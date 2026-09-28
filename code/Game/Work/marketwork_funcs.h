@@ -1,7 +1,7 @@
 #pragma once
 // MarketWork — ENDGAME B.3.8: the ctor, the dtor and the slot bodies are members of
-// the class (Work/MarketWork.h). What is left is the file's helper resolver, which
-// resourceproduce_creatework.cpp (block MI-B) also calls by name.
+// the class (Work/MarketWork.h). B3R: the helper resolver is gone; the bodies are
+// called by name.
 //
 // CRITICAL: MarketWork's tree uses a DIFFERENT node layout than
 // HuntWork/PastureWork/HerbalistWork:
@@ -20,5 +20,3 @@
 
 #include "Work/MarketWork.h"
 #include <cstdint>
-
-bool MarketWork_ResolveFuncs();

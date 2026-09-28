@@ -17,7 +17,7 @@
 // Faithful 1:1 against the Ghidra disassembly (offsets verified). Registered via
 // standalone/reg_toolbar_utility.cpp.
 
-#include "resolve.h"
+#include "Player/exe_bodies.h"   // B3R: TradeWork_impl_4b40
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"
@@ -28,26 +28,17 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
 // Retrace/rebalance (0x140014b40, TradeWork_impl_4b40) — shared AVL retrace,
-// registered by reg_keystone_a_restree.cpp. Resolve it as a plain exe function
-// pointer (direct, not a dispatch slot) so this works in the standalone exe.
-typedef void (*BstRebalance_t)(int64_t* rootHolder, int64_t* insertedNodeSlot);
-BstRebalance_t s_fn_bstRebalance = nullptr;
-
-void EnsureFuncs() {
-    if (!s_fn_bstRebalance) {
-        s_fn_bstRebalance =
-            reinterpret_cast<BstRebalance_t>(ResolveAddr(Module::Exe, 0x140014b40));
-    }
-}
+// called by name (B3R).
 
 // sub_4a90 — allocate + init a new 0x38-byte AVL node (copies the 3 data qwords,
 // sets parent, zeroes children + balance).
 uint64_t* BstNodeAlloc(uint64_t* insertData, uint64_t parent) {
-    uint64_t* n = reinterpret_cast<uint64_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+    uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
     n[0] = insertData[0];                 // key (Description ptr)
     n[1] = insertData[1];                 // packed (x,y)
@@ -70,7 +61,7 @@ extern "C" {
 void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
                                                     void* retBuf, uint64_t param) {
     // Init retBuf InternalBasePtr to null (matches the exe's leading IBP_Ctor).
-    if (fn_InternalBasePtr_Ctor) new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
@@ -99,12 +90,12 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
             ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialog)->GetController(toolUITid));  // B.3.6 bridge
         if (ctrlBuf[0] != 0) {
             void* c = reinterpret_cast<void*>(ctrlBuf[0]);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, toolUITid)) controller = c;
+            if (::Object::IsDerivedFromNullSafe(c, toolUITid)) controller = c;
         }
 
         // Wrap the (possibly null) controller in an IBP, resolve, compare +0x30.
         uintptr_t ctrlRef = 0;
-        if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
+        new (&ctrlRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(controller));   // B.3.3 bridge
         if (ctrlRef != 0) {
             if (*reinterpret_cast<uint64_t*>(ctrlRef + 0x30) == param) {
@@ -122,11 +113,9 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
 //   insertData: [0]=key(Description ptr), [1]=packed(x,y), [2]=flags
 // Faithful AVL find-or-insert; rebalances from the insertion point via 0x140014b40.
 void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData) {
-    EnsureFuncs();
-
     if (*rootHolder == 0) {
         // Empty tree — the new node becomes the root.
-        uint64_t* n = reinterpret_cast<uint64_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+        uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
         if (!n) {
             *rootHolder = 0;
             *retNode = nullptr;
@@ -174,7 +163,7 @@ void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t
             next = reinterpret_cast<uint64_t*>(node[4]);
         }
 
-        if (s_fn_bstRebalance) s_fn_bstRebalance(rootHolder, reinterpret_cast<int64_t*>(&node));
+        TradeWork_impl_4b40(rootHolder, reinterpret_cast<int64_t*>(&node));   // 0x140014b40
         *retNode = newNode;
     }
 

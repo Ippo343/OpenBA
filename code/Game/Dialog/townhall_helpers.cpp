@@ -35,6 +35,7 @@
 #include "runtime/types/ui/ImageElement.h"  // X::TypeId() (B.3.9 CG2)
 #include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
 // citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.
@@ -43,7 +44,7 @@ extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingI
 
 namespace {
 
-inline void IbpCtor(void* slot, void* obj) { if (fn_InternalBasePtr_Ctor) new (slot) ::Object::InternalBasePtr(
+inline void IbpCtor(void* slot, void* obj) { new (slot) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
 // ---------------------------------------------------------------------------
@@ -64,7 +65,7 @@ void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
     uint64_t foundBuf[2] = {0, 0};
     ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parent)->FindElement(strBuf));  // B.3.6 bridge
     void* elem = *(void**)foundBuf;
-    if (elem && fn_IsDerivedFrom(elem, typeId)) return elem;
+    if (elem && ::Object::IsDerivedFromNullSafe(elem, typeId)) return elem;
     return nullptr;
 }
 
@@ -136,7 +137,7 @@ static void ProfRow_Copy(uint64_t* dst, const uint64_t* src) {
     *(uint32_t*)((uintptr_t)dst + 0x38) = (uint32_t)cnt;
     if (cnt > 0) {
         *(uint32_t*)((uintptr_t)dst + 0x3c) = (uint32_t)cnt;
-        dst[6] = (uint64_t)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cnt << 3, 8);
+        dst[6] = (uint64_t)System::MemoryAllocator::MemAlloc((uint64_t)cnt << 3, 8);
         for (int i = 0; i < cnt; i++) {
             uint64_t* d = (uint64_t*)(dst[6] + (uintptr_t)i * 8);
             *d = 0;
@@ -164,7 +165,7 @@ extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entr
         int newCap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) newCap = newCount * 3;
         *(int*)((uintptr_t)base + 0xc) = newCap;
-        base[0] = (uint64_t)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 6, 8);
+        base[0] = (uint64_t)System::MemoryAllocator::MemAlloc((uint64_t)newCap << 6, 8);
     }
     int copyStart = (oldBuf == (void*)base[0]) ? oldCount : 0;
     for (int i = copyStart; i < newCount; i++) {
@@ -180,7 +181,7 @@ extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entr
             // shrink in place — free removed rows' entity lists (0x140015e50)
             for (int i = newCount; i < oldCount; i++) {
                 uint64_t* row = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)i * 0x40);
-                fn_MemFreeStatic((void*)row[6]);
+                System::MemoryAllocator::MemFree((void*)row[6]);
                 row[6] = 0; row[7] = 0;
             }
         }
@@ -188,10 +189,10 @@ extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entr
         // realloc'd — every old row was deep-copied; free old lists + buffer
         for (int i = 0; i < oldCount; i++) {
             uint64_t* row = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)i * 0x40);
-            fn_MemFreeStatic((void*)row[6]);
+            System::MemoryAllocator::MemFree((void*)row[6]);
             row[6] = 0; row[7] = 0;
         }
-        fn_MemFreeStatic(oldBuf);
+        System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 
@@ -412,7 +413,7 @@ void* FindWorkPlaceComp(uintptr_t entity) {
         uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (id == tid) {
             void* c = *(void**)slot;
-            return fn_IsDerivedFrom(c, tid) ? c : nullptr;
+            return ::Object::IsDerivedFromNullSafe(c, tid) ? c : nullptr;
         }
     }
     return nullptr;

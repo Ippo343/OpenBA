@@ -34,6 +34,8 @@
 
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Action/exe_bodies.h"
+#include "Component/pickingcomponent_funcs.h"
 
 extern "C" void* g_pConstructionDemoSite;
 
@@ -42,17 +44,6 @@ extern "C" void* g_pConstructionDemoSite;
 // Type ID globals needed by BuildComponent
 // ============================================================
 
-
-// ============================================================
-// Helper function pointers (resolved once)
-// ============================================================
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-    s_helpersResolved = true;
-}
 
 // ============================================================
 // BuildComponent::Shutdown (vtable slot [3], 0x140108D80)
@@ -70,8 +61,7 @@ static void EnsureHelpers() {
 // Removes component from the removal queue. Creates InternalBasePtr
 // from self, searches the removal queue at GameState+0xF0+0xD0.
 
-// Forward-declared: fn_FindInQueue at 0x140017550
-int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);   // 0x140017550, below
+// BuildComponent_FindInQueue (0x140017550, below) is declared in exe_bodies.h.
 
 
 
@@ -109,16 +99,12 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
 //
 // Wiring is DEFAULT-ON via BANISHED_LIVE_BUILD_ONADDED (kill-switch =0) — see
 // BuildComponent_InstallMsgSlot.
-// Faithful port of the Ghidra decompilation. All exe-internal helpers are resolved
-// guarded; if any is unavailable the corresponding step is skipped.
-typedef void* (*fn_BC_FindComp_t)(int64_t entity, void* retbuf);   // returns retbuf
-typedef void (*fn_BC_Entity8f50_t)(int64_t* ptr);
-static fn_BC_FindComp_t  s_fn_BC_FindMulti = nullptr;   // 0x140003f60 (FindComponent ModelComponent)
-static fn_BC_FindComp_t  s_fn_BC_Find26a30 = nullptr;   // 0x140026a30 (FindComponent StorageComponent)
-static fn_BC_FindComp_t  s_fn_BC_FindWork  = nullptr;   // 0x140004740 (Workplace)
+// Faithful port of the Ghidra decompilation. The exe-internal helpers are called
+// directly: 0x140003f60 ActCNR_FindComponent_3f60 (ModelComponent), 0x140026a30
+// BuildComponent_FindStorage26a30, 0x140004740 InteractComponent_FindWorkplaceComponent,
+// 0x140128f50 PickingComponent_RegisterMesh.
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
-static fn_BC_Entity8f50_t s_fn_BC_Entity8f50 = nullptr; // 0x140128f50
 // Type-id VALUES. The .rdata globals are never seeded (ResolveAddr(Exe,.rdata)==NULL)
 // so we fall back to
 // the runtime type registry by name — otherwise block 1's IsDerivedFrom is guarded out
@@ -137,12 +123,8 @@ static uint32_t s_tid_ModelComp  = 0;   // DWORD_1401c7a50
 static uint32_t s_tid_Picking    = 0;   // DAT_1401c7c10
 static uint32_t s_tid_MultiObj   = 0;   // DWORD_1401c7ac0
 static bool s_bcDrawResolved = false;
-static void EnsureDrawHelpers() {
+static void LatchDrawTypeIds() {
     if (s_bcDrawResolved) return;
-    s_fn_BC_FindMulti = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_BC_Find26a30 = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140026a30));
-    s_fn_BC_FindWork  = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
-    s_fn_BC_Entity8f50 = reinterpret_cast<fn_BC_Entity8f50_t>(ResolveAddr(Module::Exe, 0x140128f50));
     s_tid_ModelDesc = ModelDescription::TypeId();
     s_tid_ModelComp = ModelComponent::TypeId();
     s_tid_Picking   = PickingComponent::TypeId();
@@ -162,7 +144,7 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
         if (!comp) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == typeId) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, typeId)) return comp;
+            if (::Object::IsDerivedFromNullSafe(comp, typeId)) return comp;
             return nullptr;
         }
     }
@@ -172,8 +154,7 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
 void BuildComponent_DrawReimpl(void* selfP);   // body, 0x140108720
 
 void BuildComponent_DrawReimpl(void* selfP) {
-    EnsureHelpers();
-    EnsureDrawHelpers();
+    LatchDrawTypeIds();
     int64_t* self = (int64_t*)selfP;
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
@@ -192,19 +173,19 @@ void BuildComponent_DrawReimpl(void* selfP) {
     // --- Stage 1: append the site's own ModelComponent (whose +0x18 ModelDescription
     //     has a non-empty frame group) to the +0x58 mesh list / +0x68 storage list.
     int64_t multiBuf = 0;
-    if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
+    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(self[2]), &multiBuf);
     if (multiBuf != 0) {
-        if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
+        ActCNR_FindComponent_3f60(static_cast<uintptr_t>(self[2]), &multiBuf);
         void* objBase = *(void**)(multiBuf + 0x18);
-        void* multi = (fn_IsDerivedFrom && s_tid_ModelDesc &&
-                       fn_IsDerivedFrom(objBase, s_tid_ModelDesc)) ? objBase : nullptr;
+        void* multi = (s_tid_ModelDesc &&
+                       ::Object::IsDerivedFromNullSafe(objBase, s_tid_ModelDesc)) ? objBase : nullptr;
         if (multi && *(int*)((uintptr_t)multi + 0x28) > 0) {
             int64_t b1 = 0;
-            if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &b1);
+            ActCNR_FindComponent_3f60(static_cast<uintptr_t>(self[2]), &b1);
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &b1);
             int64_t b2 = 0;
-            if (s_fn_BC_Find26a30) s_fn_BC_Find26a30(self[2], &b2);
+            BuildComponent_FindStorage26a30(self[2], &b2);
             GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &b2);
         }
     }
@@ -212,22 +193,22 @@ void BuildComponent_DrawReimpl(void* selfP) {
     // --- Stage 2: iterate the owner workplace's job hosts, collecting the
     //     Build component and Storage component of each into +0xb / +0xd lists.
     int64_t workBuf = 0;
-    if (s_fn_BC_FindWork) s_fn_BC_FindWork(self[2], &workBuf);
+    InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(self[2]), &workBuf);
     if (workBuf != 0) {
-        if (s_fn_BC_FindWork) s_fn_BC_FindWork(self[2], &workBuf);
+        InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(self[2]), &workBuf);
         int jobCount = *(int*)(workBuf + 0x50);
         for (int j = 0; j < jobCount; j++) {
             int64_t host = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
             void* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             int64_t ib1 = 0;
-            if (fn_InternalBasePtr_Ctor) new (&ib1) ::Object::InternalBasePtr(
+            new (&ib1) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &ib1);
 
             int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
             void* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             int64_t ib2 = 0;
-            if (fn_InternalBasePtr_Ctor) new (&ib2) ::Object::InternalBasePtr(
+            new (&ib2) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(storeComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &ib2);
         }
@@ -273,7 +254,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
         }
         int64_t* sslot = (int64_t*)(self[0xd] + (int64_t)i * 8);
         if (*sslot != 0) {
-            if (s_fn_BC_Entity8f50) s_fn_BC_Entity8f50((int64_t*)*sslot);
+            PickingComponent_RegisterMesh((void*)*sslot);   // 0x140128f50
         }
     }
 
@@ -281,11 +262,11 @@ void BuildComponent_DrawReimpl(void* selfP) {
     *(int*)((uintptr_t)self + 0x4c) = 1;
     void* wp = BC_FindComponentByType(self[2], s_tid_MultiObj);
     int64_t wpIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
+    new (&wpIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
     if (wpIbp != 0) {
         void* wp2 = BC_FindComponentByType(self[2], s_tid_MultiObj);
-        if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
+        new (&wpIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wp2));   // B.3.3 bridge
         // Retail: bc+0x4c = WorkPlaceComponent+0x58 (the build-effort multiplier). In the
         // standalone exe the WorkPlaceComponent lifecycle is inert, so +0x58 stays 0 — which
@@ -326,27 +307,15 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == tidPicking) {
                 void* c = (void*)*slot;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidPicking))
+                if (::Object::IsDerivedFromNullSafe(c, tidPicking))
                     found = c;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retbuf) ::Object::InternalBasePtr(
+    new (retbuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retbuf;
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void BuildComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[BuildComponent] Funcs resolved: "
-           "TypeId_Build=%u TypeId_Storage=%u\n",
-           ModelComponent::TypeId(), PickingComponent::TypeId());
-#endif
 }
 
 // ============================================================================
@@ -484,7 +453,7 @@ void BuildComponent::Persist(void* stream) {
             // Validate: if non-null but wrong type, clear
             void* val = *(void**)ibp;
             if (val != nullptr) {
-                bool valid = fn_IsDerivedFrom(val, ModelComponent::TypeId());   // ti 0x1401c7a50
+                bool valid = ::Object::IsDerivedFromNullSafe(val, ModelComponent::TypeId());   // ti 0x1401c7a50
                 if (!valid) {
                     *(uint64_t*)ibp = 0;
                 }
@@ -512,7 +481,7 @@ void BuildComponent::Persist(void* stream) {
             // Validate with PickingComponent type (DAT_1401c7c10)
             void* val = *(void**)ibp;
             if (val != nullptr) {
-                bool valid = fn_IsDerivedFrom(val, PickingComponent::TypeId());   // ti 0x1401c7c10
+                bool valid = ::Object::IsDerivedFromNullSafe(val, PickingComponent::TypeId());   // ti 0x1401c7c10
                 if (!valid) {
                     *(uint64_t*)ibp = 0;
                 }
@@ -547,7 +516,7 @@ void BuildComponent::OnAdded() {
 void BuildComponent::OnRemove() {
     // 0x140017550 is BuildComponent_FindInQueue (this file) and 0x1401c3dd8 is
     // g_pGameWorldSingleton: called directly, no first-call cache (B.3.8, B6-5).
-    if (!g_pGameWorldSingleton || !fn_InternalBasePtr_Ctor)
+    if (!g_pGameWorldSingleton)
         return;
 
     // Create InternalBasePtr on stack — original passes this (component ptr)

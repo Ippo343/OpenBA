@@ -73,23 +73,13 @@
 #include <cstdlib>
 
 #include "Component/controller_state_table.h"
+#include "Action/exe_bodies.h"
 
 // ============================================================
-// Resolved helpers (once)
+// Helpers: 0x1400c2ea0 is ActHunt_MarkEntityRemoval_c2ea0, called directly.
 // ============================================================
-typedef void (*fn_MarkForRemoval_t)(int64_t internal);                  // 0x1400c2ea0
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-
-static fn_MarkForRemoval_t s_MarkForRemoval = nullptr;
-static bool s_resolved = false;
-
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
-        ResolveAddr(Module::Exe, 0x1400c2ea0));
-}
 
 // ============================================================
 // ClearResourceDescription_helper_17f0_sub_8560 (0x140118560) — state-2 ENTER.
@@ -108,7 +98,6 @@ static void EnsureResolved() {
 // the owning component); comp+0x10 is the owner-entity IBP.
 // ============================================================
 extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
-    EnsureResolved();
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
 
     int64_t entity = *reinterpret_cast<int64_t*>(c + 0x10);
@@ -126,7 +115,7 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
         return 1;
     }
 
-    if (s_MarkForRemoval) s_MarkForRemoval(entity);
+    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entity));
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
         .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);

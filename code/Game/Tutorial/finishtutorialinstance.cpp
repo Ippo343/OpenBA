@@ -20,7 +20,7 @@
 #include "Tutorial/TutorialInstance.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Tutorial/exe_bodies.h"   // 0x1401001f0 / 0x1400e1db0
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
@@ -30,7 +30,7 @@
 #include <atomic>
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
-// Startup/Update use function pointers from engine_funcs.h (resolved at startup).
+// Startup/Update call TutWave_TutorialTreeInsert / TutWave_StepExecute by name.
 // ENDGAME B.3.8 (B6-5): the one-shot diagnostic counters are namespace-scope
 // atomics, not function-local statics — goal instances are built on the loader
 // thread (GameUpdateLoop::Load) and ticked on the main thread.
@@ -134,16 +134,14 @@ void FinishTutorialInstance::Startup() {
     // Step 4: Create IBP from newObj, store in self+0x20
     // Use a local IBP buffer (8 bytes), then copy to self+0x20
     uint64_t localIBP = 0;
-    if (fn_InternalBasePtr_Ctor) {
-        new (&localIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newObj));   // B.3.3 bridge
-    }
+    new (&localIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newObj));   // B.3.3 bridge
     *(uint64_t*)(s + 0x20) = localIBP;
 
     // Step 5: IsDerivedFrom check on self+0x18 (goal pointer) against FinishTutorialGoal
     void* goalObj = *(void**)(s + 0x18);
     void* ftGoal = nullptr;
-    if (fn_IsDerivedFrom && goalObj) {
-        bool isDerived = fn_IsDerivedFrom(goalObj, FinishTutorialGoal::TypeId());
+    if (goalObj) {
+        bool isDerived = Object::IsDerivedFromNullSafe(goalObj, FinishTutorialGoal::TypeId());
         if (isDerived) {
             ftGoal = goalObj;
         }
@@ -165,11 +163,11 @@ void FinishTutorialInstance::Startup() {
                 (void*)self, (void*)tutInst, goalObj, ftGoal,
                 tutInst ? *(void**)(tutInst + 0x30) : nullptr,
                 FinishTutorialGoal::TypeId(),
-                (void*)fn_TutorialTreeInsert);
+                (void*)&TutWave_TutorialTreeInsert);
         std::fflush(stderr); } }
 
     // Step 7: Call FinishTutorialGoal_helper_01f0 (tutorial tree insert)
-    if (fn_TutorialTreeInsert && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
         void* treeRoot = *(void**)(gameWorld + 0x120);
 
@@ -189,7 +187,7 @@ void FinishTutorialInstance::Startup() {
             }
         }
 
-        fn_TutorialTreeInsert(treeRoot, tutorialId, p3, heightParam);
+        TutWave_TutorialTreeInsert(treeRoot, tutorialId, p3, static_cast<uint32_t>(heightParam));   // 0x1401001f0
     }
 
     // Step 8: OR game world flags at +0xd0 with 0x5f0
@@ -226,11 +224,11 @@ void FinishTutorialInstance::Update(const System::Time& time, const Achievement:
     void* tutInst = *(void**)(s + 0x20);
     { if (s_logUpdate.fetch_add(1) < 3) {
         std::fprintf(stderr, "[FinTutInst] Slot5 TICK self=%p tutInst=%p exec=%p\n",
-                (void*)self, tutInst, (void*)fn_TutorialStepExecute); std::fflush(stderr); } }
+                (void*)self, tutInst, (void*)&TutWave_StepExecute); std::fflush(stderr); } }
 
     // Delegate to the tutorial step execution helper
-    if (fn_TutorialStepExecute && tutInst) {
-        fn_TutorialStepExecute(tutInst, p2, p3, (uint64_t)(uintptr_t)p4);
+    if (tutInst) {
+        TutWave_StepExecute(tutInst, p2, p3, (uint64_t)(uintptr_t)p4);   // 0x1400e1db0
     }
 }
 
@@ -280,9 +278,7 @@ FinishTutorialInstance::FinishTutorialInstance() : _field20(nullptr) {}
 // TutorialInstance handle at +0x20; the compiler then runs ~GoalInstance
 // (re-stamp + ~Internal, the InternalFactory swap-remove).
 FinishTutorialInstance::~FinishTutorialInstance() {
-    if (fn_InternalBasePtr_DeletePtr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&_field20)->DeletePtr();   // B.3.3 bridge
-    }
+    reinterpret_cast< ::Object::InternalBasePtr*>(&_field20)->DeletePtr();   // B.3.3 bridge
 }
 
 void* FinishTutorialInstance::CreateNewObject() {

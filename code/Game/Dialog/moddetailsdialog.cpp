@@ -38,6 +38,8 @@
 #include <cstdint>
 #include <utility>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Configuration.h"   // B3R: System::Configuration::GetVersionString
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // File-local helper: ModDetails_StringArrayPush (FUN_14006e290)
@@ -203,8 +205,9 @@ void ModDetailsDialog::OnOpened() {
 
     // Version: "%i (%s)" with version number and version string
     {
-        System::String versionStr;
-        fn_Configuration_GetVersionString(&versionStr, *(uint32_t*)(m + 0x18), false);
+        // ?GetVersionString@Configuration@System@@ is a by-value static; its door
+        // placement-constructed the result over this (empty) local.
+        System::String versionStr = System::Configuration::GetVersionString(*(uint32_t*)(m + 0x18), false);
         System::String formatted = System::String::Format("%i (%s)", (uint64_t)*(uint32_t*)(m + 0x1c),
                          versionStr._data);
         reinterpret_cast<UI::TextElement*>(textVersion)->SetParameter(0, formatted);  // B.3.6 bridge
@@ -342,7 +345,7 @@ void ModDetailsDialog::OnOpened() {
     }
 
     // Free resource array buffer
-    fn_MemFreeStatic(*(void**)resArray);
+    System::MemoryAllocator::MemFree(*(void**)resArray);
 }
 
 // ============================================================
@@ -367,7 +370,7 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
     void* dialog = ext;
 
     // Allocate and construct DialogInstance (0xB8 bytes)
-    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, sizeof(ModUploadDialog), 8);
+    void* newDialog = System::MemoryAllocator::MemAlloc(sizeof(ModUploadDialog), 8);
     void* dialogInst = nullptr;
     if (newDialog) {
         // ENDGAME B.3.8 DLG: the real class. The old path ran the DialogInstance

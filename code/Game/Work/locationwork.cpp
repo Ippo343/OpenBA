@@ -15,7 +15,9 @@
 #include "Work/LocationWork.h"
 #include "Work/locationwork_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_constants.h"     // B3R: kRdata_14017214c
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdio>
@@ -25,157 +27,32 @@
 #include "Component/InteractDescription.h"  // ENDGAME B.3.9 D5: InteractDescription::TypeId()
 
 // ============================================================
-// Local function pointers (resolved once by LocationWork_ResolveFuncs)
+// Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
 // ============================================================
-
-// All typedefs prefixed with LW_ to avoid conflicts
-
-// Entity_FindComponent_Storage (0x140006270)
-typedef void* (*LW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
-// StorageComponent_QueryCount (0x14012cf10)
-typedef int   (*LW_StorageQueryCount_t)(void* storageComp);
-// CitizenAI_State_LongTermPlan (0x140115e60)
-typedef void  (*LW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
-// Entity_FindComponent_Position (0x140002ed0)
-typedef void* (*LW_FindComp_Position_t)(uintptr_t entity, void* outIBP);
-
-// FUN_140122be0 — FindWalkablePosition (workplace position helper)
-typedef uint8_t (*LW_FindWalkablePos_t)(uintptr_t posComp, uintptr_t descOffset,
-                                         float* srcPos, float* outPos, int* outDist);
-// FUN_140122b00 — FindWalkablePosition variant (sub-position)
-typedef uint8_t (*LW_FindWalkablePosSub_t)(uintptr_t entity, int index,
-                                            float* srcPos, float* outPos, int* outDist);
-
-// Pathfinding_WalkTowards action constructor (0x1400bb490)
-// Creates a WalkTowards action: (citizenIBP, priority, position, flag1, fScale, flag2)
-//
-// ⚠ This read 0x1400f8620 until 2026-08-15 — a DIFFERENT function entirely
-// (WorkGrid_TryAssignWorkplace, a 4-arg BST search over a work grid, registered under
-// that name in standalone/reg_work_grid.cpp and used correctly by cleararea /
-// fishingwork / pasturework). Calling it with WalkTowards' six arguments walked a
-// "BST" out of the float destination array and faulted READ of -1.
-//
-// It never fired before because nothing in the world had ever CONSTRUCTED a
-// LocationWork: the only producer is AttendanceComponent's state-2 enter, and that
-// controller was inert until the promotion wave. The first live school posted a
-// LocationWork, a citizen picked it up out of Idle, and Slot4 crashed a few seconds
-// in. Classic latent leaf surfaced by a new feature — see
-// reference_registered_but_never_executed.
-typedef void (*LW_WalkTowards_Ctor_t)(void* citizenIBP, int priority,
-                                       float* position, int flag1, float fScale, uint32_t flag2);
-
-// FUN_1400f7100 — ValidateEntity
-typedef bool (*LW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
-
-// FUN_1400c5400 — CancelAllWork
-typedef void (*LW_CancelAllWork_t)(void* bstRoot);
-
-// FUN_140002e10 — FindSubEntity
-typedef void* (*LW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
-
-// fn_MemFreeStatic
-typedef void (*LW_MemFreeStatic_t)(void* ptr);
-
-
-static LW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
-static LW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
-static LW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
-static LW_FindComp_Position_t          s_fn_FindComp_Position = nullptr;
-static LW_FindWalkablePos_t            s_fn_FindWalkablePos = nullptr;
-static LW_FindWalkablePosSub_t         s_fn_FindWalkablePosSub = nullptr;
-static LW_WalkTowards_Ctor_t           s_fn_WalkTowards_Ctor = nullptr;
-static LW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
-static LW_CancelAllWork_t              s_fn_CancelAllWork = nullptr;
-static LW_FindSubEntity_t              s_fn_FindSubEntity = nullptr;
-static LW_MemFreeStatic_t              s_fn_MemFreeStatic = nullptr;
-
-// Float constant: g_fUVScale at 0x14017214c
-static float* s_fUVScale = nullptr;
-
-// Vtable pointers for dtor chain
+//   0x140006270 Entity_FindComponent_Storage       WorkBase_FindComponent_6270
+//   0x14012cf10 StorageComponent_QueryCount        CitizenComp_StorageComponent_QueryCount
+//   0x140115e60 CitizenAI_State_LongTermPlan       CitizenAI_State_LongTermPlan
+//   0x140002ed0 Entity_FindComponent_Position      WorkBase_FindComponent_2ed0
+//   0x140122be0 FindWalkablePosition               WorkImpl_WalkablePos_122be0
+//   0x140122b00 FindWalkablePosition (sub)         WorkImpl_WalkablePosRecursive_122b00
+//   0x1400bb490 Pathfinding_WalkTowards ctor       CitizenAI_Pathfinding_WalkTowards_bb490
+//               (citizenIBP, priority, position, flag1, fScale, flag2)
+//     ⚠ This read 0x1400f8620 until 2026-08-15 — a DIFFERENT function entirely
+//     (WorkGrid_TryAssignWorkplace). It never fired before because nothing had ever
+//     CONSTRUCTED a LocationWork (see reference_registered_but_never_executed).
+//   0x1400f7100 ValidateEntity                     WorkBase_ValidateTask_f7100
+//   0x1400c5400 CancelAllWork                      WorkBase_TaskListCleanup_c5400
+//   0x140002e10 FindSubEntity                      AttendanceComponent_GetJobHostComponent
+//   0x14017214c g_fUVScale (.rdata, 1.0f)          kRdata_14017214c
 //
 // The Work BASE vtable is 0x140161a80, byte-verified in retail: LocationWork_Ctor
 // disassembles to `0x1400efc7d: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
-// This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
-// address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
-// "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
+// (0x1401612e0, used earlier, is an INTERIOR address of FireWork's vtable.)
 
-static bool s_locationwork_funcs_resolved = false;
-
-// ============================================================
-// Resolution — called once during hook installation
-// ============================================================
+// B3R: resolves nothing. Kept only because attendancecomponent_states.cpp (another
+// block's file) still calls it; delete it with that call.
 bool LocationWork_ResolveFuncs() {
-    if (s_locationwork_funcs_resolved) return true;
-
-    // Work::Serialize
-
-    // Entity component finders
-    s_fn_FindComp_Storage = reinterpret_cast<LW_FindComp_Storage_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_StorageQueryCount = reinterpret_cast<LW_StorageQueryCount_t>(
-        ResolveAddr(Module::Exe, 0x14012cf10));
-    s_fn_CitizenAI_LongTermPlan = reinterpret_cast<LW_CitizenAI_LongTermPlan_t>(
-        ResolveAddr(Module::Exe, 0x140115e60));
-    s_fn_FindComp_Position = reinterpret_cast<LW_FindComp_Position_t>(
-        ResolveAddr(Module::Exe, 0x140002ed0));
-
-    // Pathfinding helpers
-    s_fn_FindWalkablePos = reinterpret_cast<LW_FindWalkablePos_t>(
-        ResolveAddr(Module::Exe, 0x140122be0));
-    s_fn_FindWalkablePosSub = reinterpret_cast<LW_FindWalkablePosSub_t>(
-        ResolveAddr(Module::Exe, 0x140122b00));
-
-    // WalkTowards action constructor (see the typedef comment for the 0x1400f8620 mixup)
-    s_fn_WalkTowards_Ctor = reinterpret_cast<LW_WalkTowards_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400bb490));
-
-    // Validation and cleanup
-    s_fn_ValidateEntity = reinterpret_cast<LW_ValidateEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_CancelAllWork = reinterpret_cast<LW_CancelAllWork_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_FindSubEntity = reinterpret_cast<LW_FindSubEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-
-    // fn_MemFreeStatic from engine_funcs
-    s_fn_MemFreeStatic = reinterpret_cast<LW_MemFreeStatic_t>(fn_MemFreeStatic);
-
-    // Float constant: g_fUVScale at 0x14017214c
-    s_fUVScale = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x14017214c));
-
-    // Vtable pointers for dtor
-
-    // Verify critical pointers
-    bool ok = s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
-              s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Position &&
-              s_fn_FindWalkablePos && s_fn_FindWalkablePosSub &&
-              s_fn_WalkTowards_Ctor && s_fn_ValidateEntity &&
-              s_fn_CancelAllWork && s_fn_FindSubEntity &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && s_fUVScale;
-
-    s_locationwork_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[LocationWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
-        if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
-        if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
-        if (!s_fn_FindComp_Position) printf("  MISSING: FindComp_Position\n");
-        if (!s_fn_FindWalkablePos) printf("  MISSING: FindWalkablePos\n");
-        if (!s_fn_FindWalkablePosSub) printf("  MISSING: FindWalkablePosSub\n");
-        if (!s_fn_WalkTowards_Ctor) printf("  MISSING: WalkTowards_Ctor\n");
-        if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
-        if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
-        if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_fUVScale) printf("  MISSING: fUVScale\n");
-    }
-#endif
-
-    return ok;
+    return true;
 }
 
 
@@ -197,7 +74,7 @@ void LocationWork::Persist(void* stream) {
 
     // Validate: if _field48 is non-null, check IsDerivedFrom
     if (_field48 != nullptr) {
-        if (!fn_IsDerivedFrom(_field48, CitizenComponent::TypeId())) {
+        if (!Object::IsDerivedFromNullSafe(_field48, CitizenComponent::TypeId())) {
             _field48 = nullptr;
         }
     }
@@ -230,16 +107,16 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
     uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
 
     uintptr_t storageIBP = 0;
-    s_fn_FindComp_Storage(*(uintptr_t*)(citizenEntity + 0x10), &storageIBP);
+    WorkBase_FindComponent_6270(*(uintptr_t*)(citizenEntity + 0x10), &storageIBP);
 
-    int itemCount = s_fn_StorageQueryCount((void*)storageIBP);
+    int itemCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>((void*)storageIBP));
     if (itemCount > 0) {
-        s_fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
+        CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenIBP));
     }
 
     // Step 3: Find position component on workplace entity (self+0x10)
     uintptr_t posCompIBP = 0;
-    s_fn_FindComp_Position(selfQ[2], &posCompIBP);  // self->_field10
+    WorkBase_FindComponent_2ed0(selfQ[2], &posCompIBP);  // self->_field10
 
     // Step 4: Get citizen's current position
     uintptr_t citEnt = *(uintptr_t*)citizenIBP;
@@ -259,7 +136,7 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
 
     // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell, not the legacy
     // variable name "RadiusDesc").
-    bool isDerivedRadius = fn_IsDerivedFrom(descObj, InteractDescription::TypeId());
+    bool isDerivedRadius = Object::IsDerivedFromNullSafe(descObj, InteractDescription::TypeId());
     void* radiusDesc = nullptr;
     if (isDerivedRadius) {
         radiusDesc = descObj;
@@ -269,7 +146,7 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
     float srcPosArr[3] = {srcX, srcY, srcZ};
 
     // Check main position (via posComp + description offset +0x28)
-    uint8_t found = s_fn_FindWalkablePos(
+    uint8_t found = WorkImpl_WalkablePos_122be0(
         posCompIBP, (uintptr_t)radiusDesc + 0x28,
         srcPosArr, bestPos, &bestDist);
 
@@ -279,7 +156,7 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
         uintptr_t subArray = *(uintptr_t*)(posCompIBP + 0x28);
         for (int i = 0; i < subCount; i++) {
             uintptr_t* subPtr = (uintptr_t*)(subArray + (uintptr_t)i * 8);
-            uint8_t subFound = s_fn_FindWalkablePosSub(
+            uint8_t subFound = WorkImpl_WalkablePosRecursive_122b00(
                 *subPtr, 0, srcPosArr, bestPos, &bestDist);
             found = found | subFound;
         }
@@ -295,12 +172,12 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
 
     // The Ghidra decompilation shows the last two params come from stack;
     // the pattern is: (citizenIBP, priority, position, 0, g_fUVScale, flag&0xffffff00)
-    s_fn_WalkTowards_Ctor(
+    CitizenAI_Pathfinding_WalkTowards_bb490(
         &citizenIBPLocal,
         (int)selfQ[4],          // priority from self+0x20
-        bestPos,
+        reinterpret_cast<uint32_t*>(bestPos),
         0,                       // flag1
-        *s_fUVScale,            // UV scale constant
+        kRdata_14017214c,            // UV scale constant
         0);                      // flag2 (cleared upper bits)
 
     int priority = (int)selfQ[4];
@@ -369,7 +246,7 @@ int LocationWork::Cleanup() {
     uintptr_t targetEntity = *(uintptr_t*)(selfAddr + 0x48);
 
     // Navigate to citizen AI component (+0x278) then cancel work (+0x48)
-    s_fn_CancelAllWork((void*)(*(uintptr_t*)(targetEntity + 0x278) + 0x48));
+    WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(targetEntity + 0x278) + 0x48));
     return 0;
 }
 
@@ -389,7 +266,7 @@ int LocationWork::Validate() {
     }
 
     // Validate the entity
-    bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, &targetIBP, nullptr);
+    bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, &targetIBP, nullptr);
 
     if (!stillValid) {
         // Clear the target — construct null InternalBasePtr
@@ -416,7 +293,10 @@ void* LocationWork::GetTarget(void* outPtr) {
 
     // Find sub-entity via FUN_140002e10
     uintptr_t subIBP[2] = {0};
-    void* result = s_fn_FindSubEntity(entityRef, subIBP);
+    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
+    // so the returned pointer is the out buffer itself.
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
+    void* result = subIBP;
 
     // CheckPtr on the result
 
@@ -452,14 +332,11 @@ int LocationWork::GetPriority() {
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf field zeroed. The stamps are the compiler's. LocationWork_ResolveFuncs
-// wires the file's helper pointers (the old factory did the same).
+// the leaf field zeroed. The stamps are the compiler's.
 LocationWork::LocationWork() : Work(), _field48(nullptr) {
-    LocationWork_ResolveFuncs();
 }
 
 LocationWork::LocationWork(void* pEntityIBP) : Work(pEntityIBP), _field48(nullptr) {
-    LocationWork_ResolveFuncs();
 }
 
 // ============================================================

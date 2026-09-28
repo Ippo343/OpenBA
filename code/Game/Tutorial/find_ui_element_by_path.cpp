@@ -32,7 +32,7 @@
 // the two FindElement overloads and String::operator!= all take String const&.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "resolve.h"           // RegisterExeAddr (the 0x1400e1870 row stays: engine_funcs reads it)
 #include "address_registry.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -78,15 +78,14 @@ int SplitPath(const System::String& path, System::String* parts) {
 
 // 0x1400105B0 — narrow a Base* to ComponentEntity, or null.
 void* NarrowComponentEntity(void* obj) {
-    if (!obj || !fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(obj, ComponentEntity::TypeId()) ? obj : nullptr;
+    if (!obj) return nullptr;
+    return Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()) ? obj : nullptr;
 }
 
 // The 4-part tail: does this dialog's entity come from the named resource file?
 // Retail compares the entity description's path filename (extension stripped)
 // against parts[3] and SKIPS the dialog when they differ.
 bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
-    if (!fn_InternalBasePtr_Ctor) return false;
     void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(dialog) + 0x30);
     if (!owner) return false;
     void* entity = NarrowComponentEntity(owner);
@@ -127,8 +126,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         return outElementIBP;
     }
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
-        !fn_IsA) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
         return outElementIBP;
     }
     void* factory = ::Object::Factory::_singleton;
@@ -158,7 +156,8 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     uint64_t found = 0;
     for (auto it = ui->_dialogs.GetFirst(); it && found == 0; ++it) {
         void* dialog = it.node->element;
-        if (!dialog || !fn_IsA(dialog, dialogTypeId)) continue;
+        if (!dialog ||
+            !reinterpret_cast<const Object::Base*>(dialog)->IsA(dialogTypeId)) continue;   // B.3.x bridge
 
         if (controllerTypeId == 0 || partCount < 3) {
             // "Dialog:element" — the element is looked up on the dialog itself.

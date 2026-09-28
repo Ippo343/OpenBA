@@ -12,7 +12,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "address_registry.h"
-#include "resolve.h"
 #include <cstdio>
 #include <cstdlib>
 #include "Component/Component.h"
@@ -108,7 +107,7 @@ void TraceSlot7(void* self) {
         // i.e. heap bytes reported as game state. Only the cmd=2 work button is a
         // CheckElement here, so gate the read on the same type id Slot7 gates its
         // write on.
-        if (fn_IsDerivedFrom(elem, ControlUI_CheckElementTypeId())) {
+        if (::Object::IsDerivedFromNullSafe(elem, ControlUI_CheckElementTypeId())) {
             unsigned checked =
                 *reinterpret_cast<unsigned char*>(reinterpret_cast<uintptr_t>(elem) + 0xd8);
             std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem=%p disabled=%d checked=%u\n",
@@ -148,7 +147,7 @@ void ControlUI::OnCreated() {
     void* datasource = (void*)*(uint64_t*)(s + 0x10);
     uint32_t controlTypeId = ControlUIConfig::TypeId();
     void* component = nullptr;
-    if (fn_IsDerivedFrom(datasource, controlTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(datasource, controlTypeId)) {
         component = datasource;
     }
     // SA guard: retail reads cfg+0x20 / cfg+0x24 unconditionally. If the config is
@@ -160,7 +159,7 @@ void ControlUI::OnCreated() {
     uint32_t elemBaseTypeId = ControlUI_ButtonElementTypeId();
     void* dialogElem = (void*)*(uint64_t*)(s + 0x20);
     void* checkedElem = nullptr;
-    if (fn_IsDerivedFrom(dialogElem, elemBaseTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(dialogElem, elemBaseTypeId)) {
         checkedElem = dialogElem;
     }
     uint64_t stored = 0;
@@ -177,7 +176,7 @@ void ControlUI::OnCreated() {
     int subTypeKey = *(int*)((uintptr_t)component + 0x24);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* entityChecked = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         entityChecked = entity;
     }
     void* subComp = FindComponentByTypeId(entityChecked, subTypeKey);
@@ -206,7 +205,7 @@ void ControlUI::OnCreated() {
     // RadioElement. Revisit if a .rsc ever binds a check subclass here.
     uint32_t checkboxTypeId = ControlUI_CheckElementTypeId();
     void* elemAt30 = (void*)*(uint64_t*)(s + 0x30);
-    bool isCheckbox = fn_IsDerivedFrom(elemAt30, checkboxTypeId);
+    bool isCheckbox = ::Object::IsDerivedFromNullSafe(elemAt30, checkboxTypeId);
     if (isCheckbox) {
         void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
         // vtable[13] (offset 0x68): query enabled state with key from component+0x20
@@ -214,7 +213,7 @@ void ControlUI::OnCreated() {
 
         // Validate element again for safe access
         void* checkboxElem = nullptr;
-        if (fn_IsDerivedFrom(elemAt30, checkboxTypeId)) {
+        if (::Object::IsDerivedFromNullSafe(elemAt30, checkboxTypeId)) {
             checkboxElem = elemAt30;
         }
         // Set checkbox state: bit 1 of return value
@@ -232,7 +231,7 @@ void ControlUI::OnUpdateLayout() {
     void* datasource = (void*)*(uint64_t*)(s + 0x10);
     uint32_t controlTypeId = ControlUIConfig::TypeId();
     void* component = nullptr;
-    if (fn_IsDerivedFrom(datasource, controlTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(datasource, controlTypeId)) {
         component = datasource;
     }
     // SA guards, same reasoning as Slot4: no config => no command key; no target
@@ -244,7 +243,7 @@ void ControlUI::OnUpdateLayout() {
     // Check if element IsA CheckboxElement
     uint32_t checkboxTypeId = ControlUI_CheckElementTypeId();
     void* elemAt30 = (void*)*(uint64_t*)(s + 0x30);
-    bool isCheckbox = fn_IsDerivedFrom(elemAt30, checkboxTypeId);
+    bool isCheckbox = ::Object::IsDerivedFromNullSafe(elemAt30, checkboxTypeId);
     if (isCheckbox) {
         // Query current state from sub-component vtable[13]
         void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
@@ -253,12 +252,12 @@ void ControlUI::OnUpdateLayout() {
 
         // Only update if state changed
         void* checkboxElem = nullptr;
-        if (fn_IsDerivedFrom(elemAt30, checkboxTypeId)) {
+        if (::Object::IsDerivedFromNullSafe(elemAt30, checkboxTypeId)) {
             checkboxElem = elemAt30;
         }
         if (newState != *(char*)((uintptr_t)checkboxElem + 0xd8)) {
             void* checkboxElem2 = nullptr;
-            if (fn_IsDerivedFrom(elemAt30, checkboxTypeId)) {
+            if (::Object::IsDerivedFromNullSafe(elemAt30, checkboxTypeId)) {
                 checkboxElem2 = elemAt30;
             }
             *(char*)((uintptr_t)checkboxElem2 + 0xd8) = newState;
@@ -294,7 +293,7 @@ void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
             void* datasource = (void*)*(uint64_t*)(s + 0x10);
             uint32_t controlTypeId = ControlUIConfig::TypeId();
             void* component = nullptr;
-            if (fn_IsDerivedFrom(datasource, controlTypeId)) {
+            if (::Object::IsDerivedFromNullSafe(datasource, controlTypeId)) {
                 component = datasource;
             }
             if (!component) return;   // SA guard: no config => no command to send

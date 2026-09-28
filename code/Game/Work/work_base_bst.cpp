@@ -18,6 +18,7 @@
 // Tree root struct: root[0] = root node ptr, root[+0x8] = node count (int).
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"     // ENDGAME B.3.4 caller batch C
 #include "object/Internal.h"   // ENDGAME B.3.4a closing: InternalBasePtr::Serialize
@@ -118,7 +119,7 @@ static void SimpleBST_Retrace(uintptr_t* root, uintptr_t* pWalk) {
 
 // Reimpl of FUN_140021b40 — allocate + init a 0x28-byte leaf (key from *keyIBP).
 static void* AllocNode_1b40(const void* keyIBP, void* parent) {
-    void* node = (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8) : nullptr;
+    void* node = System::MemoryAllocator::MemAlloc(0x28, 8);
     if (!node) return nullptr;
     uintptr_t n = reinterpret_cast<uintptr_t>(node);
     *reinterpret_cast<uint64_t*>(n + 0x00) = *reinterpret_cast<const uint64_t*>(keyIBP);
@@ -237,7 +238,7 @@ void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg) {
                     *reinterpret_cast<uintptr_t*>(nodeParent + 0x18) = pred;
                 local_res10 = pred;
             }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(node));
+            System::MemoryAllocator::MemFree(reinterpret_cast<void*>(node));
             if (lVar5 == 0) SimpleBST_Retrace(root, &local_res10);
             else SimpleBST_Retrace(root, &local_res8);
             return;
@@ -252,7 +253,7 @@ void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg) {
 
     if (lVar5 != 0) *reinterpret_cast<uintptr_t*>(lVar5 + 8) = *reinterpret_cast<uintptr_t*>(node + 8);
     uintptr_t local_res10 = lVar5;
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(node));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(node));
     if (lVar5 == 0) SimpleBST_Retrace(root, &local_res8);
     else SimpleBST_Retrace(root, &local_res10);
 }
@@ -291,8 +292,8 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
         for (int i = 0; i < count; i++) {
             uintptr_t keyIBP = 0;
             reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (keyIBP != 0 && fn_IsDerivedFrom && citTid &&
-                !fn_IsDerivedFrom(reinterpret_cast<void*>(keyIBP), citTid))
+            if (keyIBP != 0 && citTid &&
+                !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(keyIBP), citTid))
                 keyIBP = 0;
             uintptr_t out = 0;
             WorkBST_RegisterWork_1a30(root, &out, &keyIBP);
@@ -308,8 +309,8 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
 joined:
     while ((pIVar6 = pIVar3) != 0) {
         reinterpret_cast<Object::InternalBasePtr*>(pIVar6)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*reinterpret_cast<uintptr_t*>(pIVar6) != 0 && fn_IsDerivedFrom && citTid &&
-            !fn_IsDerivedFrom(*reinterpret_cast<void**>(pIVar6), citTid))
+        if (*reinterpret_cast<uintptr_t*>(pIVar6) != 0 && citTid &&
+            !Object::IsDerivedFromNullSafe(*reinterpret_cast<void**>(pIVar6), citTid))
             *reinterpret_cast<uintptr_t*>(pIVar6) = 0;
         pIVar1 = *reinterpret_cast<uintptr_t*>(pIVar6 + 0x18);   // right child
         if (pIVar1 == 0) {

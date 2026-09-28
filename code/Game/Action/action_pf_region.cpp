@@ -8,21 +8,19 @@
 // corruption, strictly worse than leaving the addr unregistered).
 #include "Action/exe_bodies.h"
 //
-// Sub-callees are called via ResolveAddr(Module::Exe, 0xADDR) into a once-resolved
-// static fn-ptr; in standalone they resolve to our registered reimpls:
+// Sub-callees are called by name (B3R):
 //   0x1400021d0  int-array resize (stride 4)        — REGISTERED (Reimpl_Array_Resize_Stride04)
-//   0x14001e210  Vector resize stride 0x30          — REGISTERED (reg_pf_pools)
-//   0x14001df40  worklist-node pool alloc           — REGISTERED (reg_pf_pools)
-//   0x14001d830  array resize stride 0x18           — REGISTERED (reg_pf_pools)
-//   0x14001ca60  cell-BST AVL delete                — REGISTERED (reg_work_cellbst)
-//   0x14001c940  BST insert (variant B)             — REGISTERED (reg_pf_avl)
-//   0x140132010  sqrtf (NaN/Inf-aware)              — REGISTERED (reg_work_impl2)
+//   0x14001e210  Vector resize stride 0x30          — Pf_VectorResize30_e210
+//   0x14001df40  worklist-node pool alloc           — Pf_WorklistAlloc_df40
+//   0x14001d830  array resize stride 0x18           — Pf_ArrayResize18_d830
+//   0x14001ca60  cell-BST AVL delete                — WorkCellBST_Remove_ca60
+//   0x14001c940  BST insert (variant B)             — Pf_BstInsertB_c940
+//   0x140132010  sqrtf (NaN/Inf-aware)              — WorkImpl_Sqrtf_132010
+//   0x14001dc00  region A* run                      — Pf_RegionAstarRun_dc00
 //
-// CLOSURE NOTE for the lead (a8ba0): 0x1400a8ba0 calls 0x14001dc00
-// (BuildStructure_helper_dc00), which is NOT registered and itself calls 0x14001dcd0.
-// a8ba0's body is ported below for completeness, but its registration MUST be withheld
-// until 0x14001dc00 + 0x14001dcd0 land. The registrar (reg_pf_region.cpp) therefore
-// registers all of THIS batch EXCEPT a8ba0 — see the note there.
+// CLOSURE NOTE (a8ba0): 0x1400a8ba0 calls 0x14001dc00 (BuildStructure_helper_dc00,
+// Pf_RegionAstarRun_dc00 in action_pf_astar.cpp, which calls 0x14001dcd0). Both have
+// landed; a8ba0 is registered (reg_pf_region.cpp).
 //
 // Region-node + region-graph struct field offsets (reverse-engineered, for verification):
 //   regionGraph object = param_1 (the long-distance-router / GameWorld sub-object), with:
@@ -49,7 +47,8 @@
 //     [3]=ring buffer base (stride 0x18), [5]=pair BST root.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"          // WorkCellBST_Remove_ca60, WorkImpl_Sqrtf_132010
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "hw_watch.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -58,48 +57,19 @@
 
 namespace {
 
-// ---- exe sub-callee fn-ptrs (resolved once, all registered in earlier batches) ----
+// ---- exe sub-callees (called by name, B3R) ----
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its call sites below to
 // GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
 // is gone. I32NoInit, not I32: 0x1400021d0's loop body only copies the OLD prefix, so a
 // grown tail keeps whatever the allocation held. Every call site here is SetSize(0) or a
 // pop, so none of them actually grows.
-typedef void     (*fn_VecResize30_t)(int64_t* vec, uint32_t newCount, uint32_t* fill); // 0x14001e210
-typedef void*    (*fn_WorklistAlloc_t)(uintptr_t pool, uint64_t* val);      // 0x14001df40
-typedef void     (*fn_ArrResize18_t)(int64_t* arr, int newCount);           // 0x14001d830
-typedef void     (*fn_CellBstRemove_t)(uintptr_t* root, void* node);        // 0x14001ca60
-typedef uint64_t*(*fn_BstInsertB_t)(int64_t* root, uint64_t* a, uint32_t* b);// 0x14001c940
-typedef float    (*fn_Sqrtf_t)(float x);                                    // 0x140132010
-typedef int      (*fn_BuildPath_dc00_t)(int* self, int a, uint32_t b, uint64_t c, int64_t outArr); // 0x14001dc00
-
-static fn_VecResize30_t   s_VecResize30  = nullptr;
-static fn_WorklistAlloc_t s_WorklistAlloc= nullptr;
-static fn_ArrResize18_t   s_ArrResize18  = nullptr;
-static fn_CellBstRemove_t s_CellBstRemove= nullptr;
-static fn_BstInsertB_t    s_BstInsertB   = nullptr;
-static fn_Sqrtf_t         s_Sqrtf        = nullptr;
-static fn_BuildPath_dc00_t s_BuildPath_dc00 = nullptr;
-static bool s_init = false;
-
-static void EnsureFns() {
-    if (s_init) return;
-    s_VecResize30   = reinterpret_cast<fn_VecResize30_t>(ResolveAddr(Module::Exe, 0x14001e210));
-    s_WorklistAlloc = reinterpret_cast<fn_WorklistAlloc_t>(ResolveAddr(Module::Exe, 0x14001df40));
-    s_ArrResize18   = reinterpret_cast<fn_ArrResize18_t>(ResolveAddr(Module::Exe, 0x14001d830));
-    s_CellBstRemove = reinterpret_cast<fn_CellBstRemove_t>(ResolveAddr(Module::Exe, 0x14001ca60));
-    s_BstInsertB    = reinterpret_cast<fn_BstInsertB_t>(ResolveAddr(Module::Exe, 0x14001c940));
-    s_Sqrtf         = reinterpret_cast<fn_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_BuildPath_dc00= reinterpret_cast<fn_BuildPath_dc00_t>(ResolveAddr(Module::Exe, 0x14001dc00));
-    s_init = true;
-}
-
 // MemAlloc/MemFree shorthands matching the decompile's
 // System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr) free-function form.
 static inline void* MemAlloc(int64_t size, int align) {
-    return fn_MemAlloc(g_pMemAllocSingleton, size, align);
+    return System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(size), align);
 }
-static inline void MemFree(void* p) { fn_MemFreeStatic(p); }
+static inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 } // namespace
 
@@ -111,7 +81,6 @@ static inline void MemFree(void* p) { fn_MemFreeStatic(p); }
 // onto the free-list int-array at graph+0xa8 (count +0xb0, cap +0xb4) with the standard
 // exe grow-and-copy. Leaf except 0x1400021d0 (registered).
 void Pf_RegionNodeFree_8200(int64_t param_1, int param_2) {
-    EnsureFns();
     int64_t lVar7 = (int64_t)param_2 * 0x30;
     *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 8 + lVar7) = 0xffffffff;
     // 0x1400021d0 leaves a GROWN tail as the allocation found it, so the element type is
@@ -167,7 +136,6 @@ void Pf_RegionNodeFree_8200(int64_t param_1, int param_2) {
 // fill arg to 1e210; afterwards it MemFrees local_20 then local_30 (the template's two
 // vector ptrs). Transcribed literally.
 int Pf_RegionFreeId_8350(int64_t param_1) {
-    EnsureFns();
     int iVar1 = *(int*)(param_1 + 0xb0);
     uint32_t uVar2;
     if (iVar1 < 1) {
@@ -175,7 +143,7 @@ int Pf_RegionFreeId_8350(int64_t param_1) {
         // local template: layout matches Ghidra local_40[4]; local_30/_28/_20/_18.
         struct { uint32_t local_40[4]; void* local_30; uint64_t local_28; void* local_20; uint64_t local_18; } t;
         t.local_30 = (void*)0x0; t.local_28 = 0; t.local_20 = (void*)0x0; t.local_18 = 0;
-        s_VecResize30((int64_t*)(param_1 + 0x68), *(uint32_t*)(param_1 + 0x70) + 1, t.local_40);
+        Pf_VectorResize30_e210((int64_t*)(param_1 + 0x68), *(uint32_t*)(param_1 + 0x70) + 1, t.local_40);
         MemFree(t.local_20); t.local_20 = (void*)0x0; t.local_18 = 0;
         MemFree(t.local_30);
     } else {
@@ -241,7 +209,6 @@ void Pf_DirtyCoarseCellB_8420(int64_t param_1, int param_2) {
 // +0x18/+0x1c). Pure pointer/array logic; calls 1400021d0 (registered). The duplicate
 // scan uses the `iVar8 < 0` early-out exactly as decompiled.
 void Pf_RegionRebuildAdjacency_7480(int64_t param_1, int param_2) {
-    EnsureFns();
     int local_res10 = 0;
     int64_t lVar4 = (int64_t)param_2 * 0x20 + *(int64_t*)(param_1 + 0x78);
     if (0 < *(int*)(lVar4 + 0x18)) {
@@ -462,7 +429,6 @@ LAB_1400a7906:
 // +0x5c inside the inner loop; transcribed verbatim. Member-array stamp: piVar4[2]=param_2
 // stores the coarse cell index into node+0x08 BEFORE the scan.
 uint64_t Pf_RegionCentroidAndEdges_7950(int64_t param_1, int param_2, int param_3) {
-    EnsureFns();
     uint32_t uVar2 = (uint32_t)Pf_RegionFreeId_8350(param_1);
     uint64_t uVar12 = (uint64_t)(int)uVar2;
     int iVar10 = 0;
@@ -529,12 +495,11 @@ uint64_t Pf_RegionCentroidAndEdges_7950(int64_t param_1, int param_2, int param_
 // from local_res10/local_res18 at each iteration, exactly as the decompiler shows.
 void Pf_FloodFillLabel_7ad0(int64_t param_1, int param_2, int param_3,
                             uint32_t param_4, uint32_t param_5, uint16_t param_6) {
-    EnsureFns();
     uint64_t* puVar1 = (uint64_t*)(param_1 + 200);   // graph+0xc8 worklist root
     uint64_t local_res8 = ((uint64_t)param_5 << 32) | (uint64_t)param_4;
     int local_res10 = param_2;
     int local_res18 = param_3;
-    uint64_t* puVar3 = (uint64_t*)s_WorklistAlloc((uintptr_t)puVar1, &local_res8);
+    uint64_t* puVar3 = (uint64_t*)Pf_WorklistAlloc_df40((uintptr_t)puVar1, &local_res8);
     if (*puVar1 == 0) {
         *(uint64_t**)(param_1 + 0xd0) = puVar3;
     } else {
@@ -629,7 +594,7 @@ void Pf_FloodFillLabel_7ad0(int64_t param_1, int param_2, int param_3,
                             uint32_t local_50 = uVar14;
                             int local_4c = iVar12;
                             uint64_t pack = ((uint64_t)(uint32_t)local_4c << 32) | (uint64_t)local_50;
-                            puVar3 = (uint64_t*)s_WorklistAlloc((uintptr_t)puVar1, &pack);
+                            puVar3 = (uint64_t*)Pf_WorklistAlloc_df40((uintptr_t)puVar1, &pack);
                             if (*puVar1 == 0) {
                                 *(uint64_t**)(param_1 + 0xd0) = puVar3;
                             } else {
@@ -657,7 +622,7 @@ void Pf_FloodFillLabel_7ad0(int64_t param_1, int param_2, int param_3,
                             uint32_t local_48 = uVar6;
                             int local_44 = iVar12;
                             uint64_t pack = ((uint64_t)(uint32_t)local_44 << 32) | (uint64_t)local_48;
-                            puVar3 = (uint64_t*)s_WorklistAlloc((uintptr_t)puVar1, &pack);
+                            puVar3 = (uint64_t*)Pf_WorklistAlloc_df40((uintptr_t)puVar1, &pack);
                             if (*puVar1 == 0) {
                                 *(uint64_t**)(param_1 + 0xd0) = puVar3;
                             } else {
@@ -686,7 +651,6 @@ void Pf_FloodFillLabel_7ad0(int64_t param_1, int param_2, int param_3,
 // an incrementing label. Returns (label-1) = number of distinct regions found in the block.
 // Calls a7ad0. Map flag test identical to a7ad0 (mask 0xe1f on +0x29 byte).
 int Pf_SeedFloodFills_7f20(int64_t param_1, int param_2) {
-    EnsureFns();
     int iVar5 = 0;
     if (0 < *(int*)(param_1 + 0xc0)) {
         int64_t lVar8 = 0;
@@ -739,7 +703,6 @@ int Pf_SeedFloodFills_7f20(int64_t param_1, int param_2) {
 // coarse cell's member list (+0x10/+0x18/+0x1c, standard grow-and-copy). Finally stamp the
 // region ids into the Map cell array (a7670). Calls a8200, a7f20, a7950, a7670, 1400021d0.
 void Pf_RebuildRegionChunk_80a0(int64_t param_1, uint32_t param_2) {
-    EnsureFns();
     uint64_t uVar13 = (uint64_t)(int)param_2;
     int iVar10 = 0;
     int64_t lVar8 = uVar13 * 0x20 + *(int64_t*)(param_1 + 0x78);
@@ -809,7 +772,6 @@ void Pf_RebuildRegionChunk_80a0(int64_t param_1, uint32_t param_2) {
 // flag-B (+0x09). Then clear both dirty lists (1400021d0(,0)) and call 1d830 on the cell-BST
 // at graph+8 with graph+0x70 (region count) to size it. Calls a80a0, a7480, 1400021d0, 1d830.
 void Pf_FlushDirtyChunks_8a90(int64_t param_1) {
-    EnsureFns();
     if ((0 < *(int*)(param_1 + 0x90)) || (0 < *(int*)(param_1 + 0xa0))) {
         uint64_t uVar5 = 0;
         uint64_t uVar3 = uVar5;
@@ -839,7 +801,7 @@ void Pf_FlushDirtyChunks_8a90(int64_t param_1) {
         // I32NoInit: tail as-found, like 0x1400021d0. Both are SetSize(0) — no growth.
         GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0x88)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
         GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0x98)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-        s_ArrResize18((int64_t*)(param_1 + 8), *(int*)(param_1 + 0x70));
+        Pf_ArrayResize18_d830((int64_t*)(param_1 + 8), *(int*)(param_1 + 0x70));   // 0x14001d830
     }
 }
 
@@ -857,16 +819,14 @@ void Pf_FlushDirtyChunks_8a90(int64_t param_1) {
 // auStack frame exactly (do NOT shrink). __chkstk/alloca_probe is the compiler's stack-probe
 // injection and needs no port.
 //
-// CLOSURE WARNING (lead): 0x14001dc00 (BuildStructure_helper_dc00) is NOT registered (it
-// itself calls 0x14001dcd0). This port is complete but a8ba0 must NOT be registered until
-// dc00 + dcd0 land — see reg_pf_region.cpp.
+// 0x14001dc00 (BuildStructure_helper_dc00) is Pf_RegionAstarRun_dc00; its fourth argument
+// (param_4, the ctx) is pointer-width and passed through unchanged.
 int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64_t param_4) {
-    EnsureFns();
     int local_8008[8190];
     if ((0 < param_1[0x24]) || (0 < param_1[0x28])) {
         Pf_FlushDirtyChunks_8a90((int64_t)param_1);
     }
-    int iVar2 = s_BuildPath_dc00(param_1, param_2, param_3, param_4, (int64_t)local_8008);
+    int iVar2 = Pf_RegionAstarRun_dc00(param_1, param_2, param_3, reinterpret_cast<void*>(param_4), (int64_t)local_8008);   // 0x14001dc00
     int iVar3;
     if (iVar2 < 2) {
         iVar3 = 0;
@@ -880,7 +840,7 @@ int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64
                             *(int*)(lVar1 + 4 + (int64_t)local_8008[lVar5 + 1] * 0x30);
                 int iVar6 = *(int*)(lVar1 + (int64_t)local_8008[lVar5] * 0x30) -
                             *(int*)(lVar1 + (int64_t)local_8008[lVar5 + 1] * 0x30);
-                float fVar7 = s_Sqrtf((float)(iVar4 * iVar4 + iVar6 * iVar6));
+                float fVar7 = WorkImpl_Sqrtf_132010((float)(iVar4 * iVar4 + iVar6 * iVar6));   // 0x140132010
                 lVar5 = lVar5 + 1;
                 iVar3 = iVar3 + (int)fVar7;
             } while (lVar5 < iVar2 + -1);
@@ -908,7 +868,6 @@ int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64
 // (lookup key, slot store, c940 insert key). uStack_3c is an uninitialized pad qword the
 // decompiler reads into the high half of two CONCAT44 stores; transcribed as a local pad.
 void Pf_RegionPairCacheInsert_5b30(uint64_t* param_1, int param_2, int param_3, uint32_t param_4) {
-    EnsureFns();
     uint32_t uStack_3c = 0; // decompiler-visible pad (high half of CONCAT44 stores)
     int iVar7 = param_2;
     int iVar8 = param_3;
@@ -957,7 +916,7 @@ LAB_1400a5c1b:
                         int iVar3 = piVar4[1];
                         if (iVar3 < piVar6[1]) goto LAB_1400a5c1b;
                         if ((iVar8b <= iVar2) && ((iVar8b < iVar2 || (iVar3 <= piVar6[1])))) {
-                            s_CellBstRemove((uintptr_t*)(param_1 + 5), piVar6);
+                            WorkCellBST_Remove_ca60((uintptr_t*)(param_1 + 5), piVar6);   // 0x14001ca60
                             break;
                         }
                     }
@@ -998,5 +957,5 @@ LAB_1400a5c1b:
     k.iStackX_c = iStackX_c;
     k.local_48b = ((uint64_t)(uint32_t)iStackX_c << 32) | (uint64_t)(uint32_t)local_res8;
     k.local_40 = iVar7;
-    s_BstInsertB((int64_t*)(param_1 + 5), (uint64_t*)&k.local_res8, (uint32_t*)&k.local_48b);
+    Pf_BstInsertB_c940((int64_t*)(param_1 + 5), (uint64_t*)&k.local_res8, (uint32_t*)&k.local_48b);   // 0x14001c940
 }

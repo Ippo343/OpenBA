@@ -4,9 +4,9 @@
 // Faithful 1:1 ports of nine exe sub-helpers that are pure leaves (no NEEDS-PORT
 // children — only Math::Vector3 engine exports, System::MemoryAllocator/Random
 #include "Action/exe_bodies.h"
-// exports, and bit/array/index math). In standalone these resolve to 0 (silently
-// skipped) unless registered; this file provides the reimplementations and
-// standalone/reg_pf_geom.cpp registers them.
+// exports, and bit/array/index math). Their callers call them by name through
+// Action/exe_bodies.h (B3R); standalone/reg_pf_geom.cpp still registers them for readers
+// other blocks have.
 //
 // Transcribed literally from the Ghidra decompile/disassembly. Do NOT "improve",
 // simplify, or reorder. None of these are exercised on the autostart path, so a
@@ -23,7 +23,7 @@
 //   0x140053ca0  pasture/migration target picker (collect+random-pick cells)    [loop]
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
@@ -34,29 +34,8 @@ namespace {
 // pointers were slot 0x140152a30 ctor(x,y,z), 0x140151320 splat ctor, 0x1401526a8 Cross,
 // 0x140151298 Dot, 0x1401512c0 Normalize) ----------------------------------------
 
-// System::MemoryAllocator static MemAlloc/MemFree.
-typedef void* (*fn_MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
-typedef void  (*fn_MemFreeStatic2_t)(void* ptr);                      // SAXPEAX
-static fn_MemAllocStatic_t s_memAlloc = nullptr;  // slot 0x140152b60
-static fn_MemFreeStatic2_t s_memFree  = nullptr;  // slot 0x140152b68
-
-static bool s_init = false;
-static void EnsureFns() {
-    if (s_init) return;
-    // Prefer the registered exe dispatch slot (it stores the Runtime fn-ptr); fall
-    // back to ResolveExport for the unregistered ones.
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    s_memAlloc = reinterpret_cast<fn_MemAllocStatic_t>(slot(0x140152b60));
-    if (!s_memAlloc) s_memAlloc = reinterpret_cast<fn_MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_memFree = reinterpret_cast<fn_MemFreeStatic2_t>(slot(0x140152b68));
-    if (!s_memFree) s_memFree = reinterpret_cast<fn_MemFreeStatic2_t>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    s_init = true;
-}
+// System::MemoryAllocator static MemAlloc/MemFree (import slots 0x140152b60 /
+// 0x140152b68) are called directly (B3R).
 
 // Float constants (read from exe .rdata in the original; inlined here as bit-exact
 // values — verified via read_memory):
@@ -188,7 +167,6 @@ int Pf_MoveHeuristic_6030(uintptr_t self, int from, int to) {
 int Pf_RayTriIntersect_aa810(void* /*self*/, const float* P, const float* D,
                              const float* maxT, const float* V0, const float* V1,
                              const float* V2, float* outT, float* outNormal) {
-    EnsureFns();
     const Math::Vector3& Dv = *reinterpret_cast<const Math::Vector3*>(D);   // B.3.1 bridge
     // edge1 = V1 - V0
     Math::Vector3 edge1(V1[0] - V0[0], V1[1] - V0[1], V1[2] - V0[2]);
@@ -255,10 +233,10 @@ int Pf_TileShapeLut_ae180(void* /*self*/, char p2, char p3, char p4, char p5,
         (uint64_t)((uint32_t)(-(int)(p6 != 0)) & 0x10) |
         (uint64_t)((uint32_t)(-(int)(p7 != 0)) & 0x20);
 
-    // Tile-shape variant LUT (DAT_1401c22d0, 256 x int8). In standalone ResolveAddr on a
-    // raw .rdata table returns NULL (reference_standalone_rdata_null_fallback), so
-    // dereferencing it read address `idx` (e.g. 0x8a) and faulted. Embed the retail bytes
-    // as the fallback; 0xFF (== -1) marks an invalid edge combination.
+    // PORT GAP 0x1401c22d0 tile-shape variant LUT (256 x int8): not registered; retail
+    // reads the .rdata table here. The resolve always returned NULL, so this file always
+    // fell back to its own copy of the retail bytes -- that fallback is the code (B3R R4).
+    // 0xFF (== -1) marks an invalid edge combination.
     static const uint8_t kTileShapeLut[256] = {
         0,1,2,5,3,6,7,11,4,8,9,12,10,13,14,19,
         255,255,255,255,255,15,255,20,255,255,255,255,255,21,255,28,
@@ -277,8 +255,7 @@ int Pf_TileShapeLut_ae180(void* /*self*/, char p2, char p3, char p4, char p5,
         255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,45,
         255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,46,
     };
-    const int8_t* lut = reinterpret_cast<const int8_t*>(ResolveAddr(Module::Exe, 0x1401c22d0));
-    if (!lut) lut = reinterpret_cast<const int8_t*>(kTileShapeLut);
+    const int8_t* lut = reinterpret_cast<const int8_t*>(kTileShapeLut);
     return (int)lut[idx];
 }
 
@@ -381,7 +358,6 @@ int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
 // quadrant children (childId = parentId*4 + {1,2,3,4}). DAT_140172114 = 0.5,
 // DAT_140172280 = -1.0, g_fUVScale = 1.0. Faithful transcription of the decompile.
 void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
-    EnsureFns();
     const float c_half   = C_half();    // DAT_140172114
     const float c_negone = C_negone();  // DAT_140172280
 
@@ -474,7 +450,6 @@ void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
 // param_1+0x2428 = root box (param_2). Pushes the root record (childId=0, depth=0)
 // with extents (0.5*param_2[0]) on x/y. Returns param_1.
 uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4) {
-    EnsureFns();
     *reinterpret_cast<uint32_t*>(param_1 + 0x08) = 0xffffffffu;
     *reinterpret_cast<uint32_t*>(param_1 + 0x14) = param_3;
     *reinterpret_cast<uint64_t*>(param_1 + 0x0c) = 0;
@@ -521,7 +496,6 @@ uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t para
 // size from param_1+0x28 and the world stride at g_pGameWorldSingleton+0xf8.
 // Returns the world index or -1. Frees the temp array. 1:1 transcription.
 int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
-    EnsureFns();
     int iVar2 = *reinterpret_cast<int*>(param_1 + 0x30) / *reinterpret_cast<int*>(param_1 + 0x48);
     int iVar13 = iVar2 * (param_2 % *reinterpret_cast<int*>(param_1 + 0x48));
     int iVar12 = iVar2 * (param_2 / *reinterpret_cast<int*>(param_1 + 0x48));
@@ -549,7 +523,7 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
                             if (uVar16 != 0) {
                                 uVar4 = uVar10 * 3;
                             }
-                            pvVar5 = s_memAlloc((uint64_t)(int)uVar4 << 2, 4);
+                            pvVar5 = System::MemoryAllocator::MemAlloc((uint64_t)(int)uVar4 << 2, 4);
                         }
                         uint32_t uVar6 = 0;
                         if (pvVar11 == pvVar5) {
@@ -573,7 +547,7 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
                         }
                         uVar16 = uVar10;
                         if (pvVar11 != pvVar5) {
-                            s_memFree(pvVar11);
+                            System::MemoryAllocator::MemFree(pvVar11);
                         }
                     }
                 }
@@ -598,6 +572,6 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
                 cellSize * (picked % *reinterpret_cast<int*>(param_1 + 0x30)) + (cellSize >> 1);
         }
     }
-    s_memFree(pvVar5);
+    System::MemoryAllocator::MemFree(pvVar5);
     return iVar2_result;
 }

@@ -30,7 +30,8 @@
 // Port is 1:1 with the decompile — do not "improve".
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
@@ -41,28 +42,7 @@
 namespace {
 
 // ---- static System::MemoryAllocator MemAlloc/MemFree (the 2-arg static form the
-// original uses via slot 0x140152b60 / 0x140152b68 — NOT the 3-arg fn_MemAlloc) ----
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
-typedef void  (*MemFreeStatic_t)(void* ptr);                       // SAXPEAX
-MemAllocStatic_t s_memAlloc = nullptr;
-MemFreeStatic_t  s_memFree  = nullptr;
-bool s_memInit = false;
-void EnsureMem() {
-    if (s_memInit) return;
-    // Prefer the registered exe dispatch slot (stores the Runtime fn-ptr); fall back
-    // to ResolveExport (mirrors code/Game/Action/action_pf_geom.cpp).
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x140152b60));
-    if (!s_memAlloc) s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x140152b68));
-    if (!s_memFree) s_memFree = reinterpret_cast<MemFreeStatic_t>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    s_memInit = true;
-}
+// original uses via slot 0x140152b60 / 0x140152b68), called by name ----
 
 // CheckPtr convenience (engine_funcs export; resolves at runtime).
 
@@ -221,7 +201,6 @@ extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor) {
 // param_1 = &tree.root (and param_1[1] = count). param_2 = node to remove.
 // ============================================================
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
-    EnsureMem();
     int64_t node = reinterpret_cast<int64_t>(nodeArg);
 
     int64_t local_res8;   // retrace cursor candidate A
@@ -286,7 +265,7 @@ extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
             } else {
                 NodeRight(parent) = local_res10;
             }
-            if (s_memFree) s_memFree(nodeArg);
+            System::MemoryAllocator::MemFree(nodeArg);
             int64_t* cursor = (fix2 == 0) ? &local_res10 : &local_res8;
             PlayerTrade_Retrace_25920(root, cursor);
             return;
@@ -309,7 +288,7 @@ extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
         NodeParent(fixup) = NodeParent(node);
     }
     local_res10 = fixup;
-    if (s_memFree) s_memFree(nodeArg);
+    System::MemoryAllocator::MemFree(nodeArg);
     if (fixup == 0) {
         PlayerTrade_Retrace_25920(root, &local_res8);
     } else {
@@ -324,7 +303,6 @@ extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
 // ============================================================
 extern "C" void PlayerTrade_BSTInsert_102e30(int64_t param_1, void* keyIBP,
                                              uint32_t payloadA, uint32_t payloadB) {
-    EnsureMem();
     int64_t* rootSlot = reinterpret_cast<int64_t*>(param_1 + 0x60);
     int64_t cur = *rootSlot;
     uint64_t key = *reinterpret_cast<uint64_t*>(keyIBP);
@@ -354,7 +332,7 @@ extern "C" void PlayerTrade_BSTInsert_102e30(int64_t param_1, void* keyIBP,
     int64_t newNode;
     if (*rootSlot == 0) {
         // Empty tree: new root.
-        int64_t n = reinterpret_cast<int64_t>(s_memAlloc ? s_memAlloc(0x38, 8) : nullptr);
+        int64_t n = reinterpret_cast<int64_t>(System::MemoryAllocator::MemAlloc(0x38, 8));
         newNode = 0;
         if (n != 0) {
             NodeKey(n) = 0;
@@ -384,7 +362,7 @@ extern "C" void PlayerTrade_BSTInsert_102e30(int64_t param_1, void* keyIBP,
                 walk = NodeRight(parent);
                 if (NodeRight(parent) == 0) {
                     // attach as right child
-                    int64_t n = reinterpret_cast<int64_t>(s_memAlloc ? s_memAlloc(0x38, 8) : nullptr);
+                    int64_t n = reinterpret_cast<int64_t>(System::MemoryAllocator::MemAlloc(0x38, 8));
                     newNode = 0;
                     if (n != 0) {
                         NodeKey(n) = 0;
@@ -405,7 +383,7 @@ extern "C" void PlayerTrade_BSTInsert_102e30(int64_t param_1, void* keyIBP,
             // node.key > newKey: descend left; if no left child, attach there.
             walk = NodeLeft(parent);
             if (NodeLeft(parent) == 0) {
-                int64_t n = reinterpret_cast<int64_t>(s_memAlloc ? s_memAlloc(0x38, 8) : nullptr);
+                int64_t n = reinterpret_cast<int64_t>(System::MemoryAllocator::MemAlloc(0x38, 8));
                 newNode = 0;
                 if (n != 0) {
                     NodeKey(n) = 0;
@@ -481,13 +459,13 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
 
     void* ctrlPtr = nullptr;
     if (controllerRaw != nullptr) {
-        if (fn_IsDerivedFrom && fn_IsDerivedFrom(controllerRaw, ctrlTypeId)) {
+        if (Object::IsDerivedFromNullSafe(controllerRaw, ctrlTypeId)) {
             ctrlPtr = controllerRaw;
         }
     }
 
     int64_t controllerIBP = 0;  // local_res10
-    if (fn_InternalBasePtr_Ctor) new (&controllerIBP) ::Object::InternalBasePtr(
+    new (&controllerIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ctrlPtr));   // B.3.3 bridge
 
     // Copy the edit/track flag (+0xd8) into the controller (+0x40).

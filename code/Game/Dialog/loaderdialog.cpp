@@ -9,6 +9,7 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ENDGAME B.3.8 block DLG: LoaderDialog is a real class (Dialog/LoaderDialog.h)
 // with a compiler-generated vtable; retail evidence per slot is in the header.
@@ -78,14 +79,14 @@ void* LoaderDialog::CreateInPlaceObject(void* storage) {
 // Public entry called from SplashDLT::CreateDialog (standalone/splash_loop_stubs.cpp):
 // alloc, ctor, wrap the result in the caller's IBP.
 extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+    if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
         if (retInternalBasePtr) {
             *reinterpret_cast<uint64_t*>(retInternalBasePtr) = 0;
             *(reinterpret_cast<uint64_t*>(retInternalBasePtr) + 1) = 0;
         }
         return retInternalBasePtr;
     }
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(LoaderDialog), 8);
+    void* mem = System::MemoryAllocator::MemAlloc(sizeof(LoaderDialog), 8);
     uintptr_t lp = reinterpret_cast<uintptr_t>(loop);
     void* ui  = reinterpret_cast<void*>(lp + 0x60);
     void* rsc = *reinterpret_cast<void**>(lp + 0x50);

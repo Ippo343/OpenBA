@@ -29,6 +29,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // 0x140016f00 (inlined): AnimationEvent() is `??0AnimationEvent@Graphics@@`
 // (External's three zero stores); the 0x14015e0c0 stamp is the compiler's;
@@ -42,8 +43,7 @@ bool AnimAudioEvent::Serialize(void* stream) {
     alignas(8) uint8_t serBuf[24];
     ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // +0x20 external audio reference (stream-identical generic external-ptr serialize)
-    if (fn_ExternalPtr_BuildSerialize)
-        fn_ExternalPtr_BuildSerialize(&_sound, serBuf);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_sound, serBuf);
     // +0x28 float
     reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(_chance, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();                 // B.3.4 bridge

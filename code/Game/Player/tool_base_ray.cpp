@@ -17,7 +17,9 @@
 #include <new>
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "volume/Volume.h"
+#include "Game/exe_bodies.h"
+#include "Action/exe_bodies.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -41,33 +43,15 @@
 //   ??DTransform3@Math@@QEBA?AVVector3@1@AEBV21@@Z  Transform3::operator*(Vector3)  slot 0x140152908
 //   ?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z  GetScreenDirection(float,float) slot 0x140152918
 //   ?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z  Transform3::Rotate(Vector3)  slot 0x140151860
-typedef float* (*fn_FrustumScreenDir_t)(const void* frustum, float* retbuf, float u, float v);
-
-static fn_FrustumScreenDir_t s_fn_FrustumScreenDir = nullptr;
-static bool s_rayExportsResolved = false;
-
-static void EnsureRayExports() {
-    if (s_rayExportsResolved) return;
-    s_fn_FrustumScreenDir = reinterpret_cast<fn_FrustumScreenDir_t>(
-        ResolveExport("?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z"));
-    s_rayExportsResolved = true;
-}
+// GetScreenDirection is called by name: RtVolume_Frustum_GetScreenDirection
+// (runtime/types/volume/Volume.h), the retslot passed explicitly as the door did.
 
 static inline uintptr_t GameWorld() {
     return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
 }
 
-// CharacterComponent_impl_f3e0 (0x14009f3e0, registered) = grid->world conversion.
-typedef float* (*fn_GridToWorld_t)(int* grid, float* out, float* in, char flag, void* extra);
-static fn_GridToWorld_t s_GridToWorld = nullptr;
-static bool s_g2wResolved = false;
-static fn_GridToWorld_t s_fn_GridToWorld() {
-    if (!s_g2wResolved) {
-        s_GridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-        s_g2wResolved = true;
-    }
-    return s_GridToWorld;
-}
+// CharacterComponent_impl_f3e0 (0x14009f3e0) = grid->world conversion:
+// Reimpl_MapGetTerrainPos (Game/exe_bodies.h), called by name.
 
 // ============================================================
 // FUN_1400aa530 — QuarryComponent_impl_a530 (terrain DDA grid ray-march)
@@ -181,15 +165,11 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
     for (;;) {
         int axis = (tMax[1] <= tMax[0]) ? 1 : 0;   // SETBE: S[3] <= S[2]
         if (cell[0] >= 0 && cell[0] < width && cell[1] >= 0 && cell[1] < width) {
-            bool hit = false;
-            uintptr_t fn = ResolveAddr(Module::Exe, 0x1400aaa20);  // QuarryComponent_helper_aa20 (registered)
-            if (fn) {
-                typedef bool (*fn_aa20_t)(uintptr_t, int, int, float*, float*, float*,
-                                         float*, float*, void*);
-                hit = reinterpret_cast<fn_aa20_t>(fn)(
-                    param_1, cell[0], cell[1], param_3, param_2, param_4,
-                    param_5, param_6, nullptr);
-            }
+            // 0x1400aaa20 QuarryComponent_helper_aa20 = Pf_CellQuadRay_aa20 (Action/exe_bodies.h);
+            // it returns int, the door read AL as the bool.
+            bool hit = static_cast<uint8_t>(Pf_CellQuadRay_aa20(
+                static_cast<int64_t>(param_1), cell[0], cell[1], param_3, param_2, param_4,
+                param_5, param_6, nullptr)) != 0;
             if (hit) return 1;
         }
         // Advance along the chosen axis.
@@ -217,8 +197,6 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 //              +0x98..+0xc4 = 48-byte Transform3 (camera world matrix)
 // Caller signature: bool fn(void* /*param_1, ignored*/, float* outOrigin, float* outDir)
 extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOrigin, float* outDir) {
-    EnsureRayExports();
-
     if (!g_pInputConfigSingletonExref) return 0;
 
     // KeyMap = triple-deref of the exref (matches the working dialog pattern
@@ -273,8 +251,10 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     float u = static_cast<float>(mouseX) / static_cast<float>(screenW);
     float v = static_cast<float>(mouseY) / static_cast<float>(screenH);
     float screenDir[3] = {0.0f, 0.0f, 0.0f};
-    if (s_fn_FrustumScreenDir) {
-        float* r = s_fn_FrustumScreenDir(frustum, screenDir, u, v);
+    {
+        float* r = reinterpret_cast<float*>(RtVolume_Frustum_GetScreenDirection(
+            reinterpret_cast<const struct Frustum*>(frustum),
+            reinterpret_cast<Math::Vector3*>(screenDir), u, v));
         screenDir[0] = r[0]; screenDir[1] = r[1]; screenDir[2] = r[2];
     }
 
@@ -422,7 +402,7 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
         inGridA[1] = static_cast<float>(idxA / gw) - centerOff;
         inGridA[2] = 0.0f;
         float worldA[3] = {0.0f, 0.0f, 0.0f};
-        if (s_fn_GridToWorld()) s_fn_GridToWorld()(grid, worldA, inGridA, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(grid, worldA, inGridA, '\0', nullptr);
 
         gw = grid[0];
         int idxB = *param_5 * gw + *param_4;
@@ -432,7 +412,7 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
         inGridB[1] = static_cast<float>(idxB / gw) - centerOff;
         inGridB[2] = 0.0f;
         float worldB[3] = {0.0f, 0.0f, 0.0f};
-        if (s_fn_GridToWorld()) s_fn_GridToWorld()(grid, worldB, inGridB, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(grid, worldB, inGridB, '\0', nullptr);
 
         param_6[0] = (worldB[0] + worldA[0]) * halfCell;
         param_6[1] = (worldB[1] + worldA[1]) * halfCell;

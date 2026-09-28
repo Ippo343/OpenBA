@@ -19,7 +19,11 @@
 #include "Work/TradeWork.h"
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Player/exe_bodies.h"      // B3R: bodies called by name
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
@@ -30,46 +34,16 @@
 #include "Component/InteractDescription.h"      // ENDGAME B.3.9 D5
 
 // ============================================================
-// Local function pointers (resolved once by TradeWork_ResolveFuncs)
+// Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
-
-// All typedefs prefixed with TrW_ to avoid conflicts
-
-// Work::Serialize
-typedef void  (*TrW_Work_Serialize_t)(void* self, void* stream);
-// BST serialization (extended BST at 0x14002c8a0)
-typedef void  (*TrW_BST_Serialize_t)(void* bstRoot, void* serializer);
-// BST find-and-remove by key (TradeWork_impl_c690 at 0x14002c690)
-typedef void  (*TrW_BSTFindRemove_t)(void* bstRoot, void* keyIBP);
-// BST node remove (TradeWork_helper_5740)
-typedef void  (*TrW_BSTRemove_t)(void* bstRoot, void* node);
-// Cancel all work items
-typedef void  (*TrW_CancelAllWork_t)(void* citizenAISub);
-// FUN_1400f7100 -- validate work entity
-typedef bool  (*TrW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
-// MemAlloc/MemFree
-typedef void* (*TrW_MemAlloc_t)(int64_t size, int align);
-typedef void  (*TrW_MemFree_t)(void* ptr);
-typedef void  (*TrW_MemFreeStatic_t)(void* ptr);
-// Tree node cleanup (recursive free, extended BST at 0x140014b00)
-typedef void  (*TrW_TreeNodeCleanup_t)(void* bstRoot, void* node);
-// FindSubEntity
-typedef void* (*TrW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
-
-// Slot4 original exe function (too complex for clean reimpl, called directly)
-typedef uint32_t (*TrW_Slot4_Original_t)(void* self, void* citizenIBP, void* param3);
-
-static TrW_BST_Serialize_t           s_fn_BST_Serialize = nullptr;
-static TrW_BSTFindRemove_t           s_fn_BSTFindRemove = nullptr;
-static TrW_BSTRemove_t               s_fn_BSTRemove = nullptr;
-static TrW_CancelAllWork_t           s_fn_CancelAllWork = nullptr;
-static TrW_ValidateEntity_t          s_fn_ValidateEntity = nullptr;
-static TrW_MemAlloc_t                s_fn_MemAlloc = nullptr;
-static TrW_MemFree_t                 s_fn_MemFree = nullptr;
-static TrW_MemFreeStatic_t           s_fn_MemFreeStatic = nullptr;
-static TrW_TreeNodeCleanup_t         s_fn_TreeNodeCleanup = nullptr;
-static TrW_FindSubEntity_t           s_fn_FindSubEntity = nullptr;
-
+//   0x14002c8a0  TradeWork_Serialize_c8a0
+//   0x14002c690  PlayerTrade_BSTFindRemove_2c690
+//   0x140025740  PlayerTrade_BSTRemove_25740
+//   0x1400c5400  WorkBase_TaskListCleanup_c5400
+//   0x1400f7100  WorkBase_ValidateTask_f7100
+//   0x140014b00  TradeWork_helper_14b00
+//   0x140002e10  AttendanceComponent_GetJobHostComponent
+//
 // Vtable pointers for dtor chain
 //
 // The Work BASE vtable is 0x140161a80, byte-verified in retail: TradeWork_Ctor
@@ -77,80 +51,6 @@ static TrW_FindSubEntity_t           s_fn_FindSubEntity = nullptr;
 // This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-
-static bool s_trade_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once during hook installation
-// ============================================================
-bool TradeWork_ResolveFuncs() {
-    if (s_trade_funcs_resolved) return true;
-
-    // Direct exe function addresses
-    s_fn_BST_Serialize = reinterpret_cast<TrW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x14002c8a0));
-    s_fn_BSTFindRemove = reinterpret_cast<TrW_BSTFindRemove_t>(
-        ResolveAddr(Module::Exe, 0x14002c690));
-    s_fn_BSTRemove = reinterpret_cast<TrW_BSTRemove_t>(
-        ResolveAddr(Module::Exe, 0x140025740));
-    s_fn_CancelAllWork = reinterpret_cast<TrW_CancelAllWork_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_ValidateEntity = reinterpret_cast<TrW_ValidateEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_TreeNodeCleanup = reinterpret_cast<TrW_TreeNodeCleanup_t>(
-        ResolveAddr(Module::Exe, 0x140014b00));
-    s_fn_FindSubEntity = reinterpret_cast<TrW_FindSubEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-
-    // WRONG SLOTS (fixed 2026-08-21). These used to read exe dispatch slots
-    // 0x140151460 / 0x140151468 as MemAlloc / MemFree. 0x140151460 is NOT MemAlloc —
-    // it is Graphics::Geometry::GetTransform, verified from the disassembly at
-    // 0x1400fe1b5 and already documented at code/Game/Player/placementtool.cpp:78.
-    // So TW_PushEntry's array grow called GetTransform(size, align), which ran on
-    // garbage operands and took an ACCESS_VIOLATION (READ of 0x94) the first time a
-    // citizen actually executed a TradeWork. A resolved pointer that is a REAL but
-    // WRONG function — the failure mode reference_locationwork_walktowards_wrong_addr
-    // describes.
-    //
-    // The allocator this code wants is the STATIC form,
-    // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z (size, alignment), exe slot
-    // 0x140152b60 — which is what retail calls at its own array-grow sites (e.g.
-    // 0x140085d9f in TradeUI_Serialize). engine_funcs already binds it correctly as
-    // fn_MemAllocStatic, and this file was ALREADY using its counterpart
-    // fn_MemFreeStatic a few functions further down, so the pair is now consistent.
-    s_fn_MemAlloc = reinterpret_cast<TrW_MemAlloc_t>(fn_MemAllocStatic);
-    s_fn_MemFree  = reinterpret_cast<TrW_MemFree_t>(fn_MemFreeStatic);
-
-    // fn_MemFreeStatic from engine_funcs
-    s_fn_MemFreeStatic = reinterpret_cast<TrW_MemFreeStatic_t>(fn_MemFreeStatic);
-
-    // Vtable pointers for dtor
-
-    // Verify critical pointers
-    bool ok = s_fn_BST_Serialize && s_fn_BSTFindRemove && s_fn_BSTRemove &&
-              s_fn_CancelAllWork && s_fn_ValidateEntity &&
-              s_fn_MemAlloc && s_fn_MemFree &&
-              s_fn_TreeNodeCleanup && s_fn_FindSubEntity;
-
-    s_trade_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[TradeWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
-        if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
-        if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
-        if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
-        if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
-        if (!s_fn_MemAlloc) printf("  MISSING: MemAlloc\n");
-        if (!s_fn_MemFree) printf("  MISSING: MemFree\n");
-        if (!s_fn_TreeNodeCleanup) printf("  MISSING: TreeNodeCleanup\n");
-        if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-    }
-#endif
-
-    return ok;
-}
 
 
 // ============================================================
@@ -174,52 +74,14 @@ bool TradeWork_ResolveFuncs() {
 // the autostart harness (needs a live trade post + trader); acceptance = build-green +
 // offset fidelity.
 
-// ---- Slot4-specific resolved exe pointers (all registered) ----
-typedef void* (*TrW_FindComp2_t)(uintptr_t entity, void* outIBP);
-typedef int   (*TrW_CalcCap_t)(int64_t workComp);
-typedef int   (*TrW_QueryCnt_t)(void* storageComp);
-typedef char  (*TrW_CanAccept_t)(int64_t storageComp, uint64_t resType, int qty);
-typedef void  (*TrW_FindStorage_t)(void* resList, int64_t* out, int cell, uint64_t resType,
-                                   int qty, char flag, void* outPos, void* outIBP);   // 0x14008d590
-typedef void  (*TrW_EntityPos_t)(int64_t entity, void* outVec3, int a, uint32_t rnd, float* b);
-typedef int   (*TrW_ChildSum_t)(int64_t entity, int a);
-typedef void  (*TrW_FindPath_t)(void* outResult, void* citizenPtr, uint32_t pathType,
-                                void* destEntity, float* pos1, void* srcEntity, float* pos2,
-                                int64_t resType, int qty, int a, uint8_t b, char c, int d, uint8_t e);
-typedef void  (*TrW_LongTermPlan_t)(void* citizenEntity);
-
-static TrW_FindComp2_t    s_s4_FindTradeComp    = nullptr;  // 0x140015140 (TradeComponent)
-static TrW_FindComp2_t    s_s4_FindStorageComp  = nullptr;  // 0x140006270
-static TrW_FindComp2_t    s_s4_FindPositionComp = nullptr;  // 0x140002ed0
-static TrW_CalcCap_t      s_s4_CalcCapacity     = nullptr;  // 0x14012e5c0
-static TrW_QueryCnt_t     s_s4_QueryCount       = nullptr;  // 0x14012cf10
-static TrW_CanAccept_t    s_s4_CanAccept        = nullptr;  // 0x14012cd80
-static TrW_FindStorage_t  s_s4_FindStorage      = nullptr;  // 0x14008d590
-static TrW_EntityPos_t    s_s4_EntityPos        = nullptr;  // 0x140122e20
-static TrW_ChildSum_t     s_s4_ChildSum         = nullptr;  // 0x140123070
-static TrW_FindPath_t     s_s4_FindPath         = nullptr;  // 0x1400bf790
-static TrW_LongTermPlan_t s_s4_LongTermPlan     = nullptr;  // 0x140115e60
-static bool               s_s4_resolved         = false;
+// ---- Slot4 callees, called by name (B3R): 0x140015140 / 0x140006270 / 0x140002ed0
+// component finders, 0x14012e5c0 CalcMaxWorkers, 0x14012cf10 QueryCount, 0x14012cd80
+// CanAccept, 0x14008d590 PickBestDropTarget, 0x140122e20 EntityResolvePos,
+// 0x140123070 RecursiveChildSum, 0x1400bf790 FindPath, 0x140115e60 LongTermPlan.
 
 // The already-ported AVL insert (code/Game/Work/tradework_serialize.cpp), registered at
 // 0x14002c710. Called with (tree=&self+0x48, out, record{key,extptr,int}).
 extern "C" void* TradeWork_Insert_c710(int64_t* tree, void** out, int64_t rec);
-
-static void TradeWork_Slot4_Resolve() {
-    if (s_s4_resolved) return;
-    s_s4_FindTradeComp    = reinterpret_cast<TrW_FindComp2_t>(ResolveAddr(Module::Exe, 0x140015140));
-    s_s4_FindStorageComp  = reinterpret_cast<TrW_FindComp2_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_s4_FindPositionComp = reinterpret_cast<TrW_FindComp2_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_s4_CalcCapacity     = reinterpret_cast<TrW_CalcCap_t>(ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_s4_QueryCount       = reinterpret_cast<TrW_QueryCnt_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    s_s4_CanAccept        = reinterpret_cast<TrW_CanAccept_t>(ResolveAddr(Module::Exe, 0x14012cd80));
-    s_s4_FindStorage      = reinterpret_cast<TrW_FindStorage_t>(ResolveAddr(Module::Exe, 0x14008d590));
-    s_s4_EntityPos        = reinterpret_cast<TrW_EntityPos_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_s4_ChildSum         = reinterpret_cast<TrW_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
-    s_s4_FindPath         = reinterpret_cast<TrW_FindPath_t>(ResolveAddr(Module::Exe, 0x1400bf790));
-    s_s4_LongTermPlan     = reinterpret_cast<TrW_LongTermPlan_t>(ResolveAddr(Module::Exe, 0x140115e60));
-    s_s4_resolved = true;
-}
 
 namespace {
 
@@ -237,7 +99,7 @@ void* TW_ScanDescComp(uint64_t obj, uint32_t tid) {
         void* c = *reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
         uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == tid)
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+            return (Object::IsDerivedFromNullSafe(c, tid)) ? c : nullptr;
     }
     return nullptr;
 }
@@ -252,7 +114,7 @@ void* TW_ScanEntityComp(int64_t ent, uint32_t tid) {
         void* c = *slot;
         uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == tid) {
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+            return (Object::IsDerivedFromNullSafe(c, tid)) ? c : nullptr;
         }
     }
     return nullptr;
@@ -286,14 +148,14 @@ static void TW_PushEntry(TWEntry** arr, uint32_t* count, uint32_t* cap, uint64_t
         uint32_t newCap = (oldCount != 0) ? newCount * 3 : newCount;
         *cap = newCap;
         dst = reinterpret_cast<TWEntry*>(
-            s_fn_MemAlloc ? s_fn_MemAlloc(static_cast<int64_t>(static_cast<int>(newCap)) << 4, 8) : nullptr);
+            System::MemoryAllocator::MemAlloc(static_cast<int64_t>(static_cast<int>(newCap)) << 4, 8));
     }
     uint32_t start = (oldArr == dst) ? oldCount : 0;
     if (dst) {
         for (uint32_t i = start; i < newCount; i++)
             dst[i] = (i < oldCount) ? oldArr[i] : TWEntry{key, qty, 0};
     }
-    if (oldArr != dst && oldArr && s_fn_MemFree) s_fn_MemFree(oldArr);
+    if (oldArr != dst && oldArr) System::MemoryAllocator::MemFree(oldArr);
     *arr = dst;
     *count = newCount;
 }
@@ -328,8 +190,6 @@ static int TW_CommitAssign(TradeWork* self, void* param2, uint64_t resType, int 
 }
 
 int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
-    TradeWork_ResolveFuncs();
-    TradeWork_Slot4_Resolve();
 
     int64_t selfA = reinterpret_cast<int64_t>(this);
     void* param2 = citizenIBP;                       // local_res10 (citizen IBP)
@@ -343,19 +203,19 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
     // ---- 0. capacity gate ----------------------------------------------------
     int workerCount = static_cast<int>(*reinterpret_cast<int64_t*>(selfA + 0x50));  // param_1[10]
     int64_t workComp = *reinterpret_cast<int64_t*>(selfA + 0x18);                    // param_1[3]
-    if (*reinterpret_cast<int*>(workComp + 0x30) == 0 && s_s4_CalcCapacity)
-        *reinterpret_cast<int*>(workComp + 0x30) = s_s4_CalcCapacity(workComp);
+    if (*reinterpret_cast<int*>(workComp + 0x30) == 0)
+        *reinterpret_cast<int*>(workComp + 0x30) = WorkComponent_CalcMaxWorkers(workComp);
     if (*reinterpret_cast<int*>(workComp + 0x30) <= workerCount)
         return 1;
 
     // ---- find components -----------------------------------------------------
     int64_t tradeEntIBP = selfA + 0x10;                   // param_1+2 (&trade-post entity IBP)
     uint64_t tradeCompIBP[2] = {0};                       // local_58 (TradeComponent)
-    if (s_s4_FindTradeComp) s_s4_FindTradeComp(*reinterpret_cast<uintptr_t*>(tradeEntIBP), tradeCompIBP);
+    WorkBase_FindComponent_15140(*reinterpret_cast<uintptr_t*>(tradeEntIBP), tradeCompIBP);
     uint64_t bldgStorIBP[2] = {0};                        // local_50 (building storage)
-    if (s_s4_FindStorageComp) s_s4_FindStorageComp(*reinterpret_cast<uintptr_t*>(tradeEntIBP), bldgStorIBP);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(tradeEntIBP), bldgStorIBP);
     uint64_t posCompIBP[2] = {0};                         // local_e0 (position)
-    if (s_s4_FindPositionComp) s_s4_FindPositionComp(*reinterpret_cast<uintptr_t*>(tradeEntIBP), posCompIBP);
+    WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(tradeEntIBP), posCompIBP);
 
     int64_t bldgStor  = static_cast<int64_t>(bldgStorIBP[0]);   // local_78
     int64_t tradeComp = static_cast<int64_t>(tradeCompIBP[0]);
@@ -365,9 +225,9 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
     // ---- 1. citizen already carrying trade goods? ---------------------------
     int64_t citizenEnt = *reinterpret_cast<int64_t*>(param2);
     uint64_t carryStorIBP[2] = {0};                       // local_res20
-    if (s_s4_FindStorageComp) s_s4_FindStorageComp(*reinterpret_cast<uintptr_t*>(citizenEnt + 0x10), carryStorIBP);
-    if (s_s4_QueryCount && s_s4_QueryCount(reinterpret_cast<void*>(carryStorIBP[0])) > 0) {
-        if (s_s4_LongTermPlan) s_s4_LongTermPlan(reinterpret_cast<void*>(citizenEnt));
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(citizenEnt + 0x10), carryStorIBP);
+    if (CitizenComp_StorageComponent_QueryCount(static_cast<int64_t>(carryStorIBP[0])) > 0) {
+        CitizenAI_State_LongTermPlan(static_cast<int64_t>(citizenEnt));
         return 2;
     }
 
@@ -451,7 +311,7 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
         void* carryStor = TW_ScanEntityComp(carryEnt, storageTid);    // pvVar18
         if (matDesc && *reinterpret_cast<int*>(reinterpret_cast<int64_t>(matDesc) + 0x48) != 0) {
             int freeSpace = *reinterpret_cast<int*>(reinterpret_cast<int64_t>(carryStor) + 0x38);
-            int cur = s_s4_QueryCount ? s_s4_QueryCount(carryStor) : 0;
+            int cur = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carryStor));
             int room = (freeSpace - cur) / *reinterpret_cast<int*>(reinterpret_cast<int64_t>(matDesc) + 0x48);
             if (room < qty) qty = room;
         }
@@ -484,26 +344,24 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
         uint64_t searchPos[2] = {0};                       // local_90 (out from FindStorage)
         uint64_t srcStorIBP[2] = {0};                      // local_d8 (out IBP from FindStorage)
         int64_t srcStorPrimary = 0;                        // local_b8 (primary result)
-        if (s_s4_FindStorage)
-            s_s4_FindStorage(reinterpret_cast<void*>(resList), &srcStorPrimary, cell, resType, qty,
-                             1, searchPos, srcStorIBP);
+        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(resList), &srcStorPrimary, cell, resType, qty,
+                             1, reinterpret_cast<uint32_t*>(searchPos), srcStorIBP);
         if (srcStorPrimary == 0) { continue; }
 
         // destination position from the trade post position comp:
         uint64_t destPos[2] = {0};                         // local_a0
-        uint32_t range = s_s4_ChildSum ? s_s4_ChildSum(posComp, 0) : 0;
+        uint32_t range = Pf_RecursiveChildSum_123070(posComp, 0);
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
         uint32_t rnd = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range)) : 0;   // B.3.4b bridge
-        if (s_s4_EntityPos) s_s4_EntityPos(posComp, destPos, 0, rnd, nullptr);
+        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posComp), reinterpret_cast<float*>(destPos), 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
         int64_t destStorage = srcStorPrimary;              // local_d8 = local_b8
         uint64_t citizenVal = static_cast<uint64_t>(*reinterpret_cast<int64_t*>(param2));  // local_b0 = *param2
         uint64_t bldgVal = *reinterpret_cast<uint64_t*>(tradeEntIBP);                       // local_res20 = *local_b0(old)
         uint32_t pathType = *reinterpret_cast<uint32_t*>(selfA + 0x20);
-        if (s_s4_FindPath)
-            s_s4_FindPath(outBuf, &citizenVal, pathType, &destStorage,
-                          reinterpret_cast<float*>(searchPos), &bldgVal,
+        WorkAct_GatherRawMatCtor_bf790(outBuf, &citizenVal, pathType, reinterpret_cast<uint64_t*>(&destStorage),
+                          reinterpret_cast<float*>(searchPos), reinterpret_cast<void**>(&bldgVal),
                           reinterpret_cast<float*>(destPos), static_cast<int64_t>(resType),
                           qty, 1, 0, 1, 0, 1);
 
@@ -529,9 +387,8 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
         uint64_t srcPos[2] = {0};                          // local_a0 (out from FindStorage)
         uint64_t srcIBP[2] = {0};                          // local_90 (out IBP from FindStorage)
         int64_t srcStorage = 0;                            // local_e8 (primary result)
-        if (s_s4_FindStorage)
-            s_s4_FindStorage(reinterpret_cast<void*>(resList), &srcStorage, cell, resType, 1,
-                             0, srcPos, srcIBP);
+        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(resList), &srcStorage, cell, resType, 1,
+                             0, reinterpret_cast<uint32_t*>(srcPos), srcIBP);
         if (srcStorage == 0) continue;
 
         // source storage component: scan the FindStorage primary entity (srcStorage/local_e8,
@@ -561,18 +418,18 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
         int64_t b8 = reinterpret_cast<int64_t>(destStorComp);
         if (matDesc && *reinterpret_cast<int*>(reinterpret_cast<int64_t>(matDesc) + 0x48) != 0) {
             int cap  = *reinterpret_cast<int*>(b8 + 0x38);
-            int cur  = s_s4_QueryCount ? s_s4_QueryCount(destStorComp) : 0;
+            int cur  = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(destStorComp));
             int room = (cap - cur) / *reinterpret_cast<int*>(reinterpret_cast<int64_t>(matDesc) + 0x48);
             if (room < qtyMove) qtyMove = room;
         }
 
         // gate: can the trade-post building storage accept this resource+qty?
-        if (!s_s4_CanAccept || s_s4_CanAccept(bldgStor, resType, qtyMove) == 0)
+        if (static_cast<char>(Pf_StorageCanAccept_cd80(bldgStor, resType, qtyMove)) == 0)   // the door read AL
             continue;
 
         // source position from the trade post position comp (+ interact-desc base value):
         int64_t interactDesc = *reinterpret_cast<int64_t*>(posComp + 0x18);
-        if (!(fn_IsDerivedFrom && interactTid && fn_IsDerivedFrom(reinterpret_cast<void*>(interactDesc), interactTid)))
+        if (!(interactTid && Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(interactDesc), interactTid)))
             interactDesc = 0;
         uint32_t range = interactDesc ? *reinterpret_cast<uint32_t*>(interactDesc + 0x30) : 0;
         if (*reinterpret_cast<int*>(posComp + 0x30) > 0) {
@@ -580,22 +437,21 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
             int cn = *reinterpret_cast<int*>(posComp + 0x30);
             for (int64_t k = 0; k < cn; k++) {
                 int64_t child = *reinterpret_cast<int64_t*>(children + k * 8);
-                range += s_s4_ChildSum ? s_s4_ChildSum(child, 0) : 0;
+                range += Pf_RecursiveChildSum_123070(child, 0);
             }
         }
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
         uint32_t rnd = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range)) : 0;   // B.3.4b bridge
         uint64_t srcPos2[2] = {0};                         // local_68
-        if (s_s4_EntityPos) s_s4_EntityPos(posComp, srcPos2, 0, rnd, nullptr);
+        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posComp), reinterpret_cast<float*>(srcPos2), 0, rnd, nullptr);
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         uint64_t citizenVal = static_cast<uint64_t>(*reinterpret_cast<int64_t*>(param2));   // local_b0 = *param2
         uint64_t bldgVal = *reinterpret_cast<uint64_t*>(tradeEntIBP);                        // local_d8 = *local_b0(old)
         uint64_t srcStorVal = static_cast<uint64_t>(srcStorage);                             // local_90 = local_e8
         uint32_t pathType = *reinterpret_cast<uint32_t*>(selfA + 0x20);
-        if (s_s4_FindPath)
-            s_s4_FindPath(outBuf, &citizenVal, pathType, &bldgVal,
-                          reinterpret_cast<float*>(srcPos2), &srcStorVal,
+        WorkAct_GatherRawMatCtor_bf790(outBuf, &citizenVal, pathType, &bldgVal,
+                          reinterpret_cast<float*>(srcPos2), reinterpret_cast<void**>(&srcStorVal),
                           reinterpret_cast<float*>(srcPos), static_cast<int64_t>(resType),
                           qtyMove, 0, 0, 0, 0, 1);
 
@@ -604,7 +460,7 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
     }
 
 cleanup:
-    if (s_fn_MemFree) { s_fn_MemFree(arrB); s_fn_MemFree(arrA); }
+    System::MemoryAllocator::MemFree(arrB); System::MemoryAllocator::MemFree(arrA);
     return ret;
 }
 
@@ -613,7 +469,7 @@ cleanup:
 // TradeWork::Slot6 -- BSTFindRemove + return false (0x1400f5d20)
 // ============================================================
 int TradeWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>((void*)((uintptr_t)this + 0x48)), param2);
     return false;
 }
 
@@ -622,7 +478,7 @@ int TradeWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // TradeWork::Slot7 -- BSTFindRemove thunk (0x1400f5d10)
 // ============================================================
 int TradeWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>((void*)((uintptr_t)this + 0x48)), param2);
     return 0;
 }
 
@@ -647,7 +503,7 @@ int TradeWork::Cleanup() {
         // Cancel the work item
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
-        s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
     return 0;
 }
@@ -683,7 +539,7 @@ int TradeWork::Validate() {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
+        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed
@@ -696,7 +552,7 @@ int TradeWork::Validate() {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    newArr = (uintptr_t*)s_fn_MemAlloc((int64_t)newCap * 8, 8);
+                    newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
                 }
 
                 // Copy existing entries if buffer changed
@@ -714,7 +570,7 @@ int TradeWork::Validate() {
                     newArr[i] = val;
                 }
                 if (removeArr != newArr) {
-                    fn_MemFreeStatic(removeArr);
+                    System::MemoryAllocator::MemFree(removeArr);
                 }
                 removeArr = newArr;
                 removeCount = newCount;
@@ -753,7 +609,7 @@ int TradeWork::Validate() {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x20);
                 } else {
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
-                        s_fn_BSTRemove(bstRootPtr, searchNode);
+                        PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(bstRootPtr), searchNode);
                         break;
                     }
                     searchNode = *(void**)((uintptr_t)searchNode + 0x28);
@@ -762,7 +618,7 @@ int TradeWork::Validate() {
         }
     }
 
-    fn_MemFreeStatic(removeArr);
+    System::MemoryAllocator::MemFree(removeArr);
     return removeCount == 0;
 }
 
@@ -772,27 +628,16 @@ int TradeWork::Validate() {
 // Returns entity from this->_field10's sub-object at +0x48.
 // ============================================================
 void* TradeWork::GetTarget(void* outPtr) {
-    // Resolve here as well as in Slot4. A TradeWork does NOT always arrive through
-    // TradeWork_Factory / TradeWork_CreateInPlace: TradeComponent_Slot14 (the panel's
-    // work checkbox) hand-rolls the allocation — MemAlloc + WorkCtor25 + a manual
-    // vtable store — so the factory path, which is the only thing that calls
-    // ResolveFuncs, is skipped entirely. The scheduler then calls GetTarget from
-    // WorkScheduler_Insert BEFORE Slot4 ever runs, so every s_fn_* here was still its
-    // static nullptr and s_fn_FindSubEntity below faulted as EXEC-of-0.
-    //
-    // (The crash dumper reported that as "VCALL-of-0 ... vtable=ComponentEntity", which
-    // is its documented guess: it takes RCX as `this` and prints its first qword. RCX
-    // was the entity argument, not a receiver, and the null slots in that vtable were
-    // unrelated. The registers were the giveaway — RCX=entity, RDX=&subIBP, matching
-    // this call's signature exactly.)
-    TradeWork_ResolveFuncs();
 
     uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
-    void* result = s_fn_FindSubEntity(entityRef, subIBP);
+    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
+    // so the returned pointer is the out buffer itself.
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
+    void* result = subIBP;
 
 
     uintptr_t resolvedEntity = *(uintptr_t*)result;
@@ -831,7 +676,7 @@ void TradeWork::Persist(void* stream) {
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize extended BST at +0x48
-    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
+    TradeWork_Serialize_c8a0(reinterpret_cast<int64_t*>((void*)(selfAddr + 0x48)), serializerBuf);
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
@@ -848,11 +693,9 @@ TradeWork::~TradeWork() {
     // Free BST nodes at +0x48 (extended: left at +0x20, right at +0x28)
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x28));
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(bstRoot);
-        }
+        TradeWork_helper_14b00(reinterpret_cast<int64_t>((void*)(selfAddr + 0x48)), *(void**)((uintptr_t)bstRoot + 0x20));
+        TradeWork_helper_14b00(reinterpret_cast<int64_t>((void*)(selfAddr + 0x48)), *(void**)((uintptr_t)bstRoot + 0x28));
+        System::MemoryAllocator::MemFree(bstRoot);
     }
 
     // Zero out BST root and count
@@ -865,10 +708,8 @@ TradeWork::~TradeWork() {
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The stamps are the compiler's. TradeWork_ResolveFuncs wires
-// the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The stamps are the compiler's.
 TradeWork::TradeWork() : Work(), bstRoot(nullptr), workerCount(0), _pad54{} {
-    TradeWork_ResolveFuncs();
 }
 
 // ============================================================

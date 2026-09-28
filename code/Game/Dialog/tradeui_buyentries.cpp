@@ -64,6 +64,7 @@
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include <cstdint>
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
@@ -96,10 +97,8 @@ void AppendPtr(PtrArray* a, void* value) {
     if (a->cap < newCount) {
         a->cap = newCount;
         if (oldCount != 0) a->cap = newCount * 3;
-        void** grown = fn_MemAllocStatic
-            ? static_cast<void**>(fn_MemAllocStatic(
-                  static_cast<uint64_t>(a->cap) * 8, 8))
-            : nullptr;
+        void** grown = static_cast<void**>(System::MemoryAllocator::MemAlloc(
+                  static_cast<uint64_t>(a->cap) * 8, 8));
         if (!grown) {                        // standalone-only; retail never checks
             a->count = oldCount;
             a->cap   = oldCap;
@@ -110,7 +109,7 @@ void AppendPtr(PtrArray* a, void* value) {
     for (int32_t i = (oldData == a->data) ? oldCount : 0; i < newCount; ++i) {
         a->data[i] = (i < oldCount) ? oldData[i] : value;
     }
-    if (oldData != a->data && fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+    if (oldData != a->data) System::MemoryAllocator::MemFree(oldData);
 }
 
 // Find the first component of `typeId` on an entity, confirming with IsDerivedFrom.
@@ -127,7 +126,7 @@ void* FindComp(const void* entity, uint32_t typeId) {
         void* comp = arr[i];
         if (!comp) continue;
         if (reinterpret_cast<Object::Base*>(comp)->Type() != typeId) continue;  // B.3.8 bridge
-        if (fn_IsDerivedFrom && !fn_IsDerivedFrom(comp, typeId)) return nullptr;
+        if (!::Object::IsDerivedFromNullSafe(comp, typeId)) return nullptr;
         return comp;
     }
     return nullptr;
@@ -146,8 +145,7 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
 
     const uint8_t* ts = reinterpret_cast<const uint8_t*>(tradeState);
     void* tradeDesc = *reinterpret_cast<void* const*>(ts + 0x18);
-    if (tradeDesc && fn_IsDerivedFrom &&
-        !fn_IsDerivedFrom(tradeDesc, TradeDescription::TypeId())) {
+    if (tradeDesc && !::Object::IsDerivedFromNullSafe(tradeDesc, TradeDescription::TypeId())) {
         tradeDesc = nullptr;
     }
     if (!tradeDesc) return;                  // retail would deref null
@@ -181,7 +179,7 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
         ebuyFactory->FindNext(tidComponentDesc, nullptr));              // B.3.3 bridge
     while (cur) {
         void* desc = cur;
-        if (fn_IsDerivedFrom && !fn_IsDerivedFrom(cur, tidComponentDesc)) desc = nullptr;
+        if (!::Object::IsDerivedFromNullSafe(cur, tidComponentDesc)) desc = nullptr;
 
         if (desc) {
             // 2. Raw-material category match against the merchant's M+0x10 mask.

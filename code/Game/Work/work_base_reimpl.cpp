@@ -14,7 +14,9 @@
 //
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Action/exe_bodies.h"      // B3R: Pf_IsDstReachable_f810, Pf_ZoneRefresh_9c480
+#include "Component/exe_bodies.h"   // B3R: FloorComponent_FindResData
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cmath>
@@ -63,11 +65,11 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t type
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -131,13 +133,12 @@ void Work::InitFromEntity(void* pEntityIBP) {
     field_40 = 0;
 
     if (field_10 != nullptr) {
-        typedef void* (*Find_t)(uintptr_t, void*);
-        Find_t f4680 = reinterpret_cast<Find_t>(ResolveAddr(Module::Exe, 0x140004680));
+        // 0x140004680 = FloorComponent_FindResData (Component/exe_bodies.h), by name (B3R).
         uintptr_t tmp = 0;
-        if (f4680) {
-            void* r = f4680(reinterpret_cast<uintptr_t>(field_10), &tmp);
+        {
+            void* r = FloorComponent_FindResData(field_10, &tmp);
             if (r && *reinterpret_cast<uintptr_t*>(r) != 0) {
-                r = f4680(reinterpret_cast<uintptr_t>(field_10), &tmp);
+                r = FloorComponent_FindResData(field_10, &tmp);
                 uintptr_t comp = *reinterpret_cast<uintptr_t*>(r);
                 if (comp && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
                     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -170,7 +171,7 @@ void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
     if (node) {
         WorkBase_TreeNodeFree_14c30(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x10));
         WorkBase_TreeNodeFree_14c30(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x18));
-        if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+        System::MemoryAllocator::MemFree(node);
     }
 }
 
@@ -179,7 +180,7 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
     if (node) {
         WorkBase_TreeNodeFree_e320(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x18));
         WorkBase_TreeNodeFree_e320(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x20));
-        if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+        System::MemoryAllocator::MemFree(node);
     }
 }
 
@@ -215,18 +216,18 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).
         slot = p[0] + static_cast<uintptr_t>(i) * 8;
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(slot))->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(slot))->DeletePtr(
             );   // B.3.3 bridge
         uintptr_t nul = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uintptr_t*>(slot) = nul;
     }
     *reinterpret_cast<int*>(base + 0x18) = -1;
     if (p[2] != 0) {
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(&p[2])->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(&p[2])->DeletePtr(
             );   // B.3.3 bridge
         uintptr_t nul = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         p[2] = nul;
     }
 }
@@ -246,13 +247,13 @@ void Work::Persist(void* stream) {
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (field_10 && fn_IsDerivedFrom) {
-        if (!fn_IsDerivedFrom(field_10, ComponentEntity::TypeId()))
+    if (field_10) {
+        if (!Object::IsDerivedFromNullSafe(field_10, ComponentEntity::TypeId()))
             field_10 = nullptr;
     }
     reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (field_18 && fn_IsDerivedFrom) {
-        if (!fn_IsDerivedFrom(field_18, WorkComponent::TypeId()))
+    if (field_18) {
+        if (!Object::IsDerivedFromNullSafe(field_18, WorkComponent::TypeId()))
             field_18 = nullptr;
     }
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_20, nullptr);   // B.3.4 bridge
@@ -276,7 +277,7 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     // DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, read directly --
     // the registered cell always holds this id, so the old healing fallback is gone).
     uint32_t ciTid = CitizenComponent::TypeId();
-    if (!fn_IsA || !fn_IsA(obj, ciTid)) return 0;
+    if (!reinterpret_cast<const Object::Base*>(obj)->IsA(ciTid)) return 0;   // B.3.x bridge (fn_IsA)
 
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(taskIBP);
     uintptr_t container = *reinterpret_cast<uintptr_t*>(ci + 0x278);
@@ -291,9 +292,9 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
 
     for (int i = 0; i < count; i++) {
         void* elem = *reinterpret_cast<void**>(arrBase + static_cast<uintptr_t>(i) * 8);
-        void* ptr = (fn_IsDerivedFrom && completeTaskTid && fn_IsDerivedFrom(elem, completeTaskTid)) ? elem : nullptr;
+        void* ptr = (completeTaskTid && Object::IsDerivedFromNullSafe(elem, completeTaskTid)) ? elem : nullptr;
         uintptr_t res = 0;
-        if (fn_InternalBasePtr_Ctor) new (&res) ::Object::InternalBasePtr(
+        new (&res) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
         if (res != 0) {
             if (*reinterpret_cast<int*>(res + 0x30) == wantId) {
@@ -314,7 +315,7 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
 // back to Euclidean grid distance (sqrtf) + gridWidth penalty. FUN_140132010 in the
 // original is sqrtf (verified). Caller: int fn(int* mapGrid, uint32_t cellA, uint32_t cellB)
 int WorkBase_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB) {
-    int cost = fn_Map_CalcPathCost ? fn_Map_CalcPathCost(mapGrid, cellA, static_cast<int>(cellB), 1) : -1;
+    int cost = Pf_IsDstReachable_f810(mapGrid, cellA, cellB, 1);
     if (cost < 0) {
         int gridW = *mapGrid;
         int dRow = static_cast<int>(cellA) / gridW - static_cast<int>(cellB) / gridW;
@@ -324,18 +325,8 @@ int WorkBase_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB) {
     return cost;
 }
 
-// FUN_14009c480 — connectivity/zone refresh for the (pathType, destCell, srcCell) query.
-// The original passes all four arguments; resolve with the full 4-arg signature so we
-// don't drop the trailing register args.
-typedef void (*fn_MapConnRefresh_9c480_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
-static fn_MapConnRefresh_9c480_t s_fn_MapConnRefresh_9c480 = nullptr;
-static bool s_mapConnInit = false;
-static void EnsureMapConn() {
-    if (s_mapConnInit) return;
-    s_fn_MapConnRefresh_9c480 = reinterpret_cast<fn_MapConnRefresh_9c480_t>(
-        ResolveAddr(Module::Exe, 0x14009c480));
-    s_mapConnInit = true;
-}
+// FUN_14009c480 — connectivity/zone refresh for the (pathType, destCell, srcCell) query:
+// Pf_ZoneRefresh_9c480 (Action/exe_bodies.h), called by name with all four arguments.
 
 // Reimpl of FUN_1400a00f0 (Map::CanPathTo / WorldGrid_ValidateCell) — are two cells
 // mutually reachable? Refreshes connectivity (FUN_14009c480), then ORs the two cells'
@@ -346,7 +337,6 @@ static void EnsureMapConn() {
 //   (low byte of the returned uint64 is the bool; the WorldGrid_ValidateCell int-variant
 //    callers read the low 32 bits).
 uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell) {
-    EnsureMapConn();
     // [STANDALONE GUARD] srcCell == -1 when an entity's cell can't be resolved
     // (Entity_impl_7fb0 returns -1 because the building's MapComponent isn't found
     // via FUN_140004680 in standalone — unfilled type-id). (uint32_t)(-1)*0x30 then
@@ -359,7 +349,8 @@ uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t d
         static_cast<int64_t>(destCell) >= cellCount)
         return 0;
 
-    if (s_fn_MapConnRefresh_9c480) s_fn_MapConnRefresh_9c480(mapGrid, pathType, destCell, srcCell);
+    Pf_ZoneRefresh_9c480(mapGrid, reinterpret_cast<void*>(static_cast<uintptr_t>(pathType)),
+                         reinterpret_cast<void*>(static_cast<uintptr_t>(destCell)), srcCell);
 
     uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
     uintptr_t recSrc  = cellArr + static_cast<uintptr_t>(static_cast<uint32_t>(srcCell)) * 0x30;

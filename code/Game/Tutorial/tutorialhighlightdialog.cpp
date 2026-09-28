@@ -7,6 +7,9 @@
 // the hand-built 48-slot table and the hand-rolled ctor in
 // tutorial_dialog_vtables.cpp are gone.
 
+// volume/Volume.h FIRST: its global-scope `struct Rectangle` is hidden by <wingdi.h>'s
+// `Rectangle()` once <windows.h> has been seen.
+#include "volume/Volume.h"
 #include "Tutorial/TutorialHighlightDialog.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -89,7 +92,10 @@ void TutorialHighlightDialog::OnUpdate(const System::Time& time) {
 // arrow's bob is  sinf(elapsedSeconds * pi) * 8  pixels.
 // ===========================================================================
 
-#include "resolve.h"
+#include "Action/exe_bodies.h"      // 0x140003f60 ActCNR_FindComponent_3f60
+#include "Component/exe_bodies.h"   // 0x140004680 FloorComponent_FindResData
+#include "Game/exe_bodies.h"        // 0x14009f3e0 Reimpl_MapGetTerrainPos
+#include "Player/exe_bodies.h"      // 0x140100380 PlayerScreenRect_Entity_0380
 #include "Object/factory_registration.h"
 #include <cmath>
 #include <cstdlib>
@@ -98,20 +104,10 @@ void TutorialHighlightDialog::OnUpdate(const System::Time& time) {
 
 namespace {
 
-// Volume::Rectangle::Rectangle() — the same export tool_base_screenrect.cpp uses.
-typedef void* (*fn_RectCtor_t)(void* self);
-// 0x140100380 — entity screen bounding rectangle (ported in
-// code/Game/Player/tool_base_screenrect.cpp, registered by reg_player_screenrect.cpp).
-// param_1 is unused by the body; retail passes the rectangle itself here.
-typedef bool (*fn_EntityScreenRect_t)(uintptr_t unused, void* entityIBP, void* rectOut);
-
-// Resolved PER CALL (ENDGAME B.3.8, B6-5: no first-call cache in a member's path).
-fn_RectCtor_t RectCtorFn() {
-    return reinterpret_cast<fn_RectCtor_t>(ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
-}
-fn_EntityScreenRect_t EntityScreenRectFn() {
-    return reinterpret_cast<fn_EntityScreenRect_t>(ResolveAddr(Module::Exe, 0x140100380));
-}
+// Volume::Rectangle::Rectangle() is RtVolume_Rectangle_Ctor; 0x140100380 — entity
+// screen bounding rectangle — is PlayerScreenRect_Entity_0380 (ported in
+// code/Game/Player/tool_base_screenrect.cpp). param_1 is unused by the body; retail
+// passes the rectangle itself there.
 
 // sinf(elapsed * pi) * 8 — the shared bob offset both helpers apply.
 float ArrowBob(uintptr_t self) {
@@ -214,11 +210,9 @@ void TutorialHighlightDialog::PlaceOnElement() {
 namespace {
 
 // Member-ABI FindComponent helpers the screen-rect path uses:
-//   0x140003f60 -> ModelComponent, 0x140004680 -> MapComponent. Both are
-//   (entity, &outIBP) -> &outIBP.
-typedef void* (*fn_FindComp_t)(uintptr_t entity, void* outIBP);
-// 0x14009f3e0 — grid cell -> world position (fills a real terrain z).
-typedef float* (*fn_GridToWorld_t)(int* grid, float* out, float* in, char flag, void* extra);
+//   0x140003f60 -> ModelComponent (body ActCNR_FindComponent_3f60), 0x140004680 ->
+//   MapComponent (body FloorComponent_FindResData). Both are (entity, &outIBP) -> &outIBP.
+// 0x14009f3e0 Reimpl_MapGetTerrainPos — grid cell -> world position (real terrain z).
 
 // The diagnostic's reprint-on-change filter (main thread only: OnUpdateLayout).
 uint64_t s_diagLastEntity = 0;
@@ -226,15 +220,9 @@ int      s_diagLastRect[4] = { -12345, 0, 0, 0 };
 
 void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
 
-    // Resolved per call (B6-5).
-    fn_FindComp_t    findModel   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    fn_FindComp_t    findMap     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-    fn_GridToWorld_t gridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    if (!findModel || !findMap) return;
-
     uint64_t modelIBP = 0, mapIBP = 0;
-    findModel(entity, &modelIBP);
-    findMap(entity, &mapIBP);
+    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(entity), &modelIBP);            // 0x140003f60
+    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &mapIBP);            // 0x140004680
 
     int16_t placed = -1;
     float xf[7] = {0,0,0,0,0,0,0};
@@ -256,7 +244,7 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
     // Footprint centre through the same grid->world conversion the outline uses.
     int   g = 0;
     float centreWorld[3] = {0,0,0};
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton && gridToWorld) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         int* grid = *reinterpret_cast<int**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
         if (grid) {
@@ -264,7 +252,7 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
             float bias = static_cast<float>(g >> 1) - 0.5f;
             float in[3] = { static_cast<float>(rx + (rw >> 1)) - bias,
                             static_cast<float>(ry + (rh >> 1)) - bias, 0.0f };
-            gridToWorld(grid, centreWorld, in, '\0', nullptr);
+            Reimpl_MapGetTerrainPos(grid, centreWorld, in, '\0', nullptr);   // 0x14009f3e0
         }
     }
 
@@ -352,18 +340,16 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
 
 void TutorialHighlightDialog::PlaceOnEntity() {
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    fn_RectCtor_t         rectCtor         = RectCtorFn();
-    fn_EntityScreenRect_t entityScreenRect = EntityScreenRectFn();
 
     if (void* glowGroup = *reinterpret_cast<void**>(s + 0xC0))
         reinterpret_cast<UI::Element*>(glowGroup)->SetFlagsOnOff(1, 0);   // hide  // B.3.6 bridge
 
     // Volume::Rectangle rect; ok = EntityScreenRect(rect, &entityIBP, &rect)
     alignas(16) uint8_t rect[16] = {};
-    if (rectCtor) rectCtor(rect);
+    RtVolume_Rectangle_Ctor(reinterpret_cast<struct Rectangle*>(rect));
     uint64_t entityIBP = *reinterpret_cast<uint64_t*>(s + 0xE8);
-    bool ok = entityScreenRect &&
-              entityScreenRect(reinterpret_cast<uintptr_t>(rect), &entityIBP, rect);
+    bool ok = PlayerScreenRect_Entity_0380(reinterpret_cast<uintptr_t>(rect), &entityIBP,
+                                           reinterpret_cast<uint64_t*>(rect)) != 0;   // 0x140100380
 
     // [diag] BANISHED_TUTHL_DIAG — where the arrow thinks the target is.
     //

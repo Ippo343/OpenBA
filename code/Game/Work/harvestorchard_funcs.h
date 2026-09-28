@@ -5,4 +5,3 @@
 #include "Work/HarvestOrchard.h"
 #include <cstdint>
 
-bool HarvestOrchard_ResolveFuncs();

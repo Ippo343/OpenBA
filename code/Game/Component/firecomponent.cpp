@@ -33,34 +33,16 @@
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/FireDescription.h"
+#include "Action/exe_bodies.h"
 
 // Leaf bodies (firecomponent_ignite.cpp).
 extern "C" void FireComponent_Ignite_610(void* self);
 extern "C" void FireComponent_Spread_130(void* self);
 extern "C" void FireComponent_Extinguish_4c0(void* self);
 
-namespace {
-
-// FUN_1400a9290 — {rate, weight} probability roll (registered: reg_action_move.cpp).
-// Reads BOTH floats of the pair and CLEARS *time on every call, both arms.
-typedef bool (*fn_ProbCheck_t)(void* timeAccum, float* pair, void* rng);
-fn_ProbCheck_t s_probCheck = nullptr;
-bool s_init = false;
-
-void EnsureInit() {
-    if (s_init) return;
-    s_probCheck = reinterpret_cast<fn_ProbCheck_t>(ResolveAddr(Module::Exe, 0x1400a9290));
-    s_init = true;
-}
-
-}  // namespace
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void FireComponent_InitFuncs() {
-    EnsureInit();
-}
+// FUN_1400a9290 — {rate, weight} probability roll (ActMvDep_TimeCheck_a9290,
+// called directly). Reads BOTH floats of the pair and CLEARS *time on every call,
+// both arms.
 
 // ============================================================
 // ENDGAME B.3.8 CIT — FireComponent as a REAL class (FireComponent.h).
@@ -113,7 +95,6 @@ void FireComponent::Persist(void* stream) {
 // ============================================================
 void FireComponent::Update(void* time) {
     int64_t* pDeltaTime = static_cast<int64_t*>(time);
-    EnsureInit();
     if (!pDeltaTime) return;
 
     const int64_t dt = *pDeltaTime;
@@ -146,12 +127,11 @@ void FireComponent::Update(void* time) {
         void* obj = *reinterpret_cast<void**>(s + 0x18);
         void* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId()))
                    ? obj : nullptr;
-        if (!s_probCheck) return;
         void* rng = *reinterpret_cast<void**>(gw + 0xD8);
         float* pair = reinterpret_cast<float*>(
             reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::IgniteChance0);
 
-        const bool fired = s_probCheck(pAccum, pair, rng);
+        const bool fired = ActMvDep_TimeCheck_a9290(pAccum, pair, rng);
         if (fired) {
             FireComponent_Ignite_610(this);
             return;

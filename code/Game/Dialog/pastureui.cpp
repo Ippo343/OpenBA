@@ -73,7 +73,7 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
         if (!comp) continue;
         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (typeId == (int)animalDescTypeId) {
-            bool isAnimalDesc = fn_IsDerivedFrom(comp, animalDescTypeId);
+            bool isAnimalDesc = ::Object::IsDerivedFromNullSafe(comp, animalDescTypeId);
             if (isAnimalDesc) { animalDesc = comp; break; }
         }
     }
@@ -102,7 +102,7 @@ static void PastureUI_UpdateSlider_Impl(void* self) {
     if (!SA_DialogEntityAlive(self)) return;
     // Get entity from self+0x28, wrap in InternalBasePtr
     void* entity = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint64_t entityIPtr = 0;
     new (&entityIPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -202,7 +202,7 @@ void PastureUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
     // Get entity → find PastureComponent
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[16];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -257,7 +257,7 @@ void PastureUI::SetResource(int64_t param2) {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
@@ -304,7 +304,7 @@ void* PastureUI::GetResource(void* param2) {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
@@ -353,7 +353,7 @@ void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
     else if (param3 == 0x17 && param4 == 501) {
         // Slider change: read slider value, update max count on PastureComponent
         void* entity = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+        bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
         void* checkedEntity = isEntity ? entity : nullptr;
         uint64_t entityBasePtr = 0;
         new (&entityBasePtr) ::Object::InternalBasePtr(

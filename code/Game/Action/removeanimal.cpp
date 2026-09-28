@@ -22,7 +22,7 @@
 
 #include "RemoveAnimal.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActHunt_* helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include "Component/FireDescription.h"
@@ -33,67 +33,23 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- RemoveAnimal-specific helpers)
-// ============================================================
-
-
-// FUN_1400c2ea0 -- marks entity for removal (sets bit 10 of flags at +0x40)
-static void (*s_fn_MarkEntityRemoval)(void* entity) = nullptr;
-
+// Helpers, called by name (B3R)
+//   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0 -- marks entity for removal (sets bit 10 of
+//               flags at +0x40)
+//   0x140005500 ActHunt_FindComponent_5500 -- get model component from entity (entity, outIBP)
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470 -- notify entity changed (visual update)
+//
 // FUN_140003110 (array push) is the exe-side Collection::Array<Ptr8>::
 // SetSize(n,fill) monomorphisation -- ENDGAME B.3.2 step 2 converted its one
 // call site below to a GameColl::AsArray<GameColl::Ptr8> member call, so its
 // resolved-pointer stand-in is gone.
-
-// FUN_140005500 -- get model component from entity
-// Params: entity, outIBP (InternalBasePtr*)
-static void (*s_fn_GetModelComp)(void* entity, void* outIBP) = nullptr;
-
-// FUN_1400c3470 -- notify entity changed (triggers visual update)
-static void (*s_fn_NotifyEntityChanged)(void* entity) = nullptr;
-
+//
 // DAT_1401c4218 is FireDescription's cell (the variable name below lies — Table 1).
-
+//
 // ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
 // slot (the type-id cell 0x1401c6080 by RemoveAnimal_Slot2 0x140022e50 and the
 // NAME field 0x1401c6088 (+8) by RemoveAnimal_Slot1 0x140022e60 -- both slots); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
-
-static bool s_funcs_resolved = false;
-
 // ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool RemoveAnimal_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-
-    // FUN_1400c2ea0 -- mark entity removal
-    s_fn_MarkEntityRemoval = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c2ea0);
-
-    // FUN_140005500 -- get model component
-    s_fn_GetModelComp = (void(*)(void*, void*))ResolveAddr(Module::Exe, 0x140005500);
-
-    // FUN_1400c3470 -- notify entity changed
-    s_fn_NotifyEntityChanged = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c3470);
-
-    bool ok = s_fn_MarkEntityRemoval &&
-              s_fn_GetModelComp && s_fn_NotifyEntityChanged &&
-              fn_InternalBasePtr_DeletePtr &&
-              fn_IsDerivedFrom && fn_MemFreeStatic &&
-              g_pGameWorldSingleton;
-
-#ifdef _DEBUG
-    printf("[RemoveAnimal] ResolveFuncs: MarkRemove=%p\n",
-           (void*)s_fn_MarkEntityRemoval);
-    printf("[RemoveAnimal]   GetModel=%p Notify=%p\n",
-           (void*)s_fn_GetModelComp, (void*)s_fn_NotifyEntityChanged);
-    if (!ok) printf("[RemoveAnimal] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Slot 3: Serialize (0x1400ca870)
@@ -101,10 +57,6 @@ bool RemoveAnimal_ResolveFuncs() {
 // type validation on deserialization.
 // ============================================================
 void RemoveAnimal::Persist(void* stream) {
-    // Reached through the registered vtable, which the factory path never
-    // has to touch — an exe-ctor-built action arrives here with the file
-    // statics still null. Lazy-resolve like the other entry points do.
-    RemoveAnimal_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t localSerializer1[16];
     alignas(8) uint8_t localSerializer2[24];
@@ -121,7 +73,7 @@ void RemoveAnimal::Persist(void* stream) {
     // Type-check: if the deserialized ptr is not a ComponentEntity, null it
     void* entityRef = _field20;
     if (entityRef != nullptr) {
-        if (!fn_IsDerivedFrom(entityRef, FireDescription::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(entityRef, FireDescription::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -135,7 +87,6 @@ void RemoveAnimal::Persist(void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 int  RemoveAnimal::AbstractImpl(void* actionStack) {
-    RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     void* entityRef = _field20;
 
@@ -162,7 +113,7 @@ int  RemoveAnimal::AbstractImpl(void* actionStack) {
         if (((flags >> 10) & 1) == 0) {
 
             // Mark entity for removal
-            s_fn_MarkEntityRemoval(localRef);
+            ActHunt_MarkEntityRemoval_c2ea0(localRef);   // 0x1400c2ea0
 
             // Push to cleanup array.
             // B.3.2 bridge: FUN_140003110 == Collection::Array<Ptr8>::SetSize(n,fill)
@@ -181,11 +132,10 @@ int  RemoveAnimal::AbstractImpl(void* actionStack) {
 // If the low 16 bits of flags changed, notifies parent entity.
 // ============================================================
 void RemoveAnimal::CheckEntity() {
-    RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     void* localIBP[4];
 
     void* entity20 = _field20;
-    s_fn_GetModelComp(entity20, localIBP);
+    ActHunt_FindComponent_5500(reinterpret_cast<uintptr_t>(entity20), localIBP);   // 0x140005500
 
     uint8_t* modelComp = (uint8_t*)(localIBP[0]);
     uint32_t flagsOld = *(uint32_t*)(modelComp + 0x20);
@@ -199,7 +149,7 @@ void RemoveAnimal::CheckEntity() {
 
         if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
             if (*(void**)(modelComp + 0x10) != nullptr) {
-                s_fn_NotifyEntityChanged(*(void**)(modelComp + 0x10));
+                ActHunt_NotifyEntityChanged_c3470(*(void**)(modelComp + 0x10));   // 0x1400c3470
             }
         }
     }
@@ -210,7 +160,6 @@ void RemoveAnimal::CheckEntity() {
 // Returns true if *param matches the entity at +0x20.
 // ============================================================
 bool RemoveAnimal::GetTarget(void* param) {
-    RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     return *(void**)param == _field20;
 }
 
@@ -239,13 +188,11 @@ RemoveAnimal::RemoveAnimal(uint64_t animal)
 // [9] 0x1400ca720
 
 void* RemoveAnimal::CreateNewObject() {
-    RemoveAnimal_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(RemoveAnimal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RemoveAnimal());
 }
 void* RemoveAnimal::CreateInPlaceObject(void* storage) {
-    RemoveAnimal_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RemoveAnimal());
 }

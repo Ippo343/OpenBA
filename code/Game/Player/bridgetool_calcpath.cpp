@@ -51,8 +51,11 @@
 #include "Component/PickingComponent.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
-#include "address_registry.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
+#include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
+#include "Game/exe_bodies.h"                // 0x14009f3e0 Reimpl_MapGetTerrainPos
+#include "Player/exe_bodies.h"              // 0x1400fb710 / 0x1400fb2d0
 #include "Object/factory_registration.h"
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMeshForEntity
 #include <cstdint>
@@ -61,10 +64,6 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
-
-extern "C" int      BridgeTool_SnapEndCell_Impl(void* self, int endCell);
-extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int endCell,
-                                                 int* outLength);
 
 namespace {
 
@@ -78,8 +77,7 @@ struct SegNode {
 static_assert(sizeof(SegNode) == 0x18, "SegNode must match MemAlloc(0x18,8)");
 
 SegNode* SegAlloc(int size) {
-    if (!fn_MemAlloc) return nullptr;
-    SegNode* n = reinterpret_cast<SegNode*>(fn_MemAlloc(g_pMemAllocSingleton, 0x18, 8));
+    SegNode* n = reinterpret_cast<SegNode*>(System::MemoryAllocator::MemAlloc(0x18, 8));
     if (!n) return nullptr;
     n->size = size; n->_pad = 0; n->prev = nullptr; n->next = nullptr;
     return n;
@@ -122,7 +120,7 @@ void* FindComponentOn(void* entityIBPSlot, uint32_t typeId) {
         if (!comp) continue;
         uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (id == typeId) {
-            if (fn_IsDerivedFrom && !fn_IsDerivedFrom(comp, typeId)) return nullptr;
+            if (!Object::IsDerivedFromNullSafe(comp, typeId)) return nullptr;
             return comp;
         }
     }
@@ -144,18 +142,18 @@ void StampCells(void* comp, int col, int row, int w, int h, int rotation) {
 // World-space centre of a cell rect: sample the terrain position of the two opposite
 // corner cells and average them. Retail does exactly this twice — once for the master
 // (0x1400fa218..0x1400fa363) and once per segment (0x1400fa6f1..0x1400fa7e4) — via
-// FUN_14009f3e0 (fn_MapGetTerrainPos). Cell -> map-space is (col - c, row - c) with
+// FUN_14009f3e0 (Reimpl_MapGetTerrainPos). Cell -> map-space is (col - c, row - c) with
 // c = (gridSize >> 1) - 0.5, and the final z is forced to 0 (0x1400fa35d).
 bool CellRectCentre(uint32_t* mapGrid, int col0, int row0, int col1, int row1, float out[3]) {
     out[0] = out[1] = out[2] = 0.0f;
-    if (!mapGrid || !fn_MapGetTerrainPos) return false;
+    if (!mapGrid) return false;
     const int   W = static_cast<int>(mapGrid[0]);
     const float c = static_cast<float>(W >> 1) - 0.5f;
     float inA[3] = { static_cast<float>(col0) - c, static_cast<float>(row0) - c, 0.0f };
     float inB[3] = { static_cast<float>(col1) - c, static_cast<float>(row1) - c, 0.0f };
     float a[3] = {0.f, 0.f, 0.f}, b[3] = {0.f, 0.f, 0.f};
-    fn_MapGetTerrainPos(mapGrid, a, inA, '\0', nullptr);
-    fn_MapGetTerrainPos(mapGrid, b, inB, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, a, inA, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, b, inB, '\0', nullptr);
     out[0] = (a[0] + b[0]) * 0.5f;
     out[1] = (a[1] + b[1]) * 0.5f;
     out[2] = 0.0f;
@@ -226,14 +224,11 @@ void SeatSegmentPickOwner(void* segIBPSlot, void* masterEntity, uint32_t tidPick
 
 // Clone a ComponentEntity (0x48 bytes) from a template/description entity.
 void* CloneEntity(void* templateEntity) {
-    if (!templateEntity || !fn_MemAlloc) return nullptr;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    if (!templateEntity) return nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     if (!mem) return nullptr;
-    typedef void* (*CopyCtor_t)(void*, void*);
-    static CopyCtor_t s_copy = nullptr;
-    if (!s_copy) s_copy = reinterpret_cast<CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    if (!s_copy) return nullptr;
-    return s_copy(mem, templateEntity);
+    return ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
+                                               templateEntity);   // 0x1400c3720
 }
 
 }  // namespace
@@ -343,7 +338,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
     // ---- 3. Master entity ----------------------------------------------------------
     void* master = CloneEntity(descriptionPtr);
     void* masterIBP = nullptr;
-    if (fn_InternalBasePtr_Ctor) new (&masterIBP) ::Object::InternalBasePtr(
+    new (&masterIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
     if (!master) return 0;
 
@@ -398,7 +393,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         void* seg = CloneEntity(tpl);
         if (seg) {
             void* segIBP = nullptr;
-            if (fn_InternalBasePtr_Ctor) new (&segIBP) ::Object::InternalBasePtr(
+            new (&segIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(seg));   // B.3.3 bridge
 
 
@@ -428,10 +423,10 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
             // BEFORE the register — that is the window PickingComponent::OnAdded reads.
             SeatSegmentPickOwner(&segIBP, master, tidPicking, gameWorld);
 
-            if (fn_EntityList_RegisterEntity && entityList && tpl) {
+            if (entityList && tpl) {
                 const int categoryId = *reinterpret_cast<int*>(
                                            reinterpret_cast<uintptr_t>(tpl) + 0x20);
-                fn_EntityList_RegisterEntity(entityList, &segIBP, categoryId);
+                EntityList_RegisterEntity_Impl(entityList, &segIBP, categoryId);
             }
 
             // Standalone only: PickingComponent is an inert factory here, so the OnAdded
@@ -455,15 +450,15 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(multi) + 0x58) =
             static_cast<uint32_t>(placedCells);
 
-    if (fn_EntityList_RegisterEntity && entityList) {
+    if (entityList) {
         const int categoryId = *reinterpret_cast<int*>(
                                    reinterpret_cast<uintptr_t>(descriptionPtr) + 0x20);
-        fn_EntityList_RegisterEntity(entityList, &masterIBP, categoryId);
+        EntityList_RegisterEntity_Impl(entityList, &masterIBP, categoryId);
     }
 
     for (SegNode* n = head; n != nullptr; ) {
         SegNode* next = n->next;
-        if (fn_MemFree) fn_MemFree(g_pMemAllocSingleton, n);
+        System::MemoryAllocator::MemFree(n);
         n = next;
     }
 

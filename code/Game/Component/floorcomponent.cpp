@@ -31,60 +31,16 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
 
-static void EnsureSubHelpers();
-
 // ============================================================
-// Resolved helpers
+// Helpers, called directly (B.3R): 0x140004680 FloorComponent_FindResData,
+// 0x14009cba0 FloorComponent_RemoveFloorMesh, 0x14011f390 FloorComponent_SubF390
+// (all three defined below), the import slot 0x140152a98 Object::Base::IsDerivedFrom,
+// and the game-world cell 0x1401c3dd8 read through g_pGameWorldSingleton.
 // ============================================================
-
-
-// IsDerivedFrom -- dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// FUN_140004680 -- get entity data (owner -> entity data ptr)
-typedef void* (*fn_GetEntityData_t)(void* owner, void* outPtr);
-static fn_GetEntityData_t s_fn_GetEntityData = nullptr;
-
-// FUN_14009cba0 -- remove floor mesh from picking scene
-typedef void (*fn_RemoveFloorMesh_t)(void* scene, uint32_t floorId,
-    int x, int y, int w, int h);
-static fn_RemoveFloorMesh_t s_fn_RemoveFloorMesh = nullptr;
-
-// FloorComponent_sub_f390 -- floor mesh placement sub-function (0x14011F390)
-typedef void (*fn_FloorSubF390_t)(void* self);
-static fn_FloorSubF390_t s_fn_FloorSubF390 = nullptr;
-
-// Game state singleton
-static void** s_pGameState = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-    s_fn_GetEntityData = reinterpret_cast<fn_GetEntityData_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_RemoveFloorMesh = reinterpret_cast<fn_RemoveFloorMesh_t>(
-        ResolveAddr(Module::Exe, 0x14009cba0));
-    s_fn_FloorSubF390 = reinterpret_cast<fn_FloorSubF390_t>(
-        ResolveAddr(Module::Exe, 0x14011F390));
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-    // ENDGAME B.3.9 C1 (D5): 0x1401c7708 (FloorDescription) had zero readers --
-    // resolved but never dereferenced anywhere in this file -- removed outright.
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = reinterpret_cast<fn_IsDerivedFrom_dispatch_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    s_initialized = true;
-}
 
 // ============================================================
 // FloorComponent::Shutdown (vtable slot [3], 0x14011F560)
@@ -128,14 +84,9 @@ static void EnsureHelpers() {
 // pseudo-C but the CALL at 0x14011f41c targets 0x140003f60; the wrong one would have
 // returned a ParticleComponent (or null) and f390 would then have read a Transform out
 // of the wrong object's +0x148. Disassembly-verified 2026-08-29.
-typedef void* (*fn_EntityAccessor_t)(void* entity, void* outIBP);
-static fn_EntityAccessor_t s_fn_EntityAccessor = nullptr;
-
-static bool s_subResolved = false;
-static void EnsureSubHelpers() {
-    if (s_subResolved) return;
-    s_fn_EntityAccessor = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    // Picking::Scene::AddMesh / RemoveMesh — Runtime exports.
+// It is called directly: ActCNR_FindComponent_3f60.
+//
+// Picking::Scene::AddMesh / RemoveMesh — Runtime exports.
     // 0x1801252e0, NOT 0x1800f8d80. The latter is int3 PADDING, not a function entry —
     // calling it raises a breakpoint exception. It survived only because floors are never
     // placed on the autostart path (the note at citizenai_executor.cpp:316 has said so for
@@ -150,12 +101,9 @@ static void EnsureSubHelpers() {
     // The previous 0x1800f8f50 was MID-FUNCTION inside Frustum::Contains — every
     // floor removal jumped into its middle with garbage registers (found in the
     // save/load-wave mid-function address sweep, 2026-08-28).
-    s_subResolved = true;
-}
 
 // Reimpl of FUN_140004680 (FindComponentByType on owner+0x30 array; returns IBP wrapping found component)
 void* FloorComponent_FindResData(void* owner, void* outIBP) {
-    EnsureHelpers(); EnsureSubHelpers();
     uintptr_t o = reinterpret_cast<uintptr_t>(owner);
     void* found = nullptr;
     uint32_t wantTypeId = MapComponent::TypeId();
@@ -167,11 +115,11 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (tid == wantTypeId) {
             void* c = *slot;
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantTypeId)) found = c;
+            if (::Object::IsDerivedFromNullSafe(c, wantTypeId)) found = c;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
@@ -179,7 +127,6 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
 // Reimpl of FUN_14009cba0 (decrement per-tile floor counter over w*h footprint, then Scene::RemoveMesh)
 void FloorComponent_RemoveFloorMesh(void* scene, uint32_t floorId,
                                     int x, int y, int w, int h) {
-    EnsureHelpers(); EnsureSubHelpers();
     int* mapInfo = reinterpret_cast<int*>(scene);
     int mapW = *mapInfo;
     uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapInfo) + 0x80);
@@ -196,7 +143,6 @@ void FloorComponent_RemoveFloorMesh(void* scene, uint32_t floorId,
 
 // Reimpl of FUN_14011f390 (place floor mesh: increment footprint counters, add mesh to Picking::Scene)
 void FloorComponent_SubF390(void* selfV) {
-    EnsureHelpers(); EnsureSubHelpers();
     uintptr_t* self = reinterpret_cast<uintptr_t*>(selfV);
     uint8_t* sb = reinterpret_cast<uint8_t*>(selfV);
 
@@ -205,11 +151,11 @@ void FloorComponent_SubF390(void* selfV) {
         reinterpret_cast<Component*>(selfV)->OnRemove();   // B.3.x bridge (slot 7)
     }
 
-    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
+    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     int* mapInfo = *reinterpret_cast<int**>(world + 0xF8);
 
     int64_t resIBP = 0;
-    if (s_fn_GetEntityData) s_fn_GetEntityData(*reinterpret_cast<void**>(self + 2), &resIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(self + 2), &resIBP);   // 0x140004680
     // [SA-GUARD] Retail reads the footprint shorts unguarded — its MapComponent is always
     // there. In standalone the find can miss (the type registry can lag), and a null here
     // would stamp cell records at address 0x28.
@@ -222,7 +168,7 @@ void FloorComponent_SubF390(void* selfV) {
     int16_t fh    = *reinterpret_cast<int16_t*>(resIBP + 0x2e);
 
     int64_t entAcc = 0;
-    if (s_fn_EntityAccessor) s_fn_EntityAccessor(*reinterpret_cast<void**>(self + 2), &entAcc);
+    ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(self + 2), &entAcc);   // 0x140003f60
     uintptr_t ent = *reinterpret_cast<uintptr_t*>(&entAcc);
 
     // [SA-SCOPED FALLBACK] The finder's type id is the shared raw .rdata 0x1401c7a50
@@ -258,8 +204,7 @@ void FloorComponent_SubF390(void* selfV) {
 
     void* building = *reinterpret_cast<void**>(self + 3);
     const uint32_t descTid = FloorDescription::TypeId();
-    void* meshOwner = (descTid && fn_IsDerivedFrom &&
-                       fn_IsDerivedFrom(building, descTid)) ? building : nullptr;
+    void* meshOwner = (descTid && ::Object::IsDerivedFromNullSafe(building, descTid)) ? building : nullptr;
     void* mesh = meshOwner ? *reinterpret_cast<void**>((uintptr_t)meshOwner + 0x20) : nullptr;
     // desc+0x20 is the PickingMesh ExternalPtr (FishermansDockFloor.rsc = the dock's
     // "floor" sub-object). Without it there is nothing for the height ray to hit, and
@@ -286,18 +231,6 @@ void FloorComponent_SubF390(void* selfV) {
     *reinterpret_cast<uint8_t*>(self + 5) = 1;
     *reinterpret_cast<uint32_t*>(sb + 0x2c) = meshId;
 
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void FloorComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[FloorComponent] Funcs resolved: FloorSub=%p RemoveMesh=%p\n",
-           (void*)s_fn_FloorSubF390,
-           (void*)s_fn_RemoveFloorMesh);
-#endif
 }
 
 // ===== Standalone factory =====
@@ -377,8 +310,6 @@ FloorComponent::FloorComponent() : floorFlag(0), _pad29{}, floorId(-1) {
 
 // [3] 0x14011f560 — floorFlag round-trips a save.
 void FloorComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t serializer[24];
@@ -388,16 +319,13 @@ void FloorComponent::Persist(void* stream) {
 }
 // [6] 0x14011f340
 void FloorComponent::OnAdded() {
-    EnsureHelpers();
-    EnsureSubHelpers();
-
     const uint32_t descTid = FloorDescription::TypeId();
-    if (!s_fn_IsDerivedFrom_d || !descTid) {
+    if (!descTid) {
         return;
     }
 
     void* obj = _description;
-    bool isDerived = s_fn_IsDerivedFrom_d(obj, descTid);
+    bool isDerived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(descTid);   // B.3.x bridge
     void* building = isDerived ? obj : nullptr;
 
     // Retail dereferences `building+0x28` unconditionally (CMOVNZ leaves RDX=0 on a
@@ -411,26 +339,20 @@ void FloorComponent::OnAdded() {
     // desc+0x28 is the FloorDescription bool — "this structure has a walkable floor".
     uint8_t flag = *(uint8_t*)((uintptr_t)building + 0x28);
     if (flag != 0) {
-        if (s_fn_FloorSubF390) {
-            s_fn_FloorSubF390(this);
-        }
+        FloorComponent_SubF390(this);   // 0x14011f390
     }
 }
 // [7] 0x14011f2a0
 void FloorComponent::OnRemove() {
-    EnsureHelpers();
-
     if (floorId >= 0) {
         // Get scene from game state
-        int* pScene = *(int**)((uintptr_t)*s_pGameState + 0xF8);
+        int* pScene = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xF8);
 
         // Check owner pointer
 
         // Get entity data from owner
         uintptr_t entityData = 0;
-        if (s_fn_GetEntityData) {
-            s_fn_GetEntityData(*(void**)((uintptr_t)this + 0x10), &entityData);
-        }
+        FloorComponent_FindResData(*(void**)((uintptr_t)this + 0x10), &entityData);   // 0x140004680
 
         // [SA-GUARD] Same MapComponent-may-be-missing case as f390: without the
         // footprint we cannot decrement the per-cell counters, but we must still drop
@@ -441,10 +363,8 @@ void FloorComponent::OnRemove() {
             int16_t w = *(int16_t*)(entityData + 0x2c);
             int16_t h = *(int16_t*)(entityData + 0x2e);
 
-            if (s_fn_RemoveFloorMesh) {
-                s_fn_RemoveFloorMesh(pScene, (uint32_t)floorId,
-                    (int)x, (int)y, (int)w, (int)h);
-            }
+            FloorComponent_RemoveFloorMesh(pScene, (uint32_t)floorId,   // 0x14009cba0
+                (int)x, (int)y, (int)w, (int)h);
         }
 
         floorId = -1;

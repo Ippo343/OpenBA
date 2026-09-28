@@ -21,7 +21,6 @@
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include <cstdio>
-#include "resolve.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
@@ -36,6 +35,7 @@
 #include "runtime/types/ui/DocumentTextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ScrollElement.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "runtime/types/ui/ButtonElement.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // File-local helpers
@@ -85,7 +85,7 @@ static void HelpUI_LoadPage(HelpUI* self) {
     void* stringTable = *(void**)((uintptr_t)resourceArray + (int64_t)pageResIndex * 8);
 
     // Check IsDerivedFrom (StringTable type)
-    bool isStringTable = fn_IsDerivedFrom(stringTable, UI::StringTable::TypeId());
+    bool isStringTable = ::Object::IsDerivedFromNullSafe(stringTable, UI::StringTable::TypeId());
     void* validTable = isStringTable ? stringTable : nullptr;
 
     // Construct UI::String with text index 2 (help content body)
@@ -149,7 +149,7 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
         void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
         void* entry = *(void**)((uintptr_t)resourceArray + (int64_t)i * 8);
 
-        bool isStringTable = fn_IsDerivedFrom(entry, UI::StringTable::TypeId());
+        bool isStringTable = ::Object::IsDerivedFromNullSafe(entry, UI::StringTable::TypeId());
         if (isStringTable && entry != nullptr) {
             // GetText at index 0 = topic key/name for matching (non-trivial return)
             System::String nameStr;
@@ -213,12 +213,12 @@ namespace helpui_sa {
     // ENDGAME B.3.9: UI::ScrollElement / UI::ComboElement / UI::DocumentTextElement /
     // UI::ContainerElement / UI::ButtonElement / UI::StringTable all have a ported
     // TypeId() now (class statics, always populated), so the EnsureTypeIds() fill
-    // from Runtime exports and the Ready() pointer checks over them are dead. Only
-    // the function-pointer readiness (not a type id) stays.
+    // from Runtime exports and the Ready() pointer checks over them are dead.
+    // B3R: the function-pointer readiness over the engine_funcs doors was always true
+    // and is gone; the allocator singleton (the old g_pMemAllocSingleton snapshot)
+    // is read live.
     bool Ready() {
-        return fn_IsDerivedFrom && fn_InternalBasePtr_Ctor &&
-               fn_ExternalList_GetResourceCount &&
-               fn_MemAlloc && g_pMemAllocSingleton;
+        return System::MemoryAllocator::_singleton != nullptr;
     }
     // Report the OUTCOME of the readiness test, once, naming what is missing.
     bool CheckOnce() {
@@ -243,8 +243,9 @@ namespace helpui_sa {
                *reinterpret_cast<void**>(s+0x48), *reinterpret_cast<void**>(s+0x50),
                *reinterpret_cast<void**>(s+0x58), *reinterpret_cast<int*>(s+0x60),
                *reinterpret_cast<int*>(s+0x64), *reinterpret_cast<int*>(s+0x70), topics,
-               (topics && fn_ExternalList_GetResourceCount)
-                   ? fn_ExternalList_GetResourceCount(topics) : -1);
+               topics
+                   ? reinterpret_cast<const ::Object::ExternalList*>(topics)->GetResourceCount()  // B.3.3 bridge
+                   : -1);
         fflush(stdout);
     }
 }
@@ -290,7 +291,7 @@ void HelpUI::OnCreated() {
     // 1. Find first element (type 0x1401517e8) -> +0x30
     ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ScrollElement::TypeId()));  // B.3.6 bridge
     elem = *(void**)retBuf;
-    derived = fn_IsDerivedFrom(elem, UI::ScrollElement::TypeId());
+    derived = ::Object::IsDerivedFromNullSafe(elem, UI::ScrollElement::TypeId());
     new (bpBuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x30) = *(uint64_t*)bpBuf;
@@ -298,7 +299,7 @@ void HelpUI::OnCreated() {
     // 2. Find ComboElement (type 0x140151690) -> +0x40
     ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ComboElement::TypeId()));  // B.3.6 bridge
     elem = *(void**)retBuf;
-    derived = fn_IsDerivedFrom(elem, UI::ComboElement::TypeId());
+    derived = ::Object::IsDerivedFromNullSafe(elem, UI::ComboElement::TypeId());
     new (bpBuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x40) = *(uint64_t*)bpBuf;
@@ -306,7 +307,7 @@ void HelpUI::OnCreated() {
     // 3. Find DocumentTextElement (type 0x1401517f0) -> +0x38
     ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::DocumentTextElement::TypeId()));  // B.3.6 bridge
     elem = *(void**)retBuf;
-    derived = fn_IsDerivedFrom(elem, UI::DocumentTextElement::TypeId());
+    derived = ::Object::IsDerivedFromNullSafe(elem, UI::DocumentTextElement::TypeId());
     new (bpBuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x38) = *(uint64_t*)bpBuf;
@@ -314,7 +315,7 @@ void HelpUI::OnCreated() {
     // 4. Find ContainerElement (type 0x1401517f8) -> +0x58
     ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ContainerElement::TypeId()));  // B.3.6 bridge
     elem = *(void**)retBuf;
-    derived = fn_IsDerivedFrom(elem, UI::ContainerElement::TypeId());
+    derived = ::Object::IsDerivedFromNullSafe(elem, UI::ContainerElement::TypeId());
     new (bpBuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x58) = *(uint64_t*)bpBuf;
@@ -331,7 +332,7 @@ void HelpUI::OnCreated() {
         ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         backBtn = *(void**)retBuf;
     }
-    derived = fn_IsDerivedFrom(backBtn, UI::ButtonElement::TypeId());
+    derived = ::Object::IsDerivedFromNullSafe(backBtn, UI::ButtonElement::TypeId());
     new (bpBuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(derived ? backBtn : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x48) = *(uint64_t*)bpBuf;
@@ -343,7 +344,7 @@ void HelpUI::OnCreated() {
         ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         fwdBtn = *(void**)retBuf;
     }
-    derived = fn_IsDerivedFrom(fwdBtn, UI::ButtonElement::TypeId());
+    derived = ::Object::IsDerivedFromNullSafe(fwdBtn, UI::ButtonElement::TypeId());
     new (bpBuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(derived ? fwdBtn : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x50) = *(uint64_t*)bpBuf;
@@ -362,7 +363,7 @@ void HelpUI::OnCreated() {
         void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
         void* entry = *(void**)((uintptr_t)resourceArray + (int64_t)i * 8);
 
-        bool isStringTable = fn_IsDerivedFrom(entry, UI::StringTable::TypeId());
+        bool isStringTable = ::Object::IsDerivedFromNullSafe(entry, UI::StringTable::TypeId());
         if (isStringTable && entry != nullptr) {
             // Get topic name (text index 1) — non-trivial return
             System::String topicName;
@@ -512,7 +513,7 @@ void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t m
         void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
         void* stringTable = *(void**)((uintptr_t)resourceArray + (int64_t)pageIdx * 8);
 
-        bool isStringTable = fn_IsDerivedFrom(stringTable, UI::StringTable::TypeId());
+        bool isStringTable = ::Object::IsDerivedFromNullSafe(stringTable, UI::StringTable::TypeId());
         void* validTable = isStringTable ? stringTable : nullptr;
 
         // Construct UI::String with text index 2 (content) and set on document
@@ -558,7 +559,7 @@ void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t m
         void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
         void* stringTable = *(void**)((uintptr_t)resourceArray + (int64_t)pageIdx * 8);
 
-        bool isStringTable = fn_IsDerivedFrom(stringTable, UI::StringTable::TypeId());
+        bool isStringTable = ::Object::IsDerivedFromNullSafe(stringTable, UI::StringTable::TypeId());
         void* validTable = isStringTable ? stringTable : nullptr;
 
         // Construct UI::String with text index 2 (content) and set on document

@@ -35,6 +35,9 @@
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "utility/PerlinNoise.h"   // B3R: RtUtility_PerlinNoise_Ctor / _Generate
+#include "Game/exe_constants.h"   // B3R: kRdata_*
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
 // Helper: find element by name in parent element, cast to InternalBasePtr
@@ -74,7 +77,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     uintptr_t s = (uintptr_t)self;
 
     // --- Allocate and construct MaterialInstance (0x60 bytes) ---
-    void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+    void* matInst = System::MemoryAllocator::MemAlloc(0x60, 8);
     void* materialPtr = nullptr;
     if (matInst) {
         ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
@@ -92,7 +95,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
             ->FindOrLoad(filename));
     void* material = nullptr;
     if (ext) {
-        if (fn_IsDerivedFrom(ext, Graphics::Material::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId())) {
             material = ext;
         }
     }
@@ -111,7 +114,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
         ->BuildParameters();   // B.3.5 bridge
 
     // --- Allocate and construct SpriteSheet (0x58 bytes) ---
-    void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+    void* sheet = System::MemoryAllocator::MemAlloc(0x58, 8);
     void* spriteSheet = nullptr;
     if (sheet) {
         ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
@@ -146,7 +149,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     // Set sprite info with UV scale
     imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
     imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
     reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);  // B.3.6 bridge
 
     // --- Find "noiseImage" element and set sprite ---
@@ -159,7 +162,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     void* rawElem = (void*)foundElem;
 
     void* imageElem = nullptr;
-    if (rawElem && fn_IsDerivedFrom(rawElem, UI::ImageElement::TypeId())) {
+    if (rawElem && ::Object::IsDerivedFromNullSafe(rawElem, UI::ImageElement::TypeId())) {
         imageElem = rawElem;
     }
     uint64_t imageElemPtr = 0;
@@ -187,10 +190,9 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
 //
 // Original: FUN_1400711D0
 
-// PerlinNoise and Random function pointers are resolved globally in
-// engine_funcs.cpp (fn_PerlinNoise_Ctor, fn_PerlinNoise_Generate,
-// fn_Random_Default_Ctor, fn_Random_RandTol). Float parsing now goes through
-// System::String::ToFloat directly.
+// PerlinNoise and Random: their registered bodies RtUtility_PerlinNoise_Ctor /
+// RtUtility_PerlinNoise_Generate / RtSystem_Random_Ctor, called by name (B3R).
+// Float parsing now goes through System::String::ToFloat directly.
 
 // Helper: read float value from a slider element's text (+0xC8)
 static float NoiseUI_ReadSliderFloat(uintptr_t sliderPtr) {
@@ -200,10 +202,6 @@ static float NoiseUI_ReadSliderFloat(uintptr_t sliderPtr) {
 }
 
 void NoiseUI_GenerateNoise(void* self) {
-    if (!fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate ||
-        !fn_Random_Default_Ctor)
-        return;
-
     uintptr_t s = (uintptr_t)self;
 
     // Read slider values
@@ -214,22 +212,23 @@ void NoiseUI_GenerateNoise(void* self) {
     float gradient    = NoiseUI_ReadSliderFloat(*(uint64_t*)(s + 0x68));
 
     // Compute inverse scale (uvScale / scale)
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
     float invScale = uvScale / scale;
 
     // Create Random with time-based seed, get two random seeds
     // Random is ~0xA60 bytes (Mersenne Twister state)
     uint8_t randomBuf[0xA80];
-    fn_Random_Default_Ctor(randomBuf);
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(randomBuf));   // ??0Random@System@@QEAA@XZ
     int seed1 = reinterpret_cast<System::Random*>(randomBuf)->RandTol(static_cast<int32_t>(0x7ffffff));   // B.3.4 bridge
     int seed2 = reinterpret_cast<System::Random*>(randomBuf)->RandTol(static_cast<int32_t>(0x7ffffff));   // B.3.4 bridge
 
     // Create PerlinNoise (0x10 bytes)
     uint8_t noiseBuf[0x10];
-    fn_PerlinNoise_Ctor(noiseBuf, persistance, octaves, seed2, seed1);
+    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(noiseBuf),
+                               persistance, octaves, seed2, seed1);   // ??0PerlinNoise@Utility@@QEAA@MMHH@Z
 
     // Allocate 256*256 pixel buffer
-    uint32_t* pixels = (uint32_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x40000, 4);
+    uint32_t* pixels = (uint32_t*)System::MemoryAllocator::MemAlloc(0x40000, 4);
 
     // Generate noise texture
     // Constants from exe .rdata:
@@ -242,9 +241,9 @@ void NoiseUI_GenerateNoise(void* self) {
     for (int y = 0; y < 0x100; y++) {
         for (int x = 0; x < 0x100; x++) {
             // Generate noise value at scaled position
-            float noiseVal = fn_PerlinNoise_Generate(noiseBuf,
-                                                      (float)x * invScale,
-                                                      (float)y * invScale);
+            float noiseVal = RtUtility_PerlinNoise_Generate(
+                reinterpret_cast<const RtUtility::PerlinNoise*>(noiseBuf),
+                (float)x * invScale, (float)y * invScale);   // ?Generate@PerlinNoise@Utility@@
 
             // Map from [-1,1] to [0,1], subtract cutoff, clamp
             float val = (noiseVal * halfVal + halfVal) - cutOff;
@@ -270,7 +269,7 @@ void NoiseUI_GenerateNoise(void* self) {
     // Copy to ImageBuffer texture
     reinterpret_cast<Video::ImageBuffer*>(*(void**)(s + 0x30))
         ->CopyToTexture(pixels, 0x100, 0x100);   // B.3.5 bridge
-    fn_MemFreeStatic(pixels);
+    System::MemoryAllocator::MemFree(pixels);
 }
 
 // ============================================================
@@ -286,7 +285,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Allocate ImageBuffer (0x68 bytes)
-    void* imgBuf = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+    void* imgBuf = System::MemoryAllocator::MemAlloc(0x68, 8);
     void* imageBuffer = nullptr;
     if (imgBuf != nullptr) {
         ::new (imgBuf) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
@@ -322,7 +321,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
         /*levels   */ nullptr);   // B.3.5 bridge
 
     // Allocate 256*256 ARGB pixel buffer, fill with black (0xFF000000)
-    uint32_t* pixels = (uint32_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x40000, 4);
+    uint32_t* pixels = (uint32_t*)System::MemoryAllocator::MemAlloc(0x40000, 4);
     uint32_t* p = pixels;
     for (int i = 0; i < 0x10000; i++) {
         *p = 0xFF000000;
@@ -332,7 +331,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
     // Copy pixel data to ImageBuffer texture
     reinterpret_cast<Video::ImageBuffer*>(*(void**)(s + 0x30))
         ->CopyToTexture(pixels, 0x100, 0x100);   // B.3.5 bridge
-    fn_MemFreeStatic(pixels);
+    System::MemoryAllocator::MemFree(pixels);
 
     // Setup MaterialInstance + SpriteSheet, find "noiseImage" element
     NoiseUI_SetupImage((void*)s, *(void**)(s + 0x30),

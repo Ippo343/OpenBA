@@ -28,8 +28,12 @@
 #include "Work/HarvestArea.h"
 #include "Work/harvestarea_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_constants.h"     // B3R: kRdata_140172114
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -39,202 +43,34 @@
 #include "Component/CropFieldDescription.h"   // ENDGAME B.3.9 D5: CropFieldDescription::TypeId()
 
 // ============================================================
-// Local function pointers (resolved once by HarvestArea_ResolveFuncs)
+// Sub-functions, called by name (B3R; Work/Action/Component/Tutorial/Game headers)
 // ============================================================
+//   AutoPickupWork::CheckAssignments (0x1400e3db0)  WorkGrid_AutoPickup_e3db0
+//   0x140003050 FindComponent MaterialDesc          WorkBase_FindComponent_3050
+//   0x140002f90 FindComponent MeshInstance          WorkBase_FindComponent_2f90
+//   0x140005380 FindComponent CropFieldDescription  WorkAcc_FindComponent_5380
+//   0x1400052c0 FindComponent NaturalResource       WorkBase_FindComponent_52c0
+//   0x14012c3f0 MeshInstance set visible            CitizenComp_FUN_14012c3f0
+//   0x14012e5c0 CalcMaxWorkers                      WorkComponent_CalcMaxWorkers
+//   0x14009ccf0 Map_FindNearestPassable             WorkGrid_FindCell_9ccf0
+//   0x1400a00f0 Map_CanPathTo                       WorkBase_ValidateCell_a00f0
+//               (a uint64 whose low byte is the bool; read through uint8_t)
+//   0x14009f3e0 GetTerrainPos                       Reimpl_MapGetTerrainPos
+//   0x1400c1530 harvest action chain ctor           WorkAct_HarvestAreaCtor_c1530
+//   0x140029a40 / 0x14001ca60 / 0x140029de0 cell BST insert / remove / serialize
+//                                                   WorkCellBST_Insert_9a40 / _Remove_ca60 / _Serialize_9de0
+//   0x1400f7100 ValidateTask                        WorkBase_ValidateTask_f7100
+//   0x1400c5400 cancel work                         WorkBase_TaskListCleanup_c5400
+//   0x140002e10 FindPositionComponent               AttendanceComponent_GetJobHostComponent
+//   0x14000e320 BST recursive free                  WorkBase_TreeNodeFree_e320
+//   MemAlloc                                        System::MemoryAllocator::MemAlloc
+//   DAT_140172114 = 0.5f                            kRdata_140172114
+// 0x14000a590 (Array<uint8>::SetSize) is a GameColl::AsArray<GameColl::U8> member call.
 
-// AutoPickupWork::CheckAssignments (base class work check)
-typedef int (*HA_AutoPickup_CheckAssignments_t)(uintptr_t self, void* citizenRef);
-static HA_AutoPickup_CheckAssignments_t s_fn_AutoPickup_CheckAssignments = nullptr;
-
-// FindComponent helpers
-typedef void* (*HA_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
-typedef void* (*HA_FindComp_MeshInstance_t)(uintptr_t entity, void* outIBP);
-typedef void* (*HA_FindComp_CropDesc_t)(uintptr_t entity, void* outIBP);
-typedef void* (*HA_FindComp_NatRes_t)(uintptr_t entity, void* outIBP);
-
-static HA_FindComp_MatDesc_t s_fn_FindComp_MatDesc = nullptr;         // 0x140003050
-static HA_FindComp_MeshInstance_t s_fn_FindComp_MeshInstance = nullptr; // 0x140002f90
-static HA_FindComp_CropDesc_t s_fn_FindComp_CropDesc = nullptr;       // 0x140005380
-static HA_FindComp_NatRes_t s_fn_FindComp_NatRes = nullptr;            // 0x1400052c0
-
-// MeshInstance::SetVisible(mesh, group, visible)
-typedef void (*HA_MeshInstance_SetVisible_t)(void* meshInst, uint8_t group, char visible);
-static HA_MeshInstance_SetVisible_t s_fn_MeshInstance_SetVisible = nullptr; // 0x14012c3f0
-
-// CalcMaxWorkers(matDesc) -> int
-typedef int (*HA_CalcMaxWorkers_t)(uintptr_t matDesc);
-static HA_CalcMaxWorkers_t s_fn_CalcMaxWorkers = nullptr; // 0x14012e5c0
-
-// Map functions
-typedef int (*HA_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
-typedef bool (*HA_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
-static HA_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr; // 0x14009ccf0
-static HA_Map_CanPathTo_t s_fn_Map_CanPathTo = nullptr;                     // 0x1400a00f0
-
-// GetTerrainPos(mapGrid, outPos, gridPos, param4, outNormal)
-typedef float* (*HA_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
-                                     char param4, uint32_t* outNormal);
-static HA_GetTerrainPos_t s_fn_GetTerrainPos = nullptr; // 0x14009f3e0
-
-// ShowTool_Action_Ctor4 -- creates harvest action chain for crop areas
-// Signature: (citizenIBP, priority, harvestMode, targetIBP, position, packedCellInfo, ???)
-typedef void (*HA_ShowTool_Action_Ctor4_t)(void* citizenIBP, int priority, int harvestMode,
-                                           void* targetIBP, float* position,
-                                           uint32_t packedCellInfo, uint32_t param7);
-static HA_ShowTool_Action_Ctor4_t s_fn_ShowTool_Action_Ctor4 = nullptr; // ShowTool_Action_Ctor4
-
-// BST insert: TradeDescription_impl_9a40(treeRoot, outResult, keyData)
-typedef void* (*HA_BST_Insert_t)(void* treeRoot, void* outResult, uint32_t* keyData);
-static HA_BST_Insert_t s_fn_BST_Insert = nullptr; // TradeDescription_impl_9a40
-
-// BST remove: TradeDescription_impl_ca60(treeRoot, node)
-typedef void (*HA_BST_Remove_t)(void* treeRoot, void* node);
-static HA_BST_Remove_t s_fn_BST_Remove = nullptr; // TradeDescription_impl_ca60
-
-// BST serialize: TradeDescription_impl_9de0(treeRoot, serializer)
-typedef void (*HA_BST_Serialize_t)(void* treeRoot, void* serializer);
-static HA_BST_Serialize_t s_fn_BST_Serialize = nullptr; // TradeDescription_impl_9de0
-
-// FUN_1400f7100 -- Work validate task helper
-typedef uint8_t (*HA_ValidateTask_t)(uintptr_t self, uintptr_t param2, void* ibp, void** outTask);
-static HA_ValidateTask_t s_fn_ValidateTask = nullptr;
-
-// FUN_1400c5400 -- cancel work/task cleanup
-typedef void (*HA_TaskCancel_t)(void* taskList);
-static HA_TaskCancel_t s_fn_TaskCancel = nullptr;
-
-// FUN_140002e10 -- FindPositionComponent on entity
-typedef void* (*HA_FindPosComp_t)(uintptr_t entity, void* outIBP);
-static HA_FindPosComp_t s_fn_FindPosComp = nullptr;
-
-
-// Resize byte array (FUN_14000a590)
-// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
-// is gone.
-
-// BST recursive free (FUN_14000e320)
-typedef void (*HA_BST_RecursiveFree_t)(void* treeRoot, void* node);
-static HA_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
-
-
-// MemAlloc / MemFree
-typedef void* (*HA_MemAlloc_t)(int64_t size, int align);
-static HA_MemAlloc_t s_fn_MemAlloc = nullptr;
-static void* HA_MemAllocViaSingleton(int64_t size, int align) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
-}
-
-// Type IDs
-// (s_typeId_NatResComp not needed -- NatRes lookup done via s_fn_FindComp_NatRes)
-
-// Float constants
-static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
-
-// Vtable pointers for dtor chain
-
-static bool s_ha_funcs_resolved = false;
-
-// ============================================================
-// Resolution
-// ============================================================
+// B3R: resolves nothing. Kept only because cropfieldcomponent_states.cpp (another
+// block's file) still calls it; delete it with that call.
 bool HarvestArea_ResolveFuncs() {
-    if (s_ha_funcs_resolved) return true;
-
-    s_fn_AutoPickup_CheckAssignments = reinterpret_cast<HA_AutoPickup_CheckAssignments_t>(
-        ResolveAddr(Module::Exe, 0x1400e3db0));
-    s_fn_FindComp_MatDesc = reinterpret_cast<HA_FindComp_MatDesc_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_FindComp_MeshInstance = reinterpret_cast<HA_FindComp_MeshInstance_t>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-    s_fn_FindComp_CropDesc = reinterpret_cast<HA_FindComp_CropDesc_t>(
-        ResolveAddr(Module::Exe, 0x140005380));
-    s_fn_FindComp_NatRes = reinterpret_cast<HA_FindComp_NatRes_t>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-    s_fn_MeshInstance_SetVisible = reinterpret_cast<HA_MeshInstance_SetVisible_t>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_fn_CalcMaxWorkers = reinterpret_cast<HA_CalcMaxWorkers_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_fn_Map_FindNearestPassable = reinterpret_cast<HA_Map_FindNearestPassable_t>(
-        ResolveAddr(Module::Exe, 0x14009ccf0));
-    s_fn_Map_CanPathTo = reinterpret_cast<HA_Map_CanPathTo_t>(
-        ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_GetTerrainPos = reinterpret_cast<HA_GetTerrainPos_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_ShowTool_Action_Ctor4 = reinterpret_cast<HA_ShowTool_Action_Ctor4_t>(
-        ResolveAddr(Module::Exe, 0x1400c1530));  // was 0x1400c1720 (mid-function!)
-    s_fn_BST_Insert = reinterpret_cast<HA_BST_Insert_t>(
-        ResolveAddr(Module::Exe, 0x140029a40));
-    s_fn_BST_Remove = reinterpret_cast<HA_BST_Remove_t>(
-        ResolveAddr(Module::Exe, 0x14001ca60));  // was 0x140029a60 (wrong function!)
-    s_fn_BST_Serialize = reinterpret_cast<HA_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140029de0));
-    s_fn_ValidateTask = reinterpret_cast<HA_ValidateTask_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_TaskCancel = reinterpret_cast<HA_TaskCancel_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_FindPosComp = reinterpret_cast<HA_FindPosComp_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_BST_RecursiveFree = reinterpret_cast<HA_BST_RecursiveFree_t>(
-        ResolveAddr(Module::Exe, 0x14000e320));
-
-    // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
-    // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
-    // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
-    // Validate slot called it: EXEC of 0 the first harvest season a field had stale
-    // tasks (BANISHED_STRESS town at 10x, 2026-09-03). Allocate through the real
-    // allocator singleton instead; fn_MemFreeStatic pairs with it.
-    s_fn_MemAlloc = &HA_MemAllocViaSingleton;
-
-    // Float constants
-    s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-
-    // Vtable addresses
-    // ⚠ Were 0x140161380 / 0x140161300 — RTTI type descriptors ("ForesterWork\0" /
-    // "FishingWork\0"), not vtables; same adjacency error harvestorchard.cpp carried.
-    // The real base vtables are AutoPickupWorkAddr::Vtable / WorkAddr::Vtable.
-
-    // Verify critical pointers
-    bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
-              s_fn_FindComp_MeshInstance && s_fn_FindComp_CropDesc &&
-              s_fn_FindComp_NatRes && s_fn_MeshInstance_SetVisible &&
-              s_fn_CalcMaxWorkers && s_fn_Map_FindNearestPassable &&
-              s_fn_Map_CanPathTo && s_fn_GetTerrainPos &&
-              s_fn_ShowTool_Action_Ctor4 &&
-              s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
-              s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
-              s_fn_BST_RecursiveFree &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && g_pGameWorldSingleton && s_fHalfCellOffset;
-
-    s_ha_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[HarvestArea] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_AutoPickup_CheckAssignments) printf("  MISSING: AutoPickup_CheckAssignments\n");
-        if (!s_fn_FindComp_MatDesc) printf("  MISSING: FindComp_MatDesc\n");
-        if (!s_fn_FindComp_MeshInstance) printf("  MISSING: FindComp_MeshInstance\n");
-        if (!s_fn_FindComp_CropDesc) printf("  MISSING: FindComp_CropDesc\n");
-        if (!s_fn_FindComp_NatRes) printf("  MISSING: FindComp_NatRes\n");
-        if (!s_fn_MeshInstance_SetVisible) printf("  MISSING: MeshInstance_SetVisible\n");
-        if (!s_fn_CalcMaxWorkers) printf("  MISSING: CalcMaxWorkers\n");
-        if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
-        if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
-        if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_ShowTool_Action_Ctor4) printf("  MISSING: ShowTool_Action_Ctor4\n");
-        if (!s_fn_BST_Insert) printf("  MISSING: BST_Insert\n");
-        if (!s_fn_BST_Remove) printf("  MISSING: BST_Remove\n");
-        if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
-        if (!s_fn_ValidateTask) printf("  MISSING: ValidateTask\n");
-        if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
-        if (!s_fn_FindPosComp) printf("  MISSING: FindPosComp\n");
-        if (!s_fn_BST_RecursiveFree) printf("  MISSING: BST_RecursiveFree\n");
-    }
-#endif
-
-    return ok;
+    return true;
 }
 
 
@@ -294,7 +130,7 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
     void* citizenIBP = entityIBP;
 
     // Step 1: Check auto-pickup
-    int checkResult = s_fn_AutoPickup_CheckAssignments(selfAddr, &citizenRef);
+    int checkResult = WorkGrid_AutoPickup_e3db0(selfAddr, &citizenRef);
     if (checkResult == 2) {
         ++g_ha_auto;
         return 2;
@@ -303,14 +139,14 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
     // Step 2: Find components
     uintptr_t* workEntityPtr = (uintptr_t*)(selfAddr + 0x10);
     uintptr_t matDescIBP = 0;
-    s_fn_FindComp_MatDesc(*workEntityPtr, &matDescIBP);
+    WorkBase_FindComponent_3050(*workEntityPtr, &matDescIBP);
 
     uintptr_t cropDescIBP = 0;
-    s_fn_FindComp_CropDesc(*workEntityPtr, &cropDescIBP);
+    WorkAcc_FindComponent_5380(*workEntityPtr, &cropDescIBP);
 
     // Check CropDescription -> get description object
     void* descObj = *(void**)(cropDescIBP + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descObj, CropFieldDescription::TypeId());
+    bool isDerived = Object::IsDerivedFromNullSafe(descObj, CropFieldDescription::TypeId());
     void* cropDesc = isDerived ? descObj : nullptr;
 
     // Material index for resource tracking
@@ -332,8 +168,8 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
 
     // Set mesh visibility (group 2) based on capacity
     uintptr_t meshIBP[2] = {0};
-    s_fn_FindComp_MeshInstance(*workEntityPtr, meshIBP);
-    s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
+    WorkBase_FindComponent_2f90(*workEntityPtr, meshIBP);
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)(*(uintptr_t*)meshIBP)), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
         ++g_ha_cap;
@@ -343,7 +179,7 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
     // Check tree count vs max workers
     int treeCount = (int)selfQ[10]; // _field50
     if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
     if (treeCount > *(int*)(matDescIBP + 0x30)) {
@@ -426,10 +262,10 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
 
                     // Check pathfinding from cell to citizen
                     int srcCellIdx = *(int*)(*(uintptr_t*)(cropDescIBP + 0x58) + (uintptr_t)i * 0x20);
-                    int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
+                    int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {
-                        uint64_t canPath = (uint64_t)s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
+                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
                         if ((char)canPath != 0) {
                             // Check NaturalResourceComponent on entity
                             // natResIBPArray must be contiguous: ShowTool_Action_Ctor4
@@ -439,12 +275,12 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
                             uintptr_t& natResIBP2 = natResIBPArray[1];
 
                             uintptr_t natResCompIBP[2] = {0};
-                            s_fn_FindComp_NatRes(entityAtCell1, natResCompIBP);
+                            WorkBase_FindComponent_52c0(entityAtCell1, natResCompIBP);
                             natResIBP1 = *(uintptr_t*)natResCompIBP;
 
                             if (pairedAvailable) {
                                 uintptr_t natResCompIBP2[2] = {0};
-                                s_fn_FindComp_NatRes(entityAtCell2, natResCompIBP2);
+                                WorkBase_FindComponent_52c0(entityAtCell2, natResCompIBP2);
                                 natResIBP2 = *(uintptr_t*)natResCompIBP2;
                             }
 
@@ -472,14 +308,14 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
                         handle_removal:
                             if (!((*(uint32_t*)(natResIBP1 + 0x20) >> 20) & 1)) {
                                 // Valid cell -- create harvest action
-                                float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
+                                float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
                                 Math::Vector3 targetPos(
                                     (float)(nearestCell % *mapGrid) - halfOffset,
                                     (float)(nearestCell / *mapGrid) - halfOffset,
                                     0.0f);
 
                                 float pathPos[4]; // extra padding for GetTerrainPos
-                                s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
+                                Reimpl_MapGetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
                                 // Create the harvest action
                                 void* pCitizenIBP = citizenIBP;
@@ -490,11 +326,11 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
                                 uint32_t packedCellInfo = ((uint32_t)cellIdx2 << 16) | (uint32_t)i;
 
 
-                                s_fn_ShowTool_Action_Ctor4(
+                                WorkAct_HarvestAreaCtor_c1530(
                                     actionBuf,                    // citizenIBP
                                     (int)selfQ[4],                // priority
                                     harvestMode,                  // 1=single, 2=paired
-                                    natResIBPArray,               // target NatRes IBP array (harvestMode entries)
+                                    reinterpret_cast<void**>(natResIBPArray),               // target NatRes IBP array (harvestMode entries)
                                     pathPos,                      // position
                                     packedCellInfo,               // packed cell indices
                                     0);                           // param7
@@ -521,7 +357,7 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
                                 uintptr_t citizenIBPBuf = *(uintptr_t*)citizenIBP;
                                 keyBuf[2] = (uint32_t)citizenIBPBuf;
                                 keyBuf[3] = (uint32_t)(citizenIBPBuf >> 32);
-                                s_fn_BST_Insert((void*)(selfAddr + 0x48), insertResult, keyBuf);
+                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult, keyBuf);
 
                                 // Mark cell as used
                                 validityArray[i] = 0;
@@ -533,7 +369,7 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
                                     uintptr_t citizenIBPBuf2 = *(uintptr_t*)citizenIBP;
                                     keyBuf2[2] = (uint32_t)citizenIBPBuf2;
                                     keyBuf2[3] = (uint32_t)(citizenIBPBuf2 >> 32);
-                                    s_fn_BST_Insert((void*)(selfAddr + 0x48), insertResult2, keyBuf2);
+                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult2, keyBuf2);
                                     validityArray[cellIdx2] = 0;
                                 }
 
@@ -566,7 +402,7 @@ static void HarvestArea_RemoveCellNode(uintptr_t selfAddr, int key) {
         } else if (key > *node) {
             node = *(int**)(node + 8);          // right +0x20
         } else {
-            s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
             return;
         }
     }
@@ -661,7 +497,7 @@ int HarvestArea::Cleanup() {
 
         // Cancel work via citizen AI
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         const int before = count;
         count = *(int*)(selfAddr + 0x50);
@@ -714,7 +550,7 @@ int HarvestArea::Validate() {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2); // IBP at +0x8
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
+        uint8_t valid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), uintptr_t{0}, (void*)&ibpData, nullptr);
 
         if (valid == 0) {
             // Invalid -- add to collect list
@@ -726,7 +562,7 @@ int HarvestArea::Validate() {
                         newCap = newCount * 3;
                     }
                     collectCapacity = newCap;
-                    int* newArray = (int*)s_fn_MemAlloc((int64_t)newCap << 2, 4);
+                    int* newArray = (int*)System::MemoryAllocator::MemAlloc((int64_t)newCap << 2, 4);
                     currentArray = newArray;
 
                     uint32_t copyStart = 0;
@@ -741,7 +577,7 @@ int HarvestArea::Validate() {
                         }
                     }
                     if (collectArray != newArray) {
-                        fn_MemFreeStatic(collectArray);
+                        System::MemoryAllocator::MemFree(collectArray);
                     }
                     collectArray = newArray;
                 } else {
@@ -794,14 +630,14 @@ cleanup:
                 } else if (collectArray[k] > *bstNode) {
                     bstNode = *(int**)(bstNode + 8);
                 } else {
-                    s_fn_BST_Remove(root, bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);
                     break;
                 }
             }
         }
     }
 
-    fn_MemFreeStatic(currentArray ? currentArray : collectArray);
+    System::MemoryAllocator::MemFree(currentArray ? currentArray : collectArray);
     return collectCount == 0 ? 1 : 0;
 }
 
@@ -819,7 +655,7 @@ void* HarvestArea::GetTarget(void* outPtr) {
 
     // Find position component on entity
     uintptr_t posCompIBP[2] = {0};
-    s_fn_FindPosComp(entity, posCompIBP);
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entity), posCompIBP);
 
     // CheckPtr and read +0x48 (workplace sub-entity)
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)posCompIBP + 0x48);
@@ -850,7 +686,7 @@ void HarvestArea::Persist(void* stream) {
     ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at +0x48
-    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf2);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializerBuf2);
 
     // Serialize field cell count at +0x60
     int cellCount = *(int*)(selfAddr + 0x60);
@@ -893,16 +729,16 @@ HarvestArea::~HarvestArea() {
     uintptr_t selfAddr = (uintptr_t)this;
 
     // Free validity array at +0x58
-    fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
+    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x58));
     *(uintptr_t*)(selfAddr + 0x58) = 0;
     *(uintptr_t*)(selfAddr + 0x60) = 0;
 
     // Free BST at +0x48
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
-        fn_MemFreeStatic(bstRoot);
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
+        System::MemoryAllocator::MemFree(bstRoot);
     }
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
@@ -917,10 +753,8 @@ int HarvestArea::GetPriority() {
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The three stamps are the compiler's. HarvestArea_ResolveFuncs
-// wires the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The three stamps are the compiler's.
 HarvestArea::HarvestArea() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(nullptr) {
-    HarvestArea_ResolveFuncs();
 }
 
 // ============================================================

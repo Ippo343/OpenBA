@@ -21,7 +21,8 @@
 #include "Tutorial/TutorialImageHotKey.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Tutorial/exe_bodies.h"
+#include "object/TypeInfo.h"
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -42,16 +43,10 @@ namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex
 // ============================================================
 
 // TutorialImage External ref serialize helper (0x140027ad0)
-typedef void (*fn_ExternalRef_Serialize_t)(void* externalPtr, void* serializer);
-static fn_ExternalRef_Serialize_t ExternalRefSerializeFn() {
-    return (fn_ExternalRef_Serialize_t)ResolveAddr(Module::Exe, 0x140027ad0);
-}
+// called by name: TutBase_SerializeImageRef (Tutorial/exe_bodies.h)
 
 // FUN_140027de0 — resolves hotkey string to External ref via ExternalFactory
-typedef void (*fn_ResolveHotkeyRef_t)(void* stringField);
-static fn_ResolveHotkeyRef_t ResolveHotkeyRefFn() {
-    return (fn_ResolveHotkeyRef_t)ResolveAddr(Module::Exe, 0x140027de0);
-}
+// called by name: TutBase_ResolveToolbarRef (Tutorial/exe_bodies.h)
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -82,9 +77,7 @@ bool TutorialImageHotKey::Serialize(void* stream) {
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
 
-    if (auto serializeRef = ExternalRefSerializeFn()) {
-        serializeRef((void*)(s + 0x20), ser1);
-    }
+    TutBase_SerializeImageRef((void*)(s + 0x20), ser1);
 
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
@@ -98,9 +91,7 @@ bool TutorialImageHotKey::Serialize(void* stream) {
     // If loading (version == 0), resolve the hotkey string to an External ref
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version == 0) {
-        if (auto resolve = ResolveHotkeyRefFn()) {
-            resolve((void*)(s + 0x30));
-        }
+        TutBase_ResolveToolbarRef((void*)(s + 0x30));
     }
 
     reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
@@ -151,20 +142,18 @@ void* TutorialImageHotKey::CreateElement(void* retIBP, void* dialog) {
     // 5. IsDerivedFrom check — verify it's a TextElement
     void* foundObj = *(void**)foundIBP;
     void* textElement = nullptr;
-    if (fn_IsDerivedFrom && foundObj) {
-        if (fn_IsDerivedFrom(foundObj, UI::TextElement::TypeId()))
+    if (foundObj) {
+        if (Object::IsDerivedFromNullSafe(foundObj, UI::TextElement::TypeId()))
             textElement = foundObj;
     }
 
     // 6. Wrap in InternalBasePtr
     void* textRef = nullptr;
-    if (fn_InternalBasePtr_Ctor)
-        new (&textRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
+    new (&textRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
 
     // 7. Resolve hotkey ref from string at +0x30
-    if (auto resolve = ResolveHotkeyRefFn())
-        resolve((void*)(s + 0x30));
+    TutBase_ResolveToolbarRef((void*)(s + 0x30));
 
     // 8. Get actual KeyMap object (triple deref from exref)
     void* keymap = nullptr;
@@ -185,8 +174,7 @@ void* TutorialImageHotKey::CreateElement(void* retIBP, void* dialog) {
         deviceType = reinterpret_cast<const Input::KeyMap*>(keymap)->GetDeviceForId(keyId, 0);  // B.3.7 bridge
 
     // 11. Resolve hotkey ref again (matches original)
-    if (auto resolve = ResolveHotkeyRefFn())
-        resolve((void*)(s + 0x30));
+    TutBase_ResolveToolbarRef((void*)(s + 0x30));
 
     // 12. Get input index for this key
     int inputIndex = 0;

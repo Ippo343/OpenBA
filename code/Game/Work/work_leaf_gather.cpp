@@ -38,7 +38,8 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"      // B3R: ActCNR_FindComponent_c460
+#include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
 #include <cstdint>
 #include "Component/GrowthDescription.h"   // ENDGAME B.3.9 D5: GrowthDescription::TypeId()
 
@@ -48,32 +49,14 @@
 //   current queried count. ABI: int fn(longlong self).
 //   self+0x10 = an InternalBasePtr to the owning entity.
 // Sub-callees (all registered / engine):
-//   0x140006270 Entity_FindComponent_Storage      [reg]
-//   0x14012cf10 StorageComponent_QueryCount        [reg]
+//   0x140006270 Entity_FindComponent_Storage = WorkBase_FindComponent_6270 (by name, B3R)
+//   0x14012cf10 StorageComponent_QueryCount  = CitizenComp_StorageComponent_QueryCount (by name)
 // ============================================================
-namespace {
-typedef void* (*FindCompStorage_t)(intptr_t entity, void* retIBP);
-typedef int   (*StorageQueryCount_t)(void* storageComp);
-
-FindCompStorage_t   s_FindCompStorage_6270 = nullptr;
-StorageQueryCount_t s_StorageQueryCount_cf10 = nullptr;
-bool                s_init_116540 = false;
-
-void Ensure_116540() {
-    if (s_init_116540) return;
-    s_FindCompStorage_6270   = reinterpret_cast<FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_StorageQueryCount_cf10 = reinterpret_cast<StorageQueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    s_init_116540 = true;
-}
-} // namespace
-
 int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
-    Ensure_116540();
     void* ibpStorage[4] = { nullptr, nullptr, nullptr, nullptr };
 
     // CheckPtr(self+0x10); FindComponent_Storage(*(self+0x10), &ibpStorage)
-    if (!s_FindCompStorage_6270) return 0;
-    s_FindCompStorage_6270(*reinterpret_cast<intptr_t*>(self + 0x10), ibpStorage);
+    WorkBase_FindComponent_6270(static_cast<uintptr_t>(*reinterpret_cast<intptr_t*>(self + 0x10)), ibpStorage);
 
     // CheckPtr(&ibpStorage); iVar1 = *(int*)(storage + 0x38)
     void* storage = ibpStorage[0];
@@ -81,7 +64,7 @@ int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
     int capacity = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(storage) + 0x38);
 
     // CheckPtr(&ibpStorage); iVar2 = StorageComponent_QueryCount(storage)
-    int count = s_StorageQueryCount_cf10 ? s_StorageQueryCount_cf10(storage) : 0;
+    int count = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
 
     return capacity - count;
 }
@@ -108,7 +91,7 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
             break;
         }
     }
@@ -131,24 +114,12 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
 //     cellArrBase = *(void**)((uintptr_t)grid + 0x80);
 //     cell = *(void**)(cellArrBase + (mapW*row + col)*0x30 + 0x8)
 // Sub-callees:
-//   0x14000c460 FUN_14000c460 (owner-resolve)          [reg]
+//   0x14000c460 FUN_14000c460 (owner-resolve) = ActCNR_FindComponent_c460 (by name, B3R)
 //   slot 0x140152a98 IsDerivedFrom                     [engine dispatch]
 //   g_pGameWorldSingleton (DAT_1401c3dd8)              [runtime global]
 //   DAT_1401c77e8 type-ID global                        [runtime-filled]
 // ============================================================
-namespace {
-typedef void* (*OwnerResolve_t)(intptr_t cell, void* retIBP);
-OwnerResolve_t  s_OwnerResolve_c460 = nullptr;
-bool            s_init_120c30 = false;
-void Ensure_120c30() {
-    if (s_init_120c30) return;
-    s_OwnerResolve_c460 = reinterpret_cast<OwnerResolve_t>(ResolveAddr(Module::Exe, 0x14000c460));
-    s_init_120c30 = true;
-}
-} // namespace
-
 long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
-    Ensure_120c30();
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
 
     // grid = *(int**)((*g_pGameWorldSingleton) + 0xf8); mapW = *grid
@@ -175,11 +146,11 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
                     if (cell != nullptr) {
                         touched++;
                         void* outIBP = nullptr;
-                        if (s_OwnerResolve_c460) s_OwnerResolve_c460(reinterpret_cast<intptr_t>(cell), &outIBP);
+                        ActCNR_FindComponent_c460(reinterpret_cast<uintptr_t>(cell), &outIBP);
                         if (outIBP != nullptr) {
                             void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(outIBP) + 0x18);
                             void* owner = nullptr;
-                            if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, GrowthDescription::TypeId()))
+                            if (Object::IsDerivedFromNullSafe(obj, GrowthDescription::TypeId()))
                                 owner = obj;
                             if (owner == reinterpret_cast<void*>(self))
                                 owned++;

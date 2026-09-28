@@ -5,4 +5,3 @@
 
 #include <cstdint>
 
-bool FishingWork_ResolveFuncs();

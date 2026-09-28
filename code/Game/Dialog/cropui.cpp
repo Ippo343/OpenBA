@@ -76,7 +76,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
     if (!SA_DialogEntityAlive(self)) return 0;
     // Wrap entity at +0x28 in InternalBasePtr (base class requirement)
     void* entity = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -99,7 +99,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
 
             if (subTypeId == (int)SelectDescription::TypeId()) {
                 void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
-                bool isDerived = fn_IsDerivedFrom(subObj, SelectDescription::TypeId());
+                bool isDerived = ::Object::IsDerivedFromNullSafe(subObj, SelectDescription::TypeId());
                 if (isDerived && subObj != nullptr) {
                     // Check category filter matches
                     int category = *(int*)((uintptr_t)subObj + 0x40);
@@ -233,7 +233,7 @@ void SelectResourceUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
     // Wrap entity in InternalBasePtr (base class requirement, not used directly)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge

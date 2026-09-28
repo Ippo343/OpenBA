@@ -15,12 +15,15 @@
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/CreateRemovalDescription.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Player/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Component/exe_bodies.h"
+#include "object/TypeInfo.h"
 
 // ============================================================
 // RemovalTool::Startup (vtable +0x20, Slot4)
@@ -42,7 +45,7 @@ void RemovalTool::Startup() {
     uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
-    if (!entity || !fn_IsDerivedFrom) {
+    if (!entity) {
         removalDesc = nullptr;
         return;
     }
@@ -60,7 +63,7 @@ void RemovalTool::Startup() {
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom before casting
-            if (fn_IsDerivedFrom(comp, targetTypeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
                 result = comp;
             }
             break;
@@ -179,55 +182,18 @@ static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
 }
 
 // ============================================================
-// Resolved exe-internal function pointers for Draw
+// Draw's exe helpers, called by name:
+//   0x1401048a0 PlayerPath_Sub_48a0 -- is the entity at the tile removable by this tool
+//   0x140104770 PlayerPath_Sub_4770 -- can the entity be removed (road check)
+//   0x140104670 PlayerPath_Sub_4670 -- can the entity be removed (building check)
+//   0x140101270 PlayerRay_ScreenToCell_101270, 0x1401008c0
+//   PlayerTileRender_DrawOverlay_08c0 (Player/exe_bodies.h)
+//   0x140003050 WorkBase_FindComponent_3050 (Work/exe_bodies.h) -- the parent/owner
+//               entity lookup
+//   0x14012ead0 WorkComponent_CheckWorkSlot (Component/exe_bodies.h) -- the
+//               "marked for destruction" check
+// The Sub_* bodies return uint64_t; the door read AL as the bool.
 // ============================================================
-
-// RemovalTool_sub_48a0: checks if entity at tile is removable by this tool
-// Returns true if removable.
-typedef bool (*fn_RemovalSub48a0_t)(uintptr_t self, void* entityIBP, uint32_t col, uint32_t row);
-static fn_RemovalSub48a0_t s_fn_RemovalSub48a0 = nullptr;
-
-// RemovalTool_sub_4770: checks if entity can be removed (road check)
-typedef bool (*fn_RemovalSub4770_t)(uintptr_t self, void* entityIBP);
-static fn_RemovalSub4770_t s_fn_RemovalSub4770 = nullptr;
-
-// RemovalTool_sub_4670: checks if entity can be removed (building check)
-typedef bool (*fn_RemovalSub4670_t)(uintptr_t self, void* entityIBP);
-static fn_RemovalSub4670_t s_fn_RemovalSub4670 = nullptr;
-
-// FUN_140003050: gets parent/owner entity from an entity (InternalBasePtr)
-typedef void* (*fn_GetParentEntity_t)(uintptr_t entity, void* retIBP);
-static fn_GetParentEntity_t s_fn_GetParentEntity = nullptr;
-
-// FUN_14012ead0: checks if entity is marked for destruction
-typedef bool (*fn_IsMarkedForDestruction_t)(uintptr_t entity);
-static fn_IsMarkedForDestruction_t s_fn_IsMarkedForDestruction = nullptr;
-
-// FUN_140101270: ScreenToCell
-typedef int (*fn_ScreenToCell_t)(uint64_t unused);
-static fn_ScreenToCell_t s_fn_ScreenToCell = nullptr;
-
-static bool s_drawFuncsResolved = false;
-
-static void ResolveDrawFuncs() {
-    if (s_drawFuncsResolved) return;
-
-    s_fn_RemovalSub48a0 = reinterpret_cast<fn_RemovalSub48a0_t>(
-        ResolveAddr(Module::Exe, 0x1401048a0));
-    s_fn_RemovalSub4770 = reinterpret_cast<fn_RemovalSub4770_t>(
-        ResolveAddr(Module::Exe, 0x140104770));
-    s_fn_RemovalSub4670 = reinterpret_cast<fn_RemovalSub4670_t>(
-        ResolveAddr(Module::Exe, 0x140104670));
-    s_fn_GetParentEntity = reinterpret_cast<fn_GetParentEntity_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_IsMarkedForDestruction = reinterpret_cast<fn_IsMarkedForDestruction_t>(
-        ResolveAddr(Module::Exe, 0x14012ead0));
-    s_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
-        ResolveAddr(Module::Exe, 0x140101270));
-
-
-    s_drawFuncsResolved = true;
-}
 
 // ============================================================
 // RemovalTool::Draw (vtable +0x40, Slot8)
@@ -239,8 +205,6 @@ static void ResolveDrawFuncs() {
 //
 // Original: 0x140104050
 void RemovalTool::Draw(void* context, char param3) {
-    ResolveDrawFuncs();
-
     uintptr_t descEntity = (uintptr_t)dialogPtr;
     int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
 
@@ -272,9 +236,8 @@ void RemovalTool::Draw(void* context, char param3) {
 
         // Render: entity tiles in R8, empty array in R9
         TileArray emptyTiles;
-        if (fn_TileRender) {
-            fn_TileRender(nullptr, context, &entityTiles, &emptyTiles);
-        }
+        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&entityTiles),
+                                          reinterpret_cast<int64_t*>(&emptyTiles));
 
         // entityTiles / emptyTiles are released by ~Array at scope exit (no early
         // return inside this block).
@@ -286,10 +249,7 @@ void RemovalTool::Draw(void* context, char param3) {
 
         if (dragState == '\0') {
             // Not dragging — pick cell under cursor
-            int cell = -1;
-            if (s_fn_ScreenToCell) {
-                cell = s_fn_ScreenToCell(0);
-            }
+            int cell = PlayerRay_ScreenToCell_101270(0);
             startCell = cell;
             endCell   = cell;
         } else {
@@ -341,8 +301,7 @@ void RemovalTool::Draw(void* context, char param3) {
                     if (entityPtr2 == 0) {
                         // No entity — construct null IBP
                         void* nullIBP = nullptr;
-                        if (fn_InternalBasePtr_Ctor)
-                            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                         entity = nullIBP;
                     } else {
                         entity = (void*)entityPtr2;
@@ -354,9 +313,8 @@ void RemovalTool::Draw(void* context, char param3) {
                 // Check removability
                 bool canRemove = false;
 
-                if (s_fn_RemovalSub48a0) {
-                    canRemove = s_fn_RemovalSub48a0((uintptr_t)this, &entity, c, r);
-                }
+                canRemove = static_cast<uint8_t>(
+                    PlayerPath_Sub_48a0((uintptr_t)this, &entity, (int)c, (int)r)) != 0;
 
                 if (!canRemove) {
                     // Additional checks from description flags
@@ -394,17 +352,15 @@ void RemovalTool::Draw(void* context, char param3) {
                     if (!canRemove) {
                         // Check road removal sub_4770
                         void* entityCopy1 = entity;
-                        if (s_fn_RemovalSub4770) {
-                            canRemove = s_fn_RemovalSub4770((uintptr_t)this, &entityCopy1);
-                        }
+                        canRemove = static_cast<uint8_t>(
+                            PlayerPath_Sub_4770((uintptr_t)this, &entityCopy1)) != 0;
                     }
 
                     if (!canRemove) {
                         // Check building removal sub_4670
                         void* entityCopy2 = entity;
-                        if (s_fn_RemovalSub4670) {
-                            canRemove = (bool)s_fn_RemovalSub4670((uintptr_t)this, &entityCopy2);
-                        }
+                        canRemove = static_cast<uint8_t>(
+                            PlayerPath_Sub_4670((uintptr_t)this, &entityCopy2)) != 0;
                     }
 
                     if (!canRemove) {
@@ -414,13 +370,9 @@ void RemovalTool::Draw(void* context, char param3) {
 
                             // Get parent entity
                             uintptr_t parentIBP = 0;
-                            if (s_fn_GetParentEntity) {
-                                s_fn_GetParentEntity((uintptr_t)entityForCheck, &parentIBP);
-                            }
+                            WorkBase_FindComponent_3050((uintptr_t)entityForCheck, &parentIBP);
                             if (parentIBP != 0) {
-                                if (s_fn_IsMarkedForDestruction) {
-                                    canRemove = s_fn_IsMarkedForDestruction(parentIBP);
-                                }
+                                canRemove = WorkComponent_CheckWorkSlot((void*)parentIBP);
                             }
                         }
                     }
@@ -442,9 +394,8 @@ void RemovalTool::Draw(void* context, char param3) {
 
         // Render: selection tiles in R8, empty array in R9
         TileArray emptyTiles2;
-        if (fn_TileRender) {
-            fn_TileRender(nullptr, context, &selTiles, &emptyTiles2);
-        }
+        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&selTiles),
+                                          reinterpret_cast<int64_t*>(&emptyTiles2));
 
         // selTiles / emptyTiles2 are released by ~Array at scope exit (the block's
         // only early return, `startCell < 0`, precedes their declarations).

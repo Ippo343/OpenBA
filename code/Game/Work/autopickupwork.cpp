@@ -17,7 +17,8 @@
 #include "Object/exe_type.h"               // DEFINE_EXE_VTABLE
 #include "object/Internal.h"               // Object::detail::InternalMemFree
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"   // B3R: WorkAcc_FindComponent_22520
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 
@@ -37,18 +38,14 @@ void AutoPickupWork::Persist(void* stream) {
 // [8] 0x1400e3f30: find the AutoPickupComponent on the owning entity (+0x10) through
 // FUN_140022520 (entity, out IBP) -> out, then free its item list (+0x30) and zero
 // the list pair (+0x30/+0x38). Retail's two CheckPtr calls are bare RETs. The finder
-// is resolved per call (no first-use cache, B38 D7).
+// is WorkAcc_FindComponent_22520 (Work/exe_bodies.h), called by name (B3R).
 int AutoPickupWork::Cleanup() {
-    typedef void* (*fn_FindAutoPickupComponent_t)(void* entity, void* outPtr);
-    auto findAutoPickup = reinterpret_cast<fn_FindAutoPickupComponent_t>(
-        ResolveAddr(Module::Exe, 0x140022520));
-
     uintptr_t componentPtr[4] = {0}; // InternalBasePtr result buffer
-    findAutoPickup(field_10, componentPtr);
+    WorkAcc_FindComponent_22520((uintptr_t)field_10, componentPtr);
 
     void* component = reinterpret_cast<void*>(componentPtr[0]);
     void* itemArray = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(component) + 0x30);
-    fn_MemFreeStatic(itemArray);
+    System::MemoryAllocator::MemFree(itemArray);
 
     *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(component) + 0x30) = nullptr;
     *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(component) + 0x38) = nullptr;

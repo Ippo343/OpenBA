@@ -44,12 +44,6 @@ TendArea::TendArea(void** entityIBP, int kind) : Work(entityIBP) {
 // The door OrchardComponent's state 10 calls (orchardcomponent_states.cpp, block MI-B):
 // the real ctor on caller memory (B8-5).
 extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind) {
-    // [STANDALONE] tendarea.cpp's own function-pointer table is filled by
-    // TendArea_ResolveFuncs(). This is the state machine's path — it allocates and builds
-    // the object directly — so wire it here, as before, or the first slot the work
-    // scheduler dispatches on the fresh object calls through 0 (the bug PlantOrchard hit
-    // on this same shape, commit 7731647).
-    TendArea_ResolveFuncs();
     if (!mem) return mem;
     return static_cast<Object::Base*>(new (mem) TendArea(entityIBP, kind));
 }

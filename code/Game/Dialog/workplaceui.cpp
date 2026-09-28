@@ -11,7 +11,9 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Dialog/dialog_exe_helpers.h"   // B3R: Dialog_FindComponent_d6c0
+#include "Work/exe_bodies.h"             // B3R: WorkBase_FindComponent_2ed0
+#include "Action/exe_bodies.h"           // B3R: Pf_RecursiveChildSum_123070
 #include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (stale weak-ref guard)
 #include "system/String.h"
 #include <cstdint>
@@ -31,22 +33,12 @@
 #include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/WorkDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/exe_bodies.h"   // B3R: CitizenEmploy_Strat_*
 
-// Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
-typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
-static fn_OrigFindComp_t fn_OrigFindCompPosition = nullptr;
-// Original FUN_140002ed0 — FindComponent with type DAT_1401c7900 (ResidenceComponent)
-// This is what gets passed to FUN_140123070 (GetOccupantCount)
-static fn_OrigFindComp_t fn_OrigFindCompResidence = nullptr;
-
-static void EnsureOrigFindComps() {
-    if (!fn_OrigFindCompPosition)
-        fn_OrigFindCompPosition = (fn_OrigFindComp_t)
-            ResolveAddr(Module::Exe, 0x14000d6c0);
-    if (!fn_OrigFindCompResidence)
-        fn_OrigFindCompResidence = (fn_OrigFindComp_t)
-            ResolveAddr(Module::Exe, 0x140002ed0);
-}
+// Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only):
+// Dialog_FindComponent_d6c0. Original FUN_140002ed0 — FindComponent with type
+// DAT_1401c7900 (ResidenceComponent), what gets passed to FUN_140123070
+// (GetOccupantCount): WorkBase_FindComponent_2ed0. Both called by name (B3R).
 
 // ============================================================
 // WorkplaceUI_AdjustWorkerCount (0x140087610)
@@ -64,7 +56,7 @@ static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
 
     // Get entity from panel+0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -89,7 +81,7 @@ static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
     int currentMax = *(int*)(slc + 0x30);
 
     // Set new max workers on the workplace component
-    fn_WorkplaceComp_SetMaxWorkers((void*)wc, currentMax + delta);
+    WorkPlaceComponent_SetMaxWorkers(static_cast<int64_t>(wc), currentMax + delta);   // 0x14012fb00
 }
 
 // ============================================================
@@ -107,7 +99,7 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
 
     // Get entity from panel+0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -164,9 +156,8 @@ namespace workplaceui_sa {
 
 // ENDGAME B.3.9 CG2: TypeId_ComponentEntity -> ComponentEntity::TypeId(),
 // TypeId_WorkplaceComponent -> WorkPlaceComponent::TypeId() (cell 0x1401c80e0).
-// Both class statics always answer, so the lazy-fill retires.
-void EnsureGlobals() {
-}
+// Both class statics always answer, so the lazy-fill retires (and the empty
+// EnsureGlobals that was left went with its calls, B3R).
 
 bool Ready() {
     return true;
@@ -182,7 +173,7 @@ void UpdateVisibility(void* self) {
 
     // Resolve the bound entity (data source at +0x28).
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -250,7 +241,7 @@ void PopulateCounts(void* self) {
 
     // Bound entity (data source at +0x28).
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId())) return;
+    if (!::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId())) return;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
@@ -419,7 +410,7 @@ static void SA_AdjustJobCount(void* self, int delta) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId())) return;
+    if (!::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId())) return;
     uint8_t eb[8];
     new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     void* entityPtr = *reinterpret_cast<void**>(eb);
@@ -458,18 +449,13 @@ static void SA_AdjustJobCount(void* self, int delta) {
     // its own eviction loop (destroycomponent_workerrelease.cpp), so setting it again would
     // only obscure which layer owns it.
     const int rosterBefore = *reinterpret_cast<int*>(static_cast<uintptr_t>(wpc) + 0x60);
-    if (fn_WorkplaceComp_SetMaxWorkers)
-        fn_WorkplaceComp_SetMaxWorkers(reinterpret_cast<void*>(static_cast<uintptr_t>(wpc)),
-                                       cur + delta);
+    WorkPlaceComponent_SetMaxWorkers(static_cast<int64_t>(wpc), cur + delta);   // 0x14012fb00
 
     // Report the OUTCOME in both arms: the observed before/after of WorkComponent+0x30 (the
     // field this whole open is about) and of the roster, or the reason nothing happened.
     fprintf(stderr, "[WorkPlaceUI] jobCount delta=%+d %s WorkComponent+0x30 %d->%d (asked %d) "
                     "roster %d->%d\n",
-            delta, fn_WorkplaceComp_SetMaxWorkers
-                 ? "applied"
-                 : "NOT APPLIED (fn_WorkplaceComp_SetMaxWorkers unresolved; 0x14012fb00 should "
-                   "be registered by reg_destroy_workers.cpp)",
+            delta, "applied",
             cur, *reinterpret_cast<int*>(c + 0x30), cur + delta,
             rosterBefore, *reinterpret_cast<int*>(static_cast<uintptr_t>(wpc) + 0x60));
     fflush(stderr);
@@ -491,7 +477,6 @@ static void SA_AdjustJobCount(void* self, int delta) {
 
 // [4] 0x140087940
 void WorkPlaceUI::OnCreated() {
-    workplaceui_sa::EnsureGlobals();
     if (!workplaceui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
     void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
@@ -515,7 +500,7 @@ void WorkPlaceUI::OnCreated() {
 
     // --- Check entity component for job count visibility ---
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -538,7 +523,7 @@ void WorkPlaceUI::OnCreated() {
     // for those buildings rather than a behaviour change.
     if (!workComp) return;
     void* subComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(subComp, WorkDescription::TypeId());
+    bool isJobType = ::Object::IsDerivedFromNullSafe(subComp, WorkDescription::TypeId());
 
     if (isJobType && *(uint8_t*)((uintptr_t)subComp + 0x20) == 0) {
         // Hide job count up/down buttons if sub-component flag is zero
@@ -558,7 +543,6 @@ void WorkPlaceUI::OnCreated() {
 
 // [7] 0x140087080
 void WorkPlaceUI::OnUpdateLayout() {
-    workplaceui_sa::EnsureGlobals();
     if (!workplaceui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
     workplaceui_sa::UpdateVisibility(this);
     workplaceui_sa::PopulateCounts(this);
@@ -566,7 +550,7 @@ void WorkPlaceUI::OnUpdateLayout() {
 
     // Get entity from data source
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -583,7 +567,7 @@ void WorkPlaceUI::OnUpdateLayout() {
 
     // Get the WorkDescription off the WorkComponent: +0x18
     void* jobSubComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(jobSubComp, WorkDescription::TypeId());
+    bool isJobType = ::Object::IsDerivedFromNullSafe(jobSubComp, WorkDescription::TypeId());
     void* jobType = isJobType ? jobSubComp : nullptr;
 
     // Check if building is complete: wpComp +0x48 (profession ptr) must be non-null
@@ -613,9 +597,8 @@ void WorkPlaceUI::OnUpdateLayout() {
 
         if (professionId == laborerProf) {
             // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
-            EnsureOrigFindComps();
             uint64_t posCheck = 0;
-            fn_OrigFindCompPosition(*(void**)entityBuf, &posCheck);
+            Dialog_FindComponent_d6c0(*(void**)entityBuf, &posCheck);   // 0x14000d6c0
             if (posCheck != 0) goto showUpDown;
         }
 
@@ -747,20 +730,21 @@ showUpDown:
         *(void**)((uintptr_t)profList + 0x38)) {
         // Laborer building — check position component for position-based limit
         // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
-        EnsureOrigFindComps();
         uint64_t posGuard = 0;
-        fn_OrigFindCompPosition(*(void**)entityBuf, &posGuard);
+        Dialog_FindComponent_d6c0(*(void**)entityBuf, &posGuard);   // 0x14000d6c0
         if (posGuard != 0) {
             int maxCap = *(int*)((uintptr_t)jobType + 0x2c);
             // Get ResidenceComponent via FUN_140002ed0 (type DAT_1401c7900)
             uint64_t resIBP = 0;
-            fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP);
-            int posCount = fn_ResidenceComponent_GetOccupantCount((void*)resIBP, 1);
+            WorkBase_FindComponent_2ed0(*(uintptr_t*)entityBuf, &resIBP);   // 0x140002ed0
+            // 0x140123070 Pf_RecursiveChildSum_123070 (door misnamed
+            // fn_ResidenceComponent_GetOccupantCount)
+            int posCount = Pf_RecursiveChildSum_123070(static_cast<int64_t>(resIBP), 1);
             // Use min(jobType max, position count) as the real limit
             if (posCount < maxCap) {
                 uint64_t resIBP2 = 0;
-                fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP2);
-                maxCap = fn_ResidenceComponent_GetOccupantCount((void*)resIBP2, 1);
+                WorkBase_FindComponent_2ed0(*(uintptr_t*)entityBuf, &resIBP2);   // 0x140002ed0
+                maxCap = Pf_RecursiveChildSum_123070(static_cast<int64_t>(resIBP2), 1);   // 0x140123070
             }
             // Enable up if current max < capacity limit
             void* btnUp = *(void**)(s + 0x50);
@@ -892,7 +876,6 @@ void WorkPlaceUI::OnUpdate(const System::Time& /*time*/) {
 // [9] 0x1400877e0
 void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
                                  int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    workplaceui_sa::EnsureGlobals();
     if (!workplaceui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
     if (msg != 0x12) return;                        // button click
     if (id < 0x1450 || id > 0x1454) return;         // one of the 5 armed controls
@@ -923,7 +906,7 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
 
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId())) return;
+    if (!::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId())) return;
     uint8_t eb[8];
     new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     void* entityPtr = *reinterpret_cast<void**>(eb);
@@ -949,13 +932,13 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
 
     if (add) {
         // Add one worker: request a slot, then convert idle -> working -> student -> any.
-        if (fn_CitizenList_RequestWorker && fn_CitizenList_FindIdle) {
+        {
             uint64_t retBuf[2] = {0, 0};
-            fn_CitizenList_RequestWorker(citizenList, retBuf, profId);
+            FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             uint64_t slot = retBuf[0];
             uint64_t slotCopy = slot;
             uint8_t fb[8] = {0};
-            void* result = fn_CitizenList_FindIdle(citizenList, fb, &slotCopy, profId);
+            void* result = CitizenEmploy_Strat_cbf0(reinterpret_cast<int64_t>(citizenList), fb, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008cbf0
             int64_t found = *reinterpret_cast<int64_t*>(result);
             if (found) who = "idle";
             // Faithful to retail driver dd10 (0x14007dd10): FindWorking (Strat_ca20,
@@ -965,27 +948,27 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
             // (e.g. a just-placed foundation not yet a staffable workplace under BUILDCTRL)
             // reaches Strat_ca20's anchor -> null deref. FindIdle(cbf0)/FindStudent(c5f0)/
             // FindAny(c4b0) all guard *availPtr==0 themselves, so they stay in the chain.
-            if (found == 0 && slot != 0 && fn_CitizenList_FindWorking) {
+            if (found == 0 && slot != 0) {
                 slotCopy = slot; uint8_t fb2[8] = {0};
-                result = fn_CitizenList_FindWorking(citizenList, fb2, &slotCopy, profId);
+                result = CitizenEmploy_Strat_ca20(reinterpret_cast<int64_t>(citizenList), fb2, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008ca20
                 found = *reinterpret_cast<int64_t*>(result);
                 if (found) who = "working";
             }
-            if (found == 0 && fn_CitizenList_FindStudent) {
+            if (found == 0) {
                 slotCopy = slot; uint8_t fb3[8] = {0};
-                result = fn_CitizenList_FindStudent(citizenList, fb3, &slotCopy, profId);
+                result = CitizenEmploy_Strat_c5f0(reinterpret_cast<int64_t>(citizenList), fb3, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c5f0
                 found = *reinterpret_cast<int64_t*>(result);
                 if (found) who = "student";
             }
-            if (found == 0 && fn_CitizenList_FindAny) {
+            if (found == 0) {
                 slotCopy = slot; uint64_t anyBuf = 0;
-                fn_CitizenList_FindAny(citizenList, &anyBuf, &slotCopy, profId);
+                CitizenEmploy_Strat_c4b0(reinterpret_cast<int64_t>(citizenList), &anyBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c4b0
                 if (anyBuf) who = "any";
             }
         }
     } else {  // 0x1451 — remove one worker of this profession
         who = "remove";
-        if (fn_CitizenList_RemoveWorker) fn_CitizenList_RemoveWorker(citizenList, profId);
+        TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
     }
 
 }

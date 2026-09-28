@@ -141,13 +141,9 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
 // HotKeyToolTipUI::Serialize — Slot4 (+0x20). self = the controller.
 // [4] 0x14006a980.
 void HotKeyToolTipUI::OnCreated() {
-    if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom) {
-        return;
-    }
-
     // Resolve the controlled element (the button) and read its shortcut id.
     void* obj = *(void**)((uintptr_t)this + 0x28);
-    void* elem = (obj && fn_IsDerivedFrom(obj, UI::Element::TypeId())) ? obj : nullptr;
+    void* elem = (obj && ::Object::IsDerivedFromNullSafe(obj, UI::Element::TypeId())) ? obj : nullptr;
 
     uint64_t elemIbp = 0;
     new (&elemIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge

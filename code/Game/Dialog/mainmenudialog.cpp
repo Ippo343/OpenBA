@@ -29,7 +29,9 @@
 #include "Dialog/GoalDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Dialog/ScenarioDialog.h"      // B3R: ScenarioDialog_Ctor
+#include "system/Configuration.h"      // B3R: System::Configuration, RtSystem_Configuration_CurrentBuildId
+#include "save/SaveLoad.h"             // B3R: RtSave_SaveLoad_Dtor
 #include "Dialog/dialog_exe_helpers.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -40,6 +42,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -87,7 +90,7 @@ static void* LoadDialogResource(const char* rscPath) {
     void* extRes = nullptr;
     if (resource) {
         const uint32_t typeId = UI::Dialog::TypeId();
-        bool derived = (typeId && fn_IsDerivedFrom(resource, typeId));
+        bool derived = (typeId && ::Object::IsDerivedFromNullSafe(resource, typeId));
         printf("[LoadDialogResource] '%s' typeId=%u IsDerivedFrom=%d\n",
                rscPath, typeId, derived ? 1 : 0);
         if (derived) {
@@ -120,7 +123,7 @@ static void AddDialogToUI(MainMenuDialog* self, void* dlgObj) {
 void MainMenuDialog_OpenNewGame(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/NewGame.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xAE8, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0xAE8, 8);
     if (dlgMem) {
         uint8_t parentIBP[8];
         new (parentIBP) ::Object::InternalBasePtr(
@@ -128,7 +131,7 @@ void MainMenuDialog_OpenNewGame(MainMenuDialog* self) {
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         // Ctor args: self, ui, extRes, nullParent, parentMenuIBP (stack arg)
-        dlgObj = fn_NewGameDialog_Ctor(dlgMem,
+        dlgObj = NewGameDialog_Ctor_Standalone(dlgMem,   // 0x140071040
                                         *(void**)((uintptr_t)self + 0x10),
                                         extRes, nullIBP, parentIBP);
     }
@@ -153,11 +156,11 @@ void MainMenuDialog_OpenLoad(MainMenuDialog* self) {
     uintptr_t s = (uintptr_t)self;
     void* extRes = LoadDialogResource("Dialog/SaveLoad.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = fn_SaveLoadDialog_Ctor(dlgMem,
+        dlgObj = SaveLoadDialog_Ctor_8270(dlgMem,   // 0x1400b8270
                                          *(void**)(s + 0x10),
                                          extRes, nullIBP,
                                          1,  // mode = load
@@ -176,11 +179,11 @@ void MainMenuDialog_OpenSave(MainMenuDialog* self) {
     uintptr_t s = (uintptr_t)self;
     void* extRes = LoadDialogResource("Dialog/SaveLoad.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = fn_SaveLoadDialog_Ctor(dlgMem,
+        dlgObj = SaveLoadDialog_Ctor_8270(dlgMem,   // 0x1400b8270
                                          *(void**)(s + 0x10),
                                          extRes, nullIBP,
                                          0,  // mode = save
@@ -195,11 +198,11 @@ void MainMenuDialog_OpenSave(MainMenuDialog* self) {
 void MainMenuDialog_OpenOptions(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/Options.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0x1C0, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0x1C0, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = fn_OptionsDialog_Ctor(dlgMem,
+        dlgObj = OptionsDialog_Ctor_Standalone(dlgMem,   // 0x140075150
                                         *(void**)((uintptr_t)self + 0x10),
                                         extRes, nullIBP);
     }
@@ -218,16 +221,16 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
         uintptr_t engPtr = *(uintptr_t*)(s + 0xC0);
         void* saveLoad = *(void**)(engPtr + 0xB70);
         if (saveLoad) {
-            fn_SaveLoad_Dtor(saveLoad);
-            fn_MemFreeStatic(saveLoad);
+            RtSave_SaveLoad_Dtor(reinterpret_cast<Save::SaveLoad*>(saveLoad));   // ??1SaveLoad 0x1800c3c90
+            System::MemoryAllocator::MemFree(saveLoad);
         }
         *(void**)(engPtr + 0xB70) = nullptr;
     } else {
         // Game active: destroy SaveLoad at gameWorld+0x140
         void* saveLoad = *(void**)(gameWorld + 0x140);
         if (saveLoad) {
-            fn_SaveLoad_Dtor(saveLoad);
-            fn_MemFreeStatic(saveLoad);
+            RtSave_SaveLoad_Dtor(reinterpret_cast<Save::SaveLoad*>(saveLoad));   // ??1SaveLoad 0x1800c3c90
+            System::MemoryAllocator::MemFree(saveLoad);
         }
         *(void**)(gameWorld + 0x140) = nullptr;
     }
@@ -236,7 +239,7 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
     // 0x1400B4790 builds them (same allocations, same ctor arguments).
     // Step 1: MenuDialogLoopT (0xC00 bytes) with "Dialog/MainMenu.rsc" (ctor 0x14009bb00)
     Engine::UpdateLoop* menuLoop = nullptr;
-    void* menuMem = fn_MemAlloc(g_pMemAllocSingleton, 0xC00, 8);
+    void* menuMem = System::MemoryAllocator::MemAlloc(0xC00, 8);
     if (menuMem) {
         System::String menuStr("Dialog/MainMenu.rsc");
         menuLoop = ::new (menuMem) MenuDialogLoopT(menuStr);
@@ -245,10 +248,10 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
     // Step 2: GameLoadDialogLoopT (0xB60 bytes) wrapping the menu loop (the
     // subclass ctor retail inlines here)
     Engine::UpdateLoop* dlLoop = nullptr;
-    void* dlMem = fn_MemAlloc(g_pMemAllocSingleton, 0xB60, 4);
+    void* dlMem = System::MemoryAllocator::MemAlloc(0xB60, 4);
     if (dlMem) {
         uint64_t delayTime = 0;
-        fn_Time_Ctor_Float(&delayTime, 1.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), 1.0f);
         System::String loadingStr("Dialog/Loading.rsc");
         dlLoop = ::new (dlMem) GameLoadDialogLoopT(
             loadingStr, menuLoop, *reinterpret_cast<const System::Time*>(&delayTime));
@@ -256,10 +259,10 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
 
     // Step 3: outer GameLoaderLoop (0x48 bytes) wrapping the dialog loader
     void* outerLoop = nullptr;
-    void* outerMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+    void* outerMem = System::MemoryAllocator::MemAlloc(0x48, 4);
     if (outerMem) {
         uint64_t zeroTime = 0;
-        fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
         outerLoop = ::new (outerMem) GameLoaderLoop(
             dlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
     }
@@ -294,7 +297,7 @@ void MainMenuDialog_OpenAchievement(MainMenuDialog* self) {
 
     void* extRes = LoadDialogResource("Dialog/Achievement.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(AchievementDialog), 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(sizeof(AchievementDialog), 8);
     if (dlgMem) {
         // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here).
         dlgObj = ::new (dlgMem) AchievementDialog(
@@ -310,14 +313,14 @@ void MainMenuDialog_OpenAchievement(MainMenuDialog* self) {
 void MainMenuDialog_OpenScenario(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/Scenario.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xE8, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0xE8, 8);
     if (dlgMem) {
         uint8_t parentIBP[8];
         new (parentIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = fn_ScenarioDialog_Ctor(dlgMem,
+        dlgObj = ScenarioDialog_Ctor(dlgMem,   // 0x1400786b0
                                          *(void**)((uintptr_t)self + 0x10),
                                          extRes, nullIBP,
                                          parentIBP,
@@ -332,7 +335,7 @@ void MainMenuDialog_OpenScenario(MainMenuDialog* self) {
 void MainMenuDialog_OpenGoal(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/Goal.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(GoalDialog), 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(sizeof(GoalDialog), 8);
     if (dlgMem) {
         // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here).
         dlgObj = ::new (dlgMem) GoalDialog(
@@ -347,11 +350,11 @@ void MainMenuDialog_OpenGoal(MainMenuDialog* self) {
 void MainMenuDialog_OpenMap(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/MapParams.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xF8, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0xF8, 8);
     if (dlgMem) {
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = fn_MapParamsDialog_Ctor(dlgMem,
+        dlgObj = MapParamsDialog_Ctor_Standalone(dlgMem,   // 0x14006bd80
                                           *(void**)((uintptr_t)self + 0x10),
                                           extRes, nullIBP);
     }
@@ -365,7 +368,7 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/Tutorial.rsc");
     printf("[MainMenuDialog] OpenTutorial: extRes=%p\n", extRes);
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xE8, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0xE8, 8);
     printf("[MainMenuDialog] OpenTutorial: dlgMem=%p\n", dlgMem);
     if (dlgMem) {
         uint8_t parentIBP[8];
@@ -373,7 +376,7 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
             reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = fn_ScenarioDialog_Ctor(dlgMem,
+        dlgObj = ScenarioDialog_Ctor(dlgMem,   // 0x1400786b0
                                          *(void**)((uintptr_t)self + 0x10),
                                          extRes, nullIBP,
                                          parentIBP,
@@ -396,14 +399,14 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
 void MainMenuDialog_OpenMod(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/Mod.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(0xD8, 8);
     if (dlgMem) {
         uint8_t parentIBP[8];
         new (parentIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         uint8_t nullIBP[8];
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = fn_ModDialog_Ctor(dlgMem,
+        dlgObj = ModDialog_Ctor_Standalone(dlgMem,   // 0x140070030
                                     *(void**)((uintptr_t)self + 0x10),
                                     extRes, nullIBP, parentIBP);
     }
@@ -429,15 +432,10 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         printf("[BuildId] selfDialog or UI null, skipping\n");
         return false;
     }
-    if (!fn_IsDerivedFrom ||
-        !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
-        !fn_Configuration_CurrentVersion ||
-        !fn_Configuration_CurrentBuildId) {
-        printf("[BuildId] missing engine fns, skipping\n");
-        return false;
-    }
+    // (B3R: the readiness test over the engine_funcs doors was always true; gone.
+    // The allocator singleton -- the old g_pMemAllocSingleton snapshot -- is read live.)
     if (!::Object::ExternalFactory::_singleton ||
-        !g_pMemAllocSingleton) {
+        !System::MemoryAllocator::_singleton) {
         printf("[BuildId] missing engine singletons, skipping\n");
         return false;
     }
@@ -450,7 +448,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filenameStr));
     void* dialogResource = nullptr;
-    if (resource && fn_IsDerivedFrom(resource, UI::Dialog::TypeId())) {
+    if (resource && ::Object::IsDerivedFromNullSafe(resource, UI::Dialog::TypeId())) {
         dialogResource = resource;
     }
     if (!dialogResource) {
@@ -459,7 +457,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     }
 
     // --- Allocate + construct child DialogInstance (0xB8 bytes) ---
-    void* childDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+    void* childDialog = System::MemoryAllocator::MemAlloc(0xB8, 8);
     if (!childDialog) {
         printf("[BuildId] MemAlloc(0xB8) failed\n");
         return false;
@@ -512,13 +510,18 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     // System::String at offset 0 — the two fn_String_Dtor calls below only
     // ever released that embedded field, so they become an explicit dtor call
     // through the bridge cast rather than a real System::String local.
+    // ?CurrentVersion@Configuration@System@@ is a by-value static: its registered door
+    // (RtSystem_Configuration_CurrentVersion) placement-constructs the result in the
+    // caller's zeroed slot, which is what this does.
     uint8_t versionStr[16] = {};
-    fn_Configuration_CurrentVersion(versionStr);
+    ::new (versionStr) System::String(System::Configuration::CurrentVersion());
     reinterpret_cast<UI::TextElement*>(*(void**)textElemPtr)->SetParameter(0, *reinterpret_cast<const System::String*>(versionStr));  // B.3.6 bridge
     reinterpret_cast<System::String*>(versionStr)->~String();  // B.3.1 bridge
 
+    // ?CurrentBuildId@ has no member yet (Configuration.h note 2): its body is the
+    // retslot function, called by name on the caller's zeroed slot.
     uint8_t buildIdStr[16] = {};
-    fn_Configuration_CurrentBuildId(buildIdStr);
+    RtSystem_Configuration_CurrentBuildId(reinterpret_cast<System::String*>(buildIdStr));
     reinterpret_cast<UI::TextElement*>(*(void**)textElemPtr)->SetParameter(1, *reinterpret_cast<const System::String*>(buildIdStr));  // B.3.6 bridge
     reinterpret_cast<System::String*>(buildIdStr)->~String();  // B.3.1 bridge
 
@@ -924,12 +927,12 @@ void MainMenuDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*
 // (mapparamsdialog.cpp) and AddDialog's it (which dispatches its OnOpened).
 static void StandaloneOpenMapParams_UI(void* ui) {
     if (!ui) { printf("[OpenMap] ui null\n"); return; }
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+    if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
         printf("[OpenMap] core fns unresolved\n"); return;
     }
     void* extRes = LoadDialogResource("Dialog/MapParams.rsc");
     if (!extRes) { printf("[OpenMap] Dialog/MapParams.rsc not loaded\n"); return; }
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(MapParamsDialog), 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(sizeof(MapParamsDialog), 8);
     if (!dlgMem) return;
     MapParamsDialog* dlg = ::new (dlgMem) MapParamsDialog(
         static_cast<UI::UserInterface*>(ui), static_cast<const UI::Dialog*>(extRes),
@@ -996,13 +999,13 @@ void* MainMenuDialog::CreateInPlaceObject(void* storage) {
 // tree) instead of the Runtime ctor faulting on a null Dialog — a standalone-only
 // guard retail does not have.
 extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+    if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
         if (retInternalBasePtr) {
             *reinterpret_cast<uint64_t*>(retInternalBasePtr) = 0;
         }
         return retInternalBasePtr;
     }
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(MainMenuDialog), 8);
+    void* mem = System::MemoryAllocator::MemAlloc(sizeof(MainMenuDialog), 8);
     uintptr_t lp = reinterpret_cast<uintptr_t>(loop);
     void* rsc = loop ? *reinterpret_cast<void**>(lp + 0x30) : nullptr;
     MainMenuDialog* dlg;

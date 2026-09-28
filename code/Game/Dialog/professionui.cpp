@@ -57,6 +57,8 @@
 #include "Component/WorkDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/WorkComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Component/exe_bodies.h"   // B3R: CitizenEmploy_Strat_*
 
 // ============================================================
 // File-local helper: CalcWorkerSlots (FUN_14012e5c0)
@@ -89,7 +91,7 @@ static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
     if (!jobType) return 0;
 
     // IsDerivedFrom check
-    bool isJobType = fn_IsDerivedFrom(jobType, WorkDescription::TypeId());
+    bool isJobType = ::Object::IsDerivedFromNullSafe(jobType, WorkDescription::TypeId());
     if (!isJobType) return 0;
 
     uintptr_t jt = (uintptr_t)jobType;
@@ -458,7 +460,7 @@ void ProfessionUI::OnOpened() {
 
         if (existingRoot == nullptr) {
             // First node -- allocate and set as root
-            uint8_t* newNode = (uint8_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+            uint8_t* newNode = (uint8_t*)System::MemoryAllocator::MemAlloc(0x30, 8);
             if (newNode) {
                 *(void**)(newNode + 0x00) = profDesc;
                 *(int*)(newNode + 0x08) = bstIndex;
@@ -472,7 +474,7 @@ void ProfessionUI::OnOpened() {
         } else {
             // BST insert + rebalance
             uint8_t* current = (uint8_t*)existingRoot;
-            uint8_t* newNode = (uint8_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+            uint8_t* newNode = (uint8_t*)System::MemoryAllocator::MemAlloc(0x30, 8);
             if (newNode) {
                 *(void**)(newNode + 0x00) = profDesc;
                 *(int*)(newNode + 0x08) = bstIndex;
@@ -505,7 +507,7 @@ void ProfessionUI::OnOpened() {
                         }
                     } else {
                         // Duplicate key
-                        fn_MemFreeStatic(newNode);
+                        System::MemoryAllocator::MemFree(newNode);
                         inserted = true;
                     }
                 }
@@ -555,12 +557,8 @@ void ProfessionUI::OnOpened() {
         // (the ported Runtime static always answers; the null-guard on the exe-side
         // global retires with the conversion).
         void* numEditChecked = nullptr;
-        if (fn_IsDerivedFrom) {
-            if (fn_IsDerivedFrom(numEditRaw, UI::NumberEditElement::TypeId()))
-                numEditChecked = numEditRaw;
-        } else {
+        if (::Object::IsDerivedFromNullSafe(numEditRaw, UI::NumberEditElement::TypeId()))
             numEditChecked = numEditRaw;
-        }
         uint64_t numEditIBP = 0;
         new (&numEditIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(numEditChecked));   // B.3.3 bridge
@@ -605,7 +603,7 @@ void ProfessionUI::OnOpened() {
 
     // Call Slot8 (vtable +0x40) with Time(0.0)
     uint8_t timeBuf[8];
-    fn_Time_Ctor_Float(timeBuf, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
     OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
 }
 
@@ -747,7 +745,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                 if (!comp) continue;
                 int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (typeId == (int)WorkPlaceComponent::TypeId()) {
-                    if (fn_IsDerivedFrom((void*)comp, WorkPlaceComponent::TypeId())) {
+                    if (::Object::IsDerivedFromNullSafe((void*)comp, WorkPlaceComponent::TypeId())) {
                         workplaceComp = comp;
                     }
                     break;
@@ -776,7 +774,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                         if (!comp) continue;
                         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                         if (typeId == (int)WorkComponent::TypeId()) {
-                            if (fn_IsDerivedFrom((void*)comp, WorkComponent::TypeId())) {
+                            if (::Object::IsDerivedFromNullSafe((void*)comp, WorkComponent::TypeId())) {
                                 storageLocComp = comp;
                             }
                             break;
@@ -855,32 +853,32 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
 
             // Request a worker slot
             uint64_t retBuf[2] = {0, 0};
-            fn_CitizenList_RequestWorker(citizenList, retBuf, profId);
+            FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             uint64_t slot = retBuf[0];
 
             // Try to find a citizen: idle -> working -> student -> any
             uint64_t slotCopy = slot;
             uint8_t findBuf[8] = {0};
-            void* result = fn_CitizenList_FindIdle(citizenList, findBuf, &slotCopy, profId);
+            void* result = CitizenEmploy_Strat_cbf0(reinterpret_cast<int64_t>(citizenList), findBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008cbf0
             int64_t found = *(int64_t*)result;
 
             if (found == 0) {
                 if (slot != 0) {
                     slotCopy = slot;
                     uint8_t fb2[8] = {0};
-                    result = fn_CitizenList_FindWorking(citizenList, fb2, &slotCopy, profId);
+                    result = CitizenEmploy_Strat_ca20(reinterpret_cast<int64_t>(citizenList), fb2, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008ca20
                     found = *(int64_t*)result;
                     if (found != 0) goto next_iter;
                 }
                 slotCopy = slot;
                 uint8_t fb3[8] = {0};
-                result = fn_CitizenList_FindStudent(citizenList, fb3, &slotCopy, profId);
+                result = CitizenEmploy_Strat_c5f0(reinterpret_cast<int64_t>(citizenList), fb3, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c5f0
                 found = *(int64_t*)result;
 
                 if (found == 0) {
                     slotCopy = slot;
                     uint64_t anyBuf = 0;
-                    fn_CitizenList_FindAny(citizenList, &anyBuf, &slotCopy, profId);
+                    CitizenEmploy_Strat_c4b0(reinterpret_cast<int64_t>(citizenList), &anyBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c4b0
                     found = (int64_t)anyBuf;
                 }
             }
@@ -895,14 +893,14 @@ next_iter:
         do {
             void* citizenList = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
             uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xB0) + 0x20) + idx * 8);
-            fn_CitizenList_RemoveWorker(citizenList, profId);
+            TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
     }
 
     // Refresh display: call Slot8 (vtable +0x40) with Time(0.0)
     uint8_t timeBuf[8];
-    fn_Time_Ctor_Float(timeBuf, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
     self->OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
 }
 

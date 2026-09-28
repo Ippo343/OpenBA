@@ -84,14 +84,13 @@ void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
             const uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (t == typeId) {
                 void* o = *ibp;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
+                if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    else *reinterpret_cast<void**>(retIBP) = found;
     return retIBP;
 }
 
