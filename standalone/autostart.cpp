@@ -111,7 +111,8 @@ constexpr int kNewGameTimeoutFrames = 600;   // ~10s at 60fps
 // as a synthetic button click: (element=null, msg, id). Every dialog driven
 // here (MainMenu / NewGame / SaveLoad / ModDetails / Mod) derives from
 // UI::DialogInstance. The three trailing ints and userData were never set by
-// the old raw 4-argument call; the by-name call passes 0 / nullptr.
+// the old raw 4-argument call; the by-name call passes 0 / nullptr. The four
+// trailing arguments are the harness's choice: retail has no such caller.
 void InjectClick(void* dialog, int msg, int id) {
     static_cast<UI::DialogInstance*>(dialog)->OnElementEvent(   // B.3.x bridge
         nullptr, msg, id, 0, 0, 0, nullptr);
@@ -356,7 +357,10 @@ void TickMenu(void* menuDLT) {
             }
             if (dlg) {
                 // ModDialog::OnElementEvent reads *element as the element
-                // InternalPtr, so hand it a real (null) qword.
+                // InternalPtr, so hand it a real (null) qword. The four trailing
+                // arguments (0 / 0 / 0 / nullptr; the old raw 4-argument call
+                // left them unset) are the harness's choice: retail has no such
+                // caller.
                 void* nullElem = nullptr;
                 static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
                     reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),

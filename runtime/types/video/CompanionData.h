@@ -232,7 +232,11 @@ public:
     virtual bool EnumerateInterfaces() { detail::CompanionPureCall(); }                      // [ 1]
     virtual bool CreateDevice() { detail::CompanionPureCall(); }                             // [ 2]
     virtual void Shutdown() { detail::CompanionPureCall(); }                                 // [ 3]
-    virtual void  Slot4() { detail::CompanionPureCall(); }                                   // [ 4] dx11: void stub
+    // [ 4] name unknown. Retail's one caller, Engine::Loader::Run 0x1800dbfc0,
+    // passes a bool in DL: 0x1800dbfe7 MOV DL,1 before the load, 0x1800dc028
+    // XOR EDX,EDX before the closing tail JMP [RAX+0x20]. dx11's body
+    // (0x180001190) is a bare `ret`.
+    virtual void  Slot4(bool loading) { (void)loading; detail::CompanionPureCall(); }          // [ 4] dx11: void stub
     virtual float Slot5() { detail::CompanionPureCall(); }                                   // [ 5] dx11: returns 0.0f
     virtual bool  Slot6() { detail::CompanionPureCall(); }                                   // [ 6] dx11: returns false
     virtual bool  Slot7() { detail::CompanionPureCall(); }                                   // [ 7] dx11: returns true

@@ -138,7 +138,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                 if (dlg) {
                     // UI::DialogInstance::OnElementEvent (retail slot 8, +0x40).
                     // The trailing ints / userData were never set by the old raw
-                    // 4-argument call; the by-name call passes 0 / nullptr.
+                    // 4-argument call; the by-name call passes 0 / nullptr. The
+                    // four trailing arguments are the harness's choice: retail
+                    // has no such caller.
                     static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
                         nullptr, 0x12, id, 0, 0, 0, nullptr);
                 }
@@ -147,6 +149,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                 int id = std::atoi(tok);
                 std::fprintf(stderr, "[PauseMenu] CLICKS: ModDialog=%p id=%d\n", dlg, id);
                 if (dlg) {
+                    // The four trailing arguments (0 / 0 / 0 / nullptr, as the
+                    // old raw call already passed) are the harness's choice:
+                    // retail has no such caller.
                     void* nullElem = nullptr;
                     static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
                         reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),
@@ -247,7 +252,8 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
     // The vptr is intact (whole-vptr compare above), so the object is still the
     // MainMenuDialog the opener built: UI::DialogInstance::OnElementEvent, by
     // name (retail slot 8, +0x40). The trailing ints / userData were never set
-    // by the old raw 4-argument call; the by-name call passes 0 / nullptr.
+    // by the old raw 4-argument call; the by-name call passes 0 / nullptr. The
+    // four trailing arguments are the harness's choice: retail has no such caller.
     std::fprintf(stderr, "[PauseMenu] dispatching OnCommand(msg=0x12, id=%d)\n", s_buttonId);
     static_cast<UI::DialogInstance*>(s_dialog)->OnElementEvent(   // B.3.x bridge
         nullptr, 0x12, s_buttonId, 0, 0, 0, nullptr);

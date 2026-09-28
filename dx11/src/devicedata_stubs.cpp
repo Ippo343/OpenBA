@@ -35,8 +35,10 @@
 
 namespace VideoDX11 {
 
-// 0x180001190 — `ret`
-static void DeviceData_Stub4_Void(void* /*self*/) {
+// 0x180001190 — `ret`. The Runtime's one caller (Engine::Loader::Run
+// 0x1800dbfc0) passes a bool in DL (1 around the load, 0 after); the body
+// ignores it. Declared here since the argument is now known (B3R owed 3).
+static void DeviceData_Stub4_Void(void* /*self*/, bool /*loading*/) {
 }
 
 // 0x180005430 — `xorps xmm0,xmm0; ret`

@@ -1638,16 +1638,12 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
         if ((_flags >> 2) & 1) {
             hit = false;
         } else if ((_flags >> 3) & 1) {
-            // B3X W0: LEFT as a slot read. The 4th argument here is `_dialog`
-            // (+0x18); retail passes `_ui` (+0x10): 0x180113bb3 MOV R9,[RBX+0x10]
-            // before CALL [RAX+0x48]. A by-name Contains(x, y, UserInterface*)
-            // would either change behaviour or enshrine the divergence.
-            // B3X W0 audit: the SLOT is taken from the member (object/VSlot.h),
-            // not the literal 9, so it follows UI::Element through the flip; the
-            // call and its arguments are unchanged.
-            using Fn = bool (*)(uint8_t*, int32_t, int32_t, const void*);
-            hit = reinterpret_cast<Fn>(
-                ::Object::SlotAddressOf(root, &UI::Element::Contains))(root, mx2, my2, _dialog);
+            // Retail 0x180113baf..bba: RCX = [RBX+0x50] (_root), EDX/R8D = mouse
+            // x/y, R9 = [RBX+0x10] (_ui), CALL [RAX+0x48] = Element slot 9,
+            // Contains(x, y, UserInterface*). B3R owed 1 (behaviour): this used
+            // to pass `_dialog` (+0x18) as the fourth argument.
+            hit = reinterpret_cast<Element*>(root)->Contains(
+                mx2, my2, static_cast<UserInterface*>(_ui));
         } else {
             const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
             const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);

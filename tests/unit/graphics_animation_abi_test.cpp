@@ -67,7 +67,8 @@ const void* g_lastSelf = nullptr;
 int         g_lastMark = -1;
 
 void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
-void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
+const void* g_lastTransform = nullptr;
+void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastTransform = nullptr; }
 
 // The one instruction every raw slot caller in runtime/src compiles to.
 // `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
@@ -109,7 +110,11 @@ struct AnimationEventProbe final : Graphics::AnimationEvent {
     bool Serialize(void*) override { Note(this, kSerialize / 8); return true; }
     Object::External* Reconstruct() override { Note(this, kReconstruct / 8); return this; }
     void Destruct() override { Note(this, kDestruct / 8); }
-    Object::External* Construct() override { Note(this, kConstruct / 8); return this; }
+    // Retail slot 8 takes the event transform (0x1800faa58 MOV RDX,R13) and
+    // returns nothing (B3R owed 2); the probe records the transform it got.
+    void Construct(const Math::Transform& t) override {
+        Note(this, kConstruct / 8); g_lastTransform = &t;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -195,7 +200,17 @@ UNIT_TEST(graphics_animationevent_slot_order_is_retails) {
     void* raw = static_cast<void*>(&probe);
 
     // The probe overrides all nine, so all nine raw-call onto their own marker.
-    CheckExternalFamilySlots<AnimationEventProbe>(raw, /*checkConstruct=*/true);
+    // Slot 8 is not the family's `External* Construct()`: it takes the transform
+    // in RDX (retail's ApplyEvents 0x1800faa53..5e), raw-called with it here.
+    CheckExternalFamilySlots<AnimationEventProbe>(raw, /*checkConstruct=*/false);
+    {
+        using FireFn = void (*)(void*, const void*);
+        alignas(8) unsigned char transform[0x1c] = {};
+        Reset(); SlotAt<FireFn, AnimationEventProbe>(raw, kConstruct)(raw, transform);
+        CHECK_EQ(g_lastMark, kConstruct / 8);
+        CHECK(g_lastSelf == raw);
+        CHECK(g_lastTransform == static_cast<const void*>(transform));
+    }
 
     // Nine retail slots are TEN compiler entries (retail slot 0 = D1 + D0),
     // all distinct, D1 != D0 included.
@@ -290,7 +305,7 @@ struct AnimationEventLeaf final : Graphics::AnimationEvent {
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
-    Object::External* Construct() override { return this; }
+    void Construct(const Math::Transform&) override {}
 };
 static_assert(sizeof(AnimationEventLeaf) == 0x20, "the leaf adds nothing");
 

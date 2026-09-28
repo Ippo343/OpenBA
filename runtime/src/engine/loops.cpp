@@ -1100,15 +1100,14 @@ void Engine::Loader::Run() {
     // whole lifetime of the loader thread, and a guard here would SKIP the
     // bracket rather than restore it (CLAUDE.md, "Don't 'fix' a faithful crash").
     //
-    // KEPT A RAW SLOT CALL, deliberately: the receiver is `Video::DeviceData`
-    // (B.3.5), whose slot 4 is declared `void Slot4()` with NO argument
-    // (runtime/types/video/CompanionData.h), while retail passes the bool in
-    // DL (1 before, 0 after). A member call would drop that argument.
-    using SetModeFn = void (*)(void*, bool);
+    // The receiver is `Video::DeviceData` (B.3.5); its slot 4 is
+    // `Slot4(bool)` (runtime/types/video/CompanionData.h), retail's DL = 1
+    // here (0x1800dbfe7) and 0 at the close (0x1800dc028). B3R owed 3: the
+    // raw `[4]` call became a call by name, same arguments.
     void* owner = engine->_videoDevice;
     void* mode  = *reinterpret_cast<void**>(
                       reinterpret_cast<uint8_t*>(owner) + 0x100);
-    reinterpret_cast<SetModeFn>((*reinterpret_cast<void***>(mode))[4])(mode, true);
+    static_cast< ::Video::DeviceData*>(mode)->Slot4(true);
 
     factory[0x41] = 1;
     UpdateLoop* loop = _loop;
@@ -1128,7 +1127,7 @@ void Engine::Loader::Run() {
     void* owner2 = engine->_videoDevice;
     void* mode2  = *reinterpret_cast<void**>(
                        reinterpret_cast<uint8_t*>(owner2) + 0x100);
-    reinterpret_cast<SetModeFn>((*reinterpret_cast<void***>(mode2))[4])(mode2, false);
+    static_cast< ::Video::DeviceData*>(mode2)->Slot4(false);
 }
 
 // ---- ?_loader@LoaderLoop@Engine@@1VLoader@2@A  0x1801fe7b8 -------------------
