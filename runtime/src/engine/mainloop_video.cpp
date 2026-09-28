@@ -197,6 +197,11 @@
 #include "../../types/object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/video/ImageBuffer.h"     // ENDGAME B.3.9 TI-REST: the ten classes'
+#include "../../types/video/ShaderProgram.h"   //   TypeId() (OnVideoError's id list)
+#include "../../types/video/VertexLayout.h"
+#include "../../types/video/RenderState.h"
+#include "../../types/video/VideoProgram.h"
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 #include "../system/string.h"
@@ -314,22 +319,22 @@ static_assert(offsetof(VideoResource, path)   == 0x10, "path @ +0x10");
 // generator can both see the dependency (§4).
 // ---------------------------------------------------------------------------
 uint32_t TypeIdImageBuffer() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A");
+    return Video::ImageBuffer::TypeId();     // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdVertexProgram() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A");
+    return Video::VertexProgram::TypeId();   // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdPixelProgram() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A");
+    return Video::PixelProgram::TypeId();    // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdRenderState() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A");
+    return Video::RenderState::TypeId();     // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdVertexLayout() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A");
+    return Video::VertexLayout::TypeId();    // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdVideoProgram() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A");
+    return Video::VideoProgram::TypeId();    // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdEdgeMesh() {
     return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A");

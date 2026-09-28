@@ -26,3 +26,12 @@
 ?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::AchievementInstance, "Object::Internal", nullptr); RT_DATA_SLOT accessor and the INTPTR_ARRAY_THUNK read converted
 ?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::Goal, "Object::External", nullptr); RT_DATA_SLOT accessor and the two EXTPTR thunk reads converted
 ?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::GoalInstance, "Object::Internal", nullptr); RT_DATA_SLOT accessors (accessors, goal_list.cpp) and the INTPTR_ARRAY_THUNK read converted
+
+# -- Video --
+?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::ImageBuffer, "Object::CompiledExternal", nullptr); readers converted: imagebuffer_vtable.cpp accessor, mainloop_video.cpp TypeIdImageBuffer, EXTPTR_THUNK
+?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::ShaderProgram, "Object::CompiledExternal", nullptr); shaderprogram.cpp accessor converted
+?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::VertexProgram, "ShaderProgram", nullptr); vertexprogram.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::PixelProgram, "ShaderProgram", nullptr); pixelprogram.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::VertexLayout, "Object::CompiledExternal", nullptr); vertexlayout.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::RenderState, "Object::External", nullptr); renderstate.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::VideoProgram, "Object::External", nullptr); videoprogram.cpp accessor, mainloop_video.cpp, EXTPTR_ARRAY_THUNK converted

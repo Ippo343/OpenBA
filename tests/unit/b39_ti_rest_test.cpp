@@ -52,6 +52,11 @@
 #include "../../runtime/types/collision2d/Surface.h"
 #include "../../runtime/types/achievement/AchievementManager.h"
 #include "../../runtime/types/achievement/Goal.h"
+#include "../../runtime/types/video/ImageBuffer.h"
+#include "../../runtime/types/video/ShaderProgram.h"
+#include "../../runtime/types/video/VertexLayout.h"
+#include "../../runtime/types/video/RenderState.h"
+#include "../../runtime/types/video/VideoProgram.h"
 
 // ===========================================================================
 // Factory-pair markers (see the banner).
@@ -69,6 +74,13 @@ TIR_FACTORY_MARKERS(Collision2D::CollisionMesh)
 TIR_FACTORY_MARKERS(Collision2D::Surface)
 TIR_FACTORY_MARKERS(Achievement::Achievement)
 TIR_FACTORY_MARKERS(Achievement::Goal)
+TIR_FACTORY_MARKERS(Video::ImageBuffer)
+TIR_FACTORY_MARKERS(Video::ShaderProgram)
+TIR_FACTORY_MARKERS(Video::VertexProgram)
+TIR_FACTORY_MARKERS(Video::PixelProgram)
+TIR_FACTORY_MARKERS(Video::VertexLayout)
+TIR_FACTORY_MARKERS(Video::RenderState)
+TIR_FACTORY_MARKERS(Video::VideoProgram)
 // The two Object::Internal subclasses: only CreateNewObject is the class's;
 // the in-place half is the real forwarder in achievement_type_records.cpp.
 ::Object::Base* Achievement::AchievementInstance::CreateNewObject() { return nullptr; }
@@ -110,6 +122,14 @@ std::vector<Expect> Rows() {
         TIR_ROW(Achievement::AchievementInstance, "AchievementInstance", "Internal", 0x709F0D32u),
         TIR_ROW(Achievement::Goal,                "Goal",                "External", 0xF50A1DDFu),
         TIR_ROW(Achievement::GoalInstance,        "GoalInstance",        "Internal", 0x9C8C89CCu),
+        // ---- Video ----
+        TIR_ROW(Video::ImageBuffer,   "ImageBuffer",   "CompiledExternal", 0x84E6F2DDu),
+        TIR_ROW(Video::ShaderProgram, "ShaderProgram", "CompiledExternal", 0x5648AD42u),
+        TIR_ROW(Video::VertexProgram, "VertexProgram", "ShaderProgram",    0x2515ACC5u),
+        TIR_ROW(Video::PixelProgram,  "PixelProgram",  "ShaderProgram",    0xD91CCDF1u),
+        TIR_ROW(Video::VertexLayout,  "VertexLayout",  "CompiledExternal", 0x48B28673u),
+        TIR_ROW(Video::RenderState,   "RenderState",   "External",         0x779102E5u),
+        TIR_ROW(Video::VideoProgram,  "VideoProgram",  "External",         0x7319BD9Du),
     };
 }
 

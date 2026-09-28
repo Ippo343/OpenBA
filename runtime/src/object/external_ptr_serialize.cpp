@@ -169,6 +169,11 @@
 #include "../../types/collision2d/Surface.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/achievement/Goal.h"
+#include "../../types/video/ImageBuffer.h"
+#include "../../types/video/ShaderProgram.h"
+#include "../../types/video/VertexLayout.h"
+#include "../../types/video/RenderState.h"
+#include "../../types/video/VideoProgram.h"
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -501,8 +506,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_MaterialInstance,
 // each; the pairing of address to T is the RIP-relative `_typeInfo` operand
 // each body loads, read out of Ghidra, not guessed from the caller.
 // 0x18005d0f0 — Video::ImageBuffer
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ImageBuffer,
-             "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_ImageBuffer, Video::ImageBuffer)
 // 0x180061100 — Graphics::Material (cutover attempt 33's wall, from MaterialInstance::Serialize+0x83)
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Material,
              "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A")
@@ -526,14 +530,10 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Achievement, Achievement::Achievem
 // 0x180055090 VertexLayout, 0x1800542a0 VertexProgram, 0x180055380 PixelProgram,
 // 0x180055670 RenderState. Reached only through VideoProgram's Serialize slot,
 // so invisible to the static closure until that class was ported.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_VertexLayout,
-             "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A")
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_VertexProgram,
-             "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A")
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_PixelProgram,
-             "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A")
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_RenderState,
-             "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_VertexLayout, Video::VertexLayout)
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_VertexProgram, Video::VertexProgram)
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_PixelProgram, Video::PixelProgram)
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_RenderState, Video::RenderState)
 // 0x18003f1e0 — UI::Font, `UI::TextDescription` +0x68 (vtable batch 2). The
 // pairing is this body's own `MOV EDX,dword ptr [0x1801fab68]` at 0x18003f473
 // (the type id handed to Object::Base::IsDerivedFrom), and 0x1801fab68 is
@@ -640,8 +640,7 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_MaterialInstance,
                    "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
 // 0x1800605e0 -- Video::VideoProgram (Material::_programs; not in the static
 // closure because Material::Serialize is reached only through a vtable slot)
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_VideoProgram,
-                   "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_VideoProgram, Video::VideoProgram)
 
 // ---- BATCH B (2026-09-12): the last three array instantiations -------------
 //

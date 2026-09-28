@@ -43,8 +43,6 @@ const void* g_relVptr = nullptr;
 }  // namespace
 
 namespace Video {
-const char*       ImageBuffer::TypeName() const { return "ImageBuffer"; }
-uint32_t          ImageBuffer::Type() const { return 0; }
 int32_t           ImageBuffer::GetFileVersion() const { return 7; }
 bool              ImageBuffer::Serialize(void*) { return true; }
 Object::External* ImageBuffer::Reconstruct() { return this; }
