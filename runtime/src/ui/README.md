@@ -115,11 +115,13 @@ Where the member bodies are:
   DocumentText/Tab/Page/Graph and `Element::RemoveChildren`),
   `element_bodies_b5.cpp` (thirteen assorted leaf bodies), `documenttext.cpp`,
   `textelement_cachetext.cpp`, `tabelement_addtab.cpp`;
-- factory / allocator doors, not members: `ui_factory_wave28.cpp`,
-  `factory_ui1.cpp`(+`.inc`), `spritesheet_new.cpp`, `description_dtors.cpp`,
-  `ui_operator_delete.cpp`; the aggregator is `rt_ui_port.cpp`.
+- allocator doors, not members: `spritesheet_new.cpp`, `ui_operator_delete.cpp`;
+  the aggregator is `rt_ui_port.cpp`. (The factory interpreters
+  `ui_factory_wave28.cpp` and `factory_ui1.cpp` are deleted: every UI class
+  registers its own `CreateNewObject` / `CreateInPlaceObject`, ENDGAME B.3.9.)
 
-Every registered export door is a one-line QUALIFIED delegation to its member;
-ctor/dtor doors, the minted vtables and the deleting-dtor rows stay until the
-end of B.3 (B36_RULES section 7). `element_sprite_debug.cpp` and
+Every registered export door is a one-line QUALIFIED delegation to its member.
+Since ENDGAME B.3.9 every UI class is a real C++ class: compiler vtable, its own
+`DeletingDtor`, its `DEFINE_TYPE` record; no minted table or deleting-dtor row
+is left. `element_sprite_debug.cpp` and
 `sprite_debug.cpp` are debug-print wrappers over the members, not ports.

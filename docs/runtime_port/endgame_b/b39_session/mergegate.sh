@@ -39,5 +39,5 @@ if grep -q "GATE RESULT: 0 problem" "$HERE/runs/$LABEL/summary.txt"; then
   done
 fi
 N="$HERE/runs/$LABEL/newgame"
-cat "$N"/standalone_error.log "$N"/standalone_debug.log 2>/dev/null | grep -E '^\[RtMint\] (minted|registered)|^\[RtDelDtor\]|FACTREST registered|FACTUI' | cut -c1-200 | head -8
+cat "$N"/standalone_error.log "$N"/standalone_debug.log 2>/dev/null | grep -E '^\[RtMint\] (minted|registered)' | cut -c1-200 | head -8   # (RtDelDtor / FACTREST / FACTUI lines are gone since B.3.9)
 git status --short | head -5

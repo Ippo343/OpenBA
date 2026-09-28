@@ -8,6 +8,14 @@ of B39_RULES section 1.1 (encoded below; the rules are the authority, this is th
 """
 import os, re, sys, glob, collections
 
+# HISTORICAL since the B.3.9 close: the RT_DELDTOR table (runtime/src/object/deleting_dtor.cpp) is
+# deleted and the mint holds no vtable / BaseTypeInfo row, so there is nothing left to settle. The
+# numbers of the finished step are in CLOSE_NUMBERS.md; `git show 851adb15:<this file>` ran last.
+if not os.path.exists("runtime/src/object/deleting_dtor.cpp"):
+    print("settled.py: HISTORICAL -- step 9 is closed (deleting_dtor.cpp and every minted vtable / "
+          "BaseTypeInfo row are gone); see b39_session/CLOSE_NUMBERS.md")
+    sys.exit(0)
+
 S = "docs/runtime_port/endgame_b/b39_session/"
 
 def table(path, header_start):
