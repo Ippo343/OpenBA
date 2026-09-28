@@ -46,6 +46,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // Resolved helpers for Update
@@ -1678,9 +1679,9 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
                     if (candCap < newCount) {
                         candCap = (candCount != 0) ? newCount * 3 : newCount;
                         int64_t* nb = reinterpret_cast<int64_t*>(
-                            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)candCap * 8, 8));
+                            System::MemoryAllocator::MemAlloc((uint64_t)candCap * 8, 8));
                         for (int k = 0; k < candCount; k++) nb[k] = cand[k];
-                        if (cand) fn_MemFreeStatic(cand);
+                        if (cand) System::MemoryAllocator::MemFree(cand);
                         cand = nb;
                     }
                     cand[candCount] = entryIBP;
@@ -1692,7 +1693,7 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
 
     if (candCount == 0) {
         new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        if (cand) fn_MemFreeStatic(cand);
+        if (cand) System::MemoryAllocator::MemFree(cand);
         return param_2;
     }
     if (candCount > 1 && s_fn_helper_02a0) {
@@ -1714,12 +1715,12 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
         }
         if (*reinterpret_cast<int*>(wpIBP + 0x60) < maxSlots) {
             *param_2 = entryIBP;
-            fn_MemFreeStatic(cand);
+            System::MemoryAllocator::MemFree(cand);
             return param_2;
         }
     }
     new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    fn_MemFreeStatic(cand);
+    System::MemoryAllocator::MemFree(cand);
     return param_2;
 }
 
@@ -1912,7 +1913,7 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     }
 
     // allocate + copy-construct the child entity
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* child = nullptr;
     if (mem) {
         child = s_fn_CopyCtor
@@ -2071,7 +2072,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
             if (*reinterpret_cast<int*>(self + 0xa4) < newCount) {
                 *reinterpret_cast<int*>(self + 0xa4) = (count != 0) ? newCount * 3 : newCount;
                 int64_t* nb = reinterpret_cast<int64_t*>(
-                    fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*reinterpret_cast<int*>(self + 0xa4) * 8, 8));
+                    System::MemoryAllocator::MemAlloc((uint64_t)*reinterpret_cast<int*>(self + 0xa4) * 8, 8));
                 *reinterpret_cast<int64_t**>(self + 0x98) = nb;
             }
             int64_t* dst = *reinterpret_cast<int64_t**>(self + 0x98);
@@ -2079,7 +2080,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
             for (int i = start; i < newCount; i++) {
                 dst[i] = (i < count) ? old[i] : res10;
             }
-            if (old != dst && old) fn_MemFreeStatic(old);
+            if (old != dst && old) System::MemoryAllocator::MemFree(old);
         }
 
         // subtract one unit from the storage + bump the town per-category

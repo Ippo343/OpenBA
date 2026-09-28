@@ -36,6 +36,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Player/exe_bodies.h"
@@ -43,7 +44,7 @@
 // ---- exe helpers: called by name (Action/Work/Player exe_bodies.h) ---------------
 
 static void* WS_Alloc(size_t n) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (int)n, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc((int)n, 8);
 }
 
 // ==================================================================================
@@ -188,7 +189,7 @@ static void* WS_cb50(uint64_t* treeField, void** pOut, uint64_t* pKey, void** pS
             WorkBase_TreeNodeFree_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x18));
             WorkBase_TreeNodeFree_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x20));
         }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(sub);
+        System::MemoryAllocator::MemFree(sub);
     }
     return pOut;
 }

@@ -87,7 +87,8 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
-#include "Game/exe_constants.h"
+#include "Game/exe_constants.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
@@ -344,15 +345,14 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
                     int newCap = newCount;
                     if (arrACount != 0) newCap = newCount * 3;
                     arrACap = newCap;
-                    float* nb = reinterpret_cast<float*>(fn_MemAlloc
-                        ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(newCap) << 3, 8) : nullptr);
+                    float* nb = reinterpret_cast<float*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) << 3, 8));
                     // copy old
                     // 8-byte stride (one int64 per entry, alloc is newCap << 3) — matches the
                     // search loop's `arrA + k*2` float arithmetic and the original's pfVar14 += 2.
                     for (int c = 0; c < arrACount; ++c) {
                         reinterpret_cast<int64_t*>(nb)[c] = reinterpret_cast<int64_t*>(arrA)[c];
                     }
-                    if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
+                    if (arrA) System::MemoryAllocator::MemFree(arrA);
                     arrA = nb;
                 }
                 reinterpret_cast<int64_t*>(arrA)[arrACount] = outBest;
@@ -367,14 +367,13 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
                     int newCap = newCount;
                     if (arrBCount != 0) newCap = newCount * 3;
                     arrBCap = newCap;
-                    float* nb = reinterpret_cast<float*>(fn_MemAlloc
-                        ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(newCap) * 0xc, 4) : nullptr);
+                    float* nb = reinterpret_cast<float*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) * 0xc, 4));
                     for (int c = 0; c < arrBCount; ++c) {
                         nb[c * 3 + 0] = arrB[c * 3 + 0];
                         nb[c * 3 + 1] = arrB[c * 3 + 1];
                         nb[c * 3 + 2] = arrB[c * 3 + 2];
                     }
-                    if (arrB && fn_MemFreeStatic) fn_MemFreeStatic(arrB);
+                    if (arrB) System::MemoryAllocator::MemFree(arrB);
                     arrB = nb;
                 }
                 arrB[arrBCount * 3 + 0] = *reinterpret_cast<float*>(&outVec[0]);
@@ -428,9 +427,9 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     }
 
     // free the dynamic arrays (LAB_140116387 epilogue).
-    if (arrB && fn_MemFreeStatic) fn_MemFreeStatic(arrB);
+    if (arrB) System::MemoryAllocator::MemFree(arrB);
     arrB = nullptr; arrBCount = 0;
-    if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
+    if (arrA) System::MemoryAllocator::MemFree(arrA);
     arrA = nullptr; arrACount = 0;
 }
 

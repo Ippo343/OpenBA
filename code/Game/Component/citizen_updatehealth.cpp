@@ -58,7 +58,8 @@
 #include "Action/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
-#include "volume/Volume.h"
+#include "volume/Volume.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
@@ -319,7 +320,7 @@ extern "C" void CitizenComp_IntArrayResize(void* arrBase, int newCount, const ui
     if (*capPtr < newCount) {
         *capPtr = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) *capPtr = newCount * 3;
-        *base = (uintptr_t)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*capPtr * 4, 4);
+        *base = (uintptr_t)System::MemoryAllocator::MemAlloc((uint64_t)*capPtr * 4, 4);
     }
     uintptr_t newData = *base;
 
@@ -328,7 +329,7 @@ extern "C" void CitizenComp_IntArrayResize(void* arrBase, int newCount, const ui
         *(uint32_t*)(newData + (uintptr_t)i * 4) =
             (i < oldCount) ? *(const uint32_t*)(oldData + (uintptr_t)i * 4) : *fill;
     }
-    if (oldData != newData && oldData) fn_MemFreeStatic((void*)oldData);
+    if (oldData != newData && oldData) System::MemoryAllocator::MemFree((void*)oldData);
 }
 
 // ============================================================
@@ -416,8 +417,7 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
                         if (*capPtr < count + 1) {
                             *capPtr = count + 1;
                             if (count != 0) *capPtr = (count + 1) * 3;
-                            *arr = (uintptr_t)fn_MemAlloc(g_pMemAllocSingleton,
-                                                          (uint64_t)*capPtr * 8, 8);
+                            *arr = (uintptr_t)System::MemoryAllocator::MemAlloc((uint64_t)*capPtr * 8, 8);
                         }
                         uintptr_t newData = *arr;
                         int start = (oldData == newData) ? count : 0;
@@ -426,7 +426,7 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
                                 (i < count) ? *(uintptr_t*)(oldData + (uintptr_t)i * 8)
                                             : linkIBP;
                         }
-                        if (oldData != newData && oldData) fn_MemFreeStatic((void*)oldData);
+                        if (oldData != newData && oldData) System::MemoryAllocator::MemFree((void*)oldData);
                     }
                 }
 
@@ -602,7 +602,7 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
                 "target=%.4f -> NO BUCKET (nothing drawn)\n", self, count, total, target);
         fflush(stderr);
     }
-    if (cum.data) fn_MemFreeStatic((void*)cum.data);
+    if (cum.data) System::MemoryAllocator::MemFree((void*)cum.data);
 }
 
 // ============================================================
@@ -671,7 +671,7 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
                 self, contagionRoll, contagion, radius, found.count);
         fflush(stderr);
     }
-    fn_MemFreeStatic((void*)found.data);   // original frees even when null
+    System::MemoryAllocator::MemFree((void*)found.data);   // original frees even when null
 }
 
 // ============================================================

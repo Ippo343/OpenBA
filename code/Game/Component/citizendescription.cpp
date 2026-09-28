@@ -43,7 +43,8 @@
 #include "Component/coll_bridge.h"
 #include <cstring>
 #include <cstdint>
-#include <new>
+#include <new>
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -126,8 +127,8 @@ CitizenDescription::CitizenDescription()
 // The compiler then chains ~Description -> ~External.
 CitizenDescription::~CitizenDescription() {
     // Free the dynamic External* array buffer (entries are non-owning ptrs).
-    if (_refs && fn_MemFreeStatic) {
-        fn_MemFreeStatic(_refs);
+    if (_refs) {
+        System::MemoryAllocator::MemFree(_refs);
         _refs = nullptr;
         _refCount = 0;
         _refCap = 0;

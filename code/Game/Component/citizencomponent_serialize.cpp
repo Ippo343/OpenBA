@@ -94,7 +94,8 @@
 #include "Component/AttendanceComponent.h"      // ENDGAME B.3.9 C1: 0x1401c3f40 cell class
 #include "Component/CharacterComponent.h"       // ENDGAME B.3.9 C1: 0x1401c7078 cell class
 #include "Component/CitizenDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7190 cell class
-#include "Component/StatusIconComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7e08 cell class
+#include "Component/StatusIconComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7e08 cell class
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
                                                   long long arrayBase, void* deadInit);
@@ -122,9 +123,7 @@ void ResizeCitizenExternalArray(int64_t* header, int newCount) {
         *capPtr = newCount;
         if (newCount == oldCount + 1 && oldCount != 0)
             *capPtr = newCount * 3;
-        void* newPtr = fn_MemAllocStatic
-            ? fn_MemAllocStatic(static_cast<uint64_t>(*capPtr) * 8, 8)
-            : nullptr;
+        void* newPtr = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*capPtr) * 8, 8);
         header[0] = reinterpret_cast<int64_t>(newPtr);
     }
 
@@ -140,8 +139,8 @@ void ResizeCitizenExternalArray(int64_t* header, int newCount) {
         }
     }
 
-    if (oldPtr != reinterpret_cast<void*>(header[0]) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldPtr);
+    if (oldPtr != reinterpret_cast<void*>(header[0]))
+        System::MemoryAllocator::MemFree(oldPtr);
 }
 
 bool s_resolved = false;

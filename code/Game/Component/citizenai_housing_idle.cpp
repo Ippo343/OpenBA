@@ -85,7 +85,8 @@
 #include "Work/Work.h"      // B.3.x W0 G-B: Work::Validate / Execute by name
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
-#include "Work/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
 extern "C" void* g_pBuildStructureWork;
@@ -117,7 +118,7 @@ static inline bool ValidNode(int64_t p) {
 }
 
 static inline void* NodeAlloc() {
-    return fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc(0x30, 8);
 }
 
 // Idle work-search counters, read by standalone/road_probe.cpp. The road wave needs to
@@ -604,7 +605,7 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
     if (r != 0) {
         WorkBase_TreeNodeFree_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x18));
         WorkBase_TreeNodeFree_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x20));
-        if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(r));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(r));
     }
     return ret;
 }

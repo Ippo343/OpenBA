@@ -51,7 +51,7 @@
 //
 // Engine helpers (engine_funcs.h): fn_ObjectInternal_Ctor, fn_InternalBasePtr_Ctor,
 //   fn_InternalBasePtr_CheckPtr, fn_InternalBasePtr_DeletePtr, fn_Time_Ctor_Float,
-//   fn_MemAlloc(g_pMemAllocSingleton,size,8), g_pGameWorldSingleton.
+//   System::MemoryAllocator::MemAlloc(size, 8), g_pGameWorldSingleton.
 //
 // Action vtables (exe .rdata): vtable_Action 0x14015faa0, vtable_PerformWork 0x14015fea0,
 //   vtable_PlayAnimation 0x140158950 (all confirmed from the ctor disasm `LEA RAX,[...]`).
@@ -86,7 +86,8 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_constants.h"
-#include "system/Value.h"   // RtSystem_Time_Ctor
+#include "system/Value.h"   // RtSystem_Time_Ctor
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
@@ -110,7 +111,7 @@ static inline uint32_t MsgId7158() {
     return CitizenComponent::TypeId();
 }
 static inline void*    MemA(uint64_t sz) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, sz, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc(sz, 8);
 }
 
 // Build a raw inline PerformWork action at `mem` (0x48 bytes). animIdx is the XMM float

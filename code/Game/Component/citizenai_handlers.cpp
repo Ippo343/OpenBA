@@ -39,7 +39,8 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
-#include "Game/exe_constants.h"
+#include "Game/exe_constants.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
@@ -76,8 +77,7 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
 
     // (2) SendComponentMessage action -> CharacterComponent+0x58
     void* msgAction = nullptr;
-    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x40, 8);
     if (mem) {
         int64_t destIBP = 0;
         new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -96,8 +96,7 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
 
     // (3) PlayAnimation action (only when animTime > 0)
     if (0.0f < animTime) {
-        void* pmem = (fn_MemAlloc && g_pMemAllocSingleton)
-                     ? fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8) : nullptr;
+        void* pmem = System::MemoryAllocator::MemAlloc(0x40, 8);
         void* animAction = nullptr;
         if (pmem) {
             int64_t timeStore = 0;
@@ -120,8 +119,7 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
 
     // (4) MoveTo action (always)
     void* moveAction = nullptr;
-    void* mmem = (fn_MemAlloc && g_pMemAllocSingleton)
-                 ? fn_MemAlloc(g_pMemAllocSingleton, 0x480, 8) : nullptr;
+    void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
         int64_t entityVal = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
         int64_t familyOut = 0;

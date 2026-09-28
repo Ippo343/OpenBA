@@ -79,7 +79,8 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
-#include "Game/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
@@ -88,7 +89,7 @@ namespace {
 
 // AVL/BST node allocator (System::MemoryAllocator::MemAlloc(0x28,8)) and free wrapper.
 static inline void* NodeAlloc(uint64_t sz) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, sz, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc(sz, 8);
 }
 
 static uint32_t s_tid_CitizenDescription   = 0;  // DWORD_1401c7190
@@ -300,7 +301,7 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
                                 if (dst) { *dst = 0; *dst = *src; }
                             }
                         }
-                        if (curArr != fresh && curArr != nullptr && fn_MemFreeStatic) fn_MemFreeStatic(curArr);
+                        if (curArr != fresh && curArr != nullptr) System::MemoryAllocator::MemFree(curArr);
                         curArr = fresh;
                     } else {
                         // in-place append of the current entity into curArr[oldN]
@@ -322,12 +323,12 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             int64_t node = *chosen;
             *param_2 = 0;
             *param_2 = *reinterpret_cast<int64_t*>(node + 0x10);
-            if (curArr && fn_MemFreeStatic) fn_MemFreeStatic(curArr);
+            if (curArr) System::MemoryAllocator::MemFree(curArr);
             return param_2;
         }
     }
     new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    if (curArr && fn_MemFreeStatic) fn_MemFreeStatic(curArr);
+    if (curArr) System::MemoryAllocator::MemFree(curArr);
     return param_2;
 }
 
@@ -549,7 +550,7 @@ LAB_14010a846:
         if (local_d8 != nullptr) {
             { WorkBase_TreeNodeFree_14c30(&local_d8, reinterpret_cast<void*>(local_d8[2]));
                              WorkBase_TreeNodeFree_14c30(&local_d8, reinterpret_cast<void*>(local_d8[3])); }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(local_d8);
+            System::MemoryAllocator::MemFree(local_d8);
         }
         local_d8 = nullptr; local_d0 = 0;
         goto LAB_after_target;   // local_res20 set (or still null) -> bound decision
@@ -745,7 +746,7 @@ LAB_14010ae8a:
         if (local_c8 != nullptr) {
             { WorkBase_TreeNodeFree_14c30(&local_c8, reinterpret_cast<void*>(local_c8[2]));
                              WorkBase_TreeNodeFree_14c30(&local_c8, reinterpret_cast<void*>(local_c8[3])); }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(local_c8);
+            System::MemoryAllocator::MemFree(local_c8);
         }
         return uVar41;
     }

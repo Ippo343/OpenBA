@@ -34,6 +34,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // Force-work harness target: the first start-town structure (StorageBarn), captured
 // in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
@@ -576,7 +577,7 @@ void CitizenComp_CitizenAIComponent_TransitionState(int64_t selfV, char param) {
                 p += 3;
             } while (idx < n);
         }
-        fn_MemFreeStatic(arr);
+        System::MemoryAllocator::MemFree(arr);
     } else {
         *reinterpret_cast<int*>(self + 0x28) = *reinterpret_cast<int*>(self + 0x2c);
         *reinterpret_cast<int*>(self + 0x2c) = -1;

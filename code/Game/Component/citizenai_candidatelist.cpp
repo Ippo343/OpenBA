@@ -32,7 +32,8 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
-#include "Game/exe_constants.h"
+#include "Game/exe_constants.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // 1. SortByPriority (0x14002fe10)
@@ -326,7 +327,7 @@ static void AppendCandidate(int64_t* L, int id, int prio) {
             *reinterpret_cast<uint32_t*>(lb + 0xc) = uVar15 * 3;
         }
         int newcap = *reinterpret_cast<int*>(lb + 0xc);
-        void* pvVar8 = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)((int64_t)newcap * 0xc), 4);
+        void* pvVar8 = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)newcap * 0xc), 4);
         L[0] = reinterpret_cast<int64_t>(pvVar8);
     }
 
@@ -356,7 +357,7 @@ static void AppendCandidate(int64_t* L, int id, int prio) {
     }
 
     if (pvVar13 != reinterpret_cast<void*>(L[0])) {
-        fn_MemFreeStatic(pvVar13);
+        System::MemoryAllocator::MemFree(pvVar13);
     }
 }
 

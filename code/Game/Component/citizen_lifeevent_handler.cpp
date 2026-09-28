@@ -56,6 +56,7 @@
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Entity/componententity_funcs.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // Component vtable slot [2] (offset 0x10) = GetTypeId(this).
 static inline uint32_t CompTypeId(void* comp) {
@@ -269,8 +270,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
     void* tombDesc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(cemDesc) + 0x20);
     if (!tombDesc) return;   // [STANDALONE GUARD]
     void* built = nullptr;
-    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-        ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     if (mem) built = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tombDesc);
     int64_t entIBP = 0;
     new (&entIBP) ::Object::InternalBasePtr(
