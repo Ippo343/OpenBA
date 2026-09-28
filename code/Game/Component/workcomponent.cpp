@@ -174,19 +174,6 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
     }
 }
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void WorkComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[WorkComponent] Funcs resolved: "
-           "ComputeWorkCapacity=%p CheckWorkSlot=%p RegisterWorkSlot=%p\n",
-           (void*)s_fn_ComputeWorkCapacity, (void*)s_fn_CheckWorkSlot,
-           (void*)s_fn_RegisterWorkSlot);
-#endif
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — WorkComponent as a REAL class (WorkComponent.h).
 //

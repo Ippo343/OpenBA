@@ -811,19 +811,6 @@ extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* selfP) {
 
 
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void WorkPlaceComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[WorkPlaceComponent] Funcs resolved: "
-           "AddToList=%p OnCreateFallback=%p\n",
-           (void*)s_fn_RemoveFromList,
-           (void*)s_fn_OnCreateFallback);
-#endif
-}
-
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====
 // (WorkPlaceComponent.h). Before: COMPONENT_INERT_FACTORY expanded by hand (48-slot
 // table filled per create, slots 3/7/16/17 patched per create, Inert_ScalarDtor in

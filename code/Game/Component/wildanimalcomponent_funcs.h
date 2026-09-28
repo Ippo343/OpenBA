@@ -16,6 +16,3 @@
 // IsDerivedFrom(DAT_1401c7820 = HerdComponent) and nulls it if the check fails.
 // (Previously misnamed "Shutdown" here.)
 void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream);
-
-// Init: resolve all internal function pointers (called once at startup)
-void WildAnimalComponent_InitFuncs();

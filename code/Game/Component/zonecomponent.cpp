@@ -164,10 +164,6 @@ static void EnsureZoneHelpers() {
     s_initialized = true;
 }
 
-void ZoneComponent_InitFuncs() {
-    EnsureZoneHelpers();
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — ZoneComponent as a REAL class (ZoneComponent.h).
 //

@@ -101,19 +101,6 @@ void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
 // dispatched; count both arms.
 static long long g_war_calls = 0, g_war_noHerd = 0;
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void WildAnimalComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[WildAnimalComponent] Funcs resolved: "
-           "EraseFromList=%p HerdTypeId=%u\n",
-           (void*)s_fn_EraseFromComponentList,
-           HerdComponent::TypeId());
-#endif
-}
-
 // ===== ENDGAME B.3.8 CIT — WildAnimalComponent as a REAL class (WildAnimalComponent.h) =====
 // Before: a 48-slot hand-built WildAnimalComponent_LiveVtable filled at every
 // create (slots 3 Serialize, 7 OnRemove), Inert_ScalarDtor in slot 0. After: the
