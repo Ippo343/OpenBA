@@ -51,6 +51,7 @@
 #include "../../types/ui/SpriteCapture.h"
 #include "../../types/ui/SpriteSheet.h"
 #include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_CaptureEntry
 
 // ----------------------------------------------------------------------------
@@ -59,9 +60,6 @@
 // runtime/src/). Byte-identical to resolve.h's; the linker checks them. Same
 // spelling as runtime/src/ui/spritecontext.cpp and sprite.cpp.
 // ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 using UI::Sprite;
@@ -101,29 +99,15 @@ using UI::SpriteCapture;
 // (0x18004bde0 is registered by array.cpp now — the "NOT PORTED" half of the
 // old comment here is stale.)
 
-// System::String::Set(char const*) — 0x1800c95d0, PORTED in
-// runtime/src/system/string.cpp and registered there BY ADDRESS, so this door
-// reaches our body (ResolveAddr consults the port registry first —
-// reference_resolveaddr_consults_port_registry_first.md).
-typedef void (*StringSetFn)(void* self, const char* src);
-// ENDGAME B.3.6 block D (RULE B6-5): these three resolvers no longer keep a
-// first-call static — they run inside UI::SpriteCapture's members, on
-// whichever thread draws. `ResolveAddr` is a registry lookup.
-inline StringSetFn TheStringSet() {
-    return reinterpret_cast<StringSetFn>(ResolveAddr(Module::Runtime, 0x1800c95d0));
-}
-
-// System::MemoryAllocator::MemAlloc / MemFree, the same two doors
-// runtime/src/collection/array.cpp uses and for the same reason. Retail spells
-// both open in these bodies (`[0x1801fc718]+0x640`, Enter, Allocate, Leave);
-// 0x1800c7a50 and 0x1800c7ad0 ARE that sequence.
+// System::MemoryAllocator::MemAlloc / MemFree (0x1800c7a50 / 0x1800c7ad0),
+// called directly. Retail spells both open in these bodies
+// (`[0x1801fc718]+0x640`, Enter, Allocate, Leave); the two statics ARE that
+// sequence.
 inline void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50))(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 inline void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0))(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ---- the System::String refcount idiom -------------------------------------
@@ -181,7 +165,7 @@ void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bott
 
     // The empty name. Set() on a null slot allocates a fresh refcounted block.
     char* tmp = nullptr;
-    TheStringSet()(&tmp, "");
+    reinterpret_cast<System::String*>(&tmp)->Set("");   // System::String::Set 0x1800c95d0
     if (tmp) {
         e.name = tmp;
         ++StringRc(tmp);
@@ -343,13 +327,6 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
 }
 
 // ============================================================================
-// Registration
-// ============================================================================
-// Called from RtUiSpriteRegister() in sprite.cpp rather than from a new slot in
-// rt_ui_port.cpp, whose header says not to edit it to add a lane — the same
-// route RtUiSpriteContextRegister() already takes. Own kill switch so this
-// lane can be A/B'd without disturbing the rest of the sprite family.
-// ============================================================================
 // 0x1800D8A60  UI::SpriteCapture::EndAddingSprites()      ord 2304
 // WAVE 23 LANE TAIL
 // ============================================================================
@@ -472,36 +449,4 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
 extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
     reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
         ->UI::SpriteCapture::EndAddingSprites();
-}
-
-int RtUiSpriteCaptureRegister() {
-    int n = 0;
-    // The other half of lane UI4: the seven SpriteSheet virtual-table slot
-    // bodies that were NAMED TRAPS in the already-minted
-    // `??_7SpriteSheet@UI@@6B@`. Same switch on purpose — the two halves are
-    // verified by one run, and a split A/B would be a third state to reason
-    // about for no benefit. See runtime/src/ui/spritesheet_vtable.cpp.
-    extern int RtUiSpriteSheetVtableRegister();
-    n += RtUiSpriteSheetVtableRegister();
-
-    RegisterRuntimeExport("?AddSprite@SpriteCapture@UI@@QEAAXAEBVSprite@2@HHHHMI@Z",
-                          (void*)&RtUi_SpriteCapture_AddSprite); ++n;
-    RegisterRuntimeAddr(0x1800d8b20, (void*)&RtUi_SpriteCapture_AddSprite);
-    RegisterRuntimeExport("?AddScissor@SpriteCapture@UI@@QEAAXHHHH_N@Z",
-                          (void*)&RtUi_SpriteCapture_AddScissor); ++n;
-    RegisterRuntimeAddr(0x1800d8ef0, (void*)&RtUi_SpriteCapture_AddScissor);
-
-    // WAVE 23 LANE TAIL. Reached by name from
-    // runtime/src/save/saveload_draw.cpp and runtime/src/ui/userinterface_draw.cpp
-    // (which spells it into the constant `kEndSprites`) - two live call sites,
-    // both of which flip onto this body. Both doors, as everywhere in this file.
-    RegisterRuntimeExport("?EndAddingSprites@SpriteCapture@UI@@QEAAXXZ",
-                          (void*)&RtUi_SpriteCapture_EndAddingSprites); ++n;
-    RegisterRuntimeAddr(0x1800d8a60, (void*)&RtUi_SpriteCapture_EndAddingSprites);
-
-    // BOTH doors on purpose. spritecontext.cpp reaches these two by ADDRESS
-    // (0x1800d8b20 / 0x1800d8ef0, its two capture doors), so a name-only
-    // registration would leave the only live caller in the tree walking past
-    // the port into the DLL — reference_bypassed_port_needs_a_source_checker.md.
-    return n;
 }

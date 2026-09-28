@@ -46,7 +46,6 @@
 // namespace-scope std::atomic slots.
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"
@@ -58,14 +57,11 @@ namespace {
 
 // `?GetChildLayout@LayoutElement@UI@@AEAAXHHHHHH_N@Z` (0x1800d2dc0) — declared
 // on the class, body still element_bodies_b5.cpp's door (fragment pass).
-using GetChildLayoutFn = void (*)(void* self, int32_t index, int32_t sizePass,
-                                  int32_t left, int32_t top, int32_t right,
-                                  int32_t bottom, bool visible);
 
 // Array<ChildRecord>::~Array — 0x180043cb0, one of the parameterless `~Array`
 // copies; registered from runtime/src/collection/array.cpp, so ResolveAddr
 // hands back OUR body.
-void RowsDtor(void* hdr) { RtAddr<ArrayDtorFn>(0x180043cb0ull)(hdr); }
+void RowsDtor(void* hdr) { rtcoll::RtColl_ArrayDtor_180043cb0(hdr); }
 
 }  // namespace
 
@@ -99,10 +95,10 @@ void LayoutElement::ComputeSize() {
             row->sizeX = 0;
             row->sizeY = 0;
         } else {
-            RtAddr<GetPaddedSizeFn>(0x180115f10ull)(child, &row->sizeX, &row->sizeY);
+            child->GetPaddedSize(row->sizeX, row->sizeY);                 // 0x180115f10
         }
 
-        RtAddr<GetChildLayoutFn>(0x1800d2dc0ull)(this, i, 1, 0, 0, 0, 0, visible);
+        GetChildLayout(i, 1, 0, 0, 0, 0, visible);                        // 0x1800d2dc0
 
         // Re-read the base: GetChildLayout may have grown the array.
         row = _childRecords._data + i;
@@ -163,8 +159,8 @@ void LayoutElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
         const bool hidden  = (child->_flags & kFlagHidden) != 0;
         const bool visible = !(hidden && row0->force == 0);
 
-        RtAddr<GetChildLayoutFn>(0x1800d2dc0ull)(
-            this, i, 0, _layoutLeft, _layoutTop, _layoutRight, _layoutBottom, visible);
+        GetChildLayout(i, 0, _layoutLeft, _layoutTop, _layoutRight, _layoutBottom,   // 0x1800d2dc0
+                       visible);
 
         ChildRecord* row = _childRecords._data + i;
         child->ComputeLayout(row->left[0], row->top[0], row->right[0], row->bottom[0]);
@@ -243,19 +239,6 @@ Object::Base* LayoutElement::CreateInPlaceObject(void* place) {
 // `??_7LayoutElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // LayoutElement now wears the compiler's table.
 // ============================================================================
-
-int RtUiLayoutElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@LayoutElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@LayoutElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::LayoutElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180043380ull, (void*)&UI::LayoutElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::LayoutElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180043420ull, (void*)&UI::LayoutElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::LayoutElement's own type record, built at CRT init

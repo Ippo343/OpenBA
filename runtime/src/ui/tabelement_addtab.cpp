@@ -86,7 +86,6 @@
 // brain to close, because there is no second caller.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <new>
@@ -182,17 +181,4 @@ extern "C" void** RtUi_TabElement_AddTab(void* self, void** ret,
             Object::ExternalPtr<UI::ElementDescription>(
                 reinterpret_cast<UI::ElementDescription*>(descB)))); // B.3.6 bridge
     return ret;                                            // 0x1800DA32D
-}
-
-// ============================================================================
-// Registration — NAME AND ADDRESS, both.
-// ============================================================================
-int RtUiTabAddTabRegister() {
-    int n = 0;
-    RegisterRuntimeExport(
-        "?AddTab@TabElement@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@"
-        "V?$ExternalPtr@VElementDescription@UI@@@4@0@Z",
-        (void*)&RtUi_TabElement_AddTab); ++n;
-    RegisterRuntimeAddr(0x1800da130, (void*)&RtUi_TabElement_AddTab);
-    return n;
 }

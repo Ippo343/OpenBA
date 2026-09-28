@@ -55,7 +55,6 @@
 // RULE B6-5: the type-info records, the vtable and the Video::Device singleton
 // the members read are cached in namespace-scope std::atomic slots.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "element_common.h"
@@ -84,15 +83,14 @@ const uint8_t* VideoDevice() {
     return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
 }
 
-using IsDerivedFromFn   = bool  (*)(const void* self, uint32_t typeId);
 
 // `CMOVNZ`: the child on a passed type test, NULL on a failed one — and retail
 // then dereferences the NULL (see ComputeSize).
 UI::Element* AsClipRegion(UI::Element* p) {
-    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, UI::ClipRegionElement::TypeId()) ? p : nullptr;
+    return reinterpret_cast<const Object::Base*>(p)->IsDerivedFrom(UI::ClipRegionElement::TypeId()) ? p : nullptr;
 }
 UI::ScrollElement* AsScroll(UI::Element* p) {
-    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, UI::ScrollElement::TypeId())
+    return reinterpret_cast<const Object::Base*>(p)->IsDerivedFrom(UI::ScrollElement::TypeId())
                ? reinterpret_cast<UI::ScrollElement*>(p)             // B.3.6 bridge
                : nullptr;
 }
@@ -385,22 +383,6 @@ Object::Base* ContainerElement::CreateInPlaceObject(void* place) {
 // `??_7ContainerElement@UI@@6B@` (and its RT_DELDTOR row): every live
 // ContainerElement now wears the compiler's table.
 // ============================================================================
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtUiContainerElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ContainerElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ContainerElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ContainerElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180039db0ull, (void*)&UI::ContainerElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ContainerElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ContainerElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180039e50ull, (void*)&UI::ContainerElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ContainerElement's own type record, built at CRT init

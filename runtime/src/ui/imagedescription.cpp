@@ -50,7 +50,6 @@
 // the ??1 door, read only by the retired minted table and its RT_DELDTOR row,
 // are gone. The applier's door (non-slot) stays.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>
@@ -110,9 +109,8 @@ bool ImageDescription::Serialize(void* streamv) {
     rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1801184fa
 
-    using FieldSerFn = void (*)(void* field, rtdesc::Serializer* ser);
-    rtdesc::RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);   // 180118508 ExternalPtr<SpriteSheet>
-    rtdesc::RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);    // 180118516 String
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));   // 180118508 ExternalPtr<SpriteSheet>
+    StringSerialize(&_spriteName, &ser);    // 180118516 String
 
     rw->SerializeInt(_width, nullptr);
     rw->SerializeInt(_height, nullptr);
@@ -251,26 +249,6 @@ extern "C" void RtUi_ImageDescription_ApplyToElement(const void* selfv, void** e
     reinterpret_cast<const UI::ImageDescription*>(selfv)                // B.3.6 bridge
         ->UI::ImageDescription::CreateInstance(
             reinterpret_cast<Object::InternalPtr<UI::ImageElement>*>(elemPtr));
-}
-
-// ============================================================================
-// Registration: the factory pair (B39_RULES D2) and the applier. The eight slot
-// doors and the ??1 door, read only by the retired minted table / RT_DELDTOR
-// row, are gone; so is ui_factory_wave28.cpp's ??0 door.
-// ============================================================================
-int RtUiImageDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ImageDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180035dc0ull, (void*)&UI::ImageDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ImageDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180035eb0ull, (void*)&UI::ImageDescription::CreateInPlaceObject);
-
-    // ADDRESS ONLY, as before: the export name resolves to this address.
-    RegisterRuntimeAddr(0x180118570ull, (void*)&RtUi_ImageDescription_ApplyToElement); ++n;
-
-    return n;
 }
 
 // ============================================================================

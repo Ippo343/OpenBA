@@ -37,17 +37,15 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/ProgressDescription.h"
 #include "../../types/ui/ProgressElement.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/ui/SpriteSheet.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
-#include <atomic>
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -65,14 +63,12 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using MemFreeFn = void (*)(void*);
-
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*field);
+        System::MemoryAllocator::MemFree(*field);
     } else {
         *field = nullptr;
     }
@@ -84,23 +80,10 @@ void ReleaseStringField(char** field) {
 // The MEMBERS
 // ============================================================================
 namespace {
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_getSpriteIndex{nullptr};
-// ?GetSpriteIndexFromName@SpriteSheet@UI@@ — block D's class, a door.
+// ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
 int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
-    return reinterpret_cast<GetIdxFn>(AtomicExport(
-        g_getSpriteIndex,
-        "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"))(sheet, nameStr);
+    return static_cast<const UI::SpriteSheet*>(sheet)                       // B.3.x bridge
+        ->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
 }
 }  // namespace
 
@@ -140,15 +123,14 @@ bool ProgressDescription::Serialize(void* streamArg) {
     // kScalarUInt, NOT kScalarInt — vt+0x98 at 0x180119fbe.
     rw->SerializeUInt(_unknown68, nullptr);
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 180119fcd ExternalPtr<SpriteSheet>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_fillLeftName, &ser);           // 180119fdb
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_fillMiddleName, &ser);         // 180119fec
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_fillRightName, &ser);          // 180119ffd
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_trackLeftName, &ser);          // 18011a00e
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_trackMiddleName, &ser);        // 18011a01f
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_trackRightName, &ser);         // 18011a030
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_childDescription, &ser);       // 18011a041 ExternalPtr<ElementDescription>
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 180119fcd ExternalPtr<SpriteSheet>
+    reinterpret_cast<System::String*>(&_fillLeftName)->Serialize(&ser);           // 180119fdb
+    reinterpret_cast<System::String*>(&_fillMiddleName)->Serialize(&ser);         // 180119fec
+    reinterpret_cast<System::String*>(&_fillRightName)->Serialize(&ser);          // 180119ffd
+    reinterpret_cast<System::String*>(&_trackLeftName)->Serialize(&ser);          // 18011a00e
+    reinterpret_cast<System::String*>(&_trackMiddleName)->Serialize(&ser);        // 18011a01f
+    reinterpret_cast<System::String*>(&_trackRightName)->Serialize(&ser);         // 18011a030
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 18011a041 ExternalPtr<ElementDescription>
 
     if (rw != nullptr) {                                                // 18011a04f
         delete rw;
@@ -173,8 +155,7 @@ bool ProgressDescription::Serialize(void* streamArg) {
 // Every other class in this batch creates its children unconditionally.
 Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x130, 8);          // 180119d49 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0x130, 8);          // 180119d49 (inlined)
 
     ProgressElement* elem = static_cast<ProgressElement*>(raw);
     if (raw != nullptr)                                                 // 180119d73
@@ -206,17 +187,19 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
     }
 
     if (_childDescription != nullptr) {                                 // 180119ed1
-        // UI::Dialog::CreateElement (block B's class) — a door, by address.
-        using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-        void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(
-            dialog, &slot, _childDescription);                          // 180119ee9
+        // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+        // placed in the caller's slot.                          // 180119ee9
+        void** made = &slot;
+        new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
+            static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
+                Object::ExternalPtr<UI::ElementDescription>(
+                    static_cast<UI::ElementDescription*>(_childDescription))));
 
         Element* child = *reinterpret_cast<Element**>(made);            // 180119eee
         if (child != nullptr)
             child->_parent = elem;                                      // 180119ef6
 
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                        elem->_children.GetSize() + 1,
                                        made);                           // 180119f0c
 
@@ -264,19 +247,6 @@ Object::Base* ProgressDescription::CreateInPlaceObject(void* place) {
 // `??_7ProgressDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // ProgressDescription now wears the compiler's table.
 // ============================================================================
-
-int RtUiProgressDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ProgressDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ProgressDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180077860ull, (void*)&UI::ProgressDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ProgressDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x1800778e0ull, (void*)&UI::ProgressDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ProgressDescription's own type record, built at CRT init
