@@ -47,6 +47,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Component/FireComponent.h"
+#include "system/MemoryAllocator.h"
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp).
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
@@ -399,8 +400,8 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     }
 
     void* work = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+    if (::System::MemoryAllocator::_singleton) {
+        void* mem = ::System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
             uint64_t entityIbp = *reinterpret_cast<uint64_t*>(s + 0x10);
             work = FireWork_CtorFull_e9bd0(

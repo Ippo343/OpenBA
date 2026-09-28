@@ -85,6 +85,7 @@
 #include "Component/controller_state_table.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "system/MemoryAllocator.h"
 
 // ============================================================
 // Resolved helpers (once)
@@ -438,8 +439,8 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
                     int per = 100 / stackSize;
                     if (per > remaining) per = remaining;
 
-                    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                                    ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+                    void* mem = (::System::MemoryAllocator::_singleton)
+                                    ? ::System::MemoryAllocator::MemAlloc(0x48, 8) : nullptr;
                     void* newEntity = (mem && s_copyCtor)
                                           ? s_copyCtor(mem, reinterpret_cast<void*>(tmpl)) : nullptr;
                     if (newEntity) {
@@ -593,8 +594,8 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
     // path: Work_Ctor25 base bind (field_10 = entity) + ClearStorage vtable +
     // zeroed tail fields (ClearStorage_Ctor 0x1400e74b0 shape).
     int64_t yard = FindOn(entity, s_find3050);
-    if (yard && s_ec60 && fn_MemAlloc && g_pMemAllocSingleton) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+    if (yard && s_ec60 && ::System::MemoryAllocator::_singleton) {
+        void* mem = ::System::MemoryAllocator::MemAlloc(0x68, 8);
         if (mem) {
             // ENDGAME B.3.9 OBJ: the real class (Work_Ctor25 + the table +
             // four zero qwords), not the `??0Internal` door + hand stamp.
@@ -657,8 +658,8 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
 
         // Queue the BuildStructure work (type 0x2001) via the full retail ctor.
         int64_t yard = FindOn(entity, s_find3050);
-        if (yard && s_ec60 && fn_MemAlloc && g_pMemAllocSingleton) {
-            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8);
+        if (yard && s_ec60 && ::System::MemoryAllocator::_singleton) {
+            void* mem = ::System::MemoryAllocator::MemAlloc(0x70, 8);
             if (mem) {
                 int64_t entityIBP = entity;
                 BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1);
@@ -798,9 +799,9 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
             }
 
             // >>> CREATE THE NEW BUILDING at the old footprint <<<
-            if (s_copyCtor && s_regEntity && fn_MemAlloc && g_pMemAllocSingleton &&
+            if (s_copyCtor && s_regEntity && ::System::MemoryAllocator::_singleton &&
                 g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+                void* mem = ::System::MemoryAllocator::MemAlloc(0x48, 8);
                 void* newEntity = mem ? s_copyCtor(
                     mem, *reinterpret_cast<void**>(comp + 0x60)) : nullptr;
                 if (newEntity) {

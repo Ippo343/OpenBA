@@ -23,6 +23,7 @@
 #include "Component/NaturalResourceComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7b30 cell class
 #include "Component/CropFieldDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7548 cell class
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // ============================================================
 // Resolved helpers
@@ -181,7 +182,7 @@ void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize) {
         if (newSize == oldCount + 1 && oldCount != 0) {
             *pCap = newSize * 3;
         }
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(*pCap) * 0x20, 8);
+        void* newData = ::System::MemoryAllocator::MemAlloc((uint64_t)(*pCap) * 0x20, 8);
         base[0] = (int64_t)newData;
     }
 
@@ -204,7 +205,7 @@ void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize) {
     }
 
     if (oldData != (void*)base[0]) {
-        fn_MemFreeStatic(oldData);
+        ::System::MemoryAllocator::MemFree(oldData);
     }
 }
 

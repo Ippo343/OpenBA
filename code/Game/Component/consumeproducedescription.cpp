@@ -52,6 +52,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 namespace {
 // serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
@@ -85,27 +86,27 @@ ConsumeProduceDescription::~ConsumeProduceDescription() {
     // free inner arrays then the outer recipe array (the tree walks the CAPACITY)
     int outerN = _recipeCap;
     uint8_t* e = static_cast<uint8_t*>(_recipes);
-    if (e && fn_MemFreeStatic) {
+    if (e) {
         for (int i = 0; i < outerN; ++i, e += 0x28) {
             void* inner = *(void**)(e + 0x00);
-            if (inner) fn_MemFreeStatic(inner);
+            if (inner) ::System::MemoryAllocator::MemFree(inner);
             reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
         }
-        fn_MemFreeStatic(_recipes);
+        ::System::MemoryAllocator::MemFree(_recipes);
     }
     _recipes = nullptr;
 }
 
 // [5] 0x1401190e0: stream order as retail.
 bool ConsumeProduceDescription::Serialize(void* stream) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
+    if (!::System::MemoryAllocator::_singleton) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
     ser.Serialize(_recipeCount, nullptr);
     int outerN = _recipeCount;
     if (SerStreamErr(ser) == 0 && outerN > 0) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)outerN * 0x28, 8);
+        void* buf = ::System::MemoryAllocator::MemAlloc((uint64_t)outerN * 0x28, 8);
         _recipes = buf;
         _recipeCap = outerN;
         if (buf) for (uint64_t b = 0; b < (uint64_t)outerN * 0x28; ++b) ((uint8_t*)buf)[b] = 0;
@@ -117,7 +118,7 @@ bool ConsumeProduceDescription::Serialize(void* stream) {
             ser.Serialize(*reinterpret_cast<int*>(e + 0x08), nullptr);
             int innerN = *(int32_t*)(e + 0x08);
             if (SerStreamErr(ser) == 0 && innerN > 0) {
-                void* ibuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)innerN * 0x10, 8);
+                void* ibuf = ::System::MemoryAllocator::MemAlloc((uint64_t)innerN * 0x10, 8);
                 *(void**)(e + 0x00) = ibuf;
                 if (ibuf) for (uint64_t b = 0; b < (uint64_t)innerN * 0x10; ++b) ((uint8_t*)ibuf)[b] = 0;
             }

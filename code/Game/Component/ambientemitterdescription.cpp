@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // ctor (inlined into create 0x140001510 / createInPlace 0x140001580):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -45,7 +46,7 @@ AmbientEmitterDescription::AmbientEmitterDescription()
 // dtor (slot 0 0x140001660 minus the stamps): frees the ptr-array buffer (FUN_140001660).
 // The compiler then chains ~Description -> ~External.
 AmbientEmitterDescription::~AmbientEmitterDescription() {
-    if (fn_MemFreeStatic) fn_MemFreeStatic(_emitters);   // free ptr-array buffer
+    ::System::MemoryAllocator::MemFree(_emitters);   // free ptr-array buffer
     _emitters = nullptr;
     _emitterCount = 0;
     _emitterCap = 0;

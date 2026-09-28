@@ -77,6 +77,7 @@
 #include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7b68 cell class
 #include "Component/RawMaterialDescription.h"        // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // Work reimpl resolvers — see the note in CF_MakeAreaWork.
 bool PlantArea_ResolveFuncs();
@@ -228,8 +229,8 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, CF_AreaWork kind,
     PlantArea_ResolveFuncs();
     TendArea_ResolveFuncs();
     HarvestArea_ResolveFuncs();
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, size, 8);
+    if (!::System::MemoryAllocator::_singleton) return nullptr;
+    void* mem = ::System::MemoryAllocator::MemAlloc(size, 8);
     if (!mem) return nullptr;
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
@@ -445,8 +446,8 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
     const int count = SlotCount(comp);
     if (count <= 0) return 1;
     uint8_t* marks = reinterpret_cast<uint8_t*>(
-        (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton, count, 1) : nullptr);
+        (::System::MemoryAllocator::_singleton)
+            ? ::System::MemoryAllocator::MemAlloc(count, 1) : nullptr);
     if (!marks) return 1;
 
     // Crop type: ENDGAME B.3.9 C1 (D5) -- 0x1401c7b68 is NaturalResourceDescription
@@ -494,7 +495,7 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
                                  /*hasDescField=*/true);
     CF_PostWork(comp, work);
 
-    if (fn_MemFree && g_pMemAllocSingleton) fn_MemFree(g_pMemAllocSingleton, marks);
+    if (::System::MemoryAllocator::_singleton) ::System::MemoryAllocator::MemFree(marks);
     return 1;
 }
 

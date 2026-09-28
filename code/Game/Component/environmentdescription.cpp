@@ -42,6 +42,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -72,7 +73,7 @@ EnvironmentDescription::EnvironmentDescription()
 // dtor (slot 0 0x140019190 minus the stamps): free the dynamic weather array.
 // The compiler then runs ~External.
 EnvironmentDescription::~EnvironmentDescription() {
-    if (fn_MemFreeStatic && _weatherArray) fn_MemFreeStatic(_weatherArray);
+    if (_weatherArray) ::System::MemoryAllocator::MemFree(_weatherArray);
     _weatherArray = nullptr;
     _weatherCount = 0;
     _weatherCap = 0;

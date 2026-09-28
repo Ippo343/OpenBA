@@ -51,6 +51,7 @@
 #include <cstdio>
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
+#include "system/MemoryAllocator.h"
 
 // Emitter-array resize helper, shared with the sibling component reimpl
 // (exe FUN_140001770 / AmbientEmitterComponent_sub_1770).
@@ -311,7 +312,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     EnsureResolved();
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    if (!s_tidEnvDesc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!s_tidEnvDesc || !::System::MemoryAllocator::_singleton) return;
 
     uint8_t* self = reinterpret_cast<uint8_t*>(this);
     uint8_t* gw   = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -354,7 +355,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
 
     int* hist = nullptr;
     if (cachedDominant < 0) {
-    hist = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
+    hist = reinterpret_cast<int*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
     if (!hist) return;
     for (int i = 0; i < count; ++i) hist[i] = 0;
 
@@ -423,7 +424,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
         SetSlot(emitter, 0, daySound,   f);
         SetSlot(emitter, 1, nightSound, unit - f);
     }
-    if (hist && fn_MemFreeStatic) fn_MemFreeStatic(hist);
+    if (hist) ::System::MemoryAllocator::MemFree(hist);
 }
 
 // create 0x140001ee0: MemAlloc(0x48, 8), then the ctor.

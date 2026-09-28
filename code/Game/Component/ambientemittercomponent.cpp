@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <new>
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // FUN_140042e10(self) -- building ambient audio setup (clean reimpl below).
 extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self);
@@ -76,9 +77,8 @@ extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0) {
             *(int*)(arr + 0xc) = newCount * 3;
         }
-        if (fn_MemAlloc && g_pMemAllocSingleton) {
-            void* newPtr = fn_MemAlloc(g_pMemAllocSingleton,
-                                       (uint64_t)(*(int*)(arr + 0xc)) << 4, 8);
+        if (::System::MemoryAllocator::_singleton) {
+            void* newPtr = ::System::MemoryAllocator::MemAlloc((uint64_t)(*(int*)(arr + 0xc)) << 4, 8);
             *(void**)(arr + 0) = newPtr;
         }
     }
@@ -101,8 +101,8 @@ extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
         }
     }
 
-    if (oldPtr != *(void**)(arr + 0) && oldPtr && fn_MemFreeStatic) {
-        fn_MemFreeStatic(oldPtr);
+    if (oldPtr != *(void**)(arr + 0) && oldPtr) {
+        ::System::MemoryAllocator::MemFree(oldPtr);
     }
 }
 

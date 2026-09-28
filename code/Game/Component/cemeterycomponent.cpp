@@ -25,6 +25,7 @@
 #include "Component/TombstoneComponent.h"   // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // ============================================================
 // Resolved helpers
@@ -44,16 +45,11 @@
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
-// System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr) dispatch slots.
-typedef void* (*fn_CemMemAlloc_t)(uint64_t size, int align);
-static fn_CemMemAlloc_t s_fn_MemAlloc = nullptr;
-typedef void  (*fn_CemMemFree_t)(void* p);
-static fn_CemMemFree_t s_fn_MemFree = nullptr;
+// System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr): the import slots
+// 0x140152b60 / 0x140152b68, called directly.
 
 // TombstoneComponent type id (.rdata DAT_1401c4a30, storage + fill in
 // standalone/reg_citizen_lifeevent_handler.cpp).
-
-static bool s_initialized = false;
 
 // ============================================================
 // CemeteryComponent::Shutdown (vtable slot [3], 0x1400475C0)
@@ -81,9 +77,8 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
         // `lea eax,[rbx+rbx*2]` -- the 3x over-allocate applies only once the array is
         // already non-empty; the very first push allocates exactly one element.
         self->plotCapacity = (oldCount != 0) ? newCount * 3 : newCount;
-        if (!s_fn_MemAlloc) { self->plotCount = oldCount; self->plotCapacity = 0; return; }
         self->plots = reinterpret_cast<int32_t*>(
-            s_fn_MemAlloc(static_cast<uint64_t>(self->plotCapacity) * 4, 4));
+            ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->plotCapacity) * 4, 4));
     }
     if (!self->plots) { self->plotCount = oldCount; self->plots = oldPtr; return; }
 
@@ -92,7 +87,7 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
     for (int i = (oldPtr != self->plots) ? 0 : oldCount; i < newCount; ++i)
         self->plots[i] = (i < oldCount) ? oldPtr[i] : cell;
 
-    if (oldPtr != self->plots && oldPtr && s_fn_MemFree) s_fn_MemFree(oldPtr);
+    if (oldPtr != self->plots && oldPtr) ::System::MemoryAllocator::MemFree(oldPtr);
 }
 
 
@@ -159,23 +154,6 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
 }
 
 // ============================================================
-// Init: resolve function pointers
-// ============================================================
-void CemeteryComponent_InitFuncs() {
-    if (s_initialized) return;
-
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152b60);
-    if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_CemMemAlloc_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152b68);
-    if (slot) s_fn_MemFree = *reinterpret_cast<fn_CemMemFree_t*>(slot);
-
-    s_initialized = true;
-}
-
-// ============================================================
 // CemeteryComponent state-2 "built" enter -- 0x140046fc0
 // ============================================================
 // Two jobs, in order:
@@ -192,7 +170,6 @@ void CemeteryComponent_InitFuncs() {
 // AL so the state machine's Enter walk continues past this node.
 extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
     CemeteryComponent* self = reinterpret_cast<CemeteryComponent*>(compV);
-    CemeteryComponent_InitFuncs();
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return 0;
 
@@ -354,13 +331,9 @@ void* CemeteryComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x1400475c0. Slot 3 is the FIRST call into this class on a load-from-save:
 // PersistObject creates the object and dispatches vt[0x18] before Startup or any
-// tick. Until the resolver runs every s_fn_* is null and the fully null-guarded
-// body consumes ZERO bytes, so the stream desyncs several records later. Rule, from
-// uicomponent_serialize.cpp: resolve unconditionally at the top of every call.
-// Body: Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
+// tick. Body: Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
 // then the plot tile-index array (count +0x50, resized on a read, bulk ints).
 void CemeteryComponent::Persist(void* stream) {
-    CemeteryComponent_InitFuncs();
     Component::Persist(stream);
     { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
@@ -378,7 +351,6 @@ void CemeteryComponent::Persist(void* stream) {
 
 // [6] 0x140047200 — build the grave-plot grid from the footprint.
 void CemeteryComponent::OnAdded() {
-    CemeteryComponent_InitFuncs();
     CEM_TRACE("enter comp=%p owner=%p", (void*)this, _entity);
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
         CEM_TRACE("BAIL deps: gs=%p",

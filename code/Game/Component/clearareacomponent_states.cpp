@@ -53,6 +53,7 @@
 #include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7b68 cell class
 #include "Component/RawMaterialDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/ClearAreaDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7200 cell class
+#include "system/MemoryAllocator.h"
 
 // The instant footprint sweep lives in clearareacomponent.cpp (also used by the
 // harness + the _flag5 instant path). Reused here for the guarded sweep.
@@ -387,10 +388,10 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
         kind = ClearArea_ScanKindFlags(data, grid, x1, y1, w, h);
     }
 
-    if (!workCompIBP || !s_WorkSchedPost || !fn_MemAlloc || !g_pMemAllocSingleton) return 1;
+    if (!workCompIBP || !s_WorkSchedPost || !::System::MemoryAllocator::_singleton) return 1;
 
     // Build the ClearArea work-action and post it.
-    void* work = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
+    void* work = ::System::MemoryAllocator::MemAlloc(0x78, 8);
     if (!work) return 1;
     void* ownerEnt = *reinterpret_cast<void**>(c + 0x10);
     uint64_t descRef = desc ? *reinterpret_cast<uint64_t*>(desc + 0x20) : 0;

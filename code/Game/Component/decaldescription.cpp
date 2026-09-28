@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 namespace {
 // {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
@@ -46,8 +47,8 @@ void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
     *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+    void* buf = (count > 0 && ::System::MemoryAllocator::_singleton)
+                ? ::System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
                 : nullptr;
     *(void**)h = buf;
     return buf;
@@ -73,10 +74,8 @@ DecalDescription::DecalDescription()
 // dtor (slot 0 0x1400338a0 minus the stamps): frees the quad and ref arrays.
 // The compiler then chains ~Description -> ~External.
 DecalDescription::~DecalDescription() {
-    if (fn_MemFreeStatic) {
-        if (_quads) fn_MemFreeStatic(_quads);   // quadArray
-        if (_refs)  fn_MemFreeStatic(_refs);    // refArray
-    }
+    if (_quads) ::System::MemoryAllocator::MemFree(_quads);   // quadArray
+    if (_refs)  ::System::MemoryAllocator::MemFree(_refs);    // refArray
     _refs = nullptr;  _refCount = 0;  _refCap = 0;
     _quads = nullptr; _quadCount = 0; _quadCap = 0;
 }

@@ -69,6 +69,7 @@
 #include "Action/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
+#include "system/MemoryAllocator.h"
 
 // ============================================================
 // .rdata float constants (exact retail bit patterns, exe_constants.h).
@@ -745,8 +746,8 @@ void AnimalComponent::Update(void* time) {
                 WorkBase_TaskListCleanup_c5400(stack);
 
                 void* action = nullptr;
-                void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                                ? fn_MemAlloc(g_pMemAllocSingleton, 0x480, 8)
+                void* mem = (::System::MemoryAllocator::_singleton)
+                                ? ::System::MemoryAllocator::MemAlloc(0x480, 8)
                                 : nullptr;
                 if (mem) {
                     int64_t moverIBP = character;

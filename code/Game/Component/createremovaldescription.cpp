@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // ctor (inlined into create 0x140032b70 / createInPlace 0x140032be0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -60,7 +61,7 @@ CreateRemovalDescription::CreateRemovalDescription()
 // dtor (slot 0 0x140032ca0 minus the stamps): frees the ExternalPtr array.
 // The compiler then chains ~Description -> ~External.
 CreateRemovalDescription::~CreateRemovalDescription() {
-    if (fn_MemFreeStatic && _refs) fn_MemFreeStatic(_refs);   // heap ExternalPtr array
+    if (_refs) ::System::MemoryAllocator::MemFree(_refs);   // heap ExternalPtr array
     _refs = nullptr;
     _refCount = 0;
     _refCap = 0;

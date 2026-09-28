@@ -46,6 +46,7 @@
 #include <new>
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // ============================================================
 // Reimpl of FUN_140002540 (grow/shrink the 0x28-byte-element entry array)
@@ -68,9 +69,8 @@ extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0) {
             *(int*)(arr + 0xc) = newCount * 3;
         }
-        if (fn_MemAlloc && g_pMemAllocSingleton) {
-            void* newPtr = fn_MemAlloc(g_pMemAllocSingleton,
-                                       (uint64_t)(*(int*)(arr + 0xc)) * 0x28, 8);
+        if (::System::MemoryAllocator::_singleton) {
+            void* newPtr = ::System::MemoryAllocator::MemAlloc((uint64_t)(*(int*)(arr + 0xc)) * 0x28, 8);
             *(void**)(arr + 0) = newPtr;
         }
     }
@@ -97,8 +97,8 @@ extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
         }
     }
 
-    if (oldPtr != *(void**)(arr + 0) && oldPtr && fn_MemFreeStatic) {
-        fn_MemFreeStatic(oldPtr);
+    if (oldPtr != *(void**)(arr + 0) && oldPtr) {
+        ::System::MemoryAllocator::MemFree(oldPtr);
     }
 }
 
@@ -116,7 +116,7 @@ AmbientEnvironmentDescription::AmbientEnvironmentDescription()
 // dtor (slot 0 0x140002100 minus the stamps): frees the entry array.
 // The compiler then chains ~Description -> ~External.
 AmbientEnvironmentDescription::~AmbientEnvironmentDescription() {
-    if (fn_MemFreeStatic && _entries) fn_MemFreeStatic(_entries);   // dynamic entry array
+    if (_entries) ::System::MemoryAllocator::MemFree(_entries);   // dynamic entry array
     _entries = nullptr;
     _entryCount = 0;
     _entryCap = 0;

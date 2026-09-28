@@ -49,6 +49,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 namespace {
 
@@ -284,8 +285,7 @@ extern "C" void CharMgr_IntArrayResize_21d0(int64_t* arr, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0)
             *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc) = newCount * 3;
         int cap = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc);
-        void* nd = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                                             static_cast<uint64_t>(cap) << 2, 4) : nullptr;
+        void* nd = ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cap) << 2, 4);
         arr[0] = reinterpret_cast<int64_t>(nd);
     }
     int start = (oldData == reinterpret_cast<void*>(arr[0])) ? oldCount : 0;
@@ -294,8 +294,8 @@ extern "C" void CharMgr_IntArrayResize_21d0(int64_t* arr, int newCount) {
         if (i < oldCount && dst)
             dst[i] = reinterpret_cast<int*>(oldData)[i];
     }
-    if (oldData != reinterpret_cast<void*>(arr[0]) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldData);
+    if (oldData != reinterpret_cast<void*>(arr[0]))
+        ::System::MemoryAllocator::MemFree(oldData);
 }
 
 // ===========================================================================
@@ -320,9 +320,8 @@ extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp) {
             if (*reinterpret_cast<int*>(mgr + 0x1c) < newCount) {
                 *reinterpret_cast<int*>(mgr + 0x1c) = newCount;
                 if (count != 0) *reinterpret_cast<int*>(mgr + 0x1c) = newCount * 3;
-                void* ns = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                              static_cast<uint64_t>(*reinterpret_cast<int*>(mgr + 0x1c)) * 0x18, 8)
-                              : nullptr;
+                void* ns = ::System::MemoryAllocator::MemAlloc(
+                    static_cast<uint64_t>(*reinterpret_cast<int*>(mgr + 0x1c)) * 0x18, 8);
                 *reinterpret_cast<void**>(mgr + 0x10) = ns;
             }
             int start = (oldSlots == *reinterpret_cast<void**>(mgr + 0x10)) ? count : 0;
@@ -346,8 +345,8 @@ extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp) {
                 *reinterpret_cast<int64_t*>(dst + 0x08) = srcLinks;
                 *reinterpret_cast<int*>(dst + 0x10) = srcCell;
             }
-            if (oldSlots != *reinterpret_cast<void**>(mgr + 0x10) && fn_MemFreeStatic)
-                fn_MemFreeStatic(oldSlots);
+            if (oldSlots != *reinterpret_cast<void**>(mgr + 0x10))
+                ::System::MemoryAllocator::MemFree(oldSlots);
         }
     } else {
         // ---- free-list pop path ----
@@ -388,8 +387,8 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
         if (*reinterpret_cast<int*>(m + 0x2c) < newCount) {
             *reinterpret_cast<int*>(m + 0x2c) = newCount;
             if (freeCount != 0) *reinterpret_cast<int*>(m + 0x2c) = newCount * 3;
-            void* nf = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                          static_cast<uint64_t>(*reinterpret_cast<int*>(m + 0x2c)) << 2, 4) : nullptr;
+            void* nf = ::System::MemoryAllocator::MemAlloc(
+                static_cast<uint64_t>(*reinterpret_cast<int*>(m + 0x2c)) << 2, 4);
             *reinterpret_cast<void**>(m + 0x20) = nf;
         }
         int start = (oldFL == *reinterpret_cast<void**>(m + 0x20)) ? freeCount : 0;
@@ -397,8 +396,8 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
         for (int i = start; i < newCount; ++i) {
             if (fl) fl[i] = (i < freeCount) ? reinterpret_cast<int*>(oldFL)[i] : idx;
         }
-        if (oldFL != *reinterpret_cast<void**>(m + 0x20) && fn_MemFreeStatic)
-            fn_MemFreeStatic(oldFL);
+        if (oldFL != *reinterpret_cast<void**>(m + 0x20))
+            ::System::MemoryAllocator::MemFree(oldFL);
     }
 }
 

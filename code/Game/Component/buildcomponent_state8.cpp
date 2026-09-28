@@ -53,6 +53,7 @@
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Component/pickingcomponent_funcs.h"
+#include "system/MemoryAllocator.h"
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
@@ -286,8 +287,8 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
         // Faithful to sub_7ae0's STAGED tail. Needs the live-citizen action stack +
         // task manager (same as the gather post).
         {
-            void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                            ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
+            void* mem = (::System::MemoryAllocator::_singleton)
+                            ? ::System::MemoryAllocator::MemAlloc(0x70, 8) : nullptr;
             // Construct via the FULL retail ctor (0x1400e59c0): it routes base init through
             // Work_Ctor25 (sets field_10=site entity, +0x18 WorkComponent, +0x28 target cell)
             // AND allocates the build-position byte array field_50/field_58 from the site's

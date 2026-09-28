@@ -47,6 +47,7 @@
 #include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c3f78 cell class
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 
 // AttendanceComponent_ProcessQueue (attendancecomponent.cpp, declared in exe_bodies.h)
@@ -167,8 +168,8 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
 
     // 2. mint the LocationWork
     void* work = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton)
-        work = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
+    if (::System::MemoryAllocator::_singleton)
+        work = ::System::MemoryAllocator::MemAlloc(0x50, 8);
     if (work) {
         // Retail inlines LocationWork's entity-seeded ctor here: Work_Ctor25
         // (0x1400f72e0), the 0x1401616a0 table, +0x48 = 0. ENDGAME B.3.9 OBJ:

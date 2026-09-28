@@ -40,6 +40,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
@@ -265,8 +266,8 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
     if (!haveAll && instant == 0) {
         // -------- SPAWN branch: build the gather work + configure site storage --------
-        void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                        ? fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8) : nullptr;
+        void* mem = (::System::MemoryAllocator::_singleton)
+                        ? ::System::MemoryAllocator::MemAlloc(0x78, 8) : nullptr;
         void* work = nullptr;
         if (mem) {
             void* entRaw = *reinterpret_cast<void**>(self + 0x10);

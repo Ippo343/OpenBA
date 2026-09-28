@@ -93,6 +93,7 @@
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "system/MemoryAllocator.h"
 
 namespace {
 
@@ -280,7 +281,7 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
             if (s_findNatRes) s_findNatRes(*slot, &natResIBP);
             if (natResIBP != 0) {
                 *out = *reinterpret_cast<uint64_t*>(*slot + 0x28);
-                if (fn_MemFreeStatic) fn_MemFreeStatic((void*)listData);
+                ::System::MemoryAllocator::MemFree((void*)listData);
                 return out;
             }
         }
@@ -294,7 +295,7 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
         }
         if (cropIBP != 0) {
             *out = *reinterpret_cast<uint64_t*>(cropIBP + 0x50);
-            if (fn_MemFreeStatic) fn_MemFreeStatic((void*)listData);
+            ::System::MemoryAllocator::MemFree((void*)listData);
             return out;
         }
         int64_t orchardIBP = 0;
@@ -305,12 +306,12 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
         }
         if (orchardIBP != 0) {
             *out = *reinterpret_cast<uint64_t*>(orchardIBP + 0x60);
-            if (fn_MemFreeStatic) fn_MemFreeStatic((void*)listData);
+            ::System::MemoryAllocator::MemFree((void*)listData);
             return out;
         }
     }
 
-    if (fn_MemFreeStatic) fn_MemFreeStatic((void*)listData);
+    ::System::MemoryAllocator::MemFree((void*)listData);
     *out = 0;
     return out;
 }
@@ -405,7 +406,7 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
         if (s_findNatRes) s_findNatRes(*slot, &natResIBP);
         if (natResIBP != 0) ++living;
     }
-    if (fn_MemFreeStatic) fn_MemFreeStatic((void*)list.data);
+    ::System::MemoryAllocator::MemFree((void*)list.data);
     return living == 0;
 }
 
@@ -605,7 +606,7 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
         }
         if (++attempts > 0x31) break;
     }
-    if (fn_MemFreeStatic) fn_MemFreeStatic((void*)list.data);
+    ::System::MemoryAllocator::MemFree((void*)list.data);
 
     if (CDTrace()) {
         printf("[CropDisease] KILL-PLANT self=%p killed=%s tiles=%u attempts=%d\n",

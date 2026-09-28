@@ -66,6 +66,7 @@
 #include "Game/exe_constants.h"
 #include "Player/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // ── Leaves, called directly ──────────────────────────────────────────────────────
 //   0x140003ea0 PlayerPath_FindComponent_3ea0      0x140002ed0 WorkBase_FindComponent_2ed0
@@ -304,9 +305,8 @@ void AppendRoutePoint(uintptr_t comp, const float pt[3]) {
     if (newCount > *reinterpret_cast<int*>(comp + 0x6c)) {
         *reinterpret_cast<int*>(comp + 0x6c) = newCount;
         if (oldCount != 0) *reinterpret_cast<int*>(comp + 0x6c) = newCount * 3;
-        void* fresh = fn_MemAllocStatic
-                    ? fn_MemAllocStatic(static_cast<uint64_t>(*reinterpret_cast<int*>(comp + 0x6c)) * 0xc, 4)
-                    : nullptr;
+        void* fresh = ::System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(*reinterpret_cast<int*>(comp + 0x6c)) * 0xc, 4);
         *reinterpret_cast<void**>(comp + 0x60) = fresh;
     }
 
@@ -322,7 +322,7 @@ void AppendRoutePoint(uintptr_t comp, const float pt[3]) {
         dst[1] = src[1];
         dst[2] = src[2];
     }
-    if (oldBase != newBase && oldBase && fn_MemFreeStatic) fn_MemFreeStatic(oldBase);
+    if (oldBase != newBase && oldBase) ::System::MemoryAllocator::MemFree(oldBase);
 }
 
 // (int)(coord + mapSize/2) clamped into [0, mapSize-1] — retail's tile conversion,
