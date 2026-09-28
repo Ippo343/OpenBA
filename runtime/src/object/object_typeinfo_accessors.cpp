@@ -101,153 +101,47 @@
 // Forward declarations: the positive control at the bottom of the anonymous
 // namespace calls these, and they are defined below it.
 extern "C" uint32_t    RtObject_Base_Type(const void*);
-extern "C" uint32_t    RtObject_CompiledExternal_Type(const void*);
-extern "C" const char* RtObject_CompiledExternal_TypeName(const void*);
 extern "C" uint32_t    RtObject_External_Type(const void*);
 extern "C" const char* RtObject_External_TypeName(const void*);
 extern "C" uint32_t    RtObject_Internal_Type(const void*);
 extern "C" const char* RtObject_Internal_TypeName(const void*);
 
-namespace {
-
-// ---- the exported BaseTypeInfo nodes these bodies read ----------------------
-// ENDGAME B.3.9 OBJ (B39_RULES D6 step 1): External's and CompiledExternal's
-// records are read through the Object accessor slots in external_class.cpp
-// (`Object::External::TypeId()`, `Object::CompiledExternal::TypeId()`, and the
-// `*TypeInfoRecord()->name` beside them), not through RT_DATA_SLOT caches.
+// ENDGAME B.3.9 OBJ (B39_RULES D6 step 1): External's record is read through
+// the Object accessor slot in external_class.cpp (`Object::External::TypeId()`
+// and `ExternalTypeInfoRecord()->name`), not through RT_DATA_SLOT caches.
 // Object::Internal's record is the class's own `DEFINE_TYPE` static
-// (internal_class.cpp) since ENDGAME B.3.9 OBJ retired the minted duplicate.
-
-typedef uint32_t    (*U32ThisFn)(const void*);
-typedef const char* (*CStrThisFn)(const void*);
-
-// ============================================================================
-// GATE (b) INSTRUMENT — see the banner. Per row: entries, and of those, how
-// many arrived on an object whose +0x00 is OUR minted table, the DLL's table,
-// or a third table entirely.
-//
-// `ours` is read through the PORT door and `theirs` through the RAW door, so
-// the two differ exactly when the row is registered and are the same pointer
-// when it is not. In the unregistered half every entry is therefore counted
-// `dll` (or `other`) and `mint` is structurally zero — which is the point: the
-// quantity varies with the thing it gates.
-// ============================================================================
-struct RowAttendance {
-    const char* row;         // the ??_7 symbol
-    unsigned    entries;
-    unsigned    mint;        // object carries OUR minted table  -> row dispatched
-    unsigned    dll;         // object carries the DLL's table   -> row NOT ours
-    unsigned    other;       // object carries a third table     -> inherited body
-    // The registry door is resolved ONCE per row and cached: these accessors
-    // are on a hot path the moment anything dispatches them.
-    bool        resolved;
-    void*       ours;
-};
-
-// ⚠ THE REPORT IS **NOT** PRINTED FROM A STATIC DESTRUCTOR, AND THE FIRST
-// VERSION OF IT WAS. That version's own screen0 is what caught the mistake: at
-// static-destructor time THE PORT REGISTRY HAS ALREADY BEEN TORN DOWN, so
-// ResolveExport and the raw export door return the same DLL address for every
-// symbol — including `??_7Element@UI@@6B@`, which is promoted unconditionally
-// in standalone/reg_mint_promoted.cpp and therefore cannot be unregistered on
-// any run. Every row printed `row=unregistered(DLL)` and the ARMED half of the
-// A/B was indistinguishable from the control half, which would have been
-// written up as "the row changes nothing" — a false negative produced entirely
-// by WHEN the instrument ran.
-//
-// So Report() is called explicitly from standalone/main.cpp's shutdown block,
-// beside the exit-phase mint shadow, where the registry is still answering.
-// The `[DlgCtrl]` static-destructor idiom is fine for a counter that only
-// TALLIES; it is wrong for one that has to ask the registry a question.
-//
-// These are NOT the diff oracle `calls=` numbers: an the diff oracle site increments `calls` only from
-// inside a comparison, so a body that ran and never compared prints calls=0,
-// which reads as "never ran" and means the opposite
-// (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
-struct RowAttendanceTable {
-    RowAttendance row[4] = {
-        { "??_7Base@Object@@6B@",             0, 0, 0, 0, false, nullptr },
-        { "??_7CompiledExternal@Object@@6B@", 0, 0, 0, 0, false, nullptr },
-        { "??_7External@Object@@6B@",         0, 0, 0, 0, false, nullptr },
-        { "??_7Internal@Object@@6B@",         0, 0, 0, 0, false, nullptr },
-    };
-    void Report() {
-        for (const RowAttendance& a : row) {
-            if (a.entries == 0) {
-                printf("[ObjTI] ATTENDANCE %-34s entries=0 -- nothing dispatched "
-                       "or inherited these bodies on this run\n", a.row);
-            } else {
-                printf("[ObjTI] ATTENDANCE %-34s entries=%u  minted-table=%u  "
-                       "other-table=%u\n", a.row, a.entries, a.mint, a.other);
-            }
-        }
-    }
-};
-RowAttendanceTable g_attTable;
-RowAttendance* const g_att = g_attTable.row;
-
-void Attend(int idx, const void* self) {
-    RowAttendance& a = g_att[idx];
-    ++a.entries;
-    if (!self) { ++a.other; return; }
-    void* vt = nullptr;
-    std::memcpy(&vt, self, sizeof vt);
-    if (!a.resolved) {
-        a.ours     = ResolveExport(a.row);
-        a.resolved = true;
-    }
-    if (a.ours && vt == a.ours) ++a.mint;
-    else                        ++a.other;
-}
-
-}  // namespace
+// (internal_class.cpp). The [ObjTI] ATTENDANCE instrument went with the
+// minted rows it classified (B39_RULES D9), as did CompiledExternal's two
+// slot doors (their only reader was the minted ??_7CompiledExternal table).
 
 // ---- ??_7Base@Object@@6B@  slot 2 ------------------------------------------
 // ?Type@Base@Object@@UEBAIXZ   0x1800c0380   XOR EAX,EAX / RET.
-extern "C" uint32_t RtObject_Base_Type(const void* self) {
-    Attend(0, self);
+extern "C" uint32_t RtObject_Base_Type(const void* /*self*/) {
     const uint32_t ours = 0;
     return ours;
 }
 
-// ---- ??_7CompiledExternal@Object@@6B@  slots 2 and 1 -----------------------
-// ?Type@CompiledExternal@Object@@UEBAIXZ  0x18000b690  MOV EAX,[node+0x00].
-extern "C" uint32_t RtObject_CompiledExternal_Type(const void* self) {
-    Attend(1, self);
-    return ::Object::CompiledExternal::TypeId();
-}
-
-// ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ  0x18000b6b0  MOV RAX,[node+8].
-extern "C" const char* RtObject_CompiledExternal_TypeName(const void* self) {
-    Attend(1, self);
-    return ::Object::CompiledExternalTypeInfoRecord()->name;
-}
-
 // ---- ??_7External@Object@@6B@  slots 2 and 1 -------------------------------
 // ?Type@External@Object@@UEBAIXZ  0x1800066d0  MOV EAX,[node+0x00].
-extern "C" uint32_t RtObject_External_Type(const void* self) {
-    Attend(2, self);
+extern "C" uint32_t RtObject_External_Type(const void* /*self*/) {
     return ::Object::External::TypeId();
 }
 
 // ?TypeName@External@Object@@UEBAPEBDXZ  0x1800066c0  MOV RAX,[node+0x08].
 // THIS is the body that reports a permanent pointer divergence once
 // ?_typeInfo@External@Object@@ is promoted — see the banner.
-extern "C" const char* RtObject_External_TypeName(const void* self) {
-    Attend(2, self);
+extern "C" const char* RtObject_External_TypeName(const void* /*self*/) {
     return ::Object::ExternalTypeInfoRecord()->name;
 }
 
 // ---- ??_7Internal@Object@@6B@  slots 2 and 1 -------------------------------
 // ?Type@Internal@Object@@UEBAIXZ  0x1800064d0  MOV EAX,[node+0x00].
-extern "C" uint32_t RtObject_Internal_Type(const void* self) {
-    Attend(3, self);
+extern "C" uint32_t RtObject_Internal_Type(const void* /*self*/) {
     return ::Object::Internal::TypeId();
 }
 
 // ?TypeName@Internal@Object@@UEBAPEBDXZ  0x1800064c0  MOV RAX,[node+0x08].
-extern "C" const char* RtObject_Internal_TypeName(const void* self) {
-    Attend(3, self);
+extern "C" const char* RtObject_Internal_TypeName(const void* /*self*/) {
     return ::Object::Internal::GetTypeInfo().name;
 }
 
@@ -258,27 +152,12 @@ extern "C" const char* RtObject_Internal_TypeName(const void* self) {
 // walking past the port into the DLL
 // (reference_by_address_door_dies_at_cutover.md).
 // ============================================================================
-// Called from standalone/main.cpp's shutdown block, NOT from a static
-// destructor. See the note above RowAttendanceTable for the measurement that
-// forced that.
-void RtObjectTypeInfoAccessorsReport() {
-    g_attTable.Report();
-}
-
 int RtObjectTypeInfoAccessorsRegister() {
     int n = 0;
 
     RegisterRuntimeExport("?Type@Base@Object@@UEBAIXZ",
                           (void*)&RtObject_Base_Type); ++n;
     RegisterRuntimeAddr(0x1800c0380, (void*)&RtObject_Base_Type);
-
-    RegisterRuntimeExport("?Type@CompiledExternal@Object@@UEBAIXZ",
-                          (void*)&RtObject_CompiledExternal_Type); ++n;
-    RegisterRuntimeAddr(0x18000b690, (void*)&RtObject_CompiledExternal_Type);
-
-    RegisterRuntimeExport("?TypeName@CompiledExternal@Object@@UEBAPEBDXZ",
-                          (void*)&RtObject_CompiledExternal_TypeName); ++n;
-    RegisterRuntimeAddr(0x18000b6b0, (void*)&RtObject_CompiledExternal_TypeName);
 
     RegisterRuntimeExport("?Type@External@Object@@UEBAIXZ",
                           (void*)&RtObject_External_Type); ++n;

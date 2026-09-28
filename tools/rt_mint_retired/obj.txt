@@ -6,3 +6,6 @@
 
 # -- W1: the duplicate type-info record (B39_RULES D6) --
 ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::Internal) record is the one; readers (Internal slot doors, PersistObject) read Internal::TypeId()
+
+# -- W3: Object::CompiledExternal (INVENTORY_A row 29, RT_DELDTOR row 0x18000b7e0) --
+??_7CompiledExternal@Object@@6B@   OBJ   own vector DeletingDtor + Type/TypeName on the compiler table; RT_DELDTOR row 0x18000b7e0, ??1 door, 2 slot doors, [ObjTI] instrument deleted

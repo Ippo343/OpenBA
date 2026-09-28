@@ -266,6 +266,11 @@ System::Filename External::GetPath() const {
 // ?TypeId@CompiledExternal@Object@@SAIXZ  0x18000b6a0 — `MOV EAX,[0x1801f9b00]`.
 uint32_t CompiledExternal::TypeId() { return CompiledExternalTypeInfoRecord()->typeId; }
 
+// slot 1 — 0x18000b6b0 `MOV RAX,[0x1801f9b08]` (the record's name, content-only)
+// slot 2 — 0x18000b690 `MOV EAX,[0x1801f9b00]` (the record's type id)
+const char* CompiledExternal::TypeName() const { return CompiledExternalTypeInfoRecord()->name; }
+uint32_t    CompiledExternal::Type() const     { return TypeId(); }
+
 // ??1CompiledExternal@Object@@UEAA@XZ   retail 0x1800bb980
 //
 // Seven instructions: re-stamp `??_7CompiledExternal@Object@@6B@`

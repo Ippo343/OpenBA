@@ -691,12 +691,40 @@ static_assert(offsetof(External, _refs) == 0x10, "External::_refs @ +0x10 (~Exte
 // ============================================================
 class CompiledExternal : public External {
 public:
+    // ??0CompiledExternal@Object@@QEAA@XZ  retail 0x1800bb920: Base's and
+    // External's vptr, +0x08/+0x10/+0x18 zero (External(), the compiler's),
+    // then CompiledExternal's vptr (the compiler's). No store of its own.
     CompiledExternal() = default;
+
+    // [0] 0x18000b7e0 — MSVC's VECTOR deleting destructor (`MOV EDX,0x20` =
+    // the element size, `LEA R9,[0x1800bb980]` = ~CompiledExternal), both arms
+    // exactly as the retired RT_DELDTOR row ran them. The class's OWN slot 0
+    // (ENDGAME B.3.9 OBJ, B39_RULES D1.3): an inherited External::DeletingDtor
+    // would run ~External and skip ~CompiledExternal. INLINE so `make unit`
+    // can drive both arms.
+    Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<CompiledExternal*>(self + static_cast<int64_t>(i) * 0x20)->~CompiledExternal();
+            if (flags & 1u) TypeTreeFree(self - 8);
+            return reinterpret_cast<Base*>(self - 8);
+        }
+        this->~CompiledExternal();
+        if (flags & 1u) TypeTreeFree(this);
+        return this;
+    }
+    // [1] ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ 0x18000b6b0
+    //     `MOV RAX,[_typeInfo+8]`; [2] ?Type@CompiledExternal@Object@@UEBAIXZ
+    //     0x18000b690 `MOV EAX,[_typeInfo]` — the class's own record, not
+    //     External's (the compiler table used to inherit External's two).
+    const char* TypeName() const override;
+    uint32_t    Type() const override;
+
     // ?TypeId@CompiledExternal@Object@@SAIXZ 0x18000b6a0 — `MOV EAX,[_typeInfo]`
     // over the (still minted) record, through the Object accessor slot
-    // (external_class.cpp; B39_RULES D6 step 1). Slots 1/2 of the class
-    // (0x18000b6b0 / 0x18000b690) stay the registered doors on the minted
-    // table until the W3 row conversion.
+    // (external_class.cpp; B39_RULES D6 step 1).
     static uint32_t TypeId();
 protected:
     ~CompiledExternal();     // 0x1800bb980
