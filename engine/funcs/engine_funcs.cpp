@@ -4,6 +4,7 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::_singleton (the snapshot below)
 
 #include <cstdio>
 
@@ -607,8 +608,7 @@ bool EngineFuncsInit() {
     // (ENDGAME B.3.5, b35-K2: zero callers tree-wide). See engine_funcs.h.
 
     // MemoryAllocator
-    g_pMemAllocSingleton = reinterpret_cast<void*>(
-        *reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fc718)));
+    g_pMemAllocSingleton = System::MemoryAllocator::_singleton;   // NULL here: the Engine ctor has not run
     fn_MemAlloc = reinterpret_cast<fn_MemAlloc_t>(
         ResolveAddr(Module::Runtime, 0x1800c6e60));
 

@@ -141,8 +141,8 @@ $(foreach src,$(UNIT_SRCS),$(eval $(call UNIT_OBJ_RULE,$(src))))
 -include $(UNIT_OBJECTS:.o=.d)
 
 # (check-cutover-manifest, the Wave 26 gate on standalone/cutover_manifest.inc,
-# is deleted: ENDGAME B.3.9 close retired the manifest with its last rows --
-# the mint registers its two remaining storage rows unconditionally.)
+# is deleted: ENDGAME B.3.9 close retired the manifest with its last rows;
+# the mint itself went at B3R W0-SM M3.)
 
 standalone: SA_CXXFLAGS += -O3 -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL_RELEASE) $(STRIP_LOGS_FLAGS)
 standalone: check-log-strip $(SA_TARGET)

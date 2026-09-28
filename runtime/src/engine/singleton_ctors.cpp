@@ -18,12 +18,12 @@
 // *** A COMPLETE, CORRECT, BYTE-FAITHFUL PORT OF ONE OF THESE CONSTRUCTORS IS
 // *** STILL WRONG IF IT OMITS THE SINGLETON STORE.
 //
-// That is not hypothetical. Lane E3 hit it: `MemoryAllocator::Construct` ends
+// That is not hypothetical. Lane E3 hit it: `MemoryAllocator::Construct` ended
 // in `if (slot) *slot = self`, the resolve returned null, the store was skipped
 // WITHOUT A WORD, `MemoryAllocator::Get()` returned null for the rest of the
 // process, and the first `MemAlloc` faulted on `null + 0x640` several frames
-// away from anything naming `_singleton`. Every accessor below therefore goes
-// through `RT_DATA_SLOT` — the PORT-AWARE door — and every port is checked by
+// away from anything naming `_singleton`. Every singleton is now its class's
+// own static (no door can resolve null), and every port is still checked by
 // the probe at the bottom of this file, which asserts `*slot == our object`
 // after our body runs and reports it as its own comparison.
 //
@@ -143,19 +143,11 @@ inline void W64(void* p, size_t o, uint64_t v) { std::memcpy(static_cast<uint8_t
 inline void WP (void* p, size_t o, const void* v) { std::memcpy(static_cast<uint8_t*>(p) + o, &v, sizeof(void*)); }
 
 // ---------------------------------------------------------------------------
-// The fourteen singleton slots, each through RT_DATA_SLOT — the PORT-AWARE
-// door. While the DLL is loaded these resolve to the DLL's own .data; at
-// cutover they resolve to the storage lane C2's mint owns. THAT SWITCH IS THE
-// WHOLE POINT: a body that reached the slot by `the raw DLL door`, or by
-// `ResolveAddr(Module::Runtime, 0x1801fc6b0)`, would keep writing the DLL's
-// copy and leave the minted row zero forever — the exact failure this lane
-// exists to close.
-//
-// Mangled names copied from standalone/rt_data_mint_tables.inc, which reads
-// them out of the shipped export directory with pefile, so none of them can be
-// a phantom name (reference_resolveexport_phantom_names.md).
+// The thirteen singleton slots the probe below compares: each is its class's
+// own static (ENDGAME B.3.9 and B3R W0-SM M1 retired the mint's storage rows).
+// MemoryAllocator's (System::MemoryAllocator::_singleton) is written by
+// rtalloc::Construct / Destruct directly and had no slot accessor caller.
 // ---------------------------------------------------------------------------
-void** SlotMemoryAllocator() { return RT_DATA_SLOT(void**, "?_singleton@MemoryAllocator@System@@0PEAV12@EA"); }
 void** SlotModification()    { return reinterpret_cast<void**>(&::IO::Modification::_singleton); }   // B.3.9 IO: class static
 void** SlotFactory()         { return reinterpret_cast<void**>(&::Object::Factory::_singleton); }
 void** SlotExternalFactory() { return reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton); }
@@ -892,8 +884,8 @@ void ControlMustDetect(size_t n) {
 // `RtEngineLifecycleRegister()` (engine_lifecycle.cpp:1074) refuses to register
 // ANYTHING unless `RtLaneXEnsureAllocatorPlatform()` has filled `g_plat` first,
 // precisely so this path cannot be an EXEC-of-0 on a null `lockInit`. The body
-// is byte-faithful and publishes into the DLL's own `_singleton` slot, exactly
-// as retail's ctor does.
+// is byte-faithful and publishes into `System::MemoryAllocator::_singleton`,
+// exactly as retail's ctor does.
 //
 // The consequence worth writing down: "the allocator port is off unless
 // RT_ALLOC is set" is a claim about the REGISTRATION DOOR for the five

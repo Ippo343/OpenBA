@@ -54,8 +54,8 @@ void* ResolveExport(const char* mangled_name);
 
 // ---- Resolve-and-cache that NEVER caches a null ----------------------------
 //
-// runtime/funcs/rt_resolve_cache.cpp; read its banner before using either of
-// the macros below. Short version: caching a null in a function-local static
+// runtime/funcs/rt_resolve_cache.cpp; read its banner before using the macro
+// below. Short version: caching a null in a function-local static
 // lets the FIRST caller fix the answer for the whole process, so a symbol
 // minted later — which is how cutover supplies the exported DATA the DLL used
 // to provide — can never be picked up, and nothing says which symbol was
@@ -128,20 +128,9 @@ bool     RuntimeExportIsRegistered(const char* mangled_name);
 // module that is not there (WAVE9.md §2).
 #define RT_EXPORT_ONCE(Fn, MANGLED)  ([]() -> Fn { static void* rt_export_once__ = nullptr; return reinterpret_cast<Fn>(RtResolveCached((MANGLED), &rt_export_once__)); }())
 
-// A DATA slot the DLL exports -- ?_singleton@..., ?_typeInfo@..., ?_firstTypeInfo@...
-// The export ADDRESS is the slot, so T is normally a pointer-to-pointer.
-//
-//     MemoryAllocator** SingletonSlot() {
-//         return RT_DATA_SLOT(MemoryAllocator**,
-//                             "?_singleton@MemoryAllocator@System@@0PEAV12@EA");
-//     }
-//
-// Same never-cache-a-null contract as RT_EXPORT_ONCE, and for data it matters
-// more: a null function pointer dies loudly as EXEC-of-0 with the VEH handler
-// naming the detour, while a null data slot is either swallowed by an `if` or
-// dereferenced somewhere else entirely. T must be a typedef'd name or a
-// comma-free type, because the preprocessor splits on commas.
-#define RT_DATA_SLOT(T, MANGLED)  ([]() -> T { static void* rt_data_slot__ = nullptr; return reinterpret_cast<T>(RtResolveCached((MANGLED), &rt_data_slot__)); }())
+// (RT_DATA_SLOT -- the by-name door to an exported DATA cell -- went with the
+// mint at B3R W0-SM M3: every exported static our tree touches is its class's
+// own static.)
 
 // ---- Wave init entry points ------------------------------------------------
 void RtMathPortInit();     // runtime/src/math/
@@ -186,15 +175,9 @@ void RtCollectionPortInit();  // runtime/src/collection/ — Wave 9 lane Q
 // initialises on first USE (a real Array call) and not at init.
 void RtCollectionDestroyPortInit();  // runtime/src/collection/ -- Wave 9 lane D2
 // Wave 9 lane X. The fourteen constructors that publish a `?_singleton@...`
-// DATA export -- lane C2's tier-1 rows, where the mint would otherwise hand out
-// zeroed storage nothing ever writes. Cross-namespace on purpose: what the
-// fourteen share is the ACCEPTANCE CRITERION (the ctor must write its singleton
-// through the port-aware door), not a namespace.
-//
-// It must run BEFORE RtDataMintInit(), which reads the port registry to decide
-// what each minted row is worth, and it may run after the other waves: nothing
-// in our tree calls any of these constructors today, so its registrations
-// change no live call site. Its probe -- the only thing that executes these
-// bodies before cutover -- runs at the end of it and only when the diff harness
-// is on.
+// DATA export. Cross-namespace on purpose: what the fourteen share is the
+// ACCEPTANCE CRITERION (the ctor must write its singleton -- now its class's
+// own static), not a namespace. It may run after the other waves. Its probe
+// runs at the end of it and only when the diff harness is on. (The mint it
+// used to precede went at B3R W0-SM M3.)
 void RtSingletonCtorsPortInit();      // runtime/src/engine/ -- Wave 9 lane X

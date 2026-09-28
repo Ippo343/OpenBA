@@ -9,23 +9,19 @@
 // which record wins an accident of chain order. These tests make a second
 // record a unit failure.
 //
-// WHAT THE UNIT HARNESS CAN AND CANNOT SEE. The boot chain is three
-// populations: (1) the Runtime `DEFINE_TYPE` statics built at CRT init, (2) the
-// MINTED records `MintStorage()` splices in at port init, (3) the exe's
-// `DEFINE_EXE_TYPE` records built by `InvokeAllRegistrations`. `make unit` links
-// only part of (1) (the tree sources in tests/unit/sources.mk — today
-// `Object::Internal` — plus whatever the tests themselves define), none of (3),
-// and (2) exists only in the generated standalone/rt_data_mint_tables.inc. So:
-//   * test 1 walks the unit process's real `_firstTypeInfo` chain — population
+// WHAT THE UNIT HARNESS CAN AND CANNOT SEE. The boot chain is two
+// populations: (1) the Runtime `DEFINE_TYPE` statics built at CRT init and
+// (2) the exe's `DEFINE_EXE_TYPE` records built by `InvokeAllRegistrations`.
+// (A third, the MINTED records, was emptied at ENDGAME B.3.9 close, and the mint
+// itself -- with the test that pinned its table empty of records -- was deleted
+// at B3R W0-SM M3.) `make unit` links only part of (1) (the tree sources in
+// tests/unit/sources.mk — today `Object::Internal` — plus whatever the tests
+// themselves define) and none of (2). So:
+//   * the test walks the unit process's real `_firstTypeInfo` chain — population
 //     (1) as far as it is linked — and asserts every name's CRC is unique;
-//   * test 2 (ENDGAME B.3.9 close) pins that population (2) is EMPTY: the
-//     generated table declares no BaseTypeInfo and no vtable row any more (it
-//     used to read the minted NAME column and assert the union unique -- the
-//     check that would have failed on the Internal duplicate);
-//   * population (3), and the Runtime DEFINE_TYPEs not linked here, are NOT
+//   * population (2), and the Runtime DEFINE_TYPEs not linked here, are NOT
 //     covered: the whole-chain check is the boot's `Post-Startup
-//     _firstTypeInfo` count, which the coordinator's gate reads (416 -> 415
-//     with this retirement).
+//     _firstTypeInfo` count, which the coordinator's gate reads.
 // ============================================================================
 
 #include "unit.h"
@@ -67,32 +63,6 @@ int Duplicates(const std::vector<NameCrc>& v) {
     return dup;
 }
 
-// Population (2) is EMPTY since ENDGAME B.3.9 close: the mint carries storage
-// rows only. The generated table must declare no BaseTypeInfo storage and no
-// `?_typeInfo@` / `??_7` row -- the check that a retired record never comes back
-// through the mint (the generator refuses it too; this pins the emitted file).
-struct MintShape {
-    int typeInfoRows = 0;   // lines naming a "?_typeInfo@ row
-    int vtableRows   = 0;   // lines naming a "??_7 row
-    bool typeInfoStorage = false;
-    int storageRows  = 0;
-};
-
-bool ReadMintShape(MintShape* s) {
-    std::FILE* f = std::fopen("standalone/rt_data_mint_tables.inc", "rb");
-    if (f == nullptr) return false;
-    char line[1024];
-    while (std::fgets(line, sizeof line, f)) {
-        if (std::strncmp(line, "//", 2) == 0) continue;
-        if (std::strstr(line, "kTypeInfoStorage")) s->typeInfoStorage = true;
-        if (std::strstr(line, "{ \"?_typeInfo@")) ++s->typeInfoRows;
-        if (std::strstr(line, "{ \"??_7")) ++s->vtableRows;
-        if (std::strstr(line, "&kStorageBytes[")) ++s->storageRows;
-    }
-    std::fclose(f);
-    return true;
-}
-
 }  // namespace
 
 UNIT_TEST(b39_obj_typeinfo_chain_names_are_unique) {
@@ -103,13 +73,4 @@ UNIT_TEST(b39_obj_typeinfo_chain_names_are_unique) {
     CHECK_EQ(internal, 1);                 // DEFINE_TYPE(Object::Internal) is linked here
     CHECK(&::Object::Internal::GetTypeInfo() != nullptr);
     CHECK_EQ(Duplicates(chain), 0);
-}
-
-UNIT_TEST(b39_close_mint_carries_no_typeinfo_and_no_vtable) {
-    MintShape s;
-    CHECK(ReadMintShape(&s));               // `make unit` runs from the repo root
-    CHECK(!s.typeInfoStorage);
-    CHECK_EQ(s.typeInfoRows, 0);
-    CHECK_EQ(s.vtableRows, 0);
-    CHECK(s.storageRows > 0);               // the parse saw the table it reads
 }

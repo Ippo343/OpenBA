@@ -1,5 +1,0 @@
-# ENDGAME B.3 step 9 -- the rows block SYS retired (B39_RULES.md D3); W3 row 140 by block VS (branch b39-VS).
-# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
-# One fragment per block; a key appears once across all fragments.
-
-??_7Thread@System@@6B@   SYS   W3: every subclass (Loader, Audio::Stream, PersistenceWorker, exe PathfinderThread) on the real protected ctor; ??0Thread / ??1Thread doors and the by-name RtSystemThreadVftable read deleted; ~PathfinderThread (0x1400a6720) chains ~Thread (no deleting-dtor slot: slot 0 is Run)
