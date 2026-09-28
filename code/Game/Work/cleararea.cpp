@@ -514,7 +514,7 @@ static_assert(sizeof(TileInfo) == 0x10, "TileInfo size mismatch");
 // ============================================================
 // ClearArea::Execute implementation
 // ============================================================
-int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
+int ClearArea::Execute(void* actionStack, void* time) {
     if (!ResolveClearAreaFuncs()) return 1;
 
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
@@ -1013,7 +1013,7 @@ static bool EnsureValidateFuncs() {
     return s_fn_ValidateTask_CA && s_fn_BST_RemoveNode_CA;
 }
 
-int ClearArea::Validate(void* citizenIBP) {
+int ClearArea::Validate() {
     if (!EnsureValidateFuncs()) return 1;
 
     uintptr_t s = (uintptr_t)this;
@@ -1038,7 +1038,7 @@ int ClearArea::Validate(void* citizenIBP) {
             uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
 
             // Validate this entry
-            uint8_t valid = s_fn_ValidateTask_CA((void*)s, citizenIBP,
+            uint8_t valid = s_fn_ValidateTask_CA((void*)s, nullptr,
                                                   (void*)&entityIBP, nullptr);
 
             if (valid == 0) {
@@ -1118,7 +1118,7 @@ int ClearArea::Validate(void* citizenIBP) {
         while (node != nullptr) {
             uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
 
-            uint8_t valid = s_fn_ValidateTask_CA((void*)s, citizenIBP,
+            uint8_t valid = s_fn_ValidateTask_CA((void*)s, nullptr,
                                                   (void*)&entityIBP, nullptr);
             if (valid == 0) {
                 // Cell tree has invalid entry — early return 0

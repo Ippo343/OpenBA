@@ -344,7 +344,7 @@ bool ForesterWork_ExecuteReady() {
 // extern "C" wrapper so the force harness can drive ForesterWork::Execute directly (the Work
 // driver ABI: self + the worker citizen's IBP) without needing the ForesterWork type/mangling.
 extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<ForesterWork*>(self)->ForesterWork::Execute(citizenIBP, nullptr, 0);   // B.3.8 bridge
+    return reinterpret_cast<ForesterWork*>(self)->ForesterWork::Execute(citizenIBP, nullptr);   // B.3.8 bridge
 }
 
 
@@ -441,7 +441,7 @@ static void AssignWorkToEntity(ForesterWork* self, void* citizenIBP, int priorit
 //    a. If enough failures, check storage and replan
 //    b. Otherwise play idle animation and increment fail counter
 //
-int ForesterWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int ForesterWork::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;  // for qword-aligned field access
 
@@ -1034,7 +1034,7 @@ int ForesterWork::Cleanup() {
 // Collects invalid ones in a dynamic array, removes them from tree.
 // Returns true if all valid (removeCount == 0), false otherwise.
 // ============================================================
-int ForesterWork::Validate(void* param2) {
+int ForesterWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
@@ -1055,7 +1055,7 @@ int ForesterWork::Validate(void* param2) {
             uintptr_t entityIBP = *(uintptr_t*)node;
 
             // Validate this entity
-            char stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+            char stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
             if (stillValid == '\0') {
                 // Add to removal list -- grow array if needed

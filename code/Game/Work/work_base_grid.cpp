@@ -10,6 +10,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Work/Work.h"   // B.3.x W0: the work tree payload by name
 #include <cstdint>
 
 // ============================================================
@@ -73,25 +74,24 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
     if (*reinterpret_cast<uint32_t*>(*self + 0x2c) == mgrGen)
         return static_cast<uint64_t>(mgrGen & 0xffffff00u);
 
-    uintptr_t obj = *self;
-    (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x48))(reinterpret_cast<void*>(obj));  // notify
+    // The node payload is a Work (B.3.x bridge, by name): [9] Validate, RCX only
+    // (0x1400f86ad); [4] Execute(&citizen, mgr+0x130) (0x1400f86d3).
+    reinterpret_cast<Work*>(*self)->Validate();
 
     uintptr_t citizenCopy = *reinterpret_cast<uintptr_t*>(citizenRef);
-    obj = *self;
-    uint64_t uVar2 = (*reinterpret_cast<uint64_t(**)(void*, void*, void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x20))(
-        reinterpret_cast<void*>(obj), &citizenCopy, reinterpret_cast<void*>(mgr + 0x130));   // CanAssign
+    uint64_t uVar2 = static_cast<uint32_t>(reinterpret_cast<Work*>(*self)->Execute(
+        &citizenCopy, reinterpret_cast<void*>(mgr + 0x130)));
 
     if (static_cast<int>(uVar2) == 2)
         return (uVar2 & 0xffffffffffffff00ull) | 1;
 
     if (static_cast<int>(uVar2) == 1) {
         if (flag != '\0') {
-            obj = *self;
-            (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x48))(reinterpret_cast<void*>(obj));  // notify
+            reinterpret_cast<Work*>(*self)->Validate();   // [9] (0x1400f86f4)
             citizenCopy = *reinterpret_cast<uintptr_t*>(citizenRef);
-            obj = *self;
-            uint64_t assignR = (*reinterpret_cast<uint64_t(**)(void*, void*, void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x28))(
-                reinterpret_cast<void*>(obj), &citizenCopy, reinterpret_cast<void*>(mgr + 0x130));   // Assign
+            // [5] Slot5(&citizen, mgr+0x130) (0x1400f871a); the caller reads AL.
+            uint64_t assignR = static_cast<uint32_t>(reinterpret_cast<Work*>(*self)->Slot5(
+                &citizenCopy, reinterpret_cast<void*>(mgr + 0x130)));
             if (static_cast<char>(assignR) != '\0')
                 return (assignR & 0xffffffffffffff00ull) | 1;
         }

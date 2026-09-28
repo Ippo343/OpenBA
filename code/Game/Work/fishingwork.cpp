@@ -227,7 +227,7 @@ static inline int ClampToMap(int val, int mapSize) {
 //
 // Returns: 1 = not ready/retry, 2 = action pushed
 // ============================================================
-int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
+int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     int64_t* selfQ = (int64_t*)this;  // for 8-byte indexed access matching Ghidra
 
@@ -677,7 +677,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
 //
 // Returns: 1 = all valid (or no citizens), 0 = some invalid
 // ============================================================
-int FishingWork::Validate(void* param2) {
+int FishingWork::Validate() {
     int64_t* selfQ = (int64_t*)this;
 
     int citizenCount = (int)selfQ[10];  // +0x50
@@ -699,7 +699,7 @@ int FishingWork::Validate(void* param2) {
         // Validate this citizen's task
         uintptr_t citizenIBP = citizenRef;
         uintptr_t outTask = 0;
-        char valid = (char)fn_Work_CanStartWork(this, param2, &citizenIBP, &outTask);
+        char valid = (char)fn_Work_CanStartWork(this, nullptr, &citizenIBP, &outTask);
 
         if (valid == '\0') {
             // Invalid — clear citizen slot

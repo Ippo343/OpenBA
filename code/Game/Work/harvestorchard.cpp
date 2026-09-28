@@ -268,7 +268,7 @@ static void* BST_Find(void* root, int key) {
 // - Passes raw material ref and material count to action constructor
 // - Orchard cell data at +0x50 with stride 0x28 (not +0x58 with stride 0x20)
 //
-int HarvestOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -617,7 +617,7 @@ int HarvestOrchard::Cleanup() {
 // ============================================================
 // Identical structure to HarvestArea::Slot9.
 // Hook DISABLED (bug class 2: MOV RAX,RSP in prologue).
-int HarvestOrchard::Validate(void* param2) {
+int HarvestOrchard::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -645,7 +645,7 @@ int HarvestOrchard::Validate(void* param2) {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2);
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
+        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
 
         if (valid == 0) {
             uint32_t newCount = collectCount + 1;

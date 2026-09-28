@@ -164,7 +164,7 @@ static uint32_t WorldToCell(int gridSize, float x, float z) {
 // 7. Register work with citizen AI (CitizenAI_impl_1a30)
 // Returns: 0 = no fire, 1 = at capacity, 2 = work assigned.
 // ============================================================
-int FireWork::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
+int FireWork::Execute(void* citizenIBP, void* time) {
     uintptr_t s = (uintptr_t)this;
 
     // CheckPtr on the entity IBP at +0x10
@@ -340,7 +340,7 @@ int FireWork::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
 // 5. Free the dynamic array
 // Returns: 1 if BST is now empty, 0 otherwise.
 // ============================================================
-int FireWork::Validate(void* citizenIBP) {
+int FireWork::Validate() {
     uintptr_t s = (uintptr_t)this;
 
     // BST root is at +0x50
@@ -378,7 +378,7 @@ int FireWork::Validate(void* citizenIBP) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Check if this entity still needs fire work
-        bool stillValid = s_fn_ValidateEntity(s, citizenIBP, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(s, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Need to add to removal list -- grow array if needed

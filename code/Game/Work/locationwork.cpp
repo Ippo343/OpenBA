@@ -218,7 +218,7 @@ void LocationWork::Persist(void* stream) {
 // 6. If found, create WalkTowards action and assign work
 // 7. Store citizen ref at +0x48
 // ============================================================
-int LocationWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
+int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
     uintptr_t* selfQ = (uintptr_t*)this;
 
     // Step 1: Already has target?
@@ -380,7 +380,7 @@ int LocationWork::Cleanup() {
 // If invalid, clears +0x48 to null and returns false.
 // Returns true if valid (or no target).
 // ============================================================
-int LocationWork::Validate(void* citizenIBP) {
+int LocationWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t targetIBP = *(uintptr_t*)(selfAddr + 0x48);
 
@@ -389,7 +389,7 @@ int LocationWork::Validate(void* citizenIBP) {
     }
 
     // Validate the entity
-    bool stillValid = s_fn_ValidateEntity(selfAddr, citizenIBP, &targetIBP, nullptr);
+    bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, &targetIBP, nullptr);
 
     if (!stillValid) {
         // Clear the target — construct null InternalBasePtr

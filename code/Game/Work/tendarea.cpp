@@ -252,7 +252,7 @@ bool TendArea_ResolveFuncs() {
 // 6. Create PerformWork action
 // 7. Register with CitizenAI
 //
-int TendArea::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
+int TendArea::Execute(void* citizenIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -436,7 +436,7 @@ int TendArea::Cleanup() {
 // Returns true if all valid, false otherwise.
 // Simple BST: node +0x08=parent, +0x10=left, +0x18=right
 // ============================================================
-int TendArea::Validate(void* param2) {
+int TendArea::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)(selfAddr + 0x48);
 
@@ -460,7 +460,7 @@ int TendArea::Validate(void* param2) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed

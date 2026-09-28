@@ -295,7 +295,7 @@ int MarketWork::Cleanup() {
 // - Parent:      +0x18 (not +0x08)
 // Uses MarketWork_sub_ac40 for BST removal (not CitizenAI_impl_a6e0).
 //
-int MarketWork::Validate(void* param2) {
+int MarketWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
@@ -319,7 +319,7 @@ int MarketWork::Validate(void* param2) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed
@@ -861,7 +861,7 @@ static void MW_Stage2Teardown(int64_t* treeDesc, MW_ArrayDesc* records) {
 // ---- STAGE 1 (retail 0x1400eff80 .. 0x1400f021f) --------------------------
 // Returns 1 at two sites and 2 at one site, all faithful. Falls through to 0
 // ("keep walking") where stage 2 will begin.
-int MarketWork::Execute(void* citizenHolder, void* ctx, uint64_t /*arg3*/) {
+int MarketWork::Execute(void* citizenHolder, void* ctx) {
     (void)ctx;   // sched+0x130; retail slot 4 never reads param_3 -- it is only a
                  // decompiler artefact of a caller-saved stack slot reused as a temp.
 

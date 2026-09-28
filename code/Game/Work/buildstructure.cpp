@@ -242,7 +242,7 @@ static int WorldToCell(int gridSize, float x, float z) {
 }
 
 
-int BuildStructure::Execute(void* citizenPtr, void* /*context*/, uint64_t /*arg3*/) {
+int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
     uintptr_t s = (uintptr_t)this;
 
     // --- Phase 1: Validate building is enabled ---
@@ -635,7 +635,7 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
 // Returns: 0 = some work remains (citizens validated/removed)
 //          1 = BST is empty (no assigned citizens)
 
-int BuildStructure::Validate(void* /*citizenIBP*/) {
+int BuildStructure::Validate() {
     uintptr_t s = (uintptr_t)this;
 
     // Dynamic arrays for citizens to remove and their slot indices
@@ -859,7 +859,7 @@ extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP) {
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the
 // citizen entity, so a plain InternalBasePtr* is correct (same shape as the gather driver).
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(citizenIBP, nullptr, 0);   // B.3.8 bridge
+    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(citizenIBP, nullptr);   // B.3.8 bridge
 }
 
 // Execute-readiness gate for the force harness. BuildStructure's Execute/ctor helpers are the

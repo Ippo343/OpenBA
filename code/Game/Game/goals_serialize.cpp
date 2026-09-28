@@ -372,9 +372,7 @@ extern "C" void Goals_SavePrepass_8270(void* selfV) {
     for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
         uint8_t* ibpField = node + 0x08;
         void* entity = *reinterpret_cast<void**>(ibpField);
-        void* vtbl = *reinterpret_cast<void**>(entity);
-        typedef void (*fn_Vtbl48_t)(void*);
-        reinterpret_cast<fn_Vtbl48_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtbl) + 0x48))(entity);
+        reinterpret_cast<Work*>(entity)->Validate();   // B.3.x bridge (slot 9; 0x1400f82b1 RCX only)
     }
 }
 
@@ -824,9 +822,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
             for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
                 uint8_t* ibpField = node + 0x08;
                 void* entity = *reinterpret_cast<void**>(ibpField);
-                void* vtbl = *reinterpret_cast<void**>(entity);
-                typedef void (*fn_Vtbl48_t)(void*);
-                reinterpret_cast<fn_Vtbl48_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtbl) + 0x48))(entity);
+                reinterpret_cast<Work*>(entity)->Validate();   // B.3.x bridge (slot 9; 0x1400f99a4 RCX only)
             }
         }
 

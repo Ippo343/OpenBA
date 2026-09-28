@@ -350,7 +350,7 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
 // always null -- and fell back to this body; CALLER_SURFACE section 9 defect 3.)
 // Retail reads RCX/RDX/R8 only.
 // ============================================================
-int Pickup::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
+int Pickup::Execute(void* citizenIBP, void* time) {
     // 0x1400f2f37: CMP [RCX+0x48],0 -> anything but "unassigned" means no work.
     if (status != 0) return 1;
 
@@ -708,7 +708,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
         }
         // retail 0x1400f3991: CALL [RAX+0x20] with RCX/RDX/R8 only (slot 4
         // reads no R9), a virtual dispatch
-        int result = Execute(local_buf, param3, 0);
+        int result = Execute(local_buf, param3);
 
         if (result == 2) {
             return 1;  // Successfully re-targeted
@@ -716,7 +716,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
 
         // Try again with stored citizen
         uintptr_t storedBuf[1] = { storedCitizen };
-        Execute(storedBuf, param3, 0);
+        Execute(storedBuf, param3);
     }
 
     return 0;
@@ -771,7 +771,7 @@ int Pickup::Cleanup() {
 // If invalid, resets citizenIBP to null and status to 0.
 // Returns true if valid (or no citizen assigned).
 // ============================================================
-int Pickup::Validate(void* param2) {
+int Pickup::Validate() {
     // 🔑 LAZY-RESOLVE — REQUIRED on every entry point that touches an s_fn_* pointer.
     // Pickup_ResolveFuncs() is otherwise only called from Pickup_Factory/CreateInPlace, but
     // the Pickup works that matter here NEVER go through the factory: RawMaterialComponent::
@@ -789,7 +789,7 @@ int Pickup::Validate(void* param2) {
 
     // Validate entity via FUN_1400f7100
     uintptr_t entityIBP[1] = { citizenRef };
-    bool valid = s_fn_ValidateEntity(selfAddr, param2, entityIBP, nullptr);
+    bool valid = s_fn_ValidateEntity(selfAddr, nullptr, entityIBP, nullptr);
 
     if (!valid) {
         // Entity no longer valid -- reset

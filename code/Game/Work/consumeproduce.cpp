@@ -397,7 +397,7 @@ static int FinalizeAction(ConsumeProduce* self, void* entityIBP, void* actionIBP
 //
 // Main production work logic. Returns 1 (retry) or 2 (action pushed).
 // ============================================================
-int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     int* mapGrid = *(int**)(gameWorld + 0xf8);
     void** worldEntityList = *(void***)(gameWorld + 0xf0);
@@ -1132,7 +1132,7 @@ int ConsumeProduce::Cleanup() {
 // Checks if all assigned citizen tasks are still valid.
 // Returns: 1 = all valid, 0 = some invalid (with cleanup).
 // ============================================================
-int ConsumeProduce::Validate(void* param2) {
+int ConsumeProduce::Validate() {
     int count = field_60;
     if (count <= 0) {
         // No assigned citizens -- return valid
@@ -1152,7 +1152,7 @@ int ConsumeProduce::Validate(void* param2) {
         // Validate task for this citizen
         uintptr_t taskResult = 0;
         uintptr_t ibpBuf = entityIBP;
-        uint8_t valid = s_fn_Work_ValidateTask(this, param2, &ibpBuf, (void**)&taskResult);
+        uint8_t valid = s_fn_Work_ValidateTask(this, nullptr, &ibpBuf, (void**)&taskResult);
 
         if (valid == 0) {
             // Task invalid -- clear citizen from slot

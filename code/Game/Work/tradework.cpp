@@ -327,7 +327,7 @@ static int TW_CommitAssign(TradeWork* self, void* param2, uint64_t resType, int 
     return 2;
 }
 
-int TradeWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
+int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
     TradeWork_ResolveFuncs();
     TradeWork_Slot4_Resolve();
 
@@ -659,7 +659,7 @@ int TradeWork::Cleanup() {
 // Extended BST: +0x18=parent, +0x20=left, +0x28=right
 // Returns true if all valid, false otherwise.
 // ============================================================
-int TradeWork::Validate(void* param2) {
+int TradeWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)(selfAddr + 0x48);
 
@@ -683,7 +683,7 @@ int TradeWork::Validate(void* param2) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed

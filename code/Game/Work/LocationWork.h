@@ -47,11 +47,11 @@ public:
 
     Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a850
     void  Persist(void* stream) override;                           // [3]  0x1400efba0
-    int   Execute(void* citizenIBP, void* context, uint64_t arg3) override;  // [4]  0x1400ef880
+    int   Execute(void* citizenIBP, void* context) override;  // [4]  0x1400ef880
     int   OnComplete(void* arg1, void* arg2, int arg3) override;    // [6]  0x1400ef850
     int   OnCancel(void* arg1, void* arg2, int arg3) override;      // [7]  0x1400ef820
     int   Cleanup() override;                                       // [8]  0x1400efaf0
-    int   Validate(void* citizenIBP) override;                      // [9]  0x1400ef7c0
+    int   Validate() override;                      // [9]  0x1400ef7c0
     void* GetTarget(void* outPtr) override;                         // [10] 0x1400efb40
     int   GetPriority() override;                                   // [11] 0x1400295a0
     void  Slot12(int version) override;                                      // [12] 0x1400efae0 (own RET 0)
