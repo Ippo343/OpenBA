@@ -26,14 +26,14 @@
 #include "plantorchard_funcs.h"
 #include <new>
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Component/exe_bodies.h"   // B3R: OrchardComponent_ValidateRefs
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
 namespace {
-typedef void* (*fn_FindOrchard_t)(int64_t entity, void* outIBP);      // 0x140005440
-typedef void  (*fn_ValidateRefs_t)(int64_t orchardComp);              // 0x140051830
+// 0x140005440 WorkAcc_FindComponent_5440 (Work/exe_bodies.h) and 0x140051830
+// OrchardComponent_ValidateRefs (Component/exe_bodies.h) are called by name (B3R).
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
@@ -64,17 +64,15 @@ PlantOrchard::PlantOrchard(void** entityIBP, void* treeType) : Work(entityIBP) {
                                                          // no null test, no validation,
                                                          // no refcount — as retail does.
 
-    auto findOrchard  = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
-    auto validateRefs = reinterpret_cast<fn_ValidateRefs_t>(ResolveAddr(Module::Exe, 0x140051830));
     int64_t orchardIBP = 0;
-    if (findOrchard) findOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
+    WorkAcc_FindComponent_5440(static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(s + 0x10)), &orchardIBP);
     if (!orchardIBP) return;          // SA: retail derefs unguarded below; a PlantOrchard is
                                       // only ever built for an entity that has an orchard, so
                                       // this can only fire if our caller is wrong. Returning
                                       // early keeps the work item well-formed but empty
                                       // rather than faulting on a null component.
 
-    if (validateRefs) validateRefs(orchardIBP);
+    OrchardComponent_ValidateRefs(reinterpret_cast<void*>(orchardIBP));
 
     // Size the per-slot validity array from the orchard's CURRENT slot count.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.

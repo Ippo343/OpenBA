@@ -81,34 +81,16 @@
 // Runtime primitives (reached through .rdata dispatch slots, exactly as retail does)
 // ---------------------------------------------------------------------------
 //   [0x140152b68] System::MemoryAllocator::MemFree  (static 1-arg)
-// Read the SLOTS rather than the engine_funcs globals: standalone/redzone_alloc.cpp
-// rewires the slots but leaves fn_MemFreeStatic alone, so going through the globals here
-// would pair the insert cluster's shimmed alloc with an unshimmed free.
-// 0x140025920 (retrace) is our own PlayerTrade_Retrace_25920, resolved through the
-// address registry the way marketwork.cpp resolves its helpers.
+// B3R: called by name. The REDZONE / ALLOC_STATS instruments sit on the allocator's
+// own hook inside MemAlloc / MemFree (W0-A0), so a direct call is instrumented.
+// 0x140025920 (retrace) is our own PlayerTrade_Retrace_25920, called by name.
 
 #include "Work/marketwork_bst_aaa0.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"          // B3R: PlayerTrade_Retrace_25920 (0x140025920)
+#include "system/MemoryAllocator.h"    // B3R: slot 0x140152b68 = System::MemoryAllocator::MemFree
 #include <cstdint>
 
 namespace {
-
-typedef void (*MBstE_MemFree_t)(void* p);                       // slot 0x140152b68
-typedef void (*MBstE_Retrace_t)(int64_t* tree, int64_t* pNode); // 0x140025920
-
-MBstE_MemFree_t  s_memFree  = nullptr;
-MBstE_Retrace_t  s_retrace  = nullptr;
-bool             s_resolved = false;
-
-// Lazy one-shot resolve.  The dispatch slots are .rdata storage filled at startup, so
-// they must be DEREFERENCED -- the slot address is not the function address.
-void ResolveOnce() {
-    if (s_resolved) return;
-    s_resolved = true;
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b68))
-        s_memFree = *reinterpret_cast<MBstE_MemFree_t*>(s);
-    s_retrace = reinterpret_cast<MBstE_Retrace_t>(ResolveAddr(Module::Exe, 0x140025920));
-}
 
 // --- node field accessors (byte offsets, see header comment) -----------------
 inline uint64_t& NodeKey(int64_t n)    { return *reinterpret_cast<uint64_t*>(n + 0x00); }
@@ -133,10 +115,10 @@ inline int16_t ChildH(int64_t child) {
 // the redzone allocator inspects freed blocks, so keep the stores faithful.
 void DestroyNodeBody(int64_t node) {
     void* payload = *reinterpret_cast<void**>(node + 0x08);
-    s_memFree(payload);
+    System::MemoryAllocator::MemFree(payload);
     *reinterpret_cast<int64_t*>(node + 0x08) = 0;
     *reinterpret_cast<int64_t*>(node + 0x10) = 0;
-    s_memFree(reinterpret_cast<void*>(node));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(node));
 }
 
 } // namespace
@@ -155,7 +137,6 @@ void DestroyNodeBody(int64_t node) {
 // The null test is RETAIL's, not a defensive addition -- 0x14002ac40 only ever reaches
 // this with a value it has already proven non-null, so retail is being generous, not us.
 extern "C" void MarketBst_aee0(void* /*unusedRcx*/, void* node) {
-    ResolveOnce();
     if (node == nullptr) return;
     DestroyNodeBody(reinterpret_cast<int64_t>(node));
 }
@@ -172,7 +153,6 @@ extern "C" void MarketBst_aee0(void* /*unusedRcx*/, void* node) {
 //   [RSP+0x50] "cursorA" -- the parent of whatever left the tree
 //   [RSP+0x58] "cursorB" -- the node that took the erased node's place
 extern "C" void MarketBst_ac40(int64_t* tree, void* nodeArg) {
-    ResolveOnce();
     const int64_t z = reinterpret_cast<int64_t>(nodeArg);
 
     int64_t cursorA = NodeParent(z);   // ac61: MOV RAX,[RDX+0x18] -> [RSP+0x50]
@@ -271,10 +251,8 @@ extern "C" void MarketBst_ac40(int64_t* tree, void* nodeArg) {
         }
     }
 
-    // ae38: CALL 0x140025920(tree, &cursor).  Unguarded on purpose -- 0x140025920 is
-    // ported and registered (standalone/address_registry.cpp -> RegisterPlayerTradeBatch),
-    // and a guard here would silently skip the rebalance instead of failing loudly.
-    s_retrace(tree, useB ? &cursorB : &cursorA);
+    // ae38: CALL 0x140025920(tree, &cursor).
+    PlayerTrade_Retrace_25920(tree, useB ? &cursorB : &cursorA);
 }
 
 // ============================================================================
@@ -299,7 +277,6 @@ extern "C" void MarketBst_ac40(int64_t* tree, void* nodeArg) {
 //
 // Reaching the hit arm means key >= node.key AND node.key >= key, i.e. equality.
 extern "C" void MarketBst_aaa0(int64_t* tree, void* keyIBP) {
-    ResolveOnce();
 
     int64_t node = *tree;
     if (node == 0) return;

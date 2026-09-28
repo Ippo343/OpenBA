@@ -27,13 +27,12 @@
 #include "harvestorchard_funcs.h"
 #include <new>
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 
 namespace {
-typedef void* (*fn_FindOrchard_t)(int64_t entity, void* outIBP);      // 0x140005440
+// 0x140005440 is WorkAcc_FindComponent_5440 (Work/exe_bodies.h), called by name (B3R).
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
@@ -56,9 +55,8 @@ HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
     *reinterpret_cast<uint64_t*>(s + 0x58) = 0;   // byte-array base
     *reinterpret_cast<uint64_t*>(s + 0x60) = 0;   // count (+0x60) + capacity (+0x64)
 
-    auto findOrchard = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
     int64_t orchardIBP = 0;
-    if (findOrchard) findOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
+    WorkAcc_FindComponent_5440(static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(s + 0x10)), &orchardIBP);
     if (!orchardIBP) return;          // SA: retail derefs unguarded below; a HarvestOrchard
                                       // is only ever built for an entity that has an
                                       // orchard, so this can only fire if our caller is

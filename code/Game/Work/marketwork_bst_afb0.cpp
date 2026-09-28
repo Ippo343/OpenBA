@@ -108,6 +108,7 @@
 
 #include "Work/marketwork_bst_afb0.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -160,13 +161,6 @@ extern "C" void MarketBst_afb0(int64_t* arrRaw, int32_t newCount) {
 
     uint8_t* const oldData = arr->data;  // 14002afcf, saved before any realloc
 
-    // STANDALONE-ONLY GUARD (a genuine standalone-vs-retail difference, not a
-    // faithfulness fix): retail's MemAlloc is a direct .rdata dispatch slot that
-    // is always populated. Ours is a resolved global; if resolution ever failed
-    // we would EXEC-of-0. Bail BEFORE mutating count/capacity so the descriptor
-    // stays self-consistent rather than advertising elements that do not exist.
-    if (!fn_MemAllocStatic && newCount > arr->capacity) return;
-
     arr->count = newCount;  // 14002afd2 -- MOV dword, written before the grow
 
     if (newCount > arr->capacity) {              // 14002afda
@@ -178,7 +172,7 @@ extern "C" void MarketBst_afb0(int64_t* arrRaw, int32_t newCount) {
         // on the sign-extended 64-bit capacity, matching MOVSXD + SHL RCX,0x5.
         const int64_t bytes = static_cast<int64_t>(arr->capacity) << 5;
         arr->data = static_cast<uint8_t*>(
-            fn_MemAllocStatic(static_cast<uint64_t>(bytes), 4));
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(bytes), 4));
     }
 
     // 14002b009-14002b01b: if the buffer pointer did not change (the request
@@ -204,7 +198,7 @@ extern "C" void MarketBst_afb0(int64_t* arrRaw, int32_t newCount) {
 
     // 14002b271-14002b279: free the old buffer exactly once, and only if it was
     // really replaced. A no-realloc resize must not free the live buffer.
-    if (oldData != arr->data && fn_MemFreeStatic) {
-        fn_MemFreeStatic(oldData);
+    if (oldData != arr->data) {
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
