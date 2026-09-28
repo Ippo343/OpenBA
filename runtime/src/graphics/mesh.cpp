@@ -915,7 +915,9 @@ Graphics::MeshInstance::~MeshInstance() {
 //
 // ORACLE: FULL, through a scratch buffer. No side effects.
 // ============================================================================
-static void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
+// B3R RT-VG: external linkage (declared in types/graphics/Mesh.h) for the
+// exe-side reader in code/Game/Player/tool_base_render.cpp.
+void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
 
     TriangleVertex* tv = reinterpret_cast<TriangleVertex*>(self);
     tv->x = static_cast<int16_t>(static_cast<int>(Rd<float>(vec3, 0) * kEdgeMeshVertexScale));
@@ -940,7 +942,8 @@ static void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec
 //
 // ORACLE: FULL, through a scratch buffer. No side effects.
 // ============================================================================
-static void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
+// B3R RT-VG: external linkage (declared in types/graphics/Mesh.h), as above.
+void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
 
     EdgeVertex* ev = reinterpret_cast<EdgeVertex*>(self);
     const TriangleVertex* ta = reinterpret_cast<const TriangleVertex*>(a);

@@ -60,6 +60,7 @@
 #include "../../types/video/Buffers.h"   // ENDGAME B.3.5: Video::{Vertex,Index}Buffer
 #include "array_internal.h"
 #include "array_destroy_internal.h"
+#include "../../types/graphics/GraphicsMesh.h"   // B3R RT-VG: the Rt_* declarations
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -313,9 +314,10 @@ static_assert(kSpec_InnerArray.seedZeroHi <= kSpec_InnerArray.stride,
 // The registered entry points. One free function per ADDRESS, with the address
 // in the name so a crash log or a census line names it directly.
 // ============================================================================
-namespace {
+// B3R RT-VG: namespace rtcoll (external linkage), was an anonymous namespace --
+// the graphics readers call these by name (types/graphics/GraphicsMesh.h).
+namespace rtcoll {
 
-using rtcoll::ArrayHdr;
 using namespace rtcoll::gfxmesh;
 
 void* Rt_ArrayDtor_180013fb0(void* a) {       // ~Array<TriangleList>
@@ -345,7 +347,7 @@ void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
 void* Rt_TriangleListCtor_1800fefc0(void* p)                  { return TriangleListCtor(p); }
 void* Rt_TriangleListCopyCtor_180013c50(void* d, const void* s) { return TriangleListCopyCtor(d, s); }
 
-}  // namespace
+}  // namespace rtcoll
 
 // Every one of the six Collection rows is a template instantiation with NO
 // export name in either shipped build (checked against the shipped export
@@ -362,6 +364,7 @@ void* Rt_TriangleListCopyCtor_180013c50(void* d, const void* s) { return Triangl
 // from this file's own dtor bodies. So the banner above now reads "six rows"
 // for four; the two it counted are these.
 int RtCollectionGraphicsMeshRegister() {
+    using namespace rtcoll;
     int n = 0;
     RegisterRuntimeAddr(0x180013fb0ull, (void*)&Rt_ArrayDtor_180013fb0);            ++n;
     RegisterRuntimeAddr(0x180014160ull, (void*)&Rt_ArrayDtor_180014160);            ++n;
