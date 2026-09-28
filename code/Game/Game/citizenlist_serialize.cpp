@@ -869,7 +869,6 @@ void RegisterCitizenListSerialize() {
     // Newly-ported helpers not registered elsewhere.
     RegisterExeAddr(0x140017640, reinterpret_cast<uintptr_t>(&ResizeStride0x10));
     RegisterExeAddr(0x1400177c0, reinterpret_cast<uintptr_t>(&ResizeStride0x20));
-    RegisterExeAddr(0x140017f60, reinterpret_cast<uintptr_t>(&ResizeStride08Pair));
     // (ENDGAME B.3.9 TR: the never-filled HealerComponent / WellComponent type-id cells
     // 0x1401c4330 / 0x1401c4c28 and their storage went -- the serializer validates by the
     // class statics since B.3.9 CB.)

@@ -271,8 +271,6 @@ void* TerrainGenerator::CreateInPlaceObject(void* memory) {
 // (FUN_1400206b0 resize / FUN_140020870 serialize), so the ResolveAddr call
 // sites resolve them.
 void RegisterGameTerrainReimpls() {
-    RegisterExeAddr(0x1400206b0, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataResize));
-    RegisterExeAddr(0x140020870, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataSerialize));
 }
 
 DEFINE_EXE_TYPE(TerrainGenerator, "Object::External")

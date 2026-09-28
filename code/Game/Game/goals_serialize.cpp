@@ -849,8 +849,4 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 // ============================================================
 void RegisterGoalsSerialize() {
     RegisterExeAddr(0x1400f9240, reinterpret_cast<uintptr_t>(&Goals_Serialize_f9240));
-    RegisterExeAddr(0x1400f8270, reinterpret_cast<uintptr_t>(&Goals_SavePrepass_8270));
-    RegisterExeAddr(0x14002d060, reinterpret_cast<uintptr_t>(&Goals_TreeArray_Serialize_d060));
-    RegisterExeAddr(0x14002d5f0, reinterpret_cast<uintptr_t>(&Goals_WorkTree_Serialize_d5f0));
-    RegisterExeAddr(0x14002ccf0, reinterpret_cast<uintptr_t>(&Goals_LayoutC_Insert_ccf0));
 }
