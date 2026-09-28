@@ -24,6 +24,7 @@
 #include <new>
 #include "Component/TombstoneComponent.h"   // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers
@@ -33,28 +34,19 @@
 // FUN_1400021d0 was Collection::Array<int32>::SetSize monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
-// FUN_140002cc0 -- add InternalBasePtr to linked list
-typedef void (*fn_ListAdd_t)(void* listBase, void* ptrValue);
-static fn_ListAdd_t s_fn_ListAdd = nullptr;
-
-// FUN_140004680 -- member-ABI FindComponent<MapComponent>(entity, outIBP) -> outIBP.
-// (registered by reg_component_nature)
-typedef void** (*fn_FindMapComp_t)(uintptr_t entity, void** outIBP);
-static fn_FindMapComp_t s_fn_FindMapComp = nullptr;
-
-// FUN_140004740 -- member-ABI FindComponent<MultiObjectComponent>(entity, outIBP).
-// (ported in interactcomponent.cpp, registered by reg_component_economy)
-typedef void  (*fn_FindMultiComp_t)(uintptr_t entity, void* outIBP);
-static fn_FindMultiComp_t s_fn_FindMultiComp = nullptr;
+// Called directly (B.3R):
+//   FUN_140002cc0 CemeteryListErase_Reimpl (the list erase, below)
+//   FUN_140004680 FloorComponent_FindResData -- FindComponent<MapComponent>(entity, outIBP)
+//   FUN_140004740 InteractComponent_FindWorkplaceComponent -- FindComponent<MultiObjectComponent>
+//   0x1400a8c90 Pf_FineCellDirty_a8c90
+//   the game-world cell 0x1401c3dd8, read through g_pGameWorldSingleton.
 
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
-// 0x1400a6fe0 PfEnqueueCmd2(pfQueue, cellIdx, cmd) / 0x1400a8c90 FineCellDirty.
+// 0x1400a6fe0 PfEnqueueCmd2(pfQueue, cellIdx, cmd).
 typedef void (*fn_PfEnqueueCmd2_t)(void* queue, int cellIdx, int cmd);
 static fn_PfEnqueueCmd2_t s_fn_PfEnqueueCmd2 = nullptr;
-typedef void (*fn_FineCellDirty_t)(void* obj, int cellIdx, int row);
-static fn_FineCellDirty_t s_fn_FineCellDirty = nullptr;
 
 // System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr) dispatch slots.
 typedef void* (*fn_CemMemAlloc_t)(uint64_t size, int align);
@@ -64,8 +56,6 @@ static fn_CemMemFree_t s_fn_MemFree = nullptr;
 
 // TombstoneComponent type id (.rdata DAT_1401c4a30, storage + fill in
 // standalone/reg_citizen_lifeevent_handler.cpp).
-
-static void** s_g_pGameState = nullptr;
 
 static bool s_initialized = false;
 
@@ -181,32 +171,14 @@ void CemeteryComponent_InitFuncs() {
 
     uintptr_t slot;
 
-    s_fn_ListAdd = reinterpret_cast<fn_ListAdd_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_fn_FindMapComp = reinterpret_cast<fn_FindMapComp_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_FindMultiComp = reinterpret_cast<fn_FindMultiComp_t>(
-        ResolveAddr(Module::Exe, 0x140004740));
     s_fn_PfEnqueueCmd2 = reinterpret_cast<fn_PfEnqueueCmd2_t>(
         ResolveAddr(Module::Exe, 0x1400a6fe0));
-    s_fn_FineCellDirty = reinterpret_cast<fn_FineCellDirty_t>(
-        ResolveAddr(Module::Exe, 0x1400a8c90));
     slot = ResolveAddr(Module::Exe, 0x140152b60);
     if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_CemMemAlloc_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b68);
     if (slot) s_fn_MemFree = *reinterpret_cast<fn_CemMemFree_t*>(slot);
 
-    s_g_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
     s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[CemeteryComponent] Funcs resolved: Erase=%p FindMap=%p FindMulti=%p\n",
-           (void*)s_fn_ListAdd, (void*)s_fn_FindMapComp,
-           (void*)s_fn_FindMultiComp);
-#endif
 }
 
 // ============================================================
@@ -227,10 +199,10 @@ void CemeteryComponent_InitFuncs() {
 extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
     CemeteryComponent* self = reinterpret_cast<CemeteryComponent*>(compV);
     CemeteryComponent_InitFuncs();
-    if (!s_g_pGameState || !*s_g_pGameState)
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return 0;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*s_g_pGameState);
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xF0);
     if (!townMgr) return 0;
 
@@ -279,10 +251,11 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
         *reinterpret_cast<uint8_t*>(cell + 0x29) = 2;
         PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror
 
-        if (walkableZone && s_fn_FineCellDirty) {
+        if (walkableZone) {
             const int mapWidth = *reinterpret_cast<int*>(world);
             void* fine = *reinterpret_cast<void**>(world + 0x70);
-            if (fine && mapWidth) s_fn_FineCellDirty(fine, cellIdx, cellIdx / mapWidth);
+            if (fine && mapWidth)
+                Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(fine), cellIdx, cellIdx / mapWidth);
         }
         if (s_fn_PfEnqueueCmd2) {
             void* pf = *reinterpret_cast<void**>(world + 0x68);
@@ -408,17 +381,16 @@ void CemeteryComponent::Persist(void* stream) {
 void CemeteryComponent::OnAdded() {
     CemeteryComponent_InitFuncs();
     CEM_TRACE("enter comp=%p owner=%p", (void*)this, _entity);
-    if (!s_fn_FindMapComp || !s_fn_FindMultiComp || !s_g_pGameState || !*s_g_pGameState) {
-        CEM_TRACE("BAIL deps: findMap=%p findMulti=%p gs=%p",
-                  (void*)s_fn_FindMapComp, (void*)s_fn_FindMultiComp,
-                  (void*)(s_g_pGameState ? *s_g_pGameState : nullptr));
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+        CEM_TRACE("BAIL deps: gs=%p",
+                  (void*)(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr));
         return;
     }
 
     const uintptr_t entity = reinterpret_cast<uintptr_t>(_entity);
 
     void* mapIbp = nullptr;
-    s_fn_FindMapComp(entity, &mapIbp);
+    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &mapIbp);   // 0x140004680
     if (!mapIbp) { CEM_TRACE("BAIL no MapComponent"); return; }
     const uintptr_t map = reinterpret_cast<uintptr_t>(mapIbp);
 
@@ -429,13 +401,13 @@ void CemeteryComponent::OnAdded() {
     const int rot = *reinterpret_cast<int*>(map + 0x30);
 
     const uintptr_t world = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*s_g_pGameState) + 0xF8);
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF8);
     if (!world) { CEM_TRACE("BAIL no world"); return; }
     const int mapWidth = *reinterpret_cast<int*>(world);
 
     // The gate child: multi->children[0], then that entity's MapComponent.
     uint8_t multiIbp[24] = {};
-    s_fn_FindMultiComp(entity, multiIbp);
+    InteractComponent_FindWorkplaceComponent(entity, multiIbp);   // 0x140004740
     const uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiIbp);
     if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
     const uintptr_t childArr = *reinterpret_cast<uintptr_t*>(multi + 0x48);
@@ -449,7 +421,7 @@ void CemeteryComponent::OnAdded() {
     if (!gateEnt) { CEM_TRACE("BAIL no child[0]"); return; }
 
     void* gateIbp = nullptr;
-    s_fn_FindMapComp(reinterpret_cast<uintptr_t>(gateEnt), &gateIbp);
+    FloorComponent_FindResData(gateEnt, &gateIbp);   // 0x140004680
     if (!gateIbp) { CEM_TRACE("BAIL gate has no MapComponent"); return; }
     // NOT `*(uintptr_t*)gateIbp`. Retail's RBX is the ADDRESS of the out buffer, so its
     // `mov rax,[rbx]` yields the component pointer; `gateIbp` here IS that pointer
@@ -494,11 +466,11 @@ void CemeteryComponent::OnRemove() {
     uint8_t ptrBuf[8];
     new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(_entity));   // B.3.3 bridge
 
-    if (s_g_pGameState && *s_g_pGameState && s_fn_ListAdd) {
-        void* gameState = *s_g_pGameState;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        void* gameState = *g_pGameWorldSingleton;
         void* subObj = *(void**)((uintptr_t)gameState + 0xF0);
         void* cemeteryListBase = (void*)((uintptr_t)subObj + 0x40);
-        s_fn_ListAdd(cemeteryListBase, ptrBuf);
+        CemeteryListErase_Reimpl(cemeteryListBase, ptrBuf);   // 0x140002cc0
     }
 }
 
