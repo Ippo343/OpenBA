@@ -53,25 +53,6 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: namespace-scope atomic door caches for the member bodies.
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_radioDescriptionTypeInfo{nullptr};
-
-const uint8_t* RadioDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_radioDescriptionTypeInfo,
-        "?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 // ============================================================================
@@ -79,17 +60,6 @@ const uint8_t* RadioDescriptionTypeInfo() {
 // ============================================================================
 namespace UI {
 
-uint32_t RadioDescription::Type() const { return TypeId(); }  // 0x180047650
-// ?TypeId@RadioDescription@UI@@SAIXZ 0x180047660 — the record's first dword.
-uint32_t RadioDescription::TypeId() {
-    const uint8_t* ti = RadioDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// The key function: GCC emits `vtable for UI::RadioDescription` here.
-const char* RadioDescription::TypeName() const {               // 0x180047670
-    const uint8_t* ti = RadioDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // 0x1800d5b10: `MOV EAX,0x1104 ; RET`.
 int32_t RadioDescription::GetFileVersion() const { return 0x1104; }
 
@@ -246,3 +216,12 @@ int RtUiRadioDescriptionRegister() {
     RegisterRuntimeAddr(0x1800477e0ull, (void*)&UI::RadioDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::RadioDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@RadioDescription@UI@@ (0x1801fa238): name "RadioDescription", parent
+// "GroupDescription" (retail ?_ParentTypeName@RadioDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::RadioDescription, "GroupDescription", nullptr)

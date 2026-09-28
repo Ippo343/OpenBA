@@ -63,33 +63,9 @@ struct WidgetEvent {
 };
 static_assert(sizeof(WidgetEvent) == 0x30, "UI event record is 0x30 bytes");
 
-// RULE B6-5: a namespace-scope atomic cache for the member bodies.
-std::atomic<void*> g_radioElementTypeInfo{nullptr};
-const uint8_t* RadioElementTypeInfo() {
-    void* p = g_radioElementTypeInfo.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached("?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A", &scratch);
-        if (p != nullptr) g_radioElementTypeInfo.store(p, std::memory_order_release);
-    }
-    return static_cast<const uint8_t*>(p);
-}
-
 }  // namespace
 
 namespace UI {
-
-uint32_t RadioElement::Type() const { return TypeId(); }       // 0x1800479e0
-// ?TypeId@RadioElement@UI@@SAIXZ 0x1800479f0 — the record's first dword.
-uint32_t RadioElement::TypeId() {
-    const uint8_t* ti = RadioElementTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// The key function: GCC emits `vtable for UI::RadioElement` here.
-const char* RadioElement::TypeName() const {                    // 0x180047a00
-    const uint8_t* ti = RadioElementTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // slot 7 — ?Update@RadioElement@UI@@ ...   0x1800d5580
@@ -188,3 +164,12 @@ int RtUiRadioElementRegister() {
     RegisterRuntimeAddr(0x180047ba0ull, (void*)&UI::RadioElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::RadioElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@RadioElement@UI@@ (0x1801fa270): name "RadioElement", parent
+// "GroupElement" (retail ?_ParentTypeName@RadioElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::RadioElement, "GroupElement", nullptr)

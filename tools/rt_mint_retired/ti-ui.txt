@@ -14,3 +14,15 @@
 ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ClipRegionElement, "Element") in clipregionelement.cpp; readers: own accessor slot gone, combodialog_ctor / containerelement / element / listdescription -> ClipRegionElement::TypeId()
 ?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::BorderDescription, "ElementDescription") in borderdescription.cpp; readers: own accessor slot gone
 ?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ClipRegionDescription, "ElementDescription") in clipregiondescription.cpp; readers: own accessor slot gone
+
+# -- cluster 2: Group / Page / Radio / Image / AnimatedImage --
+?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GroupElement, "Element") in groupelement.cpp; readers: own accessor slot gone, dialog_create.cpp -> GroupElement::TypeId() (cluster 1)
+?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::PageElement, "GroupElement") in pageelement.cpp; readers: own accessor slot gone
+?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RadioElement, "GroupElement") in radioelement.cpp; readers: own accessor slot gone
+?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GroupDescription, "ElementDescription") in groupdescription.cpp; readers: own accessor slot gone
+?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::PageDescription, "GroupDescription") in pagedescription.cpp; readers: own accessor slot gone
+?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RadioDescription, "GroupDescription") in radiodescription.cpp; readers: own accessor slot gone
+?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ImageElement, "Element") in imageelement.cpp; readers: own accessor slot gone
+?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::AnimatedImageElement, "ImageElement") in animatedimageelement.cpp; readers: own accessor slot gone
+?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ImageDescription, "ElementDescription") in imagedescription.cpp; readers: own accessor slot gone
+?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::AnimatedImageDescription, "ImageDescription") in animatedimagedescription.cpp; readers: own accessor slot gone
