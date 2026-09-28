@@ -1191,7 +1191,6 @@ String* RtSystem_String_Assign(String* self, const String* rhs) {
     *AsSys(self) = *AsSys(rhs);
     return self;
 }
-void RtSystem_String_Set(String* self, const char* src) { AsSys(self)->Set(src); }
 
 String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs) {
     new (AsSys(ret)) System::String(*AsSys(lhs) + rhs);
@@ -1206,19 +1205,6 @@ String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* 
     return ret;
 }
 
-String* RtSystem_String_Format(String* ret, const char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    new (AsSys(ret)) System::String(System::String::FormatV(fmt, ap));
-    va_end(ap);
-    return ret;
-}
-
-// ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z
-void RtSystem_String_Serialize(String* self, void* serializerRaw) {
-    AsSys(self)->Serialize(serializerRaw);
-}
-
 }  // namespace RtSystem
 
 
@@ -1230,7 +1216,6 @@ int RtSystemStringRegister() {
     RegisterRuntimeExport("??1String@System@@QEAA@XZ",              (void*)&RtSystem_String_Dtor); ++n;
     RegisterRuntimeExport("??4String@System@@QEAAAEAV01@AEBV01@@Z", (void*)&RtSystem_String_Assign); ++n;
     RegisterRuntimeExport("??YString@System@@QEAA?AV01@AEBV01@@Z",  (void*)&RtSystem_String_AppendAssign); ++n;
-    RegisterRuntimeExport("?Set@String@System@@QEAAXPEBD@Z",        (void*)&RtSystem_String_Set); ++n;
     // BATCH 8: RtString_SetLength has had a body since this file's very first
     // wave (it backs every String mutator above) but was never itself
     // registered under its own export/address — every caller reached it as a
@@ -1249,11 +1234,7 @@ int RtSystemStringRegister() {
     // (ui/dialog_create.cpp:357, ui/element.cpp:215) both resolve BY NAME
     // through ResolveExport, so this registration routes them to the body
     // below and they are the route, not a synthetic one.
-    RegisterRuntimeExport("?StrCompare@String@System@@SAHPEBD0@Z",  (void*)&RtString_StrCompare); ++n;
     // Wave 9 lane B3 -- the four raw-door rows.
-    RegisterRuntimeExport("?Format@String@System@@SA?AV12@PEBDZZ",  (void*)&RtSystem_String_Format); ++n;
-    RegisterRuntimeExport("?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtSystem_String_Serialize); ++n;
     // The two free operator+ overloads. They live in namespace System, not in
     // the class, so the mangling has no class component and the hidden return
     // slot is the FIRST argument.
@@ -1270,9 +1251,6 @@ int RtSystemStringRegister() {
     RegisterRuntimeAddr(0x180006c80, (void*)&RtSystem_String_Dtor);
     RegisterRuntimeAddr(0x1800c9810, (void*)&RtSystem_String_Assign);
     RegisterRuntimeAddr(0x1800c8a90, (void*)&RtSystem_String_AppendAssign);
-    RegisterRuntimeAddr(0x1800c95d0, (void*)&RtSystem_String_Set);
-    RegisterRuntimeAddr(0x1800c9730, (void*)&RtSystem_String_Format);
-    RegisterRuntimeAddr(0x1800c9930, (void*)&RtSystem_String_Serialize);
     RegisterRuntimeAddr(0x1800c92d0, (void*)&RtSystem_String_ConcatCStr);
        // BATCH 8
 

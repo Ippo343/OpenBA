@@ -303,33 +303,3 @@ void SubtreeFree(void* ignoredThis, Node* node) {
 }
 
 }  // namespace rtpathid
-
-// ============================================================================
-// Registration — ADDRESS DOORS ONLY.
-//
-// None of the seven is exported. `Collection::Set` has zero exported symbols
-// in either shipped build, so there is no mangled name to register under; said
-// explicitly rather than left implied, and NOT inferred from an `AEAA`
-// mangling (this DLL exports its private members —
-// reference_aeaa_is_private_not_unexported.md).
-//
-// Nothing else in the tree registers any of these seven addresses (grepped
-// across runtime/, standalone/, engine/, code/ and dx11/ before writing: the
-// only hits were the closure worklist). A duplicate `RegisterRuntimeAddr` is
-// last-binding-wins and silently makes one body dead code, which is the
-// shadow hazard `tools/dispatch_slot_map.py --check` reports for the exe's
-// import table and nothing reports for this registry.
-//
-// Every address is spelled as a LITERAL: tools/runtime_census.py finds
-// address doors by grepping for the literal and a door reached through a
-// variable is invisible to it.
-// ============================================================================
-int RtCollectionSetAvlPathIdRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x180027380, (void*)&rtpathid::Insert);       ++n;
-    RegisterRuntimeAddr(0x180027970, (void*)&rtpathid::SubtreeFree);  ++n;
-    // The three shared bodies. Distinct ADDRESSES bound to bodies that already
-    // exist, byte-verified equal above — not a duplicate registration of one
-    // address. Same arrangement avl_trees.cpp makes for its six siblings.
-    return n;
-}

@@ -41,4 +41,3 @@ extern CompiledCounters g_cc;
 }  // namespace RtObject
 
 // runtime/src/object/rt_object_port.cpp calls this.
-int RtObjectExternalCompiledRegister();

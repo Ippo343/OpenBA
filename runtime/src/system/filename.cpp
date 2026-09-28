@@ -490,10 +490,6 @@ bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
 void RtSystem_Filename_AdjustDelimiters(Filename* self) {
     System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(self));
 }
-Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret, bool stripExt) {
-    new (AsSys(ret)) System::Filename(AsSys(self)->GetPathFilename(stripExt));
-    return ret;
-}
 
 }  // namespace RtSystem
 
@@ -507,8 +503,6 @@ int RtSystemFilenameRegister() {
 
     RegisterRuntimeExport("??MFilename@System@@QEBA_NAEBV01@@Z",
                           (void*)&RtSystem_Filename_Less); ++n;
-    RegisterRuntimeExport("?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z",
-                          (void*)&RtSystem_Filename_GetPathFilename); ++n;
 
     // The SAME functions by Ghidra address — and here it is not belt-and-braces
     // but REQUIRED. Two of the exe's Filename resolves use mangled names that
@@ -525,7 +519,6 @@ int RtSystemFilenameRegister() {
     // of fn_Filename_AdjustDelimiters — and ProfessionUI's GetPathIdentifer —
     // on the DLL while the census reported them ported.
     RegisterRuntimeAddr(0x180026cb0, (void*)&RtSystem_Filename_Less);
-    RegisterRuntimeAddr(0x1800c6740, (void*)&RtSystem_Filename_GetPathFilename);
 
     // CONSEQUENCE FOR standalone/filename_runtime_hook.cpp (PLAN.md §2.2
     // hazard A): that diagnostic resolves 0x1800067d0 / 0x180006980 /

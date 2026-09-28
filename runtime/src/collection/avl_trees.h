@@ -89,5 +89,3 @@ void SubtreeFree(void* ignoredThis, rtsetavl::Node* node);             // 0x1800
 
 }  // namespace rtavl
 
-int RtCollectionAvlTreesRegister();
-int RtCollectionSortRegister();

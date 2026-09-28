@@ -435,12 +435,3 @@ void* EffectSlotAssign(void* dstRaw, const void* srcRaw) {
 }
 
 }  // namespace rtsort
-
-// ============================================================================
-// Registration. ADDRESS DOORS ONLY — none of the three is exported.
-// ============================================================================
-int RtCollectionSortRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x1800264a0, (void*)&rtsort::SortByKey70);      ++n;
-    return n;
-}

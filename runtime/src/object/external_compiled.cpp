@@ -298,27 +298,3 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
 // door went with the minted ??_7CompiledExternal@Object@@6B@ row and its
 // RT_DELDTOR row 0x18000b7e0, its only callers; the body is the real
 // Object::CompiledExternal::~CompiledExternal (external_class.cpp).
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Global scope, like every other wave's Register function, because
-// runtime/src/object/rt_object_port.cpp declares it with a bare
-// `extern int RtObjectExternalCompiledRegister();`.
-int RtObjectExternalCompiledRegister() {
-    using namespace RtObject;
-    int n = 0;
-
-    // Literal mangled names, NOT constants: tools/runtime_census.py matches
-    // `RegisterRuntimeExport("<literal>"` and cannot see through a named
-    // constant (reference_census_cannot_see_nonliteral_registrations.md).
-    RegisterRuntimeExport(
-        "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z",
-        (void*)&RtObject_ExternalFactory_GetCompiledPath); ++n;
-    RegisterRuntimeAddr(0x1800bec10, (void*)&RtObject_ExternalFactory_GetCompiledPath);
-
-
-    // THE IDENTITY LINE. Nothing else in the tree prints "Compiled".
-    printf("[Compiled] registered %d exports (GetCompiledPath, FindOrLoad)\n", n);
-    return n;
-}

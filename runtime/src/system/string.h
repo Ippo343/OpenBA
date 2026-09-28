@@ -42,7 +42,6 @@ int RtString_StrCompare(const char* a, const char* b);
 int RtString_GetLength(const String* self);
 
 // ---- ported entry points reused by Filename --------------------------------
-void    RtSystem_String_Set(String* self, const char* src);                       // 0x1800c95d0
 String* RtSystem_String_Assign(String* self, const String* rhs);                  // 0x1800c9810
 
 // The two free operator+ overloads. Namespace-scope, so the hidden return slot

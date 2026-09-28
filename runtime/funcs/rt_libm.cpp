@@ -21,10 +21,6 @@ void InstallPorted() {
 
 }  // namespace
 
-// runtime/src/crt/msvc_qsort.cpp — the CRT qsort/shortsort pair at 0x18007f050 /
-// 0x18007f340, reached by ADDRESS from Save::SaveLoad::UpdateList's save-list sort.
-int RtCrtQsortRegister();
-
 namespace RtLibm {
 
 // Static-init defaults are the ported bodies, so a caller that runs before
@@ -37,7 +33,6 @@ float (*Pow)(float, float)     = &MsvcLibm::Powf;
 
 
 void Init() {
-    ::RtCrtQsortRegister();
     InstallPorted();
 }
 

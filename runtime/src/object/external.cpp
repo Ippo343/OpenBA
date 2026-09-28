@@ -545,15 +545,9 @@ int RtObjectExternalRegister() {
     // ENDGAME B.3.9 OBJ (B39_RULES D2): External's and CompiledExternal's
     // factory pairs are the classes' own statics (external_class.cpp), not
     // FACTREST rows.
-    RegisterRuntimeExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ",
-                          (void*)&RtObject_External_GetPath); ++n;
-    RegisterRuntimeExport("?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z",
-                          (void*)&RtObject_ExternalFactory_FindNext); ++n;
     RegisterRuntimeExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ",
                           (void*)&RtObject_ExternalList_GetResourceCount); ++n;
 
-    RegisterRuntimeAddr(0x180006250, (void*)&RtObject_External_GetPath);
-    RegisterRuntimeAddr(0x1800be9d0, (void*)&RtObject_ExternalFactory_FindNext);
     RegisterRuntimeAddr(0x180007650, (void*)&RtObject_ExternalList_GetResourceCount);
 
     // The Wave 3 banner named four deliberate omissions. All four have since

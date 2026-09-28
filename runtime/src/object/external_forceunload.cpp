@@ -169,25 +169,3 @@ void RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const Filename*
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration — BOTH DOORS.
-//
-// `QEAA` is public and the name is ordinal 2369 in the retail export directory,
-// verified with pefile before this was written. The address door is registered
-// too because SetupFileSystem's ported body reaches it as a direct call today
-// and, at cutover, retail's rel32 at 0x1800af1a9 will not exist.
-//
-// The name is spelled as a LITERAL: tools/runtime_census.py matches
-// `RegisterRuntimeExport("<literal>"` and cannot see through a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md — twelve live ports
-// were invisible for a full wave).
-// ============================================================================
-int RtObjectExternalForceUnloadRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?ForceUnload@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z",
-                          (void*)&RtObject::RtObject_ExternalFactory_ForceUnload); ++n;
-    RegisterRuntimeAddr(0x1800beec0,
-                        (void*)&RtObject::RtObject_ExternalFactory_ForceUnload);
-    return n;
-}

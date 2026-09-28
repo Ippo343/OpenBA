@@ -631,39 +631,3 @@ int RtSystem_WideString_StrLength(const wchar_t* s) {
 }
 
 }  // namespace RtSystem
-
-// ============================================================================
-// Registration — gated by the lane switch in rt_system_port.cpp
-// ============================================================================
-int RtSystemWideStringRegister() {
-    using namespace RtSystem;
-    int n = 0;
-
-    // Literals, never a named constant: tools/runtime_census.py cannot see a
-    // RegisterRuntimeExport whose name is a constant
-    // (reference_census_cannot_see_nonliteral_registrations.md).
-    RegisterRuntimeExport("?Set@WideString@System@@QEAAXPEB_W@Z",
-                          (void*)&RtSystem_WideString_Set); ++n;
-    RegisterRuntimeExport("?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",
-                          (void*)&RtSystem_WideString_AsUTF8); ++n;
-    RegisterRuntimeExport("??0WideString@System@@QEAA@AEBVString@1@@Z",
-                          (void*)&RtSystem_WideString_CtorFromString); ++n;
-    // The three dx11/src/devicedata.cpp has been asking for since Wave 6.
-    // Wave 9 lane PLAT: the fifth constructor. Verified against the shipped
-    // export directory with pefile (ordinal 514, 0x1800cb110) before the body
-    // was written — reference_resolveexport_phantom_names.md.
-
-    // The same four by address. dx11/src/devicedata.cpp reaches WideString
-    // through the exe's OWN dispatch slots and its own resolver door, and this
-    // project has been bitten twice by registering only the name.
-    RegisterRuntimeAddr(0x1800caf40, (void*)&RtSystem_WideString_Set);
-    RegisterRuntimeAddr(0x1800cacd0, (void*)&RtSystem_WideString_AsUTF8);
-    RegisterRuntimeAddr(0x1800cab50, (void*)&RtSystem_WideString_CtorFromString);
-
-    // DELIBERATELY ABSENT — the other 21 exports of the class. NOTHING in
-    // code/, engine/, runtime/, standalone/ or dx11/ names any of them; the
-    // census's caller column is the check, and it lists exactly the four
-    // dx11 rows plus this lane's three, all of which are now closed.
-    printf("[RtPort]   System::WideString: %d exports registered\n", n);
-    return n;
-}

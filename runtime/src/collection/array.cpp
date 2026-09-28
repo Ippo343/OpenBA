@@ -3743,9 +3743,8 @@ void RtCollectionPortInit() {
     //
     // Lane UIW's pair is reached by ?RemoveAllItems@ComboElement@UI@@ and is
     // exercised (calls=6, matching its three teardown helpers exactly).
-    RegisterRuntimeAddr(0x180024aa0, (void*)&RtColl_ArrayDtor_180024aa0);
-    RegisterRuntimeAddr(0x1800249c0, (void*)&RtColl_ArrayDtor_1800249c0);  // PKG2 4b-iii
-    RegisterRuntimeAddr(0x1800248e0, (void*)&RtColl_ArrayDtor_1800248e0);  // PKG2 4b-iii
+      // PKG2 4b-iii
+      // PKG2 4b-iii
     // Lane UIC's pair is NOT reached from our tree yet -- registered ahead of
     // its caller (?AddController@DialogInstance@) so whoever ports that does
     // not have to rediscover them. An address with no caller reports calls=0
@@ -3770,10 +3769,10 @@ void RtCollectionPortInit() {
     // BATCH 4 (Graphics render/cull/sun-camera cluster), two one-argument
     // constant-folded members. 0x18005f980 is a Reserve, not a SetSize — see
     // the banner over RtColl_ArrayReserve_18005f980.
-    RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
-    RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
-    RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
-    RegisterRuntimeAddr(0x180024c10, (void*)&RtColl_ArraySetSize_180024c10);  // PKG2 4b-ii
+      // PKG2 4b
+      // PKG2 4b
+      // PKG2 4b-ii
+      // PKG2 4b-ii
     // Wave 25 lane INTERNAL42: Wave 24 lane INTERNAL8's two declared doors.
     // BATCH 8b: Audio::Scene::EffectSlot::positions, the read-path resize
     // inside the EffectSlot inner-array serialize (0x180051e00).
@@ -3797,7 +3796,7 @@ void RtCollectionPortInit() {
     // the non-trivial tier covers.
     // VTABLE BATCH 2 (2026-09-12): the three read-path resizes of the
     // UI::*Description second half, plus LayoutElement's info array.
-    RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
+      // PKG2 4c-ii
     // ---- Wave 29 lane GFXBODY: Renderer::_drawables (AddLight) -------------
     // ---- Wave 9 lane GFX3: the Graphics::Scene node array ------------------
     // ---- Wave 9 lane UIW: the five UI instantiations -----------------------
@@ -3815,7 +3814,6 @@ void RtCollectionPortInit() {
     // one the switch exists to make cheap to bisect.
     // WAVE 10 LANE UIORACLE — the two-argument Array<System::String>, the one
     // caller of which is ?SetParameterCount@TextElement@UI@@ (ported this wave).
-    RegisterRuntimeAddr(0x180029a80, (void*)&RtColl_ArraySetSize_180029a80);
 
     // ---- Wave 9 lane UIW: the one helper that is neither SetSize nor ~Array
     // WAVE 9 LANE UIF — Array<UI::SpriteDraw>: append (3-arg) and clear (0-arg).
@@ -3838,40 +3836,8 @@ void RtCollectionPortInit() {
     // (B3R RT-Core: the LinkedList and Set-AVL registrars went with their rows,
     // which had no reader.)
 
-    // Wave 9 lane SAVE2: Collection::Set<Pair<String,String>>::Clear and its
-    // two helpers (0x18000f7d0 / 0x18000f890 / 0x18000fa90). Same reasoning
-    // again — this is the Collection namespace's one init hook. They are the
-    // boot-path door under the ported IO::Persistence::ReadSettings; see
-    // runtime/src/collection/set_clear.cpp and docs/runtime_port/WAVE9_LANE_SAVE2.md.
-    {
-        extern int RtCollectionSetClearRegister();
-        const int setClear = RtCollectionSetClearRegister();
-        printf("[RtPort]   Collection::Set Clear: %d addresses registered\n", setClear);
-    }
-
-    // Wave 9 lane COLL: the keyed Collection::Set/Map INSERT side (the three
-    // trees our tree reaches by address), the recursive subtree free, the
-    // packfile introsort and the last two element copy-assigns. Called from
-    // here because this is the Collection namespace's one init hook, the same
-    // reasoning as the linked list and lane VID2's AVL primitives above.
-    //
-    // It registers SIX addresses to lane VID2's bodies (the sibling retraces
-    // and rotations, byte-verified equal against the shipped DLL); those are
-    // distinct addresses, not a duplicate registration of one.
-    {
-        extern int RtCollectionAvlTreesRegister();
-        extern int RtCollectionSortRegister();
-        const int avl  = RtCollectionAvlTreesRegister();
-        const int sort = RtCollectionSortRegister();
-        // The CRT `_stricmp` / `__ascii_stricmp` the packfile descent compares
-        // with. Registered from here rather than a new init because it has no
-        // other owner and four live callers already reach it by address; see
-        // runtime/src/crt/msvc_stricmp.cpp for why it is not std::strcasecmp.
-        extern int  RtCrtStrICmpRegister();
-        const int icmp = RtCrtStrICmpRegister();
-        printf("[RtPort]   Collection keyed Set/Map + sort (lane COLL): "
-                    "%d + %d + %d addresses registered\n", avl, sort, icmp);
-    }
+    // (B3R RT-Core: the Set-Clear, keyed Set/Map, sort and stricmp registrars
+    // went with their rows, which had no reader.)
 
     // ---- CUTOVER CLOSURE BATCH 2b (2026-09-12) -----------------------------
     // Twenty-one addresses off docs/runtime_port/closure/WORKLIST.md, all
@@ -3901,20 +3867,6 @@ void RtCollectionPortInit() {
     // ported in this commit. Their two element-destroy helpers are registered
     // by array_destroy.cpp in the same commit, so both halves are ours and
     // neither of these three opens a door onto an unported callee.
-    RegisterRuntimeAddr(0x180028cd0, (void*)&RtColl_ArraySetSizeFill_180028cd0);
-
-    // BATCH 5 — the seventh Collection::Set instantiation, the compiled-path →
-    // packfile-id map IO::Modification::SetupFileSystem builds on its stack.
-    // Called from here because this is the Collection namespace's one init
-    // hook, the same reasoning as the linked list and lane VID2's AVL
-    // primitives below. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
-    // registers unconditionally).
-    {
-        extern int RtCollectionSetAvlPathIdRegister();
-        const int pathId = RtCollectionSetAvlPathIdRegister();
-        printf("[RtPort]   Collection::Set<Filename,uint32> (batch 5): "
-                    "%d addresses registered\n", pathId);
-    }
 
     // ---- VTABLE BATCH 7b (2026-09-12): six J3 two-argument addresses -------
     // The Array<T>::SetSize bodies batch 7's AnimationGroup::Serialize and

@@ -456,18 +456,3 @@ void DumpLoadCounters() {
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtObjectExternalLoadRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z",
-                          (void*)&RtObject::RtObject_External_Load); ++n;
-    RegisterRuntimeAddr(0x1800bc620, (void*)&RtObject::RtObject_External_Load);
-
-    printf("[RtPort]   Object::External::Load "
-                "(wave 11f lane IOSTREAM): %d export registered\n", n);
-    std::atexit(&RtObject::DumpLoadCounters);
-    return n;
-}

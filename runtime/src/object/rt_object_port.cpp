@@ -31,14 +31,11 @@
 extern int RtObjectTypeSystemRegister();          // type_system.cpp
 extern int RtObjectInternalRegister();            // internal.cpp
 extern int RtObjectExternalRegister();            // external.cpp
-extern int RtObjectExternalCompiledRegister();    // external_compiled.cpp
-extern int RtObjectExternalLoadRegister();        // external_load.cpp
-extern int RtObjectExternalForceUnloadRegister(); // external_forceunload.cpp
 
 // B3R RT-Core: every row the other thirteen register functions carried had no
 // reader by name or by address, so those functions went with their rows
 // (class_operator_delete.cpp and internalfactory_persist.cpp with them). The
-// six below still carry rows other blocks read.
+// three below still carry rows other blocks read.
 void RtObjectPortInit() {
     // ENDGAME B.3.9 OBJ (B39_RULES D7): the minted storage rows ARE the class
     // statics from here on (name door, address door, manifest publish). Every
@@ -47,9 +44,6 @@ void RtObjectPortInit() {
     n += RtObjectTypeSystemRegister();
     n += RtObjectInternalRegister();
     n += RtObjectExternalRegister();
-    n += RtObjectExternalCompiledRegister();
-    n += RtObjectExternalLoadRegister();
-    n += RtObjectExternalForceUnloadRegister();
 
     printf("[RtPort] Object: %d exports registered\n", n);
 }

@@ -252,20 +252,6 @@ extern "C" void* RtSystem_ConfigMap_Find(void* map, const String* wanted) {
 }
 
 // ============================================================================
-// ?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z    0x1800c47a0
-// ============================================================================
-// ORACLE: none, and none is manufactured. It runs once per process, from
-// Engine::Startup, and it mutates the process-wide configuration map — a replay
-// would insert every key twice. What it gets is a shadow that is meaningful
-// precisely because of §2: on an empty command line the post-condition is
-// "returned without touching the map", and the check reads the map's ROOT,
-// which this body never writes.
-// ENDGAME B.3.4b SYSTEM (4c): the door delegates; the body is the member below.
-extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* cmd) {
-    static_cast<System::Configuration*>(self)->SetCommandLine(RtSystem::Sys(*cmd));
-}
-
-// ============================================================================
 // ENDGAME B.3.4b SYSTEM (4c) — the `System::Configuration` member BODIES.
 // ============================================================================
 // Defined at GLOBAL scope with qualified names rather than inside a
@@ -511,79 +497,6 @@ System::String System::Configuration::ParseCommand(int& pos, const System::Strin
     return s.SubString(start, end - 1);                      // inclusive
 }
 
-// ============================================================================
-// ?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z
-//                                                  retail 0x1800c5300  ord 2495
-// ============================================================================
-// Wave 22 lane ERRCFG.
-//
-// THE SIGNATURE IS THREE REGISTERS, NOT TWO. `?AVString@2@` in the mangling is
-// a `System::String` returned BY VALUE, so MSVC inserts a hidden return slot as
-// the first ordinary argument:
-//
-//     RCX = this        RDX = String* ret        R8 = const String& key
-//
-// and retail says so on its first three instructions -- `MOV [RSP+0x10],RDX`
-// parks the return slot in its home space, `MOV RSI,RDX` keeps it, and
-// `MOV RDX,R8` shuffles the real argument down before the find. The function
-// returns `RAX = RSI`, the slot it was handed. An `fn_*` typedef that omitted
-// the slot would put `key` in RDX, hand the find a `String*` that is really a
-// `String**`, and then write the answer through whatever the caller happened to
-// leave in R8 -- a wild write that would STILL appear to return the right
-// answer, because RAX comes back correct either way
-// (reference_hidden_retslot_wild_write.md). The typedef above spells all three.
-//
-// WHAT IT DOES
-// ------------
-//     node = ConfigMap_Find(this + 0x10, key);        // 0x18002ace0, ported above
-//     temp = node ? node->value : nullptr;            // 0x1800c533b
-//     if (temp) ++temp[-4];                           // 0x1800c534c  temp's ref
-//     ret->data = nullptr;                            // 0x1800c537f
-//     if (temp) { ret->data = temp; ++temp[-4]; }     // 0x1800c538a  ret's ref
-//     <release temp>                                  // 0x1800c53a9 / 0x1800c53d5
-//     return ret;
-//
-// The refcount goes +2 then -1, never through zero, and the net is the +1 the
-// returned String owns. The transient +2 is written out rather than folded into
-// a single AddRef: nothing in this project can observe the difference, but
-// those two arms ARE the arms retail compiled, and a reader diffing this
-// against 0x1800c5300 should find them.
-//
-// THE TWO `TEST DIL,n` ARMS AND THE GARBAGE THEY GUARD. Retail keeps a
-// destructor-state byte at [RSP+0x20] (1 = the found-arm temporary is live,
-// 2 = the not-found-arm temporary is live, |4 = the return value is live), and
-// each arm loads the OTHER arm's UNINITIALISED stack slot into RCX/RBX before
-// falling into the common tail. That is not a bug and it is not transcribed:
-// the state bit guarding each release is clear in the arm that did not create
-// the temporary, so the garbage is never dereferenced. Modelled here as one
-// `temp`, which is what that state machine computes.
-//
-// ORACLE -- a real differential one, and it needs no snapshot.
-// -----------------------------------------------------------
-// This body is a PURE READ. It does not touch the map, so unlike SetCommandLine
-// a replay is not a double insert, and unlike ParseValue there is no aliased
-// in/out parameter to snapshot. The shipped body is run afterwards into a
-// second String and the two `data` POINTERS are compared -- as pointers, not as
-// text, which is the SHARPER test here precisely because neither side
-// allocates: both must hand back the identical buffer that lives in the map. A
-// text comparison would pass on two different nodes holding equal strings,
-// which is exactly the failure the ported find had once already (see §3).
-//
-// The replay takes a third reference, released afterwards through retail's own
-// idiom so the refcount ends where our body left it. Without that release a
-// diff run leaks one reference per call and no buffer in the configuration map
-// could ever be freed.
-// A HIDDEN-RETSLOT DOOR. The three-register shape above is preserved exactly:
-// the door takes the slot, placement-news the member's prvalue into it and
-// returns it (`MOV RAX,RSI`).
-extern "C" String* RtSystem_Configuration_GetCommandLineString(
-        void* self, String* ret, const String* key) {
-    new (RtSystem::Sys(ret)) System::String(
-        static_cast<const System::Configuration*>(self)
-            ->GetCommandLineString(RtSystem::Sys(*key)));
-    return ret;
-}
-
 System::String System::Configuration::GetCommandLineString(
         const System::String& key) const {
 
@@ -674,54 +587,4 @@ System::Configuration::~Configuration() {
     // rtcoll::RtColl_ArrayDtorElem_180010ab0.
     rtcoll::RtColl_ArrayDtorElem_180010ab0(static_cast<void*>(this));
 
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Every mangled name is ONE literal on ONE line, so runtime_census.py and
-// export_name_audit.py can see it.
-int RtSystemConfigurationRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z", (void*)&RtSystem_Configuration_SetCommandLine); ++n;
-    RegisterRuntimeAddr(0x1800c47a0, (void*)&RtSystem_Configuration_SetCommandLine);
-
-    // No export name in either build -- address only.
-    RegisterRuntimeAddr(0x18002ace0, (void*)&RtSystem_ConfigMap_Find);
-
-    // CLOSED 2026-09-08 by Wave 9 lane ADDR. Both by NAME (the two
-    // RT_EXPORT_ONCE sites in SetCommandLine above) and by ADDRESS
-    // (engine_funcs.cpp:1727 and :1729, which the address-door census listed as
-    // unregistered). BOTH DOORS, ALWAYS -- registering only the name would
-    // leave those two ResolveAddr sites resolving to null at cutover, which is
-    // the shape reference_by_address_door_dies_at_cutover.md records.
-
-
-    // ---- Wave 22 lane ERRCFG -----------------------------------------------
-    // BOTH DOORS for both rows. The NAME closes the census row and moves
-    // filesystem_setupdirs_win.cpp's two RT_EXPORT_ONCE call sites and
-    // engine_lifecycle.cpp's Engine::Shutdown; the ADDRESS closes the
-    // `ResolveAddr(Module::Runtime, ...)` door that would otherwise resolve to
-    // null at cutover (reference_by_address_door_dies_at_cutover.md).
-    RegisterRuntimeExport("?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z", (void*)&RtSystem_Configuration_GetCommandLineString); ++n;
-    RegisterRuntimeAddr(0x1800c5300, (void*)&RtSystem_Configuration_GetCommandLineString);
-
-
-    // DELIBERATELY ABSENT, with reasons in the banner:
-    //   (unexported) the map insert              0x18002a090  -> 0x18002a170
-    //       -> node alloc 0x18000f970, rebalance 0x18002a310 : a red-black
-    //          insert, a Collection lane's work.
-    //
-    //          CORRECTED 2026-09-08 by Wave 9 lane MOD: this line used to end
-    //          "unreachable on our boots", which is true of THIS FILE'S call
-    //          site (an empty command line, see the banner's §2) but NOT of the
-    //          address. persistence_registry_win.cpp:266 reaches the same
-    //          insert from ReadSettings, which every boot runs, and
-    //          persistence.cpp:59 wraps it as CallMapInsert. A reachability
-    //          claim belongs to a CALL SITE, not to an address -- the same
-    //          scope error reference_never_written_needs_by_whom.md records for
-    //          "never written", moved one level up. Whoever picks this row up
-    //          must not read "unreachable" and defer it. See WAVE9_LANE_MOD.md.
-    return n;
 }

@@ -233,7 +233,3 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
     fs->platformExistsGate = savedGate;
 }
 
-int RtClosure2bIoRegister() {
-    int n = 0;
-    return n;
-}

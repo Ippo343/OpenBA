@@ -60,10 +60,6 @@ const uint32_t* CrcTable() {
 
 }  // namespace
 
-extern "C" uint32_t RtSystem_CRC_Compute(const void* data, int count, uint32_t crc) {
-    return System::CRC::Compute(data, count, crc);
-}
-
 // ?Compute@CRC@System@@SAIPEBXHI@Z  retail 0x1800c5490 — the member body.
 uint32_t System::CRC::Compute(const void* data, int count, uint32_t crc) {
     if (count > 0) {
@@ -76,10 +72,4 @@ uint32_t System::CRC::Compute(const void* data, int count, uint32_t crc) {
         } while (--n != 0);
     }
     return ~crc;
-}
-
-int RtSystemCrcRegister() {
-    RegisterRuntimeExport("?Compute@CRC@System@@SAIPEBXHI@Z", (void*)&RtSystem_CRC_Compute);
-    RegisterRuntimeAddr(0x1800c5490ull, (void*)&RtSystem_CRC_Compute);
-    return 1;
 }

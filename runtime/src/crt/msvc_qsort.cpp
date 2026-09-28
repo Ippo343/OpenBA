@@ -168,8 +168,3 @@ recurse:
 // Registration -- address doors only; the CRT has no export names.
 // ============================================================================
 void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
-
-int RtCrtQsortRegister() {
-    RegisterRuntimeAddr(0x18007f050ull, (void*)&RtCrt_Qsort_18007f050);
-    return 1;
-}
