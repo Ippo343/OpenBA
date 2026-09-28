@@ -173,25 +173,27 @@ int32_t ActiveInterface() {
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
-using ScalarFn  = void (*)(ReaderWriter*, void*, const char*);
-using ArrayFn   = void (*)(ReaderWriter*, int, void*, const char*);
-using VersionFn = int  (*)(ReaderWriter*);
-using SkipFn    = void (*)(ReaderWriter*);
 using SetSizeFn = void (*)(void*, int);
 
+// B3X W0: the ReaderWriter members, by name on the real class (the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
+inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 inline void RwInt(ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, p, nullptr);
+    AsRw(rw)->SerializeInt(*reinterpret_cast<int32_t*>(p), nullptr);
 }
 inline void RwBool(ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8])(rw, p, nullptr);
+    AsRw(rw)->SerializeBool(*reinterpret_cast<bool*>(p), nullptr);
 }
 inline int RwVersion(ReaderWriter* rw) {
-    return reinterpret_cast<VersionFn>(rw->vtable[rt::io::rw_vtbl::kGetVersion / 8])(rw);
+    return AsRw(rw)->GetVersion();
 }
 inline void DeleteRw(ReaderWriter* rw) {
     if (rw == nullptr) return;
-    using DeleteFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+    AsRw(rw)->DeletingDtor(1);
 }
 
 // The `Serializer ser{stream,null}; rw = encoding->CreateReader/Writer(&ser,v)`
@@ -247,11 +249,11 @@ void PlatformSerializeArm(Video::ShaderProgram* self, Serializer* outer, int32_t
             RwInt(rw, &m);
             if (sub.stream->direction == rt::io::kDirectionReading)
                 RtAddr<SetSizeFn>(0x180029630ull)(blob, m);           // Array<uint8>::SetSize
-            reinterpret_cast<ArrayFn>(rw->vtable[rt::io::rw_vtbl::kArrayUChar / 8])(
-                rw, m, blob->_data, nullptr);
+            AsRw(rw)->SerializeUCharArray(
+                m, reinterpret_cast<unsigned char*>(blob->_data), nullptr);
         }
     } else {
-        reinterpret_cast<SkipFn>(rw->vtable[rt::io::rw_vtbl::kSkip / 8])(rw);
+        AsRw(rw)->Skip();
     }
     DeleteRw(rw);
 }

@@ -555,23 +555,25 @@ static_assert(kLvlTail + 4 <= kLvlStride, "detail-level fields must fit the 0xb0
 static_assert(kLvlTriCount == kLvlTriData + 8,
               "the triangle Array's _size must follow its _data, Collection::Array shape");
 
-using ScalarFn   = void (*)(ReaderWriter*, void*, const char*);
-using VersionFn  = int  (*)(ReaderWriter*);
-using SkipFn     = void (*)(ReaderWriter*);
 using SetSizeFn  = void (*)(void*, int32_t);
 using SerNFn     = void (*)(Serializer*, int32_t, void*);
 using BufSerFn   = void (*)(void*, Serializer*);
 
+// B3X W0: the ReaderWriter members, by name on the real class (the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
 void RwInt(ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, p, nullptr);
+    AsRw(rw)->SerializeInt(*static_cast<int32_t*>(p), nullptr);
 }
 int RwVersion(ReaderWriter* rw) {
-    return reinterpret_cast<VersionFn>(rw->vtable[rt::io::rw_vtbl::kGetVersion / 8])(rw);
+    return AsRw(rw)->GetVersion();
 }
 void DeleteRw(ReaderWriter* rw) {
     if (rw == nullptr) return;
-    using DeleteFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+    AsRw(rw)->DeletingDtor(1);
 }
 bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
 
@@ -688,7 +690,7 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
         const int32_t iface = ActiveInterface();
         const bool active = (arm == 0) ? (iface == 0) : (iface == 1 || iface == 2);
         if (!active) {
-            reinterpret_cast<SkipFn>(rw->vtable[rt::io::rw_vtbl::kSkip / 8])(rw);
+            AsRw(rw)->Skip();
             DeleteRw(rw);
             continue;
         }
@@ -762,20 +764,17 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
 void SpotLight::CreateTargets() {
     uint8_t* const self = reinterpret_cast<uint8_t*>(this);   // B.3.5 bridge
 
-    using CreateFn = bool (*)(void*, int32_t, int32_t, int32_t, uint32_t,
-                              int32_t, int32_t, int32_t,
-                              int32_t, int32_t, int32_t, void*);
-
     // ---- +0x148, the shadow colour image ----------------------------------
     {
         void* p = ImageBufferOperatorNew(0x68);
         if (p != nullptr) ImageBufferCtor(p);
         *reinterpret_cast<void**>(self + 0x148) = p;
-        void* const img = *reinterpret_cast<void**>(self + 0x148);
-        void** const vt = *reinterpret_cast<void***>(img);      // faithful: unguarded
-        reinterpret_cast<CreateFn>(vt[9])(img, 0, 0, 5,
-                                          0x40u, 0x400, 0x400,
-                                          1, 1, 1, 1, nullptr);
+        // Slot 9 `Create`, by name (B3X W0); faithful: unguarded.
+        Video::ImageBuffer* const img =
+            *reinterpret_cast<Video::ImageBuffer**>(self + 0x148);   // B.3.x bridge
+        img->Create(0, 0, 5,
+                    0x40u, 0x400, 0x400,
+                    1, 1, 1, 1, nullptr);
     }
 
     // ---- +0x150, the shadow depth image ------------------------------------
@@ -783,11 +782,11 @@ void SpotLight::CreateTargets() {
         void* p = ImageBufferOperatorNew(0x68);
         if (p != nullptr) ImageBufferCtor(p);
         *reinterpret_cast<void**>(self + 0x150) = p;
-        void* const img = *reinterpret_cast<void**>(self + 0x150);
-        void** const vt = *reinterpret_cast<void***>(img);
-        reinterpret_cast<CreateFn>(vt[9])(img, 0, 1, 7,
-                                          0x40u, 0x400, 0x400,
-                                          1, 1, 1, 1, nullptr);
+        Video::ImageBuffer* const img =
+            *reinterpret_cast<Video::ImageBuffer**>(self + 0x150);   // B.3.x bridge
+        img->Create(0, 1, 7,
+                    0x40u, 0x400, 0x400,
+                    1, 1, 1, 1, nullptr);
     }
 
     // ---- +0x158, the render target -----------------------------------------
@@ -857,11 +856,6 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
         return;
     }
 
-    using GeomReserveFn = int32_t (*)(const void*, void*, uint16_t, float);
-    using GeomMatrixFn  = const void* (*)(const void*, const float*, uint16_t, float);
-    using GeomDrawFn    = void (*)(const void*, void*, const void*, const void*,
-                                   float, int32_t, int32_t, int32_t);
-
     int32_t emitted = 0;
     int32_t drawn = 0;
     int64_t i = 0;
@@ -906,10 +900,11 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
 
             if (item->arg8 > 1) {
                 // ---- the instancing batch ---------------------------------
-                const void* const geom0 = item->geometry;
-                void** const gvt0 = *reinterpret_cast<void** const*>(geom0);
-                int32_t slotIndex = reinterpret_cast<GeomReserveFn>(gvt0[0x38 / 8])(
-                    geom0, ctx, item->arg5, self->frameAlpha);
+                // Geometry slot 7 `SetSharedInstanceData`, by name (B3X W0).
+                const Geometry* const geom0 =
+                    static_cast<const Geometry*>(item->geometry);   // B.3.x bridge
+                int32_t slotIndex = geom0->SetSharedInstanceData(
+                    context, item->arg5, self->frameAlpha);
                 const int32_t base = emitted - slotIndex;
 
                 batchCount = 0;
@@ -919,11 +914,14 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
                     ++batchCount;
                     itemOff += 0x38;
 
-                    const void* const g = *reinterpret_cast<const void* const*>(cur);
-                    void** const gvt = *reinterpret_cast<void** const*>(g);
+                    // Geometry slot 6 `GetInstanceTransform`, by name (B3X W0).
+                    // Its hidden return slot is `view` -- the stack matrix is
+                    // the storage, exactly as the raw call passed it.
+                    const Geometry* const g =
+                        *reinterpret_cast<const Geometry* const*>(cur);   // B.3.x bridge
                     const uint16_t sub = *reinterpret_cast<const uint16_t*>(cur + 0x1a);
-                    const void* m = reinterpret_cast<GeomMatrixFn>(gvt[0x30 / 8])(
-                        g, view, sub, self->frameAlpha);
+                    const void* m = g->GetInstanceTransform(
+                        reinterpret_cast<Math::Matrix*>(view), sub, self->frameAlpha);
                     ContextSetTransform(ctx, slotIndex, m);
 
                     ++slotIndex;
@@ -947,12 +945,16 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
                 step = 1;
             }
 
-            const void* const geom = item->geometry;
-            void** const gvt = *reinterpret_cast<void** const*>(geom);
-            reinterpret_cast<GeomDrawFn>(gvt[0x10 / 8])(
-                geom, ctx,
-                groupBase + groupOffset + offsetof(RtGraphics::RendererDrawGroup, cullCamera),
-                item->instance,
+            // Geometry slot 2 `Draw`, by name (B3X W0). The material handle is
+            // the 8-byte `ExternalPtr` passed by value in its register, as the
+            // raw call passed the pointer.
+            const Geometry* const geom =
+                static_cast<const Geometry*>(item->geometry);   // B.3.x bridge
+            geom->Draw(
+                context,
+                *reinterpret_cast<const ::Graphics::Camera*>(                // B.3.x bridge
+                    groupBase + groupOffset + offsetof(RtGraphics::RendererDrawGroup, cullCamera)),
+                ExternalPtrHandle{ const_cast<void*>(item->instance) },
                 self->frameAlpha,
                 static_cast<int32_t>(item->arg5),
                 shaderIndex,
