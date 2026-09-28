@@ -554,3 +554,29 @@ namespace rt { namespace io { struct Serializer; } }   // io/Serializer.h
 extern "C" void RtGraphics_SerializeMeshNodes(rt::io::Serializer* ser, int count, void* basev);  // 0x18005c120
 extern "C" void RtGraphics_SerializeAnimInstances(rt::io::Serializer* ser, int count, void* basev);  // 0x18005c660
 // ==== end B3R W0-P0c ====
+
+// ==== B3R RT-VG: the graphics-anim Collection::Array instantiations ====
+// Defined in runtime/src/collection/array_graphics_anim.cpp (given external
+// linkage for their direct readers in runtime/src/graphics/).
+namespace rtcoll {
+void* Rt_ArrayDtor_18001c480(void* a);  // 0x18001c480 ~Array<AnimationState::Layer>
+void* Rt_ArrayDtor_18001c550(void* a);  // 0x18001c550 ~Array<InterpolatedState<Transform>>
+void* Rt_ArrayDtor_180014090(void* a);  // 0x180014090 ~Array<GraphicsMesh::Node>
+void* Rt_ArrayDtor_18005bbb0(void* a);  // 0x18005bbb0 ~Array<AnimationState>
+void Rt_SetSize_18005aa30(void* a, int n);  // 0x18005aa30 Array<GraphicsMesh::Node>
+void Rt_SetSize_18005b1e0(void* a, int n);  // 0x18005b1e0 Array<AnimationState>
+void Rt_SetSize_18005c8a0(void* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
+void Rt_SetSize_18005ac50(void* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
+void Rt_SetSize_18005c3d0(void* a, int n);  // 0x18005c3d0 Array<Instance>
+void Rt_SetSize_18005be30(void* a, int n, const void* fill);  // 0x18005be30 Array<Instance>, fill
+void* Rt_ArrayAssign_180013960(void* d, const void* s);  // 0x180013960 Array<GraphicsMesh::Node>
+void* Rt_ArrayAssign_18005b130(void* d, const void* s);  // 0x18005b130 Array<AnimationState>
+void* Rt_ArrayAssign_18001b700(void* d, const void* s);  // 0x18001b700 Array<AnimationState::Layer>
+void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
+}  // namespace rtcoll
+// ---- graphics/wave27_lane_gfxbig.cpp: the Update door (it counts its calls
+// for the [GFXBIG27] line, then calls Graphics::AnimationState::Update)
+extern "C" bool RtGraphics_AnimationState_Update(
+        void* self, const void* time, const void* nodes, const void* baseTransform,
+        void* interpA, void* interpB, void* outVec3, bool rootOnly, bool applyEvents);  // 0x1800fdb20
+// ==== end B3R RT-VG ====

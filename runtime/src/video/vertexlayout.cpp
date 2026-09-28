@@ -88,8 +88,8 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/system/String.h"
-#include "../../../standalone/resolve.h"
 #include "../../types/collection/Collection.h"
+#include "../../types/io/Modification.h"   // RtIO::RtColl_ArrayU8Dtor_1800112a0
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../../types/video/VertexLayout.h"
@@ -108,9 +108,6 @@ void* ActiveDeviceDataPtr() {
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
 }
 constexpr size_t kDeviceDataCreateVertexLayoutData = 0x70;   // DeviceData vtable slot 14
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
@@ -207,9 +204,8 @@ void VertexLayout::Destruct() { this->~VertexLayout(); }
 // `_refs`.
 VertexLayout::~VertexLayout() {
     this->Video::VertexLayout::PlatformDestruct();
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x1800112a0ull)(&_signature);   // Array<uint8>::~Array
-    RtAddr<ArrayDtorFn>(0x18004fa30ull)(&_elements);    // ~Array<Element> (releases names)
+    RtIO::RtColl_ArrayU8Dtor_1800112a0(&_signature);     // 0x1800112a0 Array<uint8>::~Array
+    rtcoll::RtColl_ArrayDtorElem_18004fa30(&_elements);  // 0x18004fa30 ~Array<Element> (releases names)
 }
 
 // ?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ  0x18004ddc0:
@@ -261,17 +257,16 @@ bool VertexLayout::Serialize(void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    using SetSizeFn = void (*)(void*, int);
     int32_t n = _elements._size;
     AsRw(rw)->SerializeInt(n, nullptr);
-    if (ser.stream->direction == 0) RtAddr<SetSizeFn>(0x180056240ull)(&_elements, n);
+    if (ser.stream->direction == 0) rtcoll::RtColl_ArraySetSize_180056240(&_elements, n);
     // Retail CALLs 0x1800563c0; this IS that function, in this file.
     RtVideo_VertexLayout_SerializeElements(&ser, n, _elements._data);
 
     // PlatformSerialize (0x1800f5ff0), inlined by retail and inlined here.
     int32_t m = _signature._size;
     AsRw(rw)->SerializeInt(m, nullptr);
-    if (ser.stream->direction == 0) RtAddr<SetSizeFn>(0x180029630ull)(&_signature, m);
+    if (ser.stream->direction == 0) rtcoll::RtColl_ArraySetSize_180029630(&_signature, m);
     AsRw(rw)->SerializeUCharArray(
         m, reinterpret_cast<unsigned char*>(_signature._data), nullptr);
 
@@ -284,17 +279,3 @@ bool VertexLayout::Serialize(void* streamv) {
 }
 
 }  // namespace Video
-
-// ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2), and
-// the unexported element loop by address.
-int RtVideoVertexLayoutRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::VertexLayout::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004ddc0ull, (void*)&Video::VertexLayout::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@VertexLayout@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::VertexLayout::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004de40ull, (void*)&Video::VertexLayout::CreateInPlaceObject);
-    RegisterRuntimeAddr  (0x1800563c0ull,                                (void*)&RtVideo_VertexLayout_SerializeElements); ++n;
-    return n;
-}

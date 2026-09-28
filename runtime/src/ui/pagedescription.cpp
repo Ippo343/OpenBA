@@ -34,7 +34,6 @@
 // doors and the ??0 / ??1 doors, read only by the retired minted table, its
 // RT_DELDTOR row and ui_factory_wave28.cpp's row, are gone.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>
@@ -46,28 +45,6 @@
 namespace {
 
 using namespace rtdesc;
-
-// RULE B6-5: namespace-scope atomic door caches for the member bodies.
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_setActivePage{nullptr};
-
-// ?SetActivePage@PageElement@UI@@QEAAXH@Z (0x1800d5110) — the member is
-// declared in PageElement.h, but its body is widgets_layout.cpp's registered
-// door (fragment pass), so a member call would not link: reached by name.
-void CallSetActivePage(UI::PageElement* elem, int32_t page) {
-    using SetActivePageFn = void (*)(void*, int32_t);
-    reinterpret_cast<SetActivePageFn>(AtomicResolve(
-        g_setActivePage, "?SetActivePage@PageElement@UI@@QEAAXH@Z"))(elem, page);
-}
 
 }  // namespace
 
@@ -150,8 +127,7 @@ Object::InternalPtr<Element>* PageDescription::CreateInstance(
         if (child != nullptr)
             child->_parent = elem;                             // 1800d5390
 
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                                elem->_children._size + 1,
                                                made);          // 1800d53a9
 
@@ -159,8 +135,8 @@ Object::InternalPtr<Element>* PageDescription::CreateInstance(
             n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
-    CallSetActivePage(elem, -1);                               // 1800d53d4
-    CallSetActivePage(elem, _activePage);                      // 1800d53df
+    elem->SetActivePage(-1);                                   // 1800d53d4  0x1800d5110
+    elem->SetActivePage(_activePage);                          // 1800d53df
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d53e4
     return ret;
@@ -190,20 +166,6 @@ Object::Base* PageDescription::CreateInPlaceObject(void* place) {
     return ::new (place) PageDescription();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiPageDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@PageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::PageDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180046fd0ull, (void*)&UI::PageDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@PageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::PageDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180047050ull, (void*)&UI::PageDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::PageDescription's own type record, built at CRT init

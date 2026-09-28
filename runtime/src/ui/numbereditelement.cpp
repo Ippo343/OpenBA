@@ -24,7 +24,6 @@
 // at EditElement's end (the old 0xE8 + pad arithmetic is gone). The text field
 // this class reads is EditElement's `_text` at +0xC8.
 // ============================================================================
-#include <atomic>
 
 #include "element_common.h"
 #include "../../types/ui/NumberEditElement.h"
@@ -34,14 +33,8 @@ using namespace rtuielem;
 
 namespace {
 
-using ToIntegerFn = int32_t (*)(const char* s);
-using MemFreeFn = void (*)(void* p);
-// `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns a
-// System::String BY VALUE, so the first argument is the HIDDEN RETURN SLOT
-// (reference_hidden_retslot_wild_write.md).
-using FormatIntFn = void* (*)(void* ret, const char* fmt, int64_t a);
 
-void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // The inlined String::operator= (release old with retail's asymmetry, store,
 // addref) and the release of the caller's temporary.
@@ -86,7 +79,7 @@ NumberEditElement::~NumberEditElement() {}
 // FinalizeText.
 // ---------------------------------------------------------------------------
 void NumberEditElement::FinalizeText() {
-    const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(_text);
+    const int32_t v = System::String::ToInteger(_text);
 
     int32_t clamped = _min;
     if (_min <= v) {
@@ -95,7 +88,9 @@ void NumberEditElement::FinalizeText() {
     }
 
     void* tmp = nullptr;
-    RtAddr<FormatIntFn>(0x1800c9730ull)(&tmp, "%i", clamped);
+    // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns BY VALUE:
+    // its hidden return slot is `tmp`.
+    new (static_cast<void*>(&tmp)) System::String(System::String::Format("%i", clamped));
     AssignString(_text, static_cast<char*>(tmp));
     ReleaseStringLocal(&tmp);
 }
@@ -117,22 +112,6 @@ Object::Base* NumberEditElement::CreateInPlaceObject(void* place) {
     return ::new (place) NumberEditElement();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the slot doors, the ??0 and ??1 doors,
-// read only by the retired minted table / RT_DELDTOR row / FACTUI2 row, are
-// gone. The factory pair (B39_RULES D2) is the class's own.
-// ============================================================================
-int RtUiNumberEditElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::NumberEditElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180046340ull, (void*)&UI::NumberEditElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::NumberEditElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x1800463e0ull, (void*)&UI::NumberEditElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberEditElement's own type record, built at CRT init

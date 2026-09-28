@@ -104,25 +104,24 @@ members (B.4).
 The 19 misnamed `engine_funcs` globals of `b3r_session/INVENTORY_E_ENGINE_FUNCS.md` §5.8 die with
 the globals and are not repeated here.
 
-## 7. The zone refresh `0x14009c480` is called with a seed WE chose — OPEN
+## 7. `Pf_ZoneRefresh_9c480` declares three parameters retail does not have — CONFIRMED (signature only)
 
-**Where.** `code/Game/Work/foresterwork*.cpp`, `buildstructure*.cpp` (commits `6067e8a1`,
-`4b9d6b19`), `code/Game/Game/gamegrid_serialize.cpp` (`fn_Map_Invalidate`), and the Action callers.
+**Where.** The body of retail `0x14009c480`, and its callers in `code/Game/Work` (commits
+`6067e8a1`, `4b9d6b19`), `code/Game/Game/gamegrid_serialize.cpp` (`e200bbb6`) and `code/Game/Action`.
 
-**What the code does.** The body `Pf_ZoneRefresh_9c480` takes four parameters and hands the fourth
-to the flood fill (`0x14009c170`) as its seed. Retail's callers `0x1400eb303`, `0x1400e532a`,
-`0x1400e54ea`, `0x1400e556c` load ONLY RCX before the call. The old door was typedef'd with one
-parameter, so our callers left RDX / R8 / R9 as whatever the compiler had there; the direct calls
-pass `(grid, 0, 0, 0)`.
+**What the code does.** The body is declared with four parameters and hands the fourth to the flood
+fill (`0x14009c170`). The direct calls pass `(grid, 0, 0, 0)`.
 
-**Why it is open.** Either (a) the body's parameter list is wrong — Ghidra drops and invents
-arguments on forwarders, and retail's function may take ONE parameter and compute the seed itself —
-or (b) retail really reads a stale register, in which case its value at each call site is whatever
-the preceding code left there and can be read from the disassembly. Zero is neither.
+**Retail** (read 2026-09-28 by the registry teardown's G-Game block). The callers `0x14009f29e`,
+`0x1400eb303`, `0x1400e532a`, `0x1400e54ea`, `0x1400e556c` load ONLY RCX. `0x14009c480` WRITES EDX
+and R8D before it reads them (`0x14009c4bd`, `0x14009c520` / `c524`) and never touches R9;
+`0x14009c170` overwrites R9D at `0x14009c26f` and rewrites its home slot (`c365`, `c3e8`) before any
+read. So no incoming value of RDX, R8 or R9 is ever read: the three extra parameters are Ghidra's
+(it invents arguments from register use), and what the callers pass cannot matter. The gate showed
+no diff on any route or resave.
 
-**What a fix must do.** Read `0x14009c480`'s prologue (which argument registers it reads before
-writing them) and `0x14009c170`'s use of the seed. If (a): correct the body's signature. If (b):
-pass what the caller's preceding instructions leave in R9.
+**What a fix must do.** Declare the body with ONE parameter and make its three former parameters
+locals; drop the zeros at the callers. No behaviour change. Same check for `0x14009c170`'s list.
 
 ## 8. Wrong BINDINGS found in `code/Game/Dialog` — SUSPECTED
 
@@ -153,3 +152,13 @@ The image bytes at `0x140172248` are `00 00 7a 44` (1000.0f, read in Ghidra 2026
 in the placement code calls the cell 0.5, and `code/Game/Player/tool_base_tile*.cpp` hard-codes
 `250.0f` where retail reads this cell. **What a fix must do:** read retail's instruction at the
 `tool_base_tile` site and use `kRdata_140172248` if that is the operand.
+
+## 11. `String::ToInteger` and a `memmove` were never reachable from the UI edit widgets — FIXED, not exercised
+
+`runtime/src/ui`: `NumberEditElement::FinalizeText`, `SpinnerElement` (3 sites) and `DocumentText`
+resolved `0x18003f620` (`System::String::ToInteger`), and `EditElement` resolved `0x18008a290`
+(a `memmove`), by ADDRESS. Nothing registered either address, so both resolved to null and the first
+call would have jumped to 0. Fixed 2026-09-28 (`behaviour:` commit `638c4b3a`, the registry
+teardown's RT-UI block): direct calls of `System::String::ToInteger` and `std::memmove`.
+No gate route types into a number field or edits text, so the fix is compiled and unit-built but
+has NOT been seen running. A route that types into the New Game seed field would exercise it.

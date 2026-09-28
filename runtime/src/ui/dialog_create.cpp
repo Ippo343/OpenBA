@@ -129,18 +129,10 @@
 #include "../../types/ui/GroupElement.h"
 #include "../../types/ui/Element.h"       // ENDGAME B.3.6 closing pass: FindElement
 #include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.6 closing pass: GetSpriteIndexFromName
+#include "../../types/system/MemoryAllocator.h"
 #include <new>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
-// ---- ResolveExport / ResolveAddr -------------------------------------------
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: resolve.h drags in <windows.h>, whose <wingdi.h>
-// declares a function called `Rectangle` and whose <windef.h> #defines
-// `near`/`far` away. These declarations must stay byte-identical to
-// resolve.h's; the linker checks the two against each other.
-void* ResolveExport(const char* mangled_name);
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 using RtUI::Dialog;
 using RtUI::DialogController;
 using RtUI::DialogInstance;
@@ -174,16 +166,10 @@ enum : size_t {
 constexpr uint32_t kElementNeedsSizeCalc = 0x8000000u;
 
 // ---- The allocator boundary ------------------------------------------------
-// BY ADDRESS, NOT BY NAME, and deliberately: see the banner. Identical to
-// runtime/src/collection/array.cpp's pair, including the retry-a-miss contract
-// (at cutover this address is supplied by the allocator's own arming path, and
-// a caller that ran before that point would otherwise freeze a null into the
-// static for the life of the process).
+// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50), called
+// directly (B3R RT-UI).
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
 // ---- Probe scheduling ------------------------------------------------------
@@ -205,9 +191,7 @@ template <class T> inline const T& F(const void* p, size_t off) {
 }
 
 // ============================================================================
-// Callees, all through the SEAM (ResolveAddr / ResolveExport), never the raw
-// door — so that when another lane ports one of these, our body follows it,
-// which is what retail's own direct near-CALL into the same DLL amounted to.
+// Callees, called by name (B3R RT-UI).
 // ============================================================================
 
 // ENDGAME B.3.2 step 2 — the three forwarders that used to sit here are GONE.
@@ -237,13 +221,9 @@ int32_t GetSpriteIndexFromName(const void* sheet, const void* nameString) {
         *static_cast<const System::String*>(nameString));
 }
 
-// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390  (PORTED, Wave 3 lane A —
-// which is exactly why this goes through the seam and not the raw address.)
+// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390.
 bool IsDerivedFrom(const void* obj, uint32_t typeId) {
-    using Fn = bool (*)(const void*, uint32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-    return fn(obj, typeId);
+    return reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(typeId);   // B.3.x bridge
 }
 
 
@@ -298,11 +278,8 @@ RtObject::Factory* FactorySingleton() {
 // the body does NOT return; it walks to the end of the loop and appends another
 // record with the same id (WAVE7_LANE_B.md §6c). Ported as written.
 // ============================================================================
-void RtUiDialogInstance_StartTimer(void* self, int32_t id, int64_t time) {
-    // B.3.6: the body is UI::DialogInstance::StartTimer (bottom of file).
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::StartTimer(id, time);
-}
+// B3R RT-UI: the door went with its registration (no reader); the body is
+// UI::DialogInstance::StartTimer, bottom of file.
 
 // ============================================================================
 // ?AddController@DialogInstance@UI@@QEAAX I PEAVBase@Object@@
@@ -325,18 +302,8 @@ void RtUiDialogInstance_StartTimer(void* self, int32_t id, int64_t time) {
 //
 // THE TWO UNGUARDED NULL DEREFERENCES ARE RETAIL'S. See the banner.
 // ============================================================================
-void RtUiDialogInstance_AddControllerTab(void* self, uint32_t typeId, void* dataSource,
-                                         void* config, void** containerPtr) {
-    // B.3.6: the body is UI::DialogInstance::AddController (4-arg, bottom of
-    // file). The InternalPtr arrives BY ADDRESS; it is dereferenced here, on
-    // both of retail's arms, exactly where 0x18011341b dereferences it.
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::AddController(
-            typeId, static_cast<Object::Base*>(dataSource),
-            Object::ExternalPtr<UI::DialogControllerConfig>(
-                static_cast<UI::DialogControllerConfig*>(config)),
-            Object::InternalPtr<UI::Element>(static_cast<UI::Element*>(*containerPtr)));
-}
+// B3R RT-UI: the door went with its registration (no reader); the body is
+// UI::DialogInstance::AddController (4-arg), bottom of file.
 
 // ============================================================================
 // ?AddController@DialogInstance@UI@@QEAAX I PEAVBase@Object@@
@@ -368,18 +335,8 @@ void RtUiDialogInstance_AddControllerTab(void* self, uint32_t typeId, void* data
 // WHEN `desc` IS NULL the whole of phases 1 and 2 is skipped (0x1801134aa) and
 // the body goes straight to phase 3 with a null element.
 // ============================================================================
-void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSource,
-                                       void* config, void* desc, const void* nameString) {
-    // B.3.6: the body is UI::DialogInstance::AddController (5-arg, bottom of file).
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::AddController(
-            typeId, static_cast<Object::Base*>(dataSource),
-            Object::ExternalPtr<UI::DialogControllerConfig>(
-                static_cast<UI::DialogControllerConfig*>(config)),
-            Object::ExternalPtr<UI::ElementDescription>(
-                static_cast<UI::ElementDescription*>(desc)),
-            *static_cast<const System::String*>(nameString));
-}
+// B3R RT-UI: the door went with its registration (no reader); the body is
+// UI::DialogInstance::AddController (5-arg), bottom of file.
 
 // (ENDGAME B.3.9 UI-D: the ??0DialogInstance door `RtUiDialogInstance_Ctor`
 // (0x180114870) is retired; the exe's last three door sites spell
@@ -687,35 +644,3 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
 }
 
 }  // namespace UI
-
-// ============================================================================
-// Registration.
-//
-// Every mangled name below is repeated AS ITS OWN STRING LITERAL rather than
-// through a named constant: tools/runtime_census.py cannot see through a named
-// constant and would under-count the lane
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-int RtUiDialogCreateRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport(
-        "?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@"
-        "V?$ExternalPtr@VDialogControllerConfig@UI@@@4@"
-        "V?$ExternalPtr@VElementDescription@UI@@@4@AEBVString@System@@@Z",
-        (void*)&RtUiDialogInstance_AddController6);
-    RegisterRuntimeAddr(0x180113470, (void*)&RtUiDialogInstance_AddController6);      ++n;
-
-    RegisterRuntimeExport(
-        "?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@"
-        "V?$ExternalPtr@VDialogControllerConfig@UI@@@4@"
-        "V?$InternalPtr@VElement@UI@@@4@@Z",
-        (void*)&RtUiDialogInstance_AddControllerTab);
-    RegisterRuntimeAddr(0x1801133b0, (void*)&RtUiDialogInstance_AddControllerTab);    ++n;
-
-    RegisterRuntimeExport("?StartTimer@DialogInstance@UI@@QEAAXHVTime@System@@@Z",
-                          (void*)&RtUiDialogInstance_StartTimer);
-    RegisterRuntimeAddr(0x1801137c0, (void*)&RtUiDialogInstance_StartTimer);          ++n;
-
-    return n;
-}

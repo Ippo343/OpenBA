@@ -106,14 +106,10 @@
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
-
-// standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
-// and <wingdi.h> declares a function called `AlphaBlend`, which would make
-// Video::RenderState::AlphaBlend ambiguous at every use. Same local declaration
-// runtime/src/collection/array.cpp and runtime/src/object/deleting_dtor.cpp
-// carry, for the same PLAN.md §4.1 reason; the linker checks the two spellings.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/video/VideoProgram.h"      // RtVideo_VertexProgram_SerializeStreams
+#include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
+#include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_*
+#include "../../types/system/MemoryAllocator.h"
 
 namespace {
 
@@ -130,15 +126,6 @@ void* ActiveDeviceDataPtr() {
     if (!device) return nullptr;
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
 }
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
-using SetSizeFn = void (*)(void*, int);
-using LoopFn    = void (*)(Serializer* ser, int count, void* data);
-using DestroyFn = void (*)(void* ignoredThis, void* base, int count);
-using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
-using MemFreeFn = void (*)(void*);
 
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
@@ -162,7 +149,7 @@ struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
 // exported ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) is that
 // sequence instruction for instruction, plus the null guard retail also does
 // (runtime/src/collection/array.cpp "THE ALLOCATOR BOUNDARY").
-void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+using System::MemoryAllocator;
 
 // ---- the version-0 legacy block -------------------------------------------
 // A version-0 file stored the vertex declaration on the program itself. Nothing
@@ -178,11 +165,12 @@ void SerializeLegacyV0(Serializer* ser) {
     ArrayHdr namesB    = { nullptr, 0, 0 };   // Array<System::String>
     int32_t  n = 0;
 
-    RtAddr<ExtPtrSerFn>(0x180055090ull)(&droppedLayout, ser);   // ExternalPtr<VertexLayout>
+    RtObject_ExternalPtrSerialize_VertexLayout(                // 0x180055090 ExternalPtr<VertexLayout>
+        reinterpret_cast<RtObject::External**>(&droppedLayout), ser);
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x1800567d0ull)(&elements, n);
+    if (reading) rtcoll::RtColl_ArraySetSize_1800567d0(&elements, n);
     {
         uint8_t* e = static_cast<uint8_t*>(elements.data);
         for (int32_t i = 0; i < n; ++i, e += 0x18) {
@@ -196,31 +184,34 @@ void SerializeLegacyV0(Serializer* ser) {
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x180056af0ull)(&streams, n);
-    RtAddr<LoopFn>(0x180056db0ull)(ser, n, streams.data);
+    if (reading) rtcoll::RtColl_ArraySetSize_180056af0(&streams, n);
+    RtVideo_VertexProgram_SerializeStreams(ser, n, streams.data);   // 0x180056db0
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x180029a80ull)(&namesA, n);   // Array<String>::SetSize
-    RtAddr<LoopFn>(0x180029bb0ull)(ser, n, namesA.data);          // Array<String> serialize loop
+    // RtIo_SerializeStringArray (0x180029bb0): its 4th parameter is unused --
+    // retail spills R9 to its home slot and overwrites that slot (0x180029d00)
+    // before any read.
+    if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesA, n);   // Array<String>::SetSize
+    RtIo_SerializeStringArray(ser, n, namesA.data, nullptr);          // Array<String> serialize loop
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x180029a80ull)(&namesB, n);
-    RtAddr<LoopFn>(0x180029bb0ull)(ser, n, namesB.data);
+    if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesB, n);
+    RtIo_SerializeStringArray(ser, n, namesB.data, nullptr);
 
     uint8_t flag = 0;
     RwBool(rw, &flag);
 
     // Teardown, in retail's order: namesB, namesA, streams, elements.
-    RtAddr<DestroyFn>(0x180011010ull)(nullptr, namesB.data, namesB.size);
-    MemFree(namesB.data);   namesB  = ArrayHdr{ nullptr, 0, 0 };
-    RtAddr<DestroyFn>(0x180011010ull)(nullptr, namesA.data, namesA.size);
-    MemFree(namesA.data);   namesA  = ArrayHdr{ nullptr, 0, 0 };
-    RtAddr<DestroyFn>(0x180056cb0ull)(nullptr, streams.data, streams.size);
-    MemFree(streams.data);  streams = ArrayHdr{ nullptr, 0, 0 };
-    RtAddr<DestroyFn>(0x180056960ull)(nullptr, elements.data, elements.size);
-    MemFree(elements.data); elements = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesB.data, namesB.size);
+    MemoryAllocator::MemFree(namesB.data);   namesB  = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesA.data, namesA.size);
+    MemoryAllocator::MemFree(namesA.data);   namesA  = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyVtxStream_180056cb0(nullptr, streams.data, streams.size);
+    MemoryAllocator::MemFree(streams.data);  streams = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyStrings_180056960(nullptr, elements.data, elements.size);
+    MemoryAllocator::MemFree(elements.data); elements = ArrayHdr{ nullptr, 0, 0 };
     (void)namesA; (void)namesB; (void)streams; (void)elements; (void)droppedLayout;
 }
 
@@ -418,7 +409,7 @@ extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, vo
         RwInt(ser->readerWriter, &n);                        // 180056df6
 
         if (ser->stream->direction == rt::io::kDirectionReading)   // 180056dfc
-            RtAddr<SetSizeFn>(0x1800567d0ull)(e + 0x00, n);        // 180056e0c
+            rtcoll::RtColl_ArraySetSize_1800567d0(e + 0x00, n);    // 180056e0c
 
         uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x00); // 180056e15
         for (int32_t k = 0; k < n; ++k, p += 0x18) {         // 180056e22
@@ -431,45 +422,4 @@ extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, vo
 
         reinterpret_cast<System::String*>(e + 0x10)->Serialize(ser);   // B.3.1 bridge
     }
-}
-
-int RtVideoVertexProgramRegister() {
-    int n = 0;
-    // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
-    RegisterRuntimeExport("?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::VertexProgram::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004e650ull, (void*)&Video::VertexProgram::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::VertexProgram::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004e6d0ull, (void*)&Video::VertexProgram::CreateInPlaceObject);
-
-    // Batch D1: unexported in both builds, address door only.
-    RegisterRuntimeAddr  (0x180056db0ull, (void*)&RtVideo_VertexProgram_SerializeStreams); ++n;
-
-    RegisterRuntimeExport("?TypeId@VertexProgram@Video@@SAIXZ",        (void*)&RtVideo_VertexProgram_TypeId);   ++n;
-    RegisterRuntimeAddr  (0x18004e550ull,                              (void*)&RtVideo_VertexProgram_TypeId);
-    RegisterRuntimeExport("?_TypeName@VertexProgram@Video@@CAPEBDXZ",       (void*)&RtVideo_VertexProgram_StaticTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e520ull,                                   (void*)&RtVideo_VertexProgram_StaticTypeName);
-    RegisterRuntimeExport("?_ParentTypeName@VertexProgram@Video@@CAPEBDXZ", (void*)&RtVideo_VertexProgram_ParentTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e530ull,                                   (void*)&RtVideo_VertexProgram_ParentTypeName);
-    RegisterRuntimeExport("?_FileExtension@VertexProgram@Video@@CAPEBDXZ",  (void*)&RtVideo_VertexProgram_FileExtension); ++n;
-    RegisterRuntimeAddr  (0x18004e510ull,                                   (void*)&RtVideo_VertexProgram_FileExtension);
-
-
-    RegisterRuntimeExport("?GetData@VertexProgram@Video@@QEBAPEBVVertexProgramData@2@XZ",
-                          (void*)&RtVideo_VertexProgram_GetData); ++n;
-    RegisterRuntimeAddr  (0x18004e720ull, (void*)&RtVideo_VertexProgram_GetData);
-    RegisterRuntimeExport("?Bind@VertexProgram@Video@@QEBAXAEAVContext@2@H@Z",
-                          (void*)&RtVideo_VertexProgram_Bind); ++n;
-    RegisterRuntimeAddr  (0x1800f6660ull, (void*)&RtVideo_VertexProgram_Bind);
-    RegisterRuntimeExport("?PlatformConstruct@VertexProgram@Video@@AEAAXXZ",
-                          (void*)&RtVideo_VertexProgram_PlatformConstructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f65e0ull, (void*)&RtVideo_VertexProgram_PlatformConstructExport);
-    RegisterRuntimeExport("?PlatformCreate@VertexProgram@Video@@AEAA_NXZ",
-                          (void*)&RtVideo_VertexProgram_PlatformCreateExport); ++n;
-    RegisterRuntimeAddr  (0x1800f6640ull, (void*)&RtVideo_VertexProgram_PlatformCreateExport);
-    RegisterRuntimeExport("?PlatformDestruct@VertexProgram@Video@@AEAAXXZ",
-                          (void*)&RtVideo_VertexProgram_PlatformDestructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f6620ull, (void*)&RtVideo_VertexProgram_PlatformDestructExport);
-    return n;
 }

@@ -84,6 +84,7 @@
 #include <new>       // ENDGAME B.3.5: the hidden-retslot door placement-news (RULE B5-12)
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../../types/video/Device.h"
 
 using RtVideo::Adapter;
@@ -91,11 +92,6 @@ using RtVideo::Device;
 using RtVideo::DisplayMode;
 using RtVideo::GraphicsInterface;
 using RtVideo::RefreshRate;
-
-// Declared locally rather than by including standalone/resolve.h (PLAN §4.1
-// decision 1). Byte-identical to device_startup.cpp:109.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // Already ported, in device_startup.cpp (Wave 9 lane VID2). Called, not copied.
 extern "C" void  RtVideo_ArrayModeElemDestroy(void* unused, void* data, int32_t count);
@@ -109,24 +105,6 @@ extern "C" void* RtVideo_ArrayRefreshAssign(void* dst, const void* src);
 extern "C" void RtVideo_Device_AdjustDisplay(void* self);
 
 namespace {
-
-// ---------------------------------------------------------------------------
-// The allocator boundary. Cache a hit, RETRY a miss — identical to
-// device_startup.cpp:129, and deliberately not shared with it: that file keeps
-// these in its own anonymous namespace for the same reason.
-// ---------------------------------------------------------------------------
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
 
 // The 16-byte Collection::Array header, {data, size, capacity}.
 struct ArrayHdr {
@@ -157,7 +135,7 @@ void GrowTo(ArrayHdr* a, int32_t n, int32_t old, int stride, int align) {
     if (n > a->capacity) {
         a->capacity = n;
         if (n == old + 1 && old != 0) a->capacity = n * 3;
-        a->data = MemAlloc(static_cast<uint64_t>(
+        a->data = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
                       static_cast<int64_t>(a->capacity) * stride), align);
     }
 }
@@ -183,7 +161,7 @@ void StringRelease(void** slot) {
     int32_t* rc = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) - 4);
     if (--*rc == 0) {
         *slot = static_cast<uint8_t*>(*slot) - 8;
-        MemFree(*slot);
+        System::MemoryAllocator::MemFree(*slot);
     } else {
         *slot = nullptr;
     }
@@ -205,7 +183,7 @@ void StringReleaseInLoop(void** slot) {
     if (--*rc == 0) {
         void* base = static_cast<uint8_t*>(*slot) - 8;
         *slot = base;
-        if (base) MemFree(base);
+        if (base) System::MemoryAllocator::MemFree(base);
     } else {
         *slot = nullptr;
     }
@@ -244,7 +222,7 @@ extern "C" void RtVideo_ArrayAdapterElemDestroy(void* /*unused*/, void* data, in
         // +0x18 Array<bool> — data freed, then size AND capacity cleared by one
         // qword store at +0x20 (0x180010e2b/0x180010e2f, relative to elem+0x10).
         void* msaa = *reinterpret_cast<void**>(e + 0x18);
-        if (msaa) MemFree(msaa);
+        if (msaa) System::MemoryAllocator::MemFree(msaa);
         *reinterpret_cast<uint64_t*>(e + 0x18) = 0;
         *reinterpret_cast<uint64_t*>(e + 0x20) = 0;
 
@@ -253,7 +231,7 @@ extern "C" void RtVideo_ArrayAdapterElemDestroy(void* /*unused*/, void* data, in
                                      *reinterpret_cast<void**>(e + 0x08),
                                      *reinterpret_cast<int32_t*>(e + 0x10));
         void* modes = *reinterpret_cast<void**>(e + 0x08);
-        if (modes) MemFree(modes);
+        if (modes) System::MemoryAllocator::MemFree(modes);
         *reinterpret_cast<uint64_t*>(e + 0x08) = 0;
         *reinterpret_cast<uint64_t*>(e + 0x10) = 0;
 
@@ -270,7 +248,7 @@ extern "C" void RtVideo_ArrayAdapterElemDestroy(void* /*unused*/, void* data, in
 extern "C" void RtVideo_ArrayAdapterDtor(void* arr) {
     ArrayHdr* a = static_cast<ArrayHdr*>(arr);
     RtVideo_ArrayAdapterElemDestroy(arr, a->data, a->size);
-    if (a->data) MemFree(a->data);
+    if (a->data) System::MemoryAllocator::MemFree(a->data);
     a->data = nullptr;
     *reinterpret_cast<uint64_t*>(&a->size) = 0;   // one store clears size AND capacity
 }
@@ -343,7 +321,7 @@ extern "C" void RtVideo_ArrayRefreshSetSize(void* arrv, int32_t n, const void* f
         *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
     }
 
-    if (oldData != a->data && oldData) MemFree(oldData);
+    if (oldData != a->data && oldData) System::MemoryAllocator::MemFree(oldData);
 }
 
 // ============================================================================
@@ -386,7 +364,7 @@ extern "C" void RtVideo_ArrayModeSetSize(void* arrv, int32_t n, const void* fill
 
     if (oldData != a->data) {
         RtVideo_ArrayModeElemDestroy(arrv, oldData, old);
-        if (oldData) MemFree(oldData);
+        if (oldData) System::MemoryAllocator::MemFree(oldData);
     } else if (old > n) {
         RtVideo_ArrayModeElemDestroy(arrv,
                                      oldData + static_cast<int64_t>(n) * 0x18,
@@ -635,12 +613,6 @@ int RtVideoDeviceEnumTypesRegister() {
                           (void*)&RtVideo_Adapter_CopyCtor); ++n;
     RegisterRuntimeExport("??1Adapter@Device@Video@@QEAA@XZ",
                           (void*)&RtVideo_Adapter_Dtor); ++n;
-    RegisterRuntimeExport("?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z",
-                          (void*)&RtVideo_Adapter_FindOrAddMode); ++n;
-    RegisterRuntimeExport("?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z",
-                          (void*)&RtVideo_Device_GetDisplayMode); ++n;
-    RegisterRuntimeExport("?AdjustDisplay@Device@Video@@QEAAXXZ",
-                          (void*)&RtVideo_Device_AdjustDisplay); ++n;
 
     RegisterRuntimeAddr(0x18000cd90, (void*)&RtVideo_GraphicsInterface_Ctor);
     RegisterRuntimeAddr(0x18000ce10, (void*)&RtVideo_GraphicsInterface_CopyCtor);
@@ -648,15 +620,6 @@ int RtVideoDeviceEnumTypesRegister() {
     RegisterRuntimeAddr(0x1800f7100, (void*)&RtVideo_Adapter_Ctor);
     RegisterRuntimeAddr(0x18000cc70, (void*)&RtVideo_Adapter_CopyCtor);
     RegisterRuntimeAddr(0x18000cc10, (void*)&RtVideo_Adapter_Dtor);
-    RegisterRuntimeAddr(0x1800f7020, (void*)&RtVideo_Adapter_FindOrAddMode);
-    RegisterRuntimeAddr(0x18000d3e0, (void*)&RtVideo_Device_GetDisplayMode);
-    RegisterRuntimeAddr(0x1800f7e20, (void*)&RtVideo_Device_AdjustDisplay);
-
-    RegisterRuntimeAddr(0x180010da0, (void*)&RtVideo_ArrayAdapterElemDestroy);
-    RegisterRuntimeAddr(0x180010900, (void*)&RtVideo_ArrayAdapterDtor);
-    RegisterRuntimeAddr(0x18000fe10, (void*)&RtVideo_ArrayAdapterAssign);
-    RegisterRuntimeAddr(0x180057340, (void*)&RtVideo_ArrayRefreshSetSize);
-    RegisterRuntimeAddr(0x180057440, (void*)&RtVideo_ArrayModeSetSize);
 
     return n;
 }

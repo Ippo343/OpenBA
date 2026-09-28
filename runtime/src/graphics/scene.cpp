@@ -143,23 +143,14 @@
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Scene.h"
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
-#include "wave9_lane_gfxd.h"
+#include "scene_grid.h"                 // rtgfxgrid:: the Scene grid bodies
+#include "../picking/scene_grid.h"      // rtpickgrid::BoxTransform
+#include "../../types/math/Math.h"
 
 using RtGraphics::Geometry;
 using RtGraphics::Scene;
 using RtGraphics::SceneNode;
 using RtGraphics::SceneObjectId;
-
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
-// resolve.h drags in <windows.h>, and <wingdi.h>'s `Rectangle` function and
-// <windef.h>'s `near`/`far` macros collide with the engine's own type and
-// member names. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two against each other.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -307,11 +298,9 @@ const float kBigNeg       = -1.0e8f;
 // negative control (scene_grid_probe.cpp, SweepFloatBodies). Tolerance zero.
 // ONE registration, in that file: do not add a second here.
 //   out: 6 floats {minX,minY,minZ,maxX,maxY,maxZ}; localBox: the same 6 floats.
+// B3R: rtpickgrid::BoxTransform, by name.
 float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
-    using Fn = float* (*)(float*, const Transform*, const float*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001f470));
-    return fn(out, xf, localBox);
+    return static_cast<float*>(rtpickgrid::BoxTransform(out, xf, localBox));
 }
 
 // Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191,
@@ -320,12 +309,11 @@ float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
 // quaternion, R9 = &t. Pinned by the disassembly of GetInstanceTransform at
 // 0x1800154e1/0x1800154bd, which loads RCX = this+0xa0 and R8 = this+0x84 and
 // spills XMM3 to the stack slot it passes in R9.
+// B3R: the member, by value; `ret` is the caller's storage.
 Quaternion* RtQuaternionLerp(const Quaternion* from, Quaternion* ret,
                              const Quaternion* to, const Scalar* t) {
-    using Fn = Quaternion* (*)(const Quaternion*, Quaternion*, const Quaternion*, const Scalar*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001d500));
-    return fn(from, ret, to, t);
+    *ret = from->Lerp(*to, *t);
+    return ret;
 }
 
 // Math::Transform::AsMatrix — retail 0x18001e5f0. HIDDEN RETURN SLOT in RDX.
@@ -360,10 +348,7 @@ Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
 // 0x5555 cell counts filled with 0). ~350 KB of allocation, all through the
 // allocator lock.
 void RtSceneGridInit(Scene* self, float cellSize) {
-    using Fn = void* (*)(Scene*, float);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e4a0));
-    fn(self, cellSize);
+    rtgfxgrid::GridInit(self, cellSize);
 }
 
 // The grid insert — retail 0x18005e5e0. Takes a slot off the free-id array (or
@@ -372,10 +357,7 @@ void RtSceneGridInit(Scene* self, float cellSize) {
 // chain. Returns the node id. Everything it touches is the Scene's own arrays
 // or the allocator, so it is layout-compatible with this port.
 uint32_t RtSceneGridAdd(Scene* self, Geometry* const* geo) {
-    using Fn = uint64_t (*)(Scene*, Geometry* const*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e5e0));
-    return static_cast<uint32_t>(fn(self, geo));
+    return rtgfxgrid::GridAdd(self, geo);
 }
 
 // The grid unthread — retail 0x18005f090. Splices node `id` out of its cell's
@@ -388,10 +370,7 @@ uint32_t RtSceneGridAdd(Scene* self, Geometry* const* geo) {
 // See scene_grid.cpp's banner; a null-terminated reading of it makes retail look
 // like it writes sixteen bytes in front of the node buffer, and it does not.
 void RtSceneGridUnthread(Scene* self, int32_t id) {
-    using Fn = void (*)(Scene*, int32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005f090));
-    fn(self, id);
+    rtgfxgrid::GridUnthread(self, id);
 }
 
 // The grid re-index — retail 0x18005ee30. Recomputes node `id`'s quadtree level
@@ -399,10 +378,7 @@ void RtSceneGridUnthread(Scene* self, int32_t id) {
 // it if the cell changed. Scene::Clean calls it for every object whose Clean
 // reported a change.
 void RtSceneGridReindex(Scene* self, int32_t id) {
-    using Fn = void (*)(Scene*, int32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005ee30));
-    fn(self, id);
+    rtgfxgrid::GridReindex(self, id);
 }
 
 // ENDGAME B.3.2 step 2 — the global-list teardown forwarder (0x18005f1f0) is
@@ -1582,8 +1558,7 @@ void Scene::AddDrawItems(Renderer& renderer) const {
 // because tools/runtime_census.py cannot see through a named constant
 // (reference_census_cannot_see_nonliteral_registrations.md).
 //
-// `count` counts NAMES, one per distinct exported function: 17 (the ??0 / ??1
-// Geometry doors retired, ENDGAME B.3.9 GFX).
+// `count` counts NAMES, one per distinct exported function.
 // ============================================================================
 int RtGraphicsSceneRegister() {
     int count = 0;
@@ -1592,35 +1567,9 @@ int RtGraphicsSceneRegister() {
     // ENDGAME B.3.9 GFX: the ??0 (0x1800a4270) and ??1 (0x1800a41c0) doors are
     // retired -- `Geometry()` / `~Geometry()` are the members below, and their
     // one address reader (the RT_DELDTOR row 0x180015e90) is retired with them.
-    RegisterRuntimeExport("?Attach@Geometry@Graphics@@QEAAXPEAV12@H@Z", (void*)&RtGraphics_Geometry_Attach); ++count;
-    RegisterRuntimeAddr(0x1800a3fa0, (void*)&RtGraphics_Geometry_Attach);
-
-    RegisterRuntimeExport("?Detach@Geometry@Graphics@@QEAAXPEAV12@@Z", (void*)&RtGraphics_Geometry_Detach); ++count;
-    RegisterRuntimeAddr(0x1800a3f20, (void*)&RtGraphics_Geometry_Detach);
-
-    RegisterRuntimeExport("?Clean@Geometry@Graphics@@UEAA_NXZ", (void*)&RtGraphics_Geometry_Clean); ++count;
-    RegisterRuntimeAddr(0x1800a4420, (void*)&RtGraphics_Geometry_Clean);
-
-    RegisterRuntimeExport("?UpdateAttached@Geometry@Graphics@@UEAAXXZ", (void*)&RtGraphics_Geometry_UpdateAttached); ++count;
-    RegisterRuntimeAddr(0x1800a4020, (void*)&RtGraphics_Geometry_UpdateAttached);
-
-    RegisterRuntimeExport("?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z", (void*)&RtGraphics_Geometry_GetSubTransform); ++count;
-    RegisterRuntimeAddr(0x1800a43c0, (void*)&RtGraphics_Geometry_GetSubTransform);
 
     RegisterRuntimeExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ", (void*)&RtGraphics_Geometry_GetTransform); ++count;
     RegisterRuntimeAddr(0x180015800, (void*)&RtGraphics_Geometry_GetTransform);
-
-    RegisterRuntimeExport("?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z", (void*)&RtGraphics_Geometry_GetInstanceTransform); ++count;
-    RegisterRuntimeAddr(0x1800154a0, (void*)&RtGraphics_Geometry_GetInstanceTransform);
-
-    RegisterRuntimeExport("?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z", (void*)&RtGraphics_Geometry_SetSharedInstanceData); ++count;
-    RegisterRuntimeAddr(0x180015590, (void*)&RtGraphics_Geometry_SetSharedInstanceData);
-
-    RegisterRuntimeExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z", (void*)&RtGraphics_Geometry_SetBounds); ++count;
-    RegisterRuntimeAddr(0x180015700, (void*)&RtGraphics_Geometry_SetBounds);
-
-    RegisterRuntimeExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z", (void*)&RtGraphics_Geometry_SetTransform); ++count;
-    RegisterRuntimeAddr(0x1800155a0, (void*)&RtGraphics_Geometry_SetTransform);
 
     // ---- Graphics::Scene ----
     RegisterRuntimeExport("??0Scene@Graphics@@QEAA@XZ", (void*)&RtGraphics_Scene_Ctor); ++count;
@@ -1634,20 +1583,6 @@ int RtGraphicsSceneRegister() {
 
     RegisterRuntimeExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z", (void*)&RtGraphics_Scene_RemoveObject); ++count;
     RegisterRuntimeAddr(0x180102600, (void*)&RtGraphics_Scene_RemoveObject);
-
-    RegisterRuntimeExport("?AddGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z", (void*)&RtGraphics_Scene_AddGlobalObject); ++count;
-    RegisterRuntimeAddr(0x180102540, (void*)&RtGraphics_Scene_AddGlobalObject);
-
-    RegisterRuntimeExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z", (void*)&RtGraphics_Scene_RemoveGlobalObject); ++count;
-    RegisterRuntimeAddr(0x1801024c0, (void*)&RtGraphics_Scene_RemoveGlobalObject);
-
-    RegisterRuntimeExport("?Clean@Scene@Graphics@@QEAAXXZ", (void*)&RtGraphics_Scene_Clean); ++count;
-    RegisterRuntimeAddr(0x1801023f0, (void*)&RtGraphics_Scene_Clean);
-
-    // ENDGAME B.3.5 block F — the twentieth row, read out of the DLL this pass.
-    RegisterRuntimeExport("?AddDrawItems@Scene@Graphics@@QEBAXAEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_Scene_AddDrawItems); ++count;
-    RegisterRuntimeAddr(0x1801023b0, (void*)&RtGraphics_Scene_AddDrawItems);
 
     return count;
 }

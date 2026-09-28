@@ -49,18 +49,15 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/RibbonDescription.h"
 #include "../../types/ui/RibbonElement.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
-#include <atomic>
 #include <new>
 #include <new>
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // The same two-field views groupdescription.cpp carries, for the same reason:
 // these bodies read exactly `Stream::mode` (+0x08) and `Stream::encodingFactory`
@@ -87,9 +84,6 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // ============================================================================
 // The MEMBERS
 // ============================================================================
-namespace {
-}  // namespace
-
 namespace UI {
 
 // [3] 0x1800d5ef0: `MOV EAX,0x204 ; RET`. 0x204, not GroupDescription's 0x104 —
@@ -151,12 +145,10 @@ bool RibbonDescription::Serialize(void* streamArg) {
     rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                                        // 1800d5fa5 (re-read)
-        using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x1800492d0ull)(&_itemsData, n);              // 1800d5fb8
+        rtcoll::RtColl_ArraySetSize_1800492d0(&_itemsData, n);              // 1800d5fb8
     }
 
-    using ElemSerFn = void (*)(Serializer* ser, int count, void* data);
-    RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _itemsData);
+    RtObject_ExternalPtrArraySerialize_ElementDescription(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_itemsData));
 
     if (rw != nullptr) {                                                // 1800d5fd5
         delete rw;
@@ -181,8 +173,7 @@ bool RibbonDescription::Serialize(void* streamArg) {
 // It runs AFTER the child loop and OUTSIDE it.
 Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd8, 8);           // 1800d6048
+    void* raw = System::MemoryAllocator::MemAlloc(0xd8, 8);           // 1800d6048
 
     // Retail inlines ??0RibbonElement (0x1800d6078 .. 0x1800d60a0): the real ctor.
     RibbonElement* elem = nullptr;
@@ -204,16 +195,19 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
     for (int32_t i = 0; i < count; ++i) {                               // 1800d60dc / 1800d6149
         void* desc = _itemsData[i];                                     // 1800d60f7
 
-        // UI::Dialog::CreateElement (block B's class) — a door, by address.
-        using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-        void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, &slot, desc);
+        // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+        // placed in the caller's slot.
+        void** made = &slot;
+        new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
+            static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
+                Object::ExternalPtr<UI::ElementDescription>(
+                    static_cast<UI::ElementDescription*>(desc))));
 
         Element* child = *reinterpret_cast<Element**>(made);            // 1800d6108
         if (child != nullptr)
             child->_parent = elem;                                      // 1800d6110
 
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                        elem->_children.GetSize() + 1,
                                        made);                           // 1800d6129
 
@@ -221,8 +215,7 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
             n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
-    using SetSizeFn = void (*)(void* array, int n);
-    RtAddr<SetSizeFn>(0x18002fea0ull)(&elem->_extentsData, count);      // 1800d6158
+    rtcoll::RtColl_ArraySetSize_18002fea0(&elem->_extentsData, count);      // 1800d6158
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d615d
     return ret;
@@ -233,8 +226,7 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
 // 0x180039440. The restamps, the base's asymmetric _textName (+0x60) release
 // and the tail JMP into ~External are the compiler's chain.
 RibbonDescription::~RibbonDescription() {
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180039440ull)(reinterpret_cast<uint8_t*>(this) + 0x70);   // 1800d5cb4
+    rtcoll::RtColl_ArrayDtor_180039440(reinterpret_cast<uint8_t*>(this) + 0x70);   // 1800d5cb4
 }
 
 // ?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ 0x180044220 --
@@ -259,19 +251,6 @@ Object::Base* RibbonDescription::CreateInPlaceObject(void* place) {
 // `??_7RibbonDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // RibbonDescription now wears the compiler's table.
 // ============================================================================
-
-int RtUiRibbonDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@RibbonDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::RibbonDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180044220ull, (void*)&UI::RibbonDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::RibbonDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180044310ull, (void*)&UI::RibbonDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::RibbonDescription's own type record, built at CRT init

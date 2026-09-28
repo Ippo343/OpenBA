@@ -93,18 +93,13 @@
                                                      // hidden-retslot door below
 #include "../../types/system/Value.h"                // System::Time, ditto
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/graphics/Animation.h"   // Graphics::Animation::GetPoseAtTime
 
 using RtGraphics::AnimationManagerView;
 
 namespace {
 
 using ArrayHdr = Collection::Array<uint8_t>;
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // ---------------------------------------------------------------------------
 // Record strides and field offsets, all of them already asserted next door.
@@ -118,33 +113,13 @@ constexpr int kTransformStride = 0x1c;   // Math::Transform
 constexpr int kClipStride      = 0x70;   // Graphics::Animation
 
 // ---------------------------------------------------------------------------
-// The neighbours these bodies call. Every one goes through ResolveAddr or
-// ResolveExport so that OUR port answers where one exists
-// (reference_resolveaddr_consults_port_registry_first.md).
+// The neighbours these bodies call, by name (B3R): the Collection::Array<T>
+// instantiations are rtcoll::Rt_SetSize_* / Rt_ArrayAssign_* / Rt_ArrayDtor_*
+// (array_graphics_anim.cpp, declared in AnimationState.h) and
+// rtcoll::RtColl_ArraySetSize_180059140 (Array<Math::Transform>::SetSize).
+// 0x18005be30 is Array<AnimationManager::Instance>::SetSize, the THREE-argument
+// form whose new tail elements are copy-assigned from `fill`.
 // ---------------------------------------------------------------------------
-using SetSizeFn      = void  (*)(void* a, int n);
-using SetSizeFillFn  = void  (*)(void* a, int n, const void* fill);
-using ArrayAssignFn  = void* (*)(void* dst, const void* src);
-using ArrayDtorFn    = void* (*)(void* a);
-
-SetSizeFn SetSizeNodes()  { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005aa30); return f; }
-SetSizeFn SetSizeStates() { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005b1e0); return f; }
-SetSizeFn SetSizeLayers() { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005c8a0); return f; }
-SetSizeFn SetSizeInterp() { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005ac50); return f; }
-SetSizeFn SetSizePose()   { static SetSizeFn f = RtAddr<SetSizeFn>(0x180059140); return f; }
-
-// Array<AnimationManager::Instance>::SetSize, the THREE-argument form whose new
-// tail elements are copy-assigned from `fill` (array_graphics_anim.cpp).
-SetSizeFillFn SetSizeInstances() {
-    static SetSizeFillFn f = RtAddr<SetSizeFillFn>(0x18005be30);
-    return f;
-}
-
-ArrayAssignFn AssignNodes()  { static ArrayAssignFn f = RtAddr<ArrayAssignFn>(0x180013960); return f; }
-ArrayAssignFn AssignStates() { static ArrayAssignFn f = RtAddr<ArrayAssignFn>(0x18005b130); return f; }
-
-ArrayDtorFn DtorNodes()  { static ArrayDtorFn f = RtAddr<ArrayDtorFn>(0x180014090); return f; }
-ArrayDtorFn DtorStates() { static ArrayDtorFn f = RtAddr<ArrayDtorFn>(0x18005bbb0); return f; }
 
 // Math. ENDGAME B.3.1 step 2: all five are members of the real Math classes
 // now (runtime/types/math/Math.h). They keep the `(self, ret, …) -> const
@@ -185,21 +160,12 @@ inline const float* TransformAsMatrix(const void* self, void* ret) {
     return static_cast<const float*>(ret);
 }
 
-// The three cluster bodies these five call. By ADDRESS, because that is where
-// animationstate.cpp registers them and because retail's call is a direct one.
-using GetPoseFn       = void (*)(const void* mgr, int handle, void* out, int count);
-using GetPoseAtTimeFn = void (*)(const void* clip, const int64_t* time,
-                                 const int64_t* delta, void* out, int count);
-using UpdateFn        = bool (*)(void* self, const int64_t* dt, const void* nodes,
-                                 const void* root, void* interp, void* pose,
-                                 float* rootOffset, bool a, bool b);
-
-GetPoseFn GetPose()             { static GetPoseFn f = RtAddr<GetPoseFn>(0x1800fb8e0); return f; }
-GetPoseAtTimeFn GetPoseAtTime() { static GetPoseAtTimeFn f = RtAddr<GetPoseAtTimeFn>(0x1800faca0); return f; }
-// ?Update@AnimationState@Graphics@@ — retail 0x1800fdb20, NOT ported (it is the
-// body runtime/types/graphics/AnimationState.h was read out of). Reached by
-// address so the day it IS ported this call site follows without an edit.
-UpdateFn AnimationStateUpdate() { static UpdateFn f = RtAddr<UpdateFn>(0x1800fdb20); return f; }
+// The three cluster bodies these five call, by name (B3R):
+// Graphics::AnimationManager::GetPose (0x1800fb8e0) and
+// Graphics::Animation::GetPoseAtTime (0x1800faca0) are members;
+// ?Update@AnimationState@Graphics@@ (0x1800fdb20) is reached through its door
+// RtGraphics_AnimationState_Update (wave27_lane_gfxbig.cpp), which counts the
+// call for the [GFXBIG27] line before it calls the member.
 
 // ?_singleton@AnimationManager@Graphics@@0PEAV12@EA — the slot at 0x1801fe7b0.
 // ONE deref gives the manager; its +0x00 is the instance array header.
@@ -439,54 +405,6 @@ extern "C" void* RtGraphics_InterpolatedState_Transform_Lerp(
     return ret;
 }
 
-// ============================================================================
-// Registration. Unconditional (DIRECTION.md §2: a port registers, no flag).
-// ============================================================================
-int RtGraphicsAnimationTransformsRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport(
-        "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@"
-        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@"
-        "AEBVTime@System@@2M_N@Z",
-        (void*)&RtGraphics_AnimationState_PlayAnimation);                       ++n;
-    RegisterRuntimeAddr(0x1800fdf50ull, (void*)&RtGraphics_AnimationState_PlayAnimation);
-
-    RegisterRuntimeExport(
-        "?GetInstanceId@AnimationManager@Graphics@@QEAAHV?$ExternalPtr@VAnimationGroup@"
-        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@@Z",
-        (void*)&RtGraphics_AnimationManager_GetInstanceId);                     ++n;
-    RegisterRuntimeAddr(0x1800fb9d0ull, (void*)&RtGraphics_AnimationManager_GetInstanceId);
-
-    RegisterRuntimeExport(
-        "?CopyInstancedToUnique@AnimationState@Graphics@@AEBAXAEBV?$Array@UNode@"
-        "GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@"
-        "VTransform@Math@@@2@H@Z",
-        (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);               ++n;
-    RegisterRuntimeAddr(0x1800fd4c0ull, (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);
-
-    RegisterRuntimeExport(
-        "?UpdateNodes@AnimationState@Graphics@@AEAAXMAEBV?$Array@UNode@GraphicsMesh@"
-        "Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@VTransform@"
-        "Math@@@2@PEAV56@AEAVVector3@6@@Z",
-        (void*)&RtGraphics_AnimationState_UpdateNodes);                         ++n;
-    RegisterRuntimeAddr(0x1800fcc20ull, (void*)&RtGraphics_AnimationState_UpdateNodes);
-
-    RegisterRuntimeExport(
-        "?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z",
-        (void*)&RtGraphics_MeshInstance_GetBones);                              ++n;
-    RegisterRuntimeAddr(0x180100070ull, (void*)&RtGraphics_MeshInstance_GetBones);
-
-    RegisterRuntimeExport(
-        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@"
-        "AEBVScalar@4@@Z",
-        (void*)&RtGraphics_InterpolatedState_Transform_Lerp);                   ++n;
-    RegisterRuntimeAddr(0x18001aff0ull,
-                        (void*)&RtGraphics_InterpolatedState_Transform_Lerp);
-
-    return n;
-}
-
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC — the `Graphics::AnimationState` member bodies
 // whose live doors are the `extern "C"` functions above.
@@ -561,10 +479,10 @@ void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHand
 
             *reinterpret_cast<uint64_t*>(inst + 0x00) = 0;   // _group
             *reinterpret_cast<int32_t*>(inst + 0x08)  = -1;  // _animIndex
-            SetSizeNodes()(inst + 0x10, 0);                  // CALL 0x18005aa30
-            SetSizeStates()(inst + 0x20, 0);                 // CALL 0x18005b1e0
+            rtcoll::Rt_SetSize_18005aa30(inst + 0x10, 0);                  // CALL 0x18005aa30
+            rtcoll::Rt_SetSize_18005b1e0(inst + 0x20, 0);                 // CALL 0x18005b1e0
         }
-        SetSizeLayers()(layers, 0);                          // CALL 0x18005c8a0
+        rtcoll::Rt_SetSize_18005c8a0(layers, 0);                          // CALL 0x18005c8a0
         return;
     }
 
@@ -589,7 +507,7 @@ void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHand
     }
 
     if (count == 0) {
-        SetSizeLayers()(layers, 1);
+        rtcoll::Rt_SetSize_18005c8a0(layers, 1);
     } else {
         uint8_t* l = layers->_data;
         const bool armLayer0 = (l[0x30] != 0) || (count == 1);
@@ -631,7 +549,7 @@ void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHand
             *reinterpret_cast<int64_t*>(l + 0x20) = ticks;
             *reinterpret_cast<int64_t*>(layers->_data + 0x28) = ticks;
 
-            SetSizeLayers()(layers, _layers._size + 1);
+            rtcoll::Rt_SetSize_18005c8a0(layers, _layers._size + 1);
 
             // Shift layers[k] -> layers[k+1] for k = oldCount-1 .. 0, as seven
             // qword moves per record, re-reading the buffer each iteration
@@ -871,14 +789,18 @@ void AnimationState::UpdateNodes(float speed,
             static_cast<int64_t>(*reinterpret_cast<const int32_t*>(layer + 0x08)) * kClipStride;
         const int32_t handle = *reinterpret_cast<const int32_t*>(layer + 0x0c);
         if (handle >= 0) {
-            GetPose()(AnimationManagerSingleton(), handle, pose,
-                      static_cast<int>(nodeCount));
+            // B.3.x bridge: the POD view is the manager; `pose` is Transform storage.
+            reinterpret_cast<const Graphics::AnimationManager*>(AnimationManagerSingleton())
+                ->GetPose(handle, reinterpret_cast<Math::Transform*>(pose),
+                          static_cast<int>(nodeCount));
         } else {
             float scaled = speed;
             scaled = scaled * *reinterpret_cast<const float*>(layer + 0x10);
             const int64_t delta = SecondsToTicks(static_cast<double>(scaled));
-            GetPoseAtTime()(clip, reinterpret_cast<const int64_t*>(layer + 0x18), &delta,
-                            pose, static_cast<int>(nodeCount));
+            reinterpret_cast<const Graphics::Animation*>(clip)->GetPoseAtTime(   // B.3.x bridge
+                *reinterpret_cast<const System::Time*>(layer + 0x18),
+                *reinterpret_cast<const System::Time*>(&delta),
+                reinterpret_cast<Math::Transform*>(pose), static_cast<int>(nodeCount));
         }
     }
 
@@ -920,8 +842,11 @@ void AnimationState::UpdateNodes(float speed,
             float scaled = speed;
             scaled = scaled * *reinterpret_cast<const float*>(layer + 0x10);
             const int64_t delta = SecondsToTicks(static_cast<double>(scaled));
-            GetPoseAtTime()(clip, reinterpret_cast<const int64_t*>(layer + 0x18), &delta,
-                            &scratch[0][0], static_cast<int>(nodeCount));
+            reinterpret_cast<const Graphics::Animation*>(clip)->GetPoseAtTime(   // B.3.x bridge
+                *reinterpret_cast<const System::Time*>(layer + 0x18),
+                *reinterpret_cast<const System::Time*>(&delta),
+                reinterpret_cast<Math::Transform*>(&scratch[0][0]),
+                static_cast<int>(nodeCount));
         }
 
         // t = layer[i+1].fadeRemaining / layer[i+1].fadeLength, both converted
@@ -1466,14 +1391,14 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
             *reinterpret_cast<void**>(inst + 0x00)   = group;
             *reinterpret_cast<int32_t*>(inst + 0x08) = animIndex;
             *reinterpret_cast<int32_t*>(inst + 0x0c) = 0;
-            AssignNodes()(inst + 0x10, tmp + 0x10);            // CALL 0x180013960
-            AssignStates()(inst + 0x20, tmp + 0x20);           // CALL 0x18005b130
+            rtcoll::Rt_ArrayAssign_180013960(inst + 0x10, tmp + 0x10);            // CALL 0x180013960
+            rtcoll::Rt_ArrayAssign_18005b130(inst + 0x20, tmp + 0x20);           // CALL 0x18005b130
         } else {
             idx = count;
-            SetSizeInstances()(self, self->_instances._size + 1, tmp);   // CALL 0x18005be30
+            rtcoll::Rt_SetSize_18005be30(self, self->_instances._size + 1, tmp);   // CALL 0x18005be30
         }
-        DtorStates()(tmp + 0x20);                              // CALL 0x18005bbb0
-        DtorNodes()(tmp + 0x10);                               // CALL 0x180014090
+        rtcoll::Rt_ArrayDtor_18005bbb0(tmp + 0x20);                              // CALL 0x18005bbb0
+        rtcoll::Rt_ArrayDtor_180014090(tmp + 0x10);                               // CALL 0x180014090
     }
 
     if (!found) {
@@ -1481,7 +1406,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
         uint8_t* instNodes  = inst + 0x10;
         uint8_t* instStates = inst + 0x20;
 
-        AssignNodes()(instNodes, nodesv);                      // CALL 0x180013960
+        rtcoll::Rt_ArrayAssign_180013960(instNodes, nodesv);                      // CALL 0x180013960
 
         const uint8_t* clip =
             *reinterpret_cast<const uint8_t* const*>(static_cast<uint8_t*>(group) +
@@ -1492,7 +1417,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
         // clip's keyframe count (AnimationManager.h); +0x28 is how many baked
         // samples an instanced clip carries, and it is the bound of every loop
         // below and of the final smallest-time sweep.
-        SetSizeStates()(instStates, *reinterpret_cast<const int32_t*>(clip + 0x28));
+        rtcoll::Rt_SetSize_18005b1e0(instStates, *reinterpret_cast<const int32_t*>(clip + 0x28));
 
         const int32_t frames = *reinterpret_cast<const int32_t*>(clip + 0x28);
 
@@ -1517,7 +1442,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
             for (;;) {
                 uint8_t* st = *reinterpret_cast<uint8_t* const*>(instStates) + stateOff;
 
-                SetSizeInterp()(st + 0x38, nodes->_size);      // CALL 0x18005ac50
+                rtcoll::Rt_SetSize_18005ac50(st + 0x38, nodes->_size);      // CALL 0x18005ac50
                 uint8_t* ip = *reinterpret_cast<uint8_t* const*>(st + 0x38);
                 // Node 0 is the identity transform, written field by field, and
                 // then copied over its own second half.
@@ -1530,7 +1455,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
                 reinterpret_cast<float*>(ip)[6] = 0.0f;
                 Copy7Dwords(ip + kTransformStride, ip);
 
-                SetSizePose()(st + 0x28, nodes->_size);        // CALL 0x180059140
+                rtcoll::RtColl_ArraySetSize_180059140(st + 0x28, nodes->_size);        // CALL 0x180059140
 
                 if (*reinterpret_cast<const int32_t*>(st + 0x40) > 1) {
                     int64_t nodeOff   = kNodeStride;
@@ -1657,15 +1582,22 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
                 // InterpolatedState hold the settled pose.
                 const int64_t zero = SecondsToTicks(0.0);
                 const int64_t at   = SecondsToTicks(static_cast<double>(t));
-                using PlayFn = void (*)(void*, void*, int, const void*,
-                                        const int64_t*, const int64_t*, float, bool);
-                RtAddr<PlayFn>(0x1800fdf50)(st, group, animIndex, nodesv,
-                                            &at, &zero, 1.0f, false);
+                // Graphics::AnimationState::PlayAnimation (0x1800fdf50). B.3.x
+                // bridge: `st` is AnimationState storage; the ExternalPtr is the
+                // bare pointer the door wrapped (a trivial wrapper, no refcount).
+                reinterpret_cast<Graphics::AnimationState*>(st)->PlayAnimation(
+                    Object::ExternalPtr<Graphics::AnimationGroup>(
+                        reinterpret_cast<Graphics::AnimationGroup*>(group)),
+                    animIndex,
+                    *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv),
+                    *reinterpret_cast<const System::Time*>(&at),
+                    *reinterpret_cast<const System::Time*>(&zero),
+                    1.0f, false);
 
                 for (int rep = 0; rep < 2; ++rep) {
                     const int64_t z = SecondsToTicks(0.0);
                     const float ident[7] = { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-                    AnimationStateUpdate()(st, &z, instNodes, ident,
+                    RtGraphics_AnimationState_Update(st, &z, instNodes, ident,
                                            *reinterpret_cast<void* const*>(st + 0x38),
                                            *reinterpret_cast<void* const*>(st + 0x28),
                                            reinterpret_cast<float*>(st + 0x18),

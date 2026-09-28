@@ -219,13 +219,6 @@ extern "C" void RtUiDialogController_OnSerializeSettings(void* self, void* strea
 //                  but registered under one door only would still read TRAP.
 int RtUiDialogControllerRegister() {
     int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics.
-    RegisterRuntimeExport("?CreateNewObject@DialogController@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::DialogController::CreateNewObject);
-    RegisterRuntimeAddr(0x18003b6e0, (void*)&UI::DialogController::CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@DialogController@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::DialogController::CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18003b6f0, (void*)&UI::DialogController::CreateInPlaceObject); ++n;
 
     RegisterRuntimeExport("?OnOpened@DialogController@UI@@UEAAXXZ",
                           (void*)&RtUiDialogController_OnOpened);

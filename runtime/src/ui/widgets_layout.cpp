@@ -33,7 +33,6 @@
 // POINTER (RULE B6-11), so those members take the pointer.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -54,6 +53,7 @@
 #include "../../types/ui/PageElement.h"
 #include "../../types/ui/GraphElement.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_I32 etc.
+#include "../../types/collection/Collection.h"
 // B6-5 door caches (AtomicAddr / AtomicExport) and the ResolveAddr
 // declaration this file used to spell for itself.
 #include "element_common.h"
@@ -96,15 +96,9 @@ void RtStringAssign(void* self, const void* other) {
         *reinterpret_cast<const System::String*>(other);
 }
 
-// RULE B6-5: the namespace-scope door caches the member bodies read through.
-std::atomic<void*> g_memFree{nullptr};          // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-std::atomic<void*> g_graphArrayClear{nullptr};  // 0x1800416d0
-
-// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0), called by name.
 void RtMemFree(void* p) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(rtuielem::AtomicExport(
-        g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ENDGAME B.3.2 step 2 — the `RtArrayInt32SetSize`/`RtArrayCellsSetSize`
@@ -130,10 +124,9 @@ inline void RtArrayCellsSetSize(void* arrayHeader, int32_t n) {
 // off a `DestroySpec` (`kD_InnerArr_18`), a different type/dispatch from the
 // `rtcoll::ArraySpec` a `Collection::Array<T>::~Array()` would call, and no
 // `kSpec_*` row exists for it — per the batch rule, a "DtorElem" helper may
-// not be convertible at all. Retry a miss rather than caching it.
+// not be convertible at all. Called by name (B3R RT-UI).
 void RtGraphArrayClear(void* arrayHeader) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(rtuielem::AtomicAddr(g_graphArrayClear, 0x1800416d0))(arrayHeader);
+    rtcoll::RtColl_ArrayDtorElem_1800416d0(arrayHeader);
 }
 
 namespace TAE = UI::TabElementOffsets;
@@ -613,203 +606,8 @@ void Element::RemoveChildren() {
 
 }  // namespace UI
 
-// ============================================================================
-// THE DOORS — each keeps its registered name (and, where it has one, its
-// address) and delegates with a QUALIFIED non-virtual call. None of these
-// retail bodies tests `this` for null, so no door does.
-// ============================================================================
-namespace {
+// (B3R RT-UI: the 23 one-line doors that sat here -- Table/Image/Label/Text/
+// DocumentText/Tab/Page/Graph element setters and getters and
+// Element::RemoveChildren -- went with their registrations; nothing called
+// them. The members are the bodies.)
 
-int32_t TableElement_GetColumnCount(const void* self) {
-    return reinterpret_cast<const UI::TableElement*>(self)->UI::TableElement::GetColumnCount();   // B.3.6 bridge
-}
-int32_t TableElement_GetRowCount(const void* self) {
-    return reinterpret_cast<const UI::TableElement*>(self)->UI::TableElement::GetRowCount();   // B.3.6 bridge
-}
-// The by-value InternalPtr<Element> arrives as the ADDRESS of the caller's copy.
-void TableElement_SetChild2(void* self, void** elemSlot, int32_t col) {
-    reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::SetChild(   // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemSlot), col);   // B.3.6 bridge
-}
-void TableElement_SetChild3(void* self, void** elemSlot, int32_t col, int32_t row) {
-    reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::SetChild(   // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemSlot), col, row);   // B.3.6 bridge
-}
-void TableElement_SetSize(void* self, int32_t rows, int32_t cols) {
-    reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::SetSize(rows, cols);   // B.3.6 bridge
-}
-
-// RETSLOT: (this, ret) — placement-new the member's prvalue into the slot.
-void* ImageElement_GetSprite(const void* self, void* retval) {
-    new (retval) UI::Sprite(
-        reinterpret_cast<const UI::ImageElement*>(self)->UI::ImageElement::GetSprite());   // B.3.6 bridge
-    return retval;
-}
-void ImageElement_SetRotation(void* self, float angle) {
-    reinterpret_cast<UI::ImageElement*>(self)->UI::ImageElement::SetRotation(angle);   // B.3.6 bridge
-}
-// `VSprite@2@` by value: RDX holds the ADDRESS of the caller's copy.
-void ImageElement_SetSprite(void* self, const void* spriteVal) {
-    reinterpret_cast<UI::ImageElement*>(self)->UI::ImageElement::SetSprite(   // B.3.6 bridge
-        static_cast<const UI::Sprite*>(spriteVal));
-}
-void ImageElement_SetWidthHeight(void* self, int32_t w, int32_t h) {
-    reinterpret_cast<UI::ImageElement*>(self)->UI::ImageElement::SetWidthHeight(w, h);   // B.3.6 bridge
-}
-
-void* LabelElement_GetSprite(const void* self, void* retval) {
-    new (retval) UI::Sprite(
-        reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::GetSprite());   // B.3.6 bridge
-    return retval;
-}
-void LabelElement_SetSprite(void* self, const void* spriteVal) {
-    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::SetSprite(   // B.3.6 bridge
-        static_cast<const UI::Sprite*>(spriteVal));
-}
-
-// `AEBVString@System@@` — a const reference, a bare pointer in R8.
-void TextElement_SetParameter(void* self, int32_t index, const void* strRef) {
-    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::SetParameter(   // B.3.6 bridge
-        index, *static_cast<const System::String*>(strRef));
-}
-// `VString@2@` by value: RDX holds the ADDRESS of the caller's UI::String.
-void TextElement_SetText(void* self, const void* uiStringVal) {
-    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::SetText(   // B.3.6 bridge
-        static_cast<const UI::String*>(uiStringVal));
-}
-
-// RETSLOT: (this, ret, index).
-void* DocumentTextElement_GetLink(const void* self, void* retval, int32_t index) {
-    new (retval) System::String(
-        reinterpret_cast<const UI::DocumentTextElement*>(self)->UI::DocumentTextElement::GetLink(index));   // B.3.6 bridge
-    return retval;
-}
-// THE DOOR DECIDES THE OVERLOAD: `QEAAXVString@2@@Z` (UI::String by hidden
-// pointer) vs `QEAAXAEBVString@System@@@Z` (a System::String const&).
-void DocumentTextElement_SetText_UiString(void* self, const void* uiStringVal) {
-    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::SetText(   // B.3.6 bridge
-        static_cast<const UI::String*>(uiStringVal));
-}
-void DocumentTextElement_SetText_StringRef(void* self, const void* strRef) {
-    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::SetText(   // B.3.6 bridge
-        *static_cast<const System::String*>(strRef));
-}
-
-void TabElement_SetActiveTab(void* self, int32_t tab) {
-    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::SetActiveTab(tab);   // B.3.6 bridge
-}
-
-int32_t PageElement_GetActivePage(const void* self) {
-    return reinterpret_cast<const UI::PageElement*>(self)->UI::PageElement::GetActivePage();   // B.3.6 bridge
-}
-void PageElement_SetActivePage(void* self, int32_t page) {
-    reinterpret_cast<UI::PageElement*>(self)->UI::PageElement::SetActivePage(page);   // B.3.6 bridge
-}
-
-void GraphElement_RemoveGraphs(void* self) {
-    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::RemoveGraphs();   // B.3.6 bridge
-}
-void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
-    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::AddGraphPoint(graph, value);   // B.3.6 bridge
-}
-void GraphElement_AddGraph(void* self, uint32_t colour) {
-    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::AddGraph(colour);   // B.3.6 bridge
-}
-
-void Element_RemoveChildren(void* self) {
-    reinterpret_cast<UI::Element*>(self)->UI::Element::RemoveChildren();   // B.3.6 bridge
-}
-
-}  // namespace
-
-// ============================================================================
-// Registration
-// ============================================================================
-// WAVE 10 LANE UIORACLE — bodies live in their own translation units so this
-// file (lane E's, and busy) is not a merge point for them. Registration is
-// still done from RtUiWidgetsLayRegister below, because rt_ui_port.cpp says in
-// its own banner: "Do not edit this file to add a lane."
-int RtUiTabAddTabRegister();
-int RtUiTextCacheRegister();
-
-int RtUiWidgetsLayRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?GetColumnCount@TableElement@UI@@QEBAHXZ", (void*)&TableElement_GetColumnCount); ++n;
-    RegisterRuntimeExport("?GetRowCount@TableElement@UI@@QEBAHXZ", (void*)&TableElement_GetRowCount); ++n;
-    RegisterRuntimeExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@H@Z", (void*)&TableElement_SetChild2); ++n;
-    RegisterRuntimeExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@HH@Z", (void*)&TableElement_SetChild3); ++n;
-    RegisterRuntimeExport("?SetSize@TableElement@UI@@QEAAXHH@Z", (void*)&TableElement_SetSize); ++n;
-
-    RegisterRuntimeExport("?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ", (void*)&ImageElement_GetSprite); ++n;
-    RegisterRuntimeExport("?SetRotation@ImageElement@UI@@QEAAXM@Z", (void*)&ImageElement_SetRotation); ++n;
-    RegisterRuntimeExport("?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z", (void*)&ImageElement_SetSprite); ++n;
-    RegisterRuntimeExport("?SetWidthHeight@ImageElement@UI@@QEAAXHH@Z", (void*)&ImageElement_SetWidthHeight); ++n;
-    // ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A -- HELD BACK, it is
-    // a DATA export, not a function (WAVE7_LANE_E.md sec2).
-
-    RegisterRuntimeExport("?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ", (void*)&LabelElement_GetSprite); ++n;
-    RegisterRuntimeExport("?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z", (void*)&LabelElement_SetSprite); ++n;
-
-    RegisterRuntimeExport("?SetParameter@TextElement@UI@@QEAAXHAEBVString@System@@@Z", (void*)&TextElement_SetParameter); ++n;
-    RegisterRuntimeExport("?SetText@TextElement@UI@@QEAAXVString@2@@Z", (void*)&TextElement_SetText); ++n;
-
-    RegisterRuntimeExport("?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z", (void*)&DocumentTextElement_GetLink); ++n;
-    RegisterRuntimeExport("?SetText@DocumentTextElement@UI@@QEAAXAEBVString@System@@@Z", (void*)&DocumentTextElement_SetText_StringRef); ++n;
-    RegisterRuntimeExport("?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z", (void*)&DocumentTextElement_SetText_UiString); ++n;
-
-    RegisterRuntimeExport("?SetActiveTab@TabElement@UI@@QEAAXH@Z", (void*)&TabElement_SetActiveTab); ++n;
-    // WAVE 10: UpdateContainers is no longer a forwarder. Registered under BOTH
-    // its name and its address -- the convention that exists because lane B3
-    // registered Element::RemoveChildren by name only and left the tree's one
-    // address-door bypass (see the note further down this function).
-    // WAVE 10 LANE UIORACLE: the AddTab hold-back is spent. Its stated blocker
-    // ("constructs a temporary ElementDescription/DialogInstance") was a
-    // misreading of the frame -- the temporary is a default-constructed
-    // UI::Dialog and retail's inline construction IS ??0Dialog@UI@@QEAA@XZ,
-    // store for store. Body, oracle and the full re-derivation are in
-    // runtime/src/ui/tabelement_addtab.cpp.
-    n += RtUiTabAddTabRegister();
-
-    // WAVE 10 LANE UIORACLE: TextElement::CacheText + SetParameterCount, with
-    // the predictive oracle the census row asked for. See
-    // runtime/src/ui/textelement_cachetext.cpp. NOTE: RtTextElementCacheText
-    // above needs no edit -- it resolves through ResolveExport, which consults
-    // the port registry first, so it reaches the port from this point on.
-    n += RtUiTextCacheRegister();
-
-    RegisterRuntimeExport("?GetActivePage@PageElement@UI@@QEBAHXZ", (void*)&PageElement_GetActivePage); ++n;
-    RegisterRuntimeExport("?SetActivePage@PageElement@UI@@QEAAXH@Z", (void*)&PageElement_SetActivePage); ++n;
-
-    RegisterRuntimeExport("?RemoveGraphs@GraphElement@UI@@QEAAXXZ", (void*)&GraphElement_RemoveGraphs); ++n;
-    // Wave 9 lane B3 -- a REAL DEPENDENCY row (WAVE9_LANE_V.md §1b).
-    RegisterRuntimeExport("?RemoveChildren@Element@UI@@QEAAXXZ",
-                          (void*)&Element_RemoveChildren); ++n;
-    // WAVE 9 LANE UIF — A REAL HOLE, FOUND BY tools/port_bypass_audit.py, not
-    // by reading. Lane B3 registered this port under its NAME only, so
-    // `ResolveAddr(Module::Runtime, 0x180115570)` missed the address registry
-    // and fell through to the DLL — and after cutover, to NULL. Nothing
-    // exercised it until `??1Element` (runtime/src/ui/element.cpp) became the
-    // first by-address caller, at which point the audit flagged it as the
-    // tree's only address-door BYPASS. This is exactly the Wave-5-lane-D
-    // failure mode the "register TWICE, name AND address" convention exists to
-    // close (see the Registration note in element.cpp and dialog.cpp).
-    RegisterRuntimeAddr(0x180115570, (void*)&Element_RemoveChildren);
-    // WAVE 9 LANE UIF: AddGraphPoint's hold-back is spent — its one callee
-    // (0x180023830) became ours in lane Q, so the row closes.
-    RegisterRuntimeExport("?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z",
-                          (void*)&GraphElement_AddGraphPoint); ++n;
-    RegisterRuntimeAddr(0x180040690, (void*)&GraphElement_AddGraphPoint);
-    // WAVE 9 LANE UIW: the hold-back above is spent. Lane UIF declined this row
-    // because 0x1800417d0 was an unported unexported internal and porting
-    // AddGraph would have moved the cutover row one frame deeper. That frame is
-    // now ours -- 0x1800417d0 (kSpec_GraphSeries), 0x18001cdf0 and 0x1800419b0
-    // are all registered in runtime/src/collection/array.cpp -- so the row
-    // closes. See docs/runtime_port/WAVE9_LANE_UIW.md.
-    RegisterRuntimeExport("?AddGraph@GraphElement@UI@@QEAAXI@Z",
-                          (void*)&GraphElement_AddGraph); ++n;
-    RegisterRuntimeAddr(0x180040620, (void*)&GraphElement_AddGraph);
-
-    printf("[RtPort] UI widgets(layout): %d exports registered\n", n);
-    return n;
-}

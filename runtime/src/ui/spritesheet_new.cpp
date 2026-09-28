@@ -90,12 +90,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/SpriteSheet.h"   // ~SpriteSheet's body lives here
-
-// ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
-// must not be included from runtime/src (rt_port.h explains why). Declared here
-// exactly as ~30 sibling runtime files already declare it.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 namespace {
 
@@ -129,24 +125,15 @@ SpriteSheetNewSummary g_summary;
 
 // `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`, 0x1800c7a50. See the banner:
 // the Enter/Allocate/Leave triple this body open-codes IS this function with the
-// alignment frozen to 8. Reached BY ADDRESS so the port registry gets first
-// refusal.
+// alignment frozen to 8. Called directly (B3R RT-UI).
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`, 0x1800c7ad0 — the matching
-// lock/Free/unlock triple, the address standalone/filename_runtime_hook.cpp:496
-// already uses.
-// ENDGAME B.3.9 UI-D: no function-local cache any more — ~SpriteSheet runs
-// through here on the loader thread too (B9-10).
+// lock/Free/unlock triple.
 void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 }  // namespace
@@ -224,12 +211,8 @@ UI::SpriteSheet::~SpriteSheet() {
     // class could take as an `ExplicitSpec`, so per the batch rule that a
     // "DtorElem" helper may not be convertible at all, `m_sprites`
     // (SpriteSheet.h +0x20, `Collection::Array<SpriteInfo>`) stays reached
-    // through the seam rather than forced onto `.~Array()`.
-    // No function-local cache (B9-10: UI is torn down on the loader thread
-    // too); ResolveAddr is a registry lookup.
-    using ArrayDtorFn = void* (*)(void*);
-    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004f50))(
-        p + 0x20);         // m_sprites, Array<SpriteInfo>
+    // as a free-function call, by name, rather than forced onto `.~Array()`.
+    rtcoll::RtColl_ArrayDtorElem_180004f50(p + 0x20);   // m_sprites, Array<SpriteInfo>
 }
 
 // ============================================================================
@@ -245,20 +228,6 @@ int RtUiSpriteSheetNewRegister() {
     RegisterRuntimeExport("??2SpriteSheet@UI@@SAPEAX_K@Z",
                           (void*)&RtUi_SpriteSheet_OperatorNew);
     RegisterRuntimeAddr(0x180002e60, (void*)&RtUi_SpriteSheet_OperatorNew);
-
-    // Three deleting-dtor rows (operator_delete), UI leftovers batch. Each is
-    // one of the per-translation-unit `operator delete` copies
-    // runtime/src/object/deleting_dtor.cpp already catalogued (byte-identical
-    // to the exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`), reached
-    // here by whichever class's scalar/vector deleting destructor calls it.
-    RegisterRuntimeExport("??3SpriteSheet@UI@@SAXPEAX@Z", (void*)&RtUi_SpriteSheet_OperatorDelete);
-    RegisterRuntimeAddr(0x180002ee0, (void*)&RtUi_SpriteSheet_OperatorDelete);
-
-    RegisterRuntimeExport("??3ToolTipDialog@UI@@SAXPEAX@Z", (void*)&RtUi_ToolTipDialog_OperatorDelete);
-    RegisterRuntimeAddr(0x18004d050, (void*)&RtUi_ToolTipDialog_OperatorDelete);
-
-    RegisterRuntimeExport("??3DialogInstance@UI@@SAXPEAX@Z", (void*)&RtUi_DialogInstance_OperatorDelete);
-    RegisterRuntimeAddr(0x180045490, (void*)&RtUi_DialogInstance_OperatorDelete);
 
     return 1;
 }

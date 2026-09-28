@@ -30,11 +30,11 @@
 // one-line QUALIFIED delegation. The ctor / dtor stay doors (B4b-2).
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/TabElement.h"
+#include "../../types/ui/SpriteContext.h"
 
 using namespace rtui;
 
@@ -226,15 +226,13 @@ void TabElement::Draw(SpriteContext& context, uint8_t alpha) const {
     const uint32_t c = _color;
 
     // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeLeft,
-                                         bl, y0, SpriteW(_edgeLeft) + bl, y1, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeLeft, bl, y0, SpriteW(_edgeLeft) + bl, y1, c);
 
     const int32_t rw = SpriteW(_edgeRight);
     const int32_t lw = SpriteW(_edgeLeft);
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeMiddle, bl + lw, y0, br - rw, y1, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeMiddle, bl + lw, y0, br - rw, y1, c);
 
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeRight,
-                                         br - SpriteW(_edgeRight), y0, br, y1, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeRight, br - SpriteW(_edgeRight), y0, br, y1, c);
 
     _children.GetData()[GetContainerIndex(_activeTab)]->Draw(context, alpha);
 }
@@ -295,24 +293,6 @@ Object::Base* TabElement::CreateInPlaceObject(void* place) {
 // member's door (not mint scaffolding): it stays.
 extern "C" void RtUi_TabElement_UpdateContainers(void* self) {
     reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::UpdateContainers();
-}
-
-int RtUiTabElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@TabElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TabElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18004c7f0ull, (void*)&UI::TabElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TabElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18004c870ull, (void*)&UI::TabElement::CreateInPlaceObject);
-
-    RegisterRuntimeExport("?UpdateContainers@TabElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_TabElement_UpdateContainers);  ++n;
-    RegisterRuntimeAddr(0x1800d9710ull, (void*)&RtUi_TabElement_UpdateContainers);
-
-    return n;
 }
 
 // ============================================================================

@@ -154,8 +154,8 @@
 // door caches `rtuielem::AtomicExport` / `AtomicAddr`.
 #include "element_common.h"
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "../../types/collection/Collection.h"
 
-#include <atomic>
 
 extern "C" void RtUi_UserInterface_CloseDialog(UI::UserInterface* self, void** dlgPtr);
 
@@ -163,11 +163,6 @@ namespace {
 
 using UI::UserInterface;
 
-// RULE B6-5: namespace-scope atomic slots (the member body runs on UI objects
-// the loader thread constructs), not RT_DATA_SLOT / RT_EXPORT_ONCE statics.
-std::atomic<void*> g_memFreeSlot{nullptr};
-std::atomic<void*> g_eventsSetSizeSlot{nullptr};
-std::atomic<void*> g_dynArrayPushSlot{nullptr};
 
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
 inline const double* TimerSecondsPerTick() {
@@ -175,37 +170,10 @@ inline const double* TimerSecondsPerTick() {
 }
 
 // ---- the callees ------------------------------------------------------------
-// Four of the six are EXPORTED, verified against the shipped export directory
-// with pefile rather than inferred — `AEAA` means PRIVATE, not unexported
-// (reference_aeaa_is_private_not_unexported.md), and `EndDragDrop` is a plain
-// `QEAA` name that three earlier lane docs listed among "unsatisfied callees"
-// without ever running the export table.
-const char* const kEndDragDrop  = "?EndDragDrop@UserInterface@UI@@QEAAXXZ";
-const char* const kUpdateEvents = "?UpdateEvents@UserInterface@UI@@QEAAXXZ";
-const char* const kMemFree      = "?MemFree@MemoryAllocator@System@@SAXPEAX@Z";
-const char* const kCloseDialog  =
-    "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z";
-
-// THE TWO ADDRESS DOORS, DECLARED RATHER THAN HIDDEN.
-//
-// Neither is in the export table (checked with pefile). A by-address call is a
-// CUTOVER OBLIGATION, not a free choice
-// (reference_by_address_door_dies_at_cutover.md), so both are recorded in
-// docs/runtime_port/WAVE10_LANE_CLOSEDLG.md rather than left for a residue run
-// to rediscover. NEITHER IS NEW DEBT: 0x180033690 is already lane UI1's
-// declared door (userinterface_frame.cpp) and 0x18007a0d0 is already
-// `AddDialog`'s (userinterface.cpp). Both reach the DLL through
-// `ResolveAddr(Module::Runtime, …)`, which consults the port registry FIRST, so
-// the day anyone ports either helper we get theirs
-// (reference_resolveaddr_consults_port_registry_first.md).
-constexpr uintptr_t kEventsSetSizeAddr = 0x180033690;  // Array<UI::Event>::SetSize
-constexpr uintptr_t kDynArrayPushAddr  = 0x18007a0d0;  // the generic 8-byte push
-
-using CloseFn   = void  (*)(void*, void*);
-using VoidFn    = void  (*)(void*);
-using FreeFn    = void  (*)(void*);
-using SetSizeFn = void  (*)(void*, int32_t, const void*);
-using PushFn    = void  (*)(void*, int32_t, const void*);
+// B3R RT-UI: called by name -- UserInterface::EndDragDrop, System::
+// MemoryAllocator::MemFree (0x1800c7ad0) and the two Array bodies
+// 0x180033690 (Array<UI::Event>::SetSize-fill) and 0x18007a0d0 (the generic
+// 8-byte push), neither of which is exported.
 
 // A list node: value, prev, next. The same 0x18-byte shape lane UI1 proved from
 // the drain's own stores, and the same one both unlink blocks here walk.
@@ -295,10 +263,7 @@ void UnlinkFromParent(uint8_t* dlg, RtSink& out) {
         // byte-for-byte the body of the exported static `MemFree`, which is why
         // calling it reproduces the lock discipline exactly with no windows.h in
         // a runtime/src file. Lane UI1 §1b decompiled and compared the two.
-        FreeFn mfree = reinterpret_cast<FreeFn>(rtuielem::AtomicExport(g_memFreeSlot, kMemFree));
-        if (out.Call("MemFree(unlinked node)", (const void*)mfree,
-                     reinterpret_cast<int64_t>(n)))
-            mfree(n);
+        System::MemoryAllocator::MemFree(n);
         return;
     }
 }
@@ -315,7 +280,7 @@ void UnlinkFromParent(uint8_t* dlg, RtSink& out) {
 // `src` differs between the two call sites and is not an accident — see fact 2
 // in the banner.
 void PushRemovedUnlessPresent(UserInterface* self, void** dlgPtr, const void* src,
-                              RtSink& out) {
+                              RtSink& /*out*/) {
     uint8_t* const S = reinterpret_cast<uint8_t*>(self);
 
     int32_t n = *reinterpret_cast<int32_t*>(S + 0x20);
@@ -328,12 +293,8 @@ void PushRemovedUnlessPresent(UserInterface* self, void** dlgPtr, const void* sr
         if (found) return;
     }
 
-    PushFn push = reinterpret_cast<PushFn>(rtuielem::AtomicAddr(g_dynArrayPushSlot, kDynArrayPushAddr));
-    if (out.Call("DynArrayPush(_removedDialogs)", (const void*)push,
-                 reinterpret_cast<int64_t>(S + 0x18),
-                 *reinterpret_cast<int32_t*>(S + 0x20) + 1,
-                 reinterpret_cast<int64_t>(src)))
-        push(S + 0x18, *reinterpret_cast<int32_t*>(S + 0x20) + 1, src);
+    rtcoll::RtColl_ArraySetSizeFill_18007a0d0(S + 0x18,                 // DynArrayPush(_removedDialogs)
+                                              *reinterpret_cast<int32_t*>(S + 0x20) + 1, src);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,13 +379,9 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
             ev.pad24    = 0;   // never written by retail, never copied
             ev.dragData = *reinterpret_cast<void**>(S + 0x78);             // 0x180121034
 
-            SetSizeFn setSize = reinterpret_cast<SetSizeFn>(
-                rtuielem::AtomicAddr(g_eventsSetSizeSlot, kEventsSetSizeAddr));
-            if (out.Call("Array<UI::Event>::SetSize (drag cancel, id 0xd)",
-                         (const void*)setSize,
-                         reinterpret_cast<int64_t>(S + 0x48),
-                         *reinterpret_cast<int32_t*>(S + 0x50) + 1))
-                setSize(S + 0x48, *reinterpret_cast<int32_t*>(S + 0x50) + 1, &ev);
+            // Array<UI::Event>::SetSize (drag cancel, id 0xd)
+            rtcoll::RtColl_ArraySetSizeFill_180033690(S + 0x48,
+                                                      *reinterpret_cast<int32_t*>(S + 0x50) + 1, &ev);
 
             EndDragDrop();
         }
@@ -555,20 +512,4 @@ extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPt
 
     self->UI::UserInterface::CloseDialog(
         reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
-}
-
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-int RtUiCloseDialogRegister() {
-    int count = 0;
-
-    // Registered under BOTH the mangled name and the address. WAVE7.md §3's
-    // rule: a port registered under the name only can be dead at a call site
-    // that reaches the DLL through the address fallback, while reporting a
-    // clean-looking oracle over nothing.
-    RegisterRuntimeExport(kCloseDialog, (void*)&RtUi_UserInterface_CloseDialog); ++count;
-    RegisterRuntimeAddr(0x180120f20, (void*)&RtUi_UserInterface_CloseDialog);
-
-    return count;
 }

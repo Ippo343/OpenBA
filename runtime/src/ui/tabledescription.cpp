@@ -42,7 +42,6 @@
 //   0x180079870  ~Array<Cell>, the canonical free-and-zero body
 // ??0TableElement@UI@@ (0x18011e2f0) is already ported (ui_factory_wave28.cpp).
 // ============================================================================
-#include <atomic>
 #include <new>
 #include <cstddef>
 #include <cstdint>
@@ -51,6 +50,11 @@
 #include "../../types/ui/TableDescription.h"
 #include "../../types/ui/TableElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/ui/SpriteSheet.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 // ENDGAME B.3.6 block C4: the layout moved to runtime/types/ui/
 // TableDescription.h (the real class). Every slot body below is a MEMBER; each
@@ -58,26 +62,10 @@
 // DOORS (B4b-2). RULE B6-5: every export the members reach is cached in a
 // namespace-scope std::atomic slot, never in a function-local static.
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_memFree{nullptr};
 
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -95,15 +83,12 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using MemFreeFn = void (*)(void*);
-
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        reinterpret_cast<MemFreeFn>(AtomicExport(
-            g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(*field);
+        System::MemoryAllocator::MemFree(*field);
     } else {
         *field = nullptr;
     }
@@ -159,16 +144,16 @@ bool TableDescription::Serialize(void* streamv) {
     rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 18011e643 (re-read)
-        using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x1800799a0ull)(&_cells, n);         // 18011e651
+        rtcoll::RtColl_ArraySetSize_1800799a0(&_cells, n);         // 18011e651
     }
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
     Cell* cell = _cells._data;                                 // 18011e656 (once)
     for (int32_t i = 0; i < n; ++i, ++cell) {                  // 18011e65e / 18011e6ae
         rw->SerializeInt(cell->column, nullptr);
         rw->SerializeInt(cell->row, nullptr);
-        RtAddr<FieldSerFn>(0x180038f90ull)(&cell->desc, &ser); // 18011e6a2
+        RtObject_ExternalPtrSerialize_ElementDescription(               // 18011e6a2
+            reinterpret_cast<RtObject::External**>(&cell->desc),        // B.3.x bridge
+            reinterpret_cast<rt::io::Serializer*>(&ser));               // B.3.x bridge
     }
 
     if (rw != nullptr) {                                       // 18011e6b8
@@ -209,8 +194,7 @@ bool TableDescription::Serialize(void* streamv) {
 // twice; so does this.
 Object::InternalPtr<Element>* TableDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xf0, 8);   // 18011e398 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0xf0, 8);   // 18011e398 (inlined)
 
     TableElement* elem = nullptr;
     if (raw != nullptr)                                        // 18011e3c3
@@ -226,14 +210,12 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
     elem->_columnCount = columns;                              // 18011e3ea  CROSSED:
     elem->_rowCount    = rows;                                 // 18011e3f4  +0x68->0xc4, +0x6c->0xc0
 
-    using SetSizeFn = void (*)(void* array, int n);
-    RtAddr<SetSizeFn>(0x18002fea0ull)(&elem->_rowSizes, rows);        // 18011e405  Array<int32>
-    RtAddr<SetSizeFn>(0x18002fea0ull)(&elem->_columnSizes, columns);  // 18011e414  Array<int32>
+    rtcoll::RtColl_ArraySetSize_18002fea0(&elem->_rowSizes, rows);        // 18011e405  Array<int32>
+    rtcoll::RtColl_ArraySetSize_18002fea0(&elem->_columnSizes, columns);  // 18011e414  Array<int32>
 
     elem->_spacing = _spacing;                                 // 18011e41c
 
-    using PtrSetSizeFn = void (*)(void* array, int n);
-    RtAddr<PtrSetSizeFn>(0x1800764c0ull)(&elem->_children, columns * rows);  // 18011e431
+    rtcoll::RtColl_ArraySetSize_1800764c0(&elem->_children, columns * rows);  // 18011e431
 
     for (int32_t a = 0; a < _columnCount; ++a) {
         for (int32_t b = 0; b < _rowCount; ++b) {
@@ -277,9 +259,13 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
             Element** kids = elem->_children._data;            // 18011e4fd
             Element** dst  = kids + flat;                      // 18011e504
 
-            using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-            void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(
-                dialog, &slot, cell->desc);                    // 18011e519
+            // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+            // placed in the caller's slot.                    // 18011e519
+            void** made = &slot;
+            new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
+                static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
+                    Object::ExternalPtr<UI::ElementDescription>(
+                        static_cast<UI::ElementDescription*>(cell->desc))));
 
             *dst = static_cast<Element*>(*made);               // 18011e521
 
@@ -304,8 +290,7 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
 // _textName (+0x60) and the tail JMP into ~External are the compiler's chain.
 TableDescription::~TableDescription() {
     ReleaseStringField(&_unknown90);                           // 18011e710
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180079870ull)(&_cells);              // 18011e74a
+    rtcoll::RtColl_ArrayDtor_180079870(&_cells);              // 18011e74a
 }
 
 // ?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ 0x180078fc0 --
@@ -330,19 +315,6 @@ Object::Base* TableDescription::CreateInPlaceObject(void* place) {
 // `??_7TableDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // TableDescription now wears the compiler's table.
 // ============================================================================
-
-int RtUiTableDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@TableDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TableDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180078fc0ull, (void*)&UI::TableDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TableDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180079040ull, (void*)&UI::TableDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TableDescription's own type record, built at CRT init

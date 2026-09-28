@@ -108,3 +108,6 @@ static_assert(offsetof(ToolTipDialog, _unknownB8) == sizeof(DialogInstance),
 static_assert(offsetof(ToolTipDialog, _unknownBC) == 0xbc, "_unknownBC @ +0xbc");
 
 }  // namespace UI
+
+// ==== B3R RT-UI: the operator new body (ui/tooltipdialog.cpp), called by name ====
+extern "C" void* RtUi_ToolTipDialog_OperatorNew(uint64_t bytes);  // 0x18004cfd0 ??2ToolTipDialog@UI@@SAPEAX_K@Z

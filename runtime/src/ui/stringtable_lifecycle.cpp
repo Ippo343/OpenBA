@@ -124,19 +124,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/StringTable.h"
-
-// ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
-// must not be included from runtime/src (rt_port.h explains why). Declared here
-// exactly as ~30 sibling runtime files already declare it.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
 
 namespace {
 
 uint64_t g_deleteEntries = 0;
 uint64_t g_deleteNull    = 0;   // retail's own null branch was taken
-
-using VoidPtrFn = void (*)(void*);
 
 void StringTableLifecycleReport() {
     printf("[RtPort] UI::StringTable lifecycle ATTENDANCE: "
@@ -163,32 +156,6 @@ extern "C" void RtUiStringTable_OperatorDelete(void* p) {
     // (?MemFree@MemoryAllocator@System@@SAXPEAX@Z) -- see the banner for the
     // instruction-by-instruction diff that licenses delegating to it instead of
     // opening a second set of doors on the allocator singleton, its lock and
-    // the two critical-section imports. Registry-first, so this follows the
-    // tree's allocator rather than pinning one.
-    static VoidPtrFn memFree = nullptr;
-    if (!memFree)
-        memFree = reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (memFree) {
-        memFree(p);
-    } else {
-        std::fprintf(stderr, "[RtPort] StringTable::operator delete: 0x1800c7ad0 "
-                             "resolved NULL -- %p was NOT freed\n", p);
-    }
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH doors for each row: the mint and our own call sites try the NAME first
-// and the ADDRESS second, a name-only registration leaves any by-address
-// consumer on the DLL, and an address-only one is invisible to the census
-// (reference_by_address_door_dies_at_cutover.md,
-//  reference_census_cannot_see_nonliteral_registrations.md -- which is also why
-//  each name is spelled as its own string literal here).
-int RtUiStringTableLifecycleDtorRegister() {
-    int n = 0;
-    RegisterRuntimeExport("??3StringTable@UI@@SAXPEAX@Z", (void*)&RtUiStringTable_OperatorDelete);
-    RegisterRuntimeAddr(0x180002220ull, (void*)&RtUiStringTable_OperatorDelete);    ++n;
-
-    return n;
+    // the two critical-section imports. Called directly (B3R RT-UI).
+    System::MemoryAllocator::MemFree(p);
 }
