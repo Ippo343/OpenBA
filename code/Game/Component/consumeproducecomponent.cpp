@@ -32,23 +32,7 @@
 // which would zero). (The free ConsumeProduceComponent_ResizeArray copy and its
 // reader-less 0x140023a00 row went at the B.3.8 close.)
 
-// fn_IsDerivedFrom — dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-    // IsDerivedFrom via dispatch slot
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_initialized = true;
-}
+// The IsDerivedFrom import slot 0x140152a98 is Object::Base::IsDerivedFrom.
 
 // ============================================================
 // ConsumeProduceComponent::Shutdown (vtable slot [3], 0x140118e00)
@@ -83,18 +67,6 @@ static void EnsureHelpers() {
 //   self->consumeResourceId = *(desc+0x4c)        // resource ID from description
 //   for i in range(self->consumeCount):
 //     consumeRates[i] = 1.0f
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void ConsumeProduceComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[ConsumeProduceComponent] Funcs resolved: TypeId=%u IsDerived=%p\n",
-           ConsumeProduceDescription::TypeId(),
-           (void*)s_fn_IsDerivedFrom_dispatch);
-#endif
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-B — ConsumeProduceComponent as a REAL class
@@ -148,8 +120,6 @@ void* ConsumeProduceComponent::CreateInPlaceObject(void* storage) {
 // [3] 0x140118e00 (serialize) and [4] 0x140118ef0 (Startup: init the consume config
 // from the building's ConsumeProduceDescription).
 void       ConsumeProduceComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
     ResourceProduceComponent::Persist(stream);
 
@@ -193,11 +163,6 @@ void       ConsumeProduceComponent::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
 }
 void       ConsumeProduceComponent::Startup() {
-    EnsureHelpers();
-
-    if (!s_fn_IsDerivedFrom_dispatch)
-        return;
-
     void* entity = _entity;
     if (!entity) return;
 
@@ -234,7 +199,7 @@ void       ConsumeProduceComponent::Startup() {
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom
-            if (s_fn_IsDerivedFrom_dispatch(comp, targetTypeId)) {
+            if (reinterpret_cast<const Object::Base*>(comp)->IsDerivedFrom(targetTypeId)) {   // B.3.x bridge
                 desc = comp;
             }
             break;

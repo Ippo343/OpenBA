@@ -36,11 +36,11 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
+#include "Work/exe_bodies.h"
 
 // Entity_FindComponent_Storage @ 0x140006270 — returns the site StorageComponent
 // (type-id 0x1401c7e78) into the retIBP buffer. Registered in standalone
-// (reg_work_base.cpp -> WorkBase_FindComponent_6270).
-typedef void* (*BC8630_FindCompStorage_t)(uintptr_t entity, void* retIBP);
+// (reg_work_base.cpp -> WorkBase_FindComponent_6270), called directly.
 
 // Type-id for "BuildDescription" (DWORD_1401c7040). The .rdata BaseTypeInfo is
 // created by BuildDescription_Register (0x14014e5f5):
@@ -59,7 +59,7 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
     void* descObj = *reinterpret_cast<void**>(self + 0x18);
     uint32_t descTid = BC8630_BuildDescTypeId();
     void* desc = nullptr;
-    if (descObj && fn_IsDerivedFrom && descTid && fn_IsDerivedFrom(descObj, descTid))
+    if (descObj && descTid && ::Object::IsDerivedFromNullSafe(descObj, descTid))
         desc = descObj;
     // Original derefs desc unconditionally; if desc were null it would loop over
     // count at desc+0x28 (crash). Guard: no BuildDescription => no required
@@ -69,14 +69,7 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
 
     // --- Find the site StorageComponent via BuildComponent+0x10 entity IBP ---
     uintptr_t storage = 0;
-    BC8630_FindCompStorage_t findStorage =
-        reinterpret_cast<BC8630_FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    if (findStorage)
-        findStorage(*reinterpret_cast<uintptr_t*>(self + 0x10), &storage);
-    // FLAG: if findStorage is unavailable (unregistered exe addr in standalone),
-    // storage stays 0, every material reads delivered=0, and we return false as
-    // soon as a material has required>0 (i.e. keep gathering). Safe default — it
-    // never falsely reports materials complete. 0x140006270 IS registered today.
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x10), &storage);   // 0x140006270
 
     int matCount   = *reinterpret_cast<int*>(descAddr + 0x28);
     int multiplier = *reinterpret_cast<int*>(self + 0x4c);

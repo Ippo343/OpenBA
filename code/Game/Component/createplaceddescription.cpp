@@ -48,6 +48,7 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>
+#include "system/MemoryAllocator.h"
 
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);  // serialize_externals.cpp
 
@@ -68,7 +69,7 @@ CreatePlacedDescription::CreatePlacedDescription()
 // dtor (slot 0 0x140032ad0 minus the stamps): frees the int[] array; the String member's dtor follows.
 // The compiler then chains ~Description -> ~External.
 CreatePlacedDescription::~CreatePlacedDescription() {
-    if (fn_MemFreeStatic && _placeArray) fn_MemFreeStatic(_placeArray);   // int[] array
+    if (_placeArray) ::System::MemoryAllocator::MemFree(_placeArray);   // int[] array
     _placeArray = nullptr;
     _placeCount = 0;
     _placeCap = 0;
@@ -76,7 +77,7 @@ CreatePlacedDescription::~CreatePlacedDescription() {
 
 // [5] 0x1401198d0: stream order as retail.
 bool CreatePlacedDescription::Serialize(void* stream) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: the allocator is unwired
+    if (!::System::MemoryAllocator::_singleton) return true;   // standalone: the allocator is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_category, nullptr);
     // int[] count @ +0x38, base @ +0x30 (stride 4).
@@ -127,7 +128,7 @@ bool CreatePlacedDescription::Serialize(void* stream) {
         // null data pointer with a non-zero count makes it read from address 0. Retail
         // never sees that state; ours could, so keep the shared helper off this path.
         arr = reinterpret_cast<uint8_t*>(
-            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
+            ::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
         _placeArray = arr;
         _placeCount = count;
         _placeCap   = count;

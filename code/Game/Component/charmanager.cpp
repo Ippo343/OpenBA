@@ -49,21 +49,15 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
+#include "Game/exe_constants.h"
 
 namespace {
 
-// --- exe .rdata consts (resolved lazily) ---
-static const float* s_pUVScale   = nullptr;   // g_fUVScale @ 0x14017214c (= 1.0f)
-static const float* s_pRadiusEps = nullptr;   // DAT_1401720b8 (radius bias)
-static const float* s_pHalf      = nullptr;   // DAT_140172114 (= 0.5f)
-static bool s_constInit = false;
-static void EnsureConsts() {
-    if (s_constInit) return;
-    s_pUVScale   = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pRadiusEps = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720b8));
-    s_pHalf      = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_constInit = true;
-}
+// --- exe .rdata consts (exe_constants.h) ---
+//   g_fUVScale @ 0x14017214c (= 1.0f), DAT_1401720b8 (radius bias, 0.001),
+//   DAT_140172114 (= 0.5f)
+inline float RadiusEps() { float f; const uint32_t b = kRdata_1401720b8; std::memcpy(&f, &b, sizeof f); return f; }
 
 
 } // namespace
@@ -160,7 +154,6 @@ extern "C" void CharMgr_helper_8d00(int64_t mgr, int idx) {
 //   position and, if it changed, move it (8d00 out of old cell, 8c40 into new).
 // ===========================================================================
 extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
-    EnsureConsts();
     uint8_t* mgr = reinterpret_cast<uint8_t*>(mgrF);
     uint8_t* slots = *reinterpret_cast<uint8_t**>(mgr + 0x10);
     uint8_t* slot  = slots + static_cast<int64_t>(idx) * 0x18;
@@ -191,7 +184,7 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     }
 
     // Rectangle::Center / Size (inlined) ; radius = max(half-extent.x, half-extent.y)
-    float half = s_pHalf ? *s_pHalf : 0.5f;
+    float half = kRdata_140172114;
     float cx = (rect[0] + rect[2]) * half;                 // center.x
     float cy = (rect[1] + rect[3]) * half;                 // center.y
     float hx = (rect[2] - rect[0]) * half;                 // half-extent.x
@@ -217,7 +210,7 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     std::memcpy(&radiusBits, &radius, 4);
     std::memcpy(&worldBits, &worldSize, 4);
     if (radiusBits != s_mRadiusBits || worldBits != s_mWorldBits || levels != s_mLevels) {
-        float eps = s_pRadiusEps ? *s_pRadiusEps : 0.0f;
+        float eps = RadiusEps();
         float lr = worldSize / (radius + eps);
 
         // level = floor(log2(lr)) via float-exponent extraction, clamped to [0, levels-1]
@@ -228,7 +221,7 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
         if (level < 0) level = 0;
 
         int cellsPerSide = 1 << level;
-        float uvScale = s_pUVScale ? *s_pUVScale : 1.0f;
+        float uvScale = kRdata_14017214c;
         s_mCellsPerUnit = uvScale / (worldSize / static_cast<float>(cellsPerSide));
         s_mLevel = level; s_mCellsPerSide = cellsPerSide;
         s_mRadiusBits = radiusBits; s_mWorldBits = worldBits; s_mLevels = levels;
@@ -284,8 +277,7 @@ extern "C" void CharMgr_IntArrayResize_21d0(int64_t* arr, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0)
             *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc) = newCount * 3;
         int cap = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc);
-        void* nd = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                                             static_cast<uint64_t>(cap) << 2, 4) : nullptr;
+        void* nd = ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cap) << 2, 4);
         arr[0] = reinterpret_cast<int64_t>(nd);
     }
     int start = (oldData == reinterpret_cast<void*>(arr[0])) ? oldCount : 0;
@@ -294,8 +286,8 @@ extern "C" void CharMgr_IntArrayResize_21d0(int64_t* arr, int newCount) {
         if (i < oldCount && dst)
             dst[i] = reinterpret_cast<int*>(oldData)[i];
     }
-    if (oldData != reinterpret_cast<void*>(arr[0]) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldData);
+    if (oldData != reinterpret_cast<void*>(arr[0]))
+        ::System::MemoryAllocator::MemFree(oldData);
 }
 
 // ===========================================================================
@@ -320,9 +312,8 @@ extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp) {
             if (*reinterpret_cast<int*>(mgr + 0x1c) < newCount) {
                 *reinterpret_cast<int*>(mgr + 0x1c) = newCount;
                 if (count != 0) *reinterpret_cast<int*>(mgr + 0x1c) = newCount * 3;
-                void* ns = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                              static_cast<uint64_t>(*reinterpret_cast<int*>(mgr + 0x1c)) * 0x18, 8)
-                              : nullptr;
+                void* ns = ::System::MemoryAllocator::MemAlloc(
+                    static_cast<uint64_t>(*reinterpret_cast<int*>(mgr + 0x1c)) * 0x18, 8);
                 *reinterpret_cast<void**>(mgr + 0x10) = ns;
             }
             int start = (oldSlots == *reinterpret_cast<void**>(mgr + 0x10)) ? count : 0;
@@ -346,8 +337,8 @@ extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp) {
                 *reinterpret_cast<int64_t*>(dst + 0x08) = srcLinks;
                 *reinterpret_cast<int*>(dst + 0x10) = srcCell;
             }
-            if (oldSlots != *reinterpret_cast<void**>(mgr + 0x10) && fn_MemFreeStatic)
-                fn_MemFreeStatic(oldSlots);
+            if (oldSlots != *reinterpret_cast<void**>(mgr + 0x10))
+                ::System::MemoryAllocator::MemFree(oldSlots);
         }
     } else {
         // ---- free-list pop path ----
@@ -374,7 +365,7 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
     uint8_t* slot = *reinterpret_cast<uint8_t**>(m + 0x10) + static_cast<int64_t>(idx) * 0x18;
     CharMgr_helper_8d00(mgr, idx);
     int64_t nullIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *reinterpret_cast<int64_t*>(slot + 0x00) = nullIbp;
     *reinterpret_cast<int64_t*>(slot + 0x08) = 0;
     *reinterpret_cast<int*>(slot + 0x10) = -1;
@@ -388,8 +379,8 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
         if (*reinterpret_cast<int*>(m + 0x2c) < newCount) {
             *reinterpret_cast<int*>(m + 0x2c) = newCount;
             if (freeCount != 0) *reinterpret_cast<int*>(m + 0x2c) = newCount * 3;
-            void* nf = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                          static_cast<uint64_t>(*reinterpret_cast<int*>(m + 0x2c)) << 2, 4) : nullptr;
+            void* nf = ::System::MemoryAllocator::MemAlloc(
+                static_cast<uint64_t>(*reinterpret_cast<int*>(m + 0x2c)) << 2, 4);
             *reinterpret_cast<void**>(m + 0x20) = nf;
         }
         int start = (oldFL == *reinterpret_cast<void**>(m + 0x20)) ? freeCount : 0;
@@ -397,8 +388,8 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
         for (int i = start; i < newCount; ++i) {
             if (fl) fl[i] = (i < freeCount) ? reinterpret_cast<int*>(oldFL)[i] : idx;
         }
-        if (oldFL != *reinterpret_cast<void**>(m + 0x20) && fn_MemFreeStatic)
-            fn_MemFreeStatic(oldFL);
+        if (oldFL != *reinterpret_cast<void**>(m + 0x20))
+            ::System::MemoryAllocator::MemFree(oldFL);
     }
 }
 

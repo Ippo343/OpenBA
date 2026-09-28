@@ -33,6 +33,7 @@
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/DestroyComponent.h"
+#include "Game/exe_bodies.h"
 
 // The upgrade/demolish controller: the entity's StateMachineComponent links the
 // member and the 0x14011dfa0 pump (UpgradeUI click) drives states 3->4->5
@@ -79,8 +80,7 @@ void DestroyComponent::Persist(void* stream) {
     ser.Serialize(*reinterpret_cast<int*>(&field54), nullptr);
     ser.Serialize(*reinterpret_cast<int*>(&field58), nullptr);
     ser.Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(&destroyFlags) + 1), nullptr);   // +0x51
-    if (fn_ExternalPtr_BuildSerialize)
-        fn_ExternalPtr_BuildSerialize(&field60, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&field60, &ser);
     ser.Serialize(*reinterpret_cast<bool*>(&destroyFlags), nullptr);
     reinterpret_cast<System::Time*>(&field48)->Serialize(ser);   // B.3.8 bridge (field48 is a Time)
 }
@@ -89,8 +89,7 @@ void DestroyComponent::Persist(void* stream) {
 // into +0x60; dispatched at spawn by ComponentEntity_StartupComponents.
 void DestroyComponent::Startup() {
     void* desc = _description;
-    if (!fn_IsDerivedFrom) return;
-    if (fn_IsDerivedFrom(desc, DestroyDescription::TypeId()))
+    if (::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId()))
         field60 = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
 }
 

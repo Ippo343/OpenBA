@@ -2425,19 +2425,6 @@ bool EngineFuncsInit();
 // which block W0-P0b writes. They stay here, verbatim, until that header exists;
 // then they move there under their defining file's banner.
 
-// ---- componentdescription.cpp
-// ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
-// Resolves and caches an External object by filename.
-// Input: nameString points to an ExternalRef struct:
-//   +0x00: String (8 bytes) — resource name
-//   +0x08: int32  — cached generation counter (compared against ExternalFactory+0x08)
-//   +0x10: void*  — cached External* result
-// If the generation counter matches the factory's, the cached result is still valid.
-// Otherwise, looks up the External by converting the String to a Filename and calling
-// ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
-// caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
-void ResolveExternalByName_Impl(void* nameString);
-
 // ---- inline body (no .cpp)
 // Alias used by professionui.cpp
 inline int fn_CalcWorkerSlots(void* storageLocComp) {

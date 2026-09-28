@@ -51,9 +51,6 @@
 //   +0x30 _minDamageLevel  rubble MESH-VARIANT floor  -> ModelComponent+0x166 min
 //
 // ── STANDALONE deviations (each logged once at runtime) ─────────────────────
-//   * The PickingComponent pick-mesh rebuild (0x140128f50) is skipped — it is not
-//     in the address registry, so a collapsing building keeps its intact pick
-//     shape. A click-target nicety; the visuals are unaffected.
 //   * ActionStack_AbortForEntity_c52c0 skips any action whose vtable slot 8/9 is
 //     null. Our action vtables are partially-filled arrays, not the exe's, so an
 //     unported slot must not be called — retail's are all real functions.
@@ -81,6 +78,9 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Action/Action.h"  // B.3.x W0: Action slots 8/9 by name
 #include "Component/exe_bodies.h"
+#include "Component/pickingcomponent_funcs.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
 
 // ============================================================
 // Tracing
@@ -92,30 +92,20 @@ static int  s_milestones = 0;
 static bool Milestone() { return s_milestones++ < 60; }
 
 // ============================================================
-// Resolved helpers
+// Helpers, called directly
 // ============================================================
-typedef void* (*fn_FindIBP_t)(uintptr_t entity, void* retIBP);
-typedef void  (*fn_ModelNotify_t)(void* ownerEntity, int mode);        // 0x1400c2b70
+//   0x140003f60 ModelComponent finder    ActCNR_FindComponent_3f60
+//   0x140006270 StorageComponent finder  WorkBase_FindComponent_6270
+//   0x140026a30 PickingComponent finder  BuildComponent_FindStorage26a30
+//   0x1400c2b70 model-changed notify     ModelComponentNotify_Reimpl
+//   0x140128f50 pick-mesh rebuild        PickingComponent_RegisterMesh
 // 0x14000f090 was Collection::Array<Bytes<0x10,8>>::SetSize monomorphised
 // into the exe (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) —
 // converted at its call site below.
-typedef void  (*fn_PickRebuild_t)(void* pickingComp);                  // 0x140128f50
+typedef void* (*fn_FindIBP_t)(uintptr_t entity, void* retIBP);
 
-static fn_FindIBP_t         s_findModel     = nullptr;  // 0x140003f60 (ModelComponent)
-static fn_FindIBP_t         s_findStorage   = nullptr;  // 0x140006270 (StorageComponent)
-static fn_FindIBP_t         s_findPicking   = nullptr;  // 0x140026a30 (PickingComponent)
-static fn_ModelNotify_t     s_modelNotify   = nullptr;
-static fn_PickRebuild_t     s_pickRebuild   = nullptr;
-
-static bool s_resolved = false;
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_findModel     = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_findStorage   = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_findPicking   = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140026a30));
-    s_modelNotify   = reinterpret_cast<fn_ModelNotify_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
-    s_pickRebuild   = reinterpret_cast<fn_PickRebuild_t>(ResolveAddr(Module::Exe, 0x140128f50));
+static void* FindPickingIBP(uintptr_t entity, void* retIBP) {
+    return BuildComponent_FindStorage26a30(static_cast<int64_t>(entity), retIBP);
 }
 
 static uint32_t TidDestroyDesc() {
@@ -130,15 +120,15 @@ static uint32_t TidDecalComp() {
 
 // Retail's `IsDerivedFrom(p, tid) ? p : nullptr` idiom.
 static void* AsType(void* obj, uint32_t typeId) {
-    if (!obj || !typeId || !fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
+    if (!obj || !typeId) return nullptr;
+    return ::Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;
 }
 
 
 // Find a component through one of the member-return finders. `entitySlot` is the
 // owning component's IBP field (comp+0x10); returns the component or null.
 static void* FindOn(void* entitySlot, fn_FindIBP_t finder) {
-    if (!finder || !entitySlot) return nullptr;
+    if (!entitySlot) return nullptr;
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(entitySlot);
     if (!entity) return nullptr;
     void* out = nullptr;
@@ -157,7 +147,6 @@ static void* FindOn(void* entitySlot, fn_FindIBP_t finder) {
 // "DecalComponent" — the registration at 0x14014edd0 passes name="Decal",
 // suffix="Component" (rdx/r8), the same pair-encoding ModelComponent uses.
 extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP) {
-    EnsureResolved();
     uint32_t typeId = TidDecalComp();
     void* found = nullptr;
     if (entity && typeId) {
@@ -170,14 +159,13 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
             uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (t == typeId) {
                 void* o = *ibp;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
+                if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    else *reinterpret_cast<void**>(retIBP) = found;
     return retIBP;
 }
 
@@ -193,7 +181,6 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
 // IBP and store a null IBP; finally reset the current index to -1 and release the
 // current-action IBP. That is what stops citizens walking into a collapsing building.
 extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp) {
-    EnsureResolved();
     if (!stack || !pEntityIbp) return;
     uintptr_t st = reinterpret_cast<uintptr_t>(stack);
     int count = *reinterpret_cast<int*>(st + 8);
@@ -223,19 +210,19 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
             reinterpret_cast<Action*>(p)->CheckEntity();   // B.3.x bridge (slot 8, the file's "Abort")
             p = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(p) + 0x10);
         }
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(&items[i])->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(&items[i])->DeletePtr(
             );   // B.3.3 bridge
         void* nullIbp = nullptr;
-        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         items[i] = nullIbp;
     }
 
     *reinterpret_cast<int*>(st + 0x18) = -1;
     if (*reinterpret_cast<void**>(st + 0x10) != nullptr) {
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(st + 0x10))->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(st + 0x10))->DeletePtr(
             );   // B.3.3 bridge
         void* nullIbp = nullptr;
-        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<void**>(st + 0x10) = nullIbp;
     }
 
@@ -297,7 +284,6 @@ static void* MeshFromModelDesc(void* modelDesc, int16_t variantIdx, int16_t mode
 // MeshInstance at modelComp+0x28 (MeshInstance::SetMaterialInstance). This is what
 // makes the collapsing building look CHARRED rather than merely lower-poly.
 extern "C" void ModelComp_SetMaterialSet_125020(void* modelComp, int materialSetIdx) {
-    EnsureResolved();
     if (!modelComp) return;
     uintptr_t m = reinterpret_cast<uintptr_t>(modelComp);
 
@@ -332,12 +318,11 @@ extern "C" void ModelComp_SetMaterialSet_125020(void* modelComp, int materialSet
 // Steps the model down one damage stage and refreshes everything hanging off the
 // mesh. Called from all three state-6 handlers.
 extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
-    EnsureResolved();
     if (!destroyComp) return;
     uintptr_t comp = reinterpret_cast<uintptr_t>(destroyComp);
     void* entitySlot = reinterpret_cast<void*>(comp + 0x10);
 
-    void* modelComp = FindOn(entitySlot, s_findModel);
+    void* modelComp = FindOn(entitySlot, &ActCNR_FindComponent_3f60);
     if (!modelComp) return;                   // retail: no ModelComponent, nothing to do
     uintptr_t mc = reinterpret_cast<uintptr_t>(modelComp);
 
@@ -404,25 +389,15 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
 
     // Tell the owner entity its model changed (the MultiObjectComponent child forwarder).
     void* modelOwner = *reinterpret_cast<void**>(mc + 0x10);
-    if (modelOwner && s_modelNotify) s_modelNotify(modelOwner, 0);
+    if (modelOwner) ModelComponentNotify_Reimpl(modelOwner, 0);
 
     // Burnt materials on whatever mesh is now showing.
     ModelComp_SetMaterialSet_125020(modelComp, rubbleMaterialSet);
 
-    // Pick-mesh rebuild — unregistered in standalone (see the header note).
-    void* picking = FindOn(entitySlot, s_findPicking);
+    // Pick-mesh rebuild.
+    void* picking = FindOn(entitySlot, &FindPickingIBP);
     if (picking) {
-        if (s_pickRebuild) {
-            s_pickRebuild(picking);
-        } else {
-            static bool warned = false;
-            if (!warned) {
-                warned = true;
-                std::fprintf(stderr, "[Collapse] pick-mesh rebuild SKIPPED — 0x140128f50 NOT "
-                                     "REGISTERED; the rubble keeps its intact click shape\n");
-                std::fflush(stderr);
-            }
-        }
+        PickingComponent_RegisterMesh(picking);
     }
 
     // Scorch decal: swap the DecalComponent's state, and if a decal is currently
@@ -450,13 +425,12 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
 // enter return as "handled", and state 6 requests no transition of its own — the
 // fire's own state machine forces state 7 when the burn ends.
 extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
-    EnsureResolved();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     void* entitySlot = reinterpret_cast<void*>(comp + 0x10);
 
     // Building has storage -> cancel everything the town was doing with it, then
     // empty the storage outright (the goods burn; state 4's haul-away never runs).
-    if (FindOn(entitySlot, s_findStorage) != nullptr) {
+    if (FindOn(entitySlot, &WorkBase_FindComponent_6270) != nullptr) {
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
                 reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
@@ -464,7 +438,7 @@ extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
             if (townMgr) TownMgr_AbortCitizenActionsFor_89e30(
                 reinterpret_cast<void*>(townMgr), &entityCopy);
         }
-        void* storage = FindOn(entitySlot, s_findStorage);
+        void* storage = FindOn(entitySlot, &WorkBase_FindComponent_6270);
         if (storage) {
             // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
             GameColl::AsArray<GameColl::Bytes<0x10, 8>>(
@@ -494,7 +468,7 @@ extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
 
     // Countdown still running: keep the current mesh but stamp the burnt material set
     // on it right away, so the building starts looking wrong the moment it catches.
-    void* modelComp = FindOn(entitySlot, s_findModel);
+    void* modelComp = FindOn(entitySlot, &ActCNR_FindComponent_3f60);
     if (modelComp && dd)
         ModelComp_SetMaterialSet_125020(
             modelComp, *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dd) + 0x28));
@@ -513,11 +487,10 @@ extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
 // rubble step while the countdown is still running, and then a SECOND one on a
 // coin flip — so both can fire in the same call. Kept as-is.
 extern "C" char Destroy_State6Update_d400(void* data, void* /*sm*/) {
-    EnsureResolved();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     void* entitySlot = reinterpret_cast<void*>(comp + 0x10);
 
-    if (FindOn(entitySlot, s_findModel) == nullptr) return 1;
+    if (FindOn(entitySlot, &ActCNR_FindComponent_3f60) == nullptr) return 1;
 
     // Retail calls IsDerivedFrom(comp+0x18, DestroyDescription) here and DISCARDS the
     // result — no branch reads it. Not replicated: it has no side effect.
@@ -540,7 +513,6 @@ extern "C" char Destroy_State6Update_d400(void* data, void* /*sm*/) {
 // FireComponent_BeginBurning_11e7b0. Subtract this frame's delta; when it reaches
 // zero, clamp it and take the rubble step that puts the building in its final state.
 extern "C" char Destroy_State6Tick_d490(void* data, void* /*sm*/, void* time) {
-    EnsureResolved();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
 
     int64_t remaining = *reinterpret_cast<int64_t*>(comp + 0x48);

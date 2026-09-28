@@ -23,53 +23,20 @@
 #include "Component/NaturalResourceComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7b30 cell class
 #include "Component/CropFieldDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7548 cell class
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
+#include "Game/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Player/exe_bodies.h"
+#include "Game/exe_constants.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers, called directly (B.3R)
 // ============================================================
-
-
-// FUN_14011aa20 — validate entity references
-typedef void (*fn_ValidateEntityRefs_t)(uintptr_t self);
-static fn_ValidateEntityRefs_t s_fn_ValidateEntityRefs = nullptr;
-
-// FUN_140002340 — serialize InternalBasePtr array
-typedef void (*fn_SerializeIBPArray_t)(void* arrayPtr, void* serializer);
-static fn_SerializeIBPArray_t s_fn_SerializeIBPArray = nullptr;
-
-// CropFieldComponent_helper_35b0 — resize entity list
-typedef void (*fn_ResizeEntityList_t)(void* arrayPtr, int newSize);
-static fn_ResizeEntityList_t s_fn_ResizeEntityList = nullptr;
-
-// CropFieldComponent_helper_36c0 — serialize entity list entries
-typedef void (*fn_SerializeEntityList_t)(void* serializer, int count, uintptr_t arrayPtr);
-static fn_SerializeEntityList_t s_fn_SerializeEntityList = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-
-    s_fn_ValidateEntityRefs = reinterpret_cast<fn_ValidateEntityRefs_t>(
-        ResolveAddr(Module::Exe, 0x14011aa20));
-
-    s_fn_SerializeIBPArray = reinterpret_cast<fn_SerializeIBPArray_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    // NOTE: the real helper entry points are 0x1400335b0 / 0x1400336c0
-    // (CropFieldComponent_helper_35b0 / _36c0). The earlier typedefs above
-    // referenced 0x1400035b0 / 0x1400036c0, which are UNRELATED functions
-    // (AutoPickupComponent_ScalarDtor mid-body / BoatComponent_GetType) — a
-    // dropped-digit typo. Corrected here so the guarded calls hit the right code.
-    s_fn_ResizeEntityList = reinterpret_cast<fn_ResizeEntityList_t>(
-        ResolveAddr(Module::Exe, 0x1400335b0));
-
-    s_fn_SerializeEntityList = reinterpret_cast<fn_SerializeEntityList_t>(
-        ResolveAddr(Module::Exe, 0x1400336c0));
-
-    s_initialized = true;
-}
+//   FUN_14011aa20 CropFieldComponent_ValidateEntityRefs — validate entity references
+//   FUN_140002340 Reimpl_ExternalPtr_Serialize_StringTable — serialize the IBP at +0x50
+//   0x1400335b0   CropFieldComponent_ResizeEntityList (CropFieldComponent_helper_35b0)
+//   0x1400336c0   CropFieldComponent_SerializeEntityList (CropFieldComponent_helper_36c0)
 
 // ============================================================
 // Reimplemented exe helpers (callee bodies for the guarded call sites)
@@ -77,14 +44,9 @@ static void EnsureHelpers() {
 
 // Extra sub-helpers needed by the reimpl bodies below.
 
-// FUN_1400052c0 — FindComponent (BuildStateComponent variant) on a ComponentEntity.
-//   RCX=entity, RDX=outIBP  (returns outIBP)
-typedef void* (*fn_FindComp_BS_local_t)(int64_t entity, void* outIBP);
-static fn_FindComp_BS_local_t s_fn_FindComp_BS_local = nullptr;
-
-// Object::Base::IsA dispatch slot at 0x140151410 — RCX=obj, EDX=typeId -> bool
-typedef bool (*fn_Base_IsA_t)(void* obj, uint32_t typeId);
-static fn_Base_IsA_t s_fn_Base_IsA = nullptr;
+// FUN_1400052c0 — FindComponent (BuildStateComponent variant) on a ComponentEntity:
+//   WorkBase_FindComponent_52c0, called directly.
+// Object::Base::IsA — the import slot 0x140151410 — is the member (Object::Base::IsA).
 
 // Retail CropFieldComponent_helper_36c0 (0x1400336c0) disassembles to the
 // dispatch slots ac8, ac8, aa0, a98, aa0, a98, a58 — i.e. two Serialize(int&),
@@ -94,28 +56,6 @@ static fn_Base_IsA_t s_fn_Base_IsA = nullptr;
 // type-id cells (INVENTORY_C Table 1), read BY CELL. 0x1401c7b30 is
 // NaturalResourceComponent (not "BuildStateComp" as the old local name said).
 
-static bool s_cropExtraInit = false;
-static void EnsureCropExtras() {
-    if (s_cropExtraInit) return;
-    s_fn_FindComp_BS_local = reinterpret_cast<fn_FindComp_BS_local_t>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-    // Object::Base::IsA via the IAT dispatch slot 0x140151410. The slot is bound to exe
-    // 0x140002d40, which is NOT IsA at all (it is DynArray8_EraseByValue) and has no
-    // reimplementation, so ResolveAddr yields 0 and s_fn_Base_IsA stays null. The
-    // `s_fn_Base_IsA &&` guard in ValidateEntityRefs then fails for EVERY slot, so every
-    // correctly-bound crop cell was demoted to state 2 on the very next validate pass —
-    // measured: 64 msg-0 binds, then histogram 1:0 2:64, and the field pinned in state 9
-    // requesting the body-less state 21 forever.
-    //
-    // The ORCHARD wave already hit this identical bug and fixed it with the fallback
-    // below (see EnsureSubHelpers in orchardcomponent.cpp, whose comment describes the
-    // same "replanted the same cell forever" symptom). The crop-field copy of the
-    // resolve was written without it. Same fallback here.
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140151410);
-    if (slot) s_fn_Base_IsA = *reinterpret_cast<fn_Base_IsA_t*>(slot);
-    if (!s_fn_Base_IsA) s_fn_Base_IsA = reinterpret_cast<fn_Base_IsA_t>(fn_IsA);
-    s_cropExtraInit = true;
-}
 
 // Reimpl of FUN_14011aa20 (validate field-tile entity refs: drop stale/dead refs)
 // Iterates the +0x58 array (stride 0x20, count at +0x60). For each "assigned"
@@ -123,8 +63,6 @@ static void EnsureCropExtras() {
 // a ComponentEntity, or its build-state component link no longer matches, the
 // entry is reset to state 2 with null IBPs.
 void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
-    EnsureHelpers();
-    EnsureCropExtras();
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t map = *(uintptr_t*)(world + 0xf8);
@@ -139,11 +77,9 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         void* obj = *(void**)(*(uintptr_t*)(map + 0x80) + 8 + (int64_t)id * 0x30);
         bool keep = false;
         if (obj != nullptr) {
-            if (s_fn_Base_IsA &&
-                s_fn_Base_IsA(obj, ComponentEntity::TypeId())) {
+            if (reinterpret_cast<const Object::Base*>(obj)->IsA(ComponentEntity::TypeId())) {   // B.3.x bridge
                 uint8_t outIBP[8] = {0};
-                if (s_fn_FindComp_BS_local)
-                    s_fn_FindComp_BS_local((int64_t)obj, outIBP);
+                WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(obj), outIBP);
                 if (*(void**)outIBP != nullptr) {
                     if (obj == *(void**)(entry + 0x8)) keep = true;
                 }
@@ -154,10 +90,10 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         // Stale: reset entry to state 2 and null the two IBP slots.
         *(int*)(entry + 0x4) = 2;
         uint64_t nullIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(entry + 0x8) = nullIBP;
         nullIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(entry + 0x10) = nullIBP;
     }
 }
@@ -168,7 +104,6 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
 // allocates cap*0x20, copies old [int,int,ptr,ptr,bool] entries, zero-inits new
 // ones, frees old. On shrink, just updates count (no realloc).
 void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize) {
-    EnsureHelpers();
     int64_t* base = reinterpret_cast<int64_t*>(arrayPtr);
     int oldCount = (int)base[1];
     if (newSize == oldCount) return;
@@ -181,7 +116,7 @@ void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize) {
         if (newSize == oldCount + 1 && oldCount != 0) {
             *pCap = newSize * 3;
         }
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(*pCap) * 0x20, 8);
+        void* newData = ::System::MemoryAllocator::MemAlloc((uint64_t)(*pCap) * 0x20, 8);
         base[0] = (int64_t)newData;
     }
 
@@ -204,7 +139,7 @@ void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize) {
     }
 
     if (oldData != (void*)base[0]) {
-        fn_MemFreeStatic(oldData);
+        ::System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -213,8 +148,6 @@ void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize) {
 // Per entry: int id, int state, IBP(ComponentEntity), IBP(BuildStateComponent),
 // bool. After each IBP is read it is type-validated and nulled if the type is wrong.
 void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr_t arrayPtr) {
-    EnsureHelpers();
-    EnsureCropExtras();
     if (count <= 0) return;
     uintptr_t entry = arrayPtr;
     for (int i = 0; i < count; i++) {
@@ -223,14 +156,14 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
         // IBP #1 -> ComponentEntity
         reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 8) != nullptr &&
-            !fn_IsDerivedFrom(*(void**)(entry + 8), ComponentEntity::TypeId())) {
+            !::Object::IsDerivedFromNullSafe(*(void**)(entry + 8), ComponentEntity::TypeId())) {
             *(uint64_t*)(entry + 8) = 0;
         }
         // IBP #2 -> NaturalResourceComponent (0x1401c7b30; the old local name here
         // said "BuildStateComp", but INVENTORY_C Table 1 says NaturalResourceComponent)
         reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 0x10) != nullptr &&
-            !fn_IsDerivedFrom(*(void**)(entry + 0x10), NaturalResourceComponent::TypeId())) {
+            !::Object::IsDerivedFromNullSafe(*(void**)(entry + 0x10), NaturalResourceComponent::TypeId())) {
             *(uint64_t*)(entry + 0x10) = 0;
         }
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)(entry + 0x18), nullptr);   // B.3.4 bridge
@@ -251,20 +184,6 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
 //      d. Serialize entity count from +0x60
 //      e. On load: resize entity list at +0x58
 //      f. CropFieldComponent_helper_36c0 — serialize entity list entries
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void CropFieldComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[CropFieldComponent] Funcs resolved: ValidateEntityRefs=%p "
-           "SerializeIBPArray=%p ResizeEntityList=%p SerializeEntityList=%p\n",
-           (void*)s_fn_ValidateEntityRefs,
-           (void*)s_fn_SerializeIBPArray, (void*)s_fn_ResizeEntityList,
-           (void*)s_fn_SerializeEntityList);
-#endif
-}
 
 // ===== ENDGAME B.3.8 MI-B — CropFieldComponent's own slot bodies =====
 // The class (CropFieldComponent.h) reaches these three through its members
@@ -316,11 +235,8 @@ void* CropFieldComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CropFieldComponent());
 }
 
-// [3] 0x14011ae70. The body resolves its helpers at its top (slot 3 is the first
-// call into this class on a load-from-save).
+// [3] 0x14011ae70 (slot 3 is the first call into this class on a load-from-save).
 void CropFieldComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     // Base Component serialization
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
@@ -334,18 +250,14 @@ void CropFieldComponent::Persist(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Validate entity references
-    if (s_fn_ValidateEntityRefs) {
-        s_fn_ValidateEntityRefs((uintptr_t)this);
-    }
+    CropFieldComponent_ValidateEntityRefs((uintptr_t)this);   // 0x14011aa20
 
     // Serialize cropFlags as two bools (+0x48 and +0x49)
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)this + 0x48), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)this + 0x49), nullptr);   // B.3.4 bridge
 
     // Serialize InternalBasePtr array at +0x50
-    if (s_fn_SerializeIBPArray) {
-        s_fn_SerializeIBPArray((void*)((uintptr_t)this + 0x50), serializer);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable((void*)((uintptr_t)this + 0x50), serializer);   // 0x140002340
 
     // Serialize entity count from +0x60
     int entityCount = *(int*)((uintptr_t)this + 0x60);
@@ -361,15 +273,13 @@ void CropFieldComponent::Persist(void* stream) {
     // reference_serializer_plus8_is_encoding_not_loading_flag.
     const uintptr_t cfStream = *(uintptr_t*)serializer;
     if (cfStream && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        if (s_fn_ResizeEntityList) {
-            s_fn_ResizeEntityList((void*)((uintptr_t)this + 0x58), countBuf);
-        }
+        CropFieldComponent_ResizeEntityList((void*)((uintptr_t)this + 0x58), countBuf);   // 0x1400335b0
     }
 
     // Serialize entity list entries
-    if (s_fn_SerializeEntityList) {
+    {
         uintptr_t entityArray = *(uintptr_t*)((uintptr_t)this + 0x58);
-        s_fn_SerializeEntityList(serializer, countBuf, entityArray);
+        CropFieldComponent_SerializeEntityList(serializer, countBuf, entityArray);   // 0x1400336c0
     }
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
@@ -394,12 +304,8 @@ void CropFieldComponent::Startup() { field50 = nullptr; }
 // therefore greys everything, which is retail behaviour, not a defect.
 uint32_t CropFieldComponent::CommandMask(int command) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    void (*s_findSM)(uintptr_t, uintptr_t*) = nullptr;
-    s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-        ResolveAddr(Module::Exe, 0x140003ea0));
-    if (!s_findSM) return 0;
     uintptr_t smc = 0;
-    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
+    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);   // 0x140003ea0
     if (!smc) return 0;
 
     int8_t cur = *reinterpret_cast<int8_t*>(smc + 0x52);
@@ -424,31 +330,22 @@ uint32_t CropFieldComponent::CommandMask(int command) {
 // triggers do.
 void CropFieldComponent::Command(int command) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    void (*s_findSM)(uintptr_t, uintptr_t*)  = nullptr;
-    void (*s_findWpc)(uintptr_t, uintptr_t*) = nullptr;
-    void (*s_setAccepting)(uintptr_t, char)  = nullptr;
-    s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-        ResolveAddr(Module::Exe, 0x140003ea0));
-    s_findWpc = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_setAccepting = reinterpret_cast<void(*)(uintptr_t, char)>(
-        ResolveAddr(Module::Exe, 0x14012fc00));
+    // 0x140003ea0 PlayerPath_FindComponent_3ea0 (SMC), 0x140002e10
+    // AttendanceComponent_GetJobHostComponent (WPC), 0x14012fc00 WorkPlaceComponent_SetAccepting.
     if (command != 0 && command != 1 && command != 2) return;
 
     if (command == 2) {
         char* master = reinterpret_cast<char*>(self + 0x48);
         *master = (*master == 0) ? 1 : 0;
-        if (!s_findWpc || !s_setAccepting) return;
         uintptr_t wpc = 0;
-        s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpc);
+        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpc);
         if (!wpc) return;
-        s_setAccepting(wpc, *master);
+        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpc), *master != 0);
         return;
     }
 
-    if (!s_findSM) return;
     uintptr_t smc = 0;
-    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
+    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
     if (!smc) return;
 
     const uintptr_t sm = smc + 0x48;
@@ -483,8 +380,6 @@ void CropFieldComponent::Command(int command) {
 // and derefs regardless. Kept unguarded to match, except where our standalone can
 // legitimately have no entity on the cell (msg 1 already tests that in retail too).
 void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, uint32_t /*arg1*/) {
-    EnsureHelpers();
-    EnsureCropExtras();
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
@@ -501,7 +396,7 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
 
     if (message == 0) {
         uintptr_t nrIbp = 0;
-        if (s_fn_FindComp_BS_local) s_fn_FindComp_BS_local((int64_t)entity, &nrIbp);
+        WorkBase_FindComponent_52c0(entity, &nrIbp);   // 0x1400052c0
         *reinterpret_cast<int32_t*>(slot + 0x04)   = 1;          // growing
         *reinterpret_cast<uintptr_t*>(slot + 0x08) = entity;
         *reinterpret_cast<uintptr_t*>(slot + 0x10) = nrIbp;
@@ -512,19 +407,13 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
 
     if (message == 1) {
         if (!entity) return;
-        void (*s_findGrowth)(int64_t, void*) = nullptr;
-        const float* s_f300 = nullptr;
-        s_findGrowth = reinterpret_cast<void(*)(int64_t, void*)>(
-            ResolveAddr(Module::Exe, 0x14000c460));
-        s_f300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
-        if (!s_findGrowth || !s_f300 || !fn_Time_Ctor_Float) return;
         uintptr_t growth = 0;
-        s_findGrowth((int64_t)entity, &growth);
+        ActCNR_FindComponent_c460(entity, &growth);   // 0x14000c460
         if (!growth) return;
 
         void* desc = *reinterpret_cast<void**>(self + 0x18);
         const uint32_t tidCropDesc = CropFieldDescription::TypeId();
-        if (!(desc && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, tidCropDesc)))
+        if (!(desc && ::Object::IsDerivedFromNullSafe(desc, tidCropDesc)))
             return;
 
         const float rate = *reinterpret_cast<float*>(
@@ -532,7 +421,7 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
         const float mult = *reinterpret_cast<float*>(
             reinterpret_cast<uintptr_t>(desc) + 0x24);
         int64_t t = 0;
-        fn_Time_Ctor_Float(&t, rate * (*s_f300) * mult);
+        RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t), rate * kRdata_140172234 * mult);   // 300.0f
 
         reinterpret_cast<::Component*>(growth)->Update(&t);   // B.3.8 bridge (the GrowthComponent find 0x14000c460; slot 9)
     }

@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Action/exe_bodies.h"
 
 // ============================================================
 // ClearAreaComponent footprint sweep  (ClearAreaDescription_helper_7d60, 0x140117d60)
@@ -38,23 +39,13 @@
 //   gw+0xf8 -> map (int*);  *map = grid width;  *(map+0x80 bytes) = tile array base.
 //   tile stride 0x30 bytes; entity ptr slot at +0x08.  gw+0xe8 -> EntityList.
 
-typedef void (*fn_MarkForRemoval_t)(void* entity);
-static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
-static bool                s_sweepResolved = false;
-
+// The mark-for-removal leaf 0x1400c2ea0 is ActHunt_MarkEntityRemoval_c2ea0, called directly.
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-static void ClearArea_ResolveSweepFuncs() {
-    if (s_sweepResolved) return;
-    s_fn_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
-        ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_sweepResolved = true;
-}
 
 // Returns the number of footprint entities newly marked for removal.
 int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
-    ClearArea_ResolveSweepFuncs();
-    if (!self || !s_fn_MarkForRemoval) {
+    if (!self) {
         return 0;
     }
 
@@ -101,7 +92,7 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
             if (flags & 0x400) continue;   // already marked for removal
 
             // Mark + push (the proven backend).
-            s_fn_MarkForRemoval(local);
+            ActHunt_MarkEntityRemoval_c2ea0(local);
             uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
             int cnt = *reinterpret_cast<int*>(rl + 0x8);
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).

@@ -46,7 +46,7 @@ void Component::Persist(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
 
     reinterpret_cast<Object::InternalBasePtr*>(&_entity)->Serialize(ser);   // B.3.8 bridge (_entity is the retail InternalPtr)
-    if (_entity && fn_IsDerivedFrom && !fn_IsDerivedFrom(_entity, ComponentEntity::TypeId())) {
+    if (_entity && !::Object::IsDerivedFromNullSafe(_entity, ComponentEntity::TypeId())) {
         _entity = nullptr;
     }
 

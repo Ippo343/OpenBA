@@ -22,6 +22,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x1400040b0 / createInPlace 0x140004110):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -32,9 +33,8 @@ CemeteryDescription::CemeteryDescription()
 
 // [5] 0x140047800: stream order as retail.
 bool CemeteryDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     return true;
 }
 
