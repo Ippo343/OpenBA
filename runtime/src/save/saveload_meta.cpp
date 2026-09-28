@@ -136,6 +136,8 @@
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Modification.h"
+#include "../../types/system/Compression.h"
+#include <new>
 
 using RtSave::ModInfo;
 using RtSave::SaveLoad;
@@ -322,9 +324,6 @@ void ModInfoArraySetSize(ModInfoArray* a, int32_t newSize) {
 // table before it was written down — a name the DLL does not contain resolves
 // NULL in silence, reference_resolveexport_phantom_names.md). There is not one
 // address door in this file.
-using CtorFn        = void* (*)(void* self);
-using SetWindowsFn  = void  (*)(void* self, int count);
-using CommitFn      = void  (*)(void* self);
 // ENDGAME B.3.1 step 2: the String::Serialize and String::Set door typedefs
 // are gone with their call sites — both are class members now.
 
@@ -380,10 +379,10 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // failed; transcribed, including the failure arm.
     void* compression = MemAlloc(8, 4);
     cs.base.compression = (compression != nullptr)
-        ? RT_EXPORT_ONCE(CtorFn, "??0Compression@System@@QEAA@XZ")(compression)
+        ? static_cast<void*>(::new (compression) System::Compression())   // ??0Compression 0x1800c41a0
         : nullptr;
 
-    RT_EXPORT_ONCE(SetWindowsFn, "?SetWindowCount@CompressedStream@IO@@QEAAXH@Z")(&cs.base, 2);
+    RtIo::RtIo_CompressedStream_SetWindowCount(&cs.base, 2);   // 0x1800aa020
 
     // ---- inlined ??0Serializer@IO@@(stream, 3) ----------------------------
     // The stream's own Encoding decides which ReaderWriter gets built; the
@@ -439,8 +438,6 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
 
     // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
     // with its one call site — it is `work.Set(...)` below.
-    auto getDataDir = RT_EXPORT_ONCE(RtSaveDetail::GetDataDirectoryFn,
-        "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ");
 
     int64_t byteOffset = 0;
     for (int32_t i = 0; i < mods->count; ++i, byteOffset += 0x80) {
@@ -467,12 +464,9 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // destructors fire there — work then dataDir, retail's own order, the
         // reverse of the declarations — and not at the end of the iteration.
         {
-            System::Filename dataDir;
-            getDataDir(RtSaveDetail::FileSystemSingleton(),
-                       // TRANSITIONAL CAST, the class->POD direction: the
-                       // door's typedef is the C entry point's ABI shape and
-                       // IO::FileSystem is not converted yet.
-                       reinterpret_cast<String*>(&dataDir));
+            System::Filename dataDir(                            // 0x180007bd0
+                static_cast<const ::IO::FileSystem*>(RtSaveDetail::FileSystemSingleton())
+                    ->GetDataDirectory());
 
             // GetLength (0x1800063c0) IS the null-guarded stored-length read.
             const int32_t dirLen = dataDir.GetLength();
@@ -537,8 +531,8 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // ---- inlined ?Close@CompressedMemoryStream, then the handoff ----------
     // `_headers._size > 0` is "has anything been written yet"; the direction
     // test keeps a read-mode stream from committing.
-    auto commit = RT_EXPORT_ONCE(CommitFn, "?Commit@CompressedStream@IO@@QEAAXXZ");
-    if (cs.base.headerSize > 0 && cs.base.base.direction == 1) commit(&cs.base);
+    if (cs.base.headerSize > 0 && cs.base.base.direction == 1)
+        RtIo::RtIo_CompressedStream_Commit(&cs.base);           // 0x1800a9ee0
     reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream)->Close();   // slot 7 +0x38 (B.3.x bridge)
 
     // THE ONE SIDE EFFECT THAT LEAVES THIS FUNCTION: the finished record is

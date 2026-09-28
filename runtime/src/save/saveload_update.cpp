@@ -61,7 +61,8 @@
 #include "../../types/video/Device.h"          // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec -- B.3.2 step 2
 #include "../system/string.h"              // RtString_ReleaseInline
-#include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
+#include "../../funcs/rt_libm.h"   // RtCrt_Qsort_18007f050
+#include "../../types/io/PersistenceWorker.h"   // the two worker enqueue bodies
 
 using RtSave::SaveLoad;
 using RtSave::SavedState;
@@ -72,7 +73,6 @@ using RtSystem::String;
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;
 using RtSaveDetail::PersistenceSingleton;
-using RtSaveDetail::RtDataExport;
 using RtSaveDetail::ZeroTime;
 
 // runtime/src/video/buffers_win.cpp. These are the INLINE COPIES of the device
@@ -104,7 +104,22 @@ namespace {
 // Checked with pefile against C:\GOG Games\Banished\Runtime-x64.dll before
 // each name was written down, never copied out of Ghidra's demangler
 // (reference_resolveexport_phantom_names.md).
-using BeginDeleteFn = bool (*)(void* persistence, const char** name);
+// B3R RT-IO: every dependency below is called by name (they were RT_EXPORT_ONCE
+// doors and atomic by-address slots). `out.Call`'s target argument is a label
+// the sink ignores (rt_sink.h), so it is passed as null.
+inline ::IO::Persistence* Pers(void* p) {
+    return static_cast<::IO::Persistence*>(p);                         // B.3.x bridge
+}
+inline const RtSystem::String& PodStr(const char* const* slot) {
+    return *reinterpret_cast<const RtSystem::String*>(slot);           // B.3.x bridge
+}
+// ?GetSaveFilename@Persistence@IO@@ (0x1800b7c80): its by-value Filename is
+// constructed straight into a raw `const char*` slot -- retail's hidden return
+// slot -- exactly as the door that stood at each call site did.
+void GetSaveFilenameInto(void* persistence, const char** slot, const char* const* name) {
+    ::new (static_cast<void*>(slot)) System::Filename(
+        Pers(persistence)->GetSaveFilename(PodStr(name)));
+}
 
 // The vtable slot OnVideoRestart calls: `MOV R10,[RCX]` then
 // `CALL qword ptr [R10+0x28]`, i.e. index 5 of the object hanging off
@@ -210,12 +225,10 @@ void Save::SaveLoad::UpdateDelete() {
         }
 
         void* persistence = PersistenceSingleton();
-        BeginDeleteFn beginDelete =
-            RT_EXPORT_ONCE(BeginDeleteFn, "?BeginDelete@Persistence@IO@@QEAA_NAEBVString@System@@@Z");
-        if (out.Call("IO::Persistence::BeginDelete", (const void*)beginDelete,
+        if (out.Call("IO::Persistence::BeginDelete", nullptr,
                      reinterpret_cast<int64_t>(persistence),
                      reinterpret_cast<int64_t>(&_string20))) {
-            beginDelete(persistence, &_string20);
+            Pers(persistence)->BeginDelete(PodStr(&_string20));
         }
 
         out.U32(&_progress, 1, "_progress = 1");
@@ -351,22 +364,10 @@ namespace {
 using WorkerEnqueueFn = void (*)(void* worker, const char** name, int count,
                                  const RtIo::SaveBlock* blocks);
 
-// ENDGAME B.3.7 B2 (RULE B6-5): these and the four accessors below were
-// function-local `static` initialisers inside what are now MEMBER bodies; they
-// are namespace-scope atomic slots with the `AtomicAddr` shape.
-std::atomic<void*> g_workerBeginLoad{nullptr};
-std::atomic<void*> g_workerBeginSave{nullptr};
-WorkerEnqueueFn WorkerBeginLoad() {
-    return reinterpret_cast<WorkerEnqueueFn>(
-        RtSaveDetail::AtomicAddr(g_workerBeginLoad, Module::Runtime, 0x1800b7460));
-}
-WorkerEnqueueFn WorkerBeginSave() {
-    return reinterpret_cast<WorkerEnqueueFn>(
-        RtSaveDetail::AtomicAddr(g_workerBeginSave, Module::Runtime, 0x1800b75c0));
-}
+// B3R RT-IO: 0x1800b7460 / 0x1800b75c0 are RtIo_PersistenceWorker_EnqueueLoad /
+// EnqueueSave (persistence_worker_win.cpp), called by name.
 
 // ---- the rest of the exported dependency set --------------------------------
-using BeginGetInfoFn  = bool     (*)(void* persistence, const char** name, int what);
 // SetupLoadFn moved to saveload_internal.h in Wave 14 — the port of
 // ?SetupLoad@SavedState@Save@@ needs the same shape, and this one was
 // unreachable from another file inside this anonymous namespace. One
@@ -375,7 +376,6 @@ using BeginGetInfoFn  = bool     (*)(void* persistence, const char** name, int w
 using RtSaveDetail::SetupLoadFn;
 using SaveMetaDataFn  = void     (*)(SaveLoad* self, void* pixels, int w, int h,
                                      const char** nameByValue, int mode);
-using StringAssignFn  = const char** (*)(const char** self, const char* const* src);
 using NameGetterFn    = const char** (*)(const SaveLoad* self, const char** ret);
 
 // EVERY ONE of these returns a class BY VALUE, so the real ABI carries a
@@ -387,8 +387,6 @@ using NameGetterFn    = const char** (*)(const SaveLoad* self, const char** ret)
 // right answer, which is why it survives testing
 // (reference_hidden_retslot_wild_write.md). Confirmed register by register in
 // the disassembly of both call sites before these lines were written.
-using GetSaveFilenameFn = const char** (*)(void* persistence, const char** ret,
-                                           const char* const* name);
 
 // ============================================================================
 // Save::SaveLoad::UpdateLoadFromFile()  retail 0x1800c2560   ordinal 4521
@@ -431,14 +429,12 @@ void Save::SaveLoad::UpdateLoadFromFile() {
 
     if (progress == 0) {
         uint8_t* persistence = PersistenceSingleton();
-        BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
-            "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
         // `LEA R8D,[RAX+0x2]` with RAX known zero on this path — the constant
         // is 2, spelled that way by the compiler to reuse a zeroed register.
-        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", (const void*)begin,
+        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", nullptr,
                      reinterpret_cast<int64_t>(persistence),
                      reinterpret_cast<int64_t>(&_saveName), 2)) {
-            begin(persistence, &_saveName, 2);
+            Pers(persistence)->BeginGetSaveGameInfo(PodStr(&_saveName), 2);
         }
         out.U32(&_progress, 1, "_progress = 1");
         return;
@@ -470,21 +466,18 @@ void Save::SaveLoad::UpdateLoadFromFile() {
         uint8_t* persistence = PersistenceSingleton();
         if ((persistence[0x18] & 1) == 0) {
             const char* filename = nullptr;
-            GetSaveFilenameFn getName = RT_EXPORT_ONCE(GetSaveFilenameFn,
-                "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z");
-            if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
+            if (out.Call("IO::Persistence::GetSaveFilename", nullptr,
                          reinterpret_cast<int64_t>(persistence),
                          reinterpret_cast<int64_t>(&filename),
                          reinterpret_cast<int64_t>(&_saveName))) {
-                getName(persistence, &filename, &_saveName);
+                GetSaveFilenameInto(persistence, &filename, &_saveName);
             }
-            WorkerEnqueueFn enqueue = WorkerBeginLoad();
             if (out.Call("IO::Persistence worker enqueue [load, 0x1800b7460]",
-                         (const void*)enqueue,
+                         nullptr,
                          reinterpret_cast<int64_t>(persistence + 0x10),
                          reinterpret_cast<int64_t>(&filename), 1,
                          reinterpret_cast<int64_t>(&block))) {
-                enqueue(persistence + 0x10, &filename, 1, &block);
+                RtIo_PersistenceWorker_EnqueueLoad(persistence + 0x10, &PodStr(&filename), 1, &block);
             }
             ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
         }
@@ -542,25 +535,8 @@ namespace {
 // through it would be a normalisation, and it would also nest lane MOD's own
 // RT_DIFF shadow site inside this file's predictive round.
 // ----------------------------------------------------------------------------
-using ModCopyCtorFn = void* (*)(void* dst, const void* src);
-using ModAssignFn   = void* (*)(void* dst, const void* src);
-using ModDtorFn     = void  (*)(void* self);
-
-std::atomic<void*> g_modEntryCopyCtor{nullptr};
-std::atomic<void*> g_modEntryAssign{nullptr};
-std::atomic<void*> g_modEntryDtor{nullptr};
-ModCopyCtorFn ModEntryCopyCtor() {
-    return reinterpret_cast<ModCopyCtorFn>(
-        RtSaveDetail::AtomicAddr(g_modEntryCopyCtor, Module::Runtime, 0x1800101e0));
-}
-ModAssignFn ModEntryAssign() {
-    return reinterpret_cast<ModAssignFn>(
-        RtSaveDetail::AtomicAddr(g_modEntryAssign, Module::Runtime, 0x180026ef0));
-}
-ModDtorFn ModEntryDtor() {
-    return reinterpret_cast<ModDtorFn>(
-        RtSaveDetail::AtomicAddr(g_modEntryDtor, Module::Runtime, 0x180011460));
-}
+// B3R RT-IO: RtIO::RtIo_Mod_CopyCtor_1800101e0 / RtIo_Mod_Assign_180026ef0 /
+// RtIo_Mod_Dtor_180011460 (modification.cpp), called by name.
 
 // ============================================================================
 // Save::SaveLoad::UpdateLoad()          retail 0x1800c2690   ordinal 4520
@@ -774,15 +750,13 @@ void Save::SaveLoad::UpdateLoad() {
     if (progress == 0) {
         uint8_t* persistence = RtSaveDetail::PersistenceSingleton();
         SaveInfo* row = SaveInfoAt(this, out, _selectedIndex);
-        BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
-            "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
         // `MOV R8D,0x2` — spelled as a plain immediate here, where
         // UpdateLoadFromFile reuses a zeroed register with `LEA R8D,[RAX+0x2]`.
         // Same 2.
-        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", (const void*)begin,
+        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", nullptr,
                      reinterpret_cast<int64_t>(persistence),
                      reinterpret_cast<int64_t>(&row->name), 2)) {
-            begin(persistence, &row->name, 2);
+            Pers(persistence)->BeginGetSaveGameInfo(PodStr(&row->name), 2);
         }
         out.U32(&_progress, 1, "_progress = 1");
         return;
@@ -832,15 +806,9 @@ void Save::SaveLoad::UpdateLoad() {
             // as written rather than regularised.
             int32_t found = -1;
             {
-                System::Filename dataDir;
-                RT_EXPORT_ONCE(RtSaveDetail::GetDataDirectoryFn,
-                    "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
-                        RtSaveDetail::FileSystemSingleton(),
-                        // TRANSITIONAL CAST, the class->POD direction: the door's
-                        // typedef is the C entry point's ABI shape and IO::FileSystem
-                        // is not converted yet. Same eight bytes; the callee
-                        // placement-constructs into this hidden return slot.
-                        reinterpret_cast<String*>(&dataDir));
+                System::Filename dataDir(                                // 0x180007bd0
+                    static_cast<const ::IO::FileSystem*>(RtSaveDetail::FileSystemSingleton())
+                        ->GetDataDirectory());
 
                 SaveInfo* row = SaveInfoAt(this, out, _selectedIndex);
                 const RtSave::ModInfo* mi = row->mods._data + m;
@@ -906,14 +874,14 @@ void Save::SaveLoad::UpdateLoad() {
                 // all-or-nothing — suppressing the copy ctor but running the
                 // assigns would destroy the array.
                 if (out.Call("IO::Mod swap [0x1800101e0/0x180026ef0/0x180011460]",
-                             (const void*)ModEntryCopyCtor(),
+                             nullptr,
                              reinterpret_cast<int64_t>(a),
                              reinterpret_cast<int64_t>(b))) {
                     alignas(8) uint8_t tmp[0x80];
-                    ModEntryCopyCtor()(tmp, a);
-                    ModEntryAssign()(a, b);
-                    ModEntryAssign()(b, tmp);
-                    ModEntryDtor()(tmp);
+                    RtIO::RtIo_Mod_CopyCtor_1800101e0(tmp, a);
+                    RtIO::RtIo_Mod_Assign_180026ef0(a, b);
+                    RtIO::RtIo_Mod_Assign_180026ef0(b, tmp);
+                    RtIO::RtIo_Mod_Dtor_180011460(tmp);
                 }
             }
         }
@@ -950,22 +918,19 @@ void Save::SaveLoad::UpdateLoad() {
         uint8_t* persistence = RtSaveDetail::PersistenceSingleton();
         if ((persistence[0x18] & 1) == 0) {
             const char* filename = nullptr;
-            GetSaveFilenameFn getName = RT_EXPORT_ONCE(GetSaveFilenameFn,
-                "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z");
             // THREE arguments. See note 1 in the banner.
-            if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
+            if (out.Call("IO::Persistence::GetSaveFilename", nullptr,
                          reinterpret_cast<int64_t>(persistence),
                          reinterpret_cast<int64_t>(&filename),
                          reinterpret_cast<int64_t>(&nameRow->name))) {
-                getName(persistence, &filename, &nameRow->name);
+                GetSaveFilenameInto(persistence, &filename, &nameRow->name);
             }
-            WorkerEnqueueFn enqueue = WorkerBeginLoad();
             if (out.Call("IO::Persistence worker enqueue [load, 0x1800b7460]",
-                         (const void*)enqueue,
+                         nullptr,
                          reinterpret_cast<int64_t>(persistence + 0x10),
                          reinterpret_cast<int64_t>(&filename), 1,
                          reinterpret_cast<int64_t>(&block))) {
-                enqueue(persistence + 0x10, &filename, 1, &block);
+                RtIo_PersistenceWorker_EnqueueLoad(persistence + 0x10, &PodStr(&filename), 1, &block);
             }
             ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
         }
@@ -1171,8 +1136,6 @@ void Save::SaveLoad::UpdateSave() {
             }
         }
 
-        StringAssignFn assign =
-            RT_EXPORT_ONCE(StringAssignFn, "??4String@System@@QEAAAEAV01@AEBV01@@Z");
         const int32_t sel = _selectedIndex;
         if (sel == -4) {
             // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
@@ -1180,29 +1143,32 @@ void Save::SaveLoad::UpdateSave() {
             // retail's hidden slot does — born at refcount 1, nothing added.
             const char* generated = nullptr;
             RtSaveDetail::AdoptReturned(&generated, GetAutoSaveName());
-            if (out.Call("System::String::operator=", (const void*)assign,
+            if (out.Call("System::String::operator=", nullptr,
                          reinterpret_cast<int64_t>(&_string20),
                          reinterpret_cast<int64_t>(&generated))) {
-                assign(&_string20, &generated);
+                reinterpret_cast<System::String&>(_string20) =                  // B.3.x bridge
+                    reinterpret_cast<const System::String&>(generated);
             }
             ReleaseStringSlotSink(&generated, out, "GetAutoSaveName temporary");
         } else {
             const SaveInfo* row = SaveInfoAt(this, out, sel);
             if (row->saveIndex >= 0) {
-                if (out.Call("System::String::operator=", (const void*)assign,
+                if (out.Call("System::String::operator=", nullptr,
                              reinterpret_cast<int64_t>(&_string20),
                              reinterpret_cast<int64_t>(&row->name))) {
-                    assign(&_string20, &row->name);
+                    reinterpret_cast<System::String&>(_string20) =                  // B.3.x bridge
+                    reinterpret_cast<const System::String&>(row->name);
                 }
             } else {
                 // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
                 // door); the returned String lands in `generated` as above.
                 const char* generated = nullptr;
                 RtSaveDetail::AdoptReturned(&generated, GenerateSaveName());
-                if (out.Call("System::String::operator=", (const void*)assign,
+                if (out.Call("System::String::operator=", nullptr,
                              reinterpret_cast<int64_t>(&_string20),
                              reinterpret_cast<int64_t>(&generated))) {
-                    assign(&_string20, &generated);
+                    reinterpret_cast<System::String&>(_string20) =                  // B.3.x bridge
+                    reinterpret_cast<const System::String&>(generated);
                 }
                 ReleaseStringSlotSink(&generated, out, "GenerateSaveName temporary");
             }
@@ -1225,21 +1191,18 @@ void Save::SaveLoad::UpdateSave() {
         uint8_t* persistence = PersistenceSingleton();
         if ((persistence[0x18] & 1) == 0) {
             const char* filename = nullptr;
-            GetSaveFilenameFn getName = RT_EXPORT_ONCE(GetSaveFilenameFn,
-                "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z");
-            if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
+            if (out.Call("IO::Persistence::GetSaveFilename", nullptr,
                          reinterpret_cast<int64_t>(persistence),
                          reinterpret_cast<int64_t>(&filename),
                          reinterpret_cast<int64_t>(&_string20))) {
-                getName(persistence, &filename, &_string20);
+                GetSaveFilenameInto(persistence, &filename, &_string20);
             }
-            WorkerEnqueueFn enqueue = WorkerBeginSave();
             if (out.Call("IO::Persistence worker enqueue [save, 0x1800b75c0]",
-                         (const void*)enqueue,
+                         nullptr,
                          reinterpret_cast<int64_t>(persistence + 0x10),
                          reinterpret_cast<int64_t>(&filename), 2,
                          reinterpret_cast<int64_t>(blocks))) {
-                enqueue(persistence + 0x10, &filename, 2, blocks);
+                RtIo_PersistenceWorker_EnqueueSave(persistence + 0x10, &PodStr(&filename), 2, blocks);
             }
             ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
         }
@@ -1418,25 +1381,14 @@ using ComparatorFn = int (*)(const void*, const void*);
 // ENDGAME B.3.7 B2: `SaveInfoSetThumbnail()` / `SaveInfoComparator()` (the
 // 0x1800c3de0 / 0x1800c3db0 address doors) are gone: `SaveInfo::SetThumbnail`
 // and `SaveInfo::Compare` are members, called / taken directly.
-std::atomic<void*> g_retailQsort{nullptr};
-QsortFn RetailQsort() {
-    return reinterpret_cast<QsortFn>(
-        RtSaveDetail::AtomicAddr(g_retailQsort, Module::Runtime, 0x18007f050));
-}
+// B3R RT-IO: 0x18007f050 is RtCrt_Qsort_18007f050 (runtime/src/crt), called by name.
 
 // ---- the exported half ------------------------------------------------------
-using GetSaveCountFn = int  (*)(const void* persistence);
-using StrCompareFn   = int  (*)(const char* a, const char* b);
-using StringSetFn    = void (*)(const char** self, const char* literal);
-using BeginLoadFn    = bool (*)(void* persistence, const char** name, int what,
-                                const RtIo::SaveBlock* block);
 
 // GetSaveInfo returns `IO::Persistence::SaveGameInfo` BY VALUE — `?A` in
 // `?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z` — so RDX is the
 // hidden return slot and the index lands in R8D, exactly as
 // 0x1800c1fe3 (`MOV R8D,R12D` / `LEA RDX,[RBP-0x61]` / `MOV RCX,R14`) has it.
-using GetSaveInfoFn = RtIo::SaveGameInfo* (*)(const void* persistence,
-                                              RtIo::SaveGameInfo* ret, int index);
 
 // LoadMetaData does NOT have a hidden slot: it returns void (`QEAAX...`). Seven
 // arguments, three of them past the register four, and this is the call site
@@ -1721,14 +1673,7 @@ void Save::SaveLoad::UpdateList() {
             blank.~SaveInfo();                        // 0x1800c3f40
         }
 
-        GetSaveCountFn getCount = RT_EXPORT_ONCE(GetSaveCountFn,
-            "?GetSaveCount@Persistence@IO@@QEBAHXZ");
-        GetSaveInfoFn  getInfo  = RT_EXPORT_ONCE(GetSaveInfoFn,
-            "?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z");
-        StrCompareFn   strCmp   = RT_EXPORT_ONCE(StrCompareFn,
-            "?StrCompare@String@System@@SAHPEBD0@Z");
-
-        if (getCount(persistence) > 0) {
+        if (Pers(persistence)->GetSaveCount() > 0) {
             int32_t i = 0;
             do {
                 alignas(SaveInfo) uint8_t rowStorage[sizeof(SaveInfo)];
@@ -1759,7 +1704,7 @@ void Save::SaveLoad::UpdateList() {
                 // management of temporaries our own body created — which is the
                 // same reason `rowDtor` below runs unconditionally.
                 RtIo::SaveGameInfo info{};
-                getInfo(persistence, &info, i);
+                Pers(persistence)->GetSaveInfo(&info, i);
                 row.sortKey = info.sortKey;
                 if (row.name != info.name.data) {
                     RtSaveDetail::ReleaseStringSlot(&row.name);
@@ -1785,7 +1730,7 @@ void Save::SaveLoad::UpdateList() {
                         // An empty (or null) name short-circuits to "equal" and
                         // StrCompare is never called — 0x1800c20a3..0x1800c20ac.
                         skip = (row.name == nullptr) || (lenRow == 0) ||
-                               (strCmp(row.name, autoName) == 0);
+                               (System::String::StrCompare(row.name, autoName) == 0);
                     }
                     RtSaveDetail::ReleaseStringSlot(&autoName);   // live: see above
                 }
@@ -1801,7 +1746,7 @@ void Save::SaveLoad::UpdateList() {
                 // Retail re-asks Persistence for the count EVERY iteration
                 // (0x1800c2117) rather than hoisting it: the worker thread owns
                 // that list and may still be appending to it.
-            } while (i < getCount(persistence));
+            } while (i < Pers(persistence)->GetSaveCount());
         }
 
         // The sort. When a blank row is present it is at index 0 and is
@@ -1813,15 +1758,14 @@ void Save::SaveLoad::UpdateList() {
                 count -= 1;
                 base  += 0x58;
             }
-            QsortFn      sortFn = RetailQsort();
             // ENDGAME B.3.7 B2: the comparator is SaveInfo's static member,
             // handed to qsort by address as retail hands 0x1800c3db0.
             ComparatorFn cmp    = &SaveInfo::Compare;
             if (out.Call("qsort(saves, count, 0x58, cmp@0x1800c3db0)",
-                         (const void*)sortFn,
+                         nullptr,
                          reinterpret_cast<int64_t>(base), count, 0x58,
                          reinterpret_cast<int64_t>(cmp))) {
-                sortFn(base, static_cast<size_t>(static_cast<int64_t>(count)), 0x58, cmp);
+                RtCrt_Qsort_18007f050(base, static_cast<size_t>(static_cast<int64_t>(count)), 0x58, cmp);
             }
         }
 
@@ -1871,14 +1815,12 @@ void Save::SaveLoad::UpdateList() {
         }
 
         SaveInfo* row = SaveInfoAt(this, out, at);
-        BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
-            "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
         // `MOV R8D,0x2` — the same `2` UpdateLoadFromFile passes, spelled there
         // as `LEA R8D,[RAX+0x2]` off a zeroed register.
-        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", (const void*)begin,
+        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", nullptr,
                      reinterpret_cast<int64_t>(persistence),
                      reinterpret_cast<int64_t>(&row->name), 2)) {
-            begin(persistence, &row->name, 2);
+            Pers(persistence)->BeginGetSaveGameInfo(PodStr(&row->name), 2);
         }
         out.U32(&_progress, 3, "_progress = 3");
         return;
@@ -1897,13 +1839,11 @@ void Save::SaveLoad::UpdateList() {
 
             SaveInfo* row = SaveInfoAt(this, out,
                                         static_cast<int32_t>(out.ReadU32(&field38)));
-            BeginLoadFn beginLoad = RT_EXPORT_ONCE(BeginLoadFn,
-                "?BeginLoad@Persistence@IO@@QEAA_NAEBVString@System@@HPEBUSaveBlock@12@@Z");
-            if (out.Call("IO::Persistence::BeginLoad", (const void*)beginLoad,
+            if (out.Call("IO::Persistence::BeginLoad", nullptr,
                          reinterpret_cast<int64_t>(persistence),
                          reinterpret_cast<int64_t>(&row->name), 1,
                          reinterpret_cast<int64_t>(&block))) {
-                beginLoad(persistence, &row->name, 1, &block);
+                Pers(persistence)->BeginLoad(PodStr(&row->name), 1, &block);
             }
         }
         out.U32(&_progress, 4, "_progress = 4");
@@ -1951,15 +1891,13 @@ void Save::SaveLoad::UpdateList() {
         } else {
             // --- no metadata: empty description and a black thumbnail ---
             const char* empty = nullptr;
-            StringSetFn strSet = RT_EXPORT_ONCE(StringSetFn,
-                "?Set@String@System@@QEAAXPEBD@Z");
             // `LEA RDX,[0x1801551f0]` — the DLL's own "" literal. Our "" is a
             // different pointer with the same contents, and Set copies the
             // characters, so the resulting String is identical.
-            if (out.Call("System::String::Set(\"\")", (const void*)strSet,
+            if (out.Call("System::String::Set(\"\")", nullptr,
                          reinterpret_cast<int64_t>(&empty),
                          reinterpret_cast<int64_t>(""))) {
-                strSet(&empty, "");
+                reinterpret_cast<System::String*>(&empty)->Set("");     // B.3.x bridge
             }
 
             SaveInfo* row2 = SaveInfoAt(this, out,

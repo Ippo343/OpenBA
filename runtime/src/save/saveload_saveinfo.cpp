@@ -47,16 +47,10 @@
 #include "../../types/save/SaveLoad.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
-#include "saveload_internal.h"   // RtSaveDetail::AtomicAddr (RULE B6-5)
+#include "saveload_internal.h"
+#include "../../types/system/MemoryAllocator.h"
 
 using RtSave::SaveInfo;
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-// The door that does NOT consult the port registry — always the shipped bytes.
-// A probe whose "ours" side reaches the body by ADDRESS compares retail with
-// ITSELF (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md);
-// the sweep below is the mirror of that and needs the raw door for THEIRS.
 
 // Video::Device's recursive render lock, already ported in
 // runtime/src/video/buffers_win.cpp and already used from this directory
@@ -76,18 +70,10 @@ namespace {
 // the same open-coded shape. Calling the composed symbol keeps this file free
 // of <windows.h> (PLAN §4.1) at the cost of nothing observable.
 //
-// ENDGAME B.3.7 B2 (RULE B6-5): the three first-call caches below were
-// function-local `static` pointers read and written without synchronisation;
-// SetThumbnail is a member now, so they are namespace-scope atomic slots with
-// the `AtomicAddr` shape (cache a hit, RETRY a miss). The null tests that
-// follow each resolve are the pre-existing miss contract, unchanged.
-std::atomic<void*> g_memAllocSlot{nullptr};
-
+// B3R RT-IO: the static member by name; the atomic by-address slot (and its
+// readiness test, always true: 0x1800c7a50 has always been registered) is gone.
 void* SaveInfoMemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    Fn fn = reinterpret_cast<Fn>(
-        RtSaveDetail::AtomicAddr(g_memAllocSlot, Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
+    return ::System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
 // ??0ImageBuffer@Video@@QEAA@XZ, 0x1800f2580. ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired

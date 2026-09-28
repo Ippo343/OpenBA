@@ -153,7 +153,6 @@ using RtSaveDetail::AdjustDelimsFn;
 using RtSaveDetail::SaveLoadVoidFn;
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;
-using RtSaveDetail::RtDataExport;
 using RtSaveDetail::SaveLoadSingletonSlot;
 using RtSaveDetail::FileSystemSingleton;
 using RtSaveDetail::ModificationSingleton;
@@ -576,16 +575,16 @@ String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
 // identity oracle can rely on.
 // ============================================================================
 namespace {
-using FormatFn = void* (*)(void* retval, const char* fmt, ...);
-
 // The inlined "String::Format into a scratch, then refcount-adopt into *ret"
 // idiom (0x1800c1290..0x1800c1310). NOT `String::operator=`: retail's very
 // first instruction blindly zeroes `*ret` without releasing whatever was
 // there (see the banner above), so the release/adopt pair below only ever
 // runs against a slot this function itself already populated.
 void GenerateSaveName_FormatCandidateInto(const char** ret, int index) {
+    // ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730), by name: the
+    // by-value String lands in `tmp` born at refcount 1, as the door did.
     const char* tmp = nullptr;
-    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(&tmp, "Save%i", index);
+    RtSaveDetail::AdoptReturned(&tmp, System::String::Format("Save%i", index));
 
     if (*ret != tmp) {
         ReleaseStringSlot(ret);
@@ -807,14 +806,8 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     // an AddRef/Release pair that retail never spends.
     {
     System::String   joined;
-    System::Filename dataDir;
-    RT_EXPORT_ONCE(GetDataDirectoryFn,
-                     "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
-        FileSystemSingleton(),
-        // TRANSITIONAL CAST, the class->POD direction: the door's typedef is
-        // the C entry point's ABI shape and IO::FileSystem is not converted
-        // yet. Same eight bytes; the callee placement-constructs into it.
-        reinterpret_cast<String*>(&dataDir));
+    System::Filename dataDir(                                   // 0x180007bd0
+        static_cast<const ::IO::FileSystem*>(FileSystemSingleton())->GetDataDirectory());
 
     // The `??HSystem@@YA?AVString@0@AEBV10@0@Z` door IS System::operator+
     // (0x1800c9440). `mod->path` is a raw `const char*` member of the

@@ -329,7 +329,6 @@ void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding
 // ============================================================================
 
 using OpNewFn      = void* (*)(uint64_t);
-using VoidThisFn   = void  (*)(void*);
 // ENDGAME B.3.1 step 2: the String::Set door typedef is gone with its one call
 // site — it is `diffuse.Set("diffuse")` now.
 using CameraCtorFn = void  (*)(void*, const Frustum*, const Transform3*, bool);  // return ignored, see above
@@ -471,7 +470,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // ---- the offscreen colour target --------------------------------------
     ImageBuffer* target = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(0x68);
+        void* p = Video::ImageBuffer::operator new(0x68);   // ??2ImageBuffer@Video@@ 0x18001e910
         if (p != nullptr) {
             // Same rule as above: `p`, never the constructor's return.
             ::new (p) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
@@ -491,7 +490,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // the allocation-succeeded arm and `renderBuffer` stays null otherwise.
     void* renderBuffer = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(0x30);
+        void* p = Video::RenderBuffer::operator new(0x30);  // ??2RenderBuffer@Video@@ 0x18001f2e0
         if (p != nullptr) {
             reinterpret_cast<uint64_t*>(p)[0] = 0;
             reinterpret_cast<uint64_t*>(p)[1] = 0;
@@ -819,7 +818,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     if (renderBuffer != nullptr) {
         reinterpret_cast<Video::RenderBuffer*>(renderBuffer)
             ->PlatformDestruct();                            // B.3.5 bridge
-        RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(renderBuffer);
+        Video::RenderBuffer::operator delete(renderBuffer); // ??3RenderBuffer@Video@@ 0x18001f360
     }
 
     // The handshake with UpdateSave state 1: a BYTE store, clearing the request.
