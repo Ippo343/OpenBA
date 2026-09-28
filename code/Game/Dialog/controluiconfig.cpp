@@ -40,7 +40,6 @@
 #include "object/TypeInfo.h"
 #include "object/Type.h"   // B3R: RtObject::RtObject_Type_Serialize
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

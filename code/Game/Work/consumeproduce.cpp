@@ -1147,6 +1147,5 @@ void* ConsumeProduce::CreateInPlaceObject(void* storage) {
 
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 DEFINE_EXE_TYPE(ConsumeProduce, "Work")

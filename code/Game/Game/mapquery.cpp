@@ -231,9 +231,3 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
     outPos3[2] = height;
     return outPos3;
 }
-
-#include "address_registry.h"
-extern "C" void RegisterMapQueryAddrs() {
-    // fn_MapGetTerrainPos (~100 call sites) resolves via ResolveAddr(0x14009f3e0).
-    RegisterExeAddr(0x14009f3e0, reinterpret_cast<uintptr_t>(&Reimpl_MapGetTerrainPos));
-}

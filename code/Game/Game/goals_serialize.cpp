@@ -811,10 +811,3 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
-
-// ============================================================
-// Registration
-// ============================================================
-void RegisterGoalsSerialize() {
-    RegisterExeAddr(0x1400f9240, reinterpret_cast<uintptr_t>(&Goals_Serialize_f9240));
-}

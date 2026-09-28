@@ -24,7 +24,6 @@
 // serves (B38_RULES D5). The slot list above is retail's (B38_SLOTS sec. 6).
 
 
-#include "address_registry.h"
 #include "resolve.h"
 #include "object/Internal.h"
 #include "common.h"

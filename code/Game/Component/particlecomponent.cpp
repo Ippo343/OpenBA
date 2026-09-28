@@ -480,7 +480,6 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
 // slots above, with a real ctor/dtor chain (B38_RULES D1, D2).
 #include "Object/factory_registration.h"
 #include "Component/ParticleComponent.h"
-#include "address_registry.h"
 
 // ---- Per-frame frame-index un-stamp (Runtime-semantics fix, NOT a tick driver) ----
 // The tick itself is now driven faithfully by the EntityList tree walk: StartEmitter's
@@ -885,12 +884,3 @@ void* ParticleComponent::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_TYPE(ParticleComponent, "Component")
-
-// Register the helper closure at its exe addresses so the shared bodies above
-// (and any other reimpl referencing them) resolve in standalone.
-extern "C" void RegisterParticleComponentAddrs() {
-    RegisterExeAddr(0x140052480, reinterpret_cast<uintptr_t>(&ParticleComponent_Setup));
-    RegisterExeAddr(0x140052990, reinterpret_cast<uintptr_t>(&ParticleComponent_StopEmitter));
-    RegisterExeAddr(0x140052a50, reinterpret_cast<uintptr_t>(&ParticleComponent_StartEmitter));
-    RegisterExeAddr(0x140053660, reinterpret_cast<uintptr_t>(&ParticleComponent_StartEmitterFade));
-}

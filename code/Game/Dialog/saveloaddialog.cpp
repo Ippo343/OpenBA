@@ -1207,7 +1207,6 @@ void SaveLoadDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, i
 // unregistered, so the menu Load/Save buttons silently did nothing).
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // ENDGAME B.3.8 block DLG: SaveLoadDialog is a real class (Dialog/SaveLoadDialog.h);
 // the hand-built table is gone. engine_funcs.cpp does not read 0x14015f900 back,
@@ -1271,8 +1270,4 @@ extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes,
     return ::new (self) SaveLoadDialog(static_cast<UI::UserInterface*>(ui),
                                        static_cast<const UI::Dialog*>(extRes), parent,
                                        mode, enginePtr, gameWorldPtr);
-}
-
-void RegisterSaveLoadDialog() {
-    RegisterExeAddr(0x1400b8270, reinterpret_cast<uintptr_t>(&SaveLoadDialog_Ctor_8270));
 }

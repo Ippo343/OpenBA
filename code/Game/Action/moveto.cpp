@@ -617,7 +617,6 @@ bool MoveTo::GetTarget(void* param) {
 // the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // create 0x1400228c0. Retail's default ctor (0x1400c90e0) stores +0x20 = -1, +0x60 = -1, +0x478 = 1.0f;
 // the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the

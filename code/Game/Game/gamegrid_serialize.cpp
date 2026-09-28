@@ -312,10 +312,3 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
-
-// ============================================================
-// Registration
-// ============================================================
-void RegisterGameGridSerialize() {
-    RegisterExeAddr(0x14009f100, reinterpret_cast<uintptr_t>(&GameGrid_Serialize_9f100));
-}

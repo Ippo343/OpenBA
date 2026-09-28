@@ -33,7 +33,6 @@
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"           // RegisterExeAddr (the 0x1400e1870 row stays: engine_funcs reads it)
-#include "address_registry.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -202,8 +201,4 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
 
     *out = found;
     return outElementIBP;
-}
-
-extern "C" void RegisterFindUIElementByPath() {
-    RegisterExeAddr(0x1400e1870, reinterpret_cast<uintptr_t>(&FindUIElementByPath_Impl));
 }

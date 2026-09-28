@@ -56,7 +56,6 @@
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include <new>
-#include "address_registry.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -894,11 +893,4 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* lo
     fflush(stderr);
     std::free(a); std::free(b);
     if (fresh.data) System::MemoryAllocator::MemFree(fresh.data);
-}
-
-// ============================================================
-// Registration (called from standalone/address_registry.cpp)
-// ============================================================
-void RegisterGulSerialize() {
-    RegisterExeAddr(0x140021ba0, reinterpret_cast<uintptr_t>(&BucketTree_Serialize_21ba0));
 }

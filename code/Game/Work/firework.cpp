@@ -494,7 +494,6 @@ void* FireWork::GetTarget(void* retbuf) {
 // `return 0`; the real producer is the 3-arg ctor 0x1400e9bd0 (firecomponent_ignite.cpp).
 // ============================================================
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // ============================================================
 // Slot3 Serialize (vtable +0x18, 0x1400e9a50) — was Work_SerializeNop.
@@ -572,6 +571,5 @@ void* FireWork::CreateInPlaceObject(void* storage) {
 
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 DEFINE_EXE_TYPE(FireWork, "Work")

@@ -1643,7 +1643,6 @@ cleanup:
 // interface (no DialogController), so no second-vtable block.
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 #include "resolve.h"
 
 // ENDGAME B.3.8 block DLG: OptionsDialog is a real class (Dialog/OptionsDialog.h);
@@ -1695,10 +1694,6 @@ void* OptionsDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
         parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
     return ::new (self) OptionsDialog(static_cast<UI::UserInterface*>(ui),
                                       static_cast<const UI::Dialog*>(extRes), parent);
-}
-
-extern "C" void RegisterOptionsDialogVtable() {
-    RegisterExeAddr(0x140075150, reinterpret_cast<uintptr_t>(&OptionsDialog_Ctor_Standalone));
 }
 
 // Parent literal EXACTLY retail's (RegisterType_OptionsDialog 0x14014c440 passes

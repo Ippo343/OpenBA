@@ -413,19 +413,3 @@ extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
     // B.3.2 bridge: EnvironmentDescription's weather array is still a raw triple.
     reinterpret_cast<WeatherEntryArray*>(hdr)->SetSize(newCount);
 }
-
-// ============================================================
-// STANDALONE vtable + registration
-// ============================================================
-#include "address_registry.h"
-
-extern "C" void RegisterWeatherParticleVtable() {
-    // The debug-UI draw combo (DebugUI_OnDrawComboChanged) constructs the very
-    // same weather-particle Geometry via exe helpers DrawGeometry_Ctor
-    // (0x1400d3f10) and DrawGeometry_Init (0x1400d3f80). Those are exactly our
-    // WeatherParticle_GeoCtor / WeatherParticle_Config (same alloc->ctor->config
-    // sequence used in-game at weather_particles.cpp SpawnEffect). Register them
-    // so ResolveAddr(Module::Exe, ...) returns non-null and the combo works.
-    RegisterExeAddr(0x1400d3f10, reinterpret_cast<uintptr_t>(&WeatherParticle_GeoCtor));
-    RegisterExeAddr(0x1400d3f80, reinterpret_cast<uintptr_t>(&WeatherParticle_Config));
-}

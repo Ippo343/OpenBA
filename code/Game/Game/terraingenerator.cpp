@@ -268,11 +268,4 @@ void* TerrainGenerator::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) TerrainGenerator());
 }
 
-
-// Register the two terrain-data-array helpers to the faithful reimpls above
-// (FUN_1400206b0 resize / FUN_140020870 serialize), so the ResolveAddr call
-// sites resolve them.
-void RegisterGameTerrainReimpls() {
-}
-
 DEFINE_EXE_TYPE(TerrainGenerator, "Object::External")

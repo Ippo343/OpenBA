@@ -762,7 +762,6 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
 // with a qualified call, which is exactly what retail's import thunks reach.
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // [4] OnOpened — PORT GAP (header): slim standalone Setup. Mirrors the
 // button-finding + element ID assignment portion of MainMenuDialog_Slot4

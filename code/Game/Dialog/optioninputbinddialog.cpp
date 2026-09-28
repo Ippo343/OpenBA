@@ -23,7 +23,6 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -104,15 +103,6 @@ void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
         parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
     return ::new (self) OptionInputBindDialog(static_cast<UI::UserInterface*>(ui),
                                               static_cast<const UI::Dialog*>(extRes), parent);
-}
-
-
-// Called from RegisterCodeFunctions in standalone/address_registry.cpp. The
-// vtable row (0x14015ce40) is gone: nothing in the tree reads that address back
-// (B38 D5). The ctor door stays.
-extern "C" void RegisterOptionInputBindDialogVtable() {
-    RegisterExeAddr(0x140071d30,
-                    reinterpret_cast<uintptr_t>(&OptionInputBindDialog_Ctor_Standalone));
 }
 
 // Parent "MessageDialog" — retail RegisterType_OptionInputBindDialog 0x14014c480.
