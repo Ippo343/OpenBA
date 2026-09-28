@@ -49,69 +49,13 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
 #include "Component/exe_bodies.h"
+#include "Game/exe_constants.h"
 
-// From citizencomponent.cpp (faithful port of 0x1401152e0).
-extern void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2);
-
-// ============================================================
-// Local resolutions
-// ============================================================
-typedef void (*fn_helper_fde0_t)(int64_t self, int param);   // 0x14010fde0
-typedef void (*fn_helper_17a0_t)(int64_t self);              // 0x1401117a0
-typedef void (*fn_helper_1540_t)(int64_t self);              // 0x140111540
-typedef void (*fn_statusIcon_t)(void* statusIconComp, int mode, int flag); // 0x14012c3f0
-typedef bool (*fn_ResidenceCheck_t)(int64_t storageComp);    // 0x14012ac30
-typedef void* (*fn_FindResidence8090_t)(int64_t entity, void* outIBP); // 0x140008090
-typedef void (*fn_TimeCtorFloat_t)(void* outTime, float secs); // dispatch slot 0x140152b00
-typedef void (*fn_releasePartner_t)(void* self, char reroll);  // 0x140115a50 (AttendanceComponent_ReleasePartnerSlot)
-typedef void (*fn_postLifeEvent_t)(void* self, int eventType, int severity, const char* str); // 0x140113af0 (ex-"AssignState")
-
-static fn_helper_fde0_t      s_fn_fde0 = nullptr;
-static fn_helper_17a0_t      s_fn_17a0 = nullptr;
-static fn_helper_1540_t      s_fn_1540 = nullptr;
-static fn_statusIcon_t       s_fn_12c3f0 = nullptr;   // StatusIcon mesh finalize (for the msg-1 port)
-static fn_ResidenceCheck_t   s_fn_2ac30 = nullptr;
-static fn_FindResidence8090_t s_fn_find8090 = nullptr;
-static fn_TimeCtorFloat_t    s_fn_TimeCtorF = nullptr;
-static fn_releasePartner_t   s_fn_115a50 = nullptr;   // msg-4 partner-slot release
-static fn_postLifeEvent_t    s_fn_PostLifeEvent = nullptr; // msg-4 type-9 event post (citizen_lifeevent.cpp)
-static const float*          s_pDAT_172114 = nullptr;  // 0.5f   (msg-3 increment)
-static const float*          s_pDAT_172234 = nullptr;  // 300.0f (msg-5/6/7 Time scale)
-static const float*          s_pDAT_17225c = nullptr;  // 3600.0f (msg-4 budget scale, SECS_PER_YEAR)
-static bool s_resolved = false;
-
-static void EnsureNeedsUpdateFuncs() {
-    if (s_resolved) return;
-    s_resolved = true;   // latch on ATTEMPT, not on success (anti-pattern note)
-    s_fn_fde0    = reinterpret_cast<fn_helper_fde0_t>(ResolveAddr(Module::Exe, 0x14010fde0));
-    s_fn_17a0    = reinterpret_cast<fn_helper_17a0_t>(ResolveAddr(Module::Exe, 0x1401117a0));
-    s_fn_1540    = reinterpret_cast<fn_helper_1540_t>(ResolveAddr(Module::Exe, 0x140111540));
-    s_fn_12c3f0  = reinterpret_cast<fn_statusIcon_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_fn_2ac30   = reinterpret_cast<fn_ResidenceCheck_t>(ResolveAddr(Module::Exe, 0x14012ac30));
-    s_fn_find8090 = reinterpret_cast<fn_FindResidence8090_t>(ResolveAddr(Module::Exe, 0x140008090));
-    s_fn_115a50  = reinterpret_cast<fn_releasePartner_t>(ResolveAddr(Module::Exe, 0x140115a50));
-    // PostLifeEvent (0x140113af0, ex-"AssignState" misnomer) — ported in
-    // citizen_lifeevent.cpp and registered by reg_eventlog_citizen.cpp; posts the
-    // life-event message to the event log (gw+0x138).
-    s_fn_PostLifeEvent = reinterpret_cast<fn_postLifeEvent_t>(ResolveAddr(Module::Exe, 0x140113af0));
-    // .rdata float constants — NULL in standalone unless registered; real-value
-    // fallbacks are applied at the use sites (reference_standalone_rdata_null_fallback).
-    s_pDAT_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_pDAT_172234 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
-    s_pDAT_17225c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017225c)); // 3600.0f (reg_component_fruit)
-    // System::Time::Time(float) — read the fn ptr out of the dispatch slot.
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) s_fn_TimeCtorF = *reinterpret_cast<fn_TimeCtorFloat_t*>(slot);
-}
-
-static void SkipTraceOnce(const char* which) {
-    static int seen[3] = {0, 0, 0};
-    int idx = (which[0] == 'f') ? 0 : (which[0] == '1' && which[1] == '7') ? 1 : 2;
-    if (!seen[idx]) {
-        seen[idx] = 1;
-        fprintf(stderr, "[EatMsg] NeedsUpdate: helper %s unresolved — msg skipped\n", which);
-        fflush(stderr);
-    }
+// A .rdata constant stored as its bit pattern (exe_constants.h), read as the float.
+static inline float RdataF(uint32_t bits) {
+    float f;
+    std::memcpy(&f, &bits, sizeof f);
+    return f;
 }
 
 // ============================================================
@@ -122,10 +66,9 @@ static void SkipTraceOnce(const char* which) {
 // for a citizen whose StatusIconComponent is not yet live — a no-op in practice.)
 // ============================================================
 void CitizenComp_helper_fde0(int64_t selfV, int param) {
-    EnsureNeedsUpdateFuncs();
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-    if (s_fn_12c3f0 && *reinterpret_cast<void**>(p + 0x280)) {
-        s_fn_12c3f0(*reinterpret_cast<void**>(p + 0x280), 4, 0);
+    if (*reinterpret_cast<void**>(p + 0x280)) {
+        CitizenComp_FUN_14012c3f0(*reinterpret_cast<int64_t**>(p + 0x280), 4, 0);
     }
     *reinterpret_cast<int32_t*>(p + 0xac) += param;
     *reinterpret_cast<int32_t*>(p + 0xa8)  = param;
@@ -140,21 +83,20 @@ void CitizenComp_helper_fde0(int64_t selfV, int param) {
 // and post life-event 9 via PostLifeEvent. (Retail derefs +0x288 unguarded.)
 // ============================================================
 void CitizenComp_helper_17a0(int64_t selfV) {
-    EnsureNeedsUpdateFuncs();
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
     int32_t* counter = reinterpret_cast<int32_t*>(p + 0x210);
     *counter += 1;
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
     int32_t threshold  = desc ? *reinterpret_cast<int32_t*>(desc + 0x118) : 0;
     float   perUnitSec = desc ? *reinterpret_cast<float*>(desc + 0x11c)   : 0.0f;
-    float budgetSecs = perUnitSec * (s_pDAT_17225c ? *s_pDAT_17225c : 3600.0f);
+    float budgetSecs = perUnitSec * RdataF(kRdata_14017225c);   // 3600.0f
     float elapsed = reinterpret_cast<const System::Time*>(p + 0x218)->AsSeconds();   // B.3.4b bridge
     if (*counter < threshold && elapsed <= budgetSecs) return;
 
     *counter = threshold;
     *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x400;
-    if (s_fn_115a50) s_fn_115a50(reinterpret_cast<void*>(selfV), 0);
-    if (s_fn_PostLifeEvent) s_fn_PostLifeEvent(reinterpret_cast<void*>(selfV), 9, 0, nullptr);
+    AttendanceComponent_ReleasePartnerSlot(reinterpret_cast<void*>(selfV), 0);
+    CitizenComponent_PostLifeEvent(reinterpret_cast<void*>(selfV), 9, 0, nullptr);
 }
 
 // ============================================================
@@ -164,14 +106,12 @@ void CitizenComp_helper_17a0(int64_t selfV) {
 // accumulator (same "Time as raw uint64" representation the msg-6/7 tail uses).
 // ============================================================
 void CitizenComp_helper_1540(int64_t selfV) {
-    EnsureNeedsUpdateFuncs();
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
     if (*reinterpret_cast<int64_t*>(p + 0x68) == 0) return;
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);   // retail: unguarded
     float base = desc ? *reinterpret_cast<float*>(desc + 0x12c) : 0.0f;
     uint64_t t = 0;
-    if (s_fn_TimeCtorF)
-        s_fn_TimeCtorF(&t, base * (s_pDAT_172234 ? *s_pDAT_172234 : 300.0f));
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), base * kRdata_140172234);
     *reinterpret_cast<int64_t*>(p + 0x70) -= static_cast<int64_t>(t);
 }
 
@@ -183,18 +123,15 @@ void CitizenComp_helper_1540(int64_t selfV) {
 // (retail re-runs it after the first null-check), each preceded by CheckPtr.
 // ============================================================
 void CitizenComp_helper_21e0(int64_t selfV, void* param_2) {
-    EnsureNeedsUpdateFuncs();
     if (*reinterpret_cast<int64_t*>(param_2) == 0) return;
-    if (!s_fn_find8090) { SkipTraceOnce("8090"); return; }
 
     int64_t out1 = 0;
-    void* r1 = s_fn_find8090(*reinterpret_cast<int64_t*>(param_2), &out1);
+    void* r1 = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(param_2), &out1);
     if (*reinterpret_cast<int64_t*>(r1) == 0) return;
 
     int64_t out2 = 0;
-    void* r2 = s_fn_find8090(*reinterpret_cast<int64_t*>(param_2), &out2);
-    if (!s_fn_2ac30) { SkipTraceOnce("2ac30"); return; }
-    if (s_fn_2ac30(*reinterpret_cast<int64_t*>(r2))) {
+    void* r2 = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(param_2), &out2);
+    if (ResidenceCheck_2ac30(*reinterpret_cast<int64_t*>(r2))) {
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(selfV) + 0x48) = 0;
     }
 }
@@ -225,7 +162,6 @@ void CitizenComp_EatFromStorage(int64_t selfV, void* targetIBP) {
 void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t /*arg1*/) {
     uint64_t* param_3 = static_cast<uint64_t*>(data);
     int param_4 = static_cast<int>(arg0);
-    EnsureNeedsUpdateFuncs();
     if (static_cast<unsigned>(message) > 8) return;   // retail: CMP EDX,8 / JA ret
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
@@ -236,8 +172,7 @@ void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_
         return;
     }
     case 1: {   // happiness credit — helper_fde0 (0x14010fde0), now ported + registered
-        if (s_fn_fde0) s_fn_fde0(reinterpret_cast<int64_t>(this), param_4);
-        else SkipTraceOnce("fde0");
+        CitizenComp_helper_fde0(reinterpret_cast<int64_t>(this), param_4);
         return;
     }
     case 2: {   // EAT — drain hunger against the target's storage
@@ -247,17 +182,15 @@ void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_
     }
     case 3: {   // +0x54 |= 0x200 ; +0x50 += DAT_140172114 (0.5f)
         *reinterpret_cast<uint32_t*>(p + 0x54) |= 0x200;
-        *reinterpret_cast<float*>(p + 0x50) += (s_pDAT_172114 ? *s_pDAT_172114 : 0.5f);
+        *reinterpret_cast<float*>(p + 0x50) += kRdata_140172114;   // 0.5f
         return;
     }
-    case 4: {   // helper_17a0(self) — unported, resolve-or-skip
-        if (s_fn_17a0) s_fn_17a0(reinterpret_cast<int64_t>(this));
-        else SkipTraceOnce("17a0");
+    case 4: {   // helper_17a0(self)
+        CitizenComp_helper_17a0(reinterpret_cast<int64_t>(this));
         return;
     }
-    case 5: {   // helper_1540(self) — unported, resolve-or-skip
-        if (s_fn_1540) s_fn_1540(reinterpret_cast<int64_t>(this));
-        else SkipTraceOnce("1540");
+    case 5: {   // helper_1540(self)
+        CitizenComp_helper_1540(reinterpret_cast<int64_t>(this));
         return;
     }
     case 6:
@@ -284,8 +217,7 @@ void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_
     uint64_t t = 0;
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
     float base = desc ? *reinterpret_cast<float*>(desc + 0x130) : 0.0f;
-    if (s_fn_TimeCtorF)
-        s_fn_TimeCtorF(&t, base * (s_pDAT_172234 ? *s_pDAT_172234 : 300.0f));
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), base * kRdata_140172234);
     *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x800;
     *reinterpret_cast<uint64_t*>(p + 0x1e8) = t;
 }

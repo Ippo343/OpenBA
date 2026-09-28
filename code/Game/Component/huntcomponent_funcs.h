@@ -10,6 +10,3 @@
 // Vtable: 0x140163770
 // Size: 0x58 bytes
 // ============================================================
-
-// Init: resolve all internal function pointers (called once at startup)
-void HuntComponent_InitFuncs();

@@ -29,11 +29,6 @@
 // Calls parent ResourceProduceComponent::Shutdown, then creates
 // an empty serializer block (no additional data to serialize).
 
-// ============================================================
-// Init: nothing left to resolve (the base Persist is a direct member call now)
-// ============================================================
-void HerbalistComponent_InitFuncs() {}
-
 // ============================================================================
 // ENDGAME B.3.8 MI-B — HerbalistComponent as a REAL class (HerbalistComponent.h).
 //

@@ -52,57 +52,11 @@
 #include "Component/TombstoneComponent.h"    // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
 #include "Component/CemeteryDescription.h"   // ENDGAME B.3.9 C1: 0x1401c40c8 cell class
 #include "Component/exe_bodies.h"
-
-// ---------------------------------------------------------------- resolved deps
-typedef void*    (*fn_FindCompPos_2ed0_t)(uintptr_t comp, void* outIBP);            // 0x140002ed0
-typedef void*    (*fn_ResolvePos_2e20_t)(void* comp, float* outVec3, int, int, float*); // 0x140122e20
-typedef int      (*fn_PathDist_f810_t)(int* map, uint32_t src, uint32_t dst, char); // 0x14009f810
-typedef uint64_t (*fn_ValidateCell_a00f0_t)(int* map, uint32_t kind, uint32_t src, int dst); // 0x1400a00f0
-typedef void     (*fn_MarkRemoval_c2ea0_t)(void* entity);                           // 0x1400c2ea0
-// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
-// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-typedef void     (*fn_FineCellDirty_a8c90_t)(int64_t self, int x, int y);           // 0x1400a8c90
-typedef void     (*fn_PfEnqueue_a6fe0_t)(int64_t thread, uint32_t cell, void* cmd, void* world); // 0x1400a6fe0
-typedef void*    (*fn_FindResData_4680_t)(uintptr_t entity, void* outIBP);          // 0x140004680
-typedef void*    (*fn_CtorFromDesc_c3720_t)(void* self, void* description);         // 0x1400c3720
-typedef void     (*fn_RegisterEntity_c48a0_t)(void* entityList, void* entityIBP, int category); // 0x1400c48a0
-typedef void*    (*fn_FindModel_3f60_t)(uintptr_t entity, void* outIBP);            // 0x140003f60
-typedef float*   (*fn_TerrainPos_9f3e0_t)(void* map, float* outPos3, float* inXY2, char, void*); // 0x14009f3e0
-typedef void     (*fn_PostLifeEvent_t)(void* self, int eventType, int severity, const char* s); // 0x140113af0
-
-static fn_FindCompPos_2ed0_t    s_findCompPos    = nullptr;
-static fn_ResolvePos_2e20_t     s_resolvePos     = nullptr;
-static fn_PathDist_f810_t       s_pathDist       = nullptr;
-static fn_ValidateCell_a00f0_t  s_validateCell   = nullptr;
-static fn_MarkRemoval_c2ea0_t   s_markRemoval    = nullptr;
-static fn_FineCellDirty_a8c90_t s_fineCellDirty  = nullptr;
-static fn_PfEnqueue_a6fe0_t     s_pfEnqueue      = nullptr;
-static fn_FindResData_4680_t    s_findResData    = nullptr;
-static fn_CtorFromDesc_c3720_t  s_ctorFromDesc   = nullptr;
-static fn_RegisterEntity_c48a0_t s_registerEnt   = nullptr;
-static fn_FindModel_3f60_t      s_findModel      = nullptr;
-static fn_TerrainPos_9f3e0_t    s_terrainPos     = nullptr;
-static fn_PostLifeEvent_t       s_postLifeEvent  = nullptr;
-
-static bool s_resolved = false;
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_findCompPos   = reinterpret_cast<fn_FindCompPos_2ed0_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_resolvePos    = reinterpret_cast<fn_ResolvePos_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_pathDist      = reinterpret_cast<fn_PathDist_f810_t>(ResolveAddr(Module::Exe, 0x14009f810));
-    s_validateCell  = reinterpret_cast<fn_ValidateCell_a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_markRemoval   = reinterpret_cast<fn_MarkRemoval_c2ea0_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_fineCellDirty = reinterpret_cast<fn_FineCellDirty_a8c90_t>(ResolveAddr(Module::Exe, 0x1400a8c90));
-    s_pfEnqueue     = reinterpret_cast<fn_PfEnqueue_a6fe0_t>(ResolveAddr(Module::Exe, 0x1400a6fe0));
-    s_findResData   = reinterpret_cast<fn_FindResData_4680_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_ctorFromDesc  = reinterpret_cast<fn_CtorFromDesc_c3720_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_registerEnt   = reinterpret_cast<fn_RegisterEntity_c48a0_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_findModel     = reinterpret_cast<fn_FindModel_3f60_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_terrainPos    = reinterpret_cast<fn_TerrainPos_9f3e0_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_postLifeEvent = reinterpret_cast<fn_PostLifeEvent_t>(ResolveAddr(Module::Exe, 0x140113af0));
-}
-
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Entity/componententity_funcs.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // Component vtable slot [2] (offset 0x10) = GetTypeId(this).
 static inline uint32_t CompTypeId(void* comp) {
@@ -118,7 +72,7 @@ static void* FindComponentByTypeId(uint8_t* entity, uint32_t tid) {
     for (int i = 0; i < n; i++) {
         void* c = comps[i];
         if (c && CompTypeId(c) == tid) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
+            if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
             break;   // retail breaks on first type-id match, derived or not
         }
     }
@@ -148,7 +102,6 @@ extern "C" void Citizen_FamilyRingOrFlag_3a70(void* citizenV, uint32_t flags) {
 // empty OR its occupant entity has no TombstoneComponent. Returns slot index or
 // 0xffffffff when every cell already holds a tombstone.
 extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
-    EnsureResolved();
     uint8_t* self = reinterpret_cast<uint8_t*>(cemCompV);
     uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
     if (!world) return 0xffffffffu;
@@ -166,7 +119,7 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
         if (!occupant) return static_cast<uint32_t>(idx);      // empty cell — free slot
         void* ts = FindComponentByTypeId(occupant, tid);
         int64_t tsIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&tsIBP) ::Object::InternalBasePtr(
+        new (&tsIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ts));   // B.3.3 bridge
         if (!tsIBP) return static_cast<uint32_t>(idx);         // occupant is not a tombstone
         idx = (idx + 1 >= count) ? 0 : idx + 1;
@@ -180,7 +133,6 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
 // distance (f810) or euclidean + mapSize when unreachable-by-path; candidate
 // must pass ValidateCell(0xe1f) reachability and have PickFreeSlot >= 0.
 extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, uint32_t citizenCell) {
-    EnsureResolved();
     uint8_t* listMgr = reinterpret_cast<uint8_t*>(listMgrV);
     *out = nullptr;
     uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
@@ -198,10 +150,10 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
         // The cemetery's map position = its InteractComponent's resolved position.
         void* ic = FindComponentByTypeId(entity, tidInteract);
         int64_t icIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&icIBP) ::Object::InternalBasePtr(
+        new (&icIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ic));   // B.3.3 bridge
         float pos[3] = {0.0f, 0.0f, 0.0f};
-        if (s_resolvePos) s_resolvePos(reinterpret_cast<void*>(icIBP), pos, 0, 0, nullptr);
+        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(icIBP), pos, 0, 0, nullptr);
         int size = *map;
         int cx = static_cast<int>(pos[0] + static_cast<float>(size >> 1));
         int cy = static_cast<int>(pos[1] + static_cast<float>(size >> 1));
@@ -210,14 +162,14 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
         if (cy < 0) cy = 0;
         if (size <= cy) cy = size - 1;
         uint32_t cemCell = static_cast<uint32_t>(size * cy + cx);
-        int dist = s_pathDist ? s_pathDist(map, citizenCell, cemCell, 1) : -1;
+        int dist = Pf_IsDstReachable_f810(map, citizenCell, cemCell, 1);
         if (dist < 0) {
             int dy = static_cast<int>(citizenCell) / size - static_cast<int>(cemCell) / size;
             int dx = static_cast<int>(citizenCell) % size - static_cast<int>(cemCell) % size;
             dist = static_cast<int>(sqrtf(static_cast<float>(dy * dy + dx * dx))) + size;
         }
-        if (dist < best && s_validateCell
-            && (s_validateCell(map, 0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
+        if (dist < best
+            && (WorkBase_ValidateCell_a00f0(map, 0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
             if (static_cast<int>(Cemetery_PickFreeSlot_6c60(*slot)) >= 0) {
                 *out = *slot;
                 best = dist;
@@ -230,12 +182,10 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
 // ---------------------------------------------------------------- 0x140004800
 // Wrap the entity's TombstoneComponent (or null) in the out InternalBasePtr.
 extern "C" void** ComponentEntity_FindTombstoneComp_4800(void* entityV, void** outIBP) {
-    EnsureResolved();
     void* found = FindComponentByTypeId(reinterpret_cast<uint8_t*>(entityV),
                                         TombstoneComponent::TypeId());
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    else *outIBP = found;
     return outIBP;
 }
 
@@ -245,7 +195,6 @@ extern "C" void** ComponentEntity_FindTombstoneComp_4800(void* entityV, void** o
 // [0,360) at +0x30) and set the model component's transform (+0x148 quat+pos,
 // +0x168 yaw) from Transform::FromYawPitchOffset at terrain height.
 extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg) {
-    EnsureResolved();
     uint8_t* self = reinterpret_cast<uint8_t*>(tombCompV);
     uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
     if (!world || !self) return;
@@ -253,9 +202,9 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
     int size = *map;
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(self + 0x10);
     int64_t posIBP = 0;
-    if (s_findResData) s_findResData(entity, &posIBP);
+    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &posIBP);
     int64_t modelIBP = 0;
-    if (s_findModel) s_findModel(entity, &modelIBP);
+    ActCNR_FindComponent_3f60(entity, &modelIBP);
     if (!posIBP || !modelIBP) return;   // [STANDALONE GUARD] retail derefs unguarded
     int yaw = static_cast<int>(yawDeg);
     *reinterpret_cast<int16_t*>(posIBP + 0x28) = static_cast<int16_t>(cell % size);
@@ -271,7 +220,7 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
     float inXY[3] = { static_cast<float>(cell % size) - half,
                       static_cast<float>(cell / size) - half, 0.0f };
     Math::Vector3 terr(0.0f, 0.0f, 0.0f);
-    if (s_terrainPos) s_terrainPos(map, &terr.x, inXY, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(map, &terr.x, inXY, '\0', nullptr);
     Math::Scalar pitch(0.0f);
     Math::Scalar yawF(yawDeg);
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawF, pitch, terr);
@@ -287,12 +236,11 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
 // (matches retail), worldArg = game-world singleton (passed to the pathfinder cmd).
 extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
                                              uint64_t /*citizenCell*/, void* worldArg) {
-    EnsureResolved();
     uint8_t* cem = reinterpret_cast<uint8_t*>(cemCompV);
     uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
     if (!world || !cem) return;
     int64_t nullIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint8_t* map = *reinterpret_cast<uint8_t**>(world + 0xf8);
     int64_t cellRec = *reinterpret_cast<int64_t*>(map + 0x80);
     uint8_t oldState = *reinterpret_cast<uint8_t*>(cellRec + 0x29 + static_cast<int64_t>(cell) * 0x30);
@@ -300,22 +248,20 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
     *reinterpret_cast<uint8_t*>(map + 0xa2) |= static_cast<uint8_t>(stateWasWalk);
     *reinterpret_cast<uint8_t*>(cellRec + 0x29 + static_cast<int64_t>(cell) * 0x30) = 2;
     int size = *reinterpret_cast<int*>(map);
-    if (stateWasWalk && s_fineCellDirty)
-        s_fineCellDirty(*reinterpret_cast<int64_t*>(map + 0x70), cell % size, cell / size);
-    if (s_pfEnqueue)
-        s_pfEnqueue(*reinterpret_cast<int64_t*>(map + 0x68), static_cast<uint32_t>(cell),
-                    reinterpret_cast<void*>(2), worldArg);
+    if (stateWasWalk)
+        Pf_FineCellDirty_a8c90(*reinterpret_cast<int64_t*>(map + 0x70), cell % size, cell / size);
+    Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(map + 0x68), static_cast<uint32_t>(cell),
+                         reinterpret_cast<void*>(2), worldArg);
     *reinterpret_cast<int64_t*>(cellRec + 8 + static_cast<int64_t>(cell) * 0x30) = nullIBP;  // = null
     // Tombstone yaw = the cemetery's own placed rotation (position component +0x30).
     int64_t resIBP = 0;
-    void* resIBPp = s_findResData
-        ? s_findResData(*reinterpret_cast<uintptr_t*>(cem + 0x10), &resIBP) : nullptr;
+    void* resIBPp = FloorComponent_FindResData(*reinterpret_cast<void**>(cem + 0x10), &resIBP);
     int rot = (resIBPp && *reinterpret_cast<int64_t*>(resIBPp))
         ? *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(resIBPp) + 0x30) : 0;
     // Tombstone description lives at CemeteryDescription+0x20.
     void* desc = *reinterpret_cast<void**>(cem + 0x18);
-    void* cemDesc = (desc && fn_IsDerivedFrom
-                     && fn_IsDerivedFrom(desc, CemeteryDescription::TypeId())) ? desc : nullptr;
+    void* cemDesc = (desc
+                     && Object::IsDerivedFromNullSafe(desc, CemeteryDescription::TypeId())) ? desc : nullptr;
     // [STANDALONE GUARD] retail trusts the IsDerivedFrom gate then derefs
     // unguarded; type-ids can be unfilled early in standalone, so trust the
     // raw description (mirrors tombstonecomponent.cpp's OnCreate note).
@@ -324,11 +270,10 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
     void* tombDesc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(cemDesc) + 0x20);
     if (!tombDesc) return;   // [STANDALONE GUARD]
     void* built = nullptr;
-    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-        ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
-    if (mem && s_ctorFromDesc) built = s_ctorFromDesc(mem, tombDesc);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    if (mem) built = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tombDesc);
     int64_t entIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+    new (&entIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(built));   // B.3.3 bridge
     if (!entIBP) return;   // [STANDALONE GUARD] alloc/ctor failed
     int64_t tsIBP = 0;
@@ -336,16 +281,14 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
                                            reinterpret_cast<void**>(&tsIBP));
     if (tsIBP) Entity_PlaceAtCell_7b20(reinterpret_cast<void*>(tsIBP), cell, static_cast<float>(rot));
     int64_t regIBP = entIBP;
-    if (s_registerEnt)
-        s_registerEnt(*reinterpret_cast<void**>(world + 0xe8), &regIBP,
-                      *reinterpret_cast<int*>(reinterpret_cast<int64_t>(tombDesc) + 0x20));
+    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(world + 0xe8), &regIBP,
+                                   *reinterpret_cast<int*>(reinterpret_cast<int64_t>(tombDesc) + 0x20));
 }
 
 // ---------------------------------------------------------------- 0x140116dd0
 // Citizen death handler. Returns 1 (handled) or 0 when the world is in the
 // bit-8 state at +0xd0 (loading/shutdown) — retail early-outs with AL=0 there.
 extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType, const char* strParam) {
-    EnsureResolved();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
     if (!world) return 0;   // [STANDALONE GUARD]
@@ -365,10 +308,9 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
         }
     } else {
         int64_t ibp = 0;
-        void* p = s_findCompPos
-            ? s_findCompPos(*reinterpret_cast<uintptr_t*>(self + 0x238), &ibp) : nullptr;
-        if (p && s_resolvePos)
-            s_resolvePos(*reinterpret_cast<void**>(p), pos, 0, 0, nullptr);
+        void* p = WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(self + 0x238), &ibp);
+        if (p)
+            Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(p), pos, 0, 0, nullptr);
     }
 
     // --- Clamp to a map cell ---
@@ -443,14 +385,14 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
     Citizen_FamilyRingOrFlag_3a70(selfV, flags);
 
     // --- Post the event-log message (severity 1) ---
-    if (s_postLifeEvent) s_postLifeEvent(selfV, eventType, 1, strParam);
+    CitizenComponent_PostLifeEvent(selfV, eventType, 1, strParam);
 
     // --- Queue the citizen entity for removal on GameUpdateLoop (+0xd0 list) ---
     int64_t entIBP = *reinterpret_cast<int64_t*>(self + 0x10);
     uint8_t* loop = *reinterpret_cast<uint8_t**>(world + 0xe8);
     if (entIBP != 0 && loop) {
         if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10 & 1) == 0) {
-            if (s_markRemoval) s_markRemoval(reinterpret_cast<void*>(entIBP));
+            ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entIBP));
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             GameColl::AsArray<GameColl::Ptr8>(loop + 0xd0)
                 .SetSizeFill(*reinterpret_cast<int*>(loop + 0xd8) + 1, &entIBP);

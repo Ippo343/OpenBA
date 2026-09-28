@@ -73,38 +73,10 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
 
 namespace {
-
-// --- registered exe sub-callees (resolved lazily via ResolveAddr) ---
-typedef uint64_t (*fn_checkWork_t)(void* citizen, void* arg);                       // 0x1401158d0
-typedef int      (*fn_f810_t)(int* mapGrid, uint32_t fromCell, uint32_t toCell, char addCache); // 0x14009f810
-typedef void*    (*fn_findStorage_t)(int64_t entity, void* outIBP);                 // 0x140008090 / 0x140006270
-typedef void     (*fn_2e20_t)(int64_t comp, void* outVec3, int, int, void*);        // 0x140122e20
-typedef uint64_t (*fn_a00f0_t)(int* mapGrid, uint32_t cat, uint32_t a, uint32_t b); // 0x1400a00f0
-typedef float    (*fn_sqrtf_t)(float v);                                            // 0x140132010
-typedef uint32_t (*fn_7fb0_t)(void* ibp, float* outVec3orNull);                     // 0x140087fb0
-typedef void*    (*fn_ef40_t)(void* ignored, int64_t* out, void* entityIBP, int cat); // 0x14008ef40
-typedef int      (*fn_edb0_t)(int64_t entity, uint32_t goalCell, float* outVec3);   // 0x14004edb0
-typedef int      (*fn_8830_t)(int* mapGrid, uint32_t fromCell, uint32_t toCell);    // 0x140008830
-typedef void     (*fn_9c480_t)(int* mapGrid, uint64_t a, uint64_t b, int c);        // 0x14009c480
-typedef int      (*fn_d5d0_t)(int64_t entity, uint32_t goalCell, float* outVec3, uint64_t ctx); // 0x14012d5d0
-typedef void*    (*fn_78c0_t)(int64_t entity, void* outIBP);                        // 0x1400178c0
-
-static fn_checkWork_t   s_fn_checkWork    = nullptr;
-static fn_f810_t        s_fn_f810         = nullptr;
-static fn_findStorage_t s_fn_findStor8090 = nullptr;
-static fn_findStorage_t s_fn_findStor6270 = nullptr;
-static fn_2e20_t        s_fn_2e20         = nullptr;
-static fn_a00f0_t       s_fn_a00f0        = nullptr;
-static fn_sqrtf_t       s_fn_sqrtf        = nullptr;
-static fn_7fb0_t        s_fn_7fb0         = nullptr;
-static fn_ef40_t        s_fn_ef40         = nullptr;
-static fn_edb0_t        s_fn_edb0         = nullptr;
-static fn_8830_t        s_fn_8830         = nullptr;
-static fn_9c480_t       s_fn_9c480        = nullptr;
-static fn_d5d0_t        s_fn_d5d0         = nullptr;
-static fn_78c0_t        s_fn_78c0         = nullptr;
 
 // --- type ids (self-contained via GetTypeIdByName; see header note) ---
 static uint32_t s_tid_ResidenceDescription = 0;  // DAT_1401c7d28
@@ -114,23 +86,11 @@ static uint32_t s_tid_StorageLocationComp  = 0;  // DAT_1401c7ee8
 static uint32_t s_tid_StorageLocationDesc  = 0;  // DAT_1401c7f20
 static uint32_t s_tid_ResidenceComponent   = 0;  // DWORD_1401c7cf0
 
+// Resolves no door: it only caches the component type ids. The exe sub-callees are called
+// by name (Component/Action/Work exe_bodies.h).
 static bool s_init = false;
 static void EnsureInit() {
     if (s_init) return;
-    s_fn_checkWork    = reinterpret_cast<fn_checkWork_t>(ResolveAddr(Module::Exe, 0x1401158d0));
-    s_fn_f810         = reinterpret_cast<fn_f810_t>(ResolveAddr(Module::Exe, 0x14009f810));
-    s_fn_findStor8090 = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140008090));
-    s_fn_findStor6270 = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_2e20         = reinterpret_cast<fn_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_fn_a00f0        = reinterpret_cast<fn_a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_sqrtf        = reinterpret_cast<fn_sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_fn_7fb0         = reinterpret_cast<fn_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_fn_ef40         = reinterpret_cast<fn_ef40_t>(ResolveAddr(Module::Exe, 0x14008ef40));
-    s_fn_edb0         = reinterpret_cast<fn_edb0_t>(ResolveAddr(Module::Exe, 0x14004edb0));
-    s_fn_8830         = reinterpret_cast<fn_8830_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_fn_9c480        = reinterpret_cast<fn_9c480_t>(ResolveAddr(Module::Exe, 0x14009c480));
-    s_fn_d5d0         = reinterpret_cast<fn_d5d0_t>(ResolveAddr(Module::Exe, 0x14012d5d0));
-    s_fn_78c0         = reinterpret_cast<fn_78c0_t>(ResolveAddr(Module::Exe, 0x1400178c0));
 
     if (s_tid_ResidenceDescription == 0) s_tid_ResidenceDescription = ResidenceDescription::TypeId();
     if (s_tid_InteractComponent == 0)    s_tid_InteractComponent    = InteractComponent::TypeId();
@@ -161,7 +121,7 @@ static void* ScanCompList1(int64_t entity, uint32_t tid) {
         if (comp && CompTypeId(comp) == tid) {
             int64_t* slot2 = reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8);
             void* obj = reinterpret_cast<void*>(*slot2);
-            if (obj && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tid)) return obj;
+            if (obj && Object::IsDerivedFromNullSafe(obj, tid)) return obj;
             return nullptr;
         }
     }
@@ -176,7 +136,7 @@ static void* ScanCompList2(int64_t base, uint32_t tid) {
     for (int i = 0; i < n; ++i) {
         int64_t comp = *reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8);
         if (comp && CompTypeId(reinterpret_cast<void*>(comp)) == tid) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(comp), tid))
+            if (Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(comp), tid))
                 return reinterpret_cast<void*>(comp);
             return nullptr;
         }
@@ -196,7 +156,7 @@ bool ResidenceCheck_2ac30(int64_t param_1) {
     EnsureInit();
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
     float cur = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(GW() + 0x130) + 0x18);
-    void* desc = (obj && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, s_tid_ResidenceDescription)) ? obj : nullptr;
+    void* desc = (obj && Object::IsDerivedFromNullSafe(obj, s_tid_ResidenceDescription)) ? obj : nullptr;
     float thresh = desc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x28) : 0.0f;
     if (thresh <= cur) return true;
     return 0 < *reinterpret_cast<int64_t*>(param_1 + 0x48);
@@ -217,8 +177,9 @@ uint64_t CitizenAI_helper_db20(int64_t param_1) {
     }
     uint64_t local_res8[4] = {0, 0, 0, 0};
     local_res8[0] = *reinterpret_cast<uint64_t*>(*self + 0x238);
-    if (!s_fn_checkWork) return *self & 0xffffffffffffff00ULL;
-    return s_fn_checkWork(reinterpret_cast<void*>(*self), local_res8);
+    // The caller reads the low byte (the body's char).
+    return static_cast<uint8_t>(CitizenComp_CheckWorkplaceValid(
+        reinterpret_cast<CitizenComponent*>(*self), local_res8));   // 0x1401158d0
 }
 
 // ============================================================
@@ -237,12 +198,12 @@ uint64_t CitizenAI_helper_70b0(int64_t param_1) {
 
 // Path cost from cell -> goal: f810 (real A* cost), else euclidean-on-grid fallback (sqrt+width).
 static int CellCost(int* mapGrid, uint32_t cell, uint32_t goal) {
-    int c = s_fn_f810 ? s_fn_f810(mapGrid, cell, goal, '\x01') : -1;
+    int c = Pf_IsDstReachable_f810(mapGrid, cell, goal, '\x01');
     if (c < 0) {
         int w = *mapGrid;
         int dRow = static_cast<int>(cell) / w - static_cast<int>(goal) / w;
         int dCol = static_cast<int>(cell) % w - static_cast<int>(goal) % w;
-        float r = s_fn_sqrtf ? s_fn_sqrtf(static_cast<float>(dRow * dRow + dCol * dCol)) : 0.0f;
+        float r = WorkImpl_Sqrtf_132010(static_cast<float>(dRow * dRow + dCol * dCol));
         c = static_cast<int>(r) + w;
     }
     return c;
@@ -281,20 +242,20 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
 
         void* interact = ScanCompList1(cand, s_tid_InteractComponent);
         int64_t interactIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&interactIBP) ::Object::InternalBasePtr(
+        new (&interactIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
 
         float vec[4] = {0, 0, 0, 0};
-        if (s_fn_2e20) s_fn_2e20(interactIBP, vec, 0, 0, nullptr);
+        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP), vec, 0, 0, nullptr);
         uint32_t cell = WorldToCell(mapGrid, vec);
         int cost = CellCost(mapGrid, cell, param_3);
 
         if (cost < best) {
-            uint64_t valid = s_fn_a00f0 ? s_fn_a00f0(mapGrid, 0xe1f, param_3, cell) : 0;
+            uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
             if (static_cast<char>(valid) != '\0') {
                 int64_t* self_00 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x20) + byteOff);
                 int64_t storIBP[2] = {0, 0};
-                void* storPtr = s_fn_findStor8090 ? s_fn_findStor8090(*self_00, storIBP) : nullptr;
+                void* storPtr = CitizenComp_Entity_FindComponent_Storage(*self_00, storIBP);
                 int64_t storComp = storPtr ? *reinterpret_cast<int64_t*>(storPtr) : 0;
                 bool ok = storComp ? ResidenceCheck_2ac30(storComp) : false;
                 if (ok && (-1 < cost)) {
@@ -342,13 +303,13 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
     if (preferred != 0) {
         float vec[4] = {0, 0, 0, 0};
         int64_t candIBP = preferred;
-        uint32_t cell = s_fn_7fb0 ? s_fn_7fb0(&candIBP, vec) : 0;
-        uint64_t valid = s_fn_a00f0 ? s_fn_a00f0(mapGrid, 0xe1f, param_3, cell) : 0;
+        uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, vec));
+        uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
         if (static_cast<char>(valid) != '\0') {
-            int dist = s_fn_8830 ? s_fn_8830(mapGrid, cell, param_3) : 0;
+            int dist = WorkBase_CalcDistance_8830(mapGrid, cell, param_3);
             int64_t candA = *origP7;
             int64_t outSlot = 0;
-            if (s_fn_ef40) s_fn_ef40(reinterpret_cast<void*>(candA), &outSlot, &candA, 0);
+            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(candA), &outSlot, &candA, 0);
             if (outSlot != 0) {
                 *param_2 = *origP7;
                 param_5[0] = vec[0];
@@ -366,19 +327,19 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
         do {
             int64_t cand = *reinterpret_cast<int64_t*>(off + param_1[2]);
             int64_t candIBP = cand;
-            uint32_t cell = s_fn_7fb0 ? s_fn_7fb0(&candIBP, nullptr) : 0;
+            uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
             int cost = CellCost(mapGrid, cell, param_3);
             if (cost < best) {
                 int64_t candE = cand;
                 int64_t outSlot = 0;
-                if (s_fn_ef40) s_fn_ef40(reinterpret_cast<void*>(mapGrid), &outSlot, &candE, 0);
+                CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(mapGrid), &outSlot, &candE, 0);
                 int64_t slot = outSlot;
                 if (outSlot != 0) {
                     float vec[4] = {0, 0, 0, 0};
                     int64_t marketIBP[2] = {0, 0};
-                    void* mp = s_fn_78c0 ? s_fn_78c0(cand, marketIBP) : nullptr;
+                    void* mp = CitizenAI_sub_78c0(cand, marketIBP);
                     int64_t marketComp = mp ? *reinterpret_cast<int64_t*>(mp) : 0;
-                    int mcost = (marketComp && s_fn_edb0) ? s_fn_edb0(marketComp, param_3, vec) : -1;
+                    int mcost = marketComp ? Pf_PickReachableCell_edb0(marketComp, param_3, vec) : -1;
                     if ((-1 < mcost) && (mcost < best)) {
                         *param_2 = cand;
                         param_5[0] = vec[0];
@@ -401,12 +362,12 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
         do {
             int64_t cand = *reinterpret_cast<int64_t*>(off + *param_1);
             int64_t candIBP = cand;
-            uint32_t cell = s_fn_7fb0 ? s_fn_7fb0(&candIBP, nullptr) : 0;
+            uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
             int cost = CellCost(mapGrid, cell, param_3);
             if (cost < best) {
                 int64_t candE = cand;
                 int64_t slotOut[2] = {0, 0};
-                if (s_fn_ef40) s_fn_ef40(reinterpret_cast<void*>(mapGrid), slotOut, &candE, 0);
+                CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(mapGrid), slotOut, &candE, 0);
                 int64_t slot = slotOut[0];
                 if (slot != 0) {
                     // RawMaterialDescription on the ef40-picked slot's comp-list2 (slot+0x28 / +0x30)
@@ -415,18 +376,18 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                     // StorageLocationComponent on the candidate entity (comp-list1)
                     void* storComp = ScanCompList1(cand, s_tid_StorageLocationComp);
                     int64_t storIBP = 0;
-                    if (fn_InternalBasePtr_Ctor) new (&storIBP) ::Object::InternalBasePtr(
+                    new (&storIBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(storComp));   // B.3.3 bridge
 
                     if (storIBP != 0) {
                         int64_t storC = storIBP;
                         // mask from StorageLocationDescription sub-object at storC+0x18, +0x20
                         void* sub = *reinterpret_cast<void**>(storC + 0x18);
-                        void* derived = (sub && fn_IsDerivedFrom && fn_IsDerivedFrom(sub, s_tid_StorageLocationDesc)) ? sub : nullptr;
+                        void* derived = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_StorageLocationDesc)) ? sub : nullptr;
                         uint32_t mask = derived ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(derived) + 0x20) : 0;
                         if (mask == 0) {
                             float tmp[4] = {0, 0, 0, 0};
-                            void* sp = s_fn_findStor6270 ? s_fn_findStor6270(*reinterpret_cast<int64_t*>(storC + 0x10), tmp) : nullptr;
+                            void* sp = WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(storC + 0x10), tmp);
                             int64_t s = sp ? *reinterpret_cast<int64_t*>(sp) : 0;
                             // [M-D SCOPED FALLBACK] the registered 6270 port's typeid is dead
                             // .rdata (0x1401c7e78 unregistered) -> never matches in standalone;
@@ -448,10 +409,10 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                             // 2nd StorageLocationComponent scan over the entity (cost source)
                             void* costComp = ScanCompList1(cand, s_tid_StorageLocationComp);
                             int64_t costIBP = 0;
-                            if (fn_InternalBasePtr_Ctor) new (&costIBP) ::Object::InternalBasePtr(
+                            new (&costIBP) ::Object::InternalBasePtr(
                                 reinterpret_cast<RtObject::Internal*>(costComp));   // B.3.3 bridge
                             int64_t costSrc = costIBP;
-                            int dcost = (costSrc && s_fn_d5d0) ? s_fn_d5d0(costSrc, param_3, vec, 0) : -1;
+                            int dcost = costSrc ? Pf_FindBestAdjacentCell_d5d0(costSrc, param_3, vec, 0) : -1;
                             if ((-1 < dcost) && (dcost < best)) {
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];
@@ -479,7 +440,7 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
             // ResidenceComponent on the entity (comp-list1 at cand+0x30 / +0x38)
             void* resComp = ScanCompList1(cand, s_tid_ResidenceComponent);
             int64_t resIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&resIBP) ::Object::InternalBasePtr(
+            new (&resIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(resComp));   // B.3.3 bridge
             uint64_t occ = CitizenAI_helper_70b0(resIBP);
 
@@ -487,17 +448,17 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                 // InteractComponent on the entity -> world position
                 void* interact = ScanCompList1(cand, s_tid_InteractComponent);
                 int64_t interactIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&interactIBP) ::Object::InternalBasePtr(
+                new (&interactIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
 
                 float vec[4] = {0, 0, 0, 0};
-                if (s_fn_2e20) s_fn_2e20(interactIBP, vec, 0, 0, nullptr);
+                Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP), vec, 0, 0, nullptr);
                 uint32_t cell = WorldToCell(mapGrid, vec);
 
                 // path cost + ZoneRefresh args (uVar30/uVar22 carry cell/goal or %w/dist² per fallback)
                 uint64_t zr_a = cell;
                 uint64_t zr_b = param_3;
-                int cost = s_fn_f810 ? s_fn_f810(mapGrid, cell, param_3, '\x01') : -1;
+                int cost = Pf_IsDstReachable_f810(mapGrid, cell, param_3, '\x01');
                 if (cost < 0) {
                     int w = *mapGrid;
                     zr_a = static_cast<uint32_t>(static_cast<int>(param_3) % w);
@@ -505,11 +466,12 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                     int dCol = static_cast<int>(cell) % w - static_cast<int>(param_3) % w;
                     uint32_t d2 = static_cast<uint32_t>(dRow * dRow + dCol * dCol);
                     zr_b = d2;
-                    float r = s_fn_sqrtf ? s_fn_sqrtf(static_cast<float>(static_cast<int>(d2))) : 0.0f;
+                    float r = WorkImpl_Sqrtf_132010(static_cast<float>(static_cast<int>(d2)));
                     cost = static_cast<int>(r) + w;
                 }
                 if (cost < best) {
-                    if (s_fn_9c480) s_fn_9c480(mapGrid, zr_a, zr_b, 1);
+                    Pf_ZoneRefresh_9c480(mapGrid, reinterpret_cast<void*>(zr_a),
+                                         reinterpret_cast<void*>(zr_b), 1);   // 0x14009c480
                     int64_t cellArr = *reinterpret_cast<int64_t*>(mapGrid + 0x20);  // int* +0x20 = +0x80 bytes
                     int64_t cGoal = static_cast<int64_t>(static_cast<int>(param_3)) * 0x30 + cellArr;
                     int64_t cCand = static_cast<int64_t>(static_cast<int>(cell)) * 0x30 + cellArr;
@@ -531,7 +493,7 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                         if (proceed) {
                             int64_t entHolder[2] = {cand, 0};
                             int64_t outSlot = 0;
-                            if (s_fn_ef40) s_fn_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);
+                            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);
                             if ((outSlot != 0) && (-1 < cost)) {
                                 *param_2 = cand;
                                 param_5[0] = vec[0];

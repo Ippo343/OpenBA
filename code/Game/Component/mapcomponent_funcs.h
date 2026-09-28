@@ -15,6 +15,3 @@
 // Gets sibling component via IsDerivedFrom(+0x18, MapDescription typeId).
 // If building[0x30] != 0, calls internal map update sub-function.
 void MapComponent_Draw(MapComponent* self);
-
-// Init: resolve all internal function pointers (called once at startup)
-void MapComponent_InitFuncs();
