@@ -531,4 +531,6 @@ static_assert(sizeof(UserInterface::Iterator) == 0x08,
 
 // ---- ui/userinterface.cpp
 extern "C" void RtUi_UserInterface_Dtor(UI::UserInterface* self);  // 0x180120b90
+// B3R RT-Core: the ctor body the Engine dialog loops call by name.
+extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
 // ==== end B3R W0-P0c ====

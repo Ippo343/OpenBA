@@ -27,7 +27,7 @@
 //      +0x08 and +0x0c. Code that grows either callback array through
 //      `AddPostUpdate`/`AddPostDraw` reads the capacity; a port that treats it
 //      as padding would reallocate on every append.
-//   2. Its `MainLoopAddr::IsRunning = 0x1800314b0` is commented as a no-arg
+//   2. Its `IsRunning = 0x1800314b0` address constant was commented as a no-arg
 //      query. The shipped export is
 //      `?IsRunning@MainLoop@Engine@@QEBA_NPEBVUpdateLoop@2@@Z` (ordinal 3158)
 //      — it takes a `const UpdateLoop*`. The no-arg `IsRunning` in the export
@@ -127,72 +127,16 @@ namespace RtEngine {
 struct UpdateLoop;   // defined by lane A in runtime/types/engine/UpdateLoop.h
 // (`RtEngine::Engine` is an ALIAS of the real class since B.3.7: Engine.h.)
 
-// Retail addresses in Runtime-x64.dll (Ghidra space, image base 0x180000000).
-// Ordinals are from the shipped export directory, read with pefile. An entry
-// with no ordinal comment is NOT thereby internal: every function constant in
-// this namespace is an export (rt_export_addrs.inc, re-checked at the B.3.7
-// close) -- only the two device-slot OFFSETS below are not addresses at all.
+// B3R (registry teardown, W1 RT-Core): the retail ADDRESS constants that
+// stood here (Ctor 0x1800dd6b0 .. OneOverFifteen 0x1801616b0) had no code
+// reader and are gone. What is left are two byte OFFSETS the ctor's inlined
+// Video::Device::SetVideoErrorFuncs writes (engine.cpp reads them).
 namespace MainLoopAddr {
-    // (`Singleton` 0x1801fe750, ord 4813 DATA, is `Engine::MainLoop::_singleton`,
-    // the class static; its constant went with the mint row, ENDGAME B.3.9 close.)
-    constexpr uintptr_t Ctor                = 0x1800dd6b0;  // ord 263
-    constexpr uintptr_t Dtor                = 0x1800dd640;  // ord 627
-    constexpr uintptr_t Run                 = 0x1800dd3c0;  // ord 3601
-    constexpr uintptr_t SetNextLoop         = 0x1800dd7a0;  // ord 3929
-    constexpr uintptr_t OnVideoError        = 0x1800dc5e0;  // ord 3291
-    constexpr uintptr_t OnVideoRestart      = 0x1800dc3b0;  // ord 3295
-    constexpr uintptr_t Get                 = 0x180031570;  // ord 2418
-    constexpr uintptr_t IsRunning           = 0x1800314b0;  // ord 3158, takes UpdateLoop*
-    constexpr uintptr_t GetContext          = 0x1800314d0;  // ord 2511
-    constexpr uintptr_t GetCurrentLoop      = 0x1800314e0;  // ord 2531
-    constexpr uintptr_t GetDeltaTime        = 0x1800314f0;  // ord 2560
-    constexpr uintptr_t GetFrameTime        = 0x180031500;  // ord 2677
-    constexpr uintptr_t GetFrameStartTime   = 0x180031510;  // ord 2676
-    constexpr uintptr_t GetFrameUpdateTime  = 0x180031520;  // ord 2678
-    constexpr uintptr_t MarkFrameUpdateTime = 0x180031530;  // ord 3220
-    constexpr uintptr_t AddPostDraw         = 0x1800dd040;
-    constexpr uintptr_t AddPostUpdate       = 0x1800dcf60;
-    constexpr uintptr_t RemovePostDraw      = 0x1800dcf90;
-    constexpr uintptr_t RemovePostUpdate    = 0x1800dceb0;
-
-    // Filed as "Internal, NOT exported" until the B.3.7 close. ALL FIVE are
-    // exports: Update ord 4496, Frame ord 2377, Draw ord 2251, and the private
-    // (AEAA) CreateVideoContext / ReleaseVideoContext (rt_export_addrs.inc).
-    //
-    // *** CORRECTED 2026-09-12, WAVE 27 lane LOOPS: `Draw` DOES NOT BELONG UNDER
-    // *** THIS HEADING. `?Draw@MainLoop@Engine@@QEAAXM@Z` is export ORDINAL 2251
-    // *** in the shipped Runtime-x64.dll, read straight out of the export
-    // *** directory with pefile. It is now a registered port
-    // *** (runtime/src/engine/loops.cpp, RtEngine_MainLoop_Draw) reached BY NAME.
-    // *** The other four names on this list were NOT re-checked by that lane, so
-    // *** treat them as unverified rather than as confirmed-internal: this is the
-    // *** AEAA trap in its other direction (a PUBLIC name assumed unexported),
-    // *** and one instance of it in a list is reason to distrust the list.
-    // *** Re-derive any of them with:
-    // ***   pefile.PE("Runtime-x64.dll").DIRECTORY_ENTRY_EXPORT.symbols
-    constexpr uintptr_t Update              = 0x1800dd070;  // bool Update(const Time&)
-    constexpr uintptr_t Frame               = 0x1800dd100;  // bool Frame(bool)
-    constexpr uintptr_t Draw                = 0x1800dcd40;  // EXPORTED, ord 2251
-    constexpr uintptr_t CreateVideoContext  = 0x1800dd500;
-    constexpr uintptr_t ReleaseVideoContext = 0x1800dd5e0;
-
-    // The two STATIC thunks the ctor installs into Video::Device so the device
-    // can call back on loss/restore. Each is a one-line
-    // `MainLoop::OnVideoXxx(_singleton)`, and each is the ONLY DLL-internal
-    // caller of its member (get_xrefs_to). See WAVE8_LANE_B.md, detour verdict.
-    constexpr uintptr_t OnVideoError_static   = 0x1800dcd20;
-    constexpr uintptr_t OnVideoRestart_static = 0x1800dc5c0;
-
     // Video::Device::SetVideoErrorFuncs(err, restart) — the name is the
     // profile build's (0x1800fd860); retail inlines it to two stores at
     // Device +0x50 / +0x58 of `Video::Device::_singleton` (the class static).
     constexpr uintptr_t DeviceErrorFuncSlot   = 0x50;
     constexpr uintptr_t DeviceRestartFuncSlot = 0x58;
-
-    // Constants the ctor's inlined SecondsToTicks reads (the Timer static it
-    // also reads, `_secondsPerTick` 0x1801fe728, is `System::Timer`'s class static).
-    constexpr uintptr_t OneOverSixty          = 0x1801616a8;  // (double)(1.0f/60.0f)
-    constexpr uintptr_t OneOverFifteen        = 0x1801616b0;  // (double)(1.0f/15.0f)
 }
 
 // One entry of MainLoop::_videoResources. Built by OnVideoError from the live

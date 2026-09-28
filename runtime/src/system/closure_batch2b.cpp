@@ -166,7 +166,6 @@ extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
 int RtClosure2bGraphicsRegister();
 int RtClosure2bVideoRegister();
 int RtClosure2bSaveRegister();
-int RtClosure2bEngineRegister();
 int RtClosure2bIoRegister();
 
 // ============================================================================
@@ -191,10 +190,9 @@ void RtClosureBatch2bPortInit() {
     const int g = RtClosure2bGraphicsRegister();
     const int v = RtClosure2bVideoRegister();
     const int s = RtClosure2bSaveRegister();
-    const int e = RtClosure2bEngineRegister();
     const int i = RtClosure2bIoRegister();
 
     printf("[RtPort]   cutover closure batch 2b: %d system + %d graphics + "
-           "%d video + %d save + %d engine + %d io\n",
-           n, g, v, s, e, i);
+           "%d video + %d save + %d io\n",
+           n, g, v, s, i);
 }

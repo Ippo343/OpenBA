@@ -72,6 +72,9 @@
 #include "../../types/io/Modification.h"        // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../system/string.h"
 #include "../system/widestring.h"
+#include "../object/external_compiled.h"   // B3R: FindOrLoad / GetCompiledPath by name
+#include "../../types/object/TypeInfo.h"   // B3R: Object::Base::IsDerivedFrom
+#include <new>
 
 // ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)
 // is a static member of the real class now, so the local variadic declaration
@@ -88,21 +91,8 @@ bool RtEnginePlatformWidePathExists(const wchar_t* path);
 
 namespace {
 
-// ENDGAME B.3.1 step 2: these file-local typedefs are spelled in terms of the
-// real classes. They are not a boundary — nothing outside this file sees them —
-// and `System::Filename` / `System::String` are the same eight bytes as the
-// PODs they used to name (the static_asserts in Filename.h pin that), so every
-// one of these calls keeps its exact shape: pointers in, hidden return slot in.
-typedef const void* (*FindOrLoadFn)(void* factory, const System::Filename* name);
-typedef bool        (*IsDerivedFromFn)(const void* base, uint32_t typeId);
-typedef System::Filename* (*GetPathFilenameFn)(const System::Filename* self,
-                                               System::Filename* ret, bool);
-typedef System::Filename* (*GetCompiledPathFn)(System::Filename* ret,
-                                               const System::Filename* src);
-typedef bool        (*ExistsInPackfileFn)(const void* fs,
-                                          const System::Filename* name);
-typedef System::String* (*GetCommandLineStringFn)(const void*, System::String*,
-                                                  const System::String*);
+// B3R: the file-local door typedefs that stood here are gone; every call below
+// names its body.
 
 // ---- the exported DATA this body reads ----
 // ENDGAME B.3.9 SS1 (B39_RULES D7): all four cells are class statics with a
@@ -150,9 +140,8 @@ bool CompiledResourceExists(const System::Filename& compiled) {
     if (fs == nullptr) return false;
 
     if (fs[0x18] != 0) {
-        if (RT_EXPORT_ONCE(ExistsInPackfileFn,
-                "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(
-                    fs, &compiled))
+        if (reinterpret_cast<const IO::FileSystem*>(fs)->ExistsInPackfile(   // 0x1800ab180
+                reinterpret_cast<const RtSystem::Filename&>(compiled)))
             return true;
     }
     if (fs[0x19] == 0) return false;
@@ -175,12 +164,12 @@ bool CompiledResourceExists(const System::Filename& compiled) {
 // observable, and "simplifying" it away is exactly the class of edit that
 // turns a faithful port into a different function.
 const void* FindAndCheck(const System::Filename& name, bool keep) {
-    const void* ext = RT_EXPORT_ONCE(FindOrLoadFn,
-        "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z")(
-            ExternalFactorySingleton(), &name);
+    const void* ext = RtObject::RtObject_ExternalFactory_FindOrLoad(   // 0x1800bf320
+        static_cast<RtObject::ExternalFactory*>(ExternalFactorySingleton()),
+        reinterpret_cast<const RtSystem::Filename*>(&name));
     if (ext == nullptr) return nullptr;
-    const bool derived = RT_EXPORT_ONCE(IsDerivedFromFn,
-        "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(ext, ExternalListTypeId());
+    const bool derived = static_cast<const ::Object::Base*>(ext)          // 0x1800c0390
+                             ->IsDerivedFrom(ExternalListTypeId());
     if (!keep) return nullptr;
     return derived ? ext : nullptr;
 }
@@ -237,11 +226,11 @@ void Engine::UpdateLoop::LoadResources() {
             // that byte offset keeps its cast.
             System::String dir;
             {
-                System::Filename ret;
-                RT_EXPORT_ONCE(GetPathFilenameFn,
-                    "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(
-                        reinterpret_cast<const System::Filename*>(mod + 0x58),
-                        &ret, true);
+                // System::Filename::GetPathFilename (0x1800c6740), by name
+                // (B3R); the by-value result is constructed in `ret`.
+                System::Filename ret(
+                    reinterpret_cast<const System::Filename*>(mod + 0x58)
+                        ->GetPathFilename(true));
                 dir = ret.AsString();   // 0x1800dd95a: AddRef, no delimiter pass
             }
 
@@ -252,9 +241,9 @@ void Engine::UpdateLoop::LoadResources() {
             {
                 System::Filename probe(spec);
                 System::Filename compiled;
-                RT_EXPORT_ONCE(GetCompiledPathFn,
-                    "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z")(
-                        &compiled, &probe);
+                RtObject::RtObject_ExternalFactory_GetCompiledPath(       // 0x1800bec10
+                    reinterpret_cast<RtSystem::Filename*>(&compiled),
+                    reinterpret_cast<const RtSystem::Filename*>(&probe));
 
                 exists = CompiledResourceExists(compiled);
                 // `compiled` then `probe` release — retail's own order.
@@ -277,9 +266,12 @@ void Engine::UpdateLoop::LoadResources() {
         // `key` is scoped so that it still releases exactly where retail
         // releases it (0x1800ddc10), before the length test below.
         System::String key("ref");      // 0x18000b630: zero, then Set
-        RT_EXPORT_ONCE(GetCommandLineStringFn,
-            "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
-                ConfigurationSingleton(), &value, &key);
+        // System::Configuration::GetCommandLineString (0x1800c5300), by name
+        // (B3R): its by-value result is constructed into `value`, the hidden
+        // return slot the door was handed.
+        ::new (&value) System::String(
+            static_cast<const System::Configuration*>(ConfigurationSingleton())
+                ->GetCommandLineString(key));
     }
 
     // 0x1800ddc44: `CMP dword ptr [RAX-0x8],0` — the LENGTH word, not the
@@ -308,9 +300,6 @@ extern "C" void RtEngineLoadResourcesSummary() {
 // ============================================================================
 
 int RtEngineLoadResourcesRegister() {
-    RegisterRuntimeExport("?LoadResources@UpdateLoop@Engine@@QEAAXXZ",
-                          (void*)&RtEngine_UpdateLoop_LoadResources);
-    RegisterRuntimeAddr(0x1800dd7d0, (void*)&RtEngine_UpdateLoop_LoadResources);
 
     return 1;
 }

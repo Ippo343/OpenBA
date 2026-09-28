@@ -274,3 +274,9 @@ static_assert(kLastCursorYOffset   == (int)offsetof(::Input::Device, _lastCursor
 static_assert(kDeviceMappedSize    == (int)sizeof(::Input::Device),                    "alias");
 
 }  // namespace RtInput
+
+// ==== B3R RT-Core: Runtime bodies called by name ====
+// ---- input/input.cpp -- ??1Configuration@Input@@QEAA@XZ (retail never reads
+// `this`: the whole body is the `_singleton` null store).
+void RtInput_Configuration_Dtor(void* selfPtr);  // 0x1800e0e10
+// ==== end B3R RT-Core ====

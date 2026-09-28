@@ -195,17 +195,10 @@
 #include "../../types/engine/Engine.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/video/Context.h"  // B3R: RtVideo_Context_Dtor, Video_Context_OperatorDelete
+#include "../../types/collection/Collection.h"  // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
 
 // ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring the seam locally: resolve.h
-// drags in <windows.h>, and PLAN §4.1 requires runtime/src/ to stay
-// platform-neutral. This declaration must stay byte-identical to resolve.h's.
-// It has to sit at FILE scope, not inside the anonymous namespace below, or it
-// would declare a different, internal-linkage function that never links.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // The engine layouts live in `namespace RtEngine` (see the header banners): the
 // exe tree's engine/types/{MainLoop,UpdateLoop}.h define GLOBAL structs of the
@@ -590,10 +583,8 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
 
     void* context = self->_context;
     if (context) {
-        reinterpret_cast<VoidThisFn>(
-            ResolveAddr(Module::Runtime, 0x1800f16e0))(context);   // ~Context
-        reinterpret_cast<VoidThisFn>(
-            ResolveAddr(Module::Runtime, 0x180018500))(context);   // operator delete
+        RtVideo_Context_Dtor(static_cast<Video::Context*>(context));   // ~Context 0x1800f16e0
+        Video_Context_OperatorDelete(context);                        // operator delete 0x180018500
     }
     self->_context = nullptr;
 
@@ -617,9 +608,8 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
     // struct from `ArraySpec`, defined in array_destroy.cpp) — that is new
     // Collection-side plumbing this batch does not own (runtime/src/collection
     // is out of scope here), so this stays a by-address call rather than a
-    // forced (and wrong) `.~Array()`.
-    reinterpret_cast<VoidThisFn>(
-        ResolveAddr(Module::Runtime, 0x180033880))(&self->_videoResources);
+    // forced (and wrong) `.~Array()`. B3R: called by name.
+    rtcoll::RtColl_ArrayDtorElem_180033880(&self->_videoResources);
 
 }
 
@@ -651,9 +641,6 @@ int RtEngineCoreRegister() {
 
     RegisterRuntimeExport("??1MainLoop@Engine@@QEAA@XZ", (void*)&RtEngine_MainLoop_Dtor); ++n;
     RegisterRuntimeAddr(0x1800dd640, (void*)&RtEngine_MainLoop_Dtor);
-
-    RegisterRuntimeExport("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z", (void*)&RtEngine_MainLoop_SetNextLoop); ++n;
-    RegisterRuntimeAddr(0x1800dd7a0, (void*)&RtEngine_MainLoop_SetNextLoop);
 
     // MOVED to runtime/src/engine/engine_lifecycle.cpp (Wave 9 lane ENG), which
     // registers all four. The "allocator, NO-GO" reason that used to stand here

@@ -269,4 +269,6 @@ namespace rtsetavl { struct Node; }   // runtime/src/collection/set_avl.h
 
 // ---- application/application_lifecycle.cpp
 extern "C" void RtApp_SetDestroyTree(void* self, rtsetavl::Node* n);  // 0x18000a4f0
+// B3R RT-Core: the ~Application body (??1Application@0@QEAA@XZ).
+extern "C" void RtApp_Dtor(::Application::Application* self);  // 0x18009f520
 // ==== end B3R W0-P0c ====

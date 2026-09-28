@@ -20,9 +20,8 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/application/Application.h"   // B3R: RtApp_SetDestroyTree
+#include "../../types/system/MemoryAllocator.h"    // B3R: rtalloc::FreeLockedIgnoringSelf
 
 namespace {
 
@@ -32,23 +31,12 @@ namespace {
 //                rec(n->right); freeNode(n); }`, left at +0x18 and right at
 //                +0x20. It is its own caller, so porting it is a separate job.
 //   0x180009c30  the single-node free.
+// B3R: both called by name (application_lifecycle.cpp, allocator.cpp).
 void SetFreeSubtree(void* set, void* node) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18000a4f0));
-    fn(set, node);
+    RtApp_SetDestroyTree(set, static_cast<rtsetavl::Node*>(node));
 }
 void SetFreeNode(void* set, void* node) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
-    fn(set, node);
-}
-void GuardedFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    fn(p);
+    rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
 }  // namespace
@@ -87,11 +75,10 @@ extern "C" void* RtEngine_Application_ScalarDeletingDtor(void* self) {
     }
     *reinterpret_cast<void**>(p + 0x18) = nullptr;
     *reinterpret_cast<uint32_t*>(p + 0x20) = 0;
-    GuardedFree(self);
+    // PORT GAP 0x180006a10 the guarded object free (`operator delete`): no
+    // body is bound at this address -- its row went with
+    // context_lifecycle.cpp's Rt_GuardedObjectFree in 1386db46 -- so the
+    // by-address resolve here returned null. Retail calls it here. (This body
+    // has no caller: its 0x18004da00 row had no reader.)
     return self;
-}
-
-int RtClosure2bEngineRegister() {
-    RegisterRuntimeAddr(0x18004da00, (void*)&RtEngine_Application_ScalarDeletingDtor);
-    return 1;
 }

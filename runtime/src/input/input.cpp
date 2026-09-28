@@ -549,28 +549,6 @@ void RtInput_Configuration_Dtor(void* /*selfPtr - never read*/) {
 
 }
 
-int RtInputRegister() {
-    int n = 0;
-    // WAVE 23 LANE TAIL. Reached by name from
-    // runtime/src/engine/engine_lifecycle.cpp's Engine::Shutdown teardown.
-    // Registered from HERE rather than from RtInputConfigStartupRegister(),
-    // which is gated behind RT_INPUTCFGSTART: a gated registration is
-    // not a port and tools/runtime_census.py will not count it.
-    RegisterRuntimeExport("??1Configuration@Input@@QEAA@XZ", (void*)&RtInput_Configuration_Dtor);
-    RegisterRuntimeAddr(0x1800e0e10, (void*)&RtInput_Configuration_Dtor); ++n;
-
-    // Wave 9: unblocked once FUN_180023060's first argument turned out not to
-    // exist (see the port's header comment and WAVE8_LANE_D.md).
-
-    // ENDGAME B.3.7 block B5: ported (Pressed's body reading State +0x07).
-
-    // Both doors, one body -- and that body is input_config_startup.cpp's. This
-    // file keeps the registration because RtInputRegister is ungated, so the
-    // export stays bound whatever RT_INPUTCFGSTART says.
-
-    return n;
-}
-
 // ?_singleton@Configuration@Input@@0PEAV12@EA (0x1801fe768) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
 // RtInputPortInit redirects the minted storage row onto it.
 ::Input::Configuration* ::Input::Configuration::_singleton = nullptr;

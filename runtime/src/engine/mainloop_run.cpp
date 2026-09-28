@@ -350,9 +350,6 @@ extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
 int RtEngineMainLoopRunRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z", (void*)&RtEngine_MainLoop_Run); ++n;
-    RegisterRuntimeAddr(0x1800dd3c0, (void*)&RtEngine_MainLoop_Run);
-
     // TRIAGE, because `runtime_census.py` now lists this name under "Ports with
     // no caller in our tree" and its own note says a NEW name appearing there
     // has NOT been triaged. This one has:
@@ -369,8 +366,6 @@ int RtEngineMainLoopRunRegister() {
     //   It is registered under BOTH doors anyway, because at cutover the DLL's
     //   `Frame` disappears and whatever replaces it must be able to find this
     //   function by either name or address.
-    RegisterRuntimeExport("?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z", (void*)&RtEngine_MainLoop_Update); ++n;
-    RegisterRuntimeAddr(0x1800dd070, (void*)&RtEngine_MainLoop_Update);
 
     return n;
 }

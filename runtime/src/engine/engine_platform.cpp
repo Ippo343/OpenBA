@@ -90,12 +90,11 @@
 #include "../../types/input/Input.h"       // ENDGAME B.3.7 callers (K5): Input::Configuration
 #include "../../types/system/String.h"
 #include "../../types/io/Modification.h"
+#include "../../types/io/Persistence.h"            // B3R: WriteSettings by name
+#include "../../types/system/Configuration.h"      // B3R: GetCommandLineString, RtSystem_ConfigMap_Find
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"     // B3R: rtsetclear::Clear
 #include "../system/string.h"
-
-// Declared exactly as standalone/resolve.h declares them; <windows.h> must not
-// reach this file (PLAN.md §4.1 decision 1).
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // The platform seam. runtime/src/engine/engine_platform_win.cpp.
 bool RtEnginePlatformShiftHeld();
@@ -113,25 +112,16 @@ using System::String;
 
 namespace {
 
-typedef void*   (*MemAllocFn)(uint64_t, int);
-typedef void    (*MemFreeFn)(void*);
-typedef void    (*VoidThisFn)(void*);
-typedef bool    (*BoolThisFn)(void*);
-typedef String* (*GetCommandLineStringFn)(const void*, String*, const String*);
-typedef void*   (*MapFindFn)(void* map, const String* wanted);
-typedef void    (*PersistenceClearFn)(void*);
-
 // Retail's unexported per-class operator new / delete at 0x180011640 and
 // 0x180006a10 are `MemAlloc(size, 4)` and `MemFree` verbatim — read in full by
 // Wave 9 lane ENG, which made the same call this file makes: call the named
 // allocator exports directly rather than register those two addresses, because
 // they have dozens of DLL-internal callers and no name.
 void* MemAlloc(uint64_t size, int align) {
-    return RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
+    return System::MemoryAllocator::MemAlloc(size, align);   // 0x1800c7a50
 }
 void MemFree(void* p) {
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    System::MemoryAllocator::MemFree(p);                     // 0x1800c7ad0
 }
 
 // The exported DATA slots -- all class statics now (ENDGAME B.3.9 SS1,
@@ -162,10 +152,10 @@ EngineT** EngineSingletonSlot() {
 bool CommandLineHasValue(void* cfg, const char* keyText) {
     if (cfg == nullptr) return false;
     String key(keyText);       // 0x18000b630: zero, then Set
-    String value;
-    RT_EXPORT_ONCE(GetCommandLineStringFn,
-        "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
-            cfg, &value, &key);
+    // System::Configuration::GetCommandLineString (0x1800c5300), by name (B3R);
+    // the by-value result is constructed in `value`.
+    const String value = static_cast<const System::Configuration*>(cfg)
+                             ->GetCommandLineString(key);
     const bool present = value._data != nullptr;   // retail: CMP [RAX],RDI
     // `value` then `key` release here — retail's order, which is C++'s reverse
     // declaration order.
@@ -173,15 +163,15 @@ bool CommandLineHasValue(void* cfg, const char* keyText) {
 }
 
 // Retail's OTHER command-line test: the map find at `Configuration + 0x10`.
-// Unexported in both shipped builds, so by address — and ResolveAddr consults
-// the PORT REGISTRY FIRST, so runtime/src/system/configuration.cpp's
-// registration of 0x18002ace0 is what this reaches today and at cutover.
+// Unexported in both shipped builds; the body is
+// runtime/src/system/configuration.cpp's RtSystem_ConfigMap_Find (0x18002ace0),
+// called by name (B3R).
 bool CommandLineHasKey(void* cfg, const char* keyText) {
     if (cfg == nullptr) return false;
     String key(keyText);       // 0x18000b630: zero, then Set
     void* map = static_cast<uint8_t*>(cfg) + 0x10;
-    const bool found = reinterpret_cast<MapFindFn>(
-        ResolveAddr(Module::Runtime, 0x18002ace0))(map, &key) != nullptr;
+    const bool found = RtSystem_ConfigMap_Find(
+        map, reinterpret_cast<const RtSystem::String*>(&key)) != nullptr;
     // `key` releases here — retail's 0x1800a1934, now ~String.
     return found;
 }
@@ -201,7 +191,7 @@ void DisableAllModifications() {
         base[static_cast<size_t>(i) * 0x80 + 0x50] = 0;   // Mod::enabled
 
     modification[0] = 1;   // the "list is dirty" byte SaveList reads
-    RT_EXPORT_ONCE(VoidThisFn, "?SaveList@Modification@IO@@QEAAXXZ")(modification);
+    reinterpret_cast<IO::Modification*>(modification)->SaveList();
 }
 
 // 0x1800a1939-0x1800a1a92. Destroy and re-create the three Configuration
@@ -209,9 +199,9 @@ void DisableAllModifications() {
 // the instruction stream, not reconstructed from a header.
 void ResetConfigurations(EngineT* self) {
     // Persistence's settings map is cleared by an UNEXPORTED recursive helper
-    // (0x18000f7d0 -> 0x18000f890 / 0x18000fa90 / 0x180009c30). By address, so
-    // a later collection lane that ports it is picked up automatically; at
-    // cutover this is part of the Half B residual named in the banner.
+    // (0x18000f7d0 -> 0x18000f890 / 0x18000fa90 / 0x180009c30), ported as
+    // rtsetclear::Clear (runtime/src/collection/set_clear.cpp), called by name
+    // (B3R).
     //
     // NOT CONVERTED (ENDGAME B.3.2 step 2): 0x18000f7d0 is `rtsetclear::Clear`,
     // a `Collection::Set<Pair<String,String>>::Clear` door. Calling it as a
@@ -220,11 +210,10 @@ void ResetConfigurations(EngineT* self) {
     // `settingsMapCount`) to be a real `Collection::Set<Pair<String,String>,
     // DefaultAllocator, Pair<String,String>, AVLCompare>` member — that header
     // is outside this batch's file list (runtime/types/io, not runtime/src/
-    // engine), so this stays a by-address call.
+    // engine), so it stays the free body.
     void** pslot = PersistenceSingletonSlot();
     if (pslot && *pslot) {
-        if (uintptr_t clear = ResolveAddr(Module::Runtime, 0x18000f7d0))
-            reinterpret_cast<PersistenceClearFn>(clear)(*pslot);
+        rtsetclear::Clear(static_cast<rtsetavl::Set*>(*pslot));   // 0x18000f7d0
     }
 
     // --- Input::Configuration (0x10 bytes) ---------------------------------
@@ -337,8 +326,7 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
         *static_cast<uint8_t*>(_videoConfiguration) = 1;
         reinterpret_cast<Video::Configuration*>(_videoConfiguration)
             ->Save();                                        // B.3.5 bridge
-        RT_EXPORT_ONCE(VoidThisFn, "?WriteSettings@Persistence@IO@@QEBAXXZ")(
-            _persistence);
+        static_cast<const IO::Persistence*>(_persistence)->WriteSettings();   // 0x1800b88e0
         return true;
     }
 
@@ -363,8 +351,7 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     *static_cast<uint8_t*>(_videoConfiguration) = 1;
     reinterpret_cast<Video::Configuration*>(_videoConfiguration)
         ->Save();                                            // B.3.5 bridge
-    RT_EXPORT_ONCE(VoidThisFn, "?WriteSettings@Persistence@IO@@QEBAXXZ")(
-        _persistence);
+    static_cast<const IO::Persistence*>(_persistence)->WriteSettings();       // 0x1800b88e0
 
     // 0x1800a17ff / 0x1800a18bf. The `||` short-circuit is retail's: the
     // command line is consulted ONLY when the checkbox byte is zero.
@@ -398,8 +385,5 @@ extern "C" void RtEnginePlatformSummary() {
 // name is ONE string literal on ONE line so tools/runtime_census.py and
 // tools/export_name_audit.py can both see it.
 int RtEnginePlatformRegister() {
-    RegisterRuntimeExport("?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z",
-                          (void*)&RtEngine_Engine_PlatformConfigure);
-    RegisterRuntimeAddr(0x1800a1670, (void*)&RtEngine_Engine_PlatformConfigure);
     return 1;
 }

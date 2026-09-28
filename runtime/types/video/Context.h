@@ -754,4 +754,6 @@ enum : unsigned {
 // ---- video/context_lifecycle.cpp
 extern "C" void RtVideo_Context_Dtor(Video::Context* self);  // 0x1800f16e0
 extern "C" void Rt_GuardedObjectFree(void* p);  // 0x180006a10
+// B3R RT-Core: ??3Context@Video@@SAXPEAX@Z, called by name from ~MainLoop.
+extern "C" void Video_Context_OperatorDelete(void* p);  // 0x180018500
 // ==== end B3R W0-P0c ====
