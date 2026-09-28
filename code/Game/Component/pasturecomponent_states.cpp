@@ -39,6 +39,7 @@
 #include "Component/RawMaterialComponent.h"
 #include "Component/AutoPickupComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "Object/factory_registration.h"
 #include "resolve.h"
 #include <cstdint>
@@ -562,7 +563,7 @@ void PastureProduce(void* self) {
             break;
         }
 
-        void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
         void* ent = mem ? ComponentEntity_CtorFromDescription(
                               reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(produced))
                         : nullptr;

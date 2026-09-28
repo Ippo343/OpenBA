@@ -45,6 +45,7 @@
 #include "Component/LivestockComponent.h"
 #include "Component/AnimalComponent.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -148,9 +149,8 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     void* rng = *reinterpret_cast<void**>(w + 0xd8);
     int64_t tmpl = *reinterpret_cast<int64_t*>((uintptr_t)pasture + 0x28);
     if (tmpl == 0) return;
-    if (!fn_MemAlloc) return;
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* ent = mem ? ComponentEntity_CtorFromDescription(
                           reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(tmpl))
                     : nullptr;
@@ -354,7 +354,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
     if (groupCount <= 0) return 0;
 
     uintptr_t w = World();
-    if (!w || !fn_MemAlloc) return 0;
+    if (!w) return 0;
     void* rng = *reinterpret_cast<void**>(w + 0xd8);
 
     // AnimalComponent type id. Retail scans the entity's component array inline and
@@ -374,7 +374,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
 
     int spawned = 0;
     for (int i = 0; i < groupCount; ++i) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
         void* ent = mem ? ComponentEntity_CtorFromDescription(
                               reinterpret_cast<ComponentEntity*>(mem), tmpl)
                         : nullptr;

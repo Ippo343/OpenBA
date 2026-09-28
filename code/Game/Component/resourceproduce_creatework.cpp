@@ -24,6 +24,7 @@
 #include "Component/coll_bridge.h"
 #include "Component/ConsumeProduceDescription.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -61,8 +62,7 @@ namespace {
 //               re-arming the two work flags).
 
 void* AllocWork(int size) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    return fn_MemAlloc(g_pMemAllocSingleton, size, 8);
+    return System::MemoryAllocator::MemAlloc(size, 8);
 }
 
 // The tail shared by all three: hand the raw object back as an InternalBasePtr.

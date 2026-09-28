@@ -48,6 +48,7 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "math/Math.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
@@ -570,7 +571,7 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
         }
     }
 
-    if (found.data && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(found.data));
+    if (found.data) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(found.data));
 
     TORNADO_TRACE("damage at (%.1f,%.1f) radius=%d scatter=%d: tree=%d tree-NOKNOCK=%d "
                   "building=%d building-NOFIRE=%d animal=%d citizen=%d "

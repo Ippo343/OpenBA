@@ -17,6 +17,7 @@
 #include "Work/Pickup.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -120,8 +121,7 @@ void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain)
         if (oldCount != 0) {
             *(int*)(base + 0x11c) = newCount * 3;
         }
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (uint64_t)((int64_t)*(int*)(base + 0x11c) << 3), 8);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)(base + 0x11c) << 3), 8);
         *(int64_t**)(base + 0x110) = (int64_t*)nb;
     }
 
@@ -142,7 +142,7 @@ void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain)
     }
 
     if (oldBuf != *(int64_t**)(base + 0x110)) {
-        fn_MemFreeStatic(oldBuf);
+        System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 
@@ -291,10 +291,7 @@ void RawMaterialComponent::OnAdded() {
     uint64_t category = RawMaterialComponent_GetPickupCategory((uintptr_t)rawMatDesc);
 
     // Allocate pickup draw item (0x60 bytes)
-    void* pickupItem = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
-        pickupItem = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
-    }
+    void* pickupItem = System::MemoryAllocator::MemAlloc(0x60, 8);
 
     void* pickupItemResult = nullptr;
     if (pickupItem) {

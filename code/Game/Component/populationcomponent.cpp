@@ -17,6 +17,7 @@
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -97,7 +98,7 @@ void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
     if (n40 != 0) {
         if (0 < n40) {
             temp = reinterpret_cast<int*>(
-                fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n40 * 4, 4));
+                System::MemoryAllocator::MemAlloc((uint64_t)n40 * 4, 4));
         }
         // Faithful port of the (quirky) zero-init loop from the original.
         for (int64_t k = 0; k < (int64_t)n40; k++) {
@@ -114,7 +115,7 @@ void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
         }
         // Original frees a null pointer here (no-op); preserved for fidelity.
         if (temp != nullptr) {
-            fn_MemFreeStatic((void*)0);
+            System::MemoryAllocator::MemFree((void*)0);
         }
     }
 
@@ -186,7 +187,7 @@ void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
         } while (i < *reinterpret_cast<int*>(self + 0x40));
     }
 
-    fn_MemFreeStatic(temp);
+    System::MemoryAllocator::MemFree(temp);
 }
 
 // ============================================================
@@ -261,7 +262,7 @@ void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
         *pCap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) *pCap = newCount * 3;
         arr[0] = reinterpret_cast<int64_t>(
-            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(*pCap) * 0xc, 4));
+            System::MemoryAllocator::MemAlloc((uint64_t)(*pCap) * 0xc, 4));
     }
 
     int start = (oldBuf == reinterpret_cast<uint8_t*>(arr[0])) ? oldCount : 0;
@@ -279,7 +280,7 @@ void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
         }
     }
 
-    if (oldBuf != reinterpret_cast<uint8_t*>(arr[0])) fn_MemFreeStatic(oldBuf);
+    if (oldBuf != reinterpret_cast<uint8_t*>(arr[0])) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
@@ -346,7 +347,6 @@ PopulationComponent::PopulationComponent()
 void PopulationComponent::Persist(void* stream) { PopulationComponent_Serialize_Real(this, stream); }   // [3] 0x1400544a0
 void PopulationComponent::Startup() {
     uint8_t* self = reinterpret_cast<uint8_t*>(this);
-    if (!fn_MemAlloc) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
 
@@ -403,7 +403,7 @@ void PopulationComponent::Startup() {
 
     int created = 0;
     for (int i = 0; i < herdCount; i++) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
         void* ent = mem ? ComponentEntity_CtorFromDescription(
                               reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(herdTemplate))
                         : nullptr;

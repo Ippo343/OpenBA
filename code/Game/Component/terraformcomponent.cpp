@@ -13,6 +13,7 @@
 #include "Component/TerraformDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -43,11 +44,6 @@
 // DAT_140172230 == 256.0f, the heightmap scale.
 static float TF_RdataF32(uint32_t bits) { float f; memcpy(&f, &bits, sizeof f); return f; }
 
-static bool s_initialized = false;
-
-// Resolves the deformation-pass helpers (defined with those passes further down).
-static void TerraformDeformResolve();
-
 // 0x140057500 door: registered by address (standalone/reg_terraform_live.cpp).
 void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
     self->TerraformComponent::Persist(stream);
@@ -59,17 +55,6 @@ void TerraformComponent_OnRemove(TerraformComponent* self) {
     self->TerraformComponent::OnRemove();
 }
 
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void TerraformComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    TerraformDeformResolve();
-
-    s_initialized = true;
-}
 
 // ============================================================
 // Reimpl of FUN_1400ab150 (CitizenAI_impl_b150): mark the region cell(s) that
@@ -141,25 +126,14 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
 #include <cstdlib>
 
 typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
-typedef void* (*fn_TfMemAlloc_t)(uint64_t size, int align);
-typedef void  (*fn_TfMemFree_t)(void* p);
 
 // The two component finders (entity, outIbp), by retail address.
 static void TF_FindModel(void* e, void* out) { ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(e), out); }  // 0x140003f60
 static void TF_FindMap(void* e, void* out)   { FloorComponent_FindResData(e, out); }                                 // 0x140004680
 // 0x14009f3e0 Reimpl_MapGetTerrainPos samples the terrain; slot 0x140152a98 is
-// ?IsDerivedFrom@Base@Object@@, called on the object.
-static fn_TfMemAlloc_t      s_fn_MemAlloc        = nullptr;  // slot 0x140152b60
-static fn_TfMemFree_t       s_fn_MemFree         = nullptr;  // slot 0x140152b68
+// ?IsDerivedFrom@Base@Object@@, called on the object. Import slots 0x140152b60 /
+// 0x140152b68 are System::MemoryAllocator::MemAlloc / MemFree (the static pair).
 // .rdata 0x140172100 == 0.25f (vertex bias), 0x14017214c == 1.0f (g_fUVScale, cell step)
-
-static void TerraformDeformResolve() {
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152b60);
-    if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_TfMemAlloc_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152b68);
-    if (slot) s_fn_MemFree = *reinterpret_cast<fn_TfMemFree_t*>(slot);
-}
 
 
 // Resolve the component's owning entity (component +0x10 is an InternalBasePtr).
@@ -180,7 +154,6 @@ static void* TerraformFindComp(fn_FindCompOut_t finder, void* entity) {
 // growth is newCount*3 once the array is non-empty, exact-fit on the first element.
 static void TerraformArrayPush(void** pData, int32_t* pCount, int32_t* pCap,
                                const void* elem, size_t elemSize) {
-    if (!s_fn_MemAlloc) return;
     const int oldCount = *pCount;
     const int newCount = oldCount + 1;
     void* oldData = *pData;
@@ -188,7 +161,8 @@ static void TerraformArrayPush(void** pData, int32_t* pCount, int32_t* pCap,
     *pCount = newCount;
     if (*pCap < newCount) {
         *pCap = (oldCount != 0) ? newCount * 3 : newCount;
-        *pData = s_fn_MemAlloc(static_cast<uint64_t>(*pCap) * static_cast<uint64_t>(elemSize), 4);
+        *pData = System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(*pCap) * static_cast<uint64_t>(elemSize), 4);
     }
     // Buffer reused -> only the new tail element is written; reallocated -> copy all.
     int i = (oldData == *pData) ? oldCount : 0;
@@ -199,7 +173,7 @@ static void TerraformArrayPush(void** pData, int32_t* pCount, int32_t* pCap,
             : reinterpret_cast<const uint8_t*>(elem);
         memcpy(dst, src, elemSize);
     }
-    if (oldData != *pData && s_fn_MemFree) s_fn_MemFree(oldData);
+    if (oldData != *pData) System::MemoryAllocator::MemFree(oldData);
 }
 
 // Terrain type byte of the map cell containing world point (wx, wy). Retail truncates
@@ -423,7 +397,6 @@ TerraformComponent::TerraformComponent()
 // [3] 0x140057500 — the body resolves its helpers first (slot 3 is the first
 // call into the class on a load-from-save).
 void TerraformComponent::Persist(void* stream) {
-    TerraformComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
@@ -469,7 +442,6 @@ void TerraformComponent::OnAdded() {}
 // (10 here vs 10 -> 6 in the completion pass) is what settles it.
 // [7] 0x140057350
 void TerraformComponent::OnRemove() {
-    TerraformComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
@@ -554,7 +526,6 @@ void TerraformComponent::OnRemove() {
 // ------------------------------------------------------------
 void TerraformComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
-    TerraformComponent_InitFuncs();
     TerraformComponent_MeshPass(this, /*ceiling=*/true);
     TerraformComponent_MeshPass(this, /*ceiling=*/false);
     TerraformComponent_FootprintPass(this);

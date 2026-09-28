@@ -25,6 +25,7 @@
 #include "Component/coll_bridge.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "system/String.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -161,9 +162,7 @@ static void PC_GeoArrayResize(void* header, int newCount) {
     if (*(int32_t*)(h + 0xc) < newCount) {
         int cap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
         *(int32_t*)(h + 0xc) = cap;
-        *(void**)h = (fn_MemAlloc && g_pMemAllocSingleton)
-                     ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * 0x18, 8)
-                     : nullptr;
+        *(void**)h = System::MemoryAllocator::MemAlloc((uint64_t)cap * 0x18, 8);
     }
     uint8_t* data = *(uint8_t**)h;
     if (!data) { *(int32_t*)(h + 8) = 0; *(int32_t*)(h + 0xc) = 0; return; }
@@ -178,7 +177,7 @@ static void PC_GeoArrayResize(void* header, int newCount) {
             e->fadeRate = 0.0f; e->_pad14 = 0;
         }
     }
-    if (oldData && oldData != data && fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+    if (oldData && oldData != data) System::MemoryAllocator::MemFree(oldData);
 }
 
 // ============================================================

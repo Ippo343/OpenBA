@@ -17,6 +17,7 @@
 #include "Component/StorageDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -174,8 +175,7 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0) {
             *(int*)((uintptr_t)field + 0xc) = newCount * 3;
         }
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
         field[0] = (int64_t)nb;
     }
 
@@ -198,7 +198,7 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
     }
 
     if (oldBuf != (int64_t*)field[0]) {
-        if (oldBuf) fn_MemFreeStatic(oldBuf);
+        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 

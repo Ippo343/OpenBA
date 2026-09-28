@@ -41,6 +41,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "system/String.h"
 #include "system/Value.h"
 #include <cstdint>
@@ -52,8 +53,8 @@ void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
     *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+    void* buf = (count > 0)
+                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
                 : nullptr;
     *(void**)h = buf;
     return buf;
@@ -81,7 +82,7 @@ ParticleDescription::~ParticleDescription() {
     int count = _emitterCount;
     if (e) {
         for (int i = 0; i < count; ++i) reinterpret_cast<System::String*>(e + i * 0x28 + 0x08)->~String();  // B.3.1 bridge
-        if (fn_MemFreeStatic) fn_MemFreeStatic(e);
+        System::MemoryAllocator::MemFree(e);
     }
     _emitters = nullptr;
     _emitterCount = 0;

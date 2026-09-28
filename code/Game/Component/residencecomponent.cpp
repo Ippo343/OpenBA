@@ -16,6 +16,7 @@
 #include "Component/ResidenceDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -83,7 +84,7 @@ void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP) {
     int64_t* src = reinterpret_cast<int64_t*>(srcP);
     if (dst == src) return;
 
-    fn_MemFreeStatic(reinterpret_cast<void*>(dst[0]));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dst[0]));
     dst[1] = 0;
     dst[0] = 0;
     int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
@@ -92,7 +93,7 @@ void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP) {
     count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
     if (count > 0) {
         *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 0xc) = count;
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)((int64_t)count << 3), 8);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)count << 3), 8);
         dst[0] = (int64_t)nb;
     }
     int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
@@ -125,8 +126,7 @@ void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0) {
             *(int*)((uintptr_t)field + 0xc) = newCount * 3;
         }
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
         field[0] = (int64_t)nb;
     }
 
@@ -153,7 +153,7 @@ void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
         if (newCount < oldCount) {
             int64_t* p = oldBuf + (int64_t)newCount * 2;
             for (int i = 0; i < oldCount - newCount; i++) {
-                fn_MemFreeStatic((void*)p[0]);
+                System::MemoryAllocator::MemFree((void*)p[0]);
                 p[0] = 0; p[1] = 0;
                 p += 2;
             }
@@ -162,11 +162,11 @@ void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
         // Reallocated: free every old slot's inner buffer, then the old buffer
         int64_t* p = oldBuf;
         for (int i = 0; i < oldCount; i++) {
-            fn_MemFreeStatic((void*)p[0]);
+            System::MemoryAllocator::MemFree((void*)p[0]);
             p[0] = 0; p[1] = 0;
             p += 2;
         }
-        if (oldBuf) fn_MemFreeStatic(oldBuf);
+        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 

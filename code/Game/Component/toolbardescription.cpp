@@ -45,6 +45,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
 #include "Component/exe_bodies.h"
@@ -69,10 +70,7 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
         // First single-element grow from non-empty triples the capacity (exe pattern).
         if (newCount == oldCount + 1 && oldCount != 0)
             *reinterpret_cast<unsigned*>(h + 0xc) = newCount * 3;
-        void* nb = (fn_MemAlloc && g_pMemAllocSingleton)
-                 ? fn_MemAlloc(g_pMemAllocSingleton,
-                       static_cast<uint64_t>(*reinterpret_cast<unsigned*>(h + 0xc)) << 3, 8)
-                 : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*reinterpret_cast<unsigned*>(h + 0xc)) << 3, 8);
         *reinterpret_cast<void**>(h) = nb;
     }
     uint8_t* buf = *reinterpret_cast<uint8_t**>(h);
@@ -98,7 +96,7 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
         // Realloc'd: destroy every old element, then free the old buffer.
         for (unsigned i = 0; i < oldCount; ++i)
             reinterpret_cast<System::String*>(oldBuf + static_cast<size_t>(i) * 8)->~String();  // B.3.1 bridge
-        if (oldBuf && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 
@@ -125,7 +123,7 @@ ToolbarDescription::~ToolbarDescription() {
             for (int i = 0; i < n; ++i) reinterpret_cast<System::String*>(buf + (size_t)i * 8)->~String();  // B.3.1 bridge
         }
     }
-    if (fn_MemFreeStatic) fn_MemFreeStatic(_entries);
+    System::MemoryAllocator::MemFree(_entries);
     _entries = nullptr;
     _entryCount = 0;
     _entryCap = 0;

@@ -15,6 +15,7 @@
 #include "Component/GrowthDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -271,7 +272,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
               reinterpret_cast<intptr_t>(templ), x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
 
     int placeMapSize = *grid;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* newEntity = nullptr;
     if (mem) newEntity = ComponentEntity_CtorFromDescription(
                              reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(*entry));

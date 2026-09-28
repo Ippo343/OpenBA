@@ -29,6 +29,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
 
@@ -38,8 +39,8 @@ void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
     *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+    void* buf = (count > 0)
+                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
                 : nullptr;
     *(void**)h = buf;
     return buf;
@@ -62,7 +63,7 @@ StorageDescription::StorageDescription()
 // dtor (slot 0 0x140038cf0 minus the stamps): frees the volume array.
 // The compiler then chains ~Description -> ~External.
 StorageDescription::~StorageDescription() {
-    if (fn_MemFreeStatic && _volumes) fn_MemFreeStatic(_volumes);
+    if (_volumes) System::MemoryAllocator::MemFree(_volumes);
     _volumes = nullptr;
     _volumeCount = 0;
     _volumeCap = 0;

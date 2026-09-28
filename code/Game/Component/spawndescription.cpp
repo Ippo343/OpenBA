@@ -25,6 +25,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
 #include <new>
@@ -50,7 +51,7 @@ SpawnDescription::SpawnDescription()
 // dtor (slot 0 0x14000c2e0 minus the stamps): frees the entry array buffer.
 // The compiler then chains ~Description -> ~External.
 SpawnDescription::~SpawnDescription() {
-    if (_entries && fn_MemFreeStatic) fn_MemFreeStatic(_entries);
+    if (_entries) System::MemoryAllocator::MemFree(_entries);
     _entries = nullptr;
 }
 
