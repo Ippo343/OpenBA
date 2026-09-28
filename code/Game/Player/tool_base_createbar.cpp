@@ -59,6 +59,7 @@
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "ui/ImageElement.h"   // UI::ImageElement::TypeId() (ENDGAME B.3.9 TR)
 #include <new>
+#include "Player/exe_bodies.h"
 
 namespace {
 

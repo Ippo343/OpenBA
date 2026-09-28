@@ -48,6 +48,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/exe_bodies.h"
 
 // ============================================================
 // Exe-resident float constants (bit-exact, embedded — .rdata not present in

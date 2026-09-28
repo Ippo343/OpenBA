@@ -34,6 +34,7 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/ImageElement.h"  // X::TypeId() (B.3.9 CG2)
 #include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Dialog/exe_bodies.h"
 
 // AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
 // citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.

@@ -51,6 +51,7 @@
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "Dialog/exe_bodies.h"
 
 namespace {
 

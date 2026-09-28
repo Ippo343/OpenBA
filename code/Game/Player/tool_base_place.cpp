@@ -20,6 +20,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "Player/exe_bodies.h"
 
 // ============================================================
 // PlacementTool_sub_d960 — mirror/flip + advance mesh variant (0x1400fd960)

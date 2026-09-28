@@ -51,6 +51,7 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>
+#include "Dialog/exe_bodies.h"
 
 // ── B.3.2: the three clears are Collection::Array<T>::Clear() ────────────────
 // `Clear()` is `SetSize(0)`, and rtcoll::SetSizeCore at newSize == 0 does

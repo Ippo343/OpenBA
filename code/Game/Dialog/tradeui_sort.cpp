@@ -53,6 +53,7 @@
 #include <new>
 #include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "Dialog/exe_bodies.h"
 
 namespace {
 

@@ -49,6 +49,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Game/exe_bodies.h"
 
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
                                         void* scenarioIdx, void* retvalIbpPtr) {

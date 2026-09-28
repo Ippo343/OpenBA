@@ -30,6 +30,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
+#include "Game/exe_bodies.h"
 
 // Shared body — mirrors FUN_14001b8e0 / FUN_1400196a0 line by line.
 // Exposed (external linkage) via serialize_externals.h so the Tutorial

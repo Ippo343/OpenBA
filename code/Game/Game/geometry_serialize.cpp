@@ -56,6 +56,7 @@
 // BANISHED_REDZONE is unset). Localizes which Geometry::Serialize step trips a
 // tail-canary so the displaced free-list crash can be root-caused.
 #include "redzone_alloc.h"
+#include "Game/exe_bodies.h"
 // Use the free-list LINK validator (not the tail-canary ValidateAll, which is a
 // no-op at PAD=0) so a checkpoint catches the step that clobbers a freed block's
 // forward link — the menu heap-crash signature. Aborts (0x124) naming the tag.

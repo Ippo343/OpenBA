@@ -12,6 +12,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Player/exe_bodies.h"
 
 // ============================================================
 // FUN_1400a0280 — EntityAtCell: get the entity occupying a world cell.

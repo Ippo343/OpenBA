@@ -27,6 +27,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
+#include "Player/exe_bodies.h"
 
 // Shared AVL rotations from tool_base_trade.cpp (0x140015000 / 0x140014ed0, registered).
 extern "C" int64_t PlayerTrade_Rot_15000(int64_t* root, int64_t node);

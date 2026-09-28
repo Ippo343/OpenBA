@@ -56,6 +56,7 @@
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "ui/StringTable.h"  // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "Game/exe_bodies.h"
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)

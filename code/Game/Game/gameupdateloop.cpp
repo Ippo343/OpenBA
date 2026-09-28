@@ -103,6 +103,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 #include "mouse_inject.h"                 // BANISHED_MOUSE_INJECT hover/drag route (standalone/)
 #include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the
+#include "Game/exe_bodies.h"
                                 // `namespace Object { ... }` forward decl below
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)

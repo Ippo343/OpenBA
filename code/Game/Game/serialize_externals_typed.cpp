@@ -27,6 +27,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
+#include "Game/exe_bodies.h"
 
 namespace {
 

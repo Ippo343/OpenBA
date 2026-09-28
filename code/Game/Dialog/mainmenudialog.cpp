@@ -39,6 +39,7 @@
 #include <windows.h>  // PostQuitMessage fallback in standalone Quit handler
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer

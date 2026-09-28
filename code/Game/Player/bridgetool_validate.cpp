@@ -33,6 +33,7 @@
 #include "address_registry.h"
 #include <cstdint>
 #include <cstdlib>
+#include "Player/exe_bodies.h"
 
 namespace {
 

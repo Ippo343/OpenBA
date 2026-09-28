@@ -56,6 +56,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Dialog/exe_bodies.h"
 
 namespace {
 

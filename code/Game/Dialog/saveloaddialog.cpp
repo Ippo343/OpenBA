@@ -72,6 +72,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
+#include "Dialog/exe_bodies.h"
 
 
 // ============================================================

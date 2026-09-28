@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/exe_bodies.h"
 
 // Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
 // *out = the found/created node. p4 = the empty array record {data=0, count/cap=0}.

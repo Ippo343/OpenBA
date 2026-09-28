@@ -35,6 +35,7 @@
 #include "Component/DestroyComponent.h"
 #include "Component/StateMachineComponent.h"
 #include "Component/CreateDragDescription.h"
+#include "Player/exe_bodies.h"
 
 // ============================================================
 // type-ID storage: 0x1401c75f0/7d98/7430 are these classes' cells (Table 1).

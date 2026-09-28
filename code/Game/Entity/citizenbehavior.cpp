@@ -26,6 +26,7 @@
 #include "Component/RawMaterialDescription.h"
 #include "Component/ResidenceComponent.h"
 #include "Component/CitizenDescription.h"
+#include "Entity/exe_bodies.h"
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
