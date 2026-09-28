@@ -32,6 +32,7 @@
 //   delegate `->UI::X::M(…)` or it re-enters itself.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 #include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
 #include "runtime/types/ui/ContainerDescription.h"
@@ -80,14 +81,18 @@ enum Tag : int {
     kListE = 6, kScrollD = 7, kScrollE = 8, kTableD = 9, kTableE = 10,
 };
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(const void* obj, int index) {
     const void* const* vt = *reinterpret_cast<const void* const* const*>(obj);
     Fn f = nullptr;
-    const void* raw = vt[index];
+    const void* raw = vt[RetailSlot<T>(index)];
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
+// Retail slot n of a table in this file, as the compiler numbers it.
+constexpr long Retail(int n) { return RetailSlot<Object::Base>(n); }
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
@@ -509,7 +514,7 @@ void CheckDescriptionSlots(int tag) {
 
     // Slot 4 is `Object::External::Compile`, inherited (RULE B6-1.5).
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[4] == VTableOf(static_cast<void*>(&bare))[4]);
+    CHECK(VTableOf(raw)[Retail(4)] == VTableOf(static_cast<void*>(&bare))[Retail(4)]);
 
     // Ten distinct entries.
     const void* const* vt = VTableOf(raw);
@@ -540,10 +545,10 @@ void CheckElementSlots(int tag, bool ownsUpdate) {
     Reset(); SlotAt<void (*)(const void*, void*, uint8_t)>(raw, 6)(raw, nullptr, 200);
     CHECK_EQ(g_mark, tag * 100 + 6); CHECK_EQ(g_arg, 200);
 
-    for (int s : {3, 8, 9, 10, 11}) CHECK(vt[s] == bvt[s]);
-    if (ownsUpdate) CHECK(vt[7] != bvt[7]);
-    else            CHECK(vt[7] == bvt[7]);
-    for (int s : {1, 2, 4, 5, 6}) CHECK(vt[s] != bvt[s]);
+    for (int s : {3, 8, 9, 10, 11}) CHECK(vt[Retail(s)] == bvt[Retail(s)]);
+    if (ownsUpdate) CHECK(vt[Retail(7)] != bvt[Retail(7)]);
+    else            CHECK(vt[Retail(7)] == bvt[Retail(7)]);
+    for (int s : {1, 2, 4, 5, 6}) CHECK(vt[Retail(s)] != bvt[Retail(s)]);
 
     CHECK(static_cast<void*>(static_cast<UI::Element*>(&probe)) == raw);
     CHECK(static_cast<void*>(static_cast<Object::Base*>(&probe)) == raw);
@@ -643,7 +648,7 @@ UNIT_TEST(ui_c4_qualified_call_does_not_reenter_the_door) {
     const void* minted[12] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 12; ++i) minted[i] = real[i];
-    minted[4] = reinterpret_cast<const void*>(&MintedComputeSizeDoor);
+    minted[Retail(4)] = reinterpret_cast<const void*>(&MintedComputeSizeDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;

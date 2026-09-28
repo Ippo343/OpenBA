@@ -33,6 +33,7 @@
 // members as its own markers (runtime/src/ui does not link into a host test).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -102,14 +103,18 @@ const ::Object::BaseTypeInfo* WhoRecord(int who) {
 }
 
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
+// Retail slot n of a table in this file, as the compiler numbers it.
+constexpr long Retail(int n) { return RetailSlot<Object::Base>(n); }
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
@@ -392,8 +397,8 @@ void CheckDescriptionOwnSlots(void* raw, int who) {
 
     // Slot 4 is `Object::External::Compile`, INHERITED (RULE B6-1.5).
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kD4_Compile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kD4_Compile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, kD4_Compile / 8) ==
+          RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8));
 }
 
 // Slot 8 raw-called the retail way: RCX = this, RDX = the caller's storage,
@@ -485,9 +490,9 @@ UNIT_TEST(ui_leaf_c2_group_descriptions_slot_order) {
     const void* const* p = VTableOf(static_cast<void*>(&page));
     const void* const* r = VTableOf(static_cast<void*>(&radio));
     for (int i = 1; i <= 9; ++i) {
-        if (i == kD4_Compile / 8) { CHECK(p[i] == g[i]); CHECK(r[i] == g[i]); continue; }
-        CHECK(p[i] != g[i]);
-        CHECK(r[i] != g[i]);
+        if (i == kD4_Compile / 8) { CHECK(p[Retail(i)] == g[Retail(i)]); CHECK(r[Retail(i)] == g[Retail(i)]); continue; }
+        CHECK(p[Retail(i)] != g[Retail(i)]);
+        CHECK(r[Retail(i)] != g[Retail(i)]);
     }
 }
 
@@ -513,14 +518,14 @@ UNIT_TEST(ui_leaf_c2_group_elements_slot_order) {
     const void* const* vg = VTableOf(g);
     const void* const* vp = VTableOf(static_cast<void*>(&page));
     const void* const* vr = VTableOf(static_cast<void*>(&radio));
-    for (int i : {3, 7, 8, 9, 10, 11}) CHECK(vg[i] == vb[i]);
-    for (int i : {4, 5, 6}) CHECK(vg[i] != vb[i]);
+    for (int i : {3, 7, 8, 9, 10, 11}) CHECK(vg[Retail(i)] == vb[Retail(i)]);
+    for (int i : {4, 5, 6}) CHECK(vg[Retail(i)] != vb[Retail(i)]);
 
     // Page inherits ALL of GroupElement's 3..11; Radio all but 7 (Update).
-    for (int i = 3; i <= 11; ++i) CHECK(vp[i] == vg[i]);
+    for (int i = 3; i <= 11; ++i) CHECK(vp[Retail(i)] == vg[Retail(i)]);
     for (int i = 3; i <= 11; ++i) {
-        if (i == kE7_Update / 8) CHECK(vr[i] != vg[i]);
-        else                     CHECK(vr[i] == vg[i]);
+        if (i == kE7_Update / 8) CHECK(vr[Retail(i)] != vg[Retail(i)]);
+        else                     CHECK(vr[Retail(i)] == vg[Retail(i)]);
     }
 
     // Their own 1 and 2.
@@ -578,7 +583,7 @@ UNIT_TEST(ui_leaf_c2_page_serialize_qualified_does_not_reenter) {
     const void* minted[10] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 10; ++i) minted[i] = real[i];
-    minted[kD5_Serialize / 8] = reinterpret_cast<const void*>(&MintedPageSerializeDoor);
+    minted[RetailSlot<Object::Base>(kD5_Serialize / 8)] = reinterpret_cast<const void*>(&MintedPageSerializeDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;
@@ -645,8 +650,8 @@ UNIT_TEST(ui_leaf_c2_image_descriptions_slot_order) {
     const void* const* vi = VTableOf(static_cast<void*>(&image));
     const void* const* va = VTableOf(static_cast<void*>(&anim));
     for (int i = 1; i <= 9; ++i) {
-        if (i == kD4_Compile / 8) CHECK(va[i] == vi[i]);
-        else                      CHECK(va[i] != vi[i]);
+        if (i == kD4_Compile / 8) CHECK(va[Retail(i)] == vi[Retail(i)]);
+        else                      CHECK(va[Retail(i)] != vi[Retail(i)]);
     }
 
     CheckSlot8Retslot(static_cast<void*>(&image), kImageD, 0x1D1D1D1D);
@@ -687,11 +692,11 @@ UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
     const void* const* vb = VTableOf(static_cast<void*>(&base));
     const void* const* vi = VTableOf(im);
     const void* const* va = VTableOf(an);
-    for (int i : {3, 7, 8, 9, 10, 11}) CHECK(vi[i] == vb[i]);
+    for (int i : {3, 7, 8, 9, 10, 11}) CHECK(vi[Retail(i)] == vb[Retail(i)]);
     // AnimatedImageElement: ONLY Update (7) is its own among 3..11.
     for (int i = 3; i <= 11; ++i) {
-        if (i == kE7_Update / 8) CHECK(va[i] != vi[i]);
-        else                     CHECK(va[i] == vi[i]);
+        if (i == kE7_Update / 8) CHECK(va[Retail(i)] != vi[Retail(i)]);
+        else                     CHECK(va[Retail(i)] == vi[Retail(i)]);
     }
 
     CHECK(SlotAt<const char* (*)(const void*)>(an, kE1_TypeName)(an) == WhoRecord(kAnimE)->name);   // TI-UI: own record
@@ -713,15 +718,6 @@ UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
 // ENDGAME B.3.9 UI-A (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
 namespace {
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
@@ -748,15 +744,15 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 }  // namespace
 
 UNIT_TEST(b39_uia_image_family_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::ImageDescription::DeletingDtor),         (uintptr_t)0x00);   // 0x1800361f0
-    CHECK_EQ(SlotOffset(&UI::ImageDescription::Serialize),            (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&UI::ImageDescription::Construct),            (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageDescription::DeletingDtor), (uintptr_t)0x00);   // 0x1800369e0
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::ImageElement::DeletingDtor),             (uintptr_t)0x00);   // 0x180036600
-    CHECK_EQ(SlotOffset(&UI::ImageElement::Draw),                     (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180036db0
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageElement::Update),           (uintptr_t)0x38);
+    CHECK_DTOR_SLOT(UI::ImageDescription);   // 0x1800361f0
+    CHECK_SLOT(UI::ImageDescription, Serialize, 0x28/8);
+    CHECK_SLOT(UI::ImageDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::AnimatedImageDescription);   // 0x1800369e0
+    CHECK_SLOT(UI::AnimatedImageDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::ImageElement);   // 0x180036600
+    CHECK_SLOT(UI::ImageElement, Draw, 0x30/8);
+    CHECK_DTOR_SLOT(UI::AnimatedImageElement);   // 0x180036db0
+    CHECK_SLOT(UI::AnimatedImageElement, Update, 0x38/8);
 }
 
 // The real ctors' stores (each header cites the transcribed instructions);
@@ -832,18 +828,18 @@ UNIT_TEST(b39_uia_image_family_deletingdtor_both_arms) {
 }
 
 UNIT_TEST(b39_uia_group_family_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::GroupDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180046af0
-    CHECK_EQ(SlotOffset(&UI::GroupDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::PageDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x1800471a0
-    CHECK_EQ(SlotOffset(&UI::PageDescription::Serialize),     (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&UI::RadioDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180047930
-    CHECK_EQ(SlotOffset(&UI::RadioDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::GroupElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180046e10
-    CHECK_EQ(SlotOffset(&UI::GroupElement::Draw),             (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&UI::PageElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180047540
-    CHECK_EQ(SlotOffset(&UI::PageElement::Type),              (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&UI::RadioElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180047d50
-    CHECK_EQ(SlotOffset(&UI::RadioElement::Update),           (uintptr_t)0x38);
+    CHECK_DTOR_SLOT(UI::GroupDescription);   // 0x180046af0
+    CHECK_SLOT(UI::GroupDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::PageDescription);   // 0x1800471a0
+    CHECK_SLOT(UI::PageDescription, Serialize, 0x28/8);
+    CHECK_DTOR_SLOT(UI::RadioDescription);   // 0x180047930
+    CHECK_SLOT(UI::RadioDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::GroupElement);   // 0x180046e10
+    CHECK_SLOT(UI::GroupElement, Draw, 0x30/8);
+    CHECK_DTOR_SLOT(UI::PageElement);   // 0x180047540
+    CHECK_SLOT(UI::PageElement, Type, 0x10/8);
+    CHECK_DTOR_SLOT(UI::RadioElement);   // 0x180047d50
+    CHECK_SLOT(UI::RadioElement, Update, 0x38/8);
 }
 
 UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {

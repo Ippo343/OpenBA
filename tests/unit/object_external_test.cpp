@@ -36,6 +36,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include <cstdint>
 #include <cstring>
@@ -114,29 +115,29 @@ UNIT_TEST(object_external_vtable_slot_order_is_retails) {
     // slot 1 — TypeName (0x1800066c0, `MOV RAX,qword[0x1801f9b40]`). The name
     // is CONTENT-only and is never compared by pointer (B33_RULES §2.4).
     using TypeNameFn = const char* (*)(const void*);
-    const char* name = reinterpret_cast<TypeNameFn>(vt[1])(self);
+    const char* name = reinterpret_cast<TypeNameFn>(vt[RetailSlot<TestExternal>(1)])(self);
     CHECK(name != nullptr);
     CHECK_STREQ(name, "External");
 
     // slot 2 — Type (0x1800066d0, `MOV EAX,dword[0x1801f9b38]`).
     using TypeFn = uint32_t (*)(const void*);
-    CHECK_EQ(reinterpret_cast<TypeFn>(vt[2])(self), Object::External::TypeId());
+    CHECK_EQ(reinterpret_cast<TypeFn>(vt[RetailSlot<TestExternal>(2)])(self), Object::External::TypeId());
 
     // slot 3 — GetFileVersion. Pure in External; the leaf overrides it.
     using VersionFn = int32_t (*)(const void*);
-    CHECK_EQ(reinterpret_cast<VersionFn>(vt[3])(self), 7);
+    CHECK_EQ(reinterpret_cast<VersionFn>(vt[RetailSlot<TestExternal>(3)])(self), 7);
 
     // slot 4 — External::Compile (0x1800066e0, `MOV EAX,0x1; RET`). The leaf
     // does NOT override it, so this lands on External's own body. `path` is
     // genuinely dead in retail: RDX is never read in the two instructions.
     using CompileFn = uint32_t (*)(void*, const System::Filename*);
     System::Filename dead;
-    CHECK_EQ(reinterpret_cast<CompileFn>(vt[4])(self, &dead), 1u);
+    CHECK_EQ(reinterpret_cast<CompileFn>(vt[RetailSlot<TestExternal>(4)])(self, &dead), 1u);
 
     // slot 5 — Serialize.
     g_serializeCount = 0;
     using SerFn = bool (*)(void*, void*);
-    CHECK(reinterpret_cast<SerFn>(vt[5])(self, nullptr));
+    CHECK(reinterpret_cast<SerFn>(vt[RetailSlot<TestExternal>(5)])(self, nullptr));
     CHECK_EQ(g_serializeCount, 1);
 
     // slots 6 and 7 — Reconstruct and Destruct. Their names come from
@@ -144,10 +145,10 @@ UNIT_TEST(object_external_vtable_slot_order_is_retails) {
     // `_purecall`), so this is the check that the declaration order in
     // External.h matches that reading.
     using ReconFn = Object::External* (*)(void*);
-    CHECK(reinterpret_cast<ReconFn>(vt[6])(self) == static_cast<Object::External*>(&obj));
+    CHECK(reinterpret_cast<ReconFn>(vt[RetailSlot<TestExternal>(6)])(self) == static_cast<Object::External*>(&obj));
     g_destructCount = 0;
     using DestructFn = void (*)(void*);
-    reinterpret_cast<DestructFn>(vt[7])(self);
+    reinterpret_cast<DestructFn>(vt[RetailSlot<TestExternal>(7)])(self);
     CHECK_EQ(g_destructCount, 1);
 
     // ...and the same answers through ordinary C++ dispatch: the other of the

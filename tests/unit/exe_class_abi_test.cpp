@@ -11,7 +11,7 @@
 //   1 + vtable byte offset, adjustment 0 for single inheritance) — the
 //   header under test, not a copy. Component 16 slots, ControllerComponent 18,
 //   the 9-slot controller interface, Description 9 + the leaf's slot 9.
-//   `SlotOffset` also FAILS on a this-adjusting PMF: there is no multiple
+//   `CHECK_SLOT` (slot_check.h) also FAILS on a this-adjusting PMF: there is no multiple
 //   inheritance in this family (D6), so every adjustment must be 0.
 // PART C — D5, `DEFINE_EXE_VTABLE`: the address `Class::Vtable()` hands to
 //   `RegisterExeAddr` is exactly the vptr a constructed object carries, on
@@ -27,6 +27,7 @@
 // and the resave gate verify those.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Component/WellComponent.h"
 #include "Component/WellDescription.h"
@@ -37,16 +38,6 @@
 #include <type_traits>
 
 namespace {
-
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
 
 using Ctl = ControllerComponent::Controller;
 
@@ -88,58 +79,58 @@ UNIT_TEST(exe_component_class_shape_rules) {
 // PART B — SLOT ORDER
 // ===========================================================================
 UNIT_TEST(exe_component_slot_order) {
-    CHECK_EQ(SlotOffset(&Component::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&Component::TypeName),     (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&Component::Type),         (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&Component::Persist),      (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&Component::Startup),      (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&Component::Slot5),        (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&Component::OnAdded),      (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&Component::OnRemove),     (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&Component::Tick),         (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&Component::Update),       (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&Component::PostUpdate),   (uintptr_t)0x50);
-    CHECK_EQ(SlotOffset(&Component::Slot11),       (uintptr_t)0x58);
-    CHECK_EQ(SlotOffset(&Component::OnEvent),      (uintptr_t)0x60);
-    CHECK_EQ(SlotOffset(&Component::CommandMask),  (uintptr_t)0x68);
-    CHECK_EQ(SlotOffset(&Component::Command),      (uintptr_t)0x70);
-    CHECK_EQ(SlotOffset(&Component::OnMessage),    (uintptr_t)0x78);
+    CHECK_DTOR_SLOT(Component);
+    CHECK_SLOT(Component, TypeName,    0x08/8);
+    CHECK_SLOT(Component, Type,        0x10/8);
+    CHECK_SLOT(Component, Persist,     0x18/8);
+    CHECK_SLOT(Component, Startup,     0x20/8);
+    CHECK_SLOT(Component, Slot5,       0x28/8);
+    CHECK_SLOT(Component, OnAdded,     0x30/8);
+    CHECK_SLOT(Component, OnRemove,    0x38/8);
+    CHECK_SLOT(Component, Tick,        0x40/8);
+    CHECK_SLOT(Component, Update,      0x48/8);
+    CHECK_SLOT(Component, PostUpdate,  0x50/8);
+    CHECK_SLOT(Component, Slot11,      0x58/8);
+    CHECK_SLOT(Component, OnEvent,     0x60/8);
+    CHECK_SLOT(Component, CommandMask, 0x68/8);
+    CHECK_SLOT(Component, Command,     0x70/8);
+    CHECK_SLOT(Component, OnMessage,   0x78/8);
 
-    CHECK_EQ(SlotOffset(&ControllerComponent::Persist),         (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&ControllerComponent::GetDefaultState), (uintptr_t)0x80);
-    CHECK_EQ(SlotOffset(&ControllerComponent::GetController),   (uintptr_t)0x88);
+    CHECK_SLOT(ControllerComponent, Persist,         0x18/8);
+    CHECK_SLOT(ControllerComponent, GetDefaultState, 0x80/8);
+    CHECK_SLOT(ControllerComponent, GetController,   0x88/8);
 
     // The leaf overrides land on retail's indices.
-    CHECK_EQ(SlotOffset(&WellComponent::DeletingDtor),    (uintptr_t)0x00);   // 0x14000fe50
-    CHECK_EQ(SlotOffset(&WellComponent::Persist),         (uintptr_t)0x18);   // 0x14005cfa0
-    CHECK_EQ(SlotOffset(&WellComponent::OnRemove),        (uintptr_t)0x38);   // 0x14005cf60
-    CHECK_EQ(SlotOffset(&WellComponent::GetDefaultState), (uintptr_t)0x80);   // 0x1400026c0
-    CHECK_EQ(SlotOffset(&WellComponent::GetController),   (uintptr_t)0x88);   // 0x140004080
+    CHECK_DTOR_SLOT(WellComponent);   // 0x14000fe50
+    CHECK_SLOT(WellComponent, Persist,         0x18/8);   // 0x14005cfa0
+    CHECK_SLOT(WellComponent, OnRemove,        0x38/8);   // 0x14005cf60
+    CHECK_SLOT(WellComponent, GetDefaultState, 0x80/8);   // 0x1400026c0
+    CHECK_SLOT(WellComponent, GetController,   0x88/8);   // 0x140004080
 }
 
 UNIT_TEST(exe_controller_interface_slot_order) {
-    CHECK_EQ(SlotOffset(&Ctl::FindState),      (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&Ctl::FindTransition), (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&Ctl::PostEvent),      (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&Ctl::Enter),          (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&Ctl::Update),         (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&Ctl::OnTransition),   (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&Ctl::Tick),           (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&Ctl::TickAlt),        (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&Ctl::HasStates),      (uintptr_t)0x40);   // 9th and last slot
+    CHECK_SLOT(Ctl, FindState,      0x00/8);
+    CHECK_SLOT(Ctl, FindTransition, 0x08/8);
+    CHECK_SLOT(Ctl, PostEvent,      0x10/8);
+    CHECK_SLOT(Ctl, Enter,          0x18/8);
+    CHECK_SLOT(Ctl, Update,         0x20/8);
+    CHECK_SLOT(Ctl, OnTransition,   0x28/8);
+    CHECK_SLOT(Ctl, Tick,           0x30/8);
+    CHECK_SLOT(Ctl, TickAlt,        0x38/8);
+    CHECK_SLOT(Ctl, HasStates,      0x40/8);   // 9th and last slot
 }
 
 UNIT_TEST(exe_description_slot_order) {
-    CHECK_EQ(SlotOffset(&Description::DeletingDtor),     (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&Description::TypeName),         (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&Description::Type),             (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&Description::GetFileVersion),   (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&Description::Compile),          (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&Description::Serialize),        (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&Description::Reconstruct),      (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&Description::Destruct),         (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&Description::GetComponentType), (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&WellDescription::Construct),    (uintptr_t)0x48);   // leaf slot 9, 0x14000fd40
+    CHECK_DTOR_SLOT(Description);
+    CHECK_SLOT(Description, TypeName,         0x08/8);
+    CHECK_SLOT(Description, Type,             0x10/8);
+    CHECK_SLOT(Description, GetFileVersion,   0x18/8);
+    CHECK_SLOT(Description, Compile,          0x20/8);
+    CHECK_SLOT(Description, Serialize,        0x28/8);
+    CHECK_SLOT(Description, Reconstruct,      0x30/8);
+    CHECK_SLOT(Description, Destruct,         0x38/8);
+    CHECK_SLOT(Description, GetComponentType, 0x40/8);
+    CHECK_SLOT(WellDescription, Construct,    0x48/8);   // leaf slot 9, 0x14000fd40
 }
 
 // ===========================================================================

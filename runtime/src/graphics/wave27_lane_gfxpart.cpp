@@ -298,14 +298,15 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
     ser->readerWriter = rw;
     return rw;
 }
+// B3X W0: the ReaderWriter members, by name on the real class (the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
-}
-using ScalarFn = void (*)(ReaderWriter*, void*, const char*);
-void SerScalar(ReaderWriter* rw, size_t slot, void* field) {
-    reinterpret_cast<ScalarFn>(rw->vtable[slot / 8])(rw, field, nullptr);
+    AsRw(rw)->DeletingDtor(1);
 }
 
 }  // namespace
@@ -366,9 +367,9 @@ bool Particle::Serialize(void* streamv) {
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    SerScalar(rw, rt::io::rw_vtbl::kScalarBool, &_active);
-    SerScalar(rw, rt::io::rw_vtbl::kScalarInt,  &_recordCount);
-    SerScalar(rw, rt::io::rw_vtbl::kScalarInt,  &_subCount);
+    AsRw(rw)->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);          // +0x78
+    AsRw(rw)->SerializeInt(_recordCount, nullptr);   // +0xa0
+    AsRw(rw)->SerializeInt(_subCount, nullptr);      // +0xa0
 
     // ADDRESS DOOR — SYMBOL: the `Object::ExternalBasePtr::Serialize` template
     // instantiation at retail 0x180014520 (UNNAMED in the export directory,

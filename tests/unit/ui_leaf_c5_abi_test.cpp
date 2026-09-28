@@ -28,6 +28,7 @@
 // defined below as MARKERS.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 #include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
 #include "runtime/types/ui/Element.h"
@@ -85,14 +86,18 @@ void Hit(const void* self, int cls, int slot, long long arg = 0) {
 }
 void Reset() { g_self = nullptr; g_cls = kNone; g_slot = -1; g_arg = 0; }
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(const void* obj, int index) {
     const void* const* vt = *reinterpret_cast<const void* const* const*>(obj);
     Fn f = nullptr;
-    const void* raw = vt[index];
+    const void* raw = vt[RetailSlot<T>(index)];
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
+// Retail slot n of a table in this file, as the compiler numbers it.
+constexpr long Retail(int n) { return RetailSlot<Object::Base>(n); }
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
@@ -195,16 +200,16 @@ void CheckElementSlots(void* raw, int cls, unsigned ownMask) {
     for (int s = 1; s <= 11; ++s) {
         if ((ownMask & (1u << s)) && (s == 1 || s == 2)) {   // TI-UI: own record
             CheckOwnTypeSlots(raw, cls);
-            CHECK(vl[s] != vb[s]);
+            CHECK(vl[Retail(s)] != vb[Retail(s)]);
         } else if (ownMask & (1u << s)) {
             Reset(); CallElementSlot(raw, s);
             CHECK_EQ(g_cls, cls); CHECK_EQ(g_slot, s); CHECK(g_self == raw);
-            CHECK(vl[s] != vb[s]);
+            CHECK(vl[Retail(s)] != vb[Retail(s)]);
         } else {
-            CHECK(vl[s] == vb[s]);
+            CHECK(vl[Retail(s)] == vb[Retail(s)]);
         }
     }
-    CHECK(vl[4] != vb[4]);   // every leaf overrides (or inherits an override of) ComputeSize
+    CHECK(vl[Retail(4)] != vb[Retail(4)]);   // every leaf overrides (or inherits an override of) ComputeSize
 }
 // Description: 1,2,3,5,6,7,8,9 are the leaf's own; 4 is External::Compile.
 void CheckDescriptionSlots(void* raw, int cls) {
@@ -217,7 +222,7 @@ void CheckDescriptionSlots(void* raw, int cls) {
         Reset(); CallDescriptionSlot(raw, s);
         CHECK_EQ(g_cls, cls); CHECK_EQ(g_slot, s); CHECK(g_self == raw);
     }
-    CHECK(vl[4] == vb[4]);   // Compile inherited (RULE B6-1.5)
+    CHECK(vl[Retail(4)] == vb[Retail(4)]);   // Compile inherited (RULE B6-1.5)
     // Slot 8 is CreateInstance and 9 is Construct, not the other way round.
     Reset(); CallDescriptionSlot(raw, 8); CHECK_EQ(g_slot, 8); CHECK_EQ(g_arg, 0xD1A1);
     Reset(); CallDescriptionSlot(raw, 9); CHECK_EQ(g_slot, 9);

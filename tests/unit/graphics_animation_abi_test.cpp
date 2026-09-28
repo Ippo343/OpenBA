@@ -43,6 +43,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/graphics/Animation.h"
 #include "runtime/types/graphics/AnimationGroup.h"
@@ -67,11 +68,12 @@ void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
 
 // The one instruction every raw slot caller in runtime/src compiles to.
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +124,7 @@ struct AnimationGroupProbe final : Graphics::AnimationGroup {
 // takes a `const System::Filename&` (one pointer) and returns a four-byte enum
 // in EAX with NO hidden return slot (B35_RULES section 2.5 excludes `?AW4`), so
 // it raw-calls safely too.
+template <class T>
 void CheckExternalFamilySlots(void* raw, bool checkConstruct,
                               const ::Object::BaseTypeInfo* record = nullptr) {
     using DtorFn  = void* (*)(void*, unsigned);
@@ -133,38 +136,38 @@ void CheckExternalFamilySlots(void* raw, bool checkConstruct,
     using PtrFn   = void* (*)(void*);
     using VoidFn  = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
+    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8);
     CHECK(g_lastSelf == raw);
 
     if (record) {   // DECLARE_TYPE's real slots 1/2 over the class's record (B.3.9 TI-REST)
-        CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record->name);
-        CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record->typeId);
+        CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record->name);
+        CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record->typeId);
     } else {
-        Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);
+        Reset(); SlotAt<NameFn, T>(raw, kTypeName)(raw);
         CHECK_EQ(g_lastMark, kTypeName / 8);
 
-        Reset(); SlotAt<TypeFn>(raw, kType)(raw);
+        Reset(); SlotAt<TypeFn, T>(raw, kType)(raw);
         CHECK_EQ(g_lastMark, kType / 8);
     }
 
-    Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);
+    Reset(); SlotAt<VerFn, T>(raw, kGetFileVersion)(raw);
     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
 
-    Reset(); SlotAt<CompFn>(raw, kCompile)(raw, nullptr);
+    Reset(); SlotAt<CompFn, T>(raw, kCompile)(raw, nullptr);
     CHECK_EQ(g_lastMark, kCompile / 8);
 
-    Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr);
+    Reset(); SlotAt<SerFn, T>(raw, kSerialize)(raw, nullptr);
     CHECK_EQ(g_lastMark, kSerialize / 8);
 
-    Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);
+    Reset(); SlotAt<PtrFn, T>(raw, kReconstruct)(raw);
     CHECK_EQ(g_lastMark, kReconstruct / 8);
 
-    Reset(); SlotAt<VoidFn>(raw, kDestruct)(raw);
+    Reset(); SlotAt<VoidFn, T>(raw, kDestruct)(raw);
     CHECK_EQ(g_lastMark, kDestruct / 8);
 
     if (checkConstruct) {
-        Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);
+        Reset(); SlotAt<PtrFn, T>(raw, kConstruct)(raw);
         CHECK_EQ(g_lastMark, kConstruct / 8);
     }
 }
@@ -174,7 +177,7 @@ UNIT_TEST(graphics_animationevent_slot_order_is_retails) {
     void* raw = static_cast<void*>(&probe);
 
     // The probe overrides all nine, so all nine raw-call onto their own marker.
-    CheckExternalFamilySlots(raw, /*checkConstruct=*/true);
+    CheckExternalFamilySlots<AnimationEventProbe>(raw, /*checkConstruct=*/true);
 
     // The table has NINE distinct entries and no tenth that aliases one of them.
     const void* const* vt = *reinterpret_cast<const void* const* const*>(raw);
@@ -218,7 +221,8 @@ UNIT_TEST(graphics_animationgroup_slot_order_is_retails) {
     // Slots 3-8 are AnimationGroup's OWN overrides, whose bodies are the marker
     // stubs at the bottom of this file; 1/2 are DECLARE_TYPE's over the class
     // record (ENDGAME B.3.9 TI-REST). Slot 0 is the probe's.
-    CheckExternalFamilySlots(raw, /*checkConstruct=*/true, &Graphics::AnimationGroup::GetTypeInfo());
+    CheckExternalFamilySlots<AnimationGroupProbe>(raw, /*checkConstruct=*/true,
+                                                  &Graphics::AnimationGroup::GetTypeInfo());
 
     const void* const* vt = *reinterpret_cast<const void* const* const*>(raw);
     for (int i = 0; i < 9; ++i)
@@ -301,29 +305,20 @@ UNIT_TEST(b39_gfx_animationevent_slot0_is_the_classs_own_both_arms) {
 int g_agDtorCount = 0;
 const void* g_agDtorOrder[4] = {};
 
-template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
-
 UNIT_TEST(b39_gfx_animationgroup_concrete_slot_order_by_pmf) {
     using G = Graphics::AnimationGroup;
     CHECK(!std::is_abstract<G>::value);
     CHECK(!std::is_destructible<G>::value);
     CHECK(!std::has_virtual_destructor<G>::value);
-    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor),   (uintptr_t)0x00);   // 0x1800167f0
-    CHECK_EQ(GfxSlotOffset(&G::TypeName),       (uintptr_t)0x08);   // 0x180016310
-    CHECK_EQ(GfxSlotOffset(&G::Type),           (uintptr_t)0x10);   // 0x1800162f0
-    CHECK_EQ(GfxSlotOffset(&G::GetFileVersion), (uintptr_t)0x18);   // 0x1800fb680
-    CHECK_EQ(GfxSlotOffset(&G::Compile),        (uintptr_t)0x20);   // 0x1800fb690
-    CHECK_EQ(GfxSlotOffset(&G::Serialize),      (uintptr_t)0x28);   // 0x1800fb6a0
-    CHECK_EQ(GfxSlotOffset(&G::Reconstruct),    (uintptr_t)0x30);   // 0x180016550
-    CHECK_EQ(GfxSlotOffset(&G::Destruct),       (uintptr_t)0x38);   // 0x180016650
-    CHECK_EQ(GfxSlotOffset(&G::Construct),      (uintptr_t)0x40);   // 0x1800165d0
+    CHECK_DTOR_SLOT(G);   // 0x1800167f0
+    CHECK_SLOT(G, TypeName,       0x08/8);   // 0x180016310
+    CHECK_SLOT(G, Type,           0x10/8);   // 0x1800162f0
+    CHECK_SLOT(G, GetFileVersion, 0x18/8);   // 0x1800fb680
+    CHECK_SLOT(G, Compile,        0x20/8);   // 0x1800fb690
+    CHECK_SLOT(G, Serialize,      0x28/8);   // 0x1800fb6a0
+    CHECK_SLOT(G, Reconstruct,    0x30/8);   // 0x180016550
+    CHECK_SLOT(G, Destruct,       0x38/8);   // 0x180016650
+    CHECK_SLOT(G, Construct,      0x40/8);   // 0x1800165d0
 }
 
 // The real ctor makes the factory's stores (0x180016463..4ab): External's three

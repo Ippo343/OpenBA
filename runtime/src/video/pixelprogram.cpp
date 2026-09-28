@@ -95,19 +95,23 @@ void* ActiveDeviceDataPtr() {
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
-using ScalarFn    = void (*)(ReaderWriter*, void*, const char*);
-using VersionFn   = int  (*)(ReaderWriter*);
 using SetSizeFn   = void (*)(void*, int);
 using LoopFn      = void (*)(Serializer* ser, int count, void* data);
 using DestroyFn   = void (*)(void* ignoredThis, void* base, int count);
 using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
 using MemFreeFn   = void (*)(void*);
 
+// B3X W0: the ReaderWriter members, by name on the real class (the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
+inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
 inline void RwInt(ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, p, nullptr);
+    AsRw(rw)->SerializeInt(*reinterpret_cast<int32_t*>(p), nullptr);
 }
 inline void RwBool(ReaderWriter* rw, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8])(rw, p, nullptr);
+    AsRw(rw)->SerializeBool(*reinterpret_cast<bool*>(p), nullptr);
 }
 
 struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
@@ -317,15 +321,14 @@ bool PixelProgram::Serialize(void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 1);
     ser.readerWriter = rw;
 
-    if (reinterpret_cast<VersionFn>(rw->vtable[rt::io::rw_vtbl::kGetVersion / 8])(rw) == 0)
+    if (AsRw(rw)->GetVersion() == 0)
         SerializeLegacyV0(&ser);
 
     if (stream->direction == rt::io::kDirectionReading)
         this->Video::PixelProgram::PlatformCreate();   // retail derefs _data unguarded
 
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        AsRw(rw)->DeletingDtor(1);
     }
     return true;
 }

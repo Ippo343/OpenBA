@@ -29,6 +29,7 @@
 // (runtime/src/audio does not link into a host test).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/audio/Audio.h"
 #include "runtime/types/audio/Device.h"
@@ -59,11 +60,12 @@ void NoteDtor(const void* self) {
     ++g_dtorCount;
 }
 
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -143,16 +145,17 @@ using VoidFn    = void (*)(void*);
 // Raw-call the eight slots every Audio resource owns (4 checked separately).
 // Slots 1 and 2 are DECLARE_TYPE's inline bodies over the class's own record
 // (ENDGAME B.3.9 TI-REST), checked against that record.
+template <class T>
 void CheckOwnSlotsExceptCompile(void* raw, const ::Object::BaseTypeInfo& record) {
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
+    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
-    CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record.name);
-    CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record.typeId);
-    Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
-    Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr); CHECK_EQ(g_lastMark, kSerialize / 8);
-    Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);        CHECK_EQ(g_lastMark, kReconstruct / 8);
-    Reset(); SlotAt<VoidFn>(raw, kDestruct)(raw);          CHECK_EQ(g_lastMark, kDestruct / 8);
-    Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);          CHECK_EQ(g_lastMark, kConstruct / 8);
+    CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record.name);
+    CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record.typeId);
+    Reset(); (SlotAt<VerFn, T>(raw, kGetFileVersion)(raw));     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
+    Reset(); (SlotAt<SerFn, T>(raw, kSerialize)(raw, nullptr)); CHECK_EQ(g_lastMark, kSerialize / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kReconstruct)(raw));        CHECK_EQ(g_lastMark, kReconstruct / 8);
+    Reset(); (SlotAt<VoidFn, T>(raw, kDestruct)(raw));          CHECK_EQ(g_lastMark, kDestruct / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kConstruct)(raw));          CHECK_EQ(g_lastMark, kConstruct / 8);
     CHECK(g_lastSelf == raw);
 }
 
@@ -284,23 +287,25 @@ UNIT_TEST(audio_scene_and_configuration_layout) {
 UNIT_TEST(audio_soundbuffer_slot_order_and_inherited_compile) {
     SoundBufferProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckOwnSlotsExceptCompile(raw, Audio::SoundBuffer::GetTypeInfo());
+    CheckOwnSlotsExceptCompile<SoundBufferProbe>(raw, Audio::SoundBuffer::GetTypeInfo());
     // Slot 4 is NOT SoundBuffer's: it is Object::External's Compile, the same
     // pointer a bare External leaf carries, and it answers retail's 1.
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] == VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
-    CHECK_EQ(SlotAt<CompileFn>(raw, kCompile)(raw, nullptr), 1u);
+    CHECK(RetailEntry<SoundBufferProbe>(raw, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
+    CHECK_EQ((SlotAt<CompileFn, SoundBufferProbe>(raw, kCompile)(raw, nullptr)), 1u);
 }
 
 UNIT_TEST(audio_soundeffect_slot_order_and_own_compile) {
     SoundEffectProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckOwnSlotsExceptCompile(raw, Audio::SoundEffect::GetTypeInfo());
+    CheckOwnSlotsExceptCompile<SoundEffectProbe>(raw, Audio::SoundEffect::GetTypeInfo());
     Reset();
-    CHECK_EQ(SlotAt<CompileFn>(raw, kCompile)(raw, nullptr), 1u);
+    CHECK_EQ((SlotAt<CompileFn, SoundEffectProbe>(raw, kCompile)(raw, nullptr)), 1u);
     CHECK_EQ(g_lastMark, kCompile / 8);
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] != VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<SoundEffectProbe>(raw, kCompile / 8) !=
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
     const void* const* vt = VTableOf(raw);
     for (int i = 0; i < 9; ++i)
         for (int j = i + 1; j < 9; ++j)
@@ -311,7 +316,7 @@ UNIT_TEST(audio_stream_slot0_is_run_and_slot1_is_threads_oncompleted) {
     StreamProbe probe;
     void* raw = static_cast<void*>(&probe);
     Reset();
-    SlotAt<VoidFn>(raw, 0x00)(raw);
+    SlotAt<VoidFn, StreamProbe>(raw, 0x00)(raw);
     CHECK_EQ(g_lastMark, 50);
     CHECK(g_lastSelf == raw);
     // Slot 1 is System::Thread's own OnCompleted: the same pointer the
@@ -334,12 +339,12 @@ UNIT_TEST(audio_soundeffect_qualified_call_does_not_reenter_the_door) {
     const void* minted[9] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 9; ++i) minted[i] = real[i];
-    minted[kCompile / 8] = reinterpret_cast<const void*>(&MintedSoundEffectCompileDoor);
+    minted[RetailSlot<SoundEffectProbe>(kCompile / 8)] =reinterpret_cast<const void*>(&MintedSoundEffectCompileDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;
     Reset();
-    const uint32_t r = SlotAt<CompileFn>(raw, kCompile)(raw, nullptr);
+    const uint32_t r = SlotAt<CompileFn, SoundEffectProbe>(raw, kCompile)(raw, nullptr);
     CHECK_EQ(g_doorEntries, 1);
     CHECK_EQ(g_lastMark, kCompile / 8);
     CHECK_EQ(r, 1u);
@@ -420,15 +425,6 @@ UNIT_TEST(audio_accessors_read_retails_offsets) {
 // ENDGAME B.3.9 ENG (B39_RULES D1/D2, rule B9-16) -- the concrete classes.
 // ---------------------------------------------------------------------------
 namespace {
-template <typename PMF>
-uintptr_t PmfSlot(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 template <class T, int kSize>
 void CheckBothArms() {
     void* m = Object::detail::InternalMemAlloc(kSize, 8);
@@ -454,27 +450,27 @@ void CheckBothArms() {
 
 UNIT_TEST(b39_eng_soundbuffer_slot_order_by_pmf) {
     using B = Audio::SoundBuffer;
-    CHECK_EQ(PmfSlot(&B::DeletingDtor),   (uintptr_t)0x00);   // 0x18000bef0
-    CHECK_EQ(PmfSlot(&B::TypeName),       (uintptr_t)0x08);   // 0x18000b8b0
-    CHECK_EQ(PmfSlot(&B::Type),           (uintptr_t)0x10);   // 0x18000b890
-    CHECK_EQ(PmfSlot(&B::GetFileVersion), (uintptr_t)0x18);   // 0x1800e0470
-    CHECK_EQ(PmfSlot(&B::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
-    CHECK_EQ(PmfSlot(&B::Serialize),      (uintptr_t)0x28);   // 0x1800e0480
-    CHECK_EQ(PmfSlot(&B::Reconstruct),    (uintptr_t)0x30);   // 0x18000bb30
-    CHECK_EQ(PmfSlot(&B::Destruct),       (uintptr_t)0x38);   // 0x18000bc70
-    CHECK_EQ(PmfSlot(&B::Construct),      (uintptr_t)0x40);   // 0x18000bbd0
+    CHECK_DTOR_SLOT(B);   // 0x18000bef0
+    CHECK_SLOT(B, TypeName,       0x08/8);   // 0x18000b8b0
+    CHECK_SLOT(B, Type,           0x10/8);   // 0x18000b890
+    CHECK_SLOT(B, GetFileVersion, 0x18/8);   // 0x1800e0470
+    CHECK_SLOT(B, Compile,        0x20/8);   // External's 0x1800066e0
+    CHECK_SLOT(B, Serialize,      0x28/8);   // 0x1800e0480
+    CHECK_SLOT(B, Reconstruct,    0x30/8);   // 0x18000bb30
+    CHECK_SLOT(B, Destruct,       0x38/8);   // 0x18000bc70
+    CHECK_SLOT(B, Construct,      0x40/8);   // 0x18000bbd0
 }
 UNIT_TEST(b39_eng_soundeffect_slot_order_by_pmf) {
     using E = Audio::SoundEffect;
-    CHECK_EQ(PmfSlot(&E::DeletingDtor),   (uintptr_t)0x00);   // 0x180050820
-    CHECK_EQ(PmfSlot(&E::TypeName),       (uintptr_t)0x08);   // 0x180050340
-    CHECK_EQ(PmfSlot(&E::Type),           (uintptr_t)0x10);   // 0x180050320
-    CHECK_EQ(PmfSlot(&E::GetFileVersion), (uintptr_t)0x18);   // 0x1800e0990
-    CHECK_EQ(PmfSlot(&E::Compile),        (uintptr_t)0x20);   // 0x1800e09a0
-    CHECK_EQ(PmfSlot(&E::Serialize),      (uintptr_t)0x28);   // 0x1800e0aa0
-    CHECK_EQ(PmfSlot(&E::Reconstruct),    (uintptr_t)0x30);   // 0x180050560
-    CHECK_EQ(PmfSlot(&E::Destruct),       (uintptr_t)0x38);   // 0x180050640
-    CHECK_EQ(PmfSlot(&E::Construct),      (uintptr_t)0x40);   // 0x1800505d0
+    CHECK_DTOR_SLOT(E);   // 0x180050820
+    CHECK_SLOT(E, TypeName,       0x08/8);   // 0x180050340
+    CHECK_SLOT(E, Type,           0x10/8);   // 0x180050320
+    CHECK_SLOT(E, GetFileVersion, 0x18/8);   // 0x1800e0990
+    CHECK_SLOT(E, Compile,        0x20/8);   // 0x1800e09a0
+    CHECK_SLOT(E, Serialize,      0x28/8);   // 0x1800e0aa0
+    CHECK_SLOT(E, Reconstruct,    0x30/8);   // 0x180050560
+    CHECK_SLOT(E, Destruct,       0x38/8);   // 0x180050640
+    CHECK_SLOT(E, Construct,      0x40/8);   // 0x1800505d0
 }
 
 // SoundBuffer's factory stores (0x18000ba03..a6a): word +0x20, dword +0x24,
@@ -549,13 +545,13 @@ UNIT_TEST(b39_eng_platformchannel_slot_order_by_pmf) {
     using PC = Audio::Device::PlatformChannel;
     CHECK(std::is_polymorphic<PC>::value);
     CHECK(!std::has_virtual_destructor<PC>::value);
-    CHECK_EQ(PmfSlot(&PC::OnVoiceProcessingPassStart), (uintptr_t)0x00);   // 0x180050200
-    CHECK_EQ(PmfSlot(&PC::OnVoiceProcessingPassEnd),   (uintptr_t)0x08);   // 0x1800501f0
-    CHECK_EQ(PmfSlot(&PC::OnStreamEnd),                (uintptr_t)0x10);   // 0x1800501c0
-    CHECK_EQ(PmfSlot(&PC::OnBufferStart),              (uintptr_t)0x18);   // 0x180050210
-    CHECK_EQ(PmfSlot(&PC::OnBufferEnd),                (uintptr_t)0x20);   // 0x1800501d0
-    CHECK_EQ(PmfSlot(&PC::OnLoopEnd),                  (uintptr_t)0x28);   // 0x180050220
-    CHECK_EQ(PmfSlot(&PC::OnVoiceError),               (uintptr_t)0x30);   // 0x180050230
+    CHECK_SLOT(PC, OnVoiceProcessingPassStart, 0x00/8);   // 0x180050200
+    CHECK_SLOT(PC, OnVoiceProcessingPassEnd,   0x08/8);   // 0x1800501f0
+    CHECK_SLOT(PC, OnStreamEnd,                0x10/8);   // 0x1800501c0
+    CHECK_SLOT(PC, OnBufferStart,              0x18/8);   // 0x180050210
+    CHECK_SLOT(PC, OnBufferEnd,                0x20/8);   // 0x1800501d0
+    CHECK_SLOT(PC, OnLoopEnd,                  0x28/8);   // 0x180050220
+    CHECK_SLOT(PC, OnVoiceError,               0x30/8);   // 0x180050230
 }
 
 UNIT_TEST(b39_eng_platformchannel_ctor_makes_loop2_stores) {
@@ -570,7 +566,7 @@ UNIT_TEST(b39_eng_platformchannel_ctor_makes_loop2_stores) {
     CHECK(VTableOf(a) == VTableOf(b));
     // A raw COM-shaped call through slot 2 lands in the member with `this`.
     using VoidFn = void (*)(void*);
-    Reset(); SlotAt<VoidFn>(a, 0x10)(a); CHECK_EQ(g_lastMark, 62); CHECK(g_lastSelf == a);
+    Reset(); (SlotAt<VoidFn, Audio::Device::PlatformChannel>(a, 0x10)(a)); CHECK_EQ(g_lastMark, 62); CHECK(g_lastSelf == a);
 }
 
 // ENDGAME B.3.9 ENG W2: Audio::Stream is built by its REAL ctor on

@@ -183,19 +183,11 @@ StringSerializeFn StringSerialize() {
     return f;
 }
 
-// The object's OWN vtable slot 0, the vector deleting destructor, with the flags
-// byte spelled out at each call site. Read through the object rather than
-// through a resolved symbol because a derived class (`Graphics::
-// ReflectionImageBuffer`, `FrameCopyImageBuffer`, `GeneratedImageBuffer`)
-// inherits `Destruct`/`Reconstruct` and must reach ITS OWN slot 0 — which is
-// what the indirection is for, and why this is not
-// `this->DeletingDtor(flags)`: the live object wears the MINTED table, so the
-// call has to go through the object's vptr rather than through a C++ vtable
-// GCC would resolve against its own.
-void CallSlot0(void* self, unsigned flags) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, flags);
-}
+// (B3X W0: `CallSlot0`, which read slot 0 through the object's vptr, is gone.
+// Every live ImageBuffer wears the compiler's table since ENDGAME B.3.9 VS, so
+// `DeletingDtor(0)` -- unqualified, VIRTUAL -- reaches a derived class's own
+// slot 0 (`Graphics::ReflectionImageBuffer`, `FrameCopyImageBuffer`,
+// `GeneratedImageBuffer` inherit `Destruct`/`Reconstruct`) exactly as it did.)
 
 }  // namespace
 
@@ -278,7 +270,7 @@ int32_t ImageBuffer::GetFileVersion() const { return 7; }
 // it. A predicate that cannot fail is not a check
 // (`reference_a_predicate_nobody_evaluates.md`).
 // ============================================================================
-void ImageBuffer::Destruct() { CallSlot0(this, 0u); }
+void ImageBuffer::Destruct() { DeletingDtor(0u); }
 
 // ============================================================================
 // slot 8 — Object::External* Video::ImageBuffer::Construct()
@@ -343,7 +335,7 @@ Object::External* ImageBuffer::Construct() {
 // ORACLE: shadow post-condition. No replay, for both reasons at once.
 // ============================================================================
 Object::External* ImageBuffer::Reconstruct() {
-    CallSlot0(this, 0u);
+    DeletingDtor(0u);
     ::new (this) ImageBuffer();
     return this;
 }

@@ -19,6 +19,7 @@
 // this block (every slot returns void, a pointer or an int in RAX).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Component/AmbientEmitterComponent.h"
 #include "Component/AmbientEnvironmentComponent.h"
@@ -47,17 +48,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
-constexpr uintptr_t S(int slot) { return static_cast<uintptr_t>(slot) * 8; }
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -127,8 +117,8 @@ void CheckLeafShape() {
     CHECK((std::is_base_of<Component, T>::value));
     CHECK((std::is_base_of<Object::Internal, T>::value));
     CHECK_EQ(alignof(T), (size_t)8);
-    CHECK_EQ(SlotOffset(&T::DeletingDtor), S(0));
-    CHECK_EQ(SlotOffset(&T::Persist),      S(3));
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, Persist, 3);
 }
 
 UNIT_TEST(cit_component_class_shape_rules) {
@@ -157,72 +147,72 @@ UNIT_TEST(cit_component_class_shape_rules) {
 // PART C — SLOT ORDER (the leaf's own slots, B38_SLOTS.md §6)
 // ===========================================================================
 UNIT_TEST(cit_component_own_slots_land_on_retail_indices) {
-    CHECK_EQ(SlotOffset(&AmbientEmitterComponent::OnAdded),      S(6));    // 0x140042ba0
-    CHECK_EQ(SlotOffset(&AmbientEmitterComponent::OnRemove),     S(7));    // 0x140042b90
-    CHECK_EQ(SlotOffset(&AmbientEnvironmentComponent::Update),   S(9));    // 0x140043690
-    CHECK_EQ(SlotOffset(&AnimalComponent::Startup),              S(4));    // 0x140106d50
-    CHECK_EQ(SlotOffset(&AnimalComponent::OnAdded),              S(6));    // 0x140106c20
-    CHECK_EQ(SlotOffset(&AnimalComponent::Update),               S(9));    // 0x140106420
-    CHECK_EQ(SlotOffset(&AnimalComponent::Slot11),               S(11));   // 0x140106dd0
-    CHECK_EQ(SlotOffset(&CharacterComponent::Startup),           S(4));    // 0x140109a30
-    CHECK_EQ(SlotOffset(&CharacterComponent::OnAdded),           S(6));    // 0x1401099c0
-    CHECK_EQ(SlotOffset(&CharacterComponent::OnRemove),          S(7));    // 0x140109980
-    CHECK_EQ(SlotOffset(&CharacterComponent::Tick),              S(8));    // 0x1401094c0
-    CHECK_EQ(SlotOffset(&CharacterComponent::Update),            S(9));    // 0x140109480
-    CHECK_EQ(SlotOffset(&CitizenAIComponent::Startup),           S(4));    // 0x14010f920
-    CHECK_EQ(SlotOffset(&CitizenAIComponent::OnAdded),           S(6));    // 0x14010f880
-    CHECK_EQ(SlotOffset(&CitizenAIComponent::Update),            S(9));    // 0x14010f3e0
-    CHECK_EQ(SlotOffset(&CitizenAIComponent::OnMessage),         S(15));   // 0x14010f340
-    CHECK_EQ(SlotOffset(&CitizenComponent::Startup),             S(4));    // 0x140114050
-    CHECK_EQ(SlotOffset(&CitizenComponent::OnAdded),             S(6));    // 0x140114000
-    CHECK_EQ(SlotOffset(&CitizenComponent::OnRemove),            S(7));    // 0x140113ca0
-    CHECK_EQ(SlotOffset(&CitizenComponent::Update),              S(9));    // 0x140112e70
-    CHECK_EQ(SlotOffset(&CitizenComponent::Slot11),              S(11));   // 0x1401140f0
-    CHECK_EQ(SlotOffset(&CitizenComponent::OnMessage),           S(15));   // 0x140112260
-    CHECK_EQ(SlotOffset(&DiseaseComponent::Startup),             S(4));    // 0x140048c50
-    CHECK_EQ(SlotOffset(&DiseaseComponent::OnAdded),             S(6));    // 0x140048c00
-    CHECK_EQ(SlotOffset(&DiseaseComponent::OnRemove),            S(7));    // 0x140048bb0
-    CHECK_EQ(SlotOffset(&DiseaseComponent::Update),              S(9));    // 0x140048b90
-    CHECK_EQ(SlotOffset(&FireComponent::Update),                 S(9));    // 0x140048fb0
-    CHECK_EQ(SlotOffset(&FireComponent::OnMessage),              S(15));   // 0x140049090
-    CHECK_EQ(SlotOffset(&FruitComponent::Startup),               S(4));    // 0x14004a030
-    CHECK_EQ(SlotOffset(&FruitComponent::Update),                S(9));    // 0x140049de0
-    CHECK_EQ(SlotOffset(&GrowthComponent::Startup),              S(4));    // 0x1401206f0
-    CHECK_EQ(SlotOffset(&GrowthComponent::OnAdded),              S(6));    // 0x140120690
-    CHECK_EQ(SlotOffset(&GrowthComponent::OnRemove),             S(7));    // 0x140120560
-    CHECK_EQ(SlotOffset(&GrowthComponent::Update),               S(9));    // 0x140120050
-    CHECK_EQ(SlotOffset(&GrowthComponent::PostUpdate),           S(10));   // 0x14011fea0
-    CHECK_EQ(SlotOffset(&GrowthComponent::Slot11),               S(11));   // 0x1401206a0
-    CHECK_EQ(SlotOffset(&HerdComponent::OnAdded),                S(6));    // 0x140121f40
-    CHECK_EQ(SlotOffset(&HerdComponent::OnRemove),               S(7));    // 0x140121e20
-    CHECK_EQ(SlotOffset(&HerdComponent::Update),                 S(9));    // 0x140121bf0
-    CHECK_EQ(SlotOffset(&LivestockComponent::OnAdded),           S(6));    // 0x140123c70
-    CHECK_EQ(SlotOffset(&LivestockComponent::OnRemove),          S(7));    // 0x140123c00
-    CHECK_EQ(SlotOffset(&LivestockComponent::Update),            S(9));    // 0x140123b50
-    CHECK_EQ(SlotOffset(&NaturalResourceComponent::Tick),        S(8));    // 0x140125c40
-    CHECK_EQ(SlotOffset(&ParticleComponent::Startup),            S(4));    // 0x140053230
-    CHECK_EQ(SlotOffset(&ParticleComponent::OnAdded),            S(6));    // 0x140052f70
-    CHECK_EQ(SlotOffset(&ParticleComponent::OnRemove),           S(7));    // 0x140052e80
-    CHECK_EQ(SlotOffset(&ParticleComponent::Tick),               S(8));    // 0x140052b30
-    CHECK_EQ(SlotOffset(&ParticleComponent::Slot11),             S(11));   // 0x1400531b0
-    CHECK_EQ(SlotOffset(&ParticleComponent::OnEvent),            S(12));   // 0x140053090
-    CHECK_EQ(SlotOffset(&PopulationComponent::Startup),          S(4));    // 0x140054220
-    CHECK_EQ(SlotOffset(&PopulationComponent::OnAdded),          S(6));    // 0x1400541c0
-    CHECK_EQ(SlotOffset(&PopulationComponent::OnRemove),         S(7));    // 0x140054180
-    CHECK_EQ(SlotOffset(&PopulationComponent::Update),           S(9));    // 0x140054070
-    CHECK_EQ(SlotOffset(&PopulationComponent::Slot11),           S(11));   // 0x140054210
-    CHECK_EQ(SlotOffset(&SpawnComponent::Startup),               S(4));    // 0x140055e90
-    CHECK_EQ(SlotOffset(&SpawnComponent::Update),                S(9));    // 0x140055ad0
-    CHECK_EQ(SlotOffset(&TombstoneComponent::Startup),           S(4));    // 0x140057860
-    CHECK_EQ(SlotOffset(&TombstoneComponent::Update),            S(9));    // 0x1400577d0
-    CHECK_EQ(SlotOffset(&TornadoComponent::Startup),             S(4));    // 0x1400585a0
-    CHECK_EQ(SlotOffset(&TornadoComponent::Tick),                S(8));    // 0x140057cd0
-    CHECK_EQ(SlotOffset(&WildAnimalComponent::OnRemove),         S(7));    // 0x14012e2b0
+    CHECK_SLOT(AmbientEmitterComponent, OnAdded,    6);    // 0x140042ba0
+    CHECK_SLOT(AmbientEmitterComponent, OnRemove,   7);    // 0x140042b90
+    CHECK_SLOT(AmbientEnvironmentComponent, Update, 9);    // 0x140043690
+    CHECK_SLOT(AnimalComponent, Startup,            4);    // 0x140106d50
+    CHECK_SLOT(AnimalComponent, OnAdded,            6);    // 0x140106c20
+    CHECK_SLOT(AnimalComponent, Update,             9);    // 0x140106420
+    CHECK_SLOT(AnimalComponent, Slot11,             11);   // 0x140106dd0
+    CHECK_SLOT(CharacterComponent, Startup,         4);    // 0x140109a30
+    CHECK_SLOT(CharacterComponent, OnAdded,         6);    // 0x1401099c0
+    CHECK_SLOT(CharacterComponent, OnRemove,        7);    // 0x140109980
+    CHECK_SLOT(CharacterComponent, Tick,            8);    // 0x1401094c0
+    CHECK_SLOT(CharacterComponent, Update,          9);    // 0x140109480
+    CHECK_SLOT(CitizenAIComponent, Startup,         4);    // 0x14010f920
+    CHECK_SLOT(CitizenAIComponent, OnAdded,         6);    // 0x14010f880
+    CHECK_SLOT(CitizenAIComponent, Update,          9);    // 0x14010f3e0
+    CHECK_SLOT(CitizenAIComponent, OnMessage,       15);   // 0x14010f340
+    CHECK_SLOT(CitizenComponent, Startup,           4);    // 0x140114050
+    CHECK_SLOT(CitizenComponent, OnAdded,           6);    // 0x140114000
+    CHECK_SLOT(CitizenComponent, OnRemove,          7);    // 0x140113ca0
+    CHECK_SLOT(CitizenComponent, Update,            9);    // 0x140112e70
+    CHECK_SLOT(CitizenComponent, Slot11,            11);   // 0x1401140f0
+    CHECK_SLOT(CitizenComponent, OnMessage,         15);   // 0x140112260
+    CHECK_SLOT(DiseaseComponent, Startup,           4);    // 0x140048c50
+    CHECK_SLOT(DiseaseComponent, OnAdded,           6);    // 0x140048c00
+    CHECK_SLOT(DiseaseComponent, OnRemove,          7);    // 0x140048bb0
+    CHECK_SLOT(DiseaseComponent, Update,            9);    // 0x140048b90
+    CHECK_SLOT(FireComponent, Update,               9);    // 0x140048fb0
+    CHECK_SLOT(FireComponent, OnMessage,            15);   // 0x140049090
+    CHECK_SLOT(FruitComponent, Startup,             4);    // 0x14004a030
+    CHECK_SLOT(FruitComponent, Update,              9);    // 0x140049de0
+    CHECK_SLOT(GrowthComponent, Startup,            4);    // 0x1401206f0
+    CHECK_SLOT(GrowthComponent, OnAdded,            6);    // 0x140120690
+    CHECK_SLOT(GrowthComponent, OnRemove,           7);    // 0x140120560
+    CHECK_SLOT(GrowthComponent, Update,             9);    // 0x140120050
+    CHECK_SLOT(GrowthComponent, PostUpdate,         10);   // 0x14011fea0
+    CHECK_SLOT(GrowthComponent, Slot11,             11);   // 0x1401206a0
+    CHECK_SLOT(HerdComponent, OnAdded,              6);    // 0x140121f40
+    CHECK_SLOT(HerdComponent, OnRemove,             7);    // 0x140121e20
+    CHECK_SLOT(HerdComponent, Update,               9);    // 0x140121bf0
+    CHECK_SLOT(LivestockComponent, OnAdded,         6);    // 0x140123c70
+    CHECK_SLOT(LivestockComponent, OnRemove,        7);    // 0x140123c00
+    CHECK_SLOT(LivestockComponent, Update,          9);    // 0x140123b50
+    CHECK_SLOT(NaturalResourceComponent, Tick,      8);    // 0x140125c40
+    CHECK_SLOT(ParticleComponent, Startup,          4);    // 0x140053230
+    CHECK_SLOT(ParticleComponent, OnAdded,          6);    // 0x140052f70
+    CHECK_SLOT(ParticleComponent, OnRemove,         7);    // 0x140052e80
+    CHECK_SLOT(ParticleComponent, Tick,             8);    // 0x140052b30
+    CHECK_SLOT(ParticleComponent, Slot11,           11);   // 0x1400531b0
+    CHECK_SLOT(ParticleComponent, OnEvent,          12);   // 0x140053090
+    CHECK_SLOT(PopulationComponent, Startup,        4);    // 0x140054220
+    CHECK_SLOT(PopulationComponent, OnAdded,        6);    // 0x1400541c0
+    CHECK_SLOT(PopulationComponent, OnRemove,       7);    // 0x140054180
+    CHECK_SLOT(PopulationComponent, Update,         9);    // 0x140054070
+    CHECK_SLOT(PopulationComponent, Slot11,         11);   // 0x140054210
+    CHECK_SLOT(SpawnComponent, Startup,             4);    // 0x140055e90
+    CHECK_SLOT(SpawnComponent, Update,              9);    // 0x140055ad0
+    CHECK_SLOT(TombstoneComponent, Startup,         4);    // 0x140057860
+    CHECK_SLOT(TombstoneComponent, Update,          9);    // 0x1400577d0
+    CHECK_SLOT(TornadoComponent, Startup,           4);    // 0x1400585a0
+    CHECK_SLOT(TornadoComponent, Tick,              8);    // 0x140057cd0
+    CHECK_SLOT(WildAnimalComponent, OnRemove,       7);    // 0x14012e2b0
 
     // Slots retail leaves to Component stay Component's (the leaf does not
     // re-declare them): the PMF through the leaf names Component's slot.
-    CHECK_EQ(SlotOffset(&TombstoneComponent::CommandMask),       S(13));
-    CHECK_EQ(SlotOffset(&WildAnimalComponent::OnMessage),        S(15));
+    CHECK_SLOT(TombstoneComponent, CommandMask, 13);
+    CHECK_SLOT(WildAnimalComponent, OnMessage,  15);
 }
 
 }  // namespace

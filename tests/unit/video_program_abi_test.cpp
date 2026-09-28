@@ -38,6 +38,7 @@
 #include <type_traits>
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include "video/ShaderProgram.h"
 #include "video/VertexLayout.h"
@@ -46,11 +47,12 @@
 namespace {
 
 // The one instruction every raw caller idiom compiles to.
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class, here the mirror) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 int  g_lastMark = -1;
@@ -241,18 +243,18 @@ UNIT_TEST(video_program_slot_order) {
 
     // The base's eight slots, reached by BYTE OFFSET, dispatching to the leaf's
     // overrides — which is what a live object wearing the minted table does.
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(p, 0x00)(p, 0);   CHECK_EQ(g_lastMark, 0);
-    Reset(); SlotAt<const char* (*)(void*)>(p, 0x08)(p);          CHECK_EQ(g_lastMark, 101);
-    Reset(); SlotAt<uint32_t (*)(void*)>(p, 0x10)(p);             CHECK_EQ(g_lastMark, 102);
-    Reset(); SlotAt<int32_t (*)(void*)>(p, 0x18)(p);              CHECK_EQ(g_lastMark, 103);
-    Reset(); SlotAt<uint32_t (*)(void*, const void*)>(p, 0x20)(p, nullptr);
+    Reset(); SlotAt<void* (*)(void*, unsigned), MirrorShaderProgram>(p, 0x00)(p, 0);   CHECK_EQ(g_lastMark, 0);
+    Reset(); SlotAt<const char* (*)(void*), MirrorShaderProgram>(p, 0x08)(p);          CHECK_EQ(g_lastMark, 101);
+    Reset(); SlotAt<uint32_t (*)(void*), MirrorShaderProgram>(p, 0x10)(p);             CHECK_EQ(g_lastMark, 102);
+    Reset(); SlotAt<int32_t (*)(void*), MirrorShaderProgram>(p, 0x18)(p);              CHECK_EQ(g_lastMark, 103);
+    Reset(); SlotAt<uint32_t (*)(void*, const void*), MirrorShaderProgram>(p, 0x20)(p, nullptr);
     CHECK_EQ(g_lastMark, 4);   // INHERITED: External::Compile, not overridden
-    Reset(); SlotAt<bool (*)(void*, void*)>(p, 0x28)(p, nullptr); CHECK_EQ(g_lastMark, 105);
-    Reset(); SlotAt<void* (*)(void*)>(p, 0x30)(p);                CHECK_EQ(g_lastMark, 106);
-    Reset(); SlotAt<void (*)(void*)>(p, 0x38)(p);                 CHECK_EQ(g_lastMark, 107);
+    Reset(); SlotAt<bool (*)(void*, void*), MirrorShaderProgram>(p, 0x28)(p, nullptr); CHECK_EQ(g_lastMark, 105);
+    Reset(); SlotAt<void* (*)(void*), MirrorShaderProgram>(p, 0x30)(p);                CHECK_EQ(g_lastMark, 106);
+    Reset(); SlotAt<void (*)(void*), MirrorShaderProgram>(p, 0x38)(p);                 CHECK_EQ(g_lastMark, 107);
 
     // *** Construct is slot 8, at +0x40, and it is the LEAF's own. ***
-    Reset(); SlotAt<void* (*)(void*)>(p, 0x40)(p);                CHECK_EQ(g_lastMark, 108);
+    Reset(); SlotAt<void* (*)(void*), MirrorShaderProgram>(p, 0x40)(p);                CHECK_EQ(g_lastMark, 108);
 
     // And it really is the ninth entry: the base has exactly eight, so reading
     // +0x40 off a BASE object would be past the end of its table. That is not

@@ -20,6 +20,7 @@
 // cannot link into a host test) — the coordinator's run and resave gate do.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Work/Work.h"
 #include "Work/AutoPickupWork.h"
@@ -53,16 +54,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
 // ===========================================================================
 // PART A — LAYOUT
 // ===========================================================================
@@ -85,26 +76,26 @@ UNIT_TEST(wrk_base_sizes_match_retail) {
 // PART B — SLOT ORDER (retail table 0x140161a80, 13 slots)
 // ===========================================================================
 UNIT_TEST(wrk_base_slot_order) {
-    CHECK_EQ(SlotOffset(&Work::DeletingDtor), (uintptr_t)0x00);   // 0x14002ca60
-    CHECK_EQ(SlotOffset(&Work::TypeName),     (uintptr_t)0x08);   // 0x14002ca50
-    CHECK_EQ(SlotOffset(&Work::Type),         (uintptr_t)0x10);   // 0x14002ca40
-    CHECK_EQ(SlotOffset(&Work::Persist),      (uintptr_t)0x18);   // 0x1400f7400
-    CHECK_EQ(SlotOffset(&Work::Execute),      (uintptr_t)0x20);   // pure
-    CHECK_EQ(SlotOffset(&Work::Slot5),        (uintptr_t)0x28);   // 0x1400f7540
-    CHECK_EQ(SlotOffset(&Work::OnComplete),   (uintptr_t)0x30);   // pure
-    CHECK_EQ(SlotOffset(&Work::OnCancel),     (uintptr_t)0x38);   // pure
-    CHECK_EQ(SlotOffset(&Work::Cleanup),      (uintptr_t)0x40);   // pure
-    CHECK_EQ(SlotOffset(&Work::Validate),     (uintptr_t)0x48);   // pure
-    CHECK_EQ(SlotOffset(&Work::GetTarget),    (uintptr_t)0x50);   // pure
-    CHECK_EQ(SlotOffset(&Work::GetPriority),  (uintptr_t)0x58);   // pure
-    CHECK_EQ(SlotOffset(&Work::Slot12),       (uintptr_t)0x60);   // 0x140006b10, 13th and last
+    CHECK_DTOR_SLOT(Work);   // 0x14002ca60
+    CHECK_SLOT(Work, TypeName,    0x08/8);   // 0x14002ca50
+    CHECK_SLOT(Work, Type,        0x10/8);   // 0x14002ca40
+    CHECK_SLOT(Work, Persist,     0x18/8);   // 0x1400f7400
+    CHECK_SLOT(Work, Execute,     0x20/8);   // pure
+    CHECK_SLOT(Work, Slot5,       0x28/8);   // 0x1400f7540
+    CHECK_SLOT(Work, OnComplete,  0x30/8);   // pure
+    CHECK_SLOT(Work, OnCancel,    0x38/8);   // pure
+    CHECK_SLOT(Work, Cleanup,     0x40/8);   // pure
+    CHECK_SLOT(Work, Validate,    0x48/8);   // pure
+    CHECK_SLOT(Work, GetTarget,   0x50/8);   // pure
+    CHECK_SLOT(Work, GetPriority, 0x58/8);   // pure
+    CHECK_SLOT(Work, Slot12,      0x60/8);   // 0x140006b10, 13th and last
 
     // AutoPickupWork (0x140160fa0) overrides 0, 1, 2, 3 and 8.
-    CHECK_EQ(SlotOffset(&AutoPickupWork::DeletingDtor), (uintptr_t)0x00);   // 0x1400294e0
-    CHECK_EQ(SlotOffset(&AutoPickupWork::TypeName),     (uintptr_t)0x08);   // 0x1400294d0
-    CHECK_EQ(SlotOffset(&AutoPickupWork::Type),         (uintptr_t)0x10);   // 0x1400294c0
-    CHECK_EQ(SlotOffset(&AutoPickupWork::Persist),      (uintptr_t)0x18);   // 0x1400e3f80
-    CHECK_EQ(SlotOffset(&AutoPickupWork::Cleanup),      (uintptr_t)0x40);   // 0x1400e3f30
+    CHECK_DTOR_SLOT(AutoPickupWork);   // 0x1400294e0
+    CHECK_SLOT(AutoPickupWork, TypeName, 0x08/8);   // 0x1400294d0
+    CHECK_SLOT(AutoPickupWork, Type,     0x10/8);   // 0x1400294c0
+    CHECK_SLOT(AutoPickupWork, Persist,  0x18/8);   // 0x1400e3f80
+    CHECK_SLOT(AutoPickupWork, Cleanup,  0x40/8);   // 0x1400e3f30
 }
 
 // ===========================================================================
@@ -130,19 +121,19 @@ UNIT_TEST(wrk_base_class_shape_rules) {
     CHECK(!std::is_abstract<Class>::value);                                     \
     CHECK(!std::has_virtual_destructor<Class>::value);                          \
     CHECK((std::is_base_of<Parent, Class>::value));                             \
-    CHECK_EQ(SlotOffset(&Class::DeletingDtor), (uintptr_t)0x00);                \
-    CHECK_EQ(SlotOffset(&Class::TypeName),     (uintptr_t)0x08);                \
-    CHECK_EQ(SlotOffset(&Class::Type),         (uintptr_t)0x10);                \
-    CHECK_EQ(SlotOffset(&Class::Persist),      (uintptr_t)0x18);                \
-    CHECK_EQ(SlotOffset(&Class::Execute),      (uintptr_t)0x20);                \
-    CHECK_EQ(SlotOffset(&Class::Slot5),        (uintptr_t)0x28);                \
-    CHECK_EQ(SlotOffset(&Class::OnComplete),   (uintptr_t)0x30);                \
-    CHECK_EQ(SlotOffset(&Class::OnCancel),     (uintptr_t)0x38);                \
-    CHECK_EQ(SlotOffset(&Class::Cleanup),      (uintptr_t)0x40);                \
-    CHECK_EQ(SlotOffset(&Class::Validate),     (uintptr_t)0x48);                \
-    CHECK_EQ(SlotOffset(&Class::GetTarget),    (uintptr_t)0x50);                \
-    CHECK_EQ(SlotOffset(&Class::GetPriority),  (uintptr_t)0x58);                \
-    CHECK_EQ(SlotOffset(&Class::Slot12),       (uintptr_t)0x60)
+    CHECK_DTOR_SLOT(Class);                                                     \
+    CHECK_SLOT(Class, TypeName,    0x08/8);                                     \
+    CHECK_SLOT(Class, Type,        0x10/8);                                     \
+    CHECK_SLOT(Class, Persist,     0x18/8);                                     \
+    CHECK_SLOT(Class, Execute,     0x20/8);                                     \
+    CHECK_SLOT(Class, Slot5,       0x28/8);                                     \
+    CHECK_SLOT(Class, OnComplete,  0x30/8);                                     \
+    CHECK_SLOT(Class, OnCancel,    0x38/8);                                     \
+    CHECK_SLOT(Class, Cleanup,     0x40/8);                                     \
+    CHECK_SLOT(Class, Validate,    0x48/8);                                     \
+    CHECK_SLOT(Class, GetTarget,   0x50/8);                                     \
+    CHECK_SLOT(Class, GetPriority, 0x58/8);                                     \
+    CHECK_SLOT(Class, Slot12,      0x60/8)
 
 UNIT_TEST(wrk_leaf_buildroad) {
     WRK_LEAF_SHAPE(BuildRoad, Work, 0x70);   // create 0x140029560, table 0x140161020
