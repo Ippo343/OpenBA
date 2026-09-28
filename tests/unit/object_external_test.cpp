@@ -15,8 +15,11 @@
 //      general, applied to the list measured at `??_7External@Object@@6B@`
 //      (0x1801547a0) on 2026-09-18.
 //   3. `Type()` / `TypeName()` through Base -> External -> a derived leaf.
-//   4. `Object::Destroy(p)` reaching slot 0 with flags 1, and slot 0 answering
-//      `this` as every MSVC `??_G` does.
+//   4. `Object::Destroy(p)` reaching retail slot 0 with flags 1 — B3X W1:
+//      `delete p`, the compiler's D0 (compiler slot 1), which runs the chain
+//      and calls the class-scope operator delete; retail's flags 0 is D1
+//      (compiler slot 0), the chain with no free. (Every MSVC `??_G` answered
+//      `this`; the Itanium pair returns nothing.)
 //   5. THE TWO NODE LAYOUTS — `Object::detail::ResourceFind` (0x18-wide
 //      element, node tail at parent +0x18 / left +0x20 / right +0x28) and
 //      `ReferenceFind` (0x10-wide, +0x10 / +0x18 / +0x20), each driven with
@@ -37,6 +40,7 @@
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include <cstdint>
 #include <cstring>
@@ -50,6 +54,7 @@ namespace {
 
 int g_destructCount  = 0;
 int g_serializeCount = 0;
+int g_dtorCount      = 0;
 
 // A concrete External. Retail's is ABSTRACT — slots 3, 5, 6 and 7 are
 // `_purecall` at 0x18007ec28 — so a test needs a leaf, exactly as every real
@@ -63,6 +68,12 @@ public:
     void              Destruct() override { ++g_destructCount; }
 
     uint32_t _marker = 0xABCDEF01u;   // a field past External's 0x20 bytes
+
+    // B3X W1: records its destructor (retail slot 0), and frees through a
+    // recording class-scope operator delete with the allocator the test block
+    // comes from (Object::TypeTreeAlloc / TypeTreeFree, malloc/free here).
+    ~TestExternal() override { ++g_dtorCount; }
+    static void operator delete(void* p) { dtor_check::NoteFree(p); Object::TypeTreeFree(p); }
 };
 
 void** VTableOf(const void* o) { return *reinterpret_cast<void** const*>(o); }
@@ -174,31 +185,40 @@ UNIT_TEST(object_external_vtable_slot_order_is_retails) {
 // 3/4. Slot 0 and Object::Destroy
 // ---------------------------------------------------------------------------
 UNIT_TEST(object_external_destroy_reaches_slot0_with_flags1) {
-    // `Destroy(p)` is `p->DeletingDtor(1)`, and flags&1 FREES the storage — so
-    // the object has to come from the allocator `DeletingDtor` frees with,
-    // which is `Object::TypeTreeFree` (the seam type_reflection.cpp exposes and
-    // which takes a malloc branch under -DBANISHED_UNIT_TEST).
+    // `Destroy(p)` is `delete p` (B3X W1), and the deleting destructor FREES
+    // the storage — so the object has to come from the allocator its operator
+    // delete frees with: `Object::TypeTreeFree` (the seam type_reflection.cpp
+    // exposes, a malloc branch under -DBANISHED_UNIT_TEST).
     void* raw = Object::TypeTreeAlloc(sizeof(TestExternal), alignof(TestExternal));
     CHECK(raw != nullptr);
     if (raw == nullptr) return;
 
     TestExternal* p = new (raw) TestExternal();
 
-    // flags 0 — destroy WITHOUT freeing, which is what `Reconstruct` and
-    // `Destruct` drive (`slot0(this, 0)`). Slot 0 returns `this`.
-    using Slot0Fn = Object::Base* (*)(void*, unsigned);
+    // Retail flags 0 — destroy WITHOUT freeing, which is what `Reconstruct`
+    // and `Destruct` drive — is D1, compiler slot 0, read raw here; D0 is the
+    // next slot and a different body.
     void** vt = VTableOf(p);
-    Object::Base* returned = reinterpret_cast<Slot0Fn>(vt[0])(p, 0u);
-    CHECK(returned == static_cast<Object::Base*>(p));
+    CHECK(vt[0] != vt[1]);
+    g_dtorCount = 0; dtor_check::ResetFrees();
+    reinterpret_cast<dtor_check::DtorEntry>(vt[0])(p);
+    CHECK_EQ(g_dtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 0);
 
-    // Rebuild in the same storage and let Destroy take the free arm.
+    // Rebuild in the same storage and let Destroy take the free arm (D0).
     p = new (raw) TestExternal();
+    g_dtorCount = 0; dtor_check::ResetFrees();
     Object::Destroy(p);
+    CHECK_EQ(g_dtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == raw);
 
-    // The inline body's null test is retail's `Destroy` shape, not a guard on a
-    // faithful deref: `if (p) p->DeletingDtor(1)`.
+    // The null test is retail's `Destroy` shape (`if (p) <slot 0>(p, 1)`), not
+    // a guard on a faithful deref: `delete` of a null pointer to a class with a
+    // virtual destructor runs nothing and frees nothing.
     Object::Destroy(nullptr);
-    CHECK(true);
+    CHECK_EQ(g_dtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,18 +328,20 @@ UNIT_TEST(object_external_reference_find_at_two_depths) {
 }
 
 // ---------------------------------------------------------------------------
-// The no-virtual-destructor rule, restated for this family
+// The virtual-destructor rule, restated for this family (B3X W1)
 //
-// A `virtual ~T()` anywhere in the chain costs TWO slots (complete + deleting)
-// and shifts every slot after it, so the ~80 files that still stamp the MINTED
-// `??_7External@Object@@6B@` into live objects would start dispatching one slot
-// out. object_vtable_abi_test.cpp is the general regression test; this pins the
-// same claim on External's own eight, which is what the per-slot checks above
-// measure.
+// Retail slot 0 is the deleting destructor; the family now declares
+// `virtual ~T()`, which costs TWO slots (D1 complete + D0 deleting), so retail
+// slot N >= 1 is compiler slot N + 1 — the translation the per-slot checks
+// above make through RetailSlot<TestExternal>. object_vtable_abi_test.cpp is
+// the general test of the rule (with the one-slot MSVC shape as its control).
+// (Test name kept from the retired rule.)
 // ---------------------------------------------------------------------------
 UNIT_TEST(object_external_has_no_virtual_destructor) {
-    CHECK(!std::has_virtual_destructor<Object::External>::value);
-    CHECK(!std::has_virtual_destructor<Object::ExternalList>::value);
-    CHECK(!std::has_virtual_destructor<Object::CompiledExternal>::value);
-    CHECK(!std::has_virtual_destructor<Object::Base>::value);
+    CHECK(std::has_virtual_destructor<Object::External>::value);
+    CHECK(std::has_virtual_destructor<Object::ExternalList>::value);
+    CHECK(std::has_virtual_destructor<Object::CompiledExternal>::value);
+    CHECK(std::has_virtual_destructor<Object::Base>::value);
+    CHECK_EQ(RetailSlot<Object::External>(1), 2L);
 }
+

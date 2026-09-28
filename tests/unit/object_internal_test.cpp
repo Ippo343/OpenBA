@@ -6,7 +6,8 @@
 // layout against the alias PODs, the slot order of `??_7Internal@Object@@6B@`
 // read through a raw `(*(void***)p)[N]`, `Type()`/`TypeName()` through
 // Base -> Internal -> a derived test class, `Destroy(p)` reaching slot 0 with
-// flags 1, and the factory's table logic.
+// flags 1 (B3X W1: `delete p` — the deleting destructor D0 and the class-scope
+// operator delete), and the factory's table logic.
 //
 // WHAT CAN AND CANNOT BE TESTED HERE
 // ----------------------------------
@@ -55,8 +56,8 @@ namespace {
 // ---------------------------------------------------------------------------
 // Observation channel and the process-global guards.
 // ---------------------------------------------------------------------------
-int g_deletingDtorCalls = 0;
-unsigned g_lastDeletingDtorFlags = 0;
+int g_deleteCalls = 0;                 // TestInternal::operator delete (retail flags & 1)
+const void* g_lastDeleted = nullptr;
 int g_persistCalls = 0;
 int g_derivedDtorCalls = 0;
 
@@ -85,33 +86,28 @@ struct FactoryScope {
 };
 
 // ---------------------------------------------------------------------------
-// A derived class, declared the way a converted subclass will be: DECLARE_TYPE,
-// its own slot-0 override, no virtual destructor.
+// A derived class, declared the way a converted subclass is (B3X W1):
+// DECLARE_TYPE and a public `virtual ~T()` (retail slot 0 = D1 + D0). Its
+// class-scope operator delete records what D0 hands it (retail's `flags & 1`
+// free) and frees with the allocator NewTestInternal used.
 // ---------------------------------------------------------------------------
 class TestInternal : public ::Object::Internal {
     DECLARE_TYPE(TestInternal)
 
 public:
     TestInternal() : payload(0x5A5A5A5A) {}
+    ~TestInternal() override { ++g_derivedDtorCalls; }
 
-    // Slot 0. A converted subclass writes exactly this: run its own destructor,
-    // free on `flags & 1`, return `this`. Never `virtual ~TestInternal()`.
-    ::Object::Base* DeletingDtor(unsigned flags) override {
-        ++g_deletingDtorCalls;
-        g_lastDeletingDtorFlags = flags;
-        this->~TestInternal();
-        if (flags & 1)
-            ::Object::detail::InternalMemFree(this);
-        return this;
+    static void operator delete(void* p) {
+        ++g_deleteCalls;
+        g_lastDeleted = p;
+        ::Object::detail::InternalMemFree(p);
     }
 
     // Slot 3.
     void Persist(void* /*stream*/) override { ++g_persistCalls; }
 
     uint32_t payload;
-
-protected:
-    ~TestInternal() { ++g_derivedDtorCalls; }
 };
 
 DEFINE_TYPE(TestInternal, "Internal", nullptr)
@@ -125,7 +121,8 @@ TestInternal* NewTestInternal() {
 }
 
 // The four retail slot indices, spelled once.
-enum : int { kSlotDeletingDtor = 0, kSlotTypeName = 1, kSlotType = 2, kSlotPersist = 3 };
+// (Retail slot 0 is the destructor pair, compiler slots 0 and 1.)
+enum : int { kSlotDtor = 0, kSlotTypeName = 1, kSlotType = 2, kSlotPersist = 3 };
 
 void* const* VtableOf(const void* p) { return *reinterpret_cast<void* const* const*>(p); }
 
@@ -150,12 +147,13 @@ UNIT_TEST(internal_layout_matches_the_alias_pod) {
     static_assert(std::is_trivially_destructible<RtObject::Internal>::value,
                   "the alias POD must stay trivially destructible");
 
-    // No virtual destructor anywhere in the chain: GCC would spend two slots and
-    // shift Type/TypeName/Persist by one. `std::has_virtual_destructor` is the
-    // direct spelling of decision 2's rule.
-    static_assert(!std::has_virtual_destructor< ::Object::Base>::value, "Base");
-    static_assert(!std::has_virtual_destructor< ::Object::Internal>::value, "Internal");
-    static_assert(!std::has_virtual_destructor<TestInternal>::value, "derived");
+    // B3X W1: a virtual destructor on every level of the chain. GCC spends two
+    // slots on it and shifts Type/TypeName/Persist by one — RetailSlot<T>
+    // below makes exactly that translation.
+    static_assert(std::has_virtual_destructor< ::Object::Base>::value, "Base");
+    static_assert(std::has_virtual_destructor< ::Object::Internal>::value, "Internal");
+    static_assert(std::has_virtual_destructor<TestInternal>::value, "derived");
+    static_assert(RetailSlot<TestInternal>(kSlotTypeName) == 2, "retail 1 -> compiler 2");
 
     CHECK_EQ(sizeof(::Object::Internal), (size_t)0x10);
 }
@@ -251,13 +249,13 @@ UNIT_TEST(type_and_typename_through_base_internal_derived) {
 }
 
 // ===========================================================================
-// Destroy(p) -> slot 0 with flags 1
+// Destroy(p) -> slot 0 with flags 1 (B3X W1: `delete p`, D0)
 // ===========================================================================
 
 UNIT_TEST(destroy_reaches_slot0_with_flags_1) {
     FactoryScope scope;
-    g_deletingDtorCalls = 0;
-    g_lastDeletingDtorFlags = 0;
+    g_deleteCalls = 0;
+    g_lastDeleted = nullptr;
     g_derivedDtorCalls = 0;
 
     TestInternal* obj = NewTestInternal();
@@ -265,16 +263,20 @@ UNIT_TEST(destroy_reaches_slot0_with_flags_1) {
 
     ::Object::Destroy(obj);
 
-    CHECK_EQ(g_deletingDtorCalls, 1);
-    CHECK_EQ(g_lastDeletingDtorFlags, 1u);   // `&1` = free the storage
     CHECK_EQ(g_derivedDtorCalls, 1);
+    // Retail's `&1` (free the storage): the class operator delete got the block.
+    CHECK_EQ(g_deleteCalls, 1);
+    CHECK(g_lastDeleted == static_cast<const void*>(obj));
     // ~Internal ran too, so the object left the handle table.
     CHECK_EQ(scope.factory.GetObjects().GetSize(), 0);
 
-    // Destroy(nullptr) is a no-op, as the inline in TypeInfo.h says.
+    // Destroy(nullptr) is a no-op, as the inline in TypeInfo.h says: no
+    // destructor, no operator delete.
     ::Object::Destroy(nullptr);
-    CHECK_EQ(g_deletingDtorCalls, 1);
+    CHECK_EQ(g_derivedDtorCalls, 1);
+    CHECK_EQ(g_deleteCalls, 1);
 }
+
 
 // ===========================================================================
 // InternalFactory — the handle table

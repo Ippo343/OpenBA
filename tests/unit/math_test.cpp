@@ -24,6 +24,8 @@
 #include "unit.h"
 
 #include "math/Math.h"
+#include "slot_check.h"
+#include "runtime/types/io/Serializer.h"   // IO::ReaderWriter (the slot shift)
 
 #include <cmath>
 #include <cstdint>
@@ -61,10 +63,13 @@ Math::Vector3 RowVecTimesMatrix(const Math::Vector3& v, const Math::Matrix& m) {
 // ---------------------------------------------------------------------------
 // A fake IO::Serializer for the Serialize tests.
 //
-// The ported bodies read `serializer + 8` as the object to talk to, take its
-// first qword as a vtable pointer and call the function pointer at byte offset
-// 0x28 with (object, count, data). Nothing else about the layout is touched, so
-// this hand-built pair reproduces the whole protocol.
+// The ported bodies read `serializer + 8` as the object to talk to (the
+// IO::ReaderWriter), take its first qword as a vtable pointer and call
+// `SerializeFloatArray` — retail byte offset 0x28 — with (object, count, data).
+// Nothing else about the layout is touched, so this hand-built pair reproduces
+// the whole protocol. B3X W1: the call is BY NAME on a class with a virtual
+// destructor, so it reads the COMPILER slot, retail 0x28 + 8 (D1 and D0 take
+// slots 0 and 1); the entry is placed through RetailSlot<IO::ReaderWriter>.
 // ---------------------------------------------------------------------------
 struct FakeSink {
     void*   vtable;      // +0x00, points at gFakeVtable
@@ -78,7 +83,9 @@ struct FakeSerializer {
 };
 
 FakeSink  gSink;
-void*     gFakeVtable[8];          // slot 0x28 == index 5
+void*     gFakeVtable[8];          // retail 0x28 == index 5 -> compiler index 6
+constexpr long kFakeFloatArraySlot = RetailSlot<::IO::ReaderWriter>(0x28 / 8);
+static_assert(kFakeFloatArraySlot == 6, "retail slot 5 behind the D1/D0 pair");
 
 void FakeSerializeFloats(void* self, int count, void* data) {
     FakeSink* s = static_cast<FakeSink*>(self);
@@ -89,7 +96,8 @@ void FakeSerializeFloats(void* self, int count, void* data) {
 
 FakeSerializer MakeFakeSerializer() {
     for (int i = 0; i < 8; ++i) gFakeVtable[i] = nullptr;
-    gFakeVtable[0x28 / 8] = reinterpret_cast<void*>(&FakeSerializeFloats);
+    gFakeVtable[kFakeFloatArraySlot] = reinterpret_cast<void*>(&FakeSerializeFloats);
+
     gSink.vtable = gFakeVtable;
     gSink.lastCount = 0;
     gSink.lastData = nullptr;

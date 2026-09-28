@@ -17,9 +17,10 @@
 //
 // The shape is B34_BRIEFS section B.7's: a CONCRETE probe subclass of each real
 // class, every slot overridden with its own marker, then a raw slot call at
-// every retail byte offset asserting the marker equals offset/8. Slot 0 is
-// raw-called too, because `DeletingDtor(unsigned)` takes and returns plain
-// machine words with no hidden slot.
+// every retail byte offset asserting the marker equals offset/8. Retail slot 0
+// (the deleting destructor) is, since B3X W1, the compiler's destructor pair
+// (D1 at 0, D0 at 1): both are raw-called too, on objects destroyed exactly
+// once (CheckDtorPair).
 //
 // THE OUT-OF-LINE BODIES THE PROBES NEED AT LINK TIME ARE DEFINED AT THE BOTTOM
 // OF THIS FILE, not in a stubs file, and they are NOT duplicates. GCC emits a
@@ -44,6 +45,7 @@
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/graphics/Animation.h"
 #include "runtime/types/graphics/AnimationGroup.h"
@@ -80,7 +82,7 @@ Fn SlotAt(const void* obj, int byteOffset) {
 // The nine `Object::External`-family byte offsets, spelled once. Copied from
 // B35_SLOTS.md, not reconstructed.
 // ---------------------------------------------------------------------------
-constexpr int kDeletingDtor   = 0x00;
+constexpr int kDtorSlot   = 0x00;
 constexpr int kTypeName       = 0x08;
 constexpr int kType           = 0x10;
 constexpr int kGetFileVersion = 0x18;
@@ -94,9 +96,8 @@ constexpr int kConstruct      = 0x40;   // introduced per branch — RULE B5-16
 // PART A — Graphics::AnimationEvent (ABSTRACT, 9 slots, 0x20, Object::External)
 // ---------------------------------------------------------------------------
 struct AnimationEventProbe final : Graphics::AnimationEvent {
-    Object::Base* DeletingDtor(unsigned) override {
-        Note(this, kDeletingDtor / 8); return this;
-    }
+    ~AnimationEventProbe() override { Note(this, kDtorSlot / 8); }
+    DTOR_CHECK_RECORDING_DELETE
     const char* TypeName() const override {
         Note(this, kTypeName / 8); return "AnimationEvent";
     }
@@ -115,10 +116,30 @@ struct AnimationEventProbe final : Graphics::AnimationEvent {
 // PART B — Graphics::AnimationGroup (9 slots, 0x58, Object::External)
 // ---------------------------------------------------------------------------
 struct AnimationGroupProbe final : Graphics::AnimationGroup {
-    Object::Base* DeletingDtor(unsigned) override {
-        Note(this, kDeletingDtor / 8); return this;
-    }
+    ~AnimationGroupProbe() override { Note(this, kDtorSlot / 8); }
+    DTOR_CHECK_RECORDING_DELETE
 };
+
+// Retail slot 0 is the destructor pair, read raw: compiler [0] D1 runs ~P once
+// and frees nothing (retail flags 0); [1] D0 runs it and hands the block to the
+// class-scope operator delete (flags 1). D1 is called on a placement-new'd
+// probe never destroyed again (on a stack probe it would run twice).
+template <class P>
+void CheckDtorPair() {
+    alignas(P) unsigned char buf[sizeof(P)];
+    P* p = ::new (static_cast<void*>(buf)) P();
+    const void* const* vt = *reinterpret_cast<const void* const* const*>(p);
+    CHECK(vt[0] != vt[1]);
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    P* h = dtor_check::NewOnMalloc<P>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+}
 
 // The shared five: every slot whose signature is plain machine words. `Compile`
 // takes a `const System::Filename&` (one pointer) and returns a four-byte enum
@@ -127,7 +148,6 @@ struct AnimationGroupProbe final : Graphics::AnimationGroup {
 template <class T>
 void CheckExternalFamilySlots(void* raw, bool checkConstruct,
                               const ::Object::BaseTypeInfo* record = nullptr) {
-    using DtorFn  = void* (*)(void*, unsigned);
     using NameFn  = const char* (*)(const void*);
     using TypeFn  = uint32_t (*)(const void*);
     using VerFn   = int32_t (*)(const void*);
@@ -136,9 +156,7 @@ void CheckExternalFamilySlots(void* raw, bool checkConstruct,
     using PtrFn   = void* (*)(void*);
     using VoidFn  = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, kDeletingDtor / 8);
-    CHECK(g_lastSelf == raw);
+    CheckDtorPair<T>();   // retail slot 0 (kDtorSlot): D1 / D0
 
     if (record) {   // DECLARE_TYPE's real slots 1/2 over the class's record (B.3.9 TI-REST)
         CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record->name);
@@ -179,10 +197,11 @@ UNIT_TEST(graphics_animationevent_slot_order_is_retails) {
     // The probe overrides all nine, so all nine raw-call onto their own marker.
     CheckExternalFamilySlots<AnimationEventProbe>(raw, /*checkConstruct=*/true);
 
-    // The table has NINE distinct entries and no tenth that aliases one of them.
+    // Nine retail slots are TEN compiler entries (retail slot 0 = D1 + D0),
+    // all distinct, D1 != D0 included.
     const void* const* vt = *reinterpret_cast<const void* const* const*>(raw);
-    for (int i = 0; i < 9; ++i)
-        for (int j = i + 1; j < 9; ++j)
+    for (int i = 0; i < 10; ++i)
+        for (int j = i + 1; j < 10; ++j)
             CHECK(vt[i] != vt[j]);
 
     // `this` is unadjusted at +0x00: single inheritance, no virtual bases.
@@ -207,8 +226,9 @@ UNIT_TEST(graphics_animationevent_layout) {
     // RT_DELDTOR row retired) but by the pure External slots and `Construct`:
     // `Graphics::AnimationEvent e;` must still not compile.
     CHECK(std::is_abstract<Graphics::AnimationEvent>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::AnimationEvent>::value);
-    CHECK(!std::is_destructible<Graphics::AnimationEvent>::value);
+    // B3X W1: public virtual destructor (retail slot 0 = D1 + D0).
+    CHECK(std::has_virtual_destructor<Graphics::AnimationEvent>::value);
+    CHECK(std::is_destructible<Graphics::AnimationEvent>::value);
     CHECK(std::is_polymorphic<Graphics::AnimationEvent>::value);
     CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::AnimationEvent>::value));
     CHECK((std::is_base_of<Object::External, Graphics::AnimationEvent>::value));
@@ -225,8 +245,8 @@ UNIT_TEST(graphics_animationgroup_slot_order_is_retails) {
                                                   &Graphics::AnimationGroup::GetTypeInfo());
 
     const void* const* vt = *reinterpret_cast<const void* const* const*>(raw);
-    for (int i = 0; i < 9; ++i)
-        for (int j = i + 1; j < 9; ++j)
+    for (int i = 0; i < 10; ++i)          // nine retail slots, ten compiler entries
+        for (int j = i + 1; j < 10; ++j)
             CHECK(vt[i] != vt[j]);
 
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
@@ -258,11 +278,14 @@ UNIT_TEST(graphics_animationgroup_layout) {
 // A leaf that overrides every pure slot but NOT slot 0 reaches the class's
 // vector deleting dtor: both arms as the retired RT_DELDTOR row 0x180011800
 // ran them (element size 0x20, count at this-8, downward, free on &1).
+// B3X W1: flags 0 is `~T()`, flags 1 `delete` (the free proven on a recording
+// stand-in), and the vector arm 0x180011800 is retired: `delete[]` replaces it.
 // ---------------------------------------------------------------------------
 int g_aeDtorCount = 0;
 const void* g_aeDtorOrder[4] = {};
 
 struct AnimationEventLeaf final : Graphics::AnimationEvent {
+    DTOR_CHECK_RECORDING_DELETE   // B3X W1: the flags-1 free, recorded
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -277,26 +300,19 @@ UNIT_TEST(b39_gfx_animationevent_slot0_is_the_classs_own_both_arms) {
     AnimationEventLeaf* e = ::new (static_cast<void*>(buf)) AnimationEventLeaf();
     CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + 0x08), (uint64_t)0);   // External()
     g_aeDtorCount = 0;
-    CHECK(static_cast<void*>(e->DeletingDtor(0)) == static_cast<void*>(buf));
+    e->~AnimationEventLeaf();
     CHECK_EQ(g_aeDtorCount, 1);
 
     void* m = Object::detail::InternalMemAlloc(0x20, 8);
-    AnimationEventLeaf* h = ::new (m) AnimationEventLeaf();
-    g_aeDtorCount = 0;
-    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+    Graphics::AnimationEvent* h = ::new (m) AnimationEventLeaf();
+    g_aeDtorCount = 0; dtor_check::ResetFrees();
+    delete h;
     CHECK_EQ(g_aeDtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == m);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x20, 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    AnimationEventLeaf* el[3];
-    for (int i = 0; i < 3; ++i) el[i] = ::new (block + 8 + i * 0x20) AnimationEventLeaf();
-    g_aeDtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(el[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_aeDtorCount, 3);
-    CHECK(g_aeDtorOrder[0] == el[2]);
-    CHECK(g_aeDtorOrder[1] == el[1]);
-    CHECK(g_aeDtorOrder[2] == el[0]);
+
+    CHECK_ARRAY_DELETE(AnimationEventLeaf, g_aeDtorCount, g_aeDtorOrder);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,8 +324,8 @@ const void* g_agDtorOrder[4] = {};
 UNIT_TEST(b39_gfx_animationgroup_concrete_slot_order_by_pmf) {
     using G = Graphics::AnimationGroup;
     CHECK(!std::is_abstract<G>::value);
-    CHECK(!std::is_destructible<G>::value);
-    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK(std::is_destructible<G>::value);          // B3X W1: public virtual
+    CHECK(std::has_virtual_destructor<G>::value);
     CHECK_DTOR_SLOT(G);   // 0x1800167f0
     CHECK_SLOT(G, TypeName,       0x08/8);   // 0x180016310
     CHECK_SLOT(G, Type,           0x10/8);   // 0x1800162f0
@@ -335,26 +351,29 @@ UNIT_TEST(b39_gfx_animationgroup_ctor_stores_and_both_slot0_arms) {
     for (size_t off = 0x38; off < 0x58; off += 8)
         CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + off), (uint64_t)0);
     g_agDtorCount = 0;
-    CHECK(static_cast<void*>(g->DeletingDtor(0)) == static_cast<void*>(buf));
+    g->~AnimationGroup();                            // retail flags 0
     CHECK_EQ(g_agDtorCount, 1);
 
+    static_assert(dtor_check::HasClassDelete<Graphics::AnimationGroup>::value,
+                  "D0 frees through the class's own operator delete (MemFree)");
     void* m = Object::detail::InternalMemAlloc(0x58, 8);
     Graphics::AnimationGroup* h = ::new (m) Graphics::AnimationGroup();
     g_agDtorCount = 0;
-    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+    delete h;                                        // retail flags 1
     CHECK_EQ(g_agDtorCount, 1);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x58, 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    Graphics::AnimationGroup* el[3];
-    for (int i = 0; i < 3; ++i) el[i] = ::new (block + 8 + i * 0x58) Graphics::AnimationGroup();
-    g_agDtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(el[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_agDtorCount, 3);
-    CHECK(g_agDtorOrder[0] == el[2]);
-    CHECK(g_agDtorOrder[2] == el[0]);
+    Graphics::AnimationGroup* r =
+        dtor_check::NewOnMalloc<dtor_check::Recording<Graphics::AnimationGroup>>();
+    g_agDtorCount = 0; dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_agDtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
+
+    // The retired vector arm (0x1800167f0, stride 0x58): delete[], downward.
+    CHECK_ARRAY_DELETE(Graphics::AnimationGroup, g_agDtorCount, g_agDtorOrder);
 }
+
 
 // ---------------------------------------------------------------------------
 // PART C — Graphics::Animation, the 0x70 clip record (NON-polymorphic)

@@ -67,6 +67,7 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/graphics/Material.h"
 #include "runtime/types/graphics/GraphicsMesh.h"
@@ -112,7 +113,8 @@ const void* const* VTableOf(void* obj) {
 }
 
 // The nine retail byte offsets, shared by every Object::External leaf.
-constexpr int kDeletingDtor   = 0x00;
+constexpr int kDtorSlot
+   = 0x00;
 constexpr int kTypeName       = 0x08;
 constexpr int kType           = 0x10;
 constexpr int kGetFileVersion = 0x18;
@@ -122,8 +124,9 @@ constexpr int kReconstruct    = 0x30;
 constexpr int kDestruct       = 0x38;
 constexpr int kConstruct      = 0x40;   // introduced per branch — RULE B5-16
 
-// ENDGAME B.3.9 GFX: the destructor markers RECORD each call, so the real
-// inline `DeletingDtor`s can be seen running them once per element, downward.
+// ENDGAME B.3.9 GFX: the destructor markers RECORD each call, so `delete`, the
+// complete destructor and `delete[]` can be seen running them once per
+// element, downward (B3X W1).
 int         g_gfxDtorCount = 0;
 const void* g_gfxDtorOrder[4] = {};
 void NoteDtor(const void* self) {
@@ -138,36 +141,53 @@ void NoteDtor(const void* self) {
 // must carry the very same one.
 // ---------------------------------------------------------------------------
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
 
+// B3X W1: retail slot 0 is the destructor pair. Each probe records in its
+// destructor and frees through a recording class-scope operator delete.
 struct MaterialProbe final : Graphics::Material {
-    Object::Base* DeletingDtor(unsigned) override {
-        Note(this, kDeletingDtor / 8); return this;
-    }
+    ~MaterialProbe() override { Note(this, kDtorSlot / 8); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 struct MaterialInstanceProbe final : Graphics::MaterialInstance {
-    Object::Base* DeletingDtor(unsigned) override {
-        Note(this, kDeletingDtor / 8); return this;
-    }
+    ~MaterialInstanceProbe() override { Note(this, kDtorSlot / 8); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 struct GraphicsMeshProbe final : Graphics::GraphicsMesh {
-    Object::Base* DeletingDtor(unsigned) override {
-        Note(this, kDeletingDtor / 8); return this;
-    }
+    ~GraphicsMeshProbe() override { Note(this, kDtorSlot / 8); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 struct EdgeMeshProbe final : Graphics::EdgeMesh {
-    Object::Base* DeletingDtor(unsigned) override {
-        Note(this, kDeletingDtor / 8); return this;
-    }
+    ~EdgeMeshProbe() override { Note(this, kDtorSlot / 8); }
+    DTOR_CHECK_RECORDING_DELETE
 };
+
+// Retail slot 0 read raw: compiler [0] D1 runs ~P once and frees nothing
+// (retail flags 0); [1] D0 runs it and hands the block to the class-scope
+// operator delete (flags 1). D1 runs on a placement-new'd probe that is never
+// destroyed again (a stack probe would be destroyed twice).
+template <class P>
+void CheckDtorPair() {
+    alignas(P) unsigned char buf[sizeof(P)];
+    P* p = ::new (static_cast<void*>(buf)) P();
+    CHECK(VTableOf(p)[0] != VTableOf(p)[1]);
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    P* h = dtor_check::NewOnMalloc<P>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+}
 
 // The eight slots whose signature is plain machine words. `Compile` takes a
 // `const System::Filename&` (one pointer) and returns a four-byte `?AW4` enum in
@@ -176,7 +196,6 @@ struct EdgeMeshProbe final : Graphics::EdgeMesh {
 // inherit `Object::External`'s body, which does not Note().
 template <class T>
 void CheckExternalFamilySlots(void* raw, const ::Object::BaseTypeInfo* record) {
-    using DtorFn = void* (*)(void*, unsigned);
     using NameFn = const char* (*)(const void*);
     using TypeFn = uint32_t (*)(const void*);
     using VerFn  = int32_t (*)(const void*);
@@ -184,9 +203,7 @@ void CheckExternalFamilySlots(void* raw, const ::Object::BaseTypeInfo* record) {
     using PtrFn  = void* (*)(void*);
     using VoidFn = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, kDeletingDtor / 8);
-    CHECK(g_lastSelf == raw);
+    CheckDtorPair<T>();   // retail slot 0 (kDtorSlot): D1 / D0
 
     if (record) {   // DECLARE_TYPE's real slots 1/2 over the class's record (B.3.9 TI-REST)
         CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record->name);
@@ -215,12 +232,12 @@ void CheckExternalFamilySlots(void* raw, const ::Object::BaseTypeInfo* record) {
     CHECK_EQ(g_lastMark, kConstruct / 8);
 }
 
-// NINE distinct entries and no tenth that aliases one of them — the check that
-// a hand-built minted row of nine and GCC's table describe the same shape.
+// NINE retail slots, all distinct. B3X W1: they are TEN compiler entries
+// (retail slot 0 = D1 + D0), and D1 != D0 is part of the check.
 void CheckNineDistinctSlots(void* raw) {
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 9; ++i)
-        for (int j = i + 1; j < 9; ++j)
+    for (int i = 0; i < 10; ++i)
+        for (int j = i + 1; j < 10; ++j)
             CHECK(vt[i] != vt[j]);
 }
 
@@ -274,8 +291,9 @@ UNIT_TEST(graphics_material_construct_is_the_leafs_own_slot8) {
     CHECK(RetailEntry<MaterialProbe>(&mat, kConstruct / 8) !=
           RetailEntry<MaterialInstanceProbe>(&inst, kConstruct / 8));
 
-    // And slots 0..7 of each leaf are its own or the base's, never Construct's.
-    for (int i = 0; i < 8; ++i) {
+    // And slots 0..7 of each leaf are its own or the base's, never Construct's
+    // (retail 0..7 = compiler 0..8 since B3X W1: slot 0 is D1 + D0).
+    for (int i = 0; i < 9; ++i) {
         CHECK(VTableOf(static_cast<void*>(&mat))[i] !=
               RetailEntry<MaterialProbe>(&mat, kConstruct / 8));
         CHECK(VTableOf(static_cast<void*>(&inst))[i] !=
@@ -304,9 +322,9 @@ UNIT_TEST(graphics_material_qualified_call_does_not_reenter_the_door) {
 
     // A hand-built nine-entry table, the shape `rt_data_mint_tables.inc` stamps,
     // with slot 3 pointing at the door.
-    const void* minted[9] = {};
+    const void* minted[10] = {};   // nine retail slots = ten compiler entries
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 9; ++i) minted[i] = real[i];
+    for (int i = 0; i < 10; ++i) minted[i] = real[i];
     minted[RetailSlot<MaterialProbe>(kGetFileVersion / 8)] =
         reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
 
@@ -597,7 +615,8 @@ UNIT_TEST(graphics_edgemesh_layout) {
     CHECK_EQ((int)alignof(Graphics::EdgeMesh), 8);
     CHECK_EQ((int)sizeof(Graphics::EdgeMesh), (int)sizeof(RtGraphics::EdgeMesh));
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _reserved20), (int)sizeof(Object::External));
-    // B.3.9 GFX: concrete -- slot 0 is the class's own vector DeletingDtor.
+    // B.3.9 GFX: concrete -- slot 0 is the class's own (vector) deleting
+    // destructor, since B3X W1 the virtual destructor.
     CHECK(!std::is_abstract<Graphics::EdgeMesh>::value);
 
     // The four material slots, as retail's four getters name them.
@@ -682,8 +701,9 @@ UNIT_TEST(graphics_block_g_all_four_introduce_construct_at_slot8) {
         SlotAt<PtrFn, Object::Base>(all[c], kConstruct)(all[c]);
         CHECK_EQ(g_lastMark, kConstruct / 8);
         CHECK(g_lastSelf == all[c]);
-        // And slot 8 is distinct from all of slots 0..7 in that same table.
-        for (int i = 0; i < 8; ++i)
+        // And slot 8 is distinct from all of slots 0..7 in that same table
+        // (compiler 0..8: retail slot 0 is D1 + D0).
+        for (int i = 0; i < 9; ++i)
             CHECK(VTableOf(all[c])[i] != RetailEntry<Object::Base>(all[c], kConstruct / 8));
     }
 }
@@ -692,30 +712,32 @@ UNIT_TEST(graphics_block_g_all_four_introduce_construct_at_slot8) {
 // ENDGAME B.3.9 block GFX -- Material / GraphicsMesh CONCRETE (D1, B9-16).
 // ===========================================================================
 
+// B3X W1: retail flags 1 is `delete` (T's own D0, its class-scope MemFree
+// operator delete; the free proven on a Recording<T> stand-in); the vector arm
+// (flags 3, stride = sizeof) is retired: `delete[]` replaces it.
 template <class T> void CheckBothSlot0Arms(size_t stride) {
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
+    CHECK_EQ(stride, sizeof(T));
     void* m = Object::detail::InternalMemAlloc(sizeof(T), 8);
     T* h = ::new (m) T();
     g_gfxDtorCount = 0;
-    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+    delete h;
     CHECK_EQ(g_gfxDtorCount, 1);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * stride, 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * stride) T();
-    g_gfxDtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_gfxDtorCount, 3);
-    CHECK(g_gfxDtorOrder[0] == e[2]);
-    CHECK(g_gfxDtorOrder[1] == e[1]);
-    CHECK(g_gfxDtorOrder[2] == e[0]);
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
+    g_gfxDtorCount = 0; dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_gfxDtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
+
+    CHECK_ARRAY_DELETE(T, g_gfxDtorCount, g_gfxDtorOrder);
 }
 
 UNIT_TEST(b39_gfx_material_concrete_ctor_stores_and_both_slot0_arms) {
     using M = Graphics::Material;
-    CHECK(!std::is_destructible<M>::value);
-    CHECK(!std::has_virtual_destructor<M>::value);
+    CHECK(std::is_destructible<M>::value);            // B3X W1: public virtual
+    CHECK(std::has_virtual_destructor<M>::value);
     CHECK_DTOR_SLOT(M);   // 0x180011d20
     CHECK_SLOT(M, TypeName,       0x08/8);
     CHECK_SLOT(M, Type,           0x10/8);
@@ -737,16 +759,16 @@ UNIT_TEST(b39_gfx_material_concrete_ctor_stores_and_both_slot0_arms) {
     CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + 0x28), (uint64_t)0);
     CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + 0x30), (uint64_t)0);
     g_gfxDtorCount = 0;
-    CHECK(static_cast<void*>(m->DeletingDtor(0)) == static_cast<void*>(buf));
+    m->~Material();                                   // retail flags 0
     CHECK_EQ(g_gfxDtorCount, 1);
 
-    CheckBothSlot0Arms<M>(0x38);
+    CheckBothSlot0Arms<M>(0x38);   // retired vector arm: 0x180011d20
 }
 
 UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
     using G = Graphics::GraphicsMesh;
-    CHECK(!std::is_destructible<G>::value);
-    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK(std::is_destructible<G>::value);            // B3X W1: public virtual
+    CHECK(std::has_virtual_destructor<G>::value);
     CHECK_DTOR_SLOT(G);   // 0x180012bd0
     CHECK_SLOT(G, TypeName,       0x08/8);
     CHECK_SLOT(G, Type,           0x10/8);
@@ -773,10 +795,10 @@ UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
     for (size_t off = 0x80; off < 0x8c; off += 4) CHECK_EQ(D(off), 0x4cbebc20u);   //  1e8f
     for (size_t off = 0x8c; off < 0x98; off += 4) CHECK_EQ(D(off), 0xccbebc20u);   // -1e8f
     g_gfxDtorCount = 0;
-    CHECK(static_cast<void*>(g->DeletingDtor(0)) == static_cast<void*>(buf));
+    g->~GraphicsMesh();                               // retail flags 0
     CHECK_EQ(g_gfxDtorCount, 1);
 
-    CheckBothSlot0Arms<G>(0x98);
+    CheckBothSlot0Arms<G>(0x98);   // retired vector arm: 0x180012bd0
 }
 
 }  // namespace

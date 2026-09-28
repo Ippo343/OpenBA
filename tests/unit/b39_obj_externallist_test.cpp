@@ -8,13 +8,15 @@
 // which stands on the port registry and cannot link into `make unit`; here THIS
 // file defines them as RECORDING stubs — exactly the shape
 // tests/unit/pathfinding_picking_abi_test.cpp uses for Picking::PickingMesh —
-// so the REAL header's inline constructor and inline vector deleting
-// destructor run against a real compiler table. No other unit TU defines an
+// so the REAL header's inline constructor and the compiler's destructor pair
+// (B3X W1: retail's slot-0 vector deleting destructor is `virtual ~T()`, D1 +
+// D0) run against a real compiler table. No other unit TU defines an
 // ExternalList member (external_class.cpp deliberately defines none).
 // ============================================================================
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -54,12 +56,12 @@ ExternalList::~ExternalList() {
 }
 }  // namespace Object
 
-// Concrete, protected non-virtual dtor (so neither destructible from outside
-// nor carrying a virtual destructor), 0x30 bytes.
+// Concrete, 0x30 bytes. B3X W1: the destructor is public and virtual (retail
+// slot 0 = D1 + D0).
 UNIT_TEST(b39_obj_externallist_is_concrete_with_protected_nonvirtual_dtor) {
     CHECK(!std::is_abstract<Object::ExternalList>::value);
-    CHECK(!std::is_destructible<Object::ExternalList>::value);
-    CHECK(!std::has_virtual_destructor<Object::ExternalList>::value);
+    CHECK(std::is_destructible<Object::ExternalList>::value);
+    CHECK(std::has_virtual_destructor<Object::ExternalList>::value);
     CHECK_EQ(sizeof(Object::ExternalList), (size_t)0x30);
 }
 
@@ -104,34 +106,36 @@ UNIT_TEST(b39_obj_externallist_ctor_makes_retails_stores) {
     CHECK_EQ(g_elLastSlot, 3);
 
     g_elDtorCount = 0;
-    CHECK(l->DeletingDtor(0) == l);        // flags 0: destroy, no free
-    CHECK(l2->DeletingDtor(0) == l2);
+    l->~ExternalList();                     // retail flags 0: destroy, no free
+    l2->~ExternalList();
     CHECK_EQ(g_elDtorCount, 2);
 }
 
-// Slot 0 FREES on `flags & 1` (host seam: TypeTreeFree == free, so a wrong
-// pointer is a heap fault here), and the ARRAY arm reads the int32 count at
-// `this - 8`, destroys DOWNWARD with the 0x30 stride, frees and returns
-// `this - 8` — both arms exactly as the retired RT_DELDTOR row 0x180007800 ran
-// them.
+// Retail slot 0 FREES on `flags & 1`, and its ARRAY arm read the int32 count
+// at `this - 8`, destroyed DOWNWARD with the 0x30 stride, freed and returned
+// `this - 8` — both arms as the retired RT_DELDTOR row 0x180007800 ran them.
+// B3X W1: flags 1 is `delete l` (the class's D0: ~ExternalList once, then the
+// root's class-scope MemFree operator delete; host free, matching
+// InternalMemAlloc), the free itself proven on a Recording<ExternalList>; the
+// vector arm has no Itanium counterpart and `delete[]` of a `new
+// ExternalList[3]` replaces it.
 UNIT_TEST(b39_obj_externallist_deletingdtor_both_arms) {
+    static_assert(dtor_check::HasClassDelete<Object::ExternalList>::value, "class-scope operator delete");
     void* p = Object::detail::InternalMemAlloc(sizeof(Object::ExternalList), 8);
     CHECK(p != nullptr);
     Object::ExternalList* l = ::new (p) Object::ExternalList();
     g_elDtorCount = 0;
-    CHECK(l->DeletingDtor(1) == l);
+    delete l;
     CHECK_EQ(g_elDtorCount, 1);
+    CHECK(g_elDtorOrder[0] == p);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x30, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;                       // the upper dword is 0 too
-    std::memcpy(block, &cookie, sizeof cookie);
-    Object::ExternalList* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x30) Object::ExternalList();
-    g_elDtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_elDtorCount, 3);
-    CHECK(g_elDtorOrder[0] == e[2]);
-    CHECK(g_elDtorOrder[1] == e[1]);
-    CHECK(g_elDtorOrder[2] == e[0]);
+    Object::Base* r = dtor_check::NewOnMalloc<dtor_check::Recording<Object::ExternalList>>();
+    g_elDtorCount = 0; dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_elDtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
+
+    CHECK_ARRAY_DELETE(Object::ExternalList, g_elDtorCount, g_elDtorOrder);
 }
+

@@ -123,7 +123,7 @@ void CheckLeafShape() {
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::is_final<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<ControllerComponent, T>::value));
     CHECK((std::is_base_of<Component, T>::value));
     CHECK((std::is_base_of<Object::Internal, T>::value));

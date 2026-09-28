@@ -17,7 +17,7 @@
 // differs is spelled out.
 //
 // PART A — LAYOUT: sizeof / alignof / every offset the headers claim, the
-//   parent edges `_ParentTypeName` proves, no virtual destructor, abstract.
+//   parent edges `_ParentTypeName` proves, abstract (B3X W1: a public virtual destructor).
 // PART B — SLOT ORDER: probe subclasses of the REAL classes; each OWN slot is
 //   raw-called by byte offset and the marker that runs names the member; each
 //   INHERITED slot is compared, pointer for pointer, with the parent probe's
@@ -34,6 +34,8 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
+
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -152,47 +154,36 @@ enum : int {
 };
 
 // ---------------------------------------------------------------------------
-// Probes. Each overrides ONLY slot 0 (the one pure slot a leaf keeps), so every
-// other entry in its table is the leaf's (or an ancestor's) member.
+// Probes. Each is a final subclass with its own table and its own implicit
+// destructor (B3X W1: retail slot 0 is the destructor pair), so every other
+// entry in its table is the leaf's (or an ancestor's) member.
 // ---------------------------------------------------------------------------
 struct BareElementProbe final : UI::Element {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     void ComputeSize() override {}
 };
 struct GroupElementProbe final : UI::GroupElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct PageElementProbe final : UI::PageElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct RadioElementProbe final : UI::RadioElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct GroupDescriptionProbe final : UI::GroupDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct PageDescriptionProbe final : UI::PageDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct RadioDescriptionProbe final : UI::RadioDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 
 struct ImageElementProbe final : UI::ImageElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct AnimatedImageElementProbe final : UI::AnimatedImageElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct ImageDescriptionProbe final : UI::ImageDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct AnimatedImageDescriptionProbe final : UI::AnimatedImageDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -208,9 +199,9 @@ Object::InternalPtr<UI::Element>* WriteMarkerHandle(Object::InternalPtr<UI::Elem
 
 }  // namespace
 
-// ENDGAME B.3.9 UI-A: the destructor markers RECORD each call, so the real
-// `DeletingDtor` of a concrete class (inline in its header) can be seen
-// running ~X once per element, in retail's DESCENDING order.
+// ENDGAME B.3.9 UI-A: the destructor markers RECORD each call, so a concrete
+// class's destructors (B3X W1: D1, D0 and delete[], the retired slot-0 arms)
+// can be seen running ~X once per element, in retail's DESCENDING order.
 namespace {
 int         g_b39DtorCount = 0;
 const void* g_b39DtorOrder[8] = {};
@@ -454,20 +445,20 @@ UNIT_TEST(ui_leaf_c2_group_chain_sizes_match_retail) {
     CHECK((std::is_base_of<UI::GroupElement, UI::RadioElement>::value));
 
     CHECK(!std::is_abstract<UI::GroupDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::GroupDescription>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::GroupDescription>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::PageDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::PageDescription>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::PageDescription>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::RadioDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::RadioDescription>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::RadioDescription>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::GroupElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::GroupElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::GroupElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::PageElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::PageElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::PageElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::RadioElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::RadioElement>::value);  // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::GroupDescription>::value);
-    CHECK(!std::has_virtual_destructor<UI::PageElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::RadioElement>::value);
+    CHECK(std::is_destructible<UI::RadioElement>::value);  // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::GroupDescription>::value);
+    CHECK(std::has_virtual_destructor<UI::PageElement>::value);
+    CHECK(std::has_virtual_destructor<UI::RadioElement>::value);
 
     // PageElementOffsets (widgets_layout.cpp's view) agrees with the class.
     CHECK_EQ((size_t)UI::PageElementOffsets::kActivePage, offsetof(UI::PageElement, _activePage));
@@ -580,9 +571,9 @@ UNIT_TEST(ui_leaf_c2_page_serialize_qualified_does_not_reenter) {
     PageDescriptionProbe page;
     void* raw = static_cast<void*>(&page);
 
-    const void* minted[10] = {};
+    const void* minted[11] = {};   // ten retail slots = eleven compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 10; ++i) minted[i] = real[i];
+    for (int i = 0; i < 11; ++i) minted[i] = real[i];
     minted[RetailSlot<Object::Base>(kD5_Serialize / 8)] = reinterpret_cast<const void*>(&MintedPageSerializeDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
@@ -630,15 +621,15 @@ UNIT_TEST(ui_leaf_c2_image_chain_sizes_match_retail) {
     CHECK((std::is_base_of<UI::Element,      UI::ImageElement>::value));
     CHECK((std::is_base_of<UI::ImageElement, UI::AnimatedImageElement>::value));
     CHECK(!std::is_abstract<UI::ImageDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ImageDescription>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::ImageDescription>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::AnimatedImageDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::AnimatedImageDescription>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::AnimatedImageDescription>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::ImageElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ImageElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::ImageElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::AnimatedImageElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::AnimatedImageElement>::value);  // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::ImageElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::AnimatedImageDescription>::value);
+    CHECK(std::is_destructible<UI::AnimatedImageElement>::value);  // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::ImageElement>::value);
+    CHECK(std::has_virtual_destructor<UI::AnimatedImageDescription>::value);
 }
 
 UNIT_TEST(ui_leaf_c2_image_descriptions_slot_order) {
@@ -719,27 +710,31 @@ UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
 // ===========================================================================
 namespace {
 
+// B3X W1: retail's flags-1 arm is `delete one` (T's own D0: the chain once,
+// then T's class-scope operator delete, InternalMemFree == free here); the
+// free is PROVEN on a dtor_check::Recording<T> stand-in. Retail's flags-3
+// vector arm has no Itanium counterpart: `delete[]` of `new T[3]` runs three
+// destructors, downward.
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
+    CHECK_EQ(sizeof(T), elemSize);
     void* p = Object::detail::InternalMemAlloc(elemSize, 8);
     CHECK(p != nullptr);
     T* one = make(p);
     g_b39DtorCount = 0;
-    CHECK(one->DeletingDtor(1) == one);
+    delete one;
     CHECK(g_b39DtorCount >= 1);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_b39DtorCount, 3);
-    CHECK(g_b39DtorOrder[0] == e[2]);
-    CHECK(g_b39DtorOrder[1] == e[1]);
-    CHECK(g_b39DtorOrder[2] == e[0]);
+    dtor_check::ResetFrees();
+    delete r;
+    CHECK(g_b39DtorCount >= 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
+
+    CHECK_ARRAY_DELETE(T, g_b39DtorCount, g_b39DtorOrder);
 }
 }  // namespace
 
@@ -771,7 +766,7 @@ UNIT_TEST(b39_uia_image_family_ctors_make_retails_stores) {
         ImageDescriptionProbe probe;
         CHECK(VTableOf(d) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~ImageDescription();
         CHECK_EQ(g_b39DtorCount, 1);
     }
     {
@@ -784,7 +779,7 @@ UNIT_TEST(b39_uia_image_family_ctors_make_retails_stores) {
         CHECK_EQ(d->_framesPerSecond, 0x1e);
         CHECK_EQ(d->_pad94, 0xCDCDCDCDu);             // NOT written
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~AnimatedImageDescription();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~AnimatedImageDescription, ~ImageDescription
     }
     {
@@ -802,7 +797,7 @@ UNIT_TEST(b39_uia_image_family_ctors_make_retails_stores) {
         ImageElementProbe probe{};
         CHECK(VTableOf(e) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~ImageElement();
         CHECK_EQ(g_b39DtorCount, 1);
     }
     {
@@ -816,11 +811,12 @@ UNIT_TEST(b39_uia_image_family_ctors_make_retails_stores) {
         CHECK_EQ(e->_padF4, 0xCDCDCDCDu);             // NOT written
         CHECK_EQ(e->_accumTicks, 0);
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~AnimatedImageElement();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~AnimatedImageElement, ~ImageElement
     }
 }
 
+// Retired vector arms: ImageDescription 0x1800361f0, ImageElement 0x180036600.
 UNIT_TEST(b39_uia_image_family_deletingdtor_both_arms) {
     FactoryScope scope;
     B39ExpectBothArms<UI::ImageDescription>(0x80, [](void* p) { return ::new (p) UI::ImageDescription(); });
@@ -855,7 +851,7 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
         GroupDescriptionProbe probe;
         CHECK(VTableOf(d) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~GroupDescription();
         CHECK_EQ(g_b39DtorCount, 1);
     }
     {
@@ -866,7 +862,7 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
         CHECK_EQ(d->_activePage, 0);
         CHECK_EQ(d->_pad7c, 0xCDCDCDCDu);             // NOT written
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~PageDescription();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~PageDescription, ~GroupDescription
     }
     {
@@ -876,7 +872,7 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
         CHECK_EQ(d->_activeRadio, -1);
         CHECK_EQ(d->_pad7c, 0xCDCDCDCDu);             // NOT written
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~RadioDescription();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~RadioDescription, ~GroupDescription
     }
     {
@@ -887,7 +883,7 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
         GroupElementProbe probe{};
         CHECK(VTableOf(e) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~GroupElement();
         CHECK_EQ(g_b39DtorCount, 1);
     }
     {
@@ -898,7 +894,7 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
         CHECK_EQ(e->_activePage, 0);
         CHECK_EQ(e->_padC4, 0xCDCDCDCDu);             // NOT written
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~PageElement();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~PageElement, ~GroupElement
     }
     {
@@ -911,12 +907,14 @@ UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
         CHECK_EQ(e->_activeIndex, -1);
         CHECK_EQ(e->_padD4, 0xCDCDCDCDu);             // NOT written
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~RadioElement();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~RadioElement, ~GroupElement
     }
 }
 
+// Retired vector arms: GroupDescription 0x180046af0, GroupElement 0x180046e10.
 UNIT_TEST(b39_uia_group_family_deletingdtor_both_arms) {
+
     FactoryScope scope;
     B39ExpectBothArms<UI::GroupDescription>(0x78, [](void* p) { return ::new (p) UI::GroupDescription(); });
     B39ExpectBothArms<UI::GroupElement>(0xc0, [](void* p) { return ::new (p) UI::GroupElement(); });

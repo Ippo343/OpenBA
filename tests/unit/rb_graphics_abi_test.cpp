@@ -21,6 +21,7 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/graphics/Geometry.h"
 #include "runtime/types/graphics/ParticleInstance.h"
@@ -59,6 +60,14 @@ struct Entry { int ev; const void* vptr; };
 Entry g_log[16];
 int   g_n = 0;
 void Log(int ev, const void* self) { if (g_n < 16) g_log[g_n++] = Entry{ev, VptrOf(self)}; }
+
+// B3X W1: retail slot 0 of every class here is a deleting destructor; the
+// product declares `virtual ~T()` (compiler slots 0 D1 / 1 D0) and there is no
+// vector arm. `g_arr*` is the per-object destructor log CHECK_ARRAY_DELETE
+// needs (the Ev log above records vptrs, not `this`).
+int         g_arrN = 0;
+const void* g_arrOrder[8] = {};
+void NoteArr(const void* self) { if (g_arrN < 8) g_arrOrder[g_arrN] = self; ++g_arrN; }
 
 }  // namespace
 
@@ -138,30 +147,42 @@ namespace {
 
 // ---- stand-ins for the exe subclasses -------------------------------------
 struct RbGeometry final : Graphics::Geometry {   // StatusIcon member / LOOP geometry
-    Graphics::Geometry* DeletingDtor(unsigned) override { return this; }
     void Update(const System::Time&) override {}
     void Draw(Video::Context&, const Graphics::Camera&, Graphics::ExternalPtrHandle,
               float, int, int, int) const override {}
     void AddDrawItems(const Graphics::Scene&, Graphics::Renderer&) const override {}
 };
 struct RbTornadoInstance final : Graphics::ParticleInstance {
-    Graphics::Geometry* DeletingDtor(unsigned) override { return this; }
     void Update(const System::Time&) override {}
 };
 struct RbTornado final : Graphics::Particle {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     Graphics::ParticleInstance* CreateSystem() const override { return nullptr; }
 };
 struct RbAnimAudioEvent final : Graphics::AnimationEvent {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     Object::External* Construct() override { return this; }
 };
+
+// An array stand-in for a concrete product T: its destructor logs `this` once
+// per object, then T's chain runs (for the retired vector arm's replacement).
+template <class T> struct RbArr final : T {
+    ~RbArr() override { NoteArr(this); }
+};
+
+// Retail flags 1, the free PROVEN: `delete` through a T* runs T's chain once and
+// the dynamic type's class-scope operator delete (a recording stand-in's)
+// receives the block exactly once.
+template <class T> bool RecordedDeleteFreesOnce() {
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
+    dtor_check::ResetFrees();
+    delete r;
+    return dtor_check::g_frees == 1 && dtor_check::g_lastFree == static_cast<const void*>(r);
+}
 
 template <class T> T* BuildIn(unsigned char* buf) {
     std::memset(buf, 0xCD, sizeof(T));
@@ -256,9 +277,15 @@ UNIT_TEST(rb_graphics_doors_reach_the_same_bodies) {
 // section 4: 0x14015e240 MeshInstance, 0x14015e290 SunLight): public real
 // ctors, and slot 0 is the exe's scalar deleting dtor (0x140019e80 /
 // 0x140019e40: ~X, then MemFree on flags & 1).
+// B3X W1: that slot is the destructor pair. The `_ZTV` groups are read RAW on
+// purpose: [2] (the address point) is D1 `void(*)(void*)` and frees nothing,
+// [3] is D0, the deleting destructor retail's flags-1 call reached. This pins
+// the new two-slot order directly.
 // ===========================================================================
 UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
-    using Slot0 = void* (*)(void*, unsigned);
+    using DtorFn = void (*)(void*);
+    CHECK(g_rbMiVtGroup[2] != g_rbMiVtGroup[3]);
+    CHECK(g_rbSlVtGroup[2] != g_rbSlVtGroup[3]);
     g_n = 0;
     void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::MeshInstance), 8);
     Graphics::MeshInstance* mi = ::new (m) Graphics::MeshInstance();
@@ -266,8 +293,8 @@ UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
     CHECK_EQ(g_n, 2);
     CHECK_EQ(g_log[0].ev, (int)kGeoInit); CHECK(g_log[0].vptr == GeoVt());
     CHECK_EQ(g_log[1].ev, (int)kMiInit);  CHECK(g_log[1].vptr == &g_rbMiVtGroup[2]);
-    Slot0 s0 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbMiVtGroup[2]));
-    CHECK(s0(mi, 1u) == m);
+    DtorFn d0 = reinterpret_cast<DtorFn>(const_cast<void*>(g_rbMiVtGroup[3]));
+    d0(mi);                                   // flags 1: destroy + free (m)
     CHECK_EQ(g_n, 4);
     CHECK_EQ(g_log[2].ev, (int)kMiRel);   CHECK(g_log[2].vptr == &g_rbMiVtGroup[2]);
     CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
@@ -278,11 +305,14 @@ UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
     CHECK(VptrOf(sl) == &g_rbSlVtGroup[2]);
     CHECK_EQ(g_n, 2);
     CHECK_EQ(g_log[1].ev, (int)kSlInit);  CHECK(g_log[1].vptr == &g_rbSlVtGroup[2]);
-    Slot0 s1 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbSlVtGroup[2]));
-    CHECK(s1(sl, 1u) == sm);
+    DtorFn d0s = reinterpret_cast<DtorFn>(const_cast<void*>(g_rbSlVtGroup[3]));
+    d0s(sl);                                  // flags 1: destroy + free (sm)
     CHECK_EQ(g_n, 4);
     CHECK_EQ(g_log[2].ev, (int)kSlRel);   CHECK(g_log[2].vptr == &g_rbSlVtGroup[2]);
     CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
+    // The free the raw D0 calls made, proven on recording stand-ins.
+    CHECK(RecordedDeleteFreesOnce<Graphics::MeshInstance>());
+    CHECK(RecordedDeleteFreesOnce<Graphics::SunLight>());
 
     // (MeshInstance's and SunLight's doors are retired -- ENDGAME B.3.9.)
 }
@@ -290,8 +320,9 @@ UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
 // ENDGAME B.3.9 pilot c2: with the ??0/??1 doors gone, the exe's builder
 // `::new (p) Graphics::SunLight()` and the table's slot 0 are the only way in
 // and out. Slot 0 with flags 0 runs ~SunLight and frees nothing.
+// B3X W1: flags 0 is D1, `_ZTV` [2] (the address point), read raw on purpose.
 UNIT_TEST(b39_sunlight_real_ctor_is_the_only_builder) {
-    using Slot0 = void* (*)(void*, unsigned);
+    using D1Fn = void (*)(void*);
     alignas(8) unsigned char buf[sizeof(Graphics::SunLight)] = {};
     g_n = 0;
     Graphics::SunLight* sl = ::new (static_cast<void*>(buf)) Graphics::SunLight();
@@ -299,8 +330,8 @@ UNIT_TEST(b39_sunlight_real_ctor_is_the_only_builder) {
     CHECK_EQ(g_n, 2);
     CHECK_EQ(g_log[0].ev, (int)kGeoInit); CHECK(g_log[0].vptr == GeoVt());
     CHECK_EQ(g_log[1].ev, (int)kSlInit);  CHECK(g_log[1].vptr == &g_rbSlVtGroup[2]);
-    Slot0 s0 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbSlVtGroup[2]));
-    CHECK(s0(sl, 0u) == static_cast<void*>(buf));
+    D1Fn d1 = reinterpret_cast<D1Fn>(const_cast<void*>(g_rbSlVtGroup[2]));
+    d1(sl);                                   // destroy in place, nothing freed
     CHECK_EQ(g_n, 4);
     CHECK_EQ(g_log[2].ev, (int)kSlRel);   CHECK(g_log[2].vptr == &g_rbSlVtGroup[2]);
     CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
@@ -323,14 +354,19 @@ UNIT_TEST(rb_materialinstance_ctor_is_retail_0x180103980_and_concrete) {
     CHECK_EQ(Q(m, 0x08), (uint64_t)0);
     CHECK_EQ(Q(m, 0x10), (uint64_t)0);
     CHECK_EQ(Q(m, 0x18), (uint64_t)0);
-    CHECK(!std::is_destructible<Graphics::MaterialInstance>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::MaterialInstance>::value);
-    m->DeletingDtor(0);
+    // B3X W1: public virtual destructor (retail slot 0 = D1 + D0).
+    CHECK(std::is_destructible<Graphics::MaterialInstance>::value);
+    CHECK(std::has_virtual_destructor<Graphics::MaterialInstance>::value);
+    m->~MaterialInstance();                   // retail slot 0, flags 0
 
+    // Retail flags 1 through the raw table: `_ZTV` [3] is D0 (read raw on
+    // purpose; [2] is D1 and would free nothing).
+    CHECK(g_rbMatVtGroup[2] != g_rbMatVtGroup[3]);
     void* mem = Object::detail::InternalMemAlloc(sizeof(Graphics::MaterialInstance), 8);
     Graphics::MaterialInstance* h = ::new (mem) Graphics::MaterialInstance();
-    using Slot0 = Object::Base* (*)(void*, unsigned);
-    CHECK(static_cast<void*>(reinterpret_cast<Slot0>(const_cast<void*>(g_rbMatVtGroup[2]))(h, 1u)) == mem);
+    using D0Fn = void (*)(void*);
+    reinterpret_cast<D0Fn>(const_cast<void*>(g_rbMatVtGroup[3]))(h);
+    CHECK(RecordedDeleteFreesOnce<Graphics::MaterialInstance>());
 }
 
 UNIT_TEST(rb_graphics_bases_shape) {
@@ -338,16 +374,17 @@ UNIT_TEST(rb_graphics_bases_shape) {
     CHECK(std::is_abstract<Graphics::ParticleInstance>::value);
     CHECK(std::is_abstract<Graphics::Particle>::value);
     CHECK(std::is_abstract<Graphics::AnimationEvent>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::Geometry>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::Particle>::value);
+    // B3X W1: every root / leaf here declares `virtual ~T()`.
+    CHECK(std::has_virtual_destructor<Graphics::Geometry>::value);
+    CHECK(std::has_virtual_destructor<Graphics::Particle>::value);
     CHECK_EQ(sizeof(RbGeometry), (size_t)0xc0);
     CHECK_EQ(sizeof(RbTornadoInstance), (size_t)0xd8);
     CHECK_EQ(sizeof(RbTornado), (size_t)0x48);
     CHECK_EQ(sizeof(RbAnimAudioEvent), (size_t)0x20);
     CHECK(!std::is_abstract<Graphics::MeshInstance>::value);
     CHECK(!std::is_abstract<Graphics::SunLight>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::MeshInstance>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::SunLight>::value);
+    CHECK(std::has_virtual_destructor<Graphics::MeshInstance>::value);
+    CHECK(std::has_virtual_destructor<Graphics::SunLight>::value);
 }
 
 // ===========================================================================
@@ -358,10 +395,11 @@ UNIT_TEST(b39_gfx_lights_shape_and_slot_order) {
     CHECK(!std::is_abstract<Graphics::AmbientLight>::value);
     CHECK(!std::is_abstract<Graphics::SpotLight>::value);
     CHECK(std::is_abstract<Graphics::Light>::value);
-    CHECK(!std::is_destructible<Graphics::AmbientLight>::value);
-    CHECK(!std::is_destructible<Graphics::SpotLight>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::AmbientLight>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::SpotLight>::value);
+    // B3X W1: public virtual destructors.
+    CHECK(std::is_destructible<Graphics::AmbientLight>::value);
+    CHECK(std::is_destructible<Graphics::SpotLight>::value);
+    CHECK(std::has_virtual_destructor<Graphics::AmbientLight>::value);
+    CHECK(std::has_virtual_destructor<Graphics::SpotLight>::value);
     using A = Graphics::AmbientLight;
     using S = Graphics::SpotLight;
     CHECK_DTOR_SLOT(A);   // 0x180059080
@@ -394,28 +432,21 @@ UNIT_TEST(b39_gfx_ambientlight_ctor_stores_and_both_slot0_arms) {
     CHECK_EQ(D(a, 0x30), 0x8000u);
     const void* vt = VptrOf(a);
     CHECK(vt != GeoVt());
-    CHECK(a->DeletingDtor(0) == a);             // destroy, no free
+    a->~AmbientLight();                         // retail flags 0: destroy, no free
     CHECK_EQ(g_n, 3);
     CHECK_EQ(g_log[1].ev, (int)kAlRel); CHECK(g_log[1].vptr == vt);
     CHECK_EQ(g_log[2].ev, (int)kGeoRel); CHECK(g_log[2].vptr == GeoVt());
 
     void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::AmbientLight), 8);
     Graphics::AmbientLight* h = ::new (m) Graphics::AmbientLight();
-    CHECK(h->DeletingDtor(1) == h);             // destroy AND free
-
-    // The vector arm: int32 count at this-8, elements destroyed DOWNWARD with
-    // stride 0xd8, block freed, this-8 returned.
-    uint8_t* block = static_cast<uint8_t*>(
-        Object::detail::InternalMemAlloc(8 + 3 * sizeof(Graphics::AmbientLight), 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    Graphics::AmbientLight* e[3];
-    for (int i = 0; i < 3; ++i)
-        e[i] = ::new (block + 8 + i * sizeof(Graphics::AmbientLight)) Graphics::AmbientLight();
     g_n = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_n, 6);
-    CHECK(g_log[0].vptr == vt);
+    delete h;                                   // retail flags 1: destroy AND free
+    CHECK_EQ(g_n, 2);
+    CHECK(RecordedDeleteFreesOnce<Graphics::AmbientLight>());
+
+    // The retired vector arm (0x180059080, stride 0xd8): delete[] of a
+    // new[] block runs every element's chain, downward.
+    CHECK_ARRAY_DELETE(RbArr<Graphics::AmbientLight>, g_arrN, g_arrOrder);
 }
 
 // ??0SpotLight 0x180106690: the frustum's planes zero, isOrthographic 1, 0.1f /
@@ -446,7 +477,7 @@ UNIT_TEST(b39_gfx_spotlight_ctor_stores_and_dtor_chain) {
     CHECK_EQ(D(s, 0x30), 0x8000u);
     s->_shadowTarget = nullptr;                      // the marker CreateTargets built none
     const void* vt = VptrOf(s);
-    CHECK(s->DeletingDtor(0) == s);
+    s->~SpotLight();                            // retail flags 0
     CHECK_EQ(g_n, 4);
     CHECK_EQ(g_log[2].ev, (int)kSpRel); CHECK(g_log[2].vptr == vt);
     CHECK_EQ(g_log[3].ev, (int)kGeoRel); CHECK(g_log[3].vptr == GeoVt());
@@ -454,11 +485,23 @@ UNIT_TEST(b39_gfx_spotlight_ctor_stores_and_dtor_chain) {
     void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::SpotLight), 8);
     Graphics::SpotLight* h = ::new (m) Graphics::SpotLight();
     h->_shadowTarget = nullptr;
-    CHECK(h->DeletingDtor(1) == h);
+    g_n = 0;
+    delete h;                                   // retail flags 1
+    CHECK_EQ(g_n, 2);
+    Graphics::SpotLight* r = dtor_check::NewOnMalloc<dtor_check::Recording<Graphics::SpotLight>>();
+    r->_shadowTarget = nullptr;
+    dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
 }
 
 // ---- Particle / ParticleSystem (vtable rows 97 / 99) ----------------------
 struct RbParticleLeaf final : Graphics::Particle {   // slot 0 NOT overridden
+    // B3X W1: logs `this` for the array check; frees through a recording
+    // class-scope operator delete (the free retail's flags-1 arm made).
+    ~RbParticleLeaf() override { NoteArr(this); }
+    DTOR_CHECK_RECORDING_DELETE
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     Graphics::ParticleInstance* CreateSystem() const override { return nullptr; }
@@ -467,32 +510,31 @@ struct RbParticleLeaf final : Graphics::Particle {   // slot 0 NOT overridden
 UNIT_TEST(b39_gfx_particle_slot0_is_the_classs_own_both_arms) {
     // Particle stays abstract (three pure slots); its slot 0 is concrete now.
     CHECK(std::is_abstract<Graphics::Particle>::value);
-    CHECK(!std::is_destructible<Graphics::Particle>::value);
+    CHECK(std::is_destructible<Graphics::Particle>::value);   // B3X W1: public
     CHECK_DTOR_SLOT(Graphics::Particle);   // 0x180020160
     CHECK_SLOT(Graphics::Particle, CreateSystem, 0x40/8);   // _purecall, B5-16
 
     void* m = Object::detail::InternalMemAlloc(sizeof(RbParticleLeaf), 8);
-    RbParticleLeaf* p = ::new (m) RbParticleLeaf();
-    g_n = 0;
-    CHECK(static_cast<void*>(p->DeletingDtor(1)) == m);      // ~Particle, freed
+    Graphics::Particle* p = ::new (m) RbParticleLeaf();
+    g_n = 0; dtor_check::ResetFrees();
+    delete p;                                                 // ~Particle, freed
     CHECK_EQ(g_n, 1);
     CHECK_EQ(g_log[0].ev, (int)kPaRel);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == m);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x48, 8));
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    RbParticleLeaf* e0 = ::new (block + 8) RbParticleLeaf();
-    ::new (block + 8 + 0x48) RbParticleLeaf();
+    // The retired vector arm (0x180020160, stride 0x48): delete[] runs the
+    // chain per element, downward.
     g_n = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);   // stride 0x48, downward
-    CHECK_EQ(g_n, 2);
+    CHECK_ARRAY_DELETE(RbParticleLeaf, g_arrN, g_arrOrder);
+    CHECK_EQ(g_n, 3);
 }
 
 UNIT_TEST(b39_gfx_particlesystem_concrete_slot_order_and_both_slot0_arms) {
     using PS = Graphics::ParticleSystem;
     CHECK(!std::is_abstract<PS>::value);
-    CHECK(!std::is_destructible<PS>::value);
-    CHECK(!std::has_virtual_destructor<PS>::value);
+    CHECK(std::is_destructible<PS>::value);            // B3X W1
+    CHECK(std::has_virtual_destructor<PS>::value);
     CHECK_DTOR_SLOT(PS);   // 0x180020a70
     CHECK_SLOT(PS, TypeName,       0x08/8);   // 0x1800203e0
     CHECK_SLOT(PS, Type,           0x10/8);   // 0x1800203c0
@@ -513,26 +555,23 @@ UNIT_TEST(b39_gfx_particlesystem_concrete_slot_order_and_both_slot0_arms) {
     CHECK_EQ(D(ps, 0x2c), 0xCDCDCDCDu);
     const void* vt = VptrOf(ps);
     g_n = 0;
-    CHECK(static_cast<void*>(ps->DeletingDtor(0)) == static_cast<void*>(buf));
+    ps->~ParticleSystem();                                    // retail flags 0
     CHECK_EQ(g_n, 2);                                         // ~ParticleSystem, then ~Particle
     CHECK_EQ(g_log[0].ev, (int)kPsRel); CHECK(g_log[0].vptr == vt);
     CHECK_EQ(g_log[1].ev, (int)kPaRel); CHECK(g_log[1].vptr == PaVt());
 
     void* m = Object::detail::InternalMemAlloc(sizeof(PS), 8);
     PS* h = ::new (m) PS();
-    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
-
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x108, 8));
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    PS* e0 = ::new (block + 8) PS();
-    PS* e1 = ::new (block + 8 + 0x108) PS();
     g_n = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
-    CHECK_EQ(g_n, 4);
+    delete h;                                                 // retail flags 1
+    CHECK_EQ(g_n, 2);
+    CHECK(RecordedDeleteFreesOnce<PS>());
+
+    // The retired vector arm (0x180020a70, stride 0x108).
+    g_n = 0;
+    CHECK_ARRAY_DELETE(RbArr<PS>, g_arrN, g_arrOrder);
+    CHECK_EQ(g_n, 6);
     CHECK_EQ(g_log[0].ev, (int)kPsRel);
-    CHECK(g_log[0].vptr == vt);
-    (void)e1;
 }
 
 }  // namespace
@@ -541,8 +580,8 @@ UNIT_TEST(b39_gfx_particlesystem_concrete_slot_order_and_both_slot0_arms) {
 // ENDGAME B.3.9 block GFX -- ReflectionImageBuffer CONCRETE (D1).
 // Its out-of-line members are MARKERS (imagebuffer_derived.cpp does not link
 // here; Video::ImageBuffer's and GeneratedImageBuffer's are rb_video_abi_test's
-// markers); ~ReflectionImageBuffer records each call, so the real inline
-// DeletingDtor can be seen running it.
+// markers); ~ReflectionImageBuffer records each call, so `delete`, the
+// complete destructor and `delete[]` can be seen running it.
 // ===========================================================================
 namespace {
 int         g_riRel = 0;
@@ -572,8 +611,8 @@ namespace {
 UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
     using R = Graphics::ReflectionImageBuffer;
     CHECK(!std::is_abstract<R>::value);
-    CHECK(!std::is_destructible<R>::value);            // ~R protected
-    CHECK(!std::has_virtual_destructor<R>::value);
+    CHECK(std::is_destructible<R>::value);             // B3X W1: ~R public virtual
+    CHECK(std::has_virtual_destructor<R>::value);
     CHECK_EQ(sizeof(R), (size_t)0x90);
 
     g_riRel = 0;
@@ -591,23 +630,16 @@ UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
     CHECK_EQ(Q(0x80), (uint64_t)0);
     CHECK_EQ(Q(0x88), (uint64_t)0x3f800000ull);        // retail's one imm64 store
 
-    // scalar arm, flags 1: ~R under R's table, then the chain, then free.
-    CHECK(static_cast<void*>(r->DeletingDtor(1u)) == mem);
+    // retail flags 1 is `delete`: ~R under R's table, then the chain, then free.
+    delete r;
     CHECK_EQ(g_riRel, 1);
     CHECK(g_riRelVptr == &g_rbRiVtGroup[2]);
-
-    // vector arm, flags 3: count at block-8, destroyed downward, block freed.
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x90, 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    R* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x90) R();
     g_riRel = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
-    CHECK_EQ(g_riRel, 3);
-    CHECK(g_riRelOrder[0] == e[2]);
-    CHECK(g_riRelOrder[1] == e[1]);
-    CHECK(g_riRelOrder[2] == e[0]);
+    CHECK(RecordedDeleteFreesOnce<R>());
+    CHECK_EQ(g_riRel, 1);
+
+    // The retired vector arm (0x180022600): delete[] destroys downward.
+    CHECK_ARRAY_DELETE(R, g_riRel, g_riRelOrder);
 }
 
 }  // namespace
@@ -650,6 +682,9 @@ extern const void* const g_rbFcVtGroup[] __asm__("_ZTVN8Graphics20FrameCopyImage
 namespace {
 
 struct RbGeneratedLeaf final : Graphics::GeneratedImageBuffer {   // slot 0 NOT overridden
+    // B3X W1: logs `this` for the array check; recording operator delete.
+    ~RbGeneratedLeaf() override { NoteArr(this); }
+    DTOR_CHECK_RECORDING_DELETE
     void Generate(void*, int32_t) const override {}
     void Render(void*, const void*, const void*, int32_t) const override {}
 };
@@ -657,8 +692,8 @@ struct RbGeneratedLeaf final : Graphics::GeneratedImageBuffer {   // slot 0 NOT 
 UNIT_TEST(b39_gfx_framecopy_concrete_ctor_dtor_and_exe_scalar_slot0) {
     using F = Graphics::FrameCopyImageBuffer;
     CHECK(!std::is_abstract<F>::value);
-    CHECK(!std::is_destructible<F>::value);            // ~F protected
-    CHECK(!std::has_virtual_destructor<F>::value);
+    CHECK(std::is_destructible<F>::value);             // B3X W1: ~F public virtual
+    CHECK(std::has_virtual_destructor<F>::value);
     CHECK_DTOR_SLOT(F);   // exe copy 0x140019d50
     CHECK_SLOT(F, TypeName,       0x08/8);   // 0x18001efb0
     CHECK_SLOT(F, Type,           0x10/8);   // 0x18001ef90
@@ -682,15 +717,18 @@ UNIT_TEST(b39_gfx_framecopy_concrete_ctor_dtor_and_exe_scalar_slot0) {
     CHECK_EQ(g_fcGenSeen, 0);
     CHECK(FcVptrOf(f) == &g_rbFcVtGroup[2]);
 
-    // Slot 0 is the exe copy's SCALAR deleting dtor: ~F, then free on flags & 1.
-    CHECK(static_cast<void*>(f->DeletingDtor(1u)) == mem);
+    // Slot 0 is the exe copy's SCALAR deleting dtor: ~F, then free on flags & 1
+    // (B3X W1: `delete`, D0).
+    delete f;
     CHECK_EQ(g_fcDtor, 1);
     CHECK(g_fcDtorVptr == &g_rbFcVtGroup[2]);
 
     alignas(8) unsigned char buf[sizeof(F)];
     F* g = ::new (static_cast<void*>(buf)) F();
-    CHECK(static_cast<void*>(g->DeletingDtor(0u)) == static_cast<void*>(buf));   // no free
+    g->~FrameCopyImageBuffer();                       // flags 0: no free
     CHECK_EQ(g_fcDtor, 2);
+    CHECK(RecordedDeleteFreesOnce<F>());
+    CHECK_EQ(g_fcDtor, 3);
 }
 
 // GeneratedImageBuffer: abstract (slots 10 / 11 `_purecall`), protected
@@ -698,8 +736,8 @@ UNIT_TEST(b39_gfx_framecopy_concrete_ctor_dtor_and_exe_scalar_slot0) {
 UNIT_TEST(b39_gfx_generatedimagebuffer_slot0_is_the_classs_own_both_arms) {
     using G = Graphics::GeneratedImageBuffer;
     CHECK(std::is_abstract<G>::value);
-    CHECK(!std::is_destructible<G>::value);
-    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK(std::is_destructible<G>::value);             // B3X W1
+    CHECK(std::has_virtual_destructor<G>::value);
     CHECK_EQ(sizeof(RbGeneratedLeaf), (size_t)0x70);
     CHECK_DTOR_SLOT(G);   // 0x18001eee0
     CHECK_SLOT(G, Generate, 0x50/8);
@@ -712,18 +750,21 @@ UNIT_TEST(b39_gfx_generatedimagebuffer_slot0_is_the_classs_own_both_arms) {
     CHECK_EQ(gen, 0u);                                             // the ctor's one store
     uint32_t pad; std::memcpy(&pad, buf + 0x6c, 4);
     CHECK_EQ(pad, 0xCDCDCDCDu);                                    // never written
-    CHECK(static_cast<void*>(g->DeletingDtor(0u)) == static_cast<void*>(buf));
+    g_arrN = 0; dtor_check::ResetFrees();
+    g->~RbGeneratedLeaf();                                         // flags 0: no free
+    CHECK_EQ(g_arrN, 1);
+    CHECK_EQ(dtor_check::g_frees, 0);
 
     void* m = Object::detail::InternalMemAlloc(sizeof(RbGeneratedLeaf), 8);
-    RbGeneratedLeaf* h = ::new (m) RbGeneratedLeaf();
-    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
+    G* h = ::new (m) RbGeneratedLeaf();
+    g_arrN = 0; dtor_check::ResetFrees();
+    delete h;                                                      // flags 1: freed
+    CHECK_EQ(g_arrN, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == m);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x70, 8));
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    RbGeneratedLeaf* e0 = ::new (block + 8) RbGeneratedLeaf();
-    ::new (block + 8 + 0x70) RbGeneratedLeaf();
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);   // stride 0x70, freed
+    // The retired vector arm (0x18001eee0, stride 0x70).
+    CHECK_ARRAY_DELETE(RbGeneratedLeaf, g_arrN, g_arrOrder);
 }
 
 }  // namespace
@@ -752,14 +793,17 @@ extern const void* const g_rbPsiVtGroup[] __asm__("_ZTVN8Graphics22ParticleSyste
 namespace {
 
 struct RbPiLeaf final : Graphics::ParticleInstance {   // slot 0 NOT overridden
+    // B3X W1: logs `this` for the array check; recording operator delete.
+    ~RbPiLeaf() override { NoteArr(this); }
+    DTOR_CHECK_RECORDING_DELETE
     void Update(const System::Time&) override {}
 };
 
 UNIT_TEST(b39_gfx_particlesysteminstance_concrete_ctor_and_both_slot0_arms) {
     using P = Graphics::ParticleSystemInstance;
     CHECK(!std::is_abstract<P>::value);
-    CHECK(!std::is_destructible<P>::value);
-    CHECK(!std::has_virtual_destructor<P>::value);
+    CHECK(std::is_destructible<P>::value);             // B3X W1
+    CHECK(std::has_virtual_destructor<P>::value);
     CHECK_DTOR_SLOT(P);   // 0x180020ce0
     CHECK_PMF_SLOT(static_cast<void (P::*)(const System::Time&)>(&P::Update),
                    0x08/8);                                               // 0x1800a5600
@@ -784,7 +828,7 @@ UNIT_TEST(b39_gfx_particlesysteminstance_concrete_ctor_and_both_slot0_arms) {
     // Slot 0, flags 0: ~PSI under PSI's table, then RemoveState under PI's,
     // then Geometry's release under Geometry's; nothing freed.
     g_n = 0; g_psiDtor = 0;
-    CHECK(static_cast<void*>(p->DeletingDtor(0u)) == static_cast<void*>(buf));
+    p->~ParticleSystemInstance();
     CHECK_EQ(g_psiDtor, 1);
     CHECK(g_psiDtorVptr == &g_rbPsiVtGroup[2]);
     CHECK_EQ(g_n, 2);
@@ -793,43 +837,40 @@ UNIT_TEST(b39_gfx_particlesysteminstance_concrete_ctor_and_both_slot0_arms) {
 
     void* m = Object::detail::InternalMemAlloc(sizeof(P), 8);
     P* h = ::new (m) P();
-    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
-
-    // Vector arm: stride 0xe0, downward, block freed.
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0xe0, 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    P* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0xe0) P();
     g_psiDtor = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
-    CHECK_EQ(g_psiDtor, 3);
-    CHECK(g_psiDtorOrder[0] == e[2]);
-    CHECK(g_psiDtorOrder[2] == e[0]);
+    delete h;                                        // flags 1
+    CHECK_EQ(g_psiDtor, 1);
+    CHECK(RecordedDeleteFreesOnce<P>());
+
+    // The retired vector arm (0x180020ce0, stride 0xe0): delete[], downward.
+    CHECK_ARRAY_DELETE(P, g_psiDtor, g_psiDtorOrder);
 }
 
 UNIT_TEST(b39_gfx_particleinstance_slot0_is_the_classs_own_both_arms) {
     using PI = Graphics::ParticleInstance;
     CHECK(std::is_abstract<PI>::value);
-    CHECK(!std::is_destructible<PI>::value);
+    CHECK(std::is_destructible<PI>::value);          // B3X W1
     CHECK_DTOR_SLOT(PI);   // 0x180020310
     CHECK_EQ(sizeof(RbPiLeaf), (size_t)0xd8);
 
     void* m = Object::detail::InternalMemAlloc(sizeof(RbPiLeaf), 8);
-    RbPiLeaf* p = ::new (m) RbPiLeaf();
-    g_n = 0;
-    CHECK(static_cast<void*>(p->DeletingDtor(1u)) == m);       // ~PI, freed
+    PI* p = ::new (m) RbPiLeaf();
+    g_n = 0; dtor_check::ResetFrees();
+    delete p;                                        // ~PI, freed
     CHECK_EQ(g_n, 2);
     CHECK_EQ(g_log[0].ev, (int)kPiRemoveState);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == m);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0xd8, 8));
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    RbPiLeaf* e0 = ::new (block + 8) RbPiLeaf();
-    ::new (block + 8 + 0xd8) RbPiLeaf();
+    // The retired vector arm (0x180020310, stride 0xd8). The three
+    // constructors log kGeoInit (the Geometry base); each ~PI then logs
+    // RemoveState and ~Geometry's release.
     g_n = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);   // stride 0xd8
-    CHECK_EQ(g_n, 4);
+    CHECK_ARRAY_DELETE(RbPiLeaf, g_arrN, g_arrOrder);
+    CHECK_EQ(g_n, 9);
+    CHECK_EQ(g_log[2].ev, (int)kGeoInit);
+    CHECK_EQ(g_log[3].ev, (int)kPiRemoveState);
+    CHECK_EQ(g_log[4].ev, (int)kGeoRel);
 }
 
 }  // namespace
@@ -865,8 +906,8 @@ namespace {
 UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
     using E = Graphics::EdgeMeshInstance;
     CHECK(!std::is_abstract<E>::value);
-    CHECK(!std::is_destructible<E>::value);
-    CHECK(!std::has_virtual_destructor<E>::value);
+    CHECK(std::is_destructible<E>::value);           // B3X W1
+    CHECK(std::has_virtual_destructor<E>::value);
     CHECK_DTOR_SLOT(E);   // 0x1800175d0
     CHECK_SLOT(E, GetInstanceTransform, 0x30/8);   // 0x1800a3840 RETSLOT
 
@@ -884,7 +925,7 @@ UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
 
     // Slot 0, flags 0: ~EMI under EMI's table, then Geometry's release; nothing freed.
     g_n = 0; g_emiDtor = 0;
-    CHECK(static_cast<void*>(p->DeletingDtor(0u)) == static_cast<void*>(buf));
+    p->~EdgeMeshInstance();
     CHECK_EQ(g_emiDtor, 1);
     CHECK(g_emiDtorVptr == &g_rbEmiVtGroup[2]);
     CHECK_EQ(g_n, 1);
@@ -892,19 +933,13 @@ UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
 
     void* m = Object::detail::InternalMemAlloc(sizeof(E), 8);
     E* h = ::new (m) E();
-    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
-
-    // Vector arm: stride 0xd0, downward, block freed.
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0xd0, 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    E* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0xd0) E();
     g_emiDtor = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
-    CHECK_EQ(g_emiDtor, 3);
-    CHECK(g_emiDtorOrder[0] == e[2]);
-    CHECK(g_emiDtorOrder[2] == e[0]);
+    delete h;                                        // flags 1
+    CHECK_EQ(g_emiDtor, 1);
+    CHECK(RecordedDeleteFreesOnce<E>());
+
+    // The retired vector arm (0x1800175d0, stride 0xd0): delete[], downward.
+    CHECK_ARRAY_DELETE(E, g_emiDtor, g_emiDtorOrder);
 }
 
 }  // namespace
@@ -918,6 +953,9 @@ UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
 namespace {
 
 struct RbGeoLeaf final : Graphics::Geometry {   // slot 0 NOT overridden
+    // B3X W1: logs `this` for the array check; recording operator delete.
+    ~RbGeoLeaf() override { NoteArr(this); }
+    DTOR_CHECK_RECORDING_DELETE
     void Update(const System::Time&) override {}
     void Draw(Video::Context&, const Graphics::Camera&, Graphics::ExternalPtrHandle,
               float, int, int, int) const override {}
@@ -927,37 +965,39 @@ struct RbGeoLeaf final : Graphics::Geometry {   // slot 0 NOT overridden
 UNIT_TEST(b39_gfx_geometry_slot0_is_the_classs_own_both_arms) {
     using G = Graphics::Geometry;
     CHECK(std::is_abstract<G>::value);
-    CHECK(!std::is_destructible<G>::value);
-    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK(std::is_destructible<G>::value);           // B3X W1: public virtual
+    CHECK(std::has_virtual_destructor<G>::value);
     CHECK_DTOR_SLOT(G);   // 0x180015e90
     CHECK_EQ(sizeof(RbGeoLeaf), (size_t)0xc0);
 
-    // Scalar arm, flags 1: ~Geometry under Geometry's table, freed, returns this.
+    // Flags 1 is `delete`: ~Geometry under Geometry's table, freed.
     void* m = Object::detail::InternalMemAlloc(sizeof(RbGeoLeaf), 8);
-    RbGeoLeaf* p = ::new (m) RbGeoLeaf();
-    g_n = 0;
-    CHECK(static_cast<void*>(p->DeletingDtor(1u)) == m);
+    G* p = ::new (m) RbGeoLeaf();
+    g_n = 0; dtor_check::ResetFrees();
+    delete p;
     CHECK_EQ(g_n, 1);
     CHECK_EQ(g_log[0].ev, (int)kGeoRel); CHECK(g_log[0].vptr == GeoVt());
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == m);
 
-    // Scalar arm, flags 0: nothing freed.
+    // Flags 0 is the complete destructor: nothing freed.
     alignas(8) unsigned char buf[sizeof(RbGeoLeaf)];
     RbGeoLeaf* q = ::new (static_cast<void*>(buf)) RbGeoLeaf();
-    g_n = 0;
-    CHECK(static_cast<void*>(q->DeletingDtor(0u)) == static_cast<void*>(buf));
+    g_n = 0; dtor_check::ResetFrees();
+    q->~RbGeoLeaf();
     CHECK_EQ(g_n, 1);
+    CHECK_EQ(dtor_check::g_frees, 0);
 
-    // Vector arm: stride 0xc0, count at block, block freed, returns block.
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0xc0, 8));
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    RbGeoLeaf* e0 = ::new (block + 8) RbGeoLeaf();
-    ::new (block + 8 + 0xc0) RbGeoLeaf();
+    // The retired vector arm (0x180015e90, stride 0xc0): delete[], downward.
+    // (The three constructors log kGeoInit first; then each ~Geometry once.)
     g_n = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);
-    CHECK_EQ(g_n, 2);
-    CHECK_EQ(g_log[0].ev, (int)kGeoRel);
-    CHECK_EQ(g_log[1].ev, (int)kGeoRel);
+    CHECK_ARRAY_DELETE(RbGeoLeaf, g_arrN, g_arrOrder);
+    CHECK_EQ(g_n, 6);
+    CHECK_EQ(g_log[2].ev, (int)kGeoInit);
+    CHECK_EQ(g_log[3].ev, (int)kGeoRel);
+    CHECK_EQ(g_log[4].ev, (int)kGeoRel);
+    CHECK_EQ(g_log[5].ev, (int)kGeoRel);
 }
+
 
 }  // namespace

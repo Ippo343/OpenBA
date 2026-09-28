@@ -84,6 +84,7 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 // The shipped headers. The tests measure THESE, not local copies, so a failure
 // means the header and the ABI disagree.
@@ -295,9 +296,14 @@ UNIT_TEST(graphics_light_field_offsets_authored_from_retail) {
 
 class ProbeGeometry {
 public:
-    // [0] +0x00  0x180015e90 — the vector deleting destructor, declared as an
-    //            ordinary virtual (ENDGAME §B.1 decision 2: NO virtual dtor).
-    virtual ProbeGeometry* DeletingDtor(unsigned flags)  { Note(this, 0, flags); return this; }
+    // [0] +0x00  0x180015e90 — the (vector) deleting destructor. B3X W1: the
+    //            real tree declares `virtual ~Geometry()`, which GCC lays out as
+    //            TWO entries (D1 complete, D0 deleting), so retail slot n >= 1
+    //            is compiler slot n + 1 (the SlotAt reads translate). The mirror
+    //            follows the product, with a recording class-scope operator
+    //            delete standing in for the root's MemFree one.
+    virtual ~ProbeGeometry()                             { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
     // [1] +0x08  _purecall in Geometry itself
     virtual void Update(long long timeTicks)             { Note(this, 1, timeTicks); }
     // [2] +0x10  _purecall — the SLOT-2 `Draw` overload (see B5-17)
@@ -326,9 +332,6 @@ public:
     }
     // [8] +0x40  0x1800a4420  Clean
     virtual bool Clean()                                 { Note(this, 8); return true; }
-
-protected:
-    ~ProbeGeometry() = default;   // NOT virtual — decision 2
 };
 
 // Graphics::MeshInstance's own table: it overrides 1, 2, 3, 5, 6, 7 and
@@ -379,8 +382,6 @@ public:
     virtual void DrawLight(int a, int b, int c, int d) const {
         (void)b; (void)c; Note(this, 10, (long long)a * 1000 + d);
     }
-protected:
-    ~ProbeLight() = default;
 };
 
 class ProbeSunLight final : public ProbeLight {
@@ -397,7 +398,7 @@ public:
 
 // The slot byte offsets, as the tree spells them.
 enum : int {
-    kSlot0_DeletingDtor          = 0x00,
+    kSlot0_Destructor            = 0x00,
     kSlot1_Update                = 0x08,
     kSlot2_Draw                  = 0x10,
     kSlot3_AddDrawItems          = 0x18,
@@ -416,11 +417,29 @@ UNIT_TEST(graphics_geometry_slot_order_is_retail_order) {
 
     // Direction A: a raw `(*(void***)p)[N]` caller, exactly as 118 call sites
     // in the tree spell it, must land on the override with `this` UNADJUSTED.
-    Reset();
-    SlotAt<void (*)(void*, unsigned), ProbeGeometry>(g, kSlot0_DeletingDtor)(g, 3u);
-    CHECK_EQ(g_lastMark, 0);            // MeshInstance does not override slot 0
-    CHECK_EQ(g_lastSelf, (const void*)&mi);
-    CHECK_EQ(g_lastArg, 3LL);
+    // Retail slot 0 (B3X W1) is the destructor pair: raw retail slot 0 is D1,
+    // which really destroys, so it runs on a placement-new'd object that is
+    // never destroyed again (the stack `mi` would be destroyed twice); D0 at
+    // compiler slot 1 runs the same chain and frees through the class-scope
+    // operator delete. MeshInstance does not declare a destructor body, so the
+    // mark is Geometry's.
+    {
+        alignas(ProbeMeshInstance) unsigned char buf[sizeof(ProbeMeshInstance)];
+        ProbeMeshInstance* p = ::new (static_cast<void*>(buf)) ProbeMeshInstance();
+        CHECK(dtor_check::CompilerEntry<const void*>(p, 0) != dtor_check::CompilerEntry<const void*>(p, 1));
+        Reset(); dtor_check::ResetFrees();
+        SlotAt<void (*)(void*), ProbeGeometry>(p, kSlot0_Destructor)(p);   // D1
+        CHECK_EQ(g_lastMark, 0);
+        CHECK_EQ(g_lastSelf, (const void*)p);
+        CHECK_EQ(dtor_check::g_frees, 0);
+        ProbeMeshInstance* h = dtor_check::NewOnMalloc<ProbeMeshInstance>();
+        Reset(); dtor_check::ResetFrees();
+        dtor_check::CallD0(h);
+        CHECK_EQ(g_lastMark, 0);
+        CHECK_EQ(g_lastSelf, (const void*)h);
+        CHECK_EQ(dtor_check::g_frees, 1);
+        CHECK(dtor_check::g_lastFree == h);
+    }
 
     Reset();
     SlotAt<void (*)(void*, long long), ProbeGeometry>(g, kSlot1_Update)(g, 42LL);
@@ -677,9 +696,10 @@ UNIT_TEST(graphics_qualified_call_suppresses_minted_dispatch) {
     ProbeMeshInstance mi;
 
     // Build a table whose slot 1 and slot 2 are free functions, and stamp it.
+    // Nine retail slots = ten compiler entries (B3X W1: retail slot 0 = D1 + D0).
     static void* table[11] = { nullptr };
     void** const gccTable = *reinterpret_cast<void***>(&mi);
-    for (int i = 0; i < 9; ++i) table[i] = gccTable[i];
+    for (int i = 0; i < 10; ++i) table[i] = gccTable[i];
     table[RetailSlot<ProbeMeshInstance>(kSlot1_Update / 8)] = reinterpret_cast<void*>(&MintedUpdate);
     table[RetailSlot<ProbeMeshInstance>(kSlot2_Draw   / 8)] = reinterpret_cast<void*>(&MintedDraw);
     *reinterpret_cast<void***>(&mi) = table;
@@ -717,26 +737,29 @@ UNIT_TEST(graphics_qualified_call_suppresses_minted_dispatch) {
 // ===========================================================================
 
 UNIT_TEST(graphics_geometry_tree_has_no_virtual_destructor) {
-    // ENDGAME §B.1 decision 2. Slot 0 is `DeletingDtor(unsigned)`, an ordinary
-    // virtual; deletion is `Object::Destroy(p)` / the minted row, never
-    // `delete`. If a virtual destructor were ever added, GCC would insert TWO
-    // slots (the complete and deleting variants) and every index below would
-    // shift — which is the failure this pins, cheaply.
-    CHECK(!std::has_virtual_destructor<Graphics::Geometry>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::MeshInstance>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::EdgeMeshInstance>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::ParticleInstance>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::ParticleSystemInstance>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::Light>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::AmbientLight>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::SpotLight>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::SunLight>::value);
+    // B3X W1 (the normal-virtual cutover) retired ENDGAME §B.1 decision 2's
+    // one-slot deleting-destructor virtual: the tree now HAS a virtual destructor,
+    // which GCC spends TWO slots on (D1 complete, D0 deleting), so every retail
+    // index n >= 1 sits at n + 1 — the shift the slot reads above translate
+    // (RetailSlot / RetailByteOffset). This pins that the whole tree, and the
+    // probe mirror the tests read, took the new shape together.
+    CHECK(std::has_virtual_destructor<Graphics::Geometry>::value);
+    CHECK(std::has_virtual_destructor<Graphics::MeshInstance>::value);
+    CHECK(std::has_virtual_destructor<Graphics::EdgeMeshInstance>::value);
+    CHECK(std::has_virtual_destructor<Graphics::ParticleInstance>::value);
+    CHECK(std::has_virtual_destructor<Graphics::ParticleSystemInstance>::value);
+    CHECK(std::has_virtual_destructor<Graphics::Light>::value);
+    CHECK(std::has_virtual_destructor<Graphics::AmbientLight>::value);
+    CHECK(std::has_virtual_destructor<Graphics::SpotLight>::value);
+    CHECK(std::has_virtual_destructor<Graphics::SunLight>::value);
 
     // The probe hierarchy makes the same promise, and it is the one whose
     // vtable the tests above actually read.
-    CHECK(!std::has_virtual_destructor<ProbeGeometry>::value);
-    CHECK(!std::has_virtual_destructor<ProbeLight>::value);
+    CHECK(std::has_virtual_destructor<ProbeGeometry>::value);
+    CHECK(std::has_virtual_destructor<ProbeLight>::value);
+    CHECK_EQ(RetailSlot<ProbeGeometry>(1), 2L);   // retail Update is compiler slot 2
 }
+
 
 UNIT_TEST(graphics_geometry_tree_is_abstract_and_polymorphic) {
     // B34_BRIEFS §A.4, amended: abstract where nothing holds the class BY VALUE

@@ -5,13 +5,15 @@
 //
 // Retail's class is abstract (slots 3, 5, 6, 7 are `_purecall`), so the test
 // drives it through a minimal leaf that overrides ONLY the pure slots: slots
-// 0, 1 and 2 must then be CompiledExternal's, not External's (the inherited
-// External::DeletingDtor ran ~External and skipped ~CompiledExternal — the
-// INVENTORY_B finding-6 trap).
+// 0, 1 and 2 must then be CompiledExternal's, not External's (an inherited
+// External slot-0 body ran ~External and skipped ~CompiledExternal — the
+// INVENTORY_B finding-6 trap; B3X W1: slot 0 is now `virtual ~T()`, D1 + D0,
+// and the compiler chains every level).
 // ============================================================================
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,8 +26,20 @@
 
 namespace {
 
+// B3X W1: the leaves record their destructor runs (the order `delete[]`
+// destroys in) and carry a recording class-scope operator delete (retail
+// flags 1's free, proven; the blocks come from InternalMemAlloc == malloc).
+int         g_leafDtors = 0;
+const void* g_leafOrder[8] = {};
+void NoteLeafDtor(const void* self) {
+    if (g_leafDtors < 8) g_leafOrder[g_leafDtors] = self;
+    ++g_leafDtors;
+}
+
 class TestCompiled : public Object::CompiledExternal {
 public:
+    ~TestCompiled() override { NoteLeafDtor(this); }
+    DTOR_CHECK_RECORDING_DELETE
     int32_t           GetFileVersion() const override { return 1; }
     bool              Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -37,8 +51,9 @@ static_assert(sizeof(TestCompiled) == 0x20, "the leaf adds no bytes");
 
 UNIT_TEST(b39_obj_compiledexternal_protected_nonvirtual_dtor) {
     CHECK(std::is_abstract<Object::CompiledExternal>::value);   // retail's purecalls
-    CHECK(!std::is_destructible<Object::CompiledExternal>::value);
-    CHECK(!std::has_virtual_destructor<Object::CompiledExternal>::value);
+    // B3X W1: a public virtual destructor (retail slot 0 = D1 + D0).
+    CHECK(std::is_destructible<Object::CompiledExternal>::value);
+    CHECK(std::has_virtual_destructor<Object::CompiledExternal>::value);
     CHECK_EQ(sizeof(Object::CompiledExternal), (size_t)0x20);
 }
 
@@ -75,25 +90,31 @@ UNIT_TEST(b39_obj_compiledexternal_ctor_and_own_type_slots) {
     CHECK(Object::CompiledExternal::GetTypeInfo().fileExtension == nullptr);
     CHECK(Object::CompiledExternal::CreateNewObject() == nullptr);
     CHECK(Object::CompiledExternal::CreateInPlaceObject(buf) == nullptr);
-    CHECK(b->DeletingDtor(0) == b);   // flags 0: destroy, no free
+    // Retail flags 0: destroy, no free — a dispatching ~Base() is D1.
+    g_leafDtors = 0; dtor_check::ResetFrees();
+    b->~Base();
+    CHECK_EQ(g_leafDtors, 1);
+    CHECK(g_leafOrder[0] == c);
+    CHECK_EQ(dtor_check::g_frees, 0);
 }
 
-// Slot 0: frees on `flags & 1`; the ARRAY arm reads the int32 count at
-// `this - 8`, walks the 0x20 stride, frees and returns `this - 8` — the
-// retired RT_DELDTOR row 0x18000b7e0's two arms.
+// Retail slot 0 frees on `flags & 1`; its ARRAY arm read the int32 count at
+// `this - 8`, walked the 0x20 stride, freed and returned `this - 8` — the
+// retired RT_DELDTOR row 0x18000b7e0's two arms. B3X W1: flags 1 is `delete`
+// through the root pointer (the chain once, then the class-scope operator
+// delete, recorded); the vector arm has no Itanium counterpart and `delete[]`
+// of a `new T[3]` replaces it.
 UNIT_TEST(b39_obj_compiledexternal_deletingdtor_both_arms) {
     void* p = Object::detail::InternalMemAlloc(sizeof(TestCompiled), 8);
     CHECK(p != nullptr);
     Object::Base* one = ::new (p) TestCompiled();
-    CHECK(one->DeletingDtor(1) == one);
+    g_leafDtors = 0; dtor_check::ResetFrees();
+    delete one;
+    CHECK_EQ(g_leafDtors, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == p);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x20, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    TestCompiled* e0 = ::new (block + 8) TestCompiled();
-    ::new (block + 8 + 0x20) TestCompiled();
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+    CHECK_ARRAY_DELETE(TestCompiled, g_leafDtors, g_leafOrder);
 }
 
 // ---- Object::External (ENDGAME B.3.9 OBJ W3, vtable row 55) ----------------
@@ -103,6 +124,8 @@ UNIT_TEST(b39_obj_compiledexternal_deletingdtor_both_arms) {
 namespace {
 class TestPlainExternal : public Object::External {
 public:
+    ~TestPlainExternal() override { NoteLeafDtor(this); }
+    DTOR_CHECK_RECORDING_DELETE
     int32_t           GetFileVersion() const override { return 1; }
     bool              Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -113,23 +136,21 @@ static_assert(sizeof(TestPlainExternal) == 0x20, "the leaf adds no bytes");
 
 UNIT_TEST(b39_obj_external_deletingdtor_both_arms) {
     CHECK(std::is_abstract<Object::External>::value);
-    CHECK(!std::is_destructible<Object::External>::value);
-    CHECK(!std::has_virtual_destructor<Object::External>::value);
+    CHECK(std::is_destructible<Object::External>::value);         // B3X W1
+    CHECK(std::has_virtual_destructor<Object::External>::value);
     CHECK_DTOR_SLOT(Object::External);   // 0x180006640
 
     void* p = Object::detail::InternalMemAlloc(sizeof(TestPlainExternal), 8);
     CHECK(p != nullptr);
     Object::Base* one = ::new (p) TestPlainExternal();
-    CHECK(one->DeletingDtor(1) == one);
+    g_leafDtors = 0; dtor_check::ResetFrees();
+    delete one;                                                   // retail flags 1
+    CHECK_EQ(g_leafDtors, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == p);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x20, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    TestPlainExternal* e0 = ::new (block + 8) TestPlainExternal();
-    ::new (block + 8 + 0x20) TestPlainExternal();
-    ::new (block + 8 + 0x40) TestPlainExternal();
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+    // The retired vector arm of 0x180006640 (flags 3).
+    CHECK_ARRAY_DELETE(TestPlainExternal, g_leafDtors, g_leafOrder);
 }
 
 // ---- Object::Base (ENDGAME B.3.9 OBJ W3, vtable row 12) --------------------
@@ -138,14 +159,19 @@ UNIT_TEST(b39_obj_external_deletingdtor_both_arms) {
 namespace {
 class TestBaseLeaf : public Object::Base {
 public:
+    ~TestBaseLeaf() override { NoteLeafDtor(this); }
+    DTOR_CHECK_RECORDING_DELETE
     const char* TypeName() const override { return "TestBaseLeaf"; }
 };
 static_assert(sizeof(TestBaseLeaf) == 8, "one vtable pointer");
 }  // namespace
 
 UNIT_TEST(b39_obj_base_deletingdtor_both_arms) {
-    CHECK(!std::is_destructible<Object::Base>::value);
-    CHECK(!std::has_virtual_destructor<Object::Base>::value);
+    CHECK(std::is_destructible<Object::Base>::value);             // B3X W1
+    CHECK(std::has_virtual_destructor<Object::Base>::value);
+    // The root's class-scope operator delete (MemFree) is what every D0 below
+    // it reaches unless a class declares its own.
+    CHECK(dtor_check::HasClassDelete<Object::Base>::value);
     CHECK_DTOR_SLOT(Object::Base);   // 0x1800065b0
     CHECK_SLOT(Object::Base, TypeName, 0x08/8);   // _purecall
     CHECK_SLOT(Object::Base, Type,     0x10/8);   // 0x1800c0380
@@ -154,19 +180,16 @@ UNIT_TEST(b39_obj_base_deletingdtor_both_arms) {
     CHECK(p != nullptr);
     Object::Base* one = ::new (p) TestBaseLeaf();
     CHECK_EQ(one->Type(), 0u);                    // `XOR EAX,EAX; RET`
-    CHECK(one->DeletingDtor(1) == one);
+    g_leafDtors = 0; dtor_check::ResetFrees();
+    delete one;                                   // retail flags 1
+    CHECK_EQ(g_leafDtors, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == p);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 4 * 8, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 4;
-    std::memcpy(block, &cookie, sizeof cookie);
-    TestBaseLeaf* e0 = nullptr;
-    for (int i = 0; i < 4; ++i) {
-        TestBaseLeaf* e = ::new (block + 8 + i * 8) TestBaseLeaf();
-        if (i == 0) e0 = e;
-    }
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+    // The retired vector arm of 0x1800065b0 (flags 3, element 8).
+    CHECK_ARRAY_DELETE(TestBaseLeaf, g_leafDtors, g_leafOrder);
 }
+
 
 // Base's reflection record (?_typeInfo@Base@Object@@ 0x1801f9c50), the class's
 // own since the W3 fold: the ROOT -- name "Base", no parent, no extension, no

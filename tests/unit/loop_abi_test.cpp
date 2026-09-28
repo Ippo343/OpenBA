@@ -7,11 +7,12 @@
 // PART A — LAYOUT. sizeof / alignof against each retail create site's MemAlloc
 //   and the member offsets the ported bodies read.
 // PART B — SHAPE. Every class is concrete, `final`, single inheritance from its
-//   proved Runtime base, polymorphic, NO virtual destructor.
+//   proved Runtime base, polymorphic, a virtual destructor (B3X W1; the
+//   PathfinderThread, a System::Thread, has none).
 // PART C — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
 //   1 + vtable byte offset, adjustment 0): each override lands on the retail
 //   index of B38_SLOTS.md sec. 6 / B37_RULES sec. 3.1, and slot 0 is
-//   `DeletingDtor`.
+//   the destructor (B3X W1: D1 + D0).
 //
 // NOT PROVEN HERE: the bodies (they stand on the address registry and cannot
 // link into a host test), and `Vtable() == vptr` (tests/unit/exe_class_abi_test.cpp
@@ -108,20 +109,20 @@ UNIT_TEST(loop_classes_shape) {
     CHECK(!std::is_abstract<GameLoaderLoop>::value);
     CHECK(std::is_final<InnerLoaderLoop>::value);
     CHECK(std::is_final<GameLoaderLoop>::value);
-    CHECK(!std::has_virtual_destructor<InnerLoaderLoop>::value);
-    CHECK(!std::has_virtual_destructor<GameLoaderLoop>::value);
+    CHECK(std::has_virtual_destructor<InnerLoaderLoop>::value);
+    CHECK(std::has_virtual_destructor<GameLoaderLoop>::value);
     CHECK((std::is_base_of<Engine::DialogLoaderLoopT, GameLoadDialogLoopT>::value));
     CHECK(!std::is_abstract<GameLoadDialogLoopT>::value);
     CHECK(std::is_final<GameLoadDialogLoopT>::value);
-    CHECK(!std::has_virtual_destructor<GameLoadDialogLoopT>::value);
+    CHECK(std::has_virtual_destructor<GameLoadDialogLoopT>::value);
     CHECK((std::is_base_of<Engine::DialogLoopT, MenuDialogLoopT>::value));
     CHECK(!std::is_abstract<MenuDialogLoopT>::value);
     CHECK(std::is_final<MenuDialogLoopT>::value);
-    CHECK(!std::has_virtual_destructor<MenuDialogLoopT>::value);
+    CHECK(std::has_virtual_destructor<MenuDialogLoopT>::value);
     CHECK((std::is_base_of<Engine::UpdateLoop, GameUpdateLoop>::value));
     CHECK(!std::is_abstract<GameUpdateLoop>::value);
     CHECK(std::is_final<GameUpdateLoop>::value);
-    CHECK(!std::has_virtual_destructor<GameUpdateLoop>::value);
+    CHECK(std::has_virtual_destructor<GameUpdateLoop>::value);
 }
 
 // ===========================================================================
@@ -273,7 +274,7 @@ void CheckExternalShape() {
     CHECK((std::is_base_of<Object::External, T>::value));
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::is_final<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK_EQ(alignof(T), (size_t)8);
     CHECK_DTOR_SLOT(T);
     CHECK_SLOT(T, TypeName,       1);
@@ -308,7 +309,7 @@ void CheckGeometryShape() {
     CHECK((std::is_base_of<Graphics::Geometry, T>::value));
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::is_final<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK_EQ(alignof(T), (size_t)8);
     CHECK_DTOR_SLOT(T);
     CHECK_SLOT(T, Update,                 1);
@@ -348,8 +349,8 @@ UNIT_TEST(loop_tornado_classes) {
     CHECK(!std::is_abstract<TornadoInstance>::value);
     CHECK(std::is_final<Tornado>::value);
     CHECK(std::is_final<TornadoInstance>::value);
-    CHECK(!std::has_virtual_destructor<Tornado>::value);
-    CHECK(!std::has_virtual_destructor<TornadoInstance>::value);
+    CHECK(std::has_virtual_destructor<Tornado>::value);
+    CHECK(std::has_virtual_destructor<TornadoInstance>::value);
     CHECK_DTOR_SLOT(Tornado);
     CHECK_SLOT(Tornado, TypeName,       1);
     CHECK_SLOT(Tornado, Type,           2);

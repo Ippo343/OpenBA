@@ -32,6 +32,17 @@
 // table out of `standalone/rt_data_mint_tables.inc`, and it is the direction an
 // ABI with a hidden prologue slot would break.
 //
+// B3X W1 — THE NORMAL-VIRTUAL CUTOVER. `IO::ReaderWriter` and `IO::Stream` now
+// declare `virtual ~T()` for retail slot 0, which GCC spends TWO slots on (D1,
+// D0): retail slot N >= 1 is compiler slot N + 1, and the product reaches
+// every slot BY NAME. The mirrors below follow the classes they mirror
+// (`TestReaderWriter`, `TestStream` flip; `TestEncoding` — retail slot 0
+// `IsBinary`, no destructor slot — stays), and every raw read keeps its retail
+// byte offset and translates it through RetailByteOffset<T>. Where a test
+// transcribes RETAIL's raw shape on purpose (`TestSerializer` over the
+// retail-order `minted::g_table`, keyed on `MintedRwStorage`, which has no
+// virtual destructor), it stays in retail order.
+//
 // THE RETAIL SLOT LISTS BEING MIRRORED
 // ------------------------------------
 // Read byte-wise out of the shipped Runtime-x64.dll's .rdata (image base
@@ -71,6 +82,7 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 // The shipped constant tables. The tests index through THESE, not through
 // local copies, so a test failure means the header and the ABI disagree.
@@ -130,8 +142,9 @@ Fn SlotAt(const void* obj, int byteOffset) {
 }
 
 // ===========================================================================
-// PART A — `IO::ReaderWriter`: 26 distinctly-named virtuals, no virtual dtor,
-// slot 0 is the deleting destructor declared as an ordinary virtual.
+// PART A — `IO::ReaderWriter`: 26 distinctly-named retail virtuals; retail
+// slot 0, the deleting destructor, is a virtual destructor (B3X W1: D1 + D0,
+// so 27 compiler entries).
 //
 // ENDGAME §B.1 decision 2: "Overloaded virtuals: MSVC groups overloads and
 // reverses their declaration order; we give them distinct names, so the issue
@@ -145,7 +158,10 @@ Fn SlotAt(const void* obj, int byteOffset) {
 class TestReaderWriter {
 public:
     // slot 0  +0x00  rw_vtbl::kDtor          retail ??_7ReaderWriter@ [0] 0x180023bd0
-    virtual TestReaderWriter* DeletingDtor(unsigned flags) { Note(this, 0, flags); return this; }
+    //                (B3X W1: compiler slots 0 D1 and 1 D0; the recording operator
+    //                delete is retail flags 1's free)
+    virtual ~TestReaderWriter() { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
     // slot 1  +0x08  rw_vtbl::kGetVersion    (BinaryReader's is `MOV EAX,[RCX+0x28]; RET`)
     virtual int  GetVersion() const           { Note(this, 1); return 7; }
     // slot 2  +0x10  rw_vtbl::kSkip          retail BinaryReader::Skip 0x1800a83f0
@@ -185,10 +201,6 @@ public:
     uint8_t  _pad09[7];             // +0x09
     void*    serializer;            // +0x10
     void*    stream;                // +0x18
-
-protected:
-    // NOT virtual — decision 2. Deletion goes through slot 0, never `delete`.
-    ~TestReaderWriter() = default;
 };
 
 // A concrete one so it can be instantiated and its own table read.
@@ -267,12 +279,17 @@ UNIT_TEST(raw_rw_vtbl_offsets_reach_a_real_ReaderWriter_class) {
     CHECK_EQ(g_lastArg, 8LL);
 
     // Slot 0 and slot 1: the two non-Serialize slots the Serializer dtor and
-    // GetVersion forwarder reach (serializer.cpp rw_vtbl::kDtor / kGetVersion).
-    Reset();
-    using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn, TestBinaryReader>(raw, rw_vtbl::kDtor)(raw, 1u);
+    // GetVersion forwarder reach (serializer.cpp: `delete rw` and GetVersion).
+    // Retail slot 0 with flags 1 is D0, compiler slot 1 — read raw on a heap
+    // object (the stack `rw` must not be destroyed twice): ~TestReaderWriter
+    // runs and the recording operator delete gets the block.
+    TestBinaryReader* heap = dtor_check::NewOnMalloc<TestBinaryReader>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(heap);
     CHECK_EQ(g_lastMark, 0);
-    CHECK_EQ(g_lastArg, 1LL);
+    CHECK(g_lastSelf == heap);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == heap);
 
     Reset();
     using GetVerFn = int (*)(void*);
@@ -285,10 +302,13 @@ UNIT_TEST(the_ReaderWriter_table_is_exactly_26_distinct_slots) {
     void* const* vt = *reinterpret_cast<void* const* const*>(static_cast<void*>(&rw));
 
     // Every declared virtual got its own slot: no collapsing, no aliasing, and
-    // in particular no pair of "overloads" sharing an entry. 26 slots is what
-    // bounds ??_7ReaderWriter@IO@@6B@ at 0x1801553b0 (last byte offset 0xC8).
-    for (int a = 0; a < 26; ++a) {
-        for (int b = a + 1; b < 26; ++b) {
+    // in particular no pair of "overloads" sharing an entry. 26 retail slots is
+    // what bounds ??_7ReaderWriter@IO@@6B@ at 0x1801553b0 (last byte offset
+    // 0xC8); B3X W1: 27 compiler entries, retail slot 0 being D1 and D0.
+    CHECK_EQ(RetailSlot<TestBinaryReader>(25) + 1, 27L);
+    CHECK(vt[0] != vt[1]);
+    for (int a = 0; a < 27; ++a) {
+        for (int b = a + 1; b < 27; ++b) {
             CHECK(vt[a] != vt[b]);
         }
     }
@@ -321,9 +341,13 @@ UNIT_TEST(the_ReaderWriter_table_is_exactly_26_distinct_slots) {
 }
 
 // ---------------------------------------------------------------------------
-// DIRECTION B — a hand-built `void*[26]` of free functions, exactly the shape
-// `rt_data_mint_tables.inc` publishes, stamped onto a bare object which is then
-// driven through the REAL class's ordinary virtual calls.
+// DIRECTION B — a hand-built array of free functions stamped onto a bare
+// object which is then driven through the REAL class's ordinary virtual calls.
+// `g_table` is RETAIL's 26-slot shape (what `rt_data_mint_tables.inc` used to
+// publish; PART C's TestSerializer transcribes retail's raw reads over it);
+// `g_cxxTable` is the same bodies in the COMPILER's order under the B3X W1
+// rule — D1, D0, then retail slots 1..25 — which is what an ordinary virtual
+// call on a class with a virtual destructor reads.
 // ---------------------------------------------------------------------------
 namespace minted {
 
@@ -337,6 +361,8 @@ void  ScalarUInt(void* self, uint32_t* v, const char*)      { Note(self, 1019, (
 void  ScalarInt(void* self, int32_t* v, const char*)        { Note(self, 1020, *v); }
 void  Bytes(void* self, int size, void*, const char*)       { Note(self, 1025, size); }
 void  Unused(void* self)                                    { Note(self, -1); }
+void  D1(void* self)                                        { Note(self, 1100); }
+void  D0(void* self)                                        { Note(self, 1101); }
 
 // Byte offset -> entry, written the way a generated `kVSlotsNN[]` row is.
 void* g_table[26] = {
@@ -368,6 +394,37 @@ void* g_table[26] = {
     (void*)&Bytes,       // +0xC8  kSerializeBytes
 };
 
+// The compiler's order: compiler slot n holds retail slot n - 1 for n >= 2.
+void* g_cxxTable[27] = {
+    (void*)&D1,          // [0]  D1   (retail slot 0, flags 0)
+    (void*)&D0,          // [1]  D0   (retail slot 0, flags 1)
+    (void*)&GetVersion,  // [2]  retail +0x08  kGetVersion
+    (void*)&Skip,        // [3]  retail +0x10  kSkip
+    (void*)&Unused,      // [4]  retail +0x18  kArrayChar
+    (void*)&Unused,      // [5]  retail +0x20  kArrayBool
+    (void*)&Unused,      // [6]  retail +0x28  kArrayFloat
+    (void*)&Unused,      // [7]  retail +0x30  kArrayUInt64
+    (void*)&Unused,      // [8]  retail +0x38  kArrayInt64
+    (void*)&Unused,      // [9]  retail +0x40  kArrayUInt
+    (void*)&ArrayInt,    // [10] retail +0x48  kArrayInt
+    (void*)&Unused,      // [11] retail +0x50  kArrayUShort
+    (void*)&Unused,      // [12] retail +0x58  kArrayShort
+    (void*)&Unused,      // [13] retail +0x60  kArrayUChar
+    (void*)&Unused,      // [14] retail +0x68  kArraySChar
+    (void*)&Unused,      // [15] retail +0x70  kScalarChar
+    (void*)&ScalarBool,  // [16] retail +0x78  kScalarBool
+    (void*)&ScalarFloat, // [17] retail +0x80  kScalarFloat
+    (void*)&Unused,      // [18] retail +0x88  kScalarUInt64
+    (void*)&Unused,      // [19] retail +0x90  kScalarInt64
+    (void*)&ScalarUInt,  // [20] retail +0x98  kScalarUInt
+    (void*)&ScalarInt,   // [21] retail +0xA0  kScalarInt
+    (void*)&Unused,      // [22] retail +0xA8  kScalarUShort
+    (void*)&Unused,      // [23] retail +0xB0  kScalarShort
+    (void*)&Unused,      // [24] retail +0xB8  kScalarUChar
+    (void*)&Unused,      // [25] retail +0xC0  kScalarSChar
+    (void*)&Bytes,       // [26] retail +0xC8  kSerializeBytes
+};
+
 }  // namespace minted
 
 // The storage a minted-table object occupies: one vptr plus ReaderWriter's
@@ -383,7 +440,8 @@ static_assert(sizeof(MintedRwStorage) == 0x20, "ReaderWriter storage is 0x20 byt
 
 UNIT_TEST(real_class_virtual_calls_reach_a_hand_built_minted_table) {
     MintedRwStorage obj{};
-    obj.vptr = static_cast<void*>(minted::g_table);
+    obj.vptr = static_cast<void*>(minted::g_cxxTable);   // the compiler's order
+    static_assert(sizeof(minted::g_cxxTable) / sizeof(void*) == 27, "26 retail slots + 1");
 
     // This is the whole point: a converted body holds an `IO::ReaderWriter*`
     // and calls members on it, while the pointee was published by the mint.
@@ -422,17 +480,25 @@ UNIT_TEST(real_class_virtual_calls_reach_a_hand_built_minted_table) {
     Reset(); CHECK_EQ(rw->GetVersion(), 99);
     CHECK_EQ(g_lastMark, 1001);
 
-    // `IO::Serializer::~Serializer` (0x1800b99b0) is exactly this call.
-    Reset(); rw->DeletingDtor(1u);
-    CHECK_EQ(g_lastMark, 1001 + 0);  // 1000 + flags(1) == 1001
+    // `IO::Serializer::~Serializer` (0x1800b99b0, retail slot 0 with flags 1)
+    // is exactly this call since B3X W1: `delete rw` reads compiler slot 1 (D0)
+    // and leaves the free to it — the caller frees nothing itself.
+    Reset(); dtor_check::ResetFrees();
+    delete rw;
+    CHECK_EQ(g_lastMark, 1101);
     CHECK(g_lastSelf == static_cast<void*>(&obj));
+    CHECK_EQ(dtor_check::g_frees, 0);
+    // A dispatching `rw->~TestReaderWriter()` (retail flags 0) reads slot 0.
+    Reset();
+    rw->~TestReaderWriter();
+    CHECK_EQ(g_lastMark, 1100);
 }
 
 UNIT_TEST(a_virtual_destructor_would_shift_every_ReaderWriter_slot) {
-    // The regression guard for decision 2, restated for IO. Itanium spends TWO
-    // slots on a virtual destructor (complete + deleting), so the first
-    // user-declared virtual would land at index 2 and every `rw_vtbl::k*`
-    // offset in 54 files would silently point one-and-a-half slots early.
+    // The shift, restated for IO (B3X W1: it now HAPPENS — the test name is
+    // kept from the retired rule). Itanium spends TWO slots on a virtual
+    // destructor (complete + deleting), so the first user-declared virtual
+    // lands at index 2 ...
     struct WithVirtualDtor {
         virtual ~WithVirtualDtor() {}
         virtual int First() { return 1; }
@@ -442,14 +508,28 @@ UNIT_TEST(a_virtual_destructor_would_shift_every_ReaderWriter_slot) {
     using Fn = int (*)(void*);
     CHECK_EQ(reinterpret_cast<Fn>(vt[2])(&w), 1);
 
-    // ...whereas the decision-2 shape puts its slot 0 at index 0.
+    // ... and so does the ReaderWriter's GetVersion (retail +0x08): every
+    // `rw_vtbl::k*` retail offset is one slot further on in the compiler's
+    // table, which RetailByteOffset states and the raw reads above rely on.
     TestBinaryReader rw;
     void* const* rwvt = *reinterpret_cast<void* const* const*>(static_cast<void*>(&rw));
+    using GetVerFn = int (*)(void*);
     Reset();
-    using DtorFn = void* (*)(void*, unsigned);
-    reinterpret_cast<DtorFn>(rwvt[0])(&rw, 2u);
+    CHECK_EQ(reinterpret_cast<GetVerFn>(rwvt[2])(&rw), 7);
+    CHECK_EQ(g_lastMark, 1);
+    CHECK_EQ(RetailByteOffset<TestBinaryReader>(rw_vtbl::kGetVersion), (uintptr_t)0x10);
+    CHECK_EQ(RetailByteOffset<TestBinaryReader>(rw_vtbl::kSerializeBytes), (uintptr_t)0xD0);
+
+    // Retail slot 0 itself is the pair: D1 at index 0 destroys without freeing
+    // (the retired call here passed flags 2, the vector arm, which Itanium does
+    // not have). On a placement-new'd reader, destroyed exactly once.
+    alignas(TestBinaryReader) unsigned char buf[sizeof(TestBinaryReader)];
+    TestBinaryReader* once = ::new (static_cast<void*>(buf)) TestBinaryReader();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(once);
     CHECK_EQ(g_lastMark, 0);
-    CHECK_EQ(g_lastArg, 2LL);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    CHECK(rwvt[0] != rwvt[1]);
 }
 
 // ===========================================================================
@@ -517,8 +597,9 @@ UNIT_TEST(encoding_factory_slots_sit_at_0x18_and_0x20_with_arity_three) {
     CHECK(w == static_cast<void*>(&marker));
 
     // Slot 0 is IsBinary, NOT a deleting destructor. A real class that put a
-    // `DeletingDtor` first here would move both factories one slot down and the
+    // destructor slot first here would move both factories down and the
     // Serializer constructor would call GetKind() as a factory.
+
     using BoolFn = bool (*)(void*);
     CHECK((SlotAt<BoolFn, TestBinaryEncoding>(raw, 0x00)(raw)) == true);    // IsBinary
     CHECK((SlotAt<BoolFn, TestBinaryEncoding>(raw, 0x08)(raw)) == false);   // IsText
@@ -718,9 +799,10 @@ UNIT_TEST(a_real_Serializer_round_trips_through_a_fake_stream_and_encoding) {
 class TestStream {
 public:
     // ??_7Stream@IO@@6B@ @ 0x1801549a0, 7 slots. Slot 0 is the deleting dtor
-    // (0x18000c610, also RT_DELDTOR(..., "IO::Stream")); slot 1 GetSource has
-    // a real body (0x18000c6a0); slots 2..6 are `_purecall` in the base.
-    virtual TestStream* DeletingDtor(unsigned flags) { Note(this, 400, flags); return this; }
+    // (0x18000c610, also RT_DELDTOR(..., "IO::Stream")) — B3X W1: a virtual
+    // destructor, compiler slots 0/1; slot 1 GetSource has a real body
+    // (0x18000c6a0); slots 2..6 are `_purecall` in the base.
+    virtual ~TestStream() { Note(this, 400); }
     virtual const char* GetSource() const            { Note(this, 401); return "stream"; }
     virtual bool        Write(int n, const void*)    { Note(this, 402, n); return true; }
     virtual bool        Read(int n, void*)           { Note(this, 403, n); return true; }
@@ -731,8 +813,6 @@ public:
     int32_t   direction;   // +0x08
     uint32_t  _pad0c;      // +0x0C  never written by any ctor
     void*     encoding;    // +0x10  IO::Encoding*, owned; freed with MemFree
-protected:
-    ~TestStream() = default;
 };
 
 class TestMemoryStream : public TestStream {
@@ -749,13 +829,11 @@ public:
     uint32_t size;        // +0x28
     uint32_t _pad2c;
 
-    // PUBLIC, unlike every other dtor in this file, and that is a finding:
     // `IO::CompressedMemoryStream` holds a `MemoryStream` BY VALUE at +0x68, so
-    // the enclosing class's implicit destructor has to be able to destroy it.
-    // A protected non-virtual `~MemoryStream()` (the shape decision 2 gives a
-    // BASE) makes `CompressedMemoryStream` uninstantiable. So `IO::MemoryStream`
-    // gets a PUBLIC non-virtual destructor — public, still not virtual.
-    ~TestMemoryStream() = default;
+    // the enclosing class's implicit destructor has to be able to destroy it:
+    // the finding that made `~MemoryStream()` public before B3X W1. Since the
+    // cutover every destructor in the family is public and virtual.
+    ~TestMemoryStream() override = default;
 };
 
 // `IO::CompressedStream` is 0x68 bytes: Stream + position/activeWindow/source
@@ -776,8 +854,6 @@ public:
     void*    source;      // +0x28
     uint8_t  arrays[0x30];// +0x30 .. +0x5F  three Collection::Array fields
     uint64_t compression; // +0x60
-protected:
-    ~TestCompressedStream() = default;
 };
 
 class TestCompressedMemoryStream : public TestCompressedStream {
@@ -904,6 +980,8 @@ struct Counters {
     int createReader, createWriter;
     int tailReads, tailWrites, deletingDtors;
     int lastVersion;
+    int frees;                 // TailReaderWriter::operator delete (retail flags & 1)
+    const void* lastFree;
 };
 Counters g_c{};
 void ResetCounters() { g_c = Counters{}; }
@@ -921,21 +999,25 @@ struct CountingStream final : TestStream {
     uint32_t GetCurrentPos() const override { ++g_c.getPosCalls; return 0; }
 };
 
-// A CONCRETE subclass of the REAL `IO::ReaderWriter` — every one of the 26
-// slots overridden, because the base declares all 26 pure. Only slot 0 has
-// behaviour here: it is the 4-byte tail that `~Serializer` triggers.
+// A CONCRETE subclass of the REAL `IO::ReaderWriter` — every one of the 25
+// non-destructor retail slots overridden, because the base declares them pure.
+// Only retail slot 0 has behaviour here: it is the 4-byte tail that
+// `~Serializer` triggers. B3X W1: `~Serializer` is `delete rw` (retail's
+// slot-0 call with `MOV EDX,1`), so the tail is this destructor, and flags 1's
+// meaning — "then free `this`" — is the class-scope operator delete receiving
+// `this`. The objects live in HeaderEncoding's raw storage, so that operator
+// delete records and frees nothing, and nothing else ever destroys them.
 struct TailReaderWriter final : IO::ReaderWriter {
-    TailReaderWriter() : IO::ReaderWriter(ProbeSer()) {}
+    TailReaderWriter(CountingStream* s, bool w) : IO::ReaderWriter(ProbeSer()), src(s), writing(w) {}
     CountingStream* src = nullptr;
     bool writing = false;
 
-    IO::ReaderWriter* DeletingDtor(unsigned flags) override {
+    ~TailReaderWriter() override {
         ++g_c.deletingDtors;
-        CHECK_EQ((int)flags, 1);          // retail's `MOV EDX,1`
         if (writing) { src->Write(4, nullptr); ++g_c.tailWrites; }
         else         { src->Read (4, nullptr); ++g_c.tailReads;  }
-        return this;
     }
+    static void operator delete(void* p) { ++g_c.frees; g_c.lastFree = p; }
     int  GetVersion() const override { return 0; }
     void Skip() override {}
     void SerializeCharArray  (int, char*,          const char*) override {}
@@ -961,16 +1043,18 @@ struct TailReaderWriter final : IO::ReaderWriter {
     void SerializeUChar (unsigned char&, const char*) override {}
     void SerializeSChar (signed char&,   const char*) override {}
     void SerializeBytes(int, void*, const char*) override {}
-    ~TailReaderWriter() = default;
 };
 
 // A CONCRETE subclass of the REAL `IO::Encoding`, whose two factory bodies
 // reproduce the retail codec constructors' STREAM TRAFFIC and nothing else.
-// Three fixed ReaderWriters so a second construction gets its own.
+// Three fixed ReaderWriter slots so a second construction gets its own. They
+// are RAW storage: the factory placement-news a TailReaderWriter into one and
+// `~Serializer`'s `delete` destroys it, so nothing is ever destroyed twice.
 struct HeaderEncoding final : IO::Encoding {
     CountingStream* src = nullptr;
-    TailReaderWriter rw[3];
+    alignas(TailReaderWriter) unsigned char rw[3][sizeof(TailReaderWriter)];
     int handed = 0;
+    void* Slot(int i) { return static_cast<void*>(rw[i]); }
 
     bool IsBinary() const override { return true; }
     bool IsText() const override { return false; }
@@ -980,17 +1064,13 @@ struct HeaderEncoding final : IO::Encoding {
         ++g_c.createReader; g_c.lastVersion = version;
         src->Read(4, nullptr); src->Read(4, nullptr); src->Read(4, nullptr);  // 12 bytes
         src->GetCurrentPos();
-        TailReaderWriter* r = &rw[handed++ % 3];
-        r->src = src; r->writing = false;
-        return r;
+        return ::new (Slot(handed++ % 3)) TailReaderWriter(src, false);
     }
     IO::ReaderWriter* CreateWriter(IO::Serializer&, int version) override {
         ++g_c.createWriter; g_c.lastVersion = version;
         src->Write(4, nullptr); src->Write(4, nullptr); src->Write(4, nullptr); // 12 bytes
         src->GetCurrentPos(); src->GetCurrentPos();
-        TailReaderWriter* w = &rw[handed++ % 3];
-        w->src = src; w->writing = true;
-        return w;
+        return ::new (Slot(handed++ % 3)) TailReaderWriter(src, true);
     }
     ~HeaderEncoding() = default;
 };
@@ -1032,12 +1112,14 @@ UNIT_TEST(the_real_Serializer_consumes_one_12_byte_header_and_one_4_byte_tail) {
         CHECK_EQ(g_c.writeCalls, 0);
         // The object is wired the way retail wires it.
         CHECK(ser->_stream == &s);
-        CHECK(ser->_readerWriter == static_cast<IO::ReaderWriter*>(&enc.rw[0]));
+        CHECK(static_cast<void*>(ser->_readerWriter) == enc.Slot(0));
         CHECK(static_cast<void*>(ser) == static_cast<void*>(buf));
 
         // ---- the tail, on destruction, exactly once --------------------
         ser->~Serializer();
         CHECK_EQ(g_c.deletingDtors, 1);
+        CHECK_EQ(g_c.frees, 1);          // retail's flags 1: then free `this`
+        CHECK(g_c.lastFree == enc.Slot(0));
         CHECK_EQ(g_c.tailReads, 1);
         CHECK_EQ(g_c.readCalls, 4);      // 3 header + 1 tail
         CHECK_EQ(g_c.readBytes, 16);     // 12 + 4
@@ -1064,6 +1146,7 @@ UNIT_TEST(the_real_Serializer_consumes_one_12_byte_header_and_one_4_byte_tail) {
 
         ser->~Serializer();
         CHECK_EQ(g_c.deletingDtors, 1);
+        CHECK_EQ(g_c.frees, 1);
         CHECK_EQ(g_c.tailWrites, 1);
         CHECK_EQ(g_c.writeCalls, 4);
         CHECK_EQ(g_c.writeBytes, 16);
@@ -1102,6 +1185,8 @@ UNIT_TEST(constructing_a_Serializer_twice_consumes_two_headers) {
     // exactly why the destructor is not idempotent.
     b->~Serializer();
     CHECK_EQ(g_c.deletingDtors, 1);
+    CHECK_EQ(g_c.frees, 1);
+    CHECK(g_c.lastFree == enc.Slot(1));   // the second construction's reader
     CHECK_EQ(g_c.readBytes, 28);      // 24 + one tail, NOT 24 + two
 }
 
@@ -1124,8 +1209,9 @@ UNIT_TEST(constructing_a_Serializer_twice_consumes_two_headers) {
 // offset asserting that the marker equals offset/8.
 //
 // Two compiler facts, so the next reader does not fight them:
-//   * `IO::ReaderWriter`'s destructor is protected, so the probe must be a
-//     SUBCLASS (it is) and must give itself a public one.
+//   * `IO::ReaderWriter` is abstract, so the probe must be a SUBCLASS (it is);
+//     since B3X W1 its destructor is public and virtual (retail slot 0 = D1 +
+//     D0), and every raw offset below is translated by RetailByteOffset.
 //   * `IO::BinaryReader`/`BinaryWriter`/`Visitor` are `final` (concrete since
 //     ENDGAME B.3.9 IO; tests/unit/b39_io_classes_test.cpp builds them), so
 //     they cannot be subclassed into a probe.
@@ -1137,7 +1223,8 @@ namespace order {
 
 struct OrderProbe final : IO::ReaderWriter {
     OrderProbe() : IO::ReaderWriter(ProbeSer()) {}
-    IO::ReaderWriter* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~OrderProbe() override { Note(this, 0); }   // retail slot 0 (kDtor)
+    DTOR_CHECK_RECORDING_DELETE
     int  GetVersion() const override { Note(this, 1); return 0; }
     void Skip() override { Note(this, 2); }
     void SerializeCharArray  (int, char*,          const char*) override { Note(this, 3); }
@@ -1163,7 +1250,6 @@ struct OrderProbe final : IO::ReaderWriter {
     void SerializeUChar (unsigned char&, const char*) override { Note(this, 23); }
     void SerializeSChar (signed char&,   const char*) override { Note(this, 24); }
     void SerializeBytes(int, void*, const char*) override { Note(this, 25); }
-    ~OrderProbe() = default;          // public: the base's is protected
 };
 
 struct EncOrderProbe final : IO::Encoding {
@@ -1181,12 +1267,26 @@ UNIT_TEST(the_real_ReaderWriter_declares_its_26_slots_in_retail_order) {
     order::OrderProbe p;
     void* raw = static_cast<void*>(static_cast<IO::ReaderWriter*>(&p));
 
-    // The three singular shapes first.
-    Reset();
-    using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn, order::OrderProbe>(raw, rw_vtbl::kDtor)(raw, 1u);
-    CHECK_EQ(g_lastMark, rw_vtbl::kDtor / 8);
-    CHECK(g_lastSelf == raw);                       // `this` unadjusted
+    // The three singular shapes first. Retail slot 0 (kDtor) is the compiler's
+    // pair: D0 (flags 1, what `~Serializer` calls) on a heap probe, D1 (flags
+    // 0) on a placement-new'd one — never on the stack `p`, which scope exit
+    // destroys.
+    {
+        order::OrderProbe* h = dtor_check::NewOnMalloc<order::OrderProbe>();
+        void* rawH = static_cast<void*>(static_cast<IO::ReaderWriter*>(h));
+        Reset(); dtor_check::ResetFrees();
+        dtor_check::CallD0(rawH);
+        CHECK_EQ(g_lastMark, rw_vtbl::kDtor / 8);
+        CHECK(g_lastSelf == rawH);                  // `this` unadjusted
+        CHECK_EQ(dtor_check::g_frees, 1);
+        CHECK(dtor_check::g_lastFree == rawH);
+        alignas(order::OrderProbe) unsigned char buf[sizeof(order::OrderProbe)];
+        order::OrderProbe* once = ::new (static_cast<void*>(buf)) order::OrderProbe();
+        Reset(); dtor_check::ResetFrees();
+        dtor_check::CallD1(static_cast<IO::ReaderWriter*>(once));
+        CHECK_EQ(g_lastMark, rw_vtbl::kDtor / 8);
+        CHECK_EQ(dtor_check::g_frees, 0);
+    }
 
     Reset();
     using IntFn = int (*)(void*);
@@ -1235,19 +1335,21 @@ UNIT_TEST(the_real_ReaderWriter_declares_its_26_slots_in_retail_order) {
     CHECK_EQ(g_lastMark, rw_vtbl::kSerializeBytes / 8);
     CHECK_EQ(g_lastMark, 25);                 // the last slot in the table
 
-    // 26 distinct entries, on the REAL class this time — no slot shared, and
-    // in particular no pair of same-named virtuals collapsed into one.
+    // 26 distinct retail slots = 27 compiler entries (D1 != D0 included), on
+    // the REAL class this time — no slot shared, and in particular no pair of
+    // same-named virtuals collapsed into one.
     void* const* vt = *reinterpret_cast<void* const* const*>(raw);
-    for (int a = 0; a < 26; ++a)
-        for (int b = a + 1; b < 26; ++b)
+    CHECK(vt[0] != vt[1]);
+    for (int a = 0; a < 27; ++a)
+        for (int b = a + 1; b < 27; ++b)
             CHECK(vt[a] != vt[b]);
 
-    // No virtual destructor anywhere in the shipped hierarchy: one would spend
-    // two Itanium slots and mis-aim every offset above by one and a half.
-    static_assert(!std::has_virtual_destructor<IO::ReaderWriter>::value, "B34_RULES 1.2.3");
-    static_assert(!std::has_virtual_destructor<IO::BinaryReader>::value, "B34_RULES 1.2.3");
-    static_assert(!std::has_virtual_destructor<IO::BinaryWriter>::value, "B34_RULES 1.2.3");
-    static_assert(!std::has_virtual_destructor<IO::Visitor>::value,      "B34_RULES 1.2.3");
+    // B3X W1: a virtual destructor throughout the shipped hierarchy — two
+    // Itanium slots for retail slot 0, every offset above one slot on.
+    static_assert(std::has_virtual_destructor<IO::ReaderWriter>::value, "B3X W1");
+    static_assert(std::has_virtual_destructor<IO::BinaryReader>::value, "B3X W1");
+    static_assert(std::has_virtual_destructor<IO::BinaryWriter>::value, "B3X W1");
+    static_assert(std::has_virtual_destructor<IO::Visitor>::value,      "B3X W1");
 }
 
 UNIT_TEST(the_real_Encoding_declares_its_5_slots_in_retail_order) {
@@ -1325,18 +1427,18 @@ constexpr int kGetSize       = 0x30;
 constexpr int kSlot7         = 0x38;   // Close on MemoryStream, Open on FileStream
 
 struct StreamProbe final : IO::Stream {
-    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    DTOR_CHECK_RECORDING_DELETE
     System::String GetSource() const override { Note(this, 1); return System::String(); }
     bool     Write(int, const void*) override  { Note(this, 2); return true; }
     bool     Read(int, void*) override         { Note(this, 3); return true; }
     bool     SetCurrentPos(int) override       { Note(this, 4); return true; }
     uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
     uint32_t GetSize() const override          { Note(this, 6); return 0; }
-    ~StreamProbe() = default;          // public: the base's is protected
+    ~StreamProbe() override { Note(this, 0); }   // retail slot 0 (B3X W1)
 };
 
 struct MemoryStreamProbe final : IO::MemoryStream {
-    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    DTOR_CHECK_RECORDING_DELETE
     System::String GetSource() const override { Note(this, 1); return System::String(); }
     bool     Write(int, const void*) override  { Note(this, 2); return true; }
     bool     Read(int, void*) override         { Note(this, 3); return true; }
@@ -1344,7 +1446,7 @@ struct MemoryStreamProbe final : IO::MemoryStream {
     uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
     uint32_t GetSize() const override          { Note(this, 6); return 0; }
     void     Close() override                  { Note(this, 7); }
-    ~MemoryStreamProbe() = default;
+    ~MemoryStreamProbe() override { Note(this, 0); }
 };
 
 // The six slots every Stream in the family shares, raw-called at their retail
@@ -1352,12 +1454,6 @@ struct MemoryStreamProbe final : IO::MemoryStream {
 // is the override declared at offset/8, with `this` unadjusted.
 void CheckSharedStreamSlots(void* raw) {
     uint8_t scratch[8] = {0};
-
-    Reset();
-    using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn, IO::Stream>(raw, kDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, kDtor / 8);
-    CHECK(g_lastSelf == raw);
 
     Reset();
     using WriteFn = bool (*)(void*, int, const void*);
@@ -1384,13 +1480,42 @@ void CheckSharedStreamSlots(void* raw) {
     CHECK_EQ(g_lastMark, kGetSize / 8);
 }
 
-// n distinct entries — which is what turns "every slot but one is pinned" into
-// "slot 1 is `GetSource`".
+// n distinct RETAIL slots — which is what turns "every slot but one is pinned"
+// into "slot 1 is `GetSource`". B3X W1: retail's n slots are n + 1 compiler
+// entries (retail slot 0 is the D1/D0 pair), all distinct, D1 != D0 included.
 void CheckDistinctSlots(void* raw, int n) {
     void* const* vt = *reinterpret_cast<void* const* const*>(raw);
-    for (int a = 0; a < n; ++a)
-        for (int b = a + 1; b < n; ++b)
+    const int entries = static_cast<int>(RetailSlot<IO::Stream>(n - 1)) + 1;
+    CHECK_EQ(entries, n + 1);
+    CHECK(vt[0] != vt[1]);
+    for (int a = 0; a < entries; ++a)
+        for (int b = a + 1; b < entries; ++b)
             CHECK(vt[a] != vt[b]);
+}
+
+// Retail slot 0 (kDtor) is the compiler's destructor pair, read raw: [0] D1
+// runs ~P once and frees nothing (retail flags 0); [1] D0 runs it and hands the
+// block to the class-scope operator delete (flags 1). D1 on a probe
+// placement-new'd into a buffer, never destroyed again.
+template <class P>
+void CheckStreamDtorPair() {
+    static_assert(kDtor == 0, "retail slot 0");
+    alignas(P) unsigned char buf[sizeof(P)];
+    P* p = ::new (static_cast<void*>(buf)) P();
+    void* raw = static_cast<void*>(static_cast<IO::Stream*>(p));
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(raw);
+    CHECK_EQ(g_lastMark, kDtor / 8);
+    CHECK(g_lastSelf == raw);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    P* h = dtor_check::NewOnMalloc<P>();
+    void* rawH = static_cast<void*>(static_cast<IO::Stream*>(h));
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(rawH);
+    CHECK_EQ(g_lastMark, kDtor / 8);
+    CHECK(g_lastSelf == rawH);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == rawH);
 }
 
 }  // namespace streamorder
@@ -1401,6 +1526,7 @@ UNIT_TEST(the_real_Stream_declares_its_7_slots_in_retail_order) {
 
     streamorder::CheckSharedStreamSlots(raw);
     streamorder::CheckDistinctSlots(raw, 7);
+    streamorder::CheckStreamDtorPair<streamorder::StreamProbe>();
 
     // Slot 1 by elimination (see the banner), and confirmed to be a virtual at
     // all by an ordinary C++ call through the base.
@@ -1408,12 +1534,13 @@ UNIT_TEST(the_real_Stream_declares_its_7_slots_in_retail_order) {
     { const IO::Stream& s = p; (void)s.GetSource(); }
     CHECK_EQ(g_lastMark, streamorder::kGetSource / 8);
 
-    // No virtual destructor: Itanium spends TWO slots on one, which would push
-    // `Write` out of slot 2 and mis-aim every raw caller in the tree.
-    static_assert(!std::has_virtual_destructor<IO::Stream>::value,
-                  "IO::Stream must not acquire a virtual destructor");
-    static_assert(!std::has_virtual_destructor<IO::MemoryStream>::value,
-                  "IO::MemoryStream must not acquire a virtual destructor");
+    // B3X W1: a virtual destructor. Itanium spends TWO slots on it, which puts
+    // `Write` (retail slot 2) at compiler slot 3; the product reaches every
+    // slot by name, and the raw reads here translate through RetailByteOffset.
+    static_assert(std::has_virtual_destructor<IO::Stream>::value,
+                  "IO::Stream: retail slot 0 is a virtual destructor");
+    static_assert(std::has_virtual_destructor<IO::MemoryStream>::value,
+                  "IO::MemoryStream: retail slot 0 is a virtual destructor");
 }
 
 UNIT_TEST(the_real_MemoryStream_adds_Close_at_slot_7_and_no_PreCommit) {
@@ -1432,6 +1559,7 @@ UNIT_TEST(the_real_MemoryStream_adds_Close_at_slot_7_and_no_PreCommit) {
     CHECK_EQ(g_lastMark, 7);
 
     streamorder::CheckDistinctSlots(raw, 8);
+    streamorder::CheckStreamDtorPair<streamorder::MemoryStreamProbe>();
 
     Reset();
     { const IO::Stream& s = p; (void)s.GetSource(); }
@@ -1484,7 +1612,7 @@ UNIT_TEST(the_real_Stream_family_is_layout_identical_to_both_duplicate_PODs) {
 namespace streamorder {
 
 struct FileStreamProbe final : IO::FileStream {
-    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    DTOR_CHECK_RECORDING_DELETE
     System::String GetSource() const override { Note(this, 1); return System::String(); }
     bool     Write(int, const void*) override  { Note(this, 2); return true; }
     bool     Read(int, void*) override         { Note(this, 3); return true; }
@@ -1492,14 +1620,14 @@ struct FileStreamProbe final : IO::FileStream {
     uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
     uint32_t GetSize() const override          { Note(this, 6); return 0; }
     bool     Open(const System::Filename&) override { Note(this, 7); return true; }
-    ~FileStreamProbe() = default;
+    ~FileStreamProbe() override { Note(this, 0); }
 };
 
-// BinaryFileStream differs from FileStream in slot 0 ONLY, so probing it is
-// probing that claim: the same eight overrides must land at the same eight
-// offsets through a table one class further down.
+// BinaryFileStream differs from FileStream in retail slot 0 ONLY (B3X W1: the
+// D1/D0 pair), so probing it is probing that claim: the same eight overrides
+// must land at the same eight offsets through a table one class further down.
 struct BinaryFileStreamProbe final : IO::BinaryFileStream {
-    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    DTOR_CHECK_RECORDING_DELETE
     System::String GetSource() const override { Note(this, 1); return System::String(); }
     bool     Write(int, const void*) override  { Note(this, 2); return true; }
     bool     Read(int, void*) override         { Note(this, 3); return true; }
@@ -1507,7 +1635,7 @@ struct BinaryFileStreamProbe final : IO::BinaryFileStream {
     uint32_t GetCurrentPos() const override    { Note(this, 5); return 0; }
     uint32_t GetSize() const override          { Note(this, 6); return 0; }
     bool     Open(const System::Filename&) override { Note(this, 7); return true; }
-    ~BinaryFileStreamProbe() = default;
+    ~BinaryFileStreamProbe() override { Note(this, 0); }
 };
 
 }  // namespace streamorder
@@ -1532,6 +1660,7 @@ UNIT_TEST(the_real_FileStream_puts_Open_at_slot_7_not_Close) {
     CHECK_EQ(g_lastMark, 7);
 
     streamorder::CheckDistinctSlots(raw, 8);
+    streamorder::CheckStreamDtorPair<streamorder::FileStreamProbe>();
 
     Reset();
     { const IO::Stream& s = p; (void)s.GetSource(); }
@@ -1540,10 +1669,10 @@ UNIT_TEST(the_real_FileStream_puts_Open_at_slot_7_not_Close) {
     // FileStream's slot-7 override takes a Filename and MemoryStream's takes
     // nothing: the two branches genuinely disagree about +0x38, and the type
     // system now carries that rather than a comment.
-    static_assert(!std::has_virtual_destructor<IO::FileStream>::value,
-                  "IO::FileStream must not acquire a virtual destructor");
-    static_assert(!std::has_virtual_destructor<IO::BinaryFileStream>::value,
-                  "IO::BinaryFileStream must not acquire a virtual destructor");
+    static_assert(std::has_virtual_destructor<IO::FileStream>::value,
+                  "IO::FileStream: retail slot 0 is a virtual destructor (B3X W1)");
+    static_assert(std::has_virtual_destructor<IO::BinaryFileStream>::value,
+                  "IO::BinaryFileStream: retail slot 0 is a virtual destructor (B3X W1)");
 }
 
 UNIT_TEST(BinaryFileStream_differs_from_FileStream_in_slot_0_only) {
@@ -1559,6 +1688,7 @@ UNIT_TEST(BinaryFileStream_differs_from_FileStream_in_slot_0_only) {
     SlotAt<OpenFn, IO::Stream>(rawBfs, streamorder::kSlot7)(rawBfs, &fn);
     CHECK_EQ(g_lastMark, 7);
     streamorder::CheckDistinctSlots(rawBfs, 8);
+    streamorder::CheckStreamDtorPair<streamorder::BinaryFileStreamProbe>();
 
     // The class adds NO state — which is the whole content of the retail fact
     // that `??_7BinaryFileStream@` and `??_7FileStream@` are byte-identical in
@@ -1645,7 +1775,9 @@ void PkgNote(int slot) { g_pkgMark = slot; }
 // A CONCRETE subclass of the REAL `Object::External`, declaring its nine slots
 // in `IO::PackageFile`'s exact order: External's eight, then Construct.
 struct PkgOrderProbe : Object::External {
-    Object::Base* DeletingDtor(unsigned) override   { PkgNote(0); return this; }
+    // retail slot 0 (B3X W1: the D1/D0 pair) records; the operator delete is
+    // retail flags 1's free, recorded.
+    DTOR_CHECK_RECORDING_DELETE
     const char*   TypeName() const override         { PkgNote(1); return "P"; }
     uint32_t      Type() const override             { PkgNote(2); return 0x50u; }
     int32_t       GetFileVersion() const override   { PkgNote(3); return 5; }
@@ -1654,7 +1786,7 @@ struct PkgOrderProbe : Object::External {
     Object::External* Reconstruct() override        { PkgNote(6); return this; }
     void          Destruct() override               { PkgNote(7); }
     virtual Object::External* Construct()           { PkgNote(8); return this; }
-    ~PkgOrderProbe() = default;
+    ~PkgOrderProbe() override { PkgNote(0); }
 };
 
 // `index` is RETAIL's slot; T (the object's class) decides the compiler's.
@@ -1669,12 +1801,25 @@ Fn PkgSlot(const void* obj, int index) {
 UNIT_TEST(package_file_adds_exactly_one_virtual_at_slot_8_over_External) {
     PkgOrderProbe probe;
 
-    // Raw slot calls at every index 0..8, each asserting its own marker. A
-    // mis-ordered declaration in PackageFile.h would land a call on the wrong
-    // body and the marker would disagree with the index.
-    g_pkgMark = -1;
-    PkgSlot<void* (*)(void*, unsigned), PkgOrderProbe>(&probe, 0)(&probe, 0u);
-    CHECK_EQ(g_pkgMark, 0);
+    // Raw slot calls at every retail index 0..8, each asserting its own
+    // marker. A mis-ordered declaration in PackageFile.h would land a call on
+    // the wrong body and the marker would disagree with the index. Retail
+    // index 0 is the D1/D0 pair (B3X W1): D1 on a placement-new'd probe (the
+    // stack `probe` must not be destroyed twice), D0 on a heap one.
+    {
+        alignas(PkgOrderProbe) unsigned char buf[sizeof(PkgOrderProbe)];
+        PkgOrderProbe* once = ::new (static_cast<void*>(buf)) PkgOrderProbe();
+        g_pkgMark = -1; dtor_check::ResetFrees();
+        PkgSlot<void (*)(void*), PkgOrderProbe>(once, 0)(once);
+        CHECK_EQ(g_pkgMark, 0);
+        CHECK_EQ(dtor_check::g_frees, 0);
+        PkgOrderProbe* heap = dtor_check::NewOnMalloc<PkgOrderProbe>();
+        g_pkgMark = -1; dtor_check::ResetFrees();
+        dtor_check::CallD0(heap);
+        CHECK_EQ(g_pkgMark, 0);
+        CHECK_EQ(dtor_check::g_frees, 1);
+        CHECK(dtor_check::g_lastFree == heap);
+    }
     g_pkgMark = -1;
     PkgSlot<const char* (*)(const void*), PkgOrderProbe>(&probe, 1)(&probe);
     CHECK_EQ(g_pkgMark, 1);
@@ -1708,16 +1853,18 @@ UNIT_TEST(package_file_adds_exactly_one_virtual_at_slot_8_over_External) {
     PkgSlot<void* (*)(void*), PkgOrderProbe>(&probe, 8)(&probe);
     CHECK_EQ(g_pkgMark, 8);
 
-    // Nine DISTINCT entries and no more. A virtual destructor anywhere in the
-    // chain would spend two slots and shift everything after it (B33 section 4
-    // rule 2), which this catches as a duplicate or a wrong marker rather than
-    // as a corrupted package on disk.
+    // Nine DISTINCT retail slots = ten compiler entries and no more. B3X W1:
+    // the virtual ~External spends two slots and shifts everything after it
+    // by one, so retail's Construct (+0x40, index 8) is compiler index 9 —
+    // which PkgSlot's RetailSlot translation asserted above.
     void* const* vt = *reinterpret_cast<void* const* const*>(&probe);
-    for (int a = 0; a < 9; ++a)
-        for (int b = a + 1; b < 9; ++b)
+    CHECK(vt[0] != vt[1]);
+    for (int a = 0; a < 10; ++a)
+        for (int b = a + 1; b < 10; ++b)
             CHECK(vt[a] != vt[b]);
-    static_assert(!std::has_virtual_destructor<Object::External>::value,
-                  "a virtual ~External would push Construct from slot 8 to slot 9");
+    static_assert(std::has_virtual_destructor<Object::External>::value,
+                  "B3X W1: the virtual ~External pushes Construct from compiler slot 8 to 9");
+    CHECK_EQ(RetailSlot<PkgOrderProbe>(8), 9L);
 }
 
 UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
@@ -1785,9 +1932,11 @@ UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
 // bytes through +0x88 (`kScalarUInt64`) or +0x98 (`kScalarUInt`, FOUR bytes) —
 // a save-format change with no build error. The probe drives the REAL member
 // (`runtime/src/io/serializer_class.cpp`, in `tests/unit/sources.mk`) against a
-// hand-built `void*[26]` of the shape `rt_data_mint_tables.inc` publishes, with
-// a DISTINCT body in every one of the four neighbouring slots, so landing on
-// the wrong one is a failure and not a coincidence.
+// hand-built table of the shape a compiler ReaderWriter table has since B3X W1
+// (27 entries: D1, D0, then retail slots 1..25 — the member dispatches BY NAME
+// now, so retail +0x90 is compiler +0x98), with a DISTINCT body in every one of
+// the four neighbouring slots, so landing on the wrong one is a failure and not
+// a coincidence.
 //
 // It also pins the REFERENCE semantics: retail's `AEA_J` is an `int64&`, so the
 // slot receives the caller's ADDRESS and the read side writes THROUGH it. The
@@ -1811,8 +1960,9 @@ void ScalarUInt  (void*, uint32_t*, const char*)  { ++g_callsWrong; }  // +0x98
 void ScalarInt   (void*, int32_t*,  const char*)  { ++g_callsWrong; }  // +0xA0
 void Nothing     (void*)                          { ++g_callsWrong; }
 
-void* g_table[26] = {
-    (void*)&Nothing,      // +0x00  kDtor
+void* g_table[27] = {
+    (void*)&Nothing,      // D1     retail +0x00 kDtor
+    (void*)&Nothing,      // D0     retail +0x00 kDtor
     (void*)&Nothing,      // +0x08  kGetVersion
     (void*)&Nothing,      // +0x10  kSkip
     (void*)&Nothing,      // +0x18  kArrayChar
@@ -1862,6 +2012,12 @@ UNIT_TEST(serializer_serialize_int64_lands_on_slot_0x90_and_round_trips) {
 
     RwStorage rw{};
     rw.vptr = static_cast<void*>(g_table);
+    // The retail offset, translated: the entry the by-name call reads.
+    static_assert(RetailByteOffset<IO::ReaderWriter>(rt::io::rw_vtbl::kScalarInt64) == 0x98,
+                  "retail +0x90 is compiler +0x98 behind D1/D0");
+    CHECK(g_table[RetailSlot<IO::ReaderWriter>(rt::io::rw_vtbl::kScalarInt64 / 8)] ==
+          reinterpret_cast<void*>(&ScalarInt64));
+
 
     // The Serializer is NOT constructed: its constructor drives an Encoding
     // factory and consumes a 12-byte stream header (PART E), which has nothing

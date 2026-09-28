@@ -21,6 +21,7 @@
 // in runtime/src/video/buffers.cpp, which does not link here.
 // ============================================================================
 #include "unit.h"
+#include "dtor_check.h"
 
 #include "runtime/types/video/ImageBuffer.h"
 #include "runtime/types/graphics/GeneratedImageBuffer.h"   // B.3.9 GFX: FrameCopy's part moved to rb_graphics_abi_test.cpp
@@ -68,6 +69,9 @@ bool        GeneratedImageBuffer::Serialize(void*) { return true; }
 namespace {
 
 struct RbModImage final : Video::ImageBuffer {};   // a stand-in subclass
+// B3X W1: the same stand-in with a recording class-scope operator delete, so
+// the free that retail's flags-1 arm made is proven, not assumed.
+struct RbRecImage final : Video::ImageBuffer { DTOR_CHECK_RECORDING_DELETE };
 
 UNIT_TEST(rb_imagebuffer_ctor_runs_shared_body_under_its_table) {
     g_init = g_rel = 0;
@@ -87,22 +91,40 @@ UNIT_TEST(rb_imagebuffer_ctor_runs_shared_body_under_its_table) {
     CHECK(g_relVptr == IbVt());
 }
 
+// B3X W1: retail slot 0 (the exe's scalar deleting dtor 0x1400129d0) is the
+// destructor pair. The `_ZTV` group is read RAW on purpose: [2] (the address
+// point) is now D1, `void(*)(void*)`, which frees nothing; the flags-1 call
+// retail made is [3], D0, the deleting destructor. This pins the new two-slot
+// order directly.
 UNIT_TEST(rb_imagebuffer_slot0_is_the_exe_scalar_deleting_dtor) {
+    static_assert(dtor_check::HasClassDelete<Video::ImageBuffer>::value,
+                  "D0 frees through a class-scope operator delete (MemFree)");
+    CHECK(g_rbIbVtGroup[2] != g_rbIbVtGroup[3]);
     g_init = g_rel = 0;
     void* mem = Object::detail::InternalMemAlloc(sizeof(Video::ImageBuffer), 8);
     Video::ImageBuffer* ib = ::new (mem) Video::ImageBuffer();
     CHECK(VptrOf(ib) == IbVt());
-    using Slot0 = Object::Base* (*)(void*, unsigned);
-    Slot0 s0 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbIbVtGroup[2]));
-    CHECK(static_cast<void*>(s0(ib, 1u)) == mem);
+    using D0Fn = void (*)(void*);
+    D0Fn d0 = reinterpret_cast<D0Fn>(const_cast<void*>(g_rbIbVtGroup[3]));
+    d0(ib);                                   // flags 1: destroy + MemFree (free here)
     CHECK_EQ(g_rel, 1);
     CHECK(g_relVptr == IbVt());
+    // The free, proven: the stand-in's D0 (its compiler slot 1) hands the block
+    // to its recording operator delete once, after ReleaseFields ran.
+    g_rel = 0;
+    RbRecImage* r = dtor_check::NewOnMalloc<RbRecImage>();
+    dtor_check::ResetFrees();
+    dtor_check::CallD0(r);
+    CHECK_EQ(g_rel, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
 }
 
 UNIT_TEST(b39_vs_imagebuffer_is_concrete_with_a_protected_dtor) {
     CHECK(!std::is_abstract<Video::ImageBuffer>::value);
-    CHECK(!std::is_destructible<Video::ImageBuffer>::value);      // D1.3: protected
-    CHECK(!std::has_virtual_destructor<Video::ImageBuffer>::value);
+    // B3X W1: the destructor is public and virtual (retail slot 0 = D1 + D0).
+    CHECK(std::is_destructible<Video::ImageBuffer>::value);
+    CHECK(std::has_virtual_destructor<Video::ImageBuffer>::value);
     CHECK((std::is_base_of<Object::CompiledExternal, Video::ImageBuffer>::value));
 }
 
@@ -125,16 +147,18 @@ UNIT_TEST(b39_vs_imagebuffer_ctor_stores_and_table) {
     CHECK_EQ(ib->_kind, 2);
     CHECK_EQ(ib->_filter, 1);
     CHECK(ib->_sourceName == nullptr);
-    // slot 0 with flags 0: destroy in place, keep the storage (Reconstruct's arm)
-    CHECK(static_cast<void*>(ib->DeletingDtor(0u)) == mem);
+    // retail slot 0 with flags 0 (Reconstruct's arm) is the complete destructor:
+    // destroy in place, keep the storage.
+    ib->~ImageBuffer();
     CHECK_EQ(g_rel, 1);
     Object::detail::InternalMemFree(mem);
 }
 
 UNIT_TEST(rb_imagebuffer_shape) {
     CHECK(!std::is_abstract<Video::ImageBuffer>::value);
-    CHECK(!std::has_virtual_destructor<Video::ImageBuffer>::value);
-    CHECK_EQ(sizeof(Video::ImageBuffer), (size_t)0x68);
+    CHECK(std::has_virtual_destructor<Video::ImageBuffer>::value);   // B3X W1
+    CHECK_EQ(sizeof
+(Video::ImageBuffer), (size_t)0x68);
 }
 
 }  // namespace

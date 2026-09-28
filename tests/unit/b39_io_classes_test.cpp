@@ -4,16 +4,21 @@
 // their REAL constructors.
 // ============================================================================
 //
-// Each class gets: not abstract, the dtor shape (non-virtual), slot order via
+// Each class gets: not abstract, the dtor shape, slot order via
 // pointer-to-virtual-member (adjustment 0), the ctor's retail stores, and --
-// where the class has a slot-0 deleting dtor -- both arms with a recording
-// marker. The out-of-line member bodies live in runtime/src/io/, which stands
-// on the port registry and does not link here; the few this test needs to
-// reach are stubbed below and say so.
+// where the class has a slot-0 deleting dtor -- both arms. B3X W1: retail
+// slot 0 is a public `virtual ~T()` (D1 + D0): flags 0 is `p->~T()`, flags 1
+// `delete p` (the free proven on a Recording<T> stand-in whose class operator
+// delete records, where T is not final), and the retired vector arm (flags 3)
+// is `delete[]` of a `new T[n]` (destructor order proven on the ArrLog<T>
+// stand-in below where T is not final). The out-of-line member bodies live in
+// runtime/src/io/, which stands on the port registry and does not link here;
+// the few this test needs to reach are stubbed below and say so.
 // ============================================================================
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/io/Serializer.h"
 #include "runtime/types/io/FileStream.h"
@@ -29,6 +34,32 @@ namespace {
 
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
+}
+
+// B3X W1: a stand-in whose destructor logs `this` once per object, so a
+// `delete[]` of `new ArrLog<T>[n]` can be checked for running the n
+// destructors downward (the order retail's vector arm destroyed in).
+int         g_arrN = 0;
+const void* g_arrOrder[8] = {};
+template <class T>
+struct ArrLog : T {
+    using T::T;
+    ~ArrLog() override {
+        if (g_arrN < 8) g_arrOrder[g_arrN] = this;
+        ++g_arrN;
+    }
+};
+
+// Retail flags 1 on a non-final T: `delete` through T* of a Recording<T> runs
+// the chain once and its class-scope operator delete receives the block.
+template <class T>
+void CheckRecordedDelete() {
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
+    dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
 }
 
 }  // namespace
@@ -136,9 +167,13 @@ B39_IO_RW_STUBS(BinaryWriter)
 
 namespace {
 
-// A stream reached ONLY through the four raw slots the family uses (+0x10
+// A stream reached ONLY through the four slots the family uses (retail +0x10
 // Write, +0x18 Read, +0x20 SetCurrentPos, +0x28 GetCurrentPos) -- the same
 // shape a live IO::Stream presents -- over a 256-byte buffer, counting reads.
+// B3X W1: IO::Stream has a virtual destructor, so a live table is the
+// compiler's (D1, D0, then retail slots 1..6 one index up) and the family
+// calls the members by name through it: the hand table below is in that
+// order, each entry placed with RetailSlot<IO::Stream>.
 struct FakeStream {
     const void* const* vt;
     uint8_t buf[256];
@@ -155,11 +190,14 @@ bool FsRead(void* s, int32_t n, void* dst) {
 }
 bool FsSeek(void* s, int32_t p) { static_cast<FakeStream*>(s)->pos = p; return true; }
 int32_t FsPos(void* s) { return static_cast<FakeStream*>(s)->pos; }
-const void* const kFakeStreamVt[6] = {
-    nullptr, nullptr,
+static_assert(RetailSlot<IO::Stream>(0x10 / 8) == 3 && RetailSlot<IO::Stream>(0x28 / 8) == 6,
+              "Write .. GetCurrentPos at compiler slots 3 .. 6");
+const void* const kFakeStreamVt[7] = {
+    nullptr, nullptr, nullptr,                   // D1, D0, GetSource (never reached)
     reinterpret_cast<const void*>(&FsWrite), reinterpret_cast<const void*>(&FsRead),
     reinterpret_cast<const void*>(&FsSeek),  reinterpret_cast<const void*>(&FsPos),
 };
+
 
 void InitFake(FakeStream& f) {
     std::memset(&f, 0, sizeof f);
@@ -188,12 +226,13 @@ UNIT_TEST(b39_io_readerwriter_family_shape) {
     CHECK(!std::is_abstract<IO::BinaryReader>::value);
     CHECK(!std::is_abstract<IO::BinaryWriter>::value);
     CHECK(!std::is_abstract<IO::Visitor>::value);
-    CHECK(!std::is_destructible<IO::BinaryReader>::value);     // protected, slot 0 only
-    CHECK(!std::is_destructible<IO::BinaryWriter>::value);
-    CHECK(!std::is_destructible<IO::Visitor>::value);
-    CHECK(!std::has_virtual_destructor<IO::BinaryReader>::value);
-    CHECK(!std::has_virtual_destructor<IO::BinaryWriter>::value);
-    CHECK(!std::has_virtual_destructor<IO::Visitor>::value);
+    // B3X W1: public virtual destructors (retail slot 0 = D1 + D0).
+    CHECK(std::is_destructible<IO::BinaryReader>::value);
+    CHECK(std::is_destructible<IO::BinaryWriter>::value);
+    CHECK(std::is_destructible<IO::Visitor>::value);
+    CHECK(std::has_virtual_destructor<IO::BinaryReader>::value);
+    CHECK(std::has_virtual_destructor<IO::BinaryWriter>::value);
+    CHECK(std::has_virtual_destructor<IO::Visitor>::value);
     CHECK_DTOR_SLOT(IO::BinaryReader);
     CHECK_SLOT(IO::BinaryReader, GetVersion,         0x08/8);
     CHECK_SLOT(IO::BinaryReader, Skip,               0x10/8);
@@ -231,7 +270,7 @@ UNIT_TEST(b39_io_binarywriter_ctor_and_dtor_frame_the_record) {
     CHECK_EQ(Dword(f, 8), 7);
     int32_t payload = 0x1234;
     FsWrite(&f, 4, &payload);                            // one field of the record
-    CHECK(w->DeletingDtor(0) == w);                      // flags 0: no free
+    w->~BinaryWriter();                                  // retail flags 0: no free
     CHECK_EQ((uint32_t)Dword(f, 16), 0xbbbbbbbbu);       // trailer
     CHECK_EQ(Dword(f, 4), 8);                            // len = 16 - 8, back-patched
     CHECK_EQ(f.pos, 20);                                 // and forward again
@@ -239,7 +278,9 @@ UNIT_TEST(b39_io_binarywriter_ctor_and_dtor_frame_the_record) {
 
 // 0x1800a8340 then 0x1800a82f0: reads magic / length / version (the argument is
 // overwritten), remembers the position after the length, and the dtor swallows
-// the trailer. Slot 0 with flags 1 frees through MemFree (malloc on the host).
+// the trailer. Slot 0 with flags 1 frees through MemFree (malloc on the host):
+// B3X W1, `delete r` — BinaryReader's D0 and ReaderWriter's class-scope
+// operator delete (std::free here, matching the std::malloc block).
 UNIT_TEST(b39_io_binaryreader_consumes_the_record_both_arms) {
     FakeStream f; InitFake(f);
     const int32_t rec[5] = { (int32_t)0xaaaaaaaau, 8, 9, 0x1234, (int32_t)0xbbbbbbbbu };
@@ -252,19 +293,20 @@ UNIT_TEST(b39_io_binaryreader_consumes_the_record_both_arms) {
     CHECK_EQ(r->version, 9);                             // 99 overwritten by the read
     CHECK_EQ(f.reads, 3);
     f.pos = 16;                                          // past the payload
-    CHECK(r->DeletingDtor(1) == r);                      // frees p
+    static_assert(dtor_check::HasClassDelete<IO::BinaryReader>::value, "ReaderWriter::operator delete");
+    delete r;                                            // frees p
     CHECK_EQ(f.reads, 4);                                // the trailer read
     CHECK_EQ(f.pos, 20);
 
-    // The VECTOR arm (0x180023a10: count at this-8, stride 0x30, downward).
+    // The retired VECTOR arm (0x180023a10: count at this-8, stride 0x30,
+    // downward) becomes `delete[]` of a `new BinaryReader[2]` (the public
+    // (serializer, version) ctor, one braced initialiser per element): both
+    // destructors run, each swallowing its trailer. (BinaryReader is final, so
+    // no logging stand-in: the two trailer reads are the observable.)
     InitFake(f);
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x30));
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    IO::BinaryReader* e0 = ::new (block + 8)        IO::BinaryReader(ser, 0);
-    ::new (block + 8 + 0x30) IO::BinaryReader(ser, 0);
+    IO::BinaryReader* a = new IO::BinaryReader[2]{{ser, 0}, {ser, 0}};
     f.reads = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+    delete[] a;
     CHECK_EQ(f.reads, 2);                                // both dtors ran
 }
 
@@ -284,17 +326,20 @@ UNIT_TEST(b39_io_visitor_ctor_stores_and_both_arms) {
     CHECK_EQ(at20, 5);
     for (int i = 0x24; i < 0x28; ++i) CHECK_EQ((int)mem[i], 0xCD);  // _pad24 untouched
     CHECK_EQ(f.pos, 0);
-    CHECK(v->DeletingDtor(0) == v);
+    v->~Visitor();                                       // retail flags 0
 
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 3 * 0x28));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    IO::Visitor* e0 = nullptr;
-    for (int i = 0; i < 3; ++i) {
-        IO::Visitor* e = ::new (block + 8 + i * 0x28) IO::Visitor(ser, i);
-        if (i == 0) e0 = e;
-    }
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);   // freed
+    // Retail flags 1 (0x18002b710's free arm): `delete` of a heap Visitor;
+    // ~Visitor is `= default`, so the observable is that it links, runs and
+    // frees through ReaderWriter's class-scope operator delete.
+    static_assert(dtor_check::HasClassDelete<IO::Visitor>::value, "ReaderWriter::operator delete");
+    delete ::new (std::malloc(0x28)) IO::Visitor(ser, 1);
+    // The retired vector arm (0x18002b710, stride 0x28) becomes `delete[]` of a
+    // `new Visitor[3]`; the elements are the three (serializer, i) objects.
+    IO::Visitor* a = new IO::Visitor[3]{{ser, 0}, {ser, 1}, {ser, 2}};
+    CHECK_EQ(a[2].GetVersion(), 2);
+    CHECK_EQ((int)(reinterpret_cast<uint8_t*>(&a[1]) - reinterpret_cast<uint8_t*>(&a[0])), 0x28);
+    delete[] a;
+    CHECK_EQ(f.pos, 0);                                  // no stream traffic
 }
 
 // ===========================================================================
@@ -302,8 +347,8 @@ UNIT_TEST(b39_io_visitor_ctor_stores_and_both_arms) {
 // ===========================================================================
 UNIT_TEST(b39_io_visitorstream_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::VisitorStream>::value);
-    CHECK(!std::is_destructible<IO::VisitorStream>::value);
-    CHECK(!std::has_virtual_destructor<IO::VisitorStream>::value);
+    CHECK(std::is_destructible<IO::VisitorStream>::value);        // B3X W1
+    CHECK(std::has_virtual_destructor<IO::VisitorStream>::value);
     CHECK_DTOR_SLOT(IO::VisitorStream);
     CHECK_SLOT(IO::VisitorStream, GetSource, 0x08/8);
     CHECK_SLOT(IO::VisitorStream, Write,     0x10/8);
@@ -320,15 +365,12 @@ UNIT_TEST(b39_io_visitorstream_ctor_and_both_arms) {
     CHECK(vs->_encoding != nullptr);
     CHECK_EQ(vs->_encoding->GetKind(), 3);
     CHECK(!vs->_encoding->IsBinary());
-    CHECK(vs->DeletingDtor(0) == vs);          // ~VisitorStream -> ~Stream frees the encoding
+    vs->~VisitorStream();                      // flags 0: ~VisitorStream -> ~Stream frees the encoding
 
-    // The vector arm (0x18002bf80: stride 0x18).
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x18));
-    const int64_t cookie = 2;
-    std::memcpy(block, &cookie, sizeof cookie);
-    IO::VisitorStream* e0 = ::new (block + 8) IO::VisitorStream();
-    ::new (block + 8 + 0x18) IO::VisitorStream();
-    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+    // Flags 1, the free proven on a Recording<VisitorStream>.
+    CheckRecordedDelete<IO::VisitorStream>();
+    // The retired vector arm (0x18002bf80: stride 0x18) -> delete[].
+    CHECK_ARRAY_DELETE(ArrLog<IO::VisitorStream>, g_arrN, g_arrOrder);
 }
 
 // ===========================================================================
@@ -341,11 +383,12 @@ UNIT_TEST(b39_io_filestream_family_shape) {
     CHECK(!std::is_abstract<IO::FileStream>::value);
     CHECK(!std::is_abstract<IO::BinaryFileStream>::value);
     CHECK(!std::is_abstract<IO::TextFileStream>::value);
-    CHECK(!std::is_destructible<IO::FileStream>::value);
-    CHECK(!std::is_destructible<IO::BinaryFileStream>::value);
-    CHECK(!std::is_destructible<IO::TextFileStream>::value);
-    CHECK(!std::has_virtual_destructor<IO::FileStream>::value);
-    CHECK(!std::has_virtual_destructor<IO::TextFileStream>::value);
+    // B3X W1: public virtual destructors (retail slot 0 = D1 + D0).
+    CHECK(std::is_destructible<IO::FileStream>::value);
+    CHECK(std::is_destructible<IO::BinaryFileStream>::value);
+    CHECK(std::is_destructible<IO::TextFileStream>::value);
+    CHECK(std::has_virtual_destructor<IO::FileStream>::value);
+    CHECK(std::has_virtual_destructor<IO::TextFileStream>::value);
     CHECK_DTOR_SLOT(IO::FileStream);
     CHECK_SLOT(IO::FileStream, GetSource, 0x08/8);
     CHECK_SLOT(IO::FileStream, Open,      0x38/8);   // NOT Close
@@ -376,7 +419,7 @@ UNIT_TEST(b39_io_filestream_and_binaryfilestream_ctor_stores) {
     for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0x24; i < 0x28; ++i) CHECK_EQ((int)mem[i], 0xCD);   // FileInfo::_unk04
     for (int i = 0x34; i < 0x38; ++i) CHECK_EQ((int)mem[i], 0xCD);   // FileInfo::_pad14
-    CHECK(fs->DeletingDtor(0) == fs);
+    fs->~FileStream();                                  // retail flags 0
 
     alignas(8) uint8_t mem2[0x50];
     IO::BinaryFileStream* bfs = ::new (mem2) IO::BinaryFileStream();
@@ -385,32 +428,36 @@ UNIT_TEST(b39_io_filestream_and_binaryfilestream_ctor_stores) {
     CHECK_EQ(bfs->_encoding->GetKind(), 2);
     CHECK_EQ(bfs->_file.handle, -1);
     CHECK(VTableOf(bfs) != VTableOf(fs));               // slot 0 differs, one table per class
-    CHECK(bfs->DeletingDtor(0) == bfs);                 // ~Stream frees the encoding
+    bfs->~BinaryFileStream();                           // ~Stream frees the encoding
 }
 
 // Both arms of the three slot-0 bodies (0x18000c090 / 0x180023d80 stride 0x50,
-// 0x18002ba90 stride 0x80): flags 1 frees `this`, flags 3 frees `this - 8` and
-// returns it.
+// 0x18002ba90 stride 0x80): flags 1 frees `this`, flags 3 freed `this - 8` and
+// returned it. B3X W1: flags 1 is `delete` (the free proven on Recording<T>);
+// the vector arm has no Itanium counterpart and `delete[]` replaces it.
 UNIT_TEST(b39_io_filestream_family_deletingdtor_arms) {
     IO::FileStream* fs = ::new (std::malloc(0x50)) IO::FileStream();
-    CHECK(fs->DeletingDtor(1) == fs);
+    delete fs;
     IO::BinaryFileStream* bfs = ::new (std::malloc(0x50)) IO::BinaryFileStream();
-    CHECK(bfs->DeletingDtor(1) == bfs);
+    delete bfs;
+    CheckRecordedDelete<IO::FileStream>();
+    CheckRecordedDelete<IO::BinaryFileStream>();
 
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x50));
-    const int64_t two = 2;
-    std::memcpy(block, &two, sizeof two);
-    IO::BinaryFileStream* b0 = ::new (block + 8) IO::BinaryFileStream();
-    ::new (block + 8 + 0x50) IO::BinaryFileStream();
-    CHECK(reinterpret_cast<uint8_t*>(b0->DeletingDtor(3)) == block);
+    CHECK_ARRAY_DELETE(ArrLog<IO::BinaryFileStream>, g_arrN, g_arrOrder);
 
-    uint8_t* tblock = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x80));
-    std::memcpy(tblock, &two, sizeof two);
-    IO::TextFileStream* t0 =
-        ::new (tblock + 8) IO::TextFileStream(System::String(), System::String(), 0);
-    ::new (tblock + 8 + 0x80) IO::TextFileStream(System::String(), System::String(), 0);
-    CHECK_EQ(t0->_requestedFormat, 6);
-    CHECK(reinterpret_cast<uint8_t*>(t0->DeletingDtor(3)) == tblock);
+    // TextFileStream has only retail's (type, name, version) ctor: one braced
+    // initialiser per element; the destructors still run downward.
+    using TLog = ArrLog<IO::TextFileStream>;
+    TLog* t = new TLog[2]{{System::String(), System::String(), 0},
+                          {System::String(), System::String(), 0}};
+    CHECK_EQ(t[0]._requestedFormat, 6);
+    const void* t0 = &t[0];
+    const void* t1 = &t[1];
+    g_arrN = 0;
+    delete[] t;
+    CHECK_EQ(g_arrN, 2);
+    CHECK(g_arrOrder[0] == t1);
+    CHECK(g_arrOrder[1] == t0);
 }
 
 // ===========================================================================
@@ -418,8 +465,8 @@ UNIT_TEST(b39_io_filestream_family_deletingdtor_arms) {
 // ===========================================================================
 UNIT_TEST(b39_io_memorystream_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::MemoryStream>::value);
-    CHECK(!std::is_destructible<IO::MemoryStream>::value);
-    CHECK(!std::has_virtual_destructor<IO::MemoryStream>::value);
+    CHECK(std::is_destructible<IO::MemoryStream>::value);         // B3X W1
+    CHECK(std::has_virtual_destructor<IO::MemoryStream>::value);
     CHECK_DTOR_SLOT(IO::MemoryStream);
     CHECK_SLOT(IO::MemoryStream, Write, 0x10/8);
     CHECK_SLOT(IO::MemoryStream, Close, 0x38/8);   // NOT Open
@@ -442,17 +489,14 @@ UNIT_TEST(b39_io_memorystream_shape_ctor_and_both_arms) {
     // An OWNED buffer is freed by ~MemoryStream, then ~Stream frees the encoding.
     ms->_data = std::malloc(16);
     ms->_ownsData = 1;
-    CHECK(ms->DeletingDtor(0) == ms);
+    ms->~MemoryStream();                                // retail flags 0
 
-    // flags 1 frees `this`; the vector arm (stride 0x30) frees `this - 8`.
+    // flags 1 frees `this` (`delete`, proven on Recording<MemoryStream>); the
+    // retired vector arm of 0x1800242a0 (stride 0x30) becomes `delete[]`.
     IO::MemoryStream* heap = ::new (std::malloc(0x30)) IO::MemoryStream();
-    CHECK(heap->DeletingDtor(1) == heap);
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x30));
-    const int64_t two = 2;
-    std::memcpy(block, &two, sizeof two);
-    IO::MemoryStream* m0 = ::new (block + 8) IO::MemoryStream();
-    ::new (block + 8 + 0x30) IO::MemoryStream();
-    CHECK(reinterpret_cast<uint8_t*>(m0->DeletingDtor(3)) == block);
+    delete heap;
+    CheckRecordedDelete<IO::MemoryStream>();
+    CHECK_ARRAY_DELETE(ArrLog<IO::MemoryStream>, g_arrN, g_arrOrder);
 }
 
 // ===========================================================================
@@ -462,8 +506,8 @@ UNIT_TEST(b39_io_memorystream_shape_ctor_and_both_arms) {
 // the constructors and slot 0 are inline and REAL here.
 UNIT_TEST(b39_io_compressedfilestream_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::CompressedFileStream>::value);
-    CHECK(!std::is_destructible<IO::CompressedFileStream>::value);
-    CHECK(!std::has_virtual_destructor<IO::CompressedFileStream>::value);
+    CHECK(std::is_destructible<IO::CompressedFileStream>::value);         // B3X W1
+    CHECK(std::has_virtual_destructor<IO::CompressedFileStream>::value);
     CHECK_DTOR_SLOT(IO::CompressedFileStream);
     CHECK_SLOT(IO::CompressedFileStream, Close,     0x38/8);
     CHECK_SLOT(IO::CompressedFileStream, PreCommit, 0x40/8);
@@ -491,16 +535,13 @@ UNIT_TEST(b39_io_compressedfilestream_shape_ctor_and_both_arms) {
     CHECK(cfs->_file._encoding != cfs->_encoding);
     CHECK_EQ(cfs->_file._file.handle, -1);
     CHECK(VTableOf(cfs) != VTableOf(&cfs->_file));
-    CHECK(cfs->DeletingDtor(0) == cfs);
+    cfs->~CompressedFileStream();                       // retail flags 0
 
     IO::CompressedFileStream* heap = ::new (std::malloc(0xb8)) IO::CompressedFileStream();
-    CHECK(heap->DeletingDtor(1) == heap);
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0xb8));
-    const int64_t two = 2;
-    std::memcpy(block, &two, sizeof two);
-    IO::CompressedFileStream* c0 = ::new (block + 8) IO::CompressedFileStream();
-    ::new (block + 8 + 0xb8) IO::CompressedFileStream();
-    CHECK(reinterpret_cast<uint8_t*>(c0->DeletingDtor(3)) == block);
+    delete heap;                                        // retail flags 1
+    CheckRecordedDelete<IO::CompressedFileStream>();
+    // The retired vector arm of 0x180024100 (stride 0xb8) -> delete[].
+    CHECK_ARRAY_DELETE(ArrLog<IO::CompressedFileStream>, g_arrN, g_arrOrder);
 }
 
 // ===========================================================================
@@ -510,8 +551,8 @@ UNIT_TEST(b39_io_compressedfilestream_shape_ctor_and_both_arms) {
 // the constructor and slot 0 are inline and REAL here.
 UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::PackageFile>::value);
-    CHECK(!std::is_destructible<IO::PackageFile>::value);
-    CHECK(!std::has_virtual_destructor<IO::PackageFile>::value);
+    CHECK(std::is_destructible<IO::PackageFile>::value);          // B3X W1
+    CHECK(std::has_virtual_destructor<IO::PackageFile>::value);
     CHECK_DTOR_SLOT(IO::PackageFile);
     CHECK_SLOT(IO::PackageFile, TypeName,  0x08/8);
     CHECK_SLOT(IO::PackageFile, Serialize, 0x28/8);
@@ -546,16 +587,13 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     for (int i = 0xad; i < 0xb0; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0xc4; i < 0xc8; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0xd4; i < 0xd8; ++i) CHECK_EQ((int)mem[i], 0xCD);
-    CHECK(pf->DeletingDtor(0) == pf);
+    pf->~PackageFile();                                 // retail flags 0
 
     IO::PackageFile* heap = ::new (std::malloc(0xf0)) IO::PackageFile();
-    CHECK(heap->DeletingDtor(1) == heap);
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0xf0));
-    const int64_t two = 2;
-    std::memcpy(block, &two, sizeof two);
-    IO::PackageFile* p0 = ::new (block + 8) IO::PackageFile();
-    ::new (block + 8 + 0xf0) IO::PackageFile();
-    CHECK(reinterpret_cast<uint8_t*>(p0->DeletingDtor(3)) == block);
+    delete heap;                                        // retail flags 1
+    CheckRecordedDelete<IO::PackageFile>();
+    // The retired vector arm of 0x1800259d0 (stride 0xf0) -> delete[].
+    CHECK_ARRAY_DELETE(ArrLog<IO::PackageFile>, g_arrN, g_arrOrder);
 }
 
 // ===========================================================================
@@ -565,8 +603,8 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
 // the constructors and slot 0 are inline and REAL here.
 UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::CompressedMemoryStream>::value);
-    CHECK(!std::is_destructible<IO::CompressedMemoryStream>::value);
-    CHECK(!std::has_virtual_destructor<IO::CompressedMemoryStream>::value);
+    CHECK(std::is_destructible<IO::CompressedMemoryStream>::value);         // B3X W1
+    CHECK(std::has_virtual_destructor<IO::CompressedMemoryStream>::value);
     CHECK_DTOR_SLOT(IO::CompressedMemoryStream);
     CHECK_SLOT(IO::CompressedMemoryStream, Close,     0x38/8);
     CHECK_SLOT(IO::CompressedMemoryStream, PreCommit, 0x40/8);
@@ -595,17 +633,15 @@ UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
     CHECK(&cms->GetMemoryStream() == &cms->_memoryStream);
     CHECK_EQ((int)(reinterpret_cast<uint8_t*>(&cms->GetMemoryStream()) - mem), 0x68);
     CHECK(VTableOf(cms) != VTableOf(&cms->_memoryStream));
-    CHECK(cms->DeletingDtor(0) == cms);
+    cms->~CompressedMemoryStream();                     // retail flags 0
 
     IO::CompressedMemoryStream* heap = ::new (std::malloc(0x98)) IO::CompressedMemoryStream();
-    CHECK(heap->DeletingDtor(1) == heap);
-    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x98));
-    const int64_t two = 2;
-    std::memcpy(block, &two, sizeof two);
-    IO::CompressedMemoryStream* c0 = ::new (block + 8) IO::CompressedMemoryStream();
-    ::new (block + 8 + 0x98) IO::CompressedMemoryStream();
-    CHECK(reinterpret_cast<uint8_t*>(c0->DeletingDtor(3)) == block);
+    delete heap;                                        // retail flags 1
+    CheckRecordedDelete<IO::CompressedMemoryStream>();
+    // The retired vector arm of 0x1800244a0 (stride 0x98) -> delete[].
+    CHECK_ARRAY_DELETE(ArrLog<IO::CompressedMemoryStream>, g_arrN, g_arrOrder);
 }
+
 
 // ===========================================================================
 // IO::PersistenceWorker -- unexported row 1 (0x180155860, W2).

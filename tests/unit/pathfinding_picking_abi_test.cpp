@@ -24,12 +24,15 @@
 //
 // ENDGAME B.3 step 9 PILOT (B39_RULES D1/D2): Picking::PickingMesh is CONCRETE
 // now -- PART A says so, and the b39_* tests construct the REAL class (its
-// ctor and DeletingDtor are inline in PickingMesh.h; only ~PickingMesh is a
-// marker here) and pin slot order by PMF, the ctor's stores, and both arms of
-// slot 0 (free on `flags & 1`, the downward array arm on `flags & 2`).
+// ctor is inline in PickingMesh.h; only ~PickingMesh is a marker here) and pin
+// slot order by PMF, the ctor's stores, and both arms of retail slot 0 (free
+// on `flags & 1`; the downward array arm on `flags & 2` is retired with the
+// B3X W1 cutover: slot 0 is `virtual ~T()`, D1 + D0, and `delete[]` replaces
+// the array arm).
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/pathfinding/PointList.h"
 #include "runtime/types/pathfinding/IPathInfo.h"
@@ -62,7 +65,7 @@ const void* const* VTableOf(void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
 
-constexpr int kDeletingDtor   = 0x00;
+constexpr int kDtorSlot   = 0x00;
 constexpr int kTypeName       = 0x08;
 constexpr int kType           = 0x10;
 constexpr int kGetFileVersion = 0x18;
@@ -75,20 +78,19 @@ constexpr int kConstruct      = 0x40;   // introduced per leaf — B7-1.6
 // A bare Object::External leaf: whatever it carries at +0x20 IS
 // `?Compile@External@Object@@`.
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
 
-// Raw-call slots 0..8 (4 included: Compile is overridden on both resources
-// here) and check the marker each one leaves. Slots 1 and 2 are DECLARE_TYPE's
+// Raw-call retail slots 1..8 (4 included: Compile is overridden on both
+// resources here) and check the marker each one leaves; retail slot 0, the
+// destructor pair, is CheckDtorPair's. Slots 1 and 2 are DECLARE_TYPE's
 // real inline bodies (ENDGAME B.3.9 TI-REST) over the class's own record, so
 // they are checked against that record, not a marker.
 template <class T>
 void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
-    using DtorFn    = void* (*)(void*, unsigned);
     using NameFn    = const char* (*)(const void*);
     using TypeFn    = uint32_t (*)(const void*);
     using VerFn     = int32_t (*)(const void*);
@@ -97,8 +99,6 @@ void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
     using PtrFn     = void* (*)(void*);
     using VoidFn    = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
     CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record.name);
     CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record.typeId);
     Reset(); (SlotAt<VerFn, T>(raw, kGetFileVersion)(raw));  CHECK_EQ(g_lastMark, kGetFileVersion / 8);
@@ -112,13 +112,37 @@ void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
     Reset(); (SlotAt<PtrFn, T>(raw, kConstruct)(raw));       CHECK_EQ(g_lastMark, kConstruct / 8);
     CHECK(g_lastSelf == raw);
 
+    // Nine retail slots = ten compiler slots (D1, D0 for retail slot 0): all
+    // distinct, D1 != D0 included.
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 9; ++i)
-        for (int j = i + 1; j < 9; ++j)
+    for (int i = 0; i < 10; ++i)
+        for (int j = i + 1; j < 10; ++j)
             CHECK(vt[i] != vt[j]);
 
     BareExternalProbe bare;
     CHECK(RetailEntry<T>(raw, kCompile / 8) != RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
+}
+
+// Retail slot 0 (kDtorSlot) is now the destructor pair, read raw: compiler
+// [0] D1 runs ~P once and frees nothing (retail flags 0); [1] D0 runs it and
+// hands the block to the class-scope operator delete (flags 1). D1 is called on
+// a placement-new'd probe that is never destroyed again (a stack probe would be
+// destroyed twice).
+template <class P>
+void CheckDtorPair() {
+    static_assert(kDtorSlot == 0, "retail slot 0");
+    alignas(P) unsigned char buf[sizeof(P)];
+    P* p = ::new (static_cast<void*>(buf)) P();
+    CHECK(VTableOf(p)[0] != VTableOf(p)[1]);
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    P* h = dtor_check::NewOnMalloc<P>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
 }
 
 }  // namespace
@@ -136,9 +160,9 @@ Object::External* PointList::Construct() { Note(this, 8); return this; }
 }  // namespace Pathfinding
 
 namespace {
-// ENDGAME B.3.9 ENG: the destructor marker RECORDS each call, so the real
-// `DeletingDtor` (inline in PointList.h, the one under test) can be seen
-// running ~PointList once per element and in retail's DESCENDING order.
+// ENDGAME B.3.9 ENG: the destructor marker RECORDS each call, so `delete` and
+// `delete[]` (B3X W1) can be seen running ~PointList once per element and in
+// retail's DESCENDING order.
 int         g_plDtorCount = 0;
 const void* g_plDtorOrder[8] = {};
 }  // namespace
@@ -152,8 +176,11 @@ PointList::~PointList() {
 
 namespace {
 
+// B3X W1: records in its destructor (retail slot 0) and frees through a
+// recording class-scope operator delete (retail flags 1's MemFree).
 struct PointListProbe final : Pathfinding::PointList {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~PointListProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 // Slot 3 of a minted PointList table points at the DOOR, and the door delegates
@@ -186,10 +213,10 @@ UNIT_TEST(pathfinding_pointlist_layout) {
                    offsetof(Collection::Array<Pathfinding::PointList::Point>, _size)), 0x38);
     CHECK((std::is_base_of<Object::External, Pathfinding::PointList>::value));
     // ENDGAME B.3.9 ENG (B39_RULES D1): CONCRETE, retail's public default
-    // ctor; the destructor is PROTECTED and non-virtual (deletion is slot 0).
+    // ctor; B3X W1: the destructor is public and virtual (retail slot 0 = D1 + D0).
     CHECK(!std::is_abstract<Pathfinding::PointList>::value);
-    CHECK(!std::is_destructible<Pathfinding::PointList>::value);
-    CHECK(!std::has_virtual_destructor<Pathfinding::PointList>::value);
+    CHECK(std::is_destructible<Pathfinding::PointList>::value);
+    CHECK(std::has_virtual_destructor<Pathfinding::PointList>::value);
 }
 
 // The two reference getters return the members retail's LEAs name
@@ -209,6 +236,7 @@ UNIT_TEST(pathfinding_pointlist_slot_order_is_retails) {
     PointListProbe probe;
     void* raw = static_cast<void*>(&probe);
     CheckNineOwnSlots<PointListProbe>(raw, Pathfinding::PointList::GetTypeInfo());
+    CheckDtorPair<PointListProbe>();
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 
@@ -218,9 +246,9 @@ UNIT_TEST(pathfinding_pointlist_slot_order_is_retails) {
 UNIT_TEST(pathfinding_pointlist_qualified_call_does_not_reenter_the_door) {
     PointListProbe probe;
     void* raw = static_cast<void*>(&probe);
-    const void* minted[9] = {};
+    const void* minted[10] = {};   // nine retail slots = ten compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 9; ++i) minted[i] = real[i];
+    for (int i = 0; i < 10; ++i) minted[i] = real[i];
     minted[RetailSlot<PointListProbe>(kGetFileVersion / 8)] =
         reinterpret_cast<const void*>(&MintedPointListGetFileVersionDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
@@ -276,34 +304,36 @@ UNIT_TEST(b39_pointlist_ctor_makes_retails_stores) {
     CHECK(VTableOf(p) != VTableOf(&probe));
 
     g_plDtorCount = 0;
-    CHECK(p->DeletingDtor(0) == p);        // flags 0: destroy, no free
-    CHECK(p2->DeletingDtor(0) == p2);
+    p->~PointList();                        // retail flags 0: destroy, no free
+    p2->~PointList();
     CHECK_EQ(g_plDtorCount, 2);
 }
 
-// Slot 0 frees on `flags & 1`; the ARRAY arm reads the int32 count at
-// `this - 8`, destroys DOWNWARD with stride 0x50, frees and returns `this - 8`
-// -- both arms exactly as the retired RT_DELDTOR row 0x1800713b0 ran them.
+// Retail slot 0 frees on `flags & 1`; its ARRAY arm read the int32 count at
+// `this - 8`, destroyed DOWNWARD with stride 0x50, freed and returned
+// `this - 8` -- both arms as the retired RT_DELDTOR row 0x1800713b0 ran them.
+// B3X W1: flags 1 is `delete p` (PointList's D0: ~PointList once, then its
+// class-scope MemFree operator delete — InternalMemFree == free here); the free
+// itself is proven on a Recording<PointList>. The array arm has no Itanium
+// counterpart; `delete[]` of a `new PointList[3]` replaces it.
 UNIT_TEST(b39_pointlist_deletingdtor_frees_both_arms) {
+    static_assert(dtor_check::HasClassDelete<Pathfinding::PointList>::value, "class-scope operator delete");
     void* m = Object::detail::InternalMemAlloc(sizeof(Pathfinding::PointList), 8);
     CHECK(m != nullptr);
     Pathfinding::PointList* p = ::new (m) Pathfinding::PointList();
     g_plDtorCount = 0;
-    CHECK(p->DeletingDtor(1) == p);
+    delete p;
     CHECK_EQ(g_plDtorCount, 1);
+    CHECK(g_plDtorOrder[0] == m);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x50, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    Pathfinding::PointList* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x50) Pathfinding::PointList();
-    g_plDtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_plDtorCount, 3);
-    CHECK(g_plDtorOrder[0] == e[2]);
-    CHECK(g_plDtorOrder[1] == e[1]);
-    CHECK(g_plDtorOrder[2] == e[0]);
+    Pathfinding::PointList* r = dtor_check::NewOnMalloc<dtor_check::Recording<Pathfinding::PointList>>();
+    g_plDtorCount = 0; dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_plDtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
+
+    CHECK_ARRAY_DELETE(Pathfinding::PointList, g_plDtorCount, g_plDtorOrder);
 }
 
 // ---------------------------------------------------------------------------
@@ -354,9 +384,9 @@ Object::External* PickingMesh::Construct() { Note(this, 8); return this; }
 }  // namespace Picking
 
 namespace {
-// ENDGAME B.3.9 pilot: the destructor marker RECORDS each call, so the real
-// `DeletingDtor` (inline in PickingMesh.h, the one under test) can be seen
-// running ~PickingMesh once per element and in retail's DESCENDING order.
+// ENDGAME B.3.9 pilot: the destructor marker RECORDS each call, so `delete`
+// and `delete[]` (B3X W1) can be seen running ~PickingMesh once per element and
+// in retail's DESCENDING order.
 int         g_meshDtorCount = 0;
 const void* g_meshDtorOrder[8] = {};
 }  // namespace
@@ -371,7 +401,8 @@ PickingMesh::~PickingMesh() {
 namespace {
 
 struct PickingMeshProbe final : Picking::PickingMesh {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~PickingMeshProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 
@@ -404,14 +435,13 @@ UNIT_TEST(picking_pickingmesh_layout) {
     CHECK_EQ((int)offsetof(Picking::PickingMesh::SubMesh, _triangles), 0x60);
     CHECK((std::is_base_of<Object::External, Picking::PickingMesh>::value));
     // ENDGAME B.3.9 pilot (B39_RULES D1): CONCRETE, with retail's public
-    // default constructor; still no virtual destructor (the cutover is later).
+    // default constructor.
     CHECK(!std::is_abstract<Picking::PickingMesh>::value);
-    // The destructor is PROTECTED and non-virtual (B8-2): deletion is slot 0.
-    // (So `is_default_constructible` -- which also asks for an accessible
-    // destructor -- is false; the public ctor is exercised by placement new in
-    // b39_pickingmesh_ctor_makes_retails_stores below.)
-    CHECK(!std::is_destructible<Picking::PickingMesh>::value);
-    CHECK(!std::has_virtual_destructor<Picking::PickingMesh>::value);
+    // B3X W1, the cutover: the destructor is PUBLIC and virtual (retail slot 0
+    // = D1 + D0), so the class is default-constructible and destructible.
+    CHECK(std::is_destructible<Picking::PickingMesh>::value);
+    CHECK(std::has_virtual_destructor<Picking::PickingMesh>::value);
+    CHECK(std::is_default_constructible<Picking::PickingMesh>::value);
 }
 
 // ---------------------------------------------------------------------------
@@ -459,35 +489,35 @@ UNIT_TEST(b39_pickingmesh_ctor_makes_retails_stores) {
     CHECK(VTableOf(m) != VTableOf(&probe));
 
     g_meshDtorCount = 0;
-    CHECK(m->DeletingDtor(0) == m);       // flags 0: destroy, no free
-    CHECK(m2->DeletingDtor(0) == m2);
+    m->~PickingMesh();                     // retail flags 0: destroy, no free
+    m2->~PickingMesh();
     CHECK_EQ(g_meshDtorCount, 2);
 }
 
-// Slot 0 FREES on `flags & 1` (host seam: InternalMemFree == free, so a wrong
-// pointer is a heap fault here), and the ARRAY arm reads the int32 count at
-// `this - 8`, destroys DOWNWARD, frees and returns `this - 8` -- both arms
-// exactly as the retired RT_DELDTOR row 0x180072050 ran them.
+// Retail slot 0 FREES on `flags & 1`, and its ARRAY arm read the int32 count
+// at `this - 8`, destroyed DOWNWARD, freed and returned `this - 8` -- both
+// arms as the retired RT_DELDTOR row 0x180072050 ran them. B3X W1: flags 1 is
+// `delete m` (PickingMesh's D0, its class-scope MemFree operator delete;
+// InternalMemFree == free here), the free proven on a Recording<PickingMesh>;
+// `delete[]` of a `new PickingMesh[3]` replaces the array arm.
 UNIT_TEST(b39_pickingmesh_deletingdtor_frees_both_arms) {
+    static_assert(dtor_check::HasClassDelete<Picking::PickingMesh>::value, "class-scope operator delete");
     void* p = Object::detail::InternalMemAlloc(sizeof(Picking::PickingMesh), 8);
     CHECK(p != nullptr);
     Picking::PickingMesh* m = ::new (p) Picking::PickingMesh();
     g_meshDtorCount = 0;
-    CHECK(m->DeletingDtor(1) == m);
+    delete m;
     CHECK_EQ(g_meshDtorCount, 1);
+    CHECK(g_meshDtorOrder[0] == p);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x48, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;                       // the upper dword is 0 too
-    std::memcpy(block, &cookie, sizeof cookie);
-    Picking::PickingMesh* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x48) Picking::PickingMesh();
-    g_meshDtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_meshDtorCount, 3);
-    CHECK(g_meshDtorOrder[0] == e[2]);
-    CHECK(g_meshDtorOrder[1] == e[1]);
-    CHECK(g_meshDtorOrder[2] == e[0]);
+    Picking::PickingMesh* r = dtor_check::NewOnMalloc<dtor_check::Recording<Picking::PickingMesh>>();
+    g_meshDtorCount = 0; dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_meshDtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
+
+    CHECK_ARRAY_DELETE(Picking::PickingMesh, g_meshDtorCount, g_meshDtorOrder);
 }
 
 // The accessor bodies compute retail's addresses: `_nodes + i*0x80 + field`
@@ -516,6 +546,8 @@ UNIT_TEST(picking_pickingmesh_slot_order_is_retails) {
     PickingMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
     CheckNineOwnSlots<PickingMeshProbe>(raw, Picking::PickingMesh::GetTypeInfo());
+    CheckDtorPair<PickingMeshProbe>();
+
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 

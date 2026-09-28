@@ -8,7 +8,7 @@
 //   PART B — SLOT ORDER: read off pointers to VIRTUAL members (Itanium PMF =
 //            1 + vtable byte offset, adjustment 0 = single inheritance), so a
 //            slot declared out of retail order fails here, not in a run.
-//   PART C — SHAPE: polymorphic, no virtual destructor, abstract exactly where
+//   PART C — SHAPE: polymorphic, a virtual destructor (B3X W1), abstract exactly where
 //            retail is (SelectResourceUI, slots 11-13 _purecall).
 // `Vtable() == *(void**)&obj` for DEFINE_EXE_VTABLE is proven once, on probe
 // classes, by exe_class_abi_test.cpp PART C; the panel bodies stand on the
@@ -84,7 +84,7 @@ void CheckConfigSlots() {
     CHECK_SLOT(C, Construct,      0x40/8);   // 9th and last
     CHECK(std::is_polymorphic<C>::value);
     CHECK(!std::is_abstract<C>::value);
-    CHECK(!std::has_virtual_destructor<C>::value);
+    CHECK(std::has_virtual_destructor<C>::value);
     CHECK((std::is_base_of<UI::DialogControllerConfig, C>::value));
     CHECK_EQ(sizeof(C), (size_t)0x28);
     CHECK_EQ(alignof(C), (size_t)8);
@@ -128,7 +128,7 @@ void CheckPanelShape(size_t size) {
     CHECK_EQ(alignof(C), (size_t)8);
     CHECK(std::is_polymorphic<C>::value);
     CHECK(!std::is_abstract<C>::value);
-    CHECK(!std::has_virtual_destructor<C>::value);
+    CHECK(std::has_virtual_destructor<C>::value);
     CHECK((std::is_base_of<UI::DialogController, C>::value));
     CHECK_DTOR_SLOT(C);
     CHECK_SLOT(C, TypeName, 0x08/8);
@@ -139,7 +139,7 @@ void CheckPanelShape(size_t size) {
 UNIT_TEST(pnl_selectresourceui_abstract_base) {
     using S = SelectResourceUI;
     CHECK(std::is_abstract<S>::value);
-    CHECK(!std::has_virtual_destructor<S>::value);
+    CHECK(std::has_virtual_destructor<S>::value);
     CHECK((std::is_base_of<UI::DialogController, S>::value));
     CHECK_EQ(sizeof(S), (size_t)0x38);
     CHECK_EQ(offsetof(S, internalBasePtr), (size_t)0x30);

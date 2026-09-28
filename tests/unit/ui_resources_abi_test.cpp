@@ -30,6 +30,8 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
+
 
 #include "runtime/types/ui/CharacterSet.h"
 #include "runtime/types/ui/Cursor.h"
@@ -52,9 +54,9 @@ void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
 
 // ENDGAME B.3.9 UI-D: the destructor markers of the CONCRETE classes RECORD
-// each call, so the real `DeletingDtor` (inline in each header, the one under
-// test) can be seen running ~X once per element and in retail's DESCENDING
-// order.
+// each call, so the destructors (B3X W1: D1, D0 and delete[], the retired
+// slot-0 arms) can be seen running ~X once per element and in retail's
+// DESCENDING order.
 int         g_b39DtorCount = 0;
 const void* g_b39DtorOrder[8] = {};
 void B39NoteDtor(const void* self) {
@@ -76,7 +78,7 @@ const void* const* VTableOf(void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
 
-constexpr int kDeletingDtor   = 0x00;
+constexpr int kRetailDtor     = 0x00;   // B3X W1: the destructor pair (D1, D0)
 constexpr int kTypeName       = 0x08;
 constexpr int kType           = 0x10;
 constexpr int kGetFileVersion = 0x18;
@@ -89,20 +91,43 @@ constexpr int kConstruct      = 0x40;   // introduced per leaf — RULE B6-1.1
 // A bare Object::External leaf: whatever it carries at +0x20 IS
 // `?Compile@External@Object@@`.
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
 
+// B3X W1: retail slot 0 is the destructor pair; each probe's destructor
+// records mark 0 and a recording class-scope operator delete stands for
+// retail flags 1's MemFree.
 struct CharacterSetProbe final : UI::CharacterSet {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~CharacterSetProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
-// Raw-call slots 0,1,2,3,5,6,7,8 and check the marker each one leaves.
+// Retail slot 0 read raw: compiler [0] D1 runs ~Probe once and frees nothing
+// (flags 0), on a placement-new'd probe that is never destroyed again (a
+// stack probe would be destroyed twice); [1] D0 runs it and hands the block
+// to the recording operator delete (flags 1).
+template <typename Probe>
+void CheckProbeDtorPair() {
+    alignas(Probe) unsigned char buf[sizeof(Probe)];
+    Probe* p = ::new (static_cast<void*>(buf)) Probe();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, kRetailDtor / 8); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    Probe* h = dtor_check::NewOnMalloc<Probe>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, kRetailDtor / 8); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+}
+
+// Raw-call slots 0,1,2,3,5,6,7,8 and check the marker each one leaves (slot 0
+// through CheckProbeDtorPair on a fresh Probe).
+template <typename Probe>
 void CheckNineSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
-    using DtorFn = void* (*)(void*, unsigned);
     using NameFn = const char* (*)(const void*);
     using TypeFn = uint32_t (*)(const void*);
     using VerFn  = int32_t (*)(const void*);
@@ -110,8 +135,7 @@ void CheckNineSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
     using PtrFn  = void* (*)(void*);
     using VoidFn = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
+    CheckProbeDtorPair<Probe>();
     // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
     CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == rec.name);
     CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), rec.typeId);
@@ -122,9 +146,10 @@ void CheckNineSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
     Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);       CHECK_EQ(g_lastMark, kConstruct / 8);
     CHECK(g_lastSelf == raw);
 
+    // Nine retail entries = ten compiler entries, all distinct (D1 != D0).
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 9; ++i)
-        for (int j = i + 1; j < 9; ++j)
+    for (int i = 0; i < 10; ++i)
+        for (int j = i + 1; j < 10; ++j)
             CHECK(vt[i] != vt[j]);
 }
 
@@ -144,15 +169,15 @@ UNIT_TEST(ui_characterset_layout) {
     CHECK_EQ((int)offsetof(UI::CharacterSet, _string20), (int)sizeof(Object::External));
     CHECK((std::is_base_of<Object::External, UI::CharacterSet>::value));
     CHECK(!std::is_abstract<UI::CharacterSet>::value);      // B.3.9 UI-D: concrete
-    CHECK(!std::is_destructible<UI::CharacterSet>::value);  // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::CharacterSet>::value);
-    CHECK(!std::is_default_constructible<UI::CharacterSet>::value);
+    CHECK(std::is_destructible<UI::CharacterSet>::value);   // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::CharacterSet>::value);
+    CHECK(std::is_default_constructible<UI::CharacterSet>::value);   // B3X W1: public ctor + public dtor
 }
 
 UNIT_TEST(ui_characterset_slot_order_is_retails) {
     CharacterSetProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw, UI::CharacterSet::GetTypeInfo());
+    CheckNineSlots<CharacterSetProbe>(raw, UI::CharacterSet::GetTypeInfo());
     CheckCompileInherited(raw);
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
@@ -170,9 +195,9 @@ int32_t MintedGetFileVersionDoor(const void* self) {
 UNIT_TEST(ui_characterset_qualified_call_does_not_reenter_the_door) {
     CharacterSetProbe probe;
     void* raw = static_cast<void*>(&probe);
-    const void* minted[9] = {};
+    const void* minted[10] = {};   // nine retail slots = ten compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 9; ++i) minted[i] = real[i];
+    for (int i = 0; i < 10; ++i) minted[i] = real[i];
     minted[RetailSlot<Object::Base>(kGetFileVersion / 8)] = reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
@@ -191,7 +216,8 @@ UNIT_TEST(ui_characterset_qualified_call_does_not_reenter_the_door) {
 // UI::Cursor
 // ---------------------------------------------------------------------------
 struct CursorProbe final : UI::Cursor {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~CursorProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 UNIT_TEST(ui_cursor_layout) {
@@ -203,8 +229,8 @@ UNIT_TEST(ui_cursor_layout) {
     CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotX), (int)sizeof(Object::External));
     CHECK((std::is_base_of<Object::External, UI::Cursor>::value));
     CHECK(!std::is_abstract<UI::Cursor>::value);       // B.3.9 UI-D: concrete
-    CHECK(!std::is_destructible<UI::Cursor>::value);   // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::Cursor>::value);
+    CHECK(std::is_destructible<UI::Cursor>::value);    // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::Cursor>::value);
 
     // The three getters read exactly the bytes retail's do (0x18003b250/260/270).
     CursorProbe probe;
@@ -220,7 +246,7 @@ UNIT_TEST(ui_cursor_layout) {
 UNIT_TEST(ui_cursor_slot_order_is_retails) {
     CursorProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw, UI::Cursor::GetTypeInfo());
+    CheckNineSlots<CursorProbe>(raw, UI::Cursor::GetTypeInfo());
     CheckCompileInherited(raw);
 }
 
@@ -228,7 +254,8 @@ UNIT_TEST(ui_cursor_slot_order_is_retails) {
 // UI::StringTable
 // ---------------------------------------------------------------------------
 struct StringTableProbe final : UI::StringTable {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~StringTableProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 UNIT_TEST(ui_stringtable_layout) {
@@ -242,8 +269,8 @@ UNIT_TEST(ui_stringtable_layout) {
     CHECK_EQ((int)offsetof(UI::StringTable::TextEntry, text), 0x08);
     CHECK((std::is_base_of<Object::External, UI::StringTable>::value));
     CHECK(!std::is_abstract<UI::StringTable>::value);       // B.3.9 UI-D: concrete
-    CHECK(!std::is_destructible<UI::StringTable>::value);   // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::StringTable>::value);
+    CHECK(std::is_destructible<UI::StringTable>::value);    // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::StringTable>::value);
     // The B6-4.2 transition aliases name the class and its row.
     CHECK((std::is_same<::UiStringTable, UI::StringTable>::value));
     CHECK((std::is_same<::StringTable, UI::StringTable>::value));
@@ -253,7 +280,7 @@ UNIT_TEST(ui_stringtable_layout) {
 UNIT_TEST(ui_stringtable_slot_order_is_retails) {
     StringTableProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw, UI::StringTable::GetTypeInfo());
+    CheckNineSlots<StringTableProbe>(raw, UI::StringTable::GetTypeInfo());
     CheckCompileInherited(raw);
 }
 
@@ -275,7 +302,8 @@ void CheckCompileOverridden(void* raw) {
 // UI::SpriteSheet
 // ---------------------------------------------------------------------------
 struct SpriteSheetProbe final : UI::SpriteSheet {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~SpriteSheetProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 UNIT_TEST(ui_spritesheet_layout) {
@@ -302,7 +330,7 @@ UNIT_TEST(ui_spritesheet_layout) {
 UNIT_TEST(ui_spritesheet_slot_order_is_retails) {
     SpriteSheetProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw, UI::SpriteSheet::GetTypeInfo());
+    CheckNineSlots<SpriteSheetProbe>(raw, UI::SpriteSheet::GetTypeInfo());
     CheckCompileOverridden(raw);
 }
 
@@ -310,7 +338,8 @@ UNIT_TEST(ui_spritesheet_slot_order_is_retails) {
 // UI::SpriteCapture
 // ---------------------------------------------------------------------------
 struct SpriteCaptureProbe final : UI::SpriteCapture {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~SpriteCaptureProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 UNIT_TEST(ui_spritecapture_layout) {
@@ -336,7 +365,7 @@ UNIT_TEST(ui_spritecapture_layout) {
 UNIT_TEST(ui_spritecapture_slot_order_is_retails) {
     SpriteCaptureProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw, UI::SpriteCapture::GetTypeInfo());
+    CheckNineSlots<SpriteCaptureProbe>(raw, UI::SpriteCapture::GetTypeInfo());
     CheckCompileInherited(raw);
 }
 
@@ -344,7 +373,8 @@ UNIT_TEST(ui_spritecapture_slot_order_is_retails) {
 // UI::Font
 // ---------------------------------------------------------------------------
 struct FontProbe final : UI::Font {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~FontProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 
 UNIT_TEST(ui_font_layout) {
@@ -364,8 +394,8 @@ UNIT_TEST(ui_font_layout) {
     CHECK_EQ((int)sizeof(UI::Font::Layout), 0x28);
     CHECK((std::is_base_of<Object::External, UI::Font>::value));
     CHECK(!std::is_abstract<UI::Font>::value);       // B.3.9 UI-D: concrete
-    CHECK(!std::is_destructible<UI::Font>::value);   // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::Font>::value);
+    CHECK(std::is_destructible<UI::Font>::value);    // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::Font>::value);
 }
 
 // The getters read exactly the bytes retail's do (read this pass).
@@ -394,7 +424,7 @@ UNIT_TEST(ui_font_getters_read_retails_offsets) {
 UNIT_TEST(ui_font_slot_order_is_retails) {
     FontProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw, UI::Font::GetTypeInfo());
+    CheckNineSlots<FontProbe>(raw, UI::Font::GetTypeInfo());
     CheckCompileOverridden(raw);
 }
 
@@ -411,7 +441,8 @@ UNIT_TEST(ui_block_d_resources_construct_at_slot8) {
         SlotAt<PtrFn>(all[c], kConstruct)(all[c]);
         CHECK_EQ(g_lastMark, kConstruct / 8);
         CHECK(g_lastSelf == all[c]);
-        for (int i = 0; i < 8; ++i)
+        // Retail slots 0..7 = compiler slots 0..8 (D1, D0, then 1..7).
+        for (int i = 0; i < 9; ++i)
             CHECK(VTableOf(all[c])[i] != RetailEntry<Object::Base>(all[c], kConstruct / 8));
     }
 }
@@ -420,30 +451,31 @@ UNIT_TEST(ui_block_d_resources_construct_at_slot8) {
 // ENDGAME B.3.9 UI-D (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
 
-// Build one real object and run the SCALAR arm with a free; then three behind
-// an array cookie, run the ARRAY arm of slot 0 and check it destroys downward,
-// frees and returns the block. `Make` placement-constructs one real object.
+// B3X W1: retail's flags-1 arm is `delete one` (T's own D0: the chain once,
+// then T's class-scope operator delete, InternalMemFree == free here); the
+// free is PROVEN on a dtor_check::Recording<T> stand-in. Retail's flags-3
+// vector arm has no Itanium counterpart: `delete[]` of `new T[3]` runs three
+// destructors, downward. `Make` placement-constructs one real object.
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
+    CHECK_EQ(sizeof(T), elemSize);
     void* p = Object::detail::InternalMemAlloc(elemSize, 8);
     CHECK(p != nullptr);
     T* one = make(p);
     g_b39DtorCount = 0;
-    CHECK(one->DeletingDtor(1) == one);
+    delete one;
     CHECK_EQ(g_b39DtorCount, 1);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_b39DtorCount, 3);
-    CHECK(g_b39DtorOrder[0] == e[2]);
-    CHECK(g_b39DtorOrder[1] == e[1]);
-    CHECK(g_b39DtorOrder[2] == e[0]);
+    dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_b39DtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
+
+    CHECK_ARRAY_DELETE(T, g_b39DtorCount, g_b39DtorOrder);
 }
 
 // The nine slots of the six resources, by PMF (adjustment 0).
@@ -478,12 +510,15 @@ UNIT_TEST(b39_uid_characterset_ctor_makes_retails_stores) {
     CHECK(VTableOf(c) == VTableOf(c2));
     CHECK(VTableOf(c) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(c->DeletingDtor(0) == c);
-    CHECK(c2->DeletingDtor(0) == c2);
+    c->~CharacterSet();
+    c2->~CharacterSet();
     CHECK_EQ(g_b39DtorCount, 2);
 }
 
+// Retired vector arms (the retail slot-0 bodies): CharacterSet 0x1800378a0,
+// Cursor 0x18003b3a0, StringTable 0x180002740, Font 0x180032130.
 UNIT_TEST(b39_uid_characterset_deleting_dtor_both_arms) {
+
     B39ExpectBothArms<UI::CharacterSet>(0x28, [](void* p) { return ::new (p) UI::CharacterSet(); });
 }
 
@@ -506,7 +541,7 @@ UNIT_TEST(b39_uid_cursor_ctor_makes_retails_stores) {
     CursorProbe probe;
     CHECK(VTableOf(c) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(c->DeletingDtor(0) == c);
+    c->~Cursor();
     CHECK_EQ(g_b39DtorCount, 1);
 }
 
@@ -516,8 +551,8 @@ UNIT_TEST(b39_uid_cursor_deleting_dtor_both_arms) {
 
 UNIT_TEST(b39_uid_spritecapture_slot_order_by_pmf) {
     B39ExpectNineSlots<UI::SpriteCapture>();
-    CHECK(!std::is_destructible<UI::SpriteCapture>::value);   // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::SpriteCapture>::value);
+    CHECK(std::is_destructible<UI::SpriteCapture>::value);    // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::SpriteCapture>::value);
 }
 
 UNIT_TEST(b39_uid_stringtable_slot_order_by_pmf) {
@@ -535,7 +570,7 @@ UNIT_TEST(b39_uid_stringtable_ctor_makes_retails_stores) {
     StringTableProbe probe;
     CHECK(VTableOf(t) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(t->DeletingDtor(0) == t);
+    t->~StringTable();
     CHECK_EQ(g_b39DtorCount, 1);
 }
 
@@ -564,7 +599,7 @@ UNIT_TEST(b39_uid_font_ctor_makes_retails_stores) {
     FontProbe probe;
     CHECK(VTableOf(f) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(f->DeletingDtor(0) == f);
+    f->~Font();
     CHECK_EQ(g_b39DtorCount, 1);
 }
 

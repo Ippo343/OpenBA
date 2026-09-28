@@ -73,9 +73,9 @@ UNIT_TEST(engine_loop_sizes_and_shape) {
     CHECK(!std::is_abstract<Engine::Loader>::value);
     CHECK(std::is_default_constructible<Engine::Loader>::value);    // real public ctor (B.3.9 ENG W2)
 
-    // No virtual destructor anywhere in the family (ENDGAME B.2).
-    CHECK(!std::has_virtual_destructor<Engine::UpdateLoop>::value);
-    CHECK(!std::has_virtual_destructor<Engine::DialogLoaderLoopT>::value);
+    // B3X W1: the UpdateLoop family has a virtual destructor (retail slot 0 = D1 + D0); Engine::Loader (Thread family, slot 0 Run) has none.
+    CHECK(std::has_virtual_destructor<Engine::UpdateLoop>::value);
+    CHECK(std::has_virtual_destructor<Engine::DialogLoaderLoopT>::value);
     CHECK(!std::has_virtual_destructor<Engine::Loader>::value);
 }
 

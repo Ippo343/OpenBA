@@ -42,6 +42,8 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
+
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -112,33 +114,33 @@ struct FactoryScope {
 
 // The twelve retail byte offsets of `??_7Element@UI@@6B@` (B36_SLOTS.md).
 enum : int {
-    kE0_DeletingDtor  = 0x00, kE1_TypeName = 0x08, kE2_Type = 0x10,
+    kE0_Dtor          = 0x00, kE1_TypeName = 0x08, kE2_Type = 0x10,
     kE3_Persist       = 0x18, kE4_ComputeSize = 0x20, kE5_ComputeLayout = 0x28,
     kE6_Draw          = 0x30, kE7_Update = 0x38, kE8_Enable = 0x40,
     kE9_Contains      = 0x48, kE10_SetColor = 0x50, kE11_GetBorder = 0x58,
 };
 // The nine of `??_7ElementDescription@UI@@6B@`.
 enum : int {
-    kD0_DeletingDtor = 0x00, kD1_TypeName = 0x08, kD2_Type = 0x10,
+    kD0_Dtor         = 0x00, kD1_TypeName = 0x08, kD2_Type = 0x10,
     kD3_GetFileVersion = 0x18, kD4_Compile = 0x20, kD5_Serialize = 0x28,
     kD6_Reconstruct = 0x30, kD7_Destruct = 0x38, kD8_CreateInstance = 0x40,
 };
 
 // ---------------------------------------------------------------------------
 // Probes. Each overrides only what `UI::Element` / `UI::ElementDescription`
-// leave pure, so every other slot is the BASE member's marker below.
+// leave pure, so every other slot is the BASE member's marker below. B3X W1:
+// retail slot 0 is the destructor pair; the probe's destructor records mark 0
+// and a recording class-scope operator delete stands for flags 1's MemFree.
 // ---------------------------------------------------------------------------
 struct ElementProbe final : UI::Element {
-    Object::Base* DeletingDtor(unsigned flags) override {
-        Note(this, kE0_DeletingDtor / 8, flags); return this;
-    }
+    ~ElementProbe() override { Note(this, kE0_Dtor / 8); }
+    DTOR_CHECK_RECORDING_DELETE
     void ComputeSize() override { Note(this, kE4_ComputeSize / 8); }
 };
 
 struct DescriptionProbe final : UI::ElementDescription {
-    Object::Base* DeletingDtor(unsigned flags) override {
-        Note(this, kD0_DeletingDtor / 8, flags); return this;
-    }
+    ~DescriptionProbe() override { Note(this, kD0_Dtor / 8); }
+    DTOR_CHECK_RECORDING_DELETE
     Object::External* Reconstruct() override { Note(this, kD6_Reconstruct / 8); return this; }
     void Destruct() override { Note(this, kD7_Destruct / 8); }
     Object::InternalPtr<UI::Element>* CreateInstance(
@@ -153,7 +155,6 @@ struct DescriptionProbe final : UI::ElementDescription {
 // A bare External leaf: whatever it carries at +0x20 is `Object::External::
 // Compile`, and ElementDescription must carry the SAME pointer (inherited).
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -222,9 +223,9 @@ UNIT_TEST(ui_element_sizes_match_retail) {
     // second vptr.
     CHECK_EQ(offsetof(UI::Element, _name), sizeof(Object::Internal));
     CHECK_EQ(offsetof(UI::ElementDescription, _x), sizeof(Object::External));
-    // No virtual destructor anywhere (ENDGAME decision 2).
-    CHECK(!std::has_virtual_destructor<UI::Element>::value);
-    CHECK(!std::has_virtual_destructor<UI::ElementDescription>::value);
+    // B3X W1: a public virtual destructor (retail slot 0 = D1 + D0).
+    CHECK(std::has_virtual_destructor<UI::Element>::value);
+    CHECK(std::has_virtual_destructor<UI::ElementDescription>::value);
     CHECK(std::is_abstract<UI::Element>::value);
     CHECK(std::is_abstract<UI::ElementDescription>::value);
     CHECK((std::is_base_of<Object::Internal, UI::Element>::value));
@@ -292,13 +293,35 @@ UNIT_TEST(ui_element_updatestate_is_retails) {
 // ===========================================================================
 // PART B — SLOT ORDER
 // ===========================================================================
+namespace {
+// Retail slot 0 is the destructor pair (B3X W1), read raw: compiler [0] D1
+// runs ~Probe once and frees nothing (flags 0), on a placement-new'd probe
+// that is never destroyed again (a stack probe would be destroyed twice); [1]
+// D0 runs it and hands the block to the recording operator delete (flags 1).
+template <typename Probe>
+void CheckProbeDtorPair() {
+    alignas(Probe) unsigned char buf[sizeof(Probe)];
+    Probe* p = ::new (static_cast<void*>(buf)) Probe();
+    CHECK(VTableOf(p)[0] != VTableOf(p)[1]);
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    Probe* h = dtor_check::NewOnMalloc<Probe>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+}
+}  // namespace
+
 UNIT_TEST(ui_element_slot_order_is_retails) {
     FactoryScope scope;
     ElementProbe probe{};
     void* raw = static_cast<void*>(&probe);
 
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, kE0_DeletingDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == raw);
+    static_assert(kE0_Dtor == 0, "retail slot 0");
+    CheckProbeDtorPair<ElementProbe>();
     // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
     CHECK(SlotAt<const char* (*)(const void*)>(raw, kE1_TypeName)(raw) == UI::Element::GetTypeInfo().name);
     CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kE2_Type)(raw), UI::Element::GetTypeInfo().typeId);
@@ -317,10 +340,10 @@ UNIT_TEST(ui_element_slot_order_is_retails) {
     Reset(); SlotAt<void (*)(void*, uint32_t)>(raw, kE10_SetColor)(raw, 0x11223344u);
     CHECK_EQ(g_lastMark, 10); CHECK_EQ(probe._color, 0x11223344u);
 
-    // Twelve distinct entries.
+    // Twelve distinct retail entries = thirteen compiler entries (D1 != D0).
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 12; ++i)
-        for (int j = i + 1; j < 12; ++j)
+    for (int i = 0; i < 13; ++i)
+        for (int j = i + 1; j < 13; ++j)
             CHECK(vt[i] != vt[j]);
 
     // Single inheritance, `this` unadjusted.
@@ -333,8 +356,8 @@ UNIT_TEST(ui_elementdescription_slot_order_is_retails) {
     DescriptionProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, kD0_DeletingDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, 0);
+    static_assert(kD0_Dtor == 0, "retail slot 0");
+    CheckProbeDtorPair<DescriptionProbe>();
     // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
     CHECK(SlotAt<const char* (*)(const void*)>(raw, kD1_TypeName)(raw) == UI::ElementDescription::GetTypeInfo().name);
     CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kD2_Type)(raw), UI::ElementDescription::GetTypeInfo().typeId);
@@ -352,10 +375,11 @@ UNIT_TEST(ui_elementdescription_slot_order_is_retails) {
     CHECK(RetailEntry<Object::Base>(raw, kD4_Compile / 8) ==
           RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8));
 
-    // Nine distinct entries: CreateInstance at slot 8, no Construct (B6-1.1).
+    // Nine distinct retail entries = ten compiler entries (D1 != D0):
+    // CreateInstance at slot 8, no Construct (B6-1.1).
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 9; ++i)
-        for (int j = i + 1; j < 9; ++j)
+    for (int i = 0; i < 10; ++i)
+        for (int j = i + 1; j < 10; ++j)
             CHECK(vt[i] != vt[j]);
 
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
@@ -435,9 +459,10 @@ UNIT_TEST(ui_element_qualified_call_does_not_reenter_the_door) {
     ElementProbe probe{};
     void* raw = static_cast<void*>(&probe);
 
-    const void* minted[12] = {};
+    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 12; ++i) minted[i] = real[i];
+    for (int i = 0; i < 13; ++i) minted[i] = real[i];
+
     minted[RetailSlot<Object::Base>(kE10_SetColor / 8)] = reinterpret_cast<const void*>(&MintedSetColorDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 

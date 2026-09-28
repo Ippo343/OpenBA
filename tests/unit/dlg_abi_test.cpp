@@ -12,7 +12,7 @@
 //   [3] Persist, [4] OnOpened, [5] OnClosed, [6] OnUpdateLayout, [7] OnUpdate,
 //   [8] OnElementEvent, [9] OnSerializeSettings); MessageDialog adds 10-13.
 // PART C — SHAPE. polymorphic, NOT abstract (every class here is concrete in
-//   retail), no virtual destructor (ENDGAME decision 2), the proved parent.
+//   retail), a virtual destructor (B3X W1; was "none", ENDGAME decision 2), the proved parent.
 //
 // NOT PROVEN HERE: the member bodies (they stand on the address registry and
 // the UI runtime and cannot link into a host test) and `Vtable()` against a
@@ -54,7 +54,7 @@ template <typename T>
 void CheckShape() {
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<UI::DialogInstance, T>::value));
     CHECK_EQ(alignof(T), (size_t)8);
 }

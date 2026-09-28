@@ -77,6 +77,7 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 // The shipped header. The tests measure THIS, not a local copy, so a failure
 // means the header and the ABI disagree.
@@ -235,13 +236,20 @@ UNIT_TEST(graphics_particlesystem_field_offsets_authored_from_retail) {
 // either class. A probe has to be instantiable, so the LEAF probes give slot 0 a
 // body. That changes which function slot 0 holds and nothing about the INDEX of
 // any slot, which is what this part measures.
+//
+// B3X W1: retail slot 0 is now `virtual ~T()` in the real tree, which GCC lays
+// out as TWO entries (D1 complete, D0 deleting); retail slot n >= 1 is compiler
+// slot n + 1 and the SlotAt reads translate. The mirror follows: a virtual
+// destructor at the root (with a recording class-scope operator delete standing
+// in for the root's MemFree one) and a recording destructor on each leaf.
 // ===========================================================================
 
 // `Object::External`'s eight slots (External.h:601, itself read from retail).
 // Slots 3, 5, 6 and 7 are `_purecall` in retail's own table.
 class ProbeExternal {
 public:
-    virtual ProbeExternal* DeletingDtor(unsigned flags) { Note(this, 0, flags); return this; }
+    virtual ~ProbeExternal() {}                                          // [0] D1 + D0
+    DTOR_CHECK_RECORDING_DELETE
     virtual const char* TypeName() const               { Note(this, 1); return "External"; }
     virtual uint32_t    Type() const                   { Note(this, 2); return 0u; }
     virtual int32_t     GetFileVersion() const = 0;                      // [3] pure
@@ -249,8 +257,6 @@ public:
     virtual bool        Serialize(void* stream) = 0;                     // [5] pure
     virtual ProbeExternal* Reconstruct() = 0;                            // [6] pure
     virtual void        Destruct() = 0;                                  // [7] pure
-protected:
-    ~ProbeExternal() = default;
 };
 
 // `Graphics::Particle`: overrides 1, 2, 3 and 5; INHERITS 4; leaves 6 and 7 pure
@@ -266,8 +272,6 @@ public:
     ProbeExternal* Reconstruct() override = 0;                           // [6] still pure
     void        Destruct() override = 0;                                 // [7] still pure
     virtual void* CreateSystem() const = 0;                              // [8] INTRODUCED
-protected:
-    ~ProbeParticle() = default;
 };
 
 // A minimal concrete `Particle` subclass — the shape `code/Game/Game/tornado.cpp`
@@ -276,11 +280,10 @@ protected:
 // `Particle`'s bodies and slot 4 must still reach `External`'s.
 class ProbeParticleLeaf final : public ProbeParticle {
 public:
-    ProbeExternal* DeletingDtor(unsigned flags) override { Note(this, 300, flags); return this; }
     ProbeExternal* Reconstruct() override        { Note(this, 306); return this; }
     void  Destruct() override                    { Note(this, 307); }
     void* CreateSystem() const override          { Note(this, 308); return nullptr; }
-    ~ProbeParticleLeaf() = default;
+    ~ProbeParticleLeaf() override                { Note(this, 300); }
 };
 
 // `Graphics::ParticleSystem`: overrides 1, 2, 3, 5, 6, 7 and 8, INHERITS 4, and
@@ -289,7 +292,6 @@ public:
 // index 8; `Construct` is new and lands at 9.
 class ProbeParticleSystem final : public ProbeParticle {
 public:
-    ProbeExternal* DeletingDtor(unsigned flags) override { Note(this, 200, flags); return this; }
     const char* TypeName() const override        { Note(this, 201); return "ParticleSystem"; }
     uint32_t    Type() const override            { Note(this, 202); return 2u; }
     int32_t     GetFileVersion() const override  { Note(this, 203); return 0x1001; }
@@ -298,7 +300,7 @@ public:
     void        Destruct() override              { Note(this, 207); }
     void*       CreateSystem() const override    { Note(this, 208); return this->kSentinel; }
     virtual ProbeExternal* Construct()           { Note(this, 209); return this; }
-    ~ProbeParticleSystem() = default;
+    ~ProbeParticleSystem() override              { Note(this, 200); }
 
     // A value only `CreateSystem` returns, so a test can tell a `CreateSystem`
     // result apart from a `Construct` result even if both marks were lost.
@@ -307,7 +309,7 @@ public:
 
 // The slot byte offsets, as the tree spells them.
 enum : int {
-    kSlot0_DeletingDtor   = 0x00,
+    kSlot0_Destructor     = 0x00,
     kSlot1_TypeName       = 0x08,
     kSlot2_Type           = 0x10,
     kSlot3_GetFileVersion = 0x18,
@@ -325,11 +327,26 @@ UNIT_TEST(graphics_particle_slot_order_is_retail_order) {
     // A raw `(*(void***)p)[N]` caller — exactly as the tree's hand-inlined sites
     // and every minted row spell it — must land on the right member with `this`
     // UNADJUSTED at every index.
-    Reset();
-    SlotAt<void* (*)(void*, unsigned), ProbeParticleLeaf>(&leaf, kSlot0_DeletingDtor)(&leaf, 3u);
-    CHECK_EQ(g_lastMark, 300);
-    CHECK_EQ(g_lastSelf, (const void*)&leaf);
-    CHECK_EQ(g_lastArg, 3LL);
+    // Retail slot 0 (B3X W1): raw retail slot 0 is D1, which really destroys,
+    // so it runs on a placement-new'd leaf never destroyed again; D0 (compiler
+    // slot 1) runs the same body and frees through the class operator delete.
+    {
+        alignas(ProbeParticleLeaf) unsigned char buf[sizeof(ProbeParticleLeaf)];
+        ProbeParticleLeaf* p = ::new (static_cast<void*>(buf)) ProbeParticleLeaf();
+        CHECK(dtor_check::CompilerEntry<const void*>(p, 0) != dtor_check::CompilerEntry<const void*>(p, 1));
+        Reset(); dtor_check::ResetFrees();
+        SlotAt<void (*)(void*), ProbeParticleLeaf>(p, kSlot0_Destructor)(p);   // D1
+        CHECK_EQ(g_lastMark, 300);
+        CHECK_EQ(g_lastSelf, (const void*)p);
+        CHECK_EQ(dtor_check::g_frees, 0);
+        ProbeParticleLeaf* h = dtor_check::NewOnMalloc<ProbeParticleLeaf>();
+        Reset(); dtor_check::ResetFrees();
+        dtor_check::CallD0(h);
+        CHECK_EQ(g_lastMark, 300);
+        CHECK_EQ(g_lastSelf, (const void*)h);
+        CHECK_EQ(dtor_check::g_frees, 1);
+        CHECK(dtor_check::g_lastFree == h);
+    }
 
     // 1, 2, 3 and 5 reach PARTICLE's bodies: the leaf does not override them.
     Reset(); SlotAt<const char* (*)(const void*), ProbeParticleLeaf>(&leaf, kSlot1_TypeName)(&leaf);
@@ -398,8 +415,15 @@ UNIT_TEST(graphics_particlesystem_construct_is_slot_nine_behind_createsystem) {
 UNIT_TEST(graphics_particlesystem_overrides_the_seven_slots_retail_says) {
     ProbeParticleSystem ps;
 
-    Reset(); SlotAt<void* (*)(void*, unsigned), ProbeParticleSystem>(&ps, kSlot0_DeletingDtor)(&ps, 1u);
-    CHECK_EQ(g_lastMark, 200);
+    // Retail slot 0 is its own destructor: raw D1 on a placement-new'd object
+    // (never destroyed again: `ps` on the stack would be destroyed twice).
+    {
+        alignas(ProbeParticleSystem) unsigned char buf[sizeof(ProbeParticleSystem)];
+        ProbeParticleSystem* p = ::new (static_cast<void*>(buf)) ProbeParticleSystem();
+        Reset(); SlotAt<void (*)(void*), ProbeParticleSystem>(p, kSlot0_Destructor)(p);
+        CHECK_EQ(g_lastMark, 200);
+        CHECK_EQ(g_lastSelf, (const void*)p);
+    }
     Reset(); SlotAt<const char* (*)(const void*), ProbeParticleSystem>(&ps, kSlot1_TypeName)(&ps);
     CHECK_EQ(g_lastMark, 201);
     Reset(); SlotAt<uint32_t (*)(const void*), ProbeParticleSystem>(&ps, kSlot2_Type)(&ps);
@@ -437,10 +461,11 @@ UNIT_TEST(graphics_particlesystem_qualified_call_suppresses_minted_dispatch) {
     ProbeParticleSystem ps;
 
     // Build a table whose slots 8 and 9 are free functions, and stamp it. Ten
-    // entries, matching `??_7ParticleSystem@Graphics@@6B@`'s measured length.
-    static void* table[10] = { nullptr };
+    // retail entries, matching `??_7ParticleSystem@Graphics@@6B@`'s measured
+    // length — ELEVEN compiler entries since B3X W1 (retail slot 0 = D1 + D0).
+    static void* table[11] = { nullptr };
     void** const gccTable = *reinterpret_cast<void***>(&ps);
-    for (int i = 0; i < 10; ++i) table[i] = gccTable[i];
+    for (int i = 0; i < 11; ++i) table[i] = gccTable[i];
     table[RetailSlot<ProbeParticleSystem>(kSlot8_CreateSystem / 8)] =
         reinterpret_cast<void*>(&MintedCreateSystem);
     table[RetailSlot<ProbeParticleSystem>(kSlot9_Construct / 8)] =
@@ -479,15 +504,18 @@ UNIT_TEST(graphics_particlesystem_qualified_call_suppresses_minted_dispatch) {
 // ===========================================================================
 
 UNIT_TEST(graphics_particle_branch_has_no_virtual_destructor) {
-    // ENDGAME §B.1 decision 2. Slot 0 is `DeletingDtor(unsigned)`, an ordinary
-    // virtual; deletion is the minted row, never `delete`. If a virtual
-    // destructor were ever added, GCC would insert TWO slots (the complete and
-    // deleting variants) and every index above would shift — which would move
-    // `CreateSystem` and `Construct` together and hide B5-16's trap completely.
-    CHECK(!std::has_virtual_destructor<Graphics::Particle>::value);
-    CHECK(!std::has_virtual_destructor<Graphics::ParticleSystem>::value);
-    CHECK(!std::has_virtual_destructor<ProbeParticle>::value);
-    CHECK(!std::has_virtual_destructor<ProbeParticleSystem>::value);
+    // B3X W1 retired ENDGAME §B.1 decision 2's one-slot deleting-destructor
+    // virtual: the branch now HAS a virtual destructor, and GCC's two slots for
+    // it (D1 complete, D0 deleting) move every index above by one — CreateSystem
+    // and Construct TOGETHER, which is why B5-16's trap is pinned by the
+    // translated reads (RetailSlot) and not by bumped constants.
+    CHECK(std::has_virtual_destructor<Graphics::Particle>::value);
+    CHECK(std::has_virtual_destructor<Graphics::ParticleSystem>::value);
+    CHECK(std::has_virtual_destructor<ProbeParticle>::value);
+    CHECK(std::has_virtual_destructor<ProbeParticleSystem>::value);
+    CHECK_EQ(RetailSlot<ProbeParticleSystem>(kSlot8_CreateSystem / 8), 9L);
+    CHECK_EQ(RetailSlot<ProbeParticleSystem>(kSlot9_Construct / 8), 10L);
+
 }
 
 UNIT_TEST(graphics_particle_branch_is_abstract) {

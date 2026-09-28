@@ -3,13 +3,14 @@
 // tests/unit/b39_uib_test_util.h — ENDGAME B.3 step 9, block UI-B (rule B9-16)
 // ============================================================================
 // The shared checks for a widget class made CONCRETE (B39_RULES D1): the shape
-// (not abstract, protected non-virtual dtor), the slot order by
-// pointer-to-virtual-member (adjustment 0), and both `DeletingDtor` arms. The
+// (not abstract, public virtual dtor since B3X W1), the slot order by
+// pointer-to-virtual-member (adjustment 0), and the retired slot-0 arms. The
 // leaves' destructors are MARKERS in ui_leaf_c4/c5_abi_test.cpp (runtime/src/ui
 // does not link into the host test); each marker calls B39NoteDtor(this), so
 // the arms can be counted and ordered.
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include <cstdint>
 #include <cstring>
@@ -26,10 +27,11 @@ inline void B39NoteDtor(const void* self) {
     ++g_b39DtorCount;
 }
 
+// B3X W1: the destructor is public and virtual (retail slot 0 = D1 + D0).
 template <typename T>
 constexpr bool B39IsConcreteShape() {
-    return !std::is_abstract<T>::value && !std::is_destructible<T>::value &&
-           !std::has_virtual_destructor<T>::value && std::is_polymorphic<T>::value;
+    return !std::is_abstract<T>::value && std::is_destructible<T>::value &&
+           std::has_virtual_destructor<T>::value && std::is_polymorphic<T>::value;
 }
 
 // A description's ten slots (B36_SLOTS.md section 1): [4] Compile inherited,
@@ -68,16 +70,21 @@ void B39CheckElementPmf() {
     CHECK_SLOT(T, GetBorder,     0x58/8);
 }
 
-// Both arms of slot 0, exactly as the retired RT_DELDTOR row ran them: flags 0
-// destroys without freeing; flags 1 destroys and frees `this` (host seam:
-// InternalMemFree == free, so a wrong pointer is a heap fault); flags 3 reads
-// the int32 count at `this - 8`, destroys DOWNWARD with stride `Size`, frees
-// and returns `this - 8`. Also: two real instances share ONE table, which is
-// not `probeVt` (the test probe's). Run inside the caller's FactoryScope for an
-// Internal-rooted class.
+// Retail slot 0 (the retired RT_DELDTOR row) is now the destructor pair
+// (B3X W1). What its arms proved, proven the C++ way: `a->~T()` (flags 0)
+// destroys without freeing; `delete b` (flags 1) runs T's own D0, which frees
+// through T's class-scope operator delete (InternalMemFree == free here,
+// matching InternalMemAlloc), and on a dtor_check::Recording<T> stand-in the
+// free is RECORDED with the object's address; retail's flags-3 vector arm has
+// no Itanium counterpart: `delete[]` of a `new T[3]` block runs three
+// destructors, DOWNWARD. Also: two real instances share ONE table, which is
+// not `probeVt` (the test probe's), and D1 != D0 in it. Run inside the
+// caller's FactoryScope for an Internal-rooted class.
 template <typename T, size_t Size>
-void B39CheckDeletingDtorArms(const void* probeVt) {
+void B39CheckDestructorArms(const void* probeVt) {
     static_assert(sizeof(T) == Size, "the row's element size is sizeof");
+    static_assert(dtor_check::HasClassDelete<T>::value,
+                  "D0 frees through a class-scope operator delete (MemFree)");
     alignas(8) uint8_t buf[Size];
     T* a = ::new (static_cast<void*>(buf)) T();
     void* q = Object::detail::InternalMemAlloc(Size, 8);
@@ -87,25 +94,27 @@ void B39CheckDeletingDtorArms(const void* probeVt) {
     CHECK(vtA != nullptr);
     CHECK(vtA == *reinterpret_cast<const void* const*>(b));
     CHECK(vtA != probeVt);
+    CHECK(static_cast<const void* const*>(vtA)[0] != static_cast<const void* const*>(vtA)[1]);
 
     g_b39DtorCount = 0;
-    CHECK(static_cast<void*>(a->DeletingDtor(0)) == static_cast<void*>(a));
+    dtor_check::ResetFrees();
+    a->~T();                                   // flags 0: no free
     CHECK_EQ(g_b39DtorCount, 1);
     CHECK(g_b39DtorOrder[0] == a);
+    CHECK_EQ(dtor_check::g_frees, 0);
     g_b39DtorCount = 0;
-    CHECK(static_cast<void*>(b->DeletingDtor(1)) == static_cast<void*>(b));
+    delete b;                                  // flags 1: T's own D0
     CHECK_EQ(g_b39DtorCount, 1);
+    CHECK(g_b39DtorOrder[0] == b);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * Size, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (static_cast<void*>(block + 8 + i * Size)) T();
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_b39DtorCount, 3);
-    CHECK(g_b39DtorOrder[0] == e[2]);
-    CHECK(g_b39DtorOrder[1] == e[1]);
-    CHECK(g_b39DtorOrder[2] == e[0]);
+    dtor_check::ResetFrees();
+    delete r;                                  // the free, recorded
+    CHECK_EQ(g_b39DtorCount, 1);
+    CHECK(g_b39DtorOrder[0] == r);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
+
+    CHECK_ARRAY_DELETE(T, g_b39DtorCount, g_b39DtorOrder);
 }

@@ -31,7 +31,9 @@
 #include "unit.h"
 #include "slot_check.h"
 
+#include <cstdlib>
 #include <cstring>
+#include <new>
 #include <type_traits>
 
 #include "../../runtime/types/object/TypeInfo.h"
@@ -364,27 +366,34 @@ UNIT_TEST(factory_startup_is_independent_of_chain_order) {
 // A three-deep chain in retail's shape, each level using DECLARE_TYPE/
 // DEFINE_TYPE so the macro is what is under test and not a hand-written stub.
 // Every level tracks its own destruction so `Destroy` can be checked for
-// reaching the MOST DERIVED slot 0 and running the whole chain.
+// reaching the MOST DERIVED destructor and running the whole chain.
 int g_dtorCalls[3];
+int g_dtorOrder[8];
+int g_dtorN;
 int g_freeCalls;
+const void* g_lastFree;
+void NoteLevel(int level) {
+    g_dtorCalls[level]++;
+    if (g_dtorN < 8) g_dtorOrder[g_dtorN] = level;
+    ++g_dtorN;
+}
+void ResetLevels() {
+    for (int i = 0; i < 3; ++i) g_dtorCalls[i] = 0;
+    g_dtorN = 0; g_freeCalls = 0; g_lastFree = nullptr;
+}
 
-// `Base::DeletingDtor`'s free arm goes through `Object::TypeTreeFree`, which is
-// malloc's `free` under -DBANISHED_UNIT_TEST. A test that wants to observe the
-// flag without handing a stack object to `free` overrides the slot instead.
+// B3X W1: retail slot 0 (the deleting destructor) is `virtual ~T()`, D1 + D0.
+// Each level's destructor records itself; the root's class-scope operator
+// delete records what D0 hands it (retail's `flags & 1` free) and frees with
+// std::free — the heap objects below come from std::malloc.
 class TestBase : public ::Object::Base {
     DECLARE_TYPE(TestBase)
     // NOTE: DECLARE_TYPE ends in a `private:` section (retail's `_typeInfo` and
     // the two name accessors are private), so a class body must reopen its
     // access after it. That is retail's macro shape, not an accident.
 public:
-    // Slot 0 override that records the flags and does NOT free — the shape a
-    // class with its own allocator uses, and the only shape a stack object can
-    // survive.
-    ::Object::Base* DeletingDtor(unsigned flags) override {
-        g_dtorCalls[0]++; g_freeCalls = (int)flags;
-        return this;
-    }
-    ~TestBase() = default;   // non-virtual, and public so a local can exist
+    ~TestBase() override { NoteLevel(0); }
+    static void operator delete(void* p) { ++g_freeCalls; g_lastFree = p; std::free(p); }
 };
 ::Object::Base* TestBase::CreateNewObject() { return nullptr; }
 ::Object::Base* TestBase::CreateInPlaceObject(void*) { return nullptr; }
@@ -393,11 +402,7 @@ DEFINE_TYPE(TestBase, nullptr, nullptr)
 class TestMiddle : public TestBase {
     DECLARE_TYPE(TestMiddle)
 public:
-    ::Object::Base* DeletingDtor(unsigned flags) override {
-        g_dtorCalls[1]++; g_freeCalls = (int)flags;
-        return this;
-    }
-    ~TestMiddle() = default;
+    ~TestMiddle() override { NoteLevel(1); }
 };
 ::Object::Base* TestMiddle::CreateNewObject() { return nullptr; }
 ::Object::Base* TestMiddle::CreateInPlaceObject(void*) { return nullptr; }
@@ -406,12 +411,10 @@ DEFINE_TYPE(TestMiddle, "TestBase", nullptr)
 class TestLeaf : public TestMiddle {
     DECLARE_TYPE(TestLeaf)
 public:
-    ::Object::Base* DeletingDtor(unsigned flags) override {
-        g_dtorCalls[2]++; g_freeCalls = (int)flags;
-        return this;
-    }
-    ~TestLeaf() = default;
+    ~TestLeaf() override { NoteLevel(2); }
 };
+
+TestLeaf* NewHeapLeaf() { return ::new (std::malloc(sizeof(TestLeaf))) TestLeaf(); }
 ::Object::Base* TestLeaf::CreateNewObject() { return nullptr; }
 ::Object::Base* TestLeaf::CreateInPlaceObject(void*) { return nullptr; }
 DEFINE_TYPE(TestLeaf, "TestMiddle", "leaf")
@@ -419,12 +422,15 @@ DEFINE_TYPE(TestLeaf, "TestMiddle", "leaf")
 UNIT_TEST(base_is_one_vptr_with_three_slots_and_no_virtual_dtor) {
     static_assert(sizeof(::Object::Base) == 8, "Base is one vtable pointer");
     static_assert(sizeof(::Object::Base) == sizeof(RtObject::Base), "alias");
-    CHECK(std::has_virtual_destructor<::Object::Base>::value == false);
+    // B3X W1: Base has a virtual destructor — retail slot 0 is the compiler's
+    // pair (D1 at 0, D0 at 1) and retail slots 1, 2 sit at 2, 3. (Test name
+    // kept from the retired one-slot rule.)
+    CHECK(std::has_virtual_destructor<::Object::Base>::value == true);
     CHECK(std::is_polymorphic<::Object::Base>::value == true);
 
-    // A subclass adds no slot beyond its own: the three retail slots are at
-    // 0, 1, 2 and the compiler put nothing in front of them. Read them the way
-    // an unconverted C body does.
+    // A subclass adds no slot beyond its own: the three retail slots are the
+    // compiler's 0/1, 2, 3 and it put nothing else in front of them. Read them
+    // raw through RetailSlot.
     TestLeaf leaf;
     void** vt = *reinterpret_cast<void***>(&leaf);
     using TypeNameFn = const char* (*)(const void*);
@@ -437,36 +443,57 @@ UNIT_TEST(base_is_one_vptr_with_three_slots_and_no_virtual_dtor) {
 }
 
 UNIT_TEST(destroy_reaches_slot_zero_with_flags_one) {
-    TestLeaf leaf;
-    ::Object::Base* p = &leaf;
-
-    for (int i = 0; i < 3; ++i) g_dtorCalls[i] = 0;
-    g_freeCalls = -1;
+    // B3X W1: `Destroy(p)` is `delete p`. Through a Base* it reaches the MOST
+    // DERIVED deleting destructor, which runs the whole chain leaf -> middle ->
+    // base once each and then hands the block to operator delete (retail's
+    // `&1` = free-the-storage). A heap object: `delete` frees.
+    TestLeaf* leaf = NewHeapLeaf();
+    ::Object::Base* p = leaf;
+    ResetLevels();
 
     ::Object::Destroy(p);
 
-    // The MOST DERIVED slot 0 runs, exactly once, and the flag is retail's
-    // `&1` = free-the-storage.
     CHECK_EQ(g_dtorCalls[2], 1);
-    CHECK_EQ(g_dtorCalls[1], 0);
-    CHECK_EQ(g_dtorCalls[0], 0);
+    CHECK_EQ(g_dtorCalls[1], 1);
+    CHECK_EQ(g_dtorCalls[0], 1);
+    CHECK_EQ(g_dtorN, 3);
+    CHECK_EQ(g_dtorOrder[0], 2);
+    CHECK_EQ(g_dtorOrder[1], 1);
+    CHECK_EQ(g_dtorOrder[2], 0);
     CHECK_EQ(g_freeCalls, 1);
+    CHECK(g_lastFree == static_cast<const void*>(leaf));
 
     // Destroy(nullptr) is a no-op — retail's `if (p)` at every CallSlot0 site.
-    g_dtorCalls[2] = 0;
+    ResetLevels();
     ::Object::Destroy(nullptr);
-    CHECK_EQ(g_dtorCalls[2], 0);
+    CHECK_EQ(g_dtorN, 0);
+    CHECK_EQ(g_freeCalls, 0);
 
-    // And the same call reached through a RAW SLOT READ, which is what every
-    // unconverted C body still does, lands on the same body with the same flag.
-    using Slot0Fn = void* (*)(void*, unsigned);
-    void** vt = *reinterpret_cast<void***>(&leaf);
-    g_dtorCalls[2] = 0; g_freeCalls = -1;
-    void* r = reinterpret_cast<Slot0Fn>(vt[0])(&leaf, 1u);
-    CHECK_EQ(g_dtorCalls[2], 1);
+    // The same through RAW SLOT READS, which pins the new two-slot order:
+    // compiler slot 1 (D0) runs the same chain and calls operator delete;
+    // compiler slot 0 (D1, retail flags 0) runs it without. D1 is called on an
+    // object placement-new'd into a buffer and never destroyed again.
+    using DtorEntry = void (*)(void*);
+    TestLeaf* h = NewHeapLeaf();
+    void** vt = *reinterpret_cast<void***>(h);
+    CHECK(vt[0] != vt[1]);
+    ResetLevels();
+    reinterpret_cast<DtorEntry>(vt[1])(h);
+    CHECK_EQ(g_dtorN, 3);
+    CHECK_EQ(g_dtorOrder[0], 2);
     CHECK_EQ(g_freeCalls, 1);
-    CHECK(r == static_cast<void*>(&leaf));   // every MSVC ??_G returns `this`
+    CHECK(g_lastFree == static_cast<const void*>(h));
+
+    alignas(TestLeaf) unsigned char buf[sizeof(TestLeaf)];
+    TestLeaf* s = ::new (static_cast<void*>(buf)) TestLeaf();
+    ResetLevels();
+    reinterpret_cast<DtorEntry>((*reinterpret_cast<void***>(s))[0])(s);
+    CHECK_EQ(g_dtorN, 3);
+    CHECK_EQ(g_dtorOrder[0], 2);
+    CHECK_EQ(g_dtorOrder[2], 0);
+    CHECK_EQ(g_freeCalls, 0);
 }
+
 
 UNIT_TEST(type_and_typename_resolve_through_a_three_deep_chain) {
     // The three `_typeInfo` statics were constructed at CRT-init and are in the

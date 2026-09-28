@@ -7,7 +7,7 @@
 //            MemAlloc sizes and ctor stores (B38_SLOTS.md §6).
 //   PART B — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
 //            1 + vtable byte offset; adjustment must be 0: single inheritance).
-//   PART C — class shape: abstractness, no virtual destructor.
+//   PART C — class shape: abstractness, a virtual destructor (B3X W1: retail slot 0 = D1 + D0).
 //   PART D — the hidden-return-slot members (slot 11 GetSettingType, slot 13
 //            GetSelected of EditTool/PathTool): a raw retail-order call
 //            `fn(this /*RCX*/, ret /*RDX*/)` through a pointer of that shape
@@ -64,8 +64,8 @@ UNIT_TEST(tool_setting_slot_order) {
 
 UNIT_TEST(tool_setting_shape) {
     CHECK(std::is_polymorphic<ToolSetting>::value);
-    CHECK(!std::has_virtual_destructor<ToolSetting>::value);
-    CHECK(!std::has_virtual_destructor<RotationSetting>::value);
+    CHECK(std::has_virtual_destructor<ToolSetting>::value);
+    CHECK(std::has_virtual_destructor<RotationSetting>::value);
     CHECK(!std::is_abstract<RotationSetting>::value);
     CHECK((std::is_base_of<ToolSetting, RotationSetting>::value));
     CHECK((std::is_base_of<Object::Internal, ToolSetting>::value));
@@ -114,8 +114,8 @@ UNIT_TEST(tool_base_slot_order) {
 UNIT_TEST(tool_base_shape) {
     CHECK(std::is_abstract<Tool>::value);       // 4-9 pure
     CHECK(std::is_abstract<DragTool>::value);   // 4, 5, 7, 8, 13, 14 pure
-    CHECK(!std::has_virtual_destructor<Tool>::value);
-    CHECK(!std::has_virtual_destructor<DragTool>::value);
+    CHECK(std::has_virtual_destructor<Tool>::value);
+    CHECK(std::has_virtual_destructor<DragTool>::value);
     CHECK((std::is_base_of<Object::Internal, Tool>::value));
     CHECK((std::is_base_of<Tool, DragTool>::value));
 }
@@ -178,10 +178,10 @@ UNIT_TEST(tool_leaf_shape) {
     CHECK(!std::is_abstract<PlacementTool>::value);
     CHECK(!std::is_abstract<RemovalTool>::value);
     CHECK(!std::is_abstract<RoadTool>::value);
-    CHECK(!std::has_virtual_destructor<BridgeTool>::value);
-    CHECK(!std::has_virtual_destructor<EditTool>::value);
-    CHECK(!std::has_virtual_destructor<PathTool>::value);
-    CHECK(!std::has_virtual_destructor<FencedTool>::value);
+    CHECK(std::has_virtual_destructor<BridgeTool>::value);
+    CHECK(std::has_virtual_destructor<EditTool>::value);
+    CHECK(std::has_virtual_destructor<PathTool>::value);
+    CHECK(std::has_virtual_destructor<FencedTool>::value);
     CHECK((std::is_base_of<DragTool, BridgeTool>::value));
     CHECK((std::is_base_of<DragTool, DragPlacementTool>::value));
     CHECK((std::is_base_of<DragTool, FencedTool>::value));

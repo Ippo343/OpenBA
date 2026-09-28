@@ -9,10 +9,10 @@
 // PART A — LAYOUT. sizeof / alignof against each retail create function's
 //   MemAlloc (B38_RULES §1.3), and the member offsets the ported bodies read raw.
 // PART B — SHAPE. Every class is concrete, `final`, single inheritance from its
-//   proved parent, polymorphic, NO virtual destructor.
+//   proved parent, polymorphic, a virtual destructor (B3X W1).
 // PART C — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
 //   1 + vtable byte offset, adjustment 0): each override lands on the retail
-//   index of B38_SLOTS.md §6, and slot 0 is `DeletingDtor`.
+//   index of B38_SLOTS.md §6, and slot 0 is the destructor (B3X W1: D1 + D0).
 // PART D — the RETSLOT member (the two descriptions' slot 8 CreateInstance) is
 //   declared in retail order `T* (T* ret, const Dialog*) const` and sits on
 //   slot 8.
@@ -149,7 +149,7 @@ void CheckShape() {
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::is_final<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<Base, T>::value));
     CHECK_EQ(alignof(T), (size_t)8);
     CHECK_DTOR_SLOT(T);

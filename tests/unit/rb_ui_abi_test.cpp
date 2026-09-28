@@ -42,6 +42,8 @@
 #include <new>
 #include <type_traits>
 
+#include "dtor_check.h"
+
 namespace Object {
 namespace detail {
 extern InternalFactory* g_unitInternalFactory;
@@ -80,6 +82,9 @@ struct Seen {
     const void* releaseVptr = nullptr;
     const void* args[4] = {};
     int32_t     flags = 0;
+    // B3X W1: the object each ReleaseFields ran on, in call order (the
+    // destructor log CHECK_ARRAY_DELETE reads).
+    const void* releaseSelf[4] = {};
 };
 Seen g_di, g_el, g_ed;
 
@@ -107,6 +112,7 @@ void DialogInstance::InitFields(UserInterface* ui, const Dialog* dialog,
     _userFlags = userFlags;
 }
 void DialogInstance::ReleaseFields() {
+    if (g_di.releaseCalls < 4) g_di.releaseSelf[g_di.releaseCalls] = this;
     ++g_di.releaseCalls;
     g_di.releaseVptr = VptrOf(this);
 }
@@ -118,6 +124,7 @@ void Element::InitFields() {
     _color = 0xFFFFFFFFu;
 }
 void Element::ReleaseFields() {
+    if (g_el.releaseCalls < 4) g_el.releaseSelf[g_el.releaseCalls] = this;
     ++g_el.releaseCalls;
     g_el.releaseVptr = VptrOf(this);
 }
@@ -129,6 +136,7 @@ void ElementDescription::InitFields() {
     _elementType = 3;
 }
 void ElementDescription::ReleaseFields() {
+    if (g_ed.releaseCalls < 4) g_ed.releaseSelf[g_ed.releaseCalls] = this;
     ++g_ed.releaseCalls;
     g_ed.releaseVptr = VptrOf(this);
 }
@@ -143,24 +151,19 @@ struct RbDialog final : UI::DialogInstance {
              Object::InternalPtr<UI::DialogInstance> parent, Object::Base* ds,
              void* ud, int32_t uf)
         : UI::DialogInstance(ui, d, parent, ds, ud, uf) {}
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct RbPanel final : UI::DialogController {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct RbConfig final : UI::DialogControllerConfig {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
 struct RbElement final : UI::Element {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     void ComputeSize() override {}
 };
 struct RbElementDesc final : UI::ElementDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     Object::InternalPtr<UI::Element>* CreateInstance(
@@ -255,7 +258,10 @@ UNIT_TEST(rb_elementdescription_ctor_dtor_run_shared_bodies_under_base_table) {
 // Element and ElementDescription are retired with their minted tables, so the
 // door-vs-ctor comparisons went with them. What replaces them for the two
 // abstract bases: their OWN slot 0 (the retired RT_DELDTOR rows), both arms,
-// through a probe that declares no DeletingDtor of its own.
+// through a probe that declares no destructor of its own. B3X W1: the flags-0
+// arm is the QUALIFIED `~Element()` / `~ElementDescription()`; the vector arm
+// (flags 2, no free: Element 0x180035c10, ElementDescription 0x180035350) has
+// no Itanium counterpart, and `delete[]` of `new Probe[3]` replaces it.
 // ===========================================================================
 struct B39ElProbe final : UI::Element {
     void ComputeSize() override {}
@@ -277,38 +283,27 @@ UNIT_TEST(b39_uid_element_slot0_both_arms) {
     alignas(8) unsigned char one[sizeof(B39ElProbe)];
     B39ElProbe* e = ::new (static_cast<void*>(one)) B39ElProbe();
     g_el = Seen{};
-    CHECK(e->UI::Element::DeletingDtor(0) == e);
+    e->UI::Element::~Element();
     CHECK_EQ(g_el.releaseCalls, 1);
     CHECK(g_el.releaseVptr == ElVt());
 
-    // vector arm, flag 2: the count at this-8, destroyed from the top down
-    alignas(8) unsigned char arr[8 + 2 * sizeof(B39ElProbe)];
-    std::memset(arr, 0, sizeof arr);
-    *reinterpret_cast<int32_t*>(arr) = 2;
-    B39ElProbe* a0 = ::new (static_cast<void*>(arr + 8)) B39ElProbe();
-    ::new (static_cast<void*>(arr + 8 + sizeof(B39ElProbe))) B39ElProbe();
+    // the retired vector arm: delete[] destroys from the top down
     g_el = Seen{};
-    CHECK(static_cast<void*>(a0->UI::Element::DeletingDtor(2)) == static_cast<void*>(arr));
-    CHECK_EQ(g_el.releaseCalls, 2);
+    CHECK_ARRAY_DELETE(B39ElProbe, g_el.releaseCalls, g_el.releaseSelf);
+    CHECK(g_el.releaseVptr == ElVt());
 }
 
 UNIT_TEST(b39_uid_elementdescription_slot0_both_arms) {
     alignas(8) unsigned char one[sizeof(B39EdProbe)];
     B39EdProbe* d = ::new (static_cast<void*>(one)) B39EdProbe();
     g_ed = Seen{};
-    CHECK(d->UI::ElementDescription::DeletingDtor(0) == d);
+    d->UI::ElementDescription::~ElementDescription();
     CHECK_EQ(g_ed.releaseCalls, 1);
     CHECK(g_ed.releaseVptr == EdVt());
 
-    alignas(8) unsigned char arr[8 + 3 * sizeof(B39EdProbe)];
-    std::memset(arr, 0, sizeof arr);
-    *reinterpret_cast<int32_t*>(arr) = 3;
-    B39EdProbe* a0 = ::new (static_cast<void*>(arr + 8)) B39EdProbe();
-    for (int i = 1; i < 3; ++i)
-        ::new (static_cast<void*>(arr + 8 + i * sizeof(B39EdProbe))) B39EdProbe();
     g_ed = Seen{};
-    CHECK(static_cast<void*>(a0->UI::ElementDescription::DeletingDtor(2)) == static_cast<void*>(arr));
-    CHECK_EQ(g_ed.releaseCalls, 3);
+    CHECK_ARRAY_DELETE(B39EdProbe, g_ed.releaseCalls, g_ed.releaseSelf);
+    CHECK(g_ed.releaseVptr == EdVt());
 }
 
 // ===========================================================================
@@ -346,17 +341,31 @@ UNIT_TEST(rb_dialoginstance_default_ctor_is_retail_0x180114ca0) {
 UNIT_TEST(rb_dialoginstance_slot0_is_the_exe_scalar_deleting_dtor) {
     FactoryScope scope;
     g_di = Seen{};
-    // Retail 0x140020cb0: ~DialogInstance, then MemFree when flags & 1.
+    // Retail 0x140020cb0: ~DialogInstance, then MemFree when flags & 1. B3X W1:
+    // that is D0, compiler slot 1 (`_ZTV…[3]`), `void (*)(void*)` — read RAW on
+    // purpose to pin the two-slot order; slot 0 (`[2]`) is D1, which frees
+    // nothing.
+    static_assert(dtor_check::HasClassDelete<UI::DialogInstance>::value, "D0 frees through ??3 (MemFree)");
     void* mem = Object::detail::InternalMemAlloc(sizeof(UI::DialogInstance), 8);
     UI::DialogInstance* d = ::new (mem) UI::DialogInstance();
     CHECK(VptrOf(d) == DiVt());
-    using Slot0 = Object::Base* (*)(void*, unsigned);
-    Slot0 slot0 = reinterpret_cast<Slot0>(const_cast<void*>(
-        static_cast<const void* const*>(DiVt())[0]));
-    Object::Base* r = slot0(d, 1u);
-    CHECK(static_cast<void*>(r) == mem);
+    const void* const* vt = static_cast<const void* const*>(DiVt());
+    CHECK(vt[0] != vt[1]);
+    using D0 = void (*)(void*);
+    D0 d0 = reinterpret_cast<D0>(const_cast<void*>(vt[1]));
+    d0(d);
     CHECK_EQ(g_di.releaseCalls, 1);
     CHECK(g_di.releaseVptr == DiVt());
+
+    // The free, recorded: the same slot of a stand-in whose class-scope
+    // operator delete records the block.
+    UI::DialogInstance* r = dtor_check::NewOnMalloc<dtor_check::Recording<UI::DialogInstance>>();
+    g_di = Seen{};
+    dtor_check::ResetFrees();
+    dtor_check::CallD0(r);
+    CHECK_EQ(g_di.releaseCalls, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
 }
 
 UNIT_TEST(rb_dialogcontroller_ctor_is_retail_0x1800cd320) {
@@ -390,11 +399,12 @@ UNIT_TEST(rb_ui_bases_shape) {
     CHECK(std::is_abstract<UI::DialogControllerConfig>::value);  // retail's _purecall slots
     CHECK(std::is_abstract<UI::Element>::value);
     CHECK(std::is_abstract<UI::ElementDescription>::value);
-    CHECK(!std::has_virtual_destructor<UI::DialogInstance>::value);
-    CHECK(!std::has_virtual_destructor<UI::DialogController>::value);
-    CHECK(!std::has_virtual_destructor<UI::DialogControllerConfig>::value);
-    CHECK(!std::has_virtual_destructor<UI::Element>::value);
-    CHECK(!std::has_virtual_destructor<UI::ElementDescription>::value);
+    // B3X W1: retail slot 0 = D1 + D0, a public virtual destructor.
+    CHECK(std::has_virtual_destructor<UI::DialogInstance>::value);
+    CHECK(std::has_virtual_destructor<UI::DialogController>::value);
+    CHECK(std::has_virtual_destructor<UI::DialogControllerConfig>::value);
+    CHECK(std::has_virtual_destructor<UI::Element>::value);
+    CHECK(std::has_virtual_destructor<UI::ElementDescription>::value);
 }
 
 // ===========================================================================
@@ -414,12 +424,21 @@ UNIT_TEST(rb_spritesheet_ctor_is_retail_0x18011d600_and_concrete) {
     CHECK_EQ((int)By(s, 0x51), 0xCD);            // never written
     // ENDGAME B.3.9 UI-D: the DoorBody bridge is retired with the ctor door;
     // the real ctor is the only body.
-    s->DeletingDtor(0);                           // destruct only (stack buffer)
+    s->~SpriteSheet();                            // destruct only (stack buffer)
 
+    // B3X W1: retail slot 0 with flags 1 is D0, `_ZTV…[3]` (`[2]` is D1, which
+    // frees nothing) — read RAW on purpose to pin the two-slot order.
+    CHECK(g_rbSsVtGroup[2] != g_rbSsVtGroup[3]);
     void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteSheet), 8);
     UI::SpriteSheet* h = ::new (mem) UI::SpriteSheet();
-    using Slot0 = Object::Base* (*)(void*, unsigned);
-    CHECK(static_cast<void*>(reinterpret_cast<Slot0>(const_cast<void*>(g_rbSsVtGroup[2]))(h, 1u)) == mem);
+    using D0 = void (*)(void*);
+    reinterpret_cast<D0>(const_cast<void*>(g_rbSsVtGroup[3]))(h);
+    // The free, recorded on a stand-in with a recording class operator delete.
+    UI::SpriteSheet* r = dtor_check::NewOnMalloc<dtor_check::Recording<UI::SpriteSheet>>();
+    dtor_check::ResetFrees();
+    dtor_check::CallD0(r);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
 }
 
 UNIT_TEST(rb_spritecapture_ctor_is_retail_0x1800d9140_and_concrete) {
@@ -430,12 +449,20 @@ UNIT_TEST(rb_spritecapture_ctor_is_retail_0x1800d9140_and_concrete) {
     for (size_t off = 0x08; off < 0x58; off += 8) CHECK_EQ(Q(c, off), (uint64_t)0);
     // ENDGAME B.3.9 UI-D: the DoorBody bridge is retired with the ctor door;
     // the real ctor is the only body.
-    c->DeletingDtor(0);
+    c->~SpriteCapture();
 
+    // B3X W1: flags 1 is D0, `_ZTV…[3]`, read RAW on purpose (see above).
+    CHECK(g_rbScVtGroup[2] != g_rbScVtGroup[3]);
     void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteCapture), 8);
     UI::SpriteCapture* h = ::new (mem) UI::SpriteCapture();
-    using Slot0 = Object::Base* (*)(void*, unsigned);
-    CHECK(static_cast<void*>(reinterpret_cast<Slot0>(const_cast<void*>(g_rbScVtGroup[2]))(h, 1u)) == mem);
+    using D0 = void (*)(void*);
+    reinterpret_cast<D0>(const_cast<void*>(g_rbScVtGroup[3]))(h);
+    UI::SpriteCapture* r = dtor_check::NewOnMalloc<dtor_check::Recording<UI::SpriteCapture>>();
+    dtor_check::ResetFrees();
+    dtor_check::CallD0(r);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
 }
+
 
 }  // namespace

@@ -128,11 +128,9 @@ const void* const kFakeHandle  = reinterpret_cast<const void*>(static_cast<uintp
 // Bare-base probes: their inherited slots are the BASE members' pointers.
 // ---------------------------------------------------------------------------
 struct BaseElementProbe final : UI::Element {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     void ComputeSize() override {}
 };
 struct BaseDescriptionProbe final : UI::ElementDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     Object::InternalPtr<UI::Element>* CreateInstance(
@@ -295,10 +293,8 @@ C5_ELEMENT_MARKERS(GraphElement, kGraphE)
 
 namespace {
 struct GraphDescriptionProbe final : UI::GraphDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct GraphElementProbe final : UI::GraphElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 
 // Slot-ownership masks for the Elements (bit n = slot n is the leaf's own).
@@ -313,11 +309,11 @@ template <class C, class Base>
 static void CheckShape(size_t size, bool concrete = false) {
     CHECK_EQ(sizeof(C), size);
     CHECK_EQ(alignof(C), (size_t)8);
-    CHECK(!std::has_virtual_destructor<C>::value);
+    CHECK(std::has_virtual_destructor<C>::value);   // B3X W1: retail slot 0 = D1 + D0
     CHECK((std::is_base_of<Base, C>::value));
     if (concrete) {
-        // ENDGAME B.3.9 UI-B (B39_RULES D1): public real ctor, own slot 0,
-        // protected non-virtual dtor (so not destructible from outside).
+        // ENDGAME B.3.9 UI-B (B39_RULES D1): public real ctor, own slot 0;
+        // B3X W1: public virtual dtor.
         CHECK(B39IsConcreteShape<C>());
     } else {
         CHECK(std::is_abstract<C>::value);
@@ -364,10 +360,8 @@ C5_ELEMENT_MARKERS(ProgressElement, kProgressE)
 
 namespace {
 struct ProgressDescriptionProbe final : UI::ProgressDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct ProgressElementProbe final : UI::ProgressElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 }  // namespace
 
@@ -404,10 +398,8 @@ C5_ELEMENT_UPDATE_MARKER(SpinnerElement, kSpinnerE)
 
 namespace {
 struct SpinnerDescriptionProbe final : UI::SpinnerDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct SpinnerElementProbe final : UI::SpinnerElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 }  // namespace
 
@@ -440,10 +432,8 @@ C5_ELEMENT_UPDATE_MARKER(SliderElement, kSliderE)
 
 namespace {
 struct SliderDescriptionProbe final : UI::SliderDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct SliderElementProbe final : UI::SliderElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 }  // namespace
 
@@ -479,10 +469,8 @@ C5_ELEMENT_MARKERS(RibbonElement, kRibbonE)
 
 namespace {
 struct RibbonDescriptionProbe final : UI::RibbonDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct RibbonElementProbe final : UI::RibbonElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 }  // namespace
 
@@ -514,10 +502,8 @@ C5_ELEMENT_UPDATE_MARKER(TabElement, kTabE)
 
 namespace {
 struct TabDescriptionProbe final : UI::TabDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct TabElementProbe final : UI::TabElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 }  // namespace
 
@@ -609,10 +595,8 @@ C5_ELEMENT_UPDATE_MARKER(DocumentTextElement, kDocTextE)
 
 namespace {
 struct DocumentTextDescriptionProbe final : UI::DocumentTextDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct DocumentTextElementProbe final : UI::DocumentTextElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 }  // namespace
 
@@ -648,7 +632,7 @@ UNIT_TEST(ui_c5_documenttext_slots) {
 // ===========================================================================
 // ENDGAME B.3.9 block UI-B (B39_RULES D1, rule B9-16): the concrete classes —
 // slot order by PMF on the real header, the real ctor's retail stores, both
-// DeletingDtor arms (the leaves' dtors are the recording markers above).
+// retired slot-0 arms (the leaves' dtors are the recording markers above).
 // ===========================================================================
 UNIT_TEST(b39_uib_c5_slot_order_by_pmf) {
     B39CheckDescriptionPmf<UI::GraphDescription>();
@@ -670,7 +654,7 @@ UNIT_TEST(b39_uib_c5_graph_ctor_stores) {
     CHECK(gd->_spriteSheet == nullptr);
     CHECK(gd->_spriteName == nullptr);
     CHECK_EQ(gd->_id, -1);
-    gd->DeletingDtor(0);
+    gd->~GraphDescription();
 
     // ??0GraphElement 0x1800d1880; +0xec written by nothing.
     alignas(8) uint8_t e[0x100];
@@ -689,7 +673,7 @@ UNIT_TEST(b39_uib_c5_graph_ctor_stores) {
     CHECK(ge->_seriesData == nullptr);
     CHECK_EQ(ge->_seriesCount, 0);
     CHECK_EQ(ge->_seriesCapacity, 0);
-    ge->DeletingDtor(0);
+    ge->~GraphElement();
 }
 
 UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
@@ -709,7 +693,7 @@ UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
     CHECK_EQ((int)d[0xac], 0xCD);
     CHECK(dd->_colorsData == nullptr);
     CHECK(dd->_resourceList == nullptr);
-    dd->DeletingDtor(0);
+    dd->~DocumentTextDescription();
 
     // ??0DocumentTextElement 0x1800cf410: nothing in +0x170..+0x197 and
     // +0x1b0..+0x1c7; +0x1a0 is ONE qword -1.
@@ -734,19 +718,23 @@ UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
     for (int off = 0x170; off < 0x198; ++off) CHECK_EQ((int)e[off], 0xCD);
     for (int off = 0x1b0; off < 0x1c8; ++off) CHECK_EQ((int)e[off], 0xCD);
     CHECK_EQ((int)e[0x10c], 0xCD);
-    de->DeletingDtor(0);
+    de->~DocumentTextElement();
 }
 
 UNIT_TEST(b39_uib_c5_deletingdtor_arms) {
     FactoryScope scope;
     GraphDescriptionProbe gdp;
-    B39CheckDeletingDtorArms<UI::GraphDescription, 0x88>(VTableOf(&gdp));
+    B39CheckDestructorArms<
+UI::GraphDescription, 0x88>(VTableOf(&gdp));
     GraphElementProbe gep{};
-    B39CheckDeletingDtorArms<UI::GraphElement, 0x100>(VTableOf(&gep));
+    B39CheckDestructorArms<
+UI::GraphElement, 0x100>(VTableOf(&gep));
     DocumentTextDescriptionProbe ddp;
-    B39CheckDeletingDtorArms<UI::DocumentTextDescription, 0xe8>(VTableOf(&ddp));
+    B39CheckDestructorArms<
+UI::DocumentTextDescription, 0xe8>(VTableOf(&ddp));
     DocumentTextElementProbe dep{};
-    B39CheckDeletingDtorArms<UI::DocumentTextElement, 0x1c8>(VTableOf(&dep));
+    B39CheckDestructorArms<
+UI::DocumentTextElement, 0x1c8>(VTableOf(&dep));
 }
 
 // ---- Progress / Ribbon (ENDGAME B.3.9 UI-B) --------------------------------
@@ -767,7 +755,7 @@ UNIT_TEST(b39_uib_c5_progress_ribbon_pmf_and_ctors) {
     CHECK(p->_fillLeftName == nullptr);
     CHECK(p->_trackRightName == nullptr);
     CHECK(p->_childDescription == nullptr);
-    p->DeletingDtor(0);
+    p->~ProgressDescription();
     // ??0ProgressElement 0x180119c40: six {null, -1} sprites, the three tail
     // stores, +0x12c untouched.
     alignas(8) uint8_t pe[0x130];
@@ -780,7 +768,7 @@ UNIT_TEST(b39_uib_c5_progress_ribbon_pmf_and_ctors) {
     CHECK(e->_maxValue == 1.0f);
     CHECK(e->_currentValue == 0.25f);
     CHECK_EQ((int)pe[0x12c], 0xCD);
-    e->DeletingDtor(0);
+    e->~ProgressElement();
 
     // ??0RibbonDescription 0x1800d5bf0: +0x6a/+0x6b never written.
     alignas(8) uint8_t rd[0x80];
@@ -793,7 +781,7 @@ UNIT_TEST(b39_uib_c5_progress_ribbon_pmf_and_ctors) {
     CHECK_EQ(r->_spacing, 0);
     CHECK(r->_itemsData == nullptr);
     CHECK_EQ(r->_itemsCount, 0);
-    r->DeletingDtor(0);
+    r->~RibbonDescription();
     // ??0RibbonElement 0x1800d5d10: +0xc2/+0xc3 never written.
     alignas(8) uint8_t re[0xd8];
     std::memset(re, 0xCD, sizeof re);
@@ -804,19 +792,23 @@ UNIT_TEST(b39_uib_c5_progress_ribbon_pmf_and_ctors) {
     CHECK_EQ(q->_spacing, 0);
     CHECK(q->_extentsData == nullptr);
     CHECK_EQ(q->_extentsCapacity, 0);
-    q->DeletingDtor(0);
+    q->~RibbonElement();
 }
 
 UNIT_TEST(b39_uib_c5_progress_ribbon_deletingdtor_arms) {
     FactoryScope scope;
     ProgressDescriptionProbe pdp;
-    B39CheckDeletingDtorArms<UI::ProgressDescription, 0xb0>(VTableOf(&pdp));
+    B39CheckDestructorArms<
+UI::ProgressDescription, 0xb0>(VTableOf(&pdp));
     ProgressElementProbe pep{};
-    B39CheckDeletingDtorArms<UI::ProgressElement, 0x130>(VTableOf(&pep));
+    B39CheckDestructorArms<
+UI::ProgressElement, 0x130>(VTableOf(&pep));
     RibbonDescriptionProbe rdp;
-    B39CheckDeletingDtorArms<UI::RibbonDescription, 0x80>(VTableOf(&rdp));
+    B39CheckDestructorArms<
+UI::RibbonDescription, 0x80>(VTableOf(&rdp));
     RibbonElementProbe rep{};
-    B39CheckDeletingDtorArms<UI::RibbonElement, 0xd8>(VTableOf(&rep));
+    B39CheckDestructorArms<
+UI::RibbonElement, 0xd8>(VTableOf(&rep));
 }
 
 // ---- Slider (ENDGAME B.3.9 UI-B) -------------------------------------------
@@ -837,7 +829,7 @@ UNIT_TEST(b39_uib_c5_slider) {
     CHECK(sd->_maximum == 1.0f);
     CHECK_EQ(sd->_steps, 10);
     CHECK_EQ((int)d[0xb4], 0xCD);
-    sd->DeletingDtor(0);
+    sd->~SliderDescription();
     // ??0SliderElement 0x1800d7570: +0x125..+0x127 and +0x12c NOT written.
     alignas(8) uint8_t e[0x130];
     std::memset(e, 0xCD, sizeof e);
@@ -850,12 +842,14 @@ UNIT_TEST(b39_uib_c5_slider) {
     CHECK(se->_value == 0.25f);
     CHECK_EQ((int)e[0x125], 0xCD);
     CHECK_EQ((int)e[0x12c], 0xCD);
-    se->DeletingDtor(0);
+    se->~SliderElement();
 
     SliderDescriptionProbe dp;
-    B39CheckDeletingDtorArms<UI::SliderDescription, 0xb8>(VTableOf(&dp));
+    B39CheckDestructorArms<
+UI::SliderDescription, 0xb8>(VTableOf(&dp));
     SliderElementProbe ep{};
-    B39CheckDeletingDtorArms<UI::SliderElement, 0x130>(VTableOf(&ep));
+    B39CheckDestructorArms<
+UI::SliderElement, 0x130>(VTableOf(&ep));
 }
 
 // ---- Spinner / Tab (ENDGAME B.3.9 UI-B) ------------------------------------
@@ -875,14 +869,14 @@ UNIT_TEST(b39_uib_c5_spinner_tab) {
     CHECK(s->_downDescription == nullptr);
     CHECK_EQ(s->_increment, 1);
     CHECK_EQ((int)sd[0x84], 0xCD);
-    s->DeletingDtor(0);
+    s->~SpinnerDescription();
     // ??0SpinnerElement 0x1800d8670: +0xc4 not written.
     alignas(8) uint8_t se[0xc8];
     std::memset(se, 0xCD, sizeof se);
     auto* sp = ::new (static_cast<void*>(se)) UI::SpinnerElement();
     CHECK_EQ(sp->_increment, 1);
     CHECK_EQ((int)se[0xc4], 0xCD);
-    sp->DeletingDtor(0);
+    sp->~SpinnerElement();
 
     // ??0TabDescription 0x1800daa00: +0xa0 (_gap) and +0xa4 NOT written.
     alignas(8) uint8_t td[0xb8];
@@ -895,7 +889,7 @@ UNIT_TEST(b39_uib_c5_spinner_tab) {
     CHECK_EQ((int)td[0xa4], 0xCD);
     CHECK(t->_tabsData == nullptr);
     CHECK_EQ(t->_tabsCount, 0);
-    t->DeletingDtor(0);
+    t->~TabDescription();
     // ??0TabElement 0x1800da390: +0x104 not written.
     alignas(8) uint8_t te[0x108];
     std::memset(te, 0xCD, sizeof te);
@@ -908,14 +902,18 @@ UNIT_TEST(b39_uib_c5_spinner_tab) {
     CHECK_EQ(tb->_tabBarHeight, 0);
     CHECK_EQ(tb->_tabBarWidth, 0);
     CHECK_EQ((int)te[0x104], 0xCD);
-    tb->DeletingDtor(0);
+    tb->~TabElement();
 
     SpinnerDescriptionProbe sdp;
-    B39CheckDeletingDtorArms<UI::SpinnerDescription, 0x88>(VTableOf(&sdp));
+    B39CheckDestructorArms<
+UI::SpinnerDescription, 0x88>(VTableOf(&sdp));
     SpinnerElementProbe sep{};
-    B39CheckDeletingDtorArms<UI::SpinnerElement, 0xc8>(VTableOf(&sep));
+    B39CheckDestructorArms<
+UI::SpinnerElement, 0xc8>(VTableOf(&sep));
     TabDescriptionProbe tdp;
-    B39CheckDeletingDtorArms<UI::TabDescription, 0xb8>(VTableOf(&tdp));
+    B39CheckDestructorArms<
+UI::TabDescription, 0xb8>(VTableOf(&tdp));
     TabElementProbe tep{};
-    B39CheckDeletingDtorArms<UI::TabElement, 0x108>(VTableOf(&tep));
+    B39CheckDestructorArms<
+UI::TabElement, 0x108>(VTableOf(&tep));
 }

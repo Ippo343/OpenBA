@@ -7,10 +7,10 @@
 // PART A — LAYOUT. sizeof / alignof against each retail create function's
 //   MemAlloc (B38_RULES §1.3), and the member offsets the ported bodies read raw.
 // PART B — SHAPE. Every class is concrete, `final`, single inheritance from
-//   `Component` (so from Object::Internal), polymorphic, NO virtual destructor.
+//   `Component` (so from Object::Internal), polymorphic, a virtual destructor (B3X W1).
 // PART C — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
 //   1 + vtable byte offset, adjustment 0): each override lands on the retail
-//   index of B38_SLOTS.md §6, and slot 0 is `DeletingDtor`.
+//   index of B38_SLOTS.md §6, and slot 0 is the destructor (B3X W1: D1 + D0).
 //
 // NOT PROVEN HERE: the bodies (they stand on the address registry and cannot
 // link into a host test), and `Vtable() == vptr` (tests/unit/exe_class_abi_test.cpp
@@ -113,7 +113,7 @@ void CheckLeafShape() {
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::is_final<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<Component, T>::value));
     CHECK((std::is_base_of<Object::Internal, T>::value));
     CHECK_EQ(alignof(T), (size_t)8);
