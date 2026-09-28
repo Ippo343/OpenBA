@@ -136,9 +136,11 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                 int id = std::atoi(tok + 1);
                 std::fprintf(stderr, "[PauseMenu] CLICKS: ModDetailsDialog=%p id=%d\n", dlg, id);
                 if (dlg) {
-                    void** vt = *reinterpret_cast<void***>(dlg);
-                    using H = void (*)(void*, uint64_t, int, int);
-                    reinterpret_cast<H>(vt[8])(dlg, 0, 0x12, id);
+                    // UI::DialogInstance::OnElementEvent (retail slot 8, +0x40).
+                    // The trailing ints / userData were never set by the old raw
+                    // 4-argument call; the by-name call passes 0 / nullptr.
+                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
+                        nullptr, 0x12, id, 0, 0, 0, nullptr);
                 }
             } else {
                 void* dlg = ModDialog_LastOpened();
@@ -146,9 +148,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                 std::fprintf(stderr, "[PauseMenu] CLICKS: ModDialog=%p id=%d\n", dlg, id);
                 if (dlg) {
                     void* nullElem = nullptr;
-                    void** vt = *reinterpret_cast<void***>(dlg);
-                    using H = void (*)(void*, void*, int, int, uint32_t, uint32_t, uint32_t, uint64_t);
-                    reinterpret_cast<H>(vt[8])(dlg, &nullElem, 0x12, id, 0, 0, 0, 0);
+                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
+                        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),
+                        0x12, id, 0, 0, 0, nullptr);
                 }
             }
             if (!s_clickCursor) {
@@ -242,11 +244,13 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                              "so the object was destroyed under us\n");
         return;
     }
-    void** vt = reinterpret_cast<void**>(nowVtable);
-    typedef void (*OnCommand_t)(void* self, void* elem, int msg, int id);
-    OnCommand_t onCommand = reinterpret_cast<OnCommand_t>(vt[8]);   // +0x40
+    // The vptr is intact (whole-vptr compare above), so the object is still the
+    // MainMenuDialog the opener built: UI::DialogInstance::OnElementEvent, by
+    // name (retail slot 8, +0x40). The trailing ints / userData were never set
+    // by the old raw 4-argument call; the by-name call passes 0 / nullptr.
     std::fprintf(stderr, "[PauseMenu] dispatching OnCommand(msg=0x12, id=%d)\n", s_buttonId);
-    onCommand(s_dialog, nullptr, 0x12, s_buttonId);
+    static_cast<UI::DialogInstance*>(s_dialog)->OnElementEvent(   // B.3.x bridge
+        nullptr, 0x12, s_buttonId, 0, 0, 0, nullptr);
     s_clickedAt = frameNum;
     std::fprintf(stderr, "[PauseMenu] OnCommand returned\n");
 }

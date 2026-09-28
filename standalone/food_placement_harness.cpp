@@ -36,6 +36,8 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "Object/factory_registration.h"
+#include "object/TypeInfo.h"   // Object::Base::TypeName (B3X W0)
+#include "object/VSlot.h"      // Object::CompilerSlotOf
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -237,10 +239,19 @@ void ProbeClass(const FoodClass& fc) {
     // close: every component vtable is the compiler's, so no slot can hold it.)
     void** vt = *reinterpret_cast<void***>(comp);
     if (!vt) { std::fprintf(stderr, "[FoodPlace]   no vtable?!\n"); return; }
+    // `fc.retail[]` is in RETAIL slot order. Retail slot 0 is the one deleting
+    // destructor; every later retail slot i sits at compiler slot i + shift,
+    // where the shift is read off a named member (Object::Base::TypeName is
+    // retail slot 1): 0 while the class declares `DeletingDtor`, 1 once it
+    // declares `virtual ~T()` (GCC's two destructor slots, B3X_RULES X3).
+    const long shift = ::Object::CompilerSlotOf(&::Object::Base::TypeName) - 1;
+    auto compilerSlot = [shift](int retailSlot) -> long {
+        return retailSlot == 0 ? 0 : retailSlot + shift;
+    };
     char map[kSlots + 1];
     int live = 0, equiv = 0, gap = 0;
     for (int i = 0; i < kSlots; ++i) {
-        const bool isStub = (vt[i] == nullptr);
+        const bool isStub = (vt[compilerSlot(i)] == nullptr);
         if (!isStub)                        { map[i] = 'W'; ++live;  }
         else if (IsRetailNoOp(fc.retail[i])){ map[i] = '='; ++equiv; }   // retail no-op too
         else                                { map[i] = '.'; ++gap;   }

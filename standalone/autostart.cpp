@@ -35,7 +35,6 @@ namespace {
 // --- Layout constants (verified elsewhere in the standalone code) ---
 constexpr uintptr_t kMenuDLT_DialogInstance = 0x38;   // MenuDLT m_dialogInstance
 constexpr uintptr_t kNewGame_ButtonOk       = 0xF0;   // NewGameDialog::buttonOk
-constexpr int       kVtableSlot_OnCommand   = 8;      // slot8 (+0x40): OnCommand/OnEvent
 
 // Dialog command/event protocol (matches the UI dispatcher).
 constexpr int kMsg_ButtonClick = 0x12;
@@ -108,13 +107,14 @@ void*  s_lastMenu      = nullptr;// the MainMenuDialog we last clicked New Game 
 // than firing Start against half-built combos (which would crash).
 constexpr int kNewGameTimeoutFrames = 600;   // ~10s at 60fps
 
-// Invoke a dialog's vtable slot-8 handler as a synthetic button click.
-// MainMenuDialog::OnCommand and NewGameDialog::OnEvent share the same shape:
-//   (self, element=null, msg, id)
+// Invoke a dialog's UI::DialogInstance::OnElementEvent (retail slot 8, +0x40)
+// as a synthetic button click: (element=null, msg, id). Every dialog driven
+// here (MainMenu / NewGame / SaveLoad / ModDetails / Mod) derives from
+// UI::DialogInstance. The three trailing ints and userData were never set by
+// the old raw 4-argument call; the by-name call passes 0 / nullptr.
 void InjectClick(void* dialog, int msg, int id) {
-    void** vt = *reinterpret_cast<void***>(dialog);
-    using Handler = void (*)(void*, void*, int, int);
-    reinterpret_cast<Handler>(vt[kVtableSlot_OnCommand])(dialog, nullptr, msg, id);
+    static_cast<UI::DialogInstance*>(dialog)->OnElementEvent(   // B.3.x bridge
+        nullptr, msg, id, 0, 0, 0, nullptr);
 }
 
 }  // namespace
@@ -333,11 +333,7 @@ void TickMenu(void* menuDLT) {
             void* dlg = ModDetailsDialog_LastOpened();
             int id = std::atoi(tok + 1);
             fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDetailsDialog=%p id=%d\n", dlg, id);
-            if (dlg) {
-                void** vt = *reinterpret_cast<void***>(dlg);
-                using H = void (*)(void*, uint64_t, int, int);
-                reinterpret_cast<H>(vt[kVtableSlot_OnCommand])(dlg, 0, kMsg_ButtonClick, id);
-            }
+            if (dlg) InjectClick(dlg, kMsg_ButtonClick, id);
         } else {
             void* dlg = ModDialog_LastOpened();
             int id = std::atoi(tok);
@@ -359,13 +355,12 @@ void TickMenu(void* menuDLT) {
                 }
             }
             if (dlg) {
-                // ModDialog::OnElementEvent is the 8-arg shape and reads *param2 as
-                // the element InternalPtr, so hand it a real (null) qword.
+                // ModDialog::OnElementEvent reads *element as the element
+                // InternalPtr, so hand it a real (null) qword.
                 void* nullElem = nullptr;
-                void** vt = *reinterpret_cast<void***>(dlg);
-                using H = void (*)(void*, void*, int, int, uint32_t, uint32_t, uint32_t, uint64_t);
-                reinterpret_cast<H>(vt[kVtableSlot_OnCommand])(dlg, &nullElem, kMsg_ButtonClick,
-                                                               id, 0, 0, 0, 0);
+                static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
+                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),
+                    kMsg_ButtonClick, id, 0, 0, 0, nullptr);
             }
         }
         if (!s_menuClickCursor) s_phase = Phase::Done;

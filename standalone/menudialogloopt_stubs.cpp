@@ -444,8 +444,11 @@ void MenuDialogLoopT::Shutdown() {
     auto scene = [this]() {                          // MOV RCX,[RBX+0xba0], re-read
         return static_cast<Graphics::Scene*>(_scene);
     };
+    // Every object deleted here (SunLight, the MeshInstances, the DLC ship, the
+    // scene-grid instances) is a Graphics::Geometry, which is its OWN hierarchy
+    // root -- not an Object::Base. Slot 0 through the object's own root.
     auto deleteObject = [](void* o) {                // MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]
-        reinterpret_cast<Object::Base*>(o)->DeletingDtor(1);
+        static_cast<Graphics::Geometry*>(o)->DeletingDtor(1);
     };
     typedef void (*DtorFn)(void*);
     static DtorFn s_sceneDtor = reinterpret_cast<DtorFn>(

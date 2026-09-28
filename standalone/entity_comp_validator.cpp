@@ -39,6 +39,8 @@
 #include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
+#include "object/TypeInfo.h"   // Object::Base::Type (B3X W0)
+#include "object/VSlot.h"      // Object::CompilerSlotOf
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -84,12 +86,17 @@ bool IdLooksSane(const void* obj) {
 
 const char* TypeNameOf(const void* obj) {
     if (!LooksLikeObject(obj)) return nullptr;
-    typedef uint32_t (*fn_gtid_t)(const void*);
+    // Probe that the table word holding Object::Base::Type() (retail slot 2,
+    // +0x10) is readable -- the slot is taken from the member (object/VSlot.h)
+    // -- then call Type() by name.
     const uintptr_t vt = *reinterpret_cast<const uintptr_t*>(obj);
-    if (!Readable(reinterpret_cast<void*>(vt + 0x10), 8)) return nullptr;
-    fn_gtid_t f = *reinterpret_cast<fn_gtid_t*>(vt + 0x10);
-    if (!f) return nullptr;
-    return ::Object::GetTypeNameById(f(obj));
+    const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
+    if (!Readable(reinterpret_cast<void*>(vt + typeSlot * sizeof(void*)), 8)) return nullptr;
+    // The validator probes UNTRUSTED memory (a slot that may hold garbage), so
+    // an empty table word is still refused before the call.
+    if (!::Object::SlotAddressOf(obj, &::Object::Base::Type)) return nullptr;
+    return ::Object::GetTypeNameById(
+        static_cast<const ::Object::Base*>(obj)->Type());   // B.3.x bridge
 }
 
 } // namespace

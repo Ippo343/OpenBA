@@ -20,6 +20,8 @@
 #include <string>
 #include "resolve.h"
 #include "options.h"
+#include "graphics/Geometry.h"   // Graphics::Geometry::AddDrawItems (B3X W0)
+#include "object/VSlot.h"        // Object::SlotAddressOf
 #include <windows.h>
 
 namespace {
@@ -451,8 +453,11 @@ bool IsMeshInstance(void* obj) {
     if (!s_addDrawItemsOurs) return false;
     void** vt = *reinterpret_cast<void***>(obj);
     if (!VtableLooksLikeCode(vt)) return false;
-    const uintptr_t slot3 = reinterpret_cast<uintptr_t>(vt[3]);
-    return slot3 == s_addDrawItemsOurs;
+    // The table entry for Graphics::Geometry::AddDrawItems (retail slot 3,
+    // +0x18), taken from the member rather than a literal index (object/VSlot.h).
+    const uintptr_t addDrawItems = reinterpret_cast<uintptr_t>(
+        ::Object::SlotAddressOf(obj, &::Graphics::Geometry::AddDrawItems));
+    return addDrawItems == s_addDrawItemsOurs;
 }
 
 struct MeshInfo {
