@@ -9,7 +9,7 @@ Keep this to one screen. Update the closure block after every batch; never copy 
 | reachable functions from our call surface | 2,871 |
 | unported | 128, all C runtime (our CRT covers them) |
 | **engine functions to port (static lower bound)** | **0** (206 → 856 → 145 → 0 in one day) |
-| minted vtables complete | 152 of 152 (the two unexported IO::Encoding tables joined 2026-09-12 evening) |
+| minted vtables | 0 (ENDGAME B.3.9 retired all 152: every class has its compiler vtable; the mint keeps 2 storage rows) |
 | registry doors | name and address are ONE door (`standalone/rt_export_addrs.inc`) |
 
 Worklist: `docs/runtime_port/closure/WORKLIST.md` (empty). Every function the DLL's call graph
@@ -20,6 +20,76 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.9 CLOSED (2026-09-27) — B.3 is closed:** the migration scaffolding is gone. **The mint holds 0 vtables and
+  0 `BaseTypeInfo`** (152 / 104 / 48 → 0 / 0 / 2): every Runtime class is a real C++ class with its COMPILER
+  vtable, a concrete `DeletingDtor(unsigned)` with retail's arms, a protected non-virtual dtor holding the old
+  `??1` door's body and a real ctor holding the `??0` door's; every type record — the 104 Runtime ones and the
+  310 exe ones — is a `DEFINE_TYPE` class static built at static init (chain **414**, ids identical,
+  `b39_session/TYPETABLE_414.txt`). **Deleted:** the `RT_DELDTOR` table (135 rows) and its machinery; the three
+  factory interpreters (FACTREST, FACTUI1, FACTUI2 — every class registers its own `CreateNewObject` /
+  `CreateInPlaceObject` by retail name and VA); the 5 hand-built tables; every exe vtable `RegisterExeAddr`
+  row; every type-id cell read (148 cells / 441 sites), 99 `g_TypeId_*` + 97 `g_tid_*` globals, 31 fill
+  functions, 17 registrars; `InvokeAllRegistrations` / `REGISTER_TYPE` / `REGISTER_ABSTRACT_FACTORY` /
+  `StandaloneFactoryTest`; 46 of 48 storage rows (class statics now), the D7 redirect, the cutover manifest and
+  its tag file, the mint's vtable / type-info code. **Two storage rows stay minted**, as D10 said:
+  `?_singleton@MemoryAllocator@System@@` (carry-over 1) and `?_disableHandler@Debug@System@@` (System::Debug
+  unported). Rule sheet `endgame_b/B39_RULES.md` (D1-D10, B9-1..16; corrections §8, run log §9, what stays
+  §10, NOT VERIFIED §11), file map `B39_FILEMAP.md`, kit `endgame_b/b39_session/` (BLOCK0 / BLOCK /
+  CALLER_BATCH / CLOSING briefs, INVENTORY_A-D, ORDER_MEASUREMENT, GATE_TABLE, TYPETABLE_414, CLOSE_NUMBERS,
+  gate.sh, mergegate.sh, finishmerge.sh, uiroutes.sh, toolroutes.sh, devlost.sh, stepclose.sh, acceptance.sh,
+  codegrep.py, partc.py). Plan for the next step (the normal-virtual cutover): `endgame_b/NEXT_SESSION.md`.
+  **Shape.** Block 0 (four read-only inventories: mint vtables, doors / `RT_DELDTOR`, type ids / reflection,
+  storage; plus a MEASURED answer that the type table is order-independent — ids are `~CRC32(name)`) → one
+  owner: rule sheet + retirement mechanism (`tools/rt_mint_retired/<block>.txt` fragments, the generator
+  REFUSES a retired row that still has a reader) + pilot (four dead rows, PickingMesh, SunLight) → W0 COORD-0
+  → W1 namespace blocks UI-A, UI-B, UI-D, IO, VID, GFX, ENG, SYS, OBJ, EXE-1 and caller batches C1-C5, CB →
+  W2 IO2, GFX2, ENG2, RF (the exe fold, run alone), VS, caller batches CG1-CG3, storage sweeps SS1 / SS2,
+  type-id residue TR → W3 TI-REST, TI-UI (the Runtime folds), OBJ3 (Object's four bases, `Base` last) → W4
+  CLOSE. 31 merges, each gated by the coordinator (`b39_session/GATE_TABLE.md`): 0 problems after two
+  typetable re-cuts made in writing (416 → 415, the duplicate `Internal`; the order-free 414-record format)
+  and two coordinator errors fixed in their own commits (a stale generated manifest; a merge commit that did
+  not build — the line-matching `deleting_dtor.cpp` resolver, replaced by a structural one). Invariants held
+  on every merge: new game `calls=5683 openFileFail=0`, tutorial `5773/12`, resave 5/5 == golden, typetable ==
+  baseline.
+  **Numbers** (`b39_session/CLOSE_NUMBERS.md`): B.4 cast metric **32,057 → 29,870** (runtime −1,126, code −551);
+  bridge markers 6,627 → 6,036; ctor / dtor doors registered by name 206 / 181 → 99 / 37; `rt_export_addrs.inc`
+  rows with a reader 2,794 → 1,480 (of 4,926); `RegisterExeAddr` 1,007 → 694 (vtable range 6 → 0, data
+  142 → 45); `address_registry.cpp` 1,617 → 1,243 lines; `reg_*.cpp` 145 → 127; `engine_funcs` 414 → 227
+  externs (4,292 + 2,576 → 3,036 + 1,652 lines); `RT_DATA_SLOT` sites 422 → 4, `ResolveExport` 443 → 205,
+  `RT_EXPORT_ONCE` 391 → 242, `ResolveAddr(Exe` 2,690 → 2,185, `ResolveAddr(Runtime` 386 → 275; literal
+  `GetTypeIdByName("…")` 17 → 0 and `ResolveTypeIdByNameLazy("…")` 31 → 0; `DEFINE_EXE_VTABLE` 309 → 4 used;
+  unit tests 736 → 914, 0 failures. The §6 acceptance (`b39_session/acceptance.sh`): every line 0 on code.
+  **Behaviour changes, each titled and gated with resave ×5** (`git log --grep=behaviour ab1e0846..`): the
+  pilot's one `~SunLight` body and the exe-built SunLight wearing its class table; the exe ImageBuffer's
+  slots 1-8 running retail's members; Load Game's `GameUpdateLoop` name a null String as retail; IO slot-0
+  `flags & 2` arms are retail's vector delete (FileStream family, readers / writers, MemoryStream,
+  CompressedFileStream, CompressedMemoryStream — were aborts / table rows); manager-built
+  AchievementInstances wear the class table; `~EdgeMeshInstance` ported (its row called a NULL `~Class`); the
+  one `Internal` record and then `Base` / `External` / `CompiledExternal` / `ExternalList` / the two compiler
+  records are the classes'; `Particle::_rng` seeded at CRT init; `Engine::Loader` built by its class at CRT
+  init, not by the mint (gated alone); exe type records built at static init (ids read 0xFFFFFFFF, not 0,
+  before `Factory::Startup` — no reader there, confirmed by a run) and the chain 414; `ExternalPtr<Toolbar>`
+  validated against `Toolbar::TypeId()` (the global was a vtable slot); CB's retail-read sites: the
+  citizen / follow panels find `CitizenAIComponent` (the Action line shows the activity), the pasture finds
+  `AutoPickupComponent` and records new piles, the Healer / Well / Happiness and three Persist arrays run
+  their IBP type check, five Action `+8` name reads latch.
+  **Found on the way** (§8): `System::Thread` has no deleting dtor (two slots, `Run` first); INVENTORY_C was
+  wrong on three by-name `g_tid_` cells (two never filled: their readers saw 0); the C1-C5 batches missed
+  ~900 `g_TypeId_*` global reads (CG1-CG3 added); `g_TypeId_ToolbarExternal` was a vtable slot; SS1 missed
+  seven by-address storage readers (the close converted them); `EXTRA_SIZES` of retired rows are NOT stale
+  (they size the reader refusal); the acceptance's type-id grep could not work (fixed: `acceptance.sh`).
+  **Device-lost, pre-existing and reproduced on the pre-step baseline** (GATE_TABLE note; the USER's decision,
+  `DEVICE_LOST_LOADER_RACE.md`): a forced loss in the front-end faults in `MainLoop::OnVideoError` on a null
+  `SaveLoad::_singleton`; during the world build it is the documented loader race; in game the round trip
+  COMPLETEs but real `DXGI_ERROR_DEVICE_REMOVED` recoveries then repeat. Step 9's device-lost gate (Present
+  #40000): COMPLETE, crash log 0, after every seam-touching merge.
+  **Deliberately left** (B39_RULES §10): the normal-virtual cutover (next); the registry teardown
+  (`rt_export_addrs.inc`, `address_registry.cpp`, `engine_funcs`, the 5 non-type-id cells, the two minted
+  rows, `MemoryAllocator`); the dx11 seam; `ExternalPtr` exe door sites; the PORT GAP message targets
+  `kCitizenAIMessageTargetTypeId` / `kHappinessMessageTargetTypeId` (receivers unported); AutoPickupComponent's
+  uninstalled Startup; the EventNotify / AutoSave dialog construction skips; the `InitFields` seams the unit
+  tests' recording stand-ins define; `spritecaptureui.cpp:200`'s raw read of retail `.rdata` 0x14015d424.
+  **Step close:** (coordinator fills this in)
 - **B.3.8 CLOSED (2026-09-26; step close completed 2026-09-27):** every exe-phase class in
   `code/Game` is a real C++ class with a COMPILER-GENERATED vtable, on the Runtime bases steps 3-7 made
   real: 310 of 310 reflected exe classes (components, descriptions, actions, works, tools, dialogs, panels,
