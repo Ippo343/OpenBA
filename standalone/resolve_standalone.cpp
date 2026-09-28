@@ -195,69 +195,25 @@ std::map<std::string, ResidueEntry>& RtResolveMiss() {
 } // namespace
 
 // ---------------------------------------------------------------------------
-// The two doors are ONE door (2026-09-12).
+// The two doors are two maps again (B3R W0-SM, 2026-09-28).
 //
-// A port is reached two ways: by mangled name (ResolveExport, and the mint
-// filling vtable slots) and by retail address (ResolveAddr(Module::Runtime),
-// the "address door" every inlined-call site in a ported body uses). Until
-// today the two maps were independent, so a body registered by name only was
-// a NULL address door once the DLL was gone -- the cutover gate found them one
-// boot at a time (Font::Serialize's 0x180077330 was the last). The DLL's own
-// export directory says which name is which address; rt_mint_gen.py emits it
-// as standalone/rt_export_addrs.inc and each Register* call mirrors itself
-// into the other map. An explicit registration always wins over a mirror.
+// From 2026-09-12 each Register* call was MIRRORED into the opposite map
+// through the DLL's export directory (standalone/rt_export_addrs.inc), so a
+// body registered by name only still answered its retail address. The mirror
+// is deleted: the seven addresses whose only registration was the mirrored one
+// and that a reader is bound to are registered explicitly by
+// standalone/reg_rt_mirror16.cpp (the proof is
+// docs/runtime_port/endgame_b/b3r_session/scripts/mirror_proof.py). A key is
+// resolvable exactly when a Register* call names it; the last call wins.
 // ---------------------------------------------------------------------------
-namespace {
-struct RtExportAddr { uintptr_t addr; const char* name; };
-#include "rt_export_addrs.inc"
-
-std::unordered_map<uintptr_t, const char*>& ExportNameByAddr() {
-    static std::unordered_map<uintptr_t, const char*> m;
-    if (m.empty()) {
-        m.reserve(kRtExportAddrCount);
-        for (size_t i = 0; i < kRtExportAddrCount; ++i)
-            m.emplace(kRtExportAddrs[i].addr, kRtExportAddrs[i].name);
-    }
-    return m;
-}
-std::unordered_map<std::string, uintptr_t>& ExportAddrByName() {
-    static std::unordered_map<std::string, uintptr_t> m;
-    if (m.empty()) {
-        m.reserve(kRtExportAddrCount);
-        for (size_t i = 0; i < kRtExportAddrCount; ++i)
-            m.emplace(kRtExportAddrs[i].name, kRtExportAddrs[i].addr);
-    }
-    return m;
-}
-// Which addresses / names were registered EXPLICITLY (not by mirroring), so a
-// later explicit registration can overwrite a mirror but a mirror never
-// overwrites an explicit one.
-std::unordered_map<uintptr_t, bool>& AddrExplicit() { static std::unordered_map<uintptr_t, bool> m; return m; }
-std::unordered_map<std::string, bool>& NameExplicit() { static std::unordered_map<std::string, bool> m; return m; }
-}  // namespace
-
 void RegisterRuntimeExport(const char* mangled_name, void* our_fn) {
     if (!mangled_name || !our_fn) return;
     RtExportReg()[mangled_name] = our_fn;
-    NameExplicit()[mangled_name] = true;
-    auto it = ExportAddrByName().find(mangled_name);
-    if (it != ExportAddrByName().end()) {
-        auto& areg = RtAddrReg();
-        if (!AddrExplicit()[it->second] || areg.find(it->second) == areg.end())
-            areg[it->second] = our_fn;                 // mirror: name -> address door
-    }
 }
 
 void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn) {
     if (!ghidra_addr || !our_fn) return;
     RtAddrReg()[ghidra_addr] = our_fn;
-    AddrExplicit()[ghidra_addr] = true;
-    auto it = ExportNameByAddr().find(ghidra_addr);
-    if (it != ExportNameByAddr().end()) {
-        auto& nreg = RtExportReg();
-        if (!NameExplicit()[it->second] || nreg.find(it->second) == nreg.end())
-            nreg[it->second] = our_fn;                 // mirror: address -> name door
-    }
 }
 
 // Wave 9 lane H: did a PORT register this name? ResolveExport cannot answer
@@ -343,6 +299,15 @@ void RuntimePortInit() {
     // wave because its probe calls our OWN ??0Random@System@@QEAA@XZ through
     // the port-aware door, which only reaches the port once Wave 2 has run.
     RtSingletonCtorsPortInit();  // Wave 9: singleton constructors (lane X)
+
+    // B3R W0-SM: the seven addresses the deleted name->address mirror used to
+    // serve. HERE, after every *PortInit() above, because each copies the body
+    // its NAME holds (every one registered once, by RtUiPortInit /
+    // RtGraphicsPortInit), and before the count below so the count includes them.
+    // No other Register* call names these addresses, so nothing later can
+    // change which body they hold. standalone/reg_rt_mirror16.cpp.
+    extern void RtMirror16Register();
+    RtMirror16Register();
 
     // Wave 9 lane C2: mint the exported DATA symbols (??_7 vtables,
     // BaseTypeInfo, singletons and the other .data statics -- the count is a
