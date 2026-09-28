@@ -82,12 +82,6 @@ HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
 // The door OrchardComponent's state 11 calls (orchardcomponent_states.cpp, block MI-B):
 // the real ctor on caller memory (B8-5).
 extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
-    // [STANDALONE] harvestorchard.cpp's own function-pointer table is filled by
-    // HarvestOrchard_ResolveFuncs(); this is the state machine's path — it allocates and
-    // builds the object directly — so wire it here, as before, or the first slot the
-    // scheduler dispatches on the fresh object calls through 0 (the crash PlantOrchard
-    // hit on this same shape, commit 7731647).
-    HarvestOrchard_ResolveFuncs();
     if (!mem) return mem;
     OrchardDiag_NoteHarvestConstructed();
     return static_cast<Object::Base*>(new (mem) HarvestOrchard(entityIBP));
