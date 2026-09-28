@@ -103,3 +103,35 @@ members (B.4).
 
 The 19 misnamed `engine_funcs` globals of `b3r_session/INVENTORY_E_ENGINE_FUNCS.md` §5.8 die with
 the globals and are not repeated here.
+
+## 7. The zone refresh `0x14009c480` is called with a seed WE chose — OPEN
+
+**Where.** `code/Game/Work/foresterwork*.cpp`, `buildstructure*.cpp` (commits `6067e8a1`,
+`4b9d6b19`), `code/Game/Game/gamegrid_serialize.cpp` (`fn_Map_Invalidate`), and the Action callers.
+
+**What the code does.** The body `Pf_ZoneRefresh_9c480` takes four parameters and hands the fourth
+to the flood fill (`0x14009c170`) as its seed. Retail's callers `0x1400eb303`, `0x1400e532a`,
+`0x1400e54ea`, `0x1400e556c` load ONLY RCX before the call. The old door was typedef'd with one
+parameter, so our callers left RDX / R8 / R9 as whatever the compiler had there; the direct calls
+pass `(grid, 0, 0, 0)`.
+
+**Why it is open.** Either (a) the body's parameter list is wrong — Ghidra drops and invents
+arguments on forwarders, and retail's function may take ONE parameter and compute the seed itself —
+or (b) retail really reads a stale register, in which case its value at each call site is whatever
+the preceding code left there and can be read from the disassembly. Zero is neither.
+
+**What a fix must do.** Read `0x14009c480`'s prologue (which argument registers it reads before
+writing them) and `0x14009c170`'s use of the seed. If (a): correct the body's signature. If (b):
+pass what the caller's preceding instructions leave in R9.
+
+## 8. Wrong BINDINGS found in `code/Game/Dialog` — SUSPECTED
+
+| door | bound to | problem |
+|---|---|---|
+| `fn_Game_DestroyEntity` (debug UI "destroy all raw materials", retail `FUN_140060000`) | `0x140091e60` `RawMaterialComponent_RegisterRawMaterial` | the body REGISTERS where the caller means to destroy. Debug UI only |
+| `fn_DiseaseComponent_Infect` | `DiseaseComp_Infect(DiseaseComponent*)` | the caller hands it a citizen pointer |
+| `fn_StartNewGame` | `StartNewGame_Reg` | the door passed seed and terrain size as `uint32` values; the body takes pointer-width slots and reads their low dword |
+| — | `PastureComponent_ComputeCapacity` | returns `uint64_t`; the door read `int` |
+| — | `TradeComponent_SpawnPurchasedLivestock` | takes an `unsigned` quantity; the door passed `int` |
+
+Each call keeps today's bits. The first two need retail's call site read before anything changes.
