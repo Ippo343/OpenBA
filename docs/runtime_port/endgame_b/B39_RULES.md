@@ -811,6 +811,21 @@ Dependencies in one line: COORD-0 → {OBJ-1, SYS-1, IO-1, GFX-1, VID-1, UI-A, U
 
 ## 6. Acceptance (CLOSE runs these; every one prints 0 / the stated value)
 
+**Corrected at the close (2026-09-27, see §8 item 14).** Run `bash docs/runtime_port/endgame_b/b39_session/acceptance.sh`:
+it prints every line below twice, RAW (as written here) and CODE (the same pattern through
+`b39_session/codegrep.py`, which strips `//` and `/* */` comments and keeps strings). **The targets apply to CODE.**
+The type-id line as first written could not work — its `grep -v '^\s*//'` never matches `grep -rn` output, whose
+lines start with `file:line:` — and is replaced by:
+
+```bash
+python docs/runtime_port/endgame_b/b39_session/codegrep.py '0x1401c[0-9a-fA-F]{4}' code engine standalone --ext=.cpp,.h \
+  | grep -vE '0x1401c3d(d8|e0|e8)|0x1401c2[23]d0' | grep -vc '^# '                      # 0 (it printed 0; the 5 cells: 31 lines)
+```
+
+The raw forms of the `RT_DELDTOR(0x`, `RegisterExeAddr` range, `DoorBody`, `"?_singleton@` and
+`InvokeAllRegistrations|…` lines count history comments (5 / 80 / 11 / 2 / 7 at the close); they are redefined as
+the code-only scan, said here and in `b39_session/CLOSE_NUMBERS.md` §7. The original lines, for the record:
+
 ```bash
 # no minted vtable / type-info row; storage only the two that stay
 grep -cE 'kVTable[0-9]+, kVTraps[0-9]+' standalone/rt_data_mint_tables.inc           # 0 (kMintVtables rows; 146 today)
@@ -855,3 +870,167 @@ Picking: N exports` lower (PickingMesh's `??1` and slot doors gone, its two fact
 `Graphics::SunLight (lane GFX2)` 3 → 1;
 `[RtFactory] FACTREST` one class fewer; `[CutoverManifest]` door counts are cosmetic (the `.inc` was refreshed).
 Routes: the menu scene (SunLight) and every world load (PickingMesh) are the exercised paths.
+
+## 8. Corrections from the blocks (2026-09-27, the CLOSE owner, from the merge messages and GATE_TABLE)
+
+Every place this sheet, the inventories or the plan it ran under was wrong, and what is true.
+
+1. **`System::Thread` has no deleting destructor.** Retail's table is TWO slots, `Run` (pure) and `OnCompleted`
+   (a RET); D1.2 / B9-4 ("every destroyable class declares its own `DeletingDtor`") does not apply to it or its
+   subclasses (`Engine::Loader`, `Audio::Stream`, `IO::PersistenceWorker`, the exe's `PathfinderThread`, whose
+   dtor 0x1400a6720 chains `~Thread`). SYS / VS retired its row on a protected ctor and a non-virtual dtor only.
+2. **`RT_DELDTOR` had 135 rows, not 137** (the plan's §3a figure; INVENTORY_B recounted, `static_assert`ed).
+3. **Five hand-built tables, not three**: B.3.8's close missed the two `thumb_vtables.cpp` mirrors
+   (`MaterialInstance`, `SpriteSheet`); EXA deleted all five (D8's list already said five).
+4. **Achievement has four type records** (`Achievement`, `AchievementInstance`, `Goal`, `GoalInstance`), all four
+   minted and all four folded by TI-REST.
+5. **`g_TypeId_ToolbarExternal` was bound to a vtable SLOT, not a type-id cell**: `ExternalPtr<Toolbar>::Serialize`
+   validated against whatever that slot held, so the type id was never read (TR a32435ce, a behaviour commit).
+6. **The C1–C5 caller batches converted cells, not globals**: they missed the ~900 reads of the `g_TypeId_*`
+   globals (the globals were filled from the cells, so a converted cell left its global live). Batches CG1–CG3 were
+   added in W2 for them; TR then deleted 99 globals, 97 `g_tid_` globals, 31 fill functions, 157 registry rows and
+   17 registrars.
+7. **INVENTORY_C was wrong for three `g_tid_` cells** (HealerComponent 0x1401c4330, WellComponent 0x1401c4c28,
+   Work 0x1401c6cf8): each is read BY NAME (`&g_tid_*` handed to `SerializeIBPArray`, a lazy `GetTypeIdByName`
+   fill), and Healer / Well were never FILLED, so their readers saw 0 — CB made them the behaviour commit 6cc8127a
+   (the IBP type check now runs on the Healer / Well / Happiness arrays).
+8. **D3 was wrong that `EXTRA_*` entries of a retired row are stale.** `EXTRA_SIZES`, `EXTRA_VTABLES_BY_ADDR`,
+   `EXTRA_STORAGE_BY_ADDR` and `VTABLE_EXTENT` are what make a retirement key (`0x<VA>` or a name the union does not
+   produce) a row the population rules know, and what size its reader refusal (a hex literal inside the retired
+   extent is a reader). They stay. What only served EMISSION went at the close: `KNOWN_INTERNAL_THUNKS`,
+   `EXTRA_VTABLES` (the all-exported-data union already carried `??_7Loader@Engine@@`), `KNOWN_CTORS`, `EXTRA_INIT`.
+9. **The mint's promoted file counted as a reader.** `reg_mint_promoted.cpp` (stripped to comment-only
+   `RT_UNPROMOTABLE:` tags by COORD-0) was not a generated table, so the refusal counted its code-shaped lines; the
+   close deleted it with the manifest (it policed nothing once the mint registered every row itself).
+10. **SS1 missed by-address storage readers under `runtime/`**: `renderer.cpp` (Video::Device), `spritecontext_flush.cpp`
+   (Video::Device), `mainloop_frame.cpp` ×4 (Timer ×4) and `wave27_lane_gfxbig.cpp` (Timer::_secondsPerTick), plus
+   three unused `MainLoopAddr` constants. They kept `?_singleton@MainLoop@`, `?_singleton@Device@Video@` and Timer's
+   five minted; the close converted them and retired the seven rows (e51b15ee).
+11. **The acceptance's type-id grep could not work** (`grep -v '^\s*//'` against `file:line:` output), and five
+   other §6 lines as written count history comments. §6 now runs through `b39_session/acceptance.sh` (RAW and CODE
+   per line; the targets apply to CODE).
+12. **D6 / D8 on `DEFINE_EXE_VTABLE`**: "stays until the last `RegisterExeAddr(kVtable)` row goes" — that happened
+   in W2 (EXA / RF / VS); the 303 lines whose `Class::Vtable()` nobody read were left for the close, which deleted
+   them. Four remain, each with a reader (GameUpdateLoop, MenuDialogLoopT, GameLoadDialogLoopT, StatGoal).
+13. **D7's redirect was scaffolding too.** With the last storage rows retired it had 0 calls; the close deleted it
+   (`rt_mint_redirect.h`, its 5 unit tests, `RtMintRedirectStorage`, the mint's `kInit` seeding).
+14. **The manifest** was to go "when empty"; it was deleted with 7 REQUIRED rows because
+   `RtCutoverPublishManifest()` only re-registered rows `RegisterMintedData()` had already published.
+15. **`Collision2D::Surface`'s deleting dtor has the VECTOR arm** (0x180064ea0 re-read by ENG; the table's "scalar
+   arm only" note was wrong).
+16. **0x1801fc6d0 is `Object::Factory`'s compiler-plugin HMODULE** (`_compilerModule`), not IO::Modification's —
+   the generator's note was wrong; OBJ fixed it (6efa6962) as D7 said.
+17. **Block errors caught in review**: SS1's 5f56017d removed a guard in `Engine::Loader::Run` that no comment
+   justified; the coordinator's re-check restored it (df5f6f73). Rule kept: a check on a door goes, a check whose
+   reason is not on file stays.
+18. **The coordinator's own two errors** (GATE_TABLE): the VID merge left the generated manifest stale (regenerated
+   in a7868c1e); the UI-D merge commit 760d51c2 did not build — a line-matching conflict resolver broke
+   `deleting_dtor.cpp` — repaired structurally in 8fd88b17 and the resolver replaced by `resolve_deldtor.py`.
+19. **Typetable re-cuts, twice, in writing**: the OBJ merge (416 → 415, the duplicate `Internal`) and the RF merge
+   (the order-free 414-record format); then TR's refresh (433 → 428 lines, five lazy-lookup lines gone).
+20. **Machine**: the gate's -j12 build was stopped for low memory with several agents building; the kit runs at
+   -j4 and agents build at -j3 (NEXT_SESSION §1).
+
+## 9. The step as run
+
+Block 0 (inventories A–D 0426939b; the order measurement be2ea17f) → the rule sheet and the pilot on `b39-rules`
+(a084999c mechanism, e2626f00 / 620e197a / 864f95d5 / e1e8432a pilot, a3439dc8 / 6b613d92 / 08e9b580 sheet, file
+map, briefs; fast-forwarded to main) → 31 merges, each gated by the coordinator (GATE_TABLE), in this order:
+
+| # | merge | block (wave) |
+|---|---|---|
+| 1 | 41b05317 | EXA — EXE-1 (W1): loop builders, copy sites, exe door-then-stamp |
+| 2 | cf9fc8e7 | COORD-0 (W0): storage redirect, promoted-file strip, dead cells / globals / 286 rows |
+| 3 | a1750148 | UI-B (W1): 12 widget pairs |
+| 4 | e564f680 | UI-A (W1): 15 widget pairs |
+| 5 | d0acb883 | IO (W1): encodings, streams, PackageFile |
+| 6 | 96cba89a | C3 (caller batch): code/Game/Work cells |
+| 7 | 9e3e765e | ENG (W1): Achievement ×4, Audio, Collision2D, PointList; 9 singletons |
+| 8 | 3557ba2f | C2: Component i–z cells |
+| 9 | a2abb993 | C1: Component a–h cells |
+| 10 | 5ca67302 | GFX (W1): 10 Graphics classes, `~EdgeMeshInstance` ported |
+| 11 | 27b8ca2a | SYS (W1): `System::Thread` real ctor / dtor; Timer, Error, Configuration statics |
+| 12 | 5f13d9b1 | C4 + C5: Action / Goal / Entity / Dialog / Player / Tutorial / Game cells |
+| 13 | 7a4e8e5d | VID (W1): 18 Video classes incl. the 12 `*Data` (+ a7868c1e manifest regenerated) |
+| 14 | 760d51c2 | UI-D (W1 + W2): dialog family, SpriteSheet, DialogInstance, Element bases; FACTUI1/2 deleted (+ 8fd88b17 repair) |
+| 15 | 37533866 | OBJ (W1): ExternalList; the one `Internal` record; Object factory singletons (typetable re-cut 416 → 415) |
+| 16 | 020c883e | CB: the behaviour type-id sites, each read against retail |
+| 17 | 204b5776 | IO2 (W2): every IO row; PersistenceWorker; FileSystem / Modification / Persistence statics |
+| 18 | 253a8693 | GFX2 (W2): MeshInstance, EdgeMesh ×2, particle instances, Geometry; `Particle::_rng` |
+| 19 | 0169cfa9 | ENG2 up to ed104779 (W2): the four Engine loops, Audio::Stream, PathfinderThread |
+| 20 | d260cac9 | ENG2 7800a669 alone: `Engine::Loader` constructed by the class |
+| 21 | 2472cb06 | CG3: `g_TypeId_*` / `g_tid_*` reads, Player … Game |
+| 22 | ca6bfa7b | CG1: Dialog a–o, 338 sites |
+| 23 | fa7beb85 | CG2: Dialog p–z |
+| 24 | efc4fb72 | RF alone (W2): exe type records class statics at static init; chain 414 (typetable re-cut) |
+| 25 | a99bb175 | VS: VID W2 + SYS W3 (ImageBuffer, Thread rows) |
+| 26 | 8a9400dc | SS1: storage sweep, Runtime side |
+| 27 | b3b3b45c | SS2: storage sweep, exe side (20 rows) |
+| 28 | 8bbea516 | TR: type-id residue |
+| 29 | b0835c71 | TI-REST (W3): 29 Runtime records folded |
+| 30 | 251c9c9a | TI-UI (W3): the 68 UI records folded |
+| 31 | 851adb15 | OBJ3 (W3): Object's four base tables, Base last; `RT_DELDTOR` machinery and FACTREST deleted |
+
+W4 — CLOSE (`b39-close`): e8714fed manifest deleted · 5c31806a mint vtable / type-info paths, `_firstTypeInfo` ·
+e51b15ee the last storage rows, the redirect · 3cad3c22 residue sweep · 5cbac19e historical tools, READMEs, kit ·
+then this sheet, CLOSE_NUMBERS, STATUS, NEXT_SESSION. Every merge's gate: 0 problems (after the two re-cuts);
+new-game `calls=5683 openFileFail=0`, tutorial `5773 / 12`, resave 5/5, typetable == baseline throughout.
+
+## 10. Deliberately left (sizes measured at the close; `b39_session/CLOSE_NUMBERS.md`, `partc.py`)
+
+OUT of step 9 by D10:
+- **The normal-virtual cutover** — the next step (NEXT_SESSION.md): 902 `DeletingDtor(unsigned)` declaration /
+  definition lines, 466 `DeletingDtor(0)` self-calls, 53 `DeletingDtor(1)`, 19 `Object::Destroy(`, 1,051 explicit
+  `~T()` calls; and the part that decides its size, the SLOT-INDEX dependencies: 56 raw slot-0 dispatches, 160 raw
+  `vt[N≥1]` reads, 27 vtable byte offsets, 116 slot-helper calls, 92 PMF-order test checks, dx11's 84-slot seam.
+- **The registry teardown**: `rt_export_addrs.inc` 4,926 rows (1,480 with a reader), 694 `RegisterExeAddr`
+  statements (642 function rows), `address_registry.cpp` 1,243 lines, 127 `reg_*.cpp` files, `engine_funcs` 227
+  externs (3,036 + 1,652 lines), `ResolveExport(` 205 / `RT_EXPORT_ONCE(` 242 / `ResolveAddr(Module::Exe` 2,185 /
+  `ResolveAddr(Module::Runtime` 275 code lines; 99 ctor + 37 dtor doors registered by name (the non-polymorphic
+  doors, the `*Data` doors dx11 calls, the Geometry / MeshInstance slot doors — exported functions).
+- **`System::MemoryAllocator`** (carry-over 1): its storage row stays minted with `RT_DATA_SLOT` ×2 and by-address
+  readers in `standalone/main.cpp` ×2, `game_main.cpp`, `engine_funcs.cpp`.
+- **`?_disableHandler@Debug@System@@`**: System::Debug unported; one reader (`enumerate_video_modes.cpp`).
+- **The dx11 seam** (carry-over 6: 23 seam-slot code lines in `dx11/`), the **`ExternalPtr` exe door sites**
+  (carry-over 3: 125 by D10's count, not re-measured; 185 code lines in `code/` name `ExternalPtr<` /
+  `ExternalPtrHandle`), **PORT GAP** 165
+  markers (142 at the start; step 9 added the constants below and the CB sites) and 49 **STANDALONE DEVIATION**s.
+- **The device-lost / loader race** — the user's decision (GATE_TABLE's three pre-existing findings).
+
+Handed in by the blocks as left:
+- `kCitizenAIMessageTargetTypeId` / `kHappinessMessageTargetTypeId`: named PORT GAP constants (19 uses) that stay 0
+  because their receivers `CitizenAIComponent::OnMessage` 0x14010f340 and `HappinessComponent::OnMessage`
+  0x14004a780 are unported stubs (CB 310b1809).
+- `AutoPickupComponent`'s Startup (retail slot [4] 0x140044990) is not installed — the ported body, with
+  `AutoPickupDescription::TypeId()` and `isEnabled = description+0x20`, runs nowhere (CB bd681ff5).
+- The `EventNotifyDialog` / `AutoSaveDialog` construction blocks keep their standalone `dialogRes != nullptr`
+  skips; retail constructs unconditionally (CB c7e3bb1c).
+- The `InitFields` / `ReleaseFields` seams the unit tests' recording stand-ins define: UpdateLoop, LoaderLoop,
+  DialogLoopT, DialogLoaderLoopT, Particle, SunLight, Thread, DialogInstance, Element, ElementDescription,
+  ImageBuffer (and `SaveLoadDialog::InitFields`, shared by its two ctors).
+- The five non-type-id cells 0x1401c3dd8 / 3de0 / 3de8 (singleton cells) and 0x1401c22d0 / 23d0 (tables): 31 code
+  lines, registry teardown.
+- Four `DEFINE_EXE_VTABLE` lines with readers; ~98 retail vtable ADDRESS constants in `engine/types/ui` and
+  `code/Game/*/…Addr` namespaces (documentation, 0 readers).
+- Found at the close, not fixed (not scaffolding): `code/Game/Dialog/spritecaptureui.cpp:200` reads the retail
+  `.rdata` string at 0x14015d424 as a raw pointer (`".rsc"`) — in the standalone exe that address is our own image;
+  the sprite-capture dev tool's save path would read garbage.
+
+## 11. §5 NOT VERIFIED — status at the close
+
+1. **CONFIRMED BY A RUN** (RF merge efc4fb72, GATE_TABLE): new game, tutorial, Load Game, Mods, front-end and tool
+   routes clean, resave 5/5, `VerifyExeTypeInfos` (fatal in every build) silent — no exe type id is read before
+   `Factory::Startup`.
+2. **Moot**: `KNOWN_CTORS` and `EXTRA_INIT` are deleted (the close); the generator now refuses any constructed
+   storage row outright, so a stale entry cannot exist.
+3. **Resolved before it could matter**: GFX ported `~EdgeMeshInstance` (063f970a) before the row retired.
+4. **Verified by reading** (VID): `dx11_seam.cpp` builds its twelve tables only from `DX11_REGISTER_SLOT`
+   registrations and every dx11 builder stamps `Dx11VtableAddress(vt)`; no Runtime table is read. Forced
+   device-lost round trips after VID / GFX / SS1 / SS2 / TI-UI: COMPLETE, crash log 0.
+5. **Read, then run**: `Particle::_rng`'s seeder transcribes 0x180149650 (GFX2 4c85b280); `Engine::Loader` built at
+   CRT init (ENG2 7800a669, gated ALONE, with device-lost) — both clean on every route since.
+6. **Still inferred, not traced**: which storage sites run on the loader thread. The close's conversions read the
+   same cells the doors did, so the question did not change.
+7. **Done**: CB read the retail caller of every unregistered-cell and `+8` site (nine commits, each titled).
+8. **Confirmed**: the pilot's boot-line deltas were the coordinator's first gate (146 / 104 / 48, `RT_DELDTOR` 130).
+9. **Moot**: FACTUI1 is deleted (UI-D).
