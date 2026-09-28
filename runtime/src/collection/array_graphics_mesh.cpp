@@ -61,9 +61,6 @@
 #include "array_internal.h"
 #include "array_destroy_internal.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace rtcoll {
 namespace gfxmesh {
 
@@ -94,19 +91,13 @@ void IndexBufferPlatformDestruct(void* p) {
 // someone ports it (ResolveAddr is registry-first). Named here so the next
 // reader can find it rather than meeting a bare hex number.
 void InnerIndexArrayAssign(void* dst, const void* src) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180013640ull));
-    f(dst, src);
+    rtcoll::RtColl_ArrayAssign_180013640(dst, src);
 }
 
 // The same job one level up, for `Array<Array<T>>`'s element assign — retail
 // 0x180014c70, PORTED. Address door for the same reason (no export name).
 void InnerArrayAssign(void* dst, const void* src) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180014c70ull));
-    f(dst, src);
+    rtcoll::RtColl_ArrayAssign_180014c70(dst, src);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,9 +333,6 @@ void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
     rtcoll::AsArray<&kSpec_InnerArray>(a)->SetSize(n);
 }
 
-void* Rt_TriangleListCtor_1800fefc0(void* p)                  { return TriangleListCtor(p); }
-void* Rt_TriangleListCopyCtor_180013c50(void* d, const void* s) { return TriangleListCopyCtor(d, s); }
-
 }  // namespace
 
 // Every one of the six Collection rows is a template instantiation with NO
@@ -367,7 +355,5 @@ int RtCollectionGraphicsMeshRegister() {
     RegisterRuntimeAddr(0x180014160ull, (void*)&Rt_ArrayDtor_180014160);            ++n;
     RegisterRuntimeAddr(0x18005d840ull, (void*)&Rt_SetSize_18005d840);              ++n;
     RegisterRuntimeAddr(0x18005cda0ull, (void*)&Rt_SetSize_18005cda0);              ++n;
-    RegisterRuntimeAddr(0x1800fefc0ull, (void*)&Rt_TriangleListCtor_1800fefc0);     ++n;
-    RegisterRuntimeAddr(0x180013c50ull, (void*)&Rt_TriangleListCopyCtor_180013c50); ++n;
     return n;
 }

@@ -65,9 +65,6 @@
 #include "array_internal.h"
 #include "array_destroy_internal.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // The three element copy constructors live with the class they belong to, in
 // runtime/src/graphics/animationstate.cpp. They are reached by name and not by
 // address so that this file has no dependency on registration ORDER.

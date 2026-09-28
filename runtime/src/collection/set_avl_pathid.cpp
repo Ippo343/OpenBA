@@ -100,12 +100,7 @@
 #include "../../types/collection/Collection.h"
 #include "../../funcs/rt_port.h"
 #include "set_avl.h"
-
-// Declared locally rather than including standalone/resolve.h, which drags in
-// <windows.h>. Byte-identical to array.cpp's and avl_trees.cpp's copies; the
-// linker checks the three agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtpathid {
 
@@ -134,10 +129,10 @@ namespace {
 // 0x1800c7ad0 as the fallback, so this tree's blocks are visible to
 // `BANISHED_REDZONE` like every other allocation in the tree.
 void* MemAlloc(uint64_t bytes, int align) {
-    return rtcoll::DoorAlloc()(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 void MemFree(void* p) {                     // the null test is INSIDE ?MemFree@
-    rtcoll::DoorFree()(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // Retail's inlined String release. NOTE THE ASYMMETRY, which is reproduced:
@@ -168,18 +163,6 @@ int StrCmpSigned(const char* a, const char* b) {
     }
     return static_cast<int>(static_cast<signed char>(a[i])) -
            static_cast<int>(static_cast<signed char>(b[i]));
-}
-
-// The retrace, reached BY ADDRESS so that 0x1800279f0's own registration is
-// the door — the same convention array.cpp's `AssignGraphSeries` follows for
-// an element operation that is a CALL in retail. Calling `rtsetavl::Retrace`
-// directly would be the same instructions and would skip the registered entry
-// point, so the address would report `calls=0` forever.
-void RetraceByAddr(Set* set, Node** slot) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800279f0));
-    fn(set, slot);
 }
 
 }  // namespace
@@ -254,7 +237,7 @@ struct PathIdPolicy : Collection::detail::NoCounters {
     }
     // 0x1800279f0's own registration is the door, so the address is what runs
     // and the site's `calls=` counts it.
-    static void Retrace(SetT* set, Node** slot) { RetraceByAddr(set, slot); }
+    static void Retrace(SetT* set, Node** slot) { rtsetavl::Retrace(set, slot); }   // 0x1800279f0
 };
 }  // namespace
 
@@ -344,14 +327,9 @@ void SubtreeFree(void* ignoredThis, Node* node) {
 int RtCollectionSetAvlPathIdRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x180027380, (void*)&rtpathid::Insert);       ++n;
-    RegisterRuntimeAddr(0x1800275e0, (void*)&rtpathid::InsertCore);   ++n;
-    RegisterRuntimeAddr(0x1800278c0, (void*)&rtpathid::AllocNode);    ++n;
     RegisterRuntimeAddr(0x180027970, (void*)&rtpathid::SubtreeFree);  ++n;
     // The three shared bodies. Distinct ADDRESSES bound to bodies that already
     // exist, byte-verified equal above — not a duplicate registration of one
     // address. Same arrangement avl_trees.cpp makes for its six siblings.
-    RegisterRuntimeAddr(0x1800279f0, (void*)&rtsetavl::Retrace);      ++n;
-    RegisterRuntimeAddr(0x180028120, (void*)&rtsetavl::RotateLeft);   ++n;
-    RegisterRuntimeAddr(0x180028250, (void*)&rtsetavl::RotateRight);  ++n;
     return n;
 }

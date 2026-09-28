@@ -44,12 +44,7 @@
 #include "set_avl.h"
 #include "set_avl_e24.h"
 #include "avl_trees.h"
-
-// Declared locally rather than by including standalone/resolve.h, which drags
-// in <windows.h>. Byte-identical to set_avl.cpp:107 and array.cpp:133; the
-// linker checks they agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace Collection {
 namespace detail {
@@ -73,10 +68,9 @@ namespace detail {
 // (runtime/src/collection/alloc_door.cpp) so this seam reaches the allocator
 // through the exe dispatch slot 0x140152b60 — the door the rest of the tree
 // uses and the one `BANISHED_REDZONE` rewrites — falling back to the runtime
-// address above. The `fn ? … : nullptr` shape is this seam's own and is kept.
+// address above. B3R RT-Core: the static, called by name.
 void* SetNodeAlloc(uint64_t bytes, int align) {
-    const rtcoll::DoorAllocFn_t fn = rtcoll::DoorAlloc();
-    return fn ? fn(bytes, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(bytes, align);   // 0x1800c7a50
 }
 
 // ---------------------------------------------------------------------------

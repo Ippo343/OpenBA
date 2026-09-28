@@ -65,11 +65,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"   // rtcoll::DoorFree (the one allocator door)
 #include "set_avl_e24.h"
-
-// Declared locally rather than by including standalone/resolve.h, which drags
-// in <windows.h> (PLAN §4.1 decision 1). Byte-identical to set_avl.cpp:107.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtsetavl24 {
 
@@ -94,10 +90,7 @@ namespace {
 // process — the ordering defect attempt 14 fixed for `rtcoll::MemAlloc`.
 // ---------------------------------------------------------------------------
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(bytes, align);   // 0x1800c7a50
 }
 
 // ---------------------------------------------------------------------------
@@ -362,36 +355,7 @@ Node* AllocNode(void* /*unused, never read*/, const void* src, Node* parent) {
 // door carries the full argument.
 void SetNodeFree(void* ignored, void* node) {
     (void)ignored;
-    rtcoll::DoorFree()(node);
+    System::MemoryAllocator::MemFree(node);
 }
 
 }  // namespace rtsetavl24
-
-// ============================================================================
-// Registration
-//
-// ADDRESS DOORS ONLY. None of the five is exported: no symbol in retail's
-// export directory or in Runtime-x64-profile.dll's 5,182 names resolves to
-// 0x180023060, 0x180023130, 0x180023170, 0x180023570 or 0x1800236a0, so
-// `RegisterRuntimeExport` has nothing to register under. Said explicitly rather
-// than left implied (lane PICK §3).
-//
-// GREPPED FOR DUPLICATES BEFORE WRITING (the rule this wave earned: a duplicate
-// `RegisterRuntimeAddr` is last-binding-wins and silently makes one body dead
-// code). Before this file the only textual hits anywhere in code/, engine/,
-// runtime/, standalone/ and dx11/ were input.cpp's two `ResolveAddr` CALL sites
-// and one comment in runtime/types/input/Input.h; 0x180023570 and 0x1800236a0
-// appeared nowhere at all. Nothing patches any of the five, so there is no
-// prologue-detour hazard of the kind
-// `reference_resolveaddr_consults_port_registry_first.md` records for
-// `FindOrLoad`.
-// ============================================================================
-int RtCollectionSetAvlE24Register() {
-    int n = 0;
-    RegisterRuntimeAddr(0x180023060, (void*)&rtsetavl24::AllocNode);      ++n;
-    RegisterRuntimeAddr(0x180023130, (void*)&rtsetavl24::DestroySubtree); ++n;
-    RegisterRuntimeAddr(0x180023170, (void*)&rtsetavl24::Retrace);        ++n;
-    RegisterRuntimeAddr(0x180023570, (void*)&rtsetavl24::RotateLeft);     ++n;
-    RegisterRuntimeAddr(0x1800236a0, (void*)&rtsetavl24::RotateRight);    ++n;
-    return n;
-}

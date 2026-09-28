@@ -103,12 +103,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"   // rtcoll::DoorFree (the one allocator door)
 #include "set_avl.h"
-
-// Declared locally rather than by including standalone/resolve.h, which drags
-// in <windows.h> (PLAN §4.1 decision 1). Byte-identical to array.cpp:133; the
-// linker checks the two agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtsetavl {
 
@@ -409,32 +404,7 @@ void Erase(Set* set, Node* z) {
 // caller in the tree declares this door with two arguments.
 void SetNodeFree(void* ignored, void* node) {
     (void)ignored;
-    rtcoll::DoorFree()(node);   // the null test is inside ?MemFree@, as before
+    System::MemoryAllocator::MemFree(node);   // the null test is inside ?MemFree@, as before
 }
 
 }  // namespace rtsetavl
-
-// ============================================================================
-// Registration
-//
-// ADDRESS DOORS ONLY. None of these four is exported: no symbol in the retail
-// export directory or in Runtime-x64-profile.dll's 5,182 names resolves to
-// 0x18000adc0, 0x18000b040, 0x18000b170 or 0x18000aba0, so
-// `RegisterRuntimeExport` has nothing to register under. Said explicitly rather
-// than left implied (lane PICK §3).
-//
-// NOT cutover-only. `standalone/allocator_lock.cpp` patches the allocator's own
-// entry points, which is why `RegisterAllocatorAddresses()` has to wait — the
-// patcher would otherwise be handed our prologue to rewrite. **Nothing patches
-// any of these four.** Grepped across standalone/, code/, engine/ and dx11/:
-// before this lane the only textual hits for these addresses anywhere in the
-// tree were zero. So they register unconditionally, behind one kill switch.
-// ============================================================================
-int RtCollectionSetAvlRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x18000adc0, (void*)&rtsetavl::Retrace);      ++n;
-    RegisterRuntimeAddr(0x18000b040, (void*)&rtsetavl::RotateLeft);   ++n;
-    RegisterRuntimeAddr(0x18000b170, (void*)&rtsetavl::RotateRight);  ++n;
-    RegisterRuntimeAddr(0x18000aba0, (void*)&rtsetavl::Erase);        ++n;
-    return n;
-}

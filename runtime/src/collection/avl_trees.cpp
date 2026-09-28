@@ -129,12 +129,9 @@
 #include "../../types/object/TypeInfo.h"
 #include "avl_trees.h"
 #include "set_avl.h"
-
-// Declared locally rather than including standalone/resolve.h, which drags in
-// <windows.h> (PLAN §4.1 decision 1). Byte-identical to array.cpp:133 and
-// set_avl.cpp's; the linker checks the three agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "../../funcs/rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc)
+#include "../../types/system/Filename.h"   // B3R: RtSystem_Filename_CtorCopy (0x1800067d0)
 
 namespace rtavl {
 
@@ -171,14 +168,14 @@ ProbeCounters g_pc = {};
 // Same allocator, same lock, same order; "a heap cannot be half ours" now
 // covers the instrument too.
 static void* MemAlloc(uint64_t bytes, int align) {
-    return rtcoll::DoorAlloc()(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
 // `if (p) { Enter; Free(_singleton,p); Leave; }` — the null test is INSIDE
 // 0x1800c7ad0, which is why the callers below hand it a possibly-null pointer
 // exactly as retail does.
 static void MemFree(void* p) {
-    rtcoll::DoorFree()(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,10 +327,7 @@ void* PtrArrayAssign(void* dstRaw, const void* srcRaw) {
     // Through the port-aware address door, so the 0x1800093e0 site's own
     // `calls=` counts it and the door is the one every other by-address caller
     // of that address uses.
-    using DtorFn = void* (*)(void*);
-    static DtorFn dtor = nullptr;         // cache a hit, retry a miss
-    if (!dtor) dtor = reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x1800093e0));
-    dtor(dst);
+    rtavl::PtrArrayDtor(dst);
 
     const int32_t n   = src->_size;
     const int32_t old = dst->_size;       // always 0 here — see above
@@ -587,11 +581,7 @@ TypeNode* TypePairCtor(void* nodeRaw, const void* srcRaw, TypeNode* parent) {
 
     // Through the port-aware address door, so this edge is countable and so a
     // later re-registration of 0x180009350 is picked up with no edit here.
-    using AssignFn = void* (*)(void*, const void*);
-    static AssignFn assign = nullptr;      // cache a hit, retry a miss
-    if (!assign)
-        assign = reinterpret_cast<AssignFn>(ResolveAddr(Module::Runtime, 0x180009350));
-    assign(node + 0x20, src + 0x20);
+    rtavl::PtrArrayAssign(node + 0x20, src + 0x20);
 
     *reinterpret_cast<TypeNode**>(node + 0x30) = parent;
     *reinterpret_cast<uint64_t*>(node + 0x38)  = 0;
@@ -865,14 +855,9 @@ struct StringPolicy : Collection::detail::NoCounters {
     static Node* Alloc(decltype(nullptr), const Element* p, Node* parent) {
         return StringNodeAlloc(nullptr, p, parent);
     }
-    // Through the port-aware address door, so the registration below is what
-    // actually runs and the edge is countable.
+    // 0x18002a310 -- the shared rtsetavl body, by name (B3R RT-Core).
     static void Retrace(SetT* set, Node** slot) {
-        using RetraceFn = void (*)(void*, void*);
-        static RetraceFn retrace = nullptr;          // cache a hit, retry a miss
-        if (!retrace)
-            retrace = reinterpret_cast<RetraceFn>(ResolveAddr(Module::Runtime, 0x18002a310));
-        retrace(set, slot);
+        rtsetavl::Retrace(set, slot);
     }
 
     static void OnRootInsert()    { ++g_pc.rootInsert; }
@@ -940,10 +925,7 @@ Node** StringMapInsert(Set* map, Node** outSlot,
 // two other callers; this is the third and it adds no census row. Spelled as a
 // literal inside ResolveAddr at the call site so the census can see the edge.
 static int PathStrICmp(const char* a, const char* b) {
-    using Fn = int (*)(const char*, const char*);
-    static Fn fn = nullptr;            // cache a hit, retry a miss
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007eefc));
-    const int r = fn(a, b);
+    const int r = rtcrt::StrICmp(a, b);
     if (r < 0)      ++g_pc.icmpLt;
     else if (r > 0) ++g_pc.icmpGt;
     else            ++g_pc.icmpEq;
@@ -965,11 +947,9 @@ Node* FilenamePairCtor(void* nodeRaw, const void* srcRaw, Node* parent) {
     uint8_t*       node = static_cast<uint8_t*>(nodeRaw);
     const uint8_t* src  = static_cast<const uint8_t*>(srcRaw);
 
-    using FilenameCopyFn = void* (*)(void*, const void*);
-    static FilenameCopyFn copy = nullptr;
-    if (!copy)
-        copy = reinterpret_cast<FilenameCopyFn>(ResolveAddr(Module::Runtime, 0x1800067d0));
-    copy(node + 0x00, src + 0x00);
+    RtSystem::RtSystem_Filename_CtorCopy(                      // 0x1800067d0
+        reinterpret_cast<RtSystem::Filename*>(node + 0x00),
+        reinterpret_cast<const RtSystem::Filename*>(src + 0x00));
 
     *reinterpret_cast<uint64_t*>(node + 0x08) =
         *reinterpret_cast<const uint64_t*>(src + 0x08);
@@ -1018,11 +998,7 @@ struct FilenamePolicy : Collection::detail::NoCounters {
         return FilenameNodeAlloc(nullptr, p, parent);
     }
     static void Retrace(SetT* set, Node** slot) {
-        using RetraceFn = void (*)(void*, void*);
-        static RetraceFn retrace = nullptr;
-        if (!retrace)
-            retrace = reinterpret_cast<RetraceFn>(ResolveAddr(Module::Runtime, 0x180025e10));
-        retrace(set, slot);
+        rtsetavl::Retrace(set, slot);
     }
 
     static void OnRootInsert()    { ++g_pc.rootInsert; }
@@ -1054,11 +1030,9 @@ Node** FilenameSetInsert(Set* set, Node** outSlot,
     // because the caller is itself about to allocate a node.
     uint8_t temp[0x10];
 
-    using FilenameCopyFn = void* (*)(void*, const void*);
-    static FilenameCopyFn copy = nullptr;
-    if (!copy)
-        copy = reinterpret_cast<FilenameCopyFn>(ResolveAddr(Module::Runtime, 0x1800067d0));
-    copy(temp + 0x00, key);
+    RtSystem::RtSystem_Filename_CtorCopy(                      // 0x1800067d0
+        reinterpret_cast<RtSystem::Filename*>(temp + 0x00),
+        reinterpret_cast<const RtSystem::Filename*>(key));
 
     *reinterpret_cast<uint64_t*>(temp + 0x08) = *value;
 
@@ -1144,26 +1118,12 @@ int RtCollectionAvlTreesRegister() {
 
     // ---- group A: the 0x50-node type tree ---------------------------------
     // 0x180030140 (TypeSetInsert) retired in B.3.3 step 7 — see the banner above.
-    RegisterRuntimeAddr(0x180030380, (void*)&rtavl::TypeInsertCore);  ++n;
-    RegisterRuntimeAddr(0x180008440, (void*)&rtavl::TypeNodeAlloc);   ++n;
-    RegisterRuntimeAddr(0x1800087c0, (void*)&rtavl::TypePairCtor);    ++n;
-    RegisterRuntimeAddr(0x180030540, (void*)&rtavl::Retrace50);       ++n;
-    RegisterRuntimeAddr(0x1800307b0, (void*)&rtavl::RotateLeft50);    ++n;
-    RegisterRuntimeAddr(0x1800308e0, (void*)&rtavl::RotateRight50);   ++n;
-    RegisterRuntimeAddr(0x180009350, (void*)&rtavl::PtrArrayAssign);  ++n;
-    RegisterRuntimeAddr(0x1800093e0, (void*)&rtavl::PtrArrayDtor);    ++n;
 
     // ---- group B: the 0x30-node string map --------------------------------
     RegisterRuntimeAddr(0x18002a090, (void*)&rtavl::StringMapInsert);   ++n;
-    RegisterRuntimeAddr(0x18002a170, (void*)&rtavl::StringInsertCore);  ++n;
-    RegisterRuntimeAddr(0x18000f970, (void*)&rtavl::StringNodeAlloc);   ++n;
-    RegisterRuntimeAddr(0x18000fb00, (void*)&rtavl::StringPairCtor);    ++n;
 
     // ---- group D: the 0x30-node packfile path index -----------------------
     RegisterRuntimeAddr(0x180025a80, (void*)&rtavl::FilenameSetInsert);   ++n;
-    RegisterRuntimeAddr(0x180025c70, (void*)&rtavl::FilenameInsertCore);  ++n;
-    RegisterRuntimeAddr(0x180008520, (void*)&rtavl::FilenameNodeAlloc);   ++n;
-    RegisterRuntimeAddr(0x180008840, (void*)&rtavl::FilenamePairCtor);    ++n;
 
     // ---- the recursive subtree free ---------------------------------------
     RegisterRuntimeAddr(0x180008340, (void*)&rtavl::SubtreeFree);         ++n;
@@ -1171,12 +1131,6 @@ int RtCollectionAvlTreesRegister() {
     // ---- lane VID2's three bodies, at the six sibling addresses -----------
     // Byte-verified equal (rotations) / semantically verified equal (retrace)
     // against the DLL on disk; see the banner's byte-comparison table.
-    RegisterRuntimeAddr(0x18002a310, (void*)&rtsetavl::Retrace);      ++n;
-    RegisterRuntimeAddr(0x18002a590, (void*)&rtsetavl::RotateLeft);   ++n;
-    RegisterRuntimeAddr(0x18002a6c0, (void*)&rtsetavl::RotateRight);  ++n;
-    RegisterRuntimeAddr(0x180025e10, (void*)&rtsetavl::Retrace);      ++n;
-    RegisterRuntimeAddr(0x180026080, (void*)&rtsetavl::RotateLeft);   ++n;
-    RegisterRuntimeAddr(0x1800261b0, (void*)&rtsetavl::RotateRight);  ++n;
 
     return n;
 }

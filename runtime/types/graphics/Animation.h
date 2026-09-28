@@ -505,3 +505,8 @@ static_assert(std::is_standard_layout<Animation>::value,
 extern "C" RtGraphics::AnimationManager* RtGraphics_AnimationManager_Ctor(RtGraphics::AnimationManager* self);  // 0x1800fc430
 extern "C" void RtGraphics_AnimationManager_Dtor(RtGraphics::AnimationManager* self);  // 0x1800fc400
 // ==== end B3R G-Game ====
+
+// ==== B3R RT-Core: the Array<Animation> element ops collection/array.cpp calls ====
+extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv);  // 0x1800160a0
+extern "C" void  RtGraphics_Animation_Dtor(void* selfv);                        // 0x1800fb290
+// ==== end B3R RT-Core ====

@@ -120,16 +120,13 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
 #include "array_internal.h"
-
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
-// resolve.h drags in <windows.h>, whose <wingdi.h> declares a function called
-// `Rectangle` and whose <windef.h> #defines `near`/`far` away. This declaration
-// must stay byte-identical to resolve.h's; the linker checks the two.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// B3R RT-Core: the element ops below call their bodies by name.
+#include "../../types/system/Filename.h"      // RtSystem_Filename_CtorCopy 0x1800067d0
+#include "../../types/io/Modification.h"      // RtColl_ArrayU8Assign_180011220
+#include "../../types/save/SaveLoad.h"        // RtSave_MetaData_CopyCtor 0x180032f70
+#include "../../types/graphics/Scene.h"       // RtGraphics_DrawGroup_CopyCtor 0x18001be60
+#include "../../types/graphics/Animation.h"   // RtGraphics_Animation_CopyCtor / _Dtor
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtcoll {
 
@@ -171,7 +168,7 @@ void* MemAlloc(uint64_t bytes, int align) {
 // UNGUARDED, exactly as it was: a null here means the allocator never armed,
 // and that is a crash worth having rather than a silent null buffer.
 void* MemAlloc(uint64_t bytes, int align) {
-    return DoorAlloc()(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 #endif
 
@@ -182,7 +179,7 @@ void* MemAlloc(uint64_t bytes, int align) {
 void MemFree(void* p) { std::free(p); }   // retail's null test lives in free()
 #else
 void MemFree(void* p) {
-    DoorFree()(p);            // dispatch slot 0x140152b68 first — see MemAlloc
+    System::MemoryAllocator::MemFree(p);            // dispatch slot 0x140152b68 first — see MemAlloc
 }
 #endif
 
@@ -541,21 +538,12 @@ void InitSpriteIndexNeg1(uint8_t* d) {
 // to see the edge.
 // ============================================================================
 
-// EVERY ONE OF THE FIVE HELPER CALLS BELOW SPELLS ITS ADDRESS AS A LITERAL
-// INSIDE ResolveAddr(Module::Runtime, ...), and must keep doing so. A one-line
-// address-wrapper reads better and is INVISIBLE TO tools/runtime_census.py,
-// which scans for that literal at the call site. This lane's whole point is
-// that the census can see what it retired; hiding the five rows it CREATED
-// behind a helper would be the mirror image of
-// reference_census_cannot_see_nonliteral_registrations.md, where twelve live
-// ports went uncounted for a full wave. (Written after the first draft of this
-// file did exactly that: the census reported 27 retired and 0 created.)
+// B3R RT-Core: every element op below that is a CALL in retail calls its
+// ported body BY NAME; the retail address stays on the line as a comment.
 
 // 0x180004e30's copy: `MOV RCX,dst; MOV RDX,src; CALL 0x180004220`.
 void Assign38Call(uint8_t* d, const uint8_t* s) {
-    using Fn = void (*)(uint8_t*, const uint8_t*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180004220));
-    fn(d, s);
+    RtColl_SpriteEntryAssign_180004220(d, s);
 }
 // 0x180078950's `else` (init) arm — see kSpec_Sprite38Z for the transcription
 // and for why this arm exists here and not on kSpec_Sprite38.
@@ -570,9 +558,7 @@ void InitSprite38Z(uint8_t* d) {
     /* +0x34..+0x37 deliberately untouched — retail does not write them */
 }
 void Destroy38(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800059e0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_1800059e0(ignoredThis, base, count);
 }
 
 // UI leftovers batch: `Array<CaptureEntry>`'s shrink/realloc destroy, one
@@ -582,21 +568,15 @@ void Destroy38(void* ignoredThis, uint8_t* base, int count) {
 // (reference_resolveaddr_consults_port_registry_first.md) picks up OUR body
 // regardless of file init order.
 void Destroy28Call(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18003f070));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_18003f070(ignoredThis, base, count);
 }
 
 // 0x180051390's copy: `CALL 0x180051650` with RCX=dst, RDX=src.
 void Assign40Call(uint8_t* d, const uint8_t* s) {
-    using Fn = void (*)(uint8_t*, const uint8_t*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180051650));
-    fn(d, s);
+    rtsort::EffectSlotAssign(d, s);
 }
 void Destroy40(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180052110));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyInner_180052110(ignoredThis, base, count);
 }
 // 0x180051390's `else` arm, inlined in retail (Audio::EffectSlot's default):
 //   [+0x00]=0q [+0x08]=0q [+0x10]=0q [+0x18]=0q [+0x20]=0q
@@ -642,9 +622,7 @@ void AssignStringExt(uint8_t* d, const uint8_t* s) {
     dp[1] = sp[1];
 }
 void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005930));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180005930(ignoredThis, base, count);
 }
 
 // ============================================================================
@@ -713,9 +691,7 @@ void InitZero10(uint8_t* d) {
 // that file's banner says to wait for), so this ResolveAddr is registry-first
 // and lands on our body rather than opening a door onto an unported callee.
 void DestroyExtStringAt08(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180039640));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180039640(ignoredThis, base, count);
 }
 
 // --- WAVE 26 LANE INT33: 0x180075b20's three element ops --------------------
@@ -760,9 +736,7 @@ void InitCfgEntry20(uint8_t* d) {
 // CALL 0x180039580 — Body B with kD_Str_20at18, ported and registered by
 // array_destroy.cpp in this same commit for the same reason as 0x180039640.
 void DestroyCfgEntry20(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180039580));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180039580(ignoredThis, base, count);
 }
 
 // --- WAVE 27 LANE FRONTIER: 0x18002c6a0's two element ops -------------------
@@ -830,17 +804,12 @@ void AssignStringPair10(uint8_t* d, const uint8_t* s) {
 // TWO slots per element, and reusing the one-slot kD_Str_10 (same stride) would
 // have leaked every entry's `text`.
 void DestroyStringPair10Range(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005570));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180005570(ignoredThis, base, count);
 }
 
 void AssignExtArrayElem(uint8_t* d, const uint8_t* s) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn ctor = nullptr;            // cache a hit, retry a miss
-    if (!ctor) ctor = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800067d0));
-    ctor(d, s);                                                    // 18002c773
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d),     // 18002c773
+                                         reinterpret_cast<const RtSystem::Filename*>(s));
     *reinterpret_cast<uint64_t*>(d + 0x8) =
         *reinterpret_cast<const uint64_t*>(s + 0x8);               // 18002c779
 }
@@ -856,10 +825,7 @@ void AssignExtArrayElem(uint8_t* d, const uint8_t* s) {
 // is the failure mode reference_porting_can_grow_the_cutover_surface.md names
 // and which attempt 29 hit one level up.
 void DestroyExtArrayElemRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006ac0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180006ac0(ignoredThis, base, count);
 }
 
 void AssignStringRef(uint8_t* d, const uint8_t* s) {
@@ -898,10 +864,7 @@ void AssignStringRef(uint8_t* d, const uint8_t* s) {
 // registered body is in another translation unit and the registry is the door
 // every other caller uses.
 void DestroyStringRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;               // cache a hit, retry a miss
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180011010));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180011010(ignoredThis, base, count);
 }
 
 // ---------------------------------------------------------------------------
@@ -971,10 +934,7 @@ void* RtColl_I32ArrayAssign(uint8_t* dstRaw, const uint8_t* srcRaw) {
     const ArrayHdr* src = reinterpret_cast<const ArrayHdr*>(srcRaw);
     if (dst == src) return dst;
 
-    using DtorFn = void* (*)(void*);
-    static DtorFn dtor = nullptr;            // cache a hit, retry a miss
-    if (!dtor) dtor = reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x18001c750));
-    dtor(dst);
+    RtColl_ArrayDtor_18001c750(dst);
 
     const int32_t n   = src->_size;
     const int32_t old = dst->_size;          // always 0 here — see above
@@ -1008,10 +968,7 @@ void AssignGraphSeries(uint8_t* d, const uint8_t* s) {
     // `0x18001cdf0`'s diff site never fired and the run reported no coverage
     // for a whole ported body. Retail's 0x1800418b1 is a CALL to that address;
     // going through the registry is both faithful and instrumented.
-    using Fn = void* (*)(void*, const void*);
-    static Fn fn = nullptr;                 // cache a hit, retry a miss
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001cdf0));
-    fn(d + 8, s + 8);
+    RtColl_I32ArrayAssign_18001cdf0(d + 8, s + 8);
 }
 
 // 0x1800419b0, the destroy-range for the same element — and, exactly like
@@ -1023,10 +980,7 @@ void AssignGraphSeries(uint8_t* d, const uint8_t* s) {
 //
 // Reached by address so the registry is the door, as above.
 void DestroyGraphSeriesRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800419b0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyInner_1800419b0(ignoredThis, base, count);
 }
 
 // ============================================================================
@@ -1092,10 +1046,8 @@ const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
 // assign below therefore delegates to the ported copy ctor rather than
 // reimplementing its String half.
 void AssignPkgEntry(uint8_t* d, const uint8_t* s) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn ctor = nullptr;            // cache a hit, retry a miss
-    if (!ctor) ctor = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800067d0));
-    ctor(d, s);                                                    // 1800299bd
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d),     // 1800299bd
+                                         reinterpret_cast<const RtSystem::Filename*>(s));
     *reinterpret_cast<uint32_t*>(d + 0x8) =
         *reinterpret_cast<const uint32_t*>(s + 0x8);               // 1800299c3
     *reinterpret_cast<uint32_t*>(d + 0xc) =
@@ -1130,10 +1082,7 @@ void AssignPkgEntry(uint8_t* d, const uint8_t* s) {
 // address stays spelled as a literal here so tools/addr_door_audit.py and
 // tools/runtime_census.py can both still see the edge.
 void DestroyPkgEntryRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180026b50));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180026b50(ignoredThis, base, count);
 }
 
 // NO SEED ZEROS, and that is read out of the callee rather than copied from the
@@ -1446,9 +1395,7 @@ void InitVertexElement(uint8_t* d) {
     std::memset(d, 0, 0x1c);
 }
 void DestroyVertexElement(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004fe20));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_18004fe20(ignoredThis, base, count);
 }
 const ArraySpec kSpec_VertexElement = {           // 0x180056240
     "Array<VertexLayout::Element>", 0x20, 8, &AssignVertexElement, &InitVertexElement,
@@ -1502,10 +1449,7 @@ void InitZero18(uint8_t* d) {
 // caller elsewhere in the tree that registers 0x180005880 differently is
 // picked up here too.
 void DestroyMaterialParamStrings(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005880));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180005880(ignoredThis, base, count);
 }
 const ArraySpec kSpec_MaterialParam = {           // 0x1800616c0
     "Array<Material::Parameter>", 0x18, 8, &AssignStringPlus16, &InitZero18,
@@ -1703,10 +1647,7 @@ const ArraySpec kSpec_TableCell10 = {             // 0x1800799a0
 // direct C++ call to the same instructions skips the registered entry point and
 // that body's diff site never fires.
 void AssignLayoutEntry(uint8_t* d, const uint8_t* s) {
-    using Fn = void* (*)(uint8_t*, const uint8_t*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180043980));
-    fn(d, s);
+    RtColl_LayoutEntryAssign_180043980(d, s);
 }
 // 0x180043d80's `else` (new-tail) arm, transcribed. Note the UNALIGNED QWORD of
 // 1 at +0x24, which sets +0x24 to 1 AND +0x28 to 0 in one store, and that
@@ -1727,10 +1668,7 @@ void InitLayoutEntry(uint8_t* d) {
 // around it. The loop IS the range form.
 // runtime/src/collection/array_destroy.cpp ports and registers 0x180044050.
 void DestroyLayoutEntryRange(void* /*ignoredThis*/, uint8_t* base, int count) {
-    using Fn = void (*)(uint8_t*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180044050));
-    for (int i = 0; i < count; ++i) fn(base + i * 0x38);
+    for (int i = 0; i < count; ++i) RtColl_DestroyElem_180044050(base + i * 0x38);
 }
 const ArraySpec kSpec_LayoutEntry38 = {           // 0x180043d80
     "Array<UI::LayoutDescription::Entry>", 0x38, 8, &AssignLayoutEntry,
@@ -1824,9 +1762,7 @@ void InitShaderParam(uint8_t* d) {
     std::memset(d, 0, 0x0d);
 }
 void DestroyShaderParamRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004fed0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_18004fed0(ignoredThis, base, count);
 }
 const ArraySpec kSpec_ShaderParam = {             // 0x180055db0
     "Array<ShaderProgram::Parameter>", 0x10, 8, &AssignShaderParam, &InitShaderParam,
@@ -1852,17 +1788,13 @@ void AssignInnerArrayU8(uint8_t* d, const uint8_t* s) {
     dp[0] = nullptr;
     dp[1] = nullptr;
     if (d == s) return;                   // retail's `CMP RCX,RSI; JE` skip
-    using AssignFn = void* (*)(void*, const void*);
-    static AssignFn fn = reinterpret_cast<AssignFn>(ResolveAddr(Module::Runtime, 0x180011220));
-    fn(d, s);
+    RtIO::RtColl_ArrayU8Assign_180011220(d, s);
 }
 void InitInnerArrayU8(uint8_t* d) {
     std::memset(d, 0, 0x10);
 }
 void DestroyInnerArrayU8Range(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004ff80));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyInner_18004ff80(ignoredThis, base, count);
 }
 const ArraySpec kSpec_InnerArrayU8 = {            // 0x180053f00
     "Array<Array<uint8>>", 0x10, 8, &AssignInnerArrayU8, &InitInnerArrayU8,
@@ -1986,10 +1918,7 @@ void InitMetaEntry20(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
 }
 void DestroyMetaEntry20Range(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800341e0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_1800341e0(ignoredThis, base, count);
 }
 const ArraySpec kSpec_MetaEntry20 = {             // 0x180034010, 0x180033080
     "Array<Save::MetaDataEntry>", 0x20, 8,
@@ -2006,16 +1935,13 @@ const ArraySpec kSpec_MetaEntry20 = {             // 0x180034010, 0x180033080
 // at both arms, read from the two `ADD R..,0x58` walks.
 void DestroyMetaData58Range(void* ignoredThis, uint8_t* base, int count) {
     (void)ignoredThis;
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c3f40));
-    for (int i = 0; i < count; ++i) fn(base + static_cast<int64_t>(i) * 0x58);
+    for (int i = 0; i < count; ++i) {                     // ~SaveInfo, 0x1800c3f40
+        reinterpret_cast<Save::SaveLoad::SaveInfo*>(base + static_cast<int64_t>(i) * 0x58)
+            ->Save::SaveLoad::SaveInfo::~SaveInfo();
+    }
 }
 void AssignMetaData58(uint8_t* d, const uint8_t* s) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180032f70));
-    fn(d, s);
+    RtSave_MetaData_CopyCtor(d, s);
 }
 const ArraySpec kSpec_MetaData58 = {              // 0x1800332d0
     "Array<Save::MetaData>", 0x58, 8,
@@ -2042,10 +1968,7 @@ void DestroyDrawGroup1f0Range(void* ignoredThis, uint8_t* base, int count) {
     }
 }
 void AssignDrawGroup1f0(uint8_t* d, const uint8_t* s) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001be60));
-    fn(d, s);
+    RtGraphics_DrawGroup_CopyCtor(d, s);
 }
 const ArraySpec kSpec_DrawGroup1f0 = {            // 0x1800638e0
     "Array<Graphics::DrawGroup>", 0x1f0, 8,
@@ -2118,10 +2041,7 @@ const ArraySpec kSpec_AudioChannel70 = {          // 0x180051020
 //          (0x180059fa3 realloc arm, 0x18005a005 shrink arm) — unlike every
 //          other destroy row in this file, which takes (base, count).
 void AssignAnimClip70(uint8_t* d, const uint8_t* s) {
-    using Fn = void* (*)(uint8_t*, const uint8_t*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800160a0));
-    fn(d, s);
+    RtGraphics_Animation_CopyCtor(d, s);
 }
 void InitAnimClip70(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x00) = 0;   // 180059f2d  inner event array
@@ -2142,10 +2062,7 @@ void InitAnimClip70(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x68) = 0;   // 180059f7b
 }
 void DestroyAnimClip70(void* /*ignoredThis*/, uint8_t* base, int count) {
-    using Fn = void (*)(uint8_t*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800fb290));
-    for (int i = 0; i < count; ++i) fn(base + static_cast<int64_t>(i) * 0x70);
+    for (int i = 0; i < count; ++i) RtGraphics_Animation_Dtor(base + static_cast<int64_t>(i) * 0x70);
 }
 // THREE init holes, not one, and ArraySpec can name only one window. The one
 // named is the widest (+0x54..+0x57, the padding before the int64 at +0x58);
@@ -2179,10 +2096,7 @@ void InitTagStrStrF18(uint8_t* d) {
     *reinterpret_cast<uint32_t*>(d + 0x10) = 0x3dcccccdu;           // 18005a30a
 }
 void DestroyTagStrStrF18(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001cbf0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_18001cbf0(ignoredThis, base, count);
 }
 const ArraySpec kSpec_TagStrStrF18 = {            // 0x18005a220
     "Array<{String,String,float}>", 0x18, 8,
@@ -2423,7 +2337,6 @@ J1_ENTRY(180024aa0)   // UI:          ComboElement::_userData (+0x108)
 // fields by instruction pattern instead is what produced the numbers above.
 // (reference_recheck_must_match_its_own_proof.md: a check whose own decode is
 // wrong reads as a finding about the subject.)
-J1_ENTRY(180009460)   // UI:          reached from ?AddController@DialogInstance@ 0x18011363f
 J1_ENTRY(180039440)   // UI:          reached from ?AddController@DialogInstance@ 0x180113649
 // VTABLE BATCH 2 (2026-09-12) - the two canonical free-and-zero ~Array bodies
 // the UI::*Description second half needs. Each read from its own
@@ -2462,15 +2375,6 @@ J1_ENTRY(1800248e0)   // IO:          CompressedStream::_windows (+0x30), Array<
 //     reports 63 differing bytes OUTSIDE the displacement fields and unequal
 //     targets. Without it, "IDENTICAL" would have been a screen that passes
 //     everything in this neighbourhood.
-// 0x18000c4a0 was recorded by Wave 24 lane SMALLBODY as "a heap-buffer release
-// ... NOT re-implemented here: it is 0x18 bytes of somebody else's object and
-// this lane has no witness for what lives at +0x30". That blocker is
-// DEPENDENCY-SHAPED and it is FALSE, which is the class Wave 24 measured at 5
-// of 9 (WAVE25_KICKOFF §1a). The body does not need a witness for +0x30,
-// because it is not a bespoke release at all: it is byte-for-byte this family's
-// `~Array`, and freeing a buffer does not need to know what is in it — the
-// reason stated at the top of this section for why J1 has no parameters.
-J1_ENTRY(18000c4a0)   // Audio:       Audio::Stream's +0x30 Array<T>
 // Cutover closure batch 2 (2026-09-12): 0x180051ef0 has no element-destroy
 // CALL at all — just the allocator Enter/Free/Leave triple and the two zero
 // stores. Same J1 body, no new spec.
@@ -2498,7 +2402,6 @@ J1_ENTRY(180062320)   // Graphics
 // above pins (0x1801fc718 twice, 0x18014b390, 0x1800c6c00, 0x18014b388). The
 // only textual differences are the addresses of the instructions themselves.
 J1_ENTRY(180043cb0)   // UI:          LayoutElement::_rows       (+0xC0)
-J1_ENTRY(1800490e0)   // UI:          RadioElement::_checkBoxes  (+0xC0)
 
 
 #undef J1_ENTRY
@@ -2638,8 +2541,6 @@ J3_ENTRY2(180020e90, kSpec_Rec14)        // Graphics: one pool record's inner ar
 
 J3_ENTRY3(180023830, kSpec_Fill4)       // Graphics: Array<uint32>
 J3_ENTRY3(180043b40, kSpec_LayoutInfo44) // UI: LayoutElement's per-cell info array (batch 2)
-J3_ENTRY3(18004f790, kSpec_Fill16)      // Engine:   MainLoop::_postDraw push
-J3_ENTRY3(18004f8e0, kSpec_Fill16)      // Engine:   MainLoop::_postUpdate push
 // WAVE 29 LANE GFXBODY — Array<RendererDrawable>::SetSize, the append behind
 // ?AddLight@Renderer@Graphics@@ (0x1801051d0). kSpec_Fill16 is not inferred
 // from the element type: 0x180063a80 was compared against the known Fill16 site
@@ -2974,11 +2875,8 @@ void AssignModExternal18(uint8_t* d, const uint8_t* s) {
     /* +0x04..+0x07 deliberately not copied — retail's first store is a DWORD */
     *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
 
-    using FilenameCopyFn = void* (*)(void*, const void*);
-    static FilenameCopyFn copy = nullptr;          // cache a hit, retry a miss
-    if (!copy) copy = reinterpret_cast<FilenameCopyFn>(
-        ResolveAddr(Module::Runtime, 0x1800067d0));
-    copy(d + 0x10, s + 0x10);
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d + 0x10),   // 0x1800067d0
+                                         reinterpret_cast<const RtSystem::Filename*>(s + 0x10));
 }
 
 // The two destroy ranges. Both are ported AND registered in array_destroy.cpp
@@ -2988,16 +2886,10 @@ void AssignModExternal18(uint8_t* d, const uint8_t* s) {
 // unported callee — the failure mode
 // reference_porting_can_grow_the_cutover_surface.md names.
 void DestroySaveGameInfoRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002afc0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_18002afc0(ignoredThis, base, count);
 }
 void DestroyModExternal18Range(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180029190));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180029190(ignoredThis, base, count);
 }
 
 // NOT kSpec_ExtStr10at08, and the difference is the two fields that decide
@@ -3143,10 +3035,7 @@ void InitLink18(uint8_t* d) {
 // this same commit (`B_ENTRY(18003e3e0, kD_Str_18at00)`), so this lands on our
 // body rather than opening a door onto an unported callee.
 void DestroyLinkRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18003e3e0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_18003e3e0(ignoredThis, base, count);
 }
 const ArraySpec kSpec_Link18 = {                  // 0x18003e1a0, 0x18003d430
     "Array<UI::DocumentText::Link>", 0x18, 8, &AssignLink18, &InitLink18,
@@ -3163,10 +3052,7 @@ const ArraySpec kSpec_Link18 = {                  // 0x18003e1a0, 0x18003d430
 // registry hands the call to, so this gets its own row rather than borrowing a
 // sibling's door.
 void DestroyStringRange_180054920(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180054920));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180054920(ignoredThis, base, count);
 }
 const ArraySpec kSpec_StringRefZ_PP = {           // 0x1800547e0
     "Array<System::String>(PixelProgram)", 8, 8, &AssignStringRef, &InitZero8,
@@ -3191,10 +3077,7 @@ void AssignPpSampler10(uint8_t* d, const uint8_t* s) {
     d[0x0e] = s[0x0e];
 }
 void DestroyStringRange_180054ba0(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180054ba0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180054ba0(ignoredThis, base, count);
 }
 const ArraySpec kSpec_PpSampler10 = {             // 0x180054a20
     "Array<Video::PixelProgram::Sampler>", 0x10, 8, &AssignPpSampler10,
@@ -3222,10 +3105,7 @@ void InitZero16(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
 }
 void DestroyVtxElementRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180056960));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyStrings_180056960(ignoredThis, base, count);
 }
 const ArraySpec kSpec_VtxElement18 = {            // 0x1800567d0
     "Array<Video::VertexProgram::Element>", 0x18, 8, &AssignVtxElement18,
@@ -3248,18 +3128,12 @@ void AssignVtxStream18(uint8_t* d, const uint8_t* s) {
     *reinterpret_cast<uint64_t*>(d + 0x00) = 0;              // 180056bb3
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;              // 180056bb6
     {
-        using Fn = void* (*)(void*, const void*);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800571b0));
-        fn(d + 0x00, s + 0x00);                              // 180056bc5
+        RtColl_ArrayAssign_1800571b0(d + 0x00, s + 0x00);                              // 180056bc5
     }
     AssignStringRef(d + 0x10, s + 0x10);                     // 180056bcd..180056bdd
 }
 void DestroyVtxStreamRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180056cb0));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyVtxStream_180056cb0(ignoredThis, base, count);
 }
 const ArraySpec kSpec_VtxStream18 = {             // 0x180056af0
     "Array<Video::VertexProgram::Stream>", 0x18, 8, &AssignVtxStream18,
@@ -3282,10 +3156,7 @@ void AssignSfxBuffer18(uint8_t* d, const uint8_t* s) {
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
     *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
     {
-        using Fn = void* (*)(void*, const void*);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180052700));
-        fn(d + 0x08, s + 0x08);
+        RtColl_ArrayAssign_180052700(d + 0x08, s + 0x08);
     }
 }
 void InitSfxBuffer18(uint8_t* d) {
@@ -3294,10 +3165,7 @@ void InitSfxBuffer18(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
 }
 void DestroySfxBufferRange(void* ignoredThis, uint8_t* base, int count) {
-    using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180052220));
-    fn(ignoredThis, base, count);
+    RtColl_DestroyInner_180052220(ignoredThis, base, count);
 }
 const ArraySpec kSpec_SfxBuffer18 = {             // 0x180053190
     "Array<Audio::SoundEffect::Buffer>", 0x18, 8, &AssignSfxBuffer18,
@@ -3341,7 +3209,6 @@ D1_J1_ENTRY(180013e70)   // Graphics: EdgeMesh's Array<Triangle>, 0x180013640's 
 D1_J1_ENTRY(18001c020)   // Graphics: 0x18001b270's clear, Array<blk16>
 D1_J1_ENTRY(18001c3b0)   // Graphics
 D1_J1_ENTRY(180021490)   // Graphics: the particle emitter's Array<T>
-D1_J1_ENTRY(180033c50)   // UI:       Font::_glyphs (+0x40)
 D1_J1_ENTRY(18003d8c0)   // UI:       DocumentTextElement +0x110 / Description +0xb0
 D1_J1_ENTRY(18003da00)   // UI:       DocumentTextElement +0x120 / SpriteCapture::_sheets
 D1_J1_ENTRY(18003db40)   // UI:       DocumentTextElement +0x130 / Description +0xd0
@@ -3856,8 +3723,6 @@ void RtCollectionPortInit() {
 
     // ---- J1: Array<T>::~Array, one body, eleven addresses ------------------
     RegisterRuntimeAddr(0x180013da0, (void*)&RtColl_ArrayDtor_180013da0);
-    RegisterRuntimeAddr(0x18001c750, (void*)&RtColl_ArrayDtor_18001c750);
-    RegisterRuntimeAddr(0x180051d80, (void*)&RtColl_ArrayDtor_180051d80);
     // Wave 9 lane UIF: the twelfth J1 address, reached by ??1Element@UI@@.
     // Wave 11 lane OBJLIFE: the seventeenth, reached by ??1InternalFactory@Object@@.
     // ---- THIRTEENTH THROUGH SIXTEENTH, and the number is STILL a lower bound.
@@ -3879,7 +3744,6 @@ void RtCollectionPortInit() {
     //
     // Lane UIW's pair is reached by ?RemoveAllItems@ComboElement@UI@@ and is
     // exercised (calls=6, matching its three teardown helpers exactly).
-    RegisterRuntimeAddr(0x180037310, (void*)&RtColl_ArrayDtor_180037310);
     RegisterRuntimeAddr(0x180024aa0, (void*)&RtColl_ArrayDtor_180024aa0);
     RegisterRuntimeAddr(0x1800249c0, (void*)&RtColl_ArrayDtor_1800249c0);  // PKG2 4b-iii
     RegisterRuntimeAddr(0x1800248e0, (void*)&RtColl_ArrayDtor_1800248e0);  // PKG2 4b-iii
@@ -3889,11 +3753,7 @@ void RtCollectionPortInit() {
     // and is NOT verified by that
     // (reference_uncalled_port_is_not_verified.md); the evidence here is the
     // byte identity to the canonical J1 body, and it is stated as such.
-    RegisterRuntimeAddr(0x180009460, (void*)&RtColl_ArrayDtor_180009460);
-    RegisterRuntimeAddr(0x180039440, (void*)&RtColl_ArrayDtor_180039440);
     // VTABLE BATCH 2 (2026-09-12): the Tab and Table description arrays.
-    RegisterRuntimeAddr(0x18004cc90, (void*)&RtColl_ArrayDtor_18004cc90);
-    RegisterRuntimeAddr(0x180079870, (void*)&RtColl_ArrayDtor_180079870);
     // ---- EIGHTEENTH AND NINETEENTH (Wave 25 lane INTERNAL42) ---------------
     // The count above says "expect a seventeenth rather than be surprised by
     // it", and that held: both of these became visible because another lane
@@ -3901,7 +3761,6 @@ void RtCollectionPortInit() {
     // exactly as lane UIC described it. Both are exercised today —
     // 0x18002a930 has three call sites in the tree and 0x18000c4a0 one — but a
     // call site is not attendance, and neither has been watched running.
-    RegisterRuntimeAddr(0x18000c4a0, (void*)&RtColl_ArrayDtor_18000c4a0);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
@@ -3913,14 +3772,10 @@ void RtCollectionPortInit() {
     // to zero the moment the DLL is gone.
     RegisterRuntimeAddr(0x180055db0, (void*)&RtColl_ArraySetSize_180055db0);
     RegisterRuntimeAddr(0x180053f00, (void*)&RtColl_ArraySetSize_180053f00);
-    RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
-    RegisterRuntimeAddr(0x1800764c0, (void*)&RtColl_ArraySetSize_1800764c0);
     // BATCH 4 (Graphics render/cull/sun-camera cluster), two one-argument
     // constant-folded members. 0x18005f980 is a Reserve, not a SetSize — see
     // the banner over RtColl_ArrayReserve_18005f980.
-    RegisterRuntimeAddr(0x18000c300, (void*)&RtColl_ArraySetSize_18000c300);
-    RegisterRuntimeAddr(0x18005f980, (void*)&RtColl_ArrayReserve_18005f980);
     RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
@@ -3928,8 +3783,6 @@ void RtCollectionPortInit() {
     // Wave 25 lane INTERNAL42: Wave 24 lane INTERNAL8's two declared doors.
     // BATCH 8b: Audio::Scene::EffectSlot::positions, the read-path resize
     // inside the EffectSlot inner-array serialize (0x180051e00).
-    RegisterRuntimeAddr(0x18002f070, (void*)&RtColl_ArraySetSize_18002f070);
-    RegisterRuntimeAddr(0x1800492d0, (void*)&RtColl_ArraySetSize_1800492d0);
     // WAVE 27 LANE FRONTIER - the address cutover attempt 29 died on. Its
     // caller is runtime/src/object/external_load.cpp:157, whose door comment
     // predicted this exact EXEC-of-0 and is updated in the same commit.
@@ -3951,22 +3804,12 @@ void RtCollectionPortInit() {
     // the non-trivial tier covers.
     // VTABLE BATCH 2 (2026-09-12): the three read-path resizes of the
     // UI::*Description second half, plus LayoutElement's info array.
-    RegisterRuntimeAddr(0x18004cdf0, (void*)&RtColl_ArraySetSize_18004cdf0);
-    RegisterRuntimeAddr(0x1800799a0, (void*)&RtColl_ArraySetSize_1800799a0);
-    RegisterRuntimeAddr(0x180043d80, (void*)&RtColl_ArraySetSize_180043d80);
-    RegisterRuntimeAddr(0x180043b40, (void*)&RtColl_ArraySetSizeFill_180043b40);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
-    RegisterRuntimeAddr(0x18004f790, (void*)&RtColl_ArraySetSizeFill_18004f790);
-    RegisterRuntimeAddr(0x18004f8e0, (void*)&RtColl_ArraySetSizeFill_18004f8e0);
     // ---- Wave 29 lane GFXBODY: Renderer::_drawables (AddLight) -------------
     RegisterRuntimeAddr(0x180063a80, (void*)&RtColl_ArraySetSizeFill_180063a80);
-    RegisterRuntimeAddr(0x180076900, (void*)&RtColl_ArraySetSizeFill_180076900);
-    RegisterRuntimeAddr(0x18007a0d0, (void*)&RtColl_ArraySetSizeFill_18007a0d0);
     // ---- Wave 9 lane GFX3: the Graphics::Scene node array ------------------
     // ---- Wave 9 lane UIW: the five UI instantiations -----------------------
-    RegisterRuntimeAddr(0x180024fe0, (void*)&RtColl_ArraySetSizeFill_180024fe0);
-    RegisterRuntimeAddr(0x18004bfc0, (void*)&RtColl_ArraySetSizeFill_18004bfc0);
     // The two NON-TRIVIAL ones are registered HERE, unconditionally, and NOT
     // in the non-trivial tier. That tier is called out because its three
     // members call unexported per-element helpers BY ADDRESS INTO THE DLL, so
@@ -3982,19 +3825,14 @@ void RtCollectionPortInit() {
     // WAVE 10 LANE UIORACLE — the two-argument Array<System::String>, the one
     // caller of which is ?SetParameterCount@TextElement@UI@@ (ported this wave).
     RegisterRuntimeAddr(0x180029a80, (void*)&RtColl_ArraySetSize_180029a80);
-    RegisterRuntimeAddr(0x180034860, (void*)&RtColl_ArraySetSizeFill_180034860);
 
     // ---- Wave 9 lane UIW: the one helper that is neither SetSize nor ~Array
     RegisterRuntimeAddr(0x18001cdf0, (void*)&RtColl_I32ArrayAssign_18001cdf0);
     // WAVE 9 LANE UIF — Array<UI::SpriteDraw>: append (3-arg) and clear (0-arg).
-    RegisterRuntimeAddr(0x1800783d0, (void*)&RtColl_ArraySetSize_1800783d0);
     // WAVE 10 LANE UI3 — the two DialogInstance grow helpers. Both are
     // byte-identical to a body already registered above; the measurement and
     // its negative control are in the J3 table's note.
     // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) -------
-    RegisterRuntimeAddr(0x18004ba90, (void*)&RtColl_ArraySetSize_18004ba90);
-    RegisterRuntimeAddr(0x1800370c0, (void*)&RtColl_ArraySetSize_1800370c0);
-    RegisterRuntimeAddr(0x180033690, (void*)&RtColl_ArraySetSizeFill_180033690);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two
@@ -4007,22 +3845,8 @@ void RtCollectionPortInit() {
     // only ones with a shrink-path destroy. An integration run that sees a new
     // failure can halve the search space with one env var.
 
-    // ---- Wave 9 lane UIC: Collection::LinkedList's three helpers -----------
-    // In their own file — see runtime/src/collection/linkedlist.cpp. Called
-    // from here because this is the Collection namespace's one init hook.
-    extern int RtCollLinkedListRegister();
-    RtCollLinkedListRegister();
-
-    // Wave 9 lane VID2: the four unexported Collection::Set AVL bodies
-    // (retrace, both rotations, erase). Same reasoning as the linked list —
-    // this is the Collection namespace's one init hook. They are the recorded
-    // blocker for Video::Device::PlatformStartup; see
-    // runtime/src/collection/set_avl.cpp and docs/runtime_port/WAVE9_LANE_VID2.md.
-    {
-        extern int RtCollectionSetAvlRegister();
-        const int setAvl = RtCollectionSetAvlRegister();
-        printf("[RtPort]   Collection::Set AVL: %d addresses registered\n", setAvl);
-    }
+    // (B3R RT-Core: the LinkedList and Set-AVL registrars went with their rows,
+    // which had no reader.)
 
     // Wave 9 lane SAVE2: Collection::Set<Pair<String,String>>::Clear and its
     // two helpers (0x18000f7d0 / 0x18000f890 / 0x18000fa90). Same reasoning
@@ -4069,8 +3893,6 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180062320, (void*)&RtColl_ArrayDtor_180062320);
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
-    RegisterRuntimeAddr(0x180043cb0, (void*)&RtColl_ArrayDtor_180043cb0);
-    RegisterRuntimeAddr(0x1800490e0, (void*)&RtColl_ArrayDtor_1800490e0);
 
     // J3, two-argument.
     RegisterRuntimeAddr(0x18005cc60, (void*)&RtColl_ArraySetSize_18005cc60);
@@ -4129,27 +3951,13 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18001c020, (void*)&RtColl_ArrayDtor_18001c020);
     RegisterRuntimeAddr(0x18001c3b0, (void*)&RtColl_ArrayDtor_18001c3b0);
     RegisterRuntimeAddr(0x180021490, (void*)&RtColl_ArrayDtor_180021490);
-    RegisterRuntimeAddr(0x180033c50, (void*)&RtColl_ArrayDtor_180033c50);
-    RegisterRuntimeAddr(0x18003d8c0, (void*)&RtColl_ArrayDtor_18003d8c0);
-    RegisterRuntimeAddr(0x18003da00, (void*)&RtColl_ArrayDtor_18003da00);
-    RegisterRuntimeAddr(0x18003db40, (void*)&RtColl_ArrayDtor_18003db40);
-    RegisterRuntimeAddr(0x18003e0c0, (void*)&RtColl_ArrayDtor_18003e0c0);
 
-    RegisterRuntimeAddr(0x18003e600, (void*)&RtColl_ArraySetSize_18003e600);
-    RegisterRuntimeAddr(0x18003ea50, (void*)&RtColl_ArraySetSize_18003ea50);
-    RegisterRuntimeAddr(0x18003eea0, (void*)&RtColl_ArraySetSize_18003eea0);
     RegisterRuntimeAddr(0x1800547e0, (void*)&RtColl_ArraySetSize_1800547e0);
     RegisterRuntimeAddr(0x180054a20, (void*)&RtColl_ArraySetSize_180054a20);
     RegisterRuntimeAddr(0x1800567d0, (void*)&RtColl_ArraySetSize_1800567d0);
     RegisterRuntimeAddr(0x180056af0, (void*)&RtColl_ArraySetSize_180056af0);
-    RegisterRuntimeAddr(0x180053190, (void*)&RtColl_ArraySetSize_180053190);
-    RegisterRuntimeAddr(0x180052e60, (void*)&RtColl_ArraySetSize_180052e60);
 
-    RegisterRuntimeAddr(0x18003df80, (void*)&RtColl_ArraySetSizeFill_18003df80);
-    RegisterRuntimeAddr(0x18003e1a0, (void*)&RtColl_ArraySetSizeFill_18003e1a0);
 
-    RegisterRuntimeAddr(0x18003d1c0, (void*)&RtColl_ArraySetSize_18003d1c0);
-    RegisterRuntimeAddr(0x18003d430, (void*)&RtColl_ArraySetSize_18003d430);
 
 
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
@@ -4157,25 +3965,10 @@ void RtCollectionPortInit() {
     // 0x1800571b0 that our ports reach by address. Spelled as LITERALS so
     // tools/runtime_census.py can see them.
     // J1 -- seven more copies of the parameterless ~Array body.
-    RegisterRuntimeAddr(0x180065bf0, (void*)&RtColl_ArrayDtor_180065bf0);
-    RegisterRuntimeAddr(0x180065e80, (void*)&RtColl_ArrayDtor_180065e80);
     // J3, two-argument.
     RegisterRuntimeAddr(0x180062110, (void*)&RtColl_ArraySetSize_180062110);
     RegisterRuntimeAddr(0x180061bb0, (void*)&RtColl_ArraySetSize_180061bb0);
-    RegisterRuntimeAddr(0x1800660f0, (void*)&RtColl_ArraySetSize_1800660f0);
-    RegisterRuntimeAddr(0x1800666e0, (void*)&RtColl_ArraySetSize_1800666e0);
-    RegisterRuntimeAddr(0x180066bc0, (void*)&RtColl_ArraySetSize_180066bc0);
-    RegisterRuntimeAddr(0x180066e80, (void*)&RtColl_ArraySetSize_180066e80);
-    RegisterRuntimeAddr(0x180066350, (void*)&RtColl_ArraySetSize_180066350);
-    RegisterRuntimeAddr(0x1800774d0, (void*)&RtColl_ArraySetSize_1800774d0);
-    RegisterRuntimeAddr(0x180077330, (void*)&RtColl_ArraySetSize_180077330);
-    RegisterRuntimeAddr(0x18007a4d0, (void*)&RtColl_ArraySetSize_18007a4d0);
-    RegisterRuntimeAddr(0x18007a790, (void*)&RtColl_ArraySetSize_18007a790);
-    RegisterRuntimeAddr(0x18007a900, (void*)&RtColl_ArraySetSize_18007a900);
-    RegisterRuntimeAddr(0x18007aa40, (void*)&RtColl_ArraySetSize_18007aa40);
     // J3, three-argument (UI::Font::ComputeLineLayout appends one glyph).
-    RegisterRuntimeAddr(0x180076d10, (void*)&RtColl_ArraySetSizeFill_180076d10);
     // The two element copy constructors the non-trivial specs above call.
     // J3, constant-folded one-argument.
-    RegisterRuntimeAddr(0x180076a40, (void*)&RtColl_ArraySetSize_180076a40);
 }

@@ -17,15 +17,11 @@
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the storage redirect
 #include "../../types/input/Input.h"   // ENDGAME B.3.9 ENG: the storage redirect
 
-// The five unexported `Collection::Set` AVL bodies for the 0x18-byte element
-// instantiation (0x180023060/130/170/570/6a0), registered from here because
-// Input::KeyMap was their only caller.
-extern int RtCollectionSetAvlE24Register();       // collection/set_avl_e24.cpp
-
 void RtInputPortInit() {
     // B3R (registry teardown, W1 RT-Core): the eight Input register functions
     // registered only rows no code read (or read only by a site converted to a
-    // direct call); they went with their rows.
-    const int n = RtCollectionSetAvlE24Register();
-    printf("[RtPort] Input: %d exports registered\n", n);
+    // direct call); they went with their rows, and so did the five
+    // Collection::Set<E24> rows (collection/set_avl_e24.cpp). It registers
+    // nothing and stays defined only because standalone/resolve_standalone.cpp's
+    // RuntimePortInit() still calls it (the coordinator removes that call).
 }

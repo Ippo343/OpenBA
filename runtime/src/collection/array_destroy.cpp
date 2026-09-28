@@ -173,11 +173,7 @@
 #include "../../types/collection/Collection.h"
 #include "array_internal.h"
 #include "array_destroy_internal.h"
-
-// Same local declaration array.cpp carries, and for the same reason: resolve.h
-// drags in <windows.h>. The linker checks the two spellings match.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/graphics/Animation.h"   // B3R: RtGraphics_Animation_Dtor (0x1800fb290)
 
 namespace rtcoll {
 
@@ -1399,10 +1395,7 @@ void* RtColl_ArrayDtorAnim_18001c1e0(void* self) {
     const int32_t n = a->_size;
     uint8_t* p = a->_data;
     if (n > 0) {                                   // TEST EAX,EAX / JLE
-        using Fn = void (*)(void*);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800fb290));
-        for (int32_t i = 0; i < n; ++i, p += 0x70) fn(p);
+        for (int32_t i = 0; i < n; ++i, p += 0x70) RtGraphics_Animation_Dtor(p);
     }
     void* r = ArrayDtorImpl(a);
     return r;
@@ -1671,59 +1664,38 @@ void RtCollectionDestroyPortInit() {
     // ---- the three element-destroy helpers our tree reaches ---------------
     // The other eight are ported and deliberately unregistered; the reason and
     // the full list are above the A_ENTRY block.
-    RegisterRuntimeAddr(0x180052110, (void*)&RtColl_DestroyInner_180052110);
-    RegisterRuntimeAddr(0x180005930, (void*)&RtColl_DestroyStrings_180005930);
-    RegisterRuntimeAddr(0x1800059e0, (void*)&RtColl_DestroyStrings_1800059e0);
     // Wave 9 lane UIW: two more of "the eight", now that array.cpp's
     // kSpec_GraphSeries and kSpec_StringRef reach them by address. See the note
     // above the A_ENTRY block.
-    RegisterRuntimeAddr(0x1800419b0, (void*)&RtColl_DestroyInner_1800419b0);
     RegisterRuntimeAddr(0x180011010, (void*)&RtColl_DestroyStrings_180011010);
-    RegisterRuntimeAddr(0x18004fe20, (void*)&RtColl_DestroyStrings_18004fe20);
     // Wave 9 lane DESTROY: the packfile-entry range destroy. array.cpp's
     // kSpec_PkgEntry reaches it by address from ReadPackfile's SetSize, and it
     // was the attempt-17 cutover wall (an EXEC of 0 with the DLL absent).
-    RegisterRuntimeAddr(0x180026b50, (void*)&RtColl_DestroyStrings_180026b50);
     // Wave 26 lane INT33: the fifth Body-B address. See the B_ENTRY line -- it
     // is one of "the eight", and it is registered now because array.cpp's
     // kSpec_ExtStr10at08 gives it the caller the banner says to wait for.
-    RegisterRuntimeAddr(0x180039640, (void*)&RtColl_DestroyStrings_180039640);
-    RegisterRuntimeAddr(0x180039580, (void*)&RtColl_DestroyStrings_180039580);
     // Wave 27 lane FRONTIER: the sixth Body-B address. array.cpp's
     // kSpec_ExtArrayElem (0x18002c6a0) reaches it by address on BOTH of its
     // destroy arms, and 0x180006b80 below reaches it as a direct call.
-    RegisterRuntimeAddr(0x180006ac0, (void*)&RtColl_DestroyStrings_180006ac0);
     // Wave 27 lane FRONTIER: UI::StringTable's TextEntry range destroy. Two
     // callers, both ported in this commit - 0x180004a90 below and array.cpp's
     // kSpec_StringPair10 (0x180078c90).
-    RegisterRuntimeAddr(0x180005570, (void*)&RtColl_DestroyStrings_180005570);
     // Cutover closure batch 2: Material parameter array element-destroy
     // helper; its caller (0x180004c80) is registered just below.
-    RegisterRuntimeAddr(0x180005880, (void*)&RtColl_DestroyStrings_180005880);
 
     // ---- the one element COPY-ASSIGN with no frontier at all ---------------
     // 37 instructions, zero callees. Its sibling 0x180051650 is NOT here: that
     // one calls Audio's 0x180050d30 and stays gated with the Wave 8 Audio
     // holdbacks, exactly where lane Q left it.
-    RegisterRuntimeAddr(0x180004220, (void*)&RtColl_SpriteEntryAssign_180004220);
     // VTABLE BATCH 2 (2026-09-12): its caller is array.cpp's kSpec_LayoutEntry38
     // (0x180043d80), registered in the same commit and reaching this by address.
-    RegisterRuntimeAddr(0x180043980, (void*)&RtColl_LayoutEntryAssign_180043980);
 
     // ---- J2: ~Array with an element-destroy prologue, six addresses --------
-    RegisterRuntimeAddr(0x180010ab0, (void*)&RtColl_ArrayDtorElem_180010ab0);
     RegisterRuntimeAddr(0x18004fa30, (void*)&RtColl_ArrayDtorElem_18004fa30);
     // VTABLE BATCH 2 (2026-09-12): UI::LayoutDescription's entry array.
-    RegisterRuntimeAddr(0x180043a00, (void*)&RtColl_ArrayDtorElem_180043a00);
-    RegisterRuntimeAddr(0x180044050, (void*)&RtColl_DestroyElem_180044050);
-    RegisterRuntimeAddr(0x180033880, (void*)&RtColl_ArrayDtorElem_180033880);
-    RegisterRuntimeAddr(0x1800416d0, (void*)&RtColl_ArrayDtorElem_1800416d0);
     RegisterRuntimeAddr(0x18005bf60, (void*)&RtColl_ArrayDtorElem_18005bf60);
     // Wave 25 lane INTERNAL42 — see the banner above these three for why one
     // opcode hash covers all three bodies and three specs do not.
-    RegisterRuntimeAddr(0x18002ac40, (void*)&RtColl_ArrayDtorElem_18002ac40);
-    RegisterRuntimeAddr(0x180039360, (void*)&RtColl_ArrayDtorElem_180039360);
-    RegisterRuntimeAddr(0x180039280, (void*)&RtColl_ArrayDtorElem_180039280);
     // Wave 26 lane INT33 — ~Array<PackageFile::Entry>, PackageFile+0xB0. Its
     // helper 0x180026b50 is registered eight lines above, so this entry point
     // and the helper now BOTH route through this file; before it, retail's
@@ -1735,13 +1707,10 @@ void RtCollectionDestroyPortInit() {
     // both ours.
     // Wave 27 lane FRONTIER -- ~Array<UI::StringTable::TextEntry>, the member
     // ??1StringTable@UI@@ destroys at this+0x20.
-    RegisterRuntimeAddr(0x180004a90, (void*)&RtColl_ArrayDtorElem_180004a90);
     // UI leftovers batch -- ~Array<UI::SpriteSheet::SpriteInfo>, the member
     // ~SpriteSheet destroys at this+0x20 (runtime/src/ui/spritesheet_new.cpp).
-    RegisterRuntimeAddr(0x180004f50, (void*)&RtColl_ArrayDtorElem_180004f50);
 
     // ---- the SpriteCapture entry range destroy (B_ENTRY, this batch) -------
-    RegisterRuntimeAddr(0x18003f070, (void*)&RtColl_DestroyStrings_18003f070);
 
     // Cutover closure batch 2 -- ~Array<MaterialParam> (~MaterialInstance) and
     // the Audio EffectSlot ~Array; the ~ShaderProgram pair is in the block below.
@@ -1751,13 +1720,10 @@ void RtCollectionDestroyPortInit() {
     // 0x1800269a0 note records: at cutover retail's rel32 will not exist.
     RegisterRuntimeAddr(0x18004fb00, (void*)&RtColl_ArrayDtorElem_18004fb00);
     RegisterRuntimeAddr(0x18004fbd0, (void*)&RtColl_ArrayDtorElem_18004fbd0);
-    RegisterRuntimeAddr(0x18004fed0, (void*)&RtColl_DestroyStrings_18004fed0);
-    RegisterRuntimeAddr(0x18004ff80, (void*)&RtColl_DestroyInner_18004ff80);
 
     // ---- J2b -------------------------------------------------------------
 
     // ---- J4 (the half whose frontier is clean) ----------------------------
-    RegisterRuntimeAddr(0x180003970, (void*)&RtColl_ArrayAssign_180003970);
     RegisterRuntimeAddr(0x18001b1a0, (void*)&RtColl_ArrayAssign_18001b1a0);
 
     // NOT registered, deliberately, and NOT because they are hard:
@@ -1775,48 +1741,32 @@ void RtCollectionDestroyPortInit() {
 
     // ---- Cutover closure batch 2b (2026-09-12) ----------------------------
     // Element-destroy helpers (both have a caller registered just below).
-    RegisterRuntimeAddr(0x1800341e0, (void*)&RtColl_DestroyStrings_1800341e0);
     // J2.
     RegisterRuntimeAddr(0x180004b70, (void*)&RtColl_ArrayDtorElem_180004b70);
     RegisterRuntimeAddr(0x180004d60, (void*)&RtColl_ArrayDtorElem_180004d60);
     // J4.
     RegisterRuntimeAddr(0x180014c70, (void*)&RtColl_ArrayAssign_180014c70);
-    RegisterRuntimeAddr(0x180033f30, (void*)&RtColl_ArrayAssign_180033f30);
     // Close-out: the stride-0x38 family (see the kAsgn_Blob38 block).
-    RegisterRuntimeAddr(0x18001cd30, (void*)&RtColl_ArrayAssign_18001cd30);
     RegisterRuntimeAddr(0x18001c620, (void*)&RtColl_ArrayCopyCtor_18001c620);
     // BATCH 5 (2026-09-12): the two element-destroy helpers the IO save-list
     // and mod-reload arrays call. Both callers are ported in array.cpp in the
     // same commit and reach these BY ADDRESS, so registering here is what
     // keeps the destroy arm out of the DLL — and at cutover retail's rel32 to
     // them will not exist at all.
-    RegisterRuntimeAddr(0x18002afc0, (void*)&RtColl_DestroyStrings_18002afc0);
-    RegisterRuntimeAddr(0x180029190, (void*)&RtColl_DestroyStrings_180029190);
 
 
     // ---- CUTOVER CLOSURE BATCH D1 (2026-09-12) ----------------------------
     // Element-destroy helpers (every one has a caller registered in this same
     // commit, in array.cpp or in the J2 block just below).
-    RegisterRuntimeAddr(0x180052220, (void*)&RtColl_DestroyInner_180052220);
-    RegisterRuntimeAddr(0x18003e3e0, (void*)&RtColl_DestroyStrings_18003e3e0);
     RegisterRuntimeAddr(0x180054920, (void*)&RtColl_DestroyStrings_180054920);
     RegisterRuntimeAddr(0x180054ba0, (void*)&RtColl_DestroyStrings_180054ba0);
-    RegisterRuntimeAddr(0x18001cbf0, (void*)&RtColl_DestroyStrings_18001cbf0);
     RegisterRuntimeAddr(0x180056960, (void*)&RtColl_DestroyStrings_180056960);
     RegisterRuntimeAddr(0x180056cb0, (void*)&RtColl_DestroyVtxStream_180056cb0);
     // J2.
     RegisterRuntimeAddr(0x18001c2d0, (void*)&RtColl_ArrayDtorElem_18001c2d0);
-    RegisterRuntimeAddr(0x18003e310, (void*)&RtColl_ArrayDtorElem_18003e310);
-    RegisterRuntimeAddr(0x18003e4a0, (void*)&RtColl_ArrayDtorElem_18003e4a0);
-    RegisterRuntimeAddr(0x1800516c0, (void*)&RtColl_ArrayDtorElem_1800516c0);
-    RegisterRuntimeAddr(0x180056610, (void*)&RtColl_ArrayDtorElem_180056610);
     RegisterRuntimeAddr(0x18001c1e0, (void*)&RtColl_ArrayDtorAnim_18001c1e0);
     // J4.
-    RegisterRuntimeAddr(0x180013640, (void*)&RtColl_ArrayAssign_180013640);
     RegisterRuntimeAddr(0x18001b270, (void*)&RtColl_ArrayAssign_18001b270);
-    RegisterRuntimeAddr(0x180052700, (void*)&RtColl_ArrayAssign_180052700);
-    RegisterRuntimeAddr(0x18003ce30, (void*)&RtColl_ArrayAssign_18003ce30);
-    RegisterRuntimeAddr(0x18003cf20, (void*)&RtColl_ArrayAssign_18003cf20);
 
 
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
@@ -1824,18 +1774,8 @@ void RtCollectionDestroyPortInit() {
     // retail's rel32 from the ~Array entry point to its helper will not exist,
     // so registering only one half would leave the other in the DLL
     // (the 0x1800269a0 note above records the first time that bit).
-    RegisterRuntimeAddr(0x1800664c0, (void*)&RtColl_DestroyInner_1800664c0);
-    RegisterRuntimeAddr(0x180073ee0, (void*)&RtColl_DestroySubMesh_180073ee0);
     // J2.
-    RegisterRuntimeAddr(0x180065d40, (void*)&RtColl_ArrayDtorElem_180065d40);
-    RegisterRuntimeAddr(0x180073720, (void*)&RtColl_ArrayDtorElem_180073720);
     // J4.
-    RegisterRuntimeAddr(0x180066b30, (void*)&RtColl_ArrayAssign_180066b30);
-    RegisterRuntimeAddr(0x180066de0, (void*)&RtColl_ArrayAssign_180066de0);
-    RegisterRuntimeAddr(0x1800742d0, (void*)&RtColl_ArrayAssign_1800742d0);
-    RegisterRuntimeAddr(0x180073dc0, (void*)&RtColl_ArrayAssign_180073dc0);
-    RegisterRuntimeAddr(0x1800741b0, (void*)&RtColl_ArrayAssign_1800741b0);
-    RegisterRuntimeAddr(0x1800571b0, (void*)&RtColl_ArrayAssign_1800571b0);
 
     // A LANE-OWNED IDENTITY MARKER (the idiom lane PKG2 established in
     // package_file.cpp). This lane's gate for "the exe that RAN is the one I

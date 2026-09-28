@@ -228,7 +228,5 @@ void Clear(Set* set) {
 int RtCollectionSetClearRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x18000f7d0, (void*)&rtsetclear::Clear);          ++n;
-    RegisterRuntimeAddr(0x18000f890, (void*)&rtsetclear::DestroySubtree); ++n;
-    RegisterRuntimeAddr(0x18000fa90, (void*)&rtsetclear::DestroyElement); ++n;
     return n;
 }
