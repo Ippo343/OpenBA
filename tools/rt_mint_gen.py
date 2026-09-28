@@ -597,9 +597,9 @@ RETIRED_DIR = os.path.join(REPO, "tools", "rt_mint_retired")
 # a unit test that asks for a minted name is a reader too.
 READER_DIRS = SCAN_DIRS + ("tests/unit",)
 # Only the GENERATED tables are not readers: they name every row by
-# construction. rt_data_mint.cpp (ConstructLoader's strcmp), the cutover
-# manifest and reg_mint_promoted.cpp DO count -- each is a binding that would
-# resolve NULL or go dead once the row is gone.
+# construction. rt_data_mint.cpp DOES count -- a binding there would resolve
+# NULL or go dead once the row is gone. (The cutover manifest and
+# reg_mint_promoted.cpp counted too until ENDGAME B.3.9 close deleted them.)
 READER_SKIP = ("standalone/rt_data_mint_tables.inc", "standalone/rt_export_addrs.inc")
 DELDTOR_FILES = ("runtime/src/object/deleting_dtor.cpp",)
 HEX_LITERAL = re.compile(r"\b0[xX]0*([0-9a-fA-F]{1,16})(?:[uU]?[lL]{0,2}|[lL]{1,2}[uU]?)\b")

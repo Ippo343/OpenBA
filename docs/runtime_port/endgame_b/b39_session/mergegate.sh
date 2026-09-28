@@ -16,21 +16,17 @@ if ! git merge --no-ff --no-commit "$BR" > "$HERE/merge_$LABEL.log" 2>&1; then
   echo "conflicts: $CONF"
   for f in $CONF; do
     case "$f" in
-      standalone/rt_data_mint_tables.inc|standalone/cutover_manifest.inc)
+      standalone/rt_data_mint_tables.inc)
         git checkout --theirs -- "$f"; git add "$f";;
-      runtime/src/object/deleting_dtor.cpp)
-        python "$HERE/resolve_deldtor.py" || { echo "UNRESOLVED CONFLICT in $f (structural resolver refused) — merge left in progress (pre-merge HEAD $PRE)"; exit 3; }
-        git add "$f";;
+      # (B.3.9 close: runtime/src/object/deleting_dtor.cpp and the cutover manifest are
+      # deleted; their conflict branch and the manifest regeneration went with them.)
       *) echo "UNRESOLVED CONFLICT in $f — merge left in progress (pre-merge HEAD $PRE)"; exit 3;;
     esac
   done
 fi
-python tools/cutover_manifest.py --inc > "$HERE/manifest_$LABEL.log" 2>&1
 $PY tools/rt_mint_gen.py > "$HERE/mintgen_$LABEL.log" 2>&1 || { echo "MINT GENERATOR REFUSED:"; tail -20 "$HERE/mintgen_$LABEL.log"; echo "merge left in progress (pre-merge HEAD $PRE)"; exit 4; }
 git checkout -- standalone/rt_export_addrs.inc 2>/dev/null
-python tools/cutover_manifest.py --inc > "$HERE/manifest_$LABEL.log" 2>&1
-git checkout -- standalone/rt_export_addrs.inc 2>/dev/null
-git add -A standalone/rt_data_mint_tables.inc standalone/cutover_manifest.inc
+git add -A standalone/rt_data_mint_tables.inc
 git commit -q -F "$HERE/mergemsg.txt" || { echo "commit failed"; exit 5; }
 echo "merged $BR: $PRE -> $(git rev-parse --short HEAD)"
 bash "$HERE/gate.sh" "$LABEL" 5 > "$HERE/gate_$LABEL.out" 2>&1

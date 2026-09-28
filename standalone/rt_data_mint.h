@@ -51,15 +51,6 @@ void RtDataMintInit();
 void RtMintRedirectStorage(const char* symbol, void* cell);
 
 // ============================================================================
-// PER-ROW REGISTRATION
-// ============================================================================
-
-// Register one minted row through both doors. False if `symbol` is not a
-// minted row at all. Valid only after RtDataMintInit() has laid the storage
-// out. standalone/cutover_manifest.cpp publishes its REQUIRED rows this way.
-bool RtMintRegisterRow(const char* symbol);
-
-// ============================================================================
 // WAVE 11 FOLLOW-UP 5 (lane TINFO) — the minted-node predicate
 // ============================================================================
 // True when `p` points into the minted BaseTypeInfo storage array. Used by
@@ -81,12 +72,3 @@ const void* RtMintTypeInfoStorageProbe(int index);
 // constant; the CONTENT of `storage` is only meaningful after RtDataMintInit().
 int  RtMintTypeInfoRowCount();
 bool RtMintTypeInfoRowAt(int i, const char** symbol, void** storage);
-
-// ============================================================================
-// WAVE 25 lane MANIFEST -- the cutover publish manifest
-// ============================================================================
-// standalone/cutover_manifest.cpp. `RtCutoverPublishManifest()` walks the
-// generated standalone/cutover_manifest.inc and registers every row the
-// manifest marks REQUIRED, naming every row it holds and every by-name door it
-// knowingly leaves resolving NULL. Returns the number of rows registered.
-int  RtCutoverPublishManifest();

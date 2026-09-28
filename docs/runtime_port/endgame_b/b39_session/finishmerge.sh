@@ -8,17 +8,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LABEL="$1"; TITLE="$2"; shift 2
 PY=tools/ghidra_mcp/.venv/Scripts/python.exe
 cd "$REPO" || exit 2
-for f in standalone/rt_data_mint_tables.inc standalone/cutover_manifest.inc; do
+for f in standalone/rt_data_mint_tables.inc; do   # (B.3.9 close: the cutover manifest is deleted)
   git diff --name-only --diff-filter=U | grep -qx "$f" && { git checkout --theirs -- "$f"; git add "$f"; }
 done
 LEFT=$(git diff --name-only --diff-filter=U)
 [ -n "$LEFT" ] && { echo "STILL UNRESOLVED: $LEFT"; exit 3; }
 grep -rlE '^(<<<<<<<|>>>>>>>) ' $(git diff --cached --name-only | grep -E '\.(cpp|h|py|inc|md|txt)$') 2>/dev/null | head -3 | grep . && { echo "CONFLICT MARKERS LEFT"; exit 3; }
-python tools/cutover_manifest.py --inc > "$HERE/manifest_$LABEL.log" 2>&1
 $PY tools/rt_mint_gen.py > "$HERE/mintgen_$LABEL.log" 2>&1 || { echo "MINT GENERATOR REFUSED:"; grep -E "STILL READ|REFUS" -A3 "$HERE/mintgen_$LABEL.log" | head -20; exit 4; }
-python tools/cutover_manifest.py --inc >> "$HERE/manifest_$LABEL.log" 2>&1
 git checkout -- standalone/rt_export_addrs.inc 2>/dev/null
-git add -A standalone/rt_data_mint_tables.inc standalone/cutover_manifest.inc
+git add -A standalone/rt_data_mint_tables.inc
 printf '%s\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\n' "$TITLE" > "$HERE/mergemsg.txt"
 git commit -q -F "$HERE/mergemsg.txt" || { echo "commit failed"; exit 5; }
 echo "merged: $(git log --oneline -1 | cut -c1-120)"

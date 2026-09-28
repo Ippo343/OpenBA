@@ -534,80 +534,6 @@ static void MintStorage() {
 //
 // It is also the ONLY door for a row with no exported name at all.
 //
-// ---------------------------------------------------------------------------
-// PER-ROW SELECTIVITY (Wave 10 lane MINTSEL)
-// ---------------------------------------------------------------------------
-//
-// Until this change RegisterMintedData() was ONE switch over all 197 rows, and
-// that made a per-row question unanswerable in practice. Lane UIDATA hit it
-// head on: the four UI vtables were not gated because anyone had judged UI
-// unsafe, they were gated because they shared a switch with 184 other rows --
-// and the switch does not even boot. Its blocker
-// (?_singleton@MemoryAllocator@System@@ published as our zeroed storage, then
-// EnterCriticalSection on a null self) lives entirely in the 38 STORAGE rows
-// and has nothing to do with any vtable or any BaseTypeInfo.
-//
-// Registration is also addressable one row at a time, through
-// RtMintRegisterRow(symbol): both doors (name + address) for exactly one row,
-// idempotent, returns false for an unknown symbol.
-// standalone/cutover_manifest.cpp publishes its REQUIRED rows through it.
-// ---------------------------------------------------------------------------
-
-// One addressable row, whatever table it came from.
-struct RtMintRow {
-    const char*        symbol;    // may be nullptr (address-only rows)
-    unsigned long long dllVa;
-    void*              storage;
-    const char*        kind;      // "vtable" / "typeinfo" / "storage"
-    int                index;     // index within that kind's table
-};
-
-static bool MintRowAt(int kind, int i, RtMintRow* out) {
-    if (kind == 0) {
-        if (i < 0 || i >= kVtableCount) return false;
-        const RtMintVtable& v = kMintVtables[i];
-        *out = { v.symbol, v.dllVa, (void*)v.table, "vtable", i };
-    } else if (kind == 1) {
-        if (i < 0 || i >= kTypeInfoCount) return false;
-        const RtMintTypeInfo& t = kMintTypeInfos[i];
-        *out = { t.symbol, t.dllVa, (void*)t.storage, "typeinfo", i };
-    } else {
-        if (i < 0 || i >= kStorageCount) return false;
-        const RtMintStorage& s = kMintStorage[i];
-        *out = { s.symbol, s.dllVa, MintStorageCell(i), "storage", i };
-    }
-    return true;
-}
-static int MintRowCount(int kind) {
-    return kind == 0 ? kVtableCount : kind == 1 ? kTypeInfoCount : kStorageCount;
-}
-
-static bool FindMintRow(const char* symbol, RtMintRow* out) {
-    if (!symbol) return false;
-    for (int k = 0; k < 3; ++k)
-        for (int i = 0; i < MintRowCount(k); ++i) {
-            RtMintRow r;
-            MintRowAt(k, i, &r);
-            if (r.symbol && strcmp(r.symbol, symbol) == 0) { *out = r; return true; }
-        }
-    return false;
-}
-
-// Register ONE row through both doors.
-static int RegisterOneMintRow(const RtMintRow& r) {
-    int doors = 0;
-    if (r.symbol) { RegisterRuntimeExport(r.symbol, r.storage); ++doors; }
-    RegisterRuntimeAddr((uintptr_t)r.dllVa, r.storage); ++doors;
-    return doors;
-}
-
-bool RtMintRegisterRow(const char* symbol) {
-    RtMintRow r;
-    if (!FindMintRow(symbol, &r)) return false;
-    RegisterOneMintRow(r);
-    return true;
-}
-
 static void RegisterMintedData() {
     int names = 0, addrs = 0;
     for (int i = 0; i < kVtableCount; ++i) {
@@ -724,17 +650,9 @@ void RtDataMintInit() {
     // "registered N by name" line precedes "constructed N of the M statics".
     RegisterMintedData();
 
-    // WAVE 25 lane MANIFEST -- the 46 RT_UNPROMOTABLE-tagged gap rows, whose
-    // verdicts are ROUTE-SCOPED. 44 of them INVERT to REQUIRED once the DLL is
-    // gone; two must still be held. standalone/cutover_manifest.cpp publishes
-    // exactly the ones the generated manifest says to publish and NAMES the
-    // ones it holds.
-    //
-    // Placed HERE for the same reason RegisterMintedData() is placed above
-    // MintConstructedStatics(): registration must precede construction, or the
-    // Thread ctor inside ConstructLoader() caches a null for the life of the
-    // process (see the banner above RegisterMintedData).
-    RtCutoverPublishManifest();
+    // (The Wave 25 cutover manifest's RtCutoverPublishManifest() re-registered a
+    // subset of the rows RegisterMintedData() already publishes; it is deleted
+    // with the manifest, ENDGAME B.3.9 close.)
 
     MintConstructedStatics();   // after MintStorage: it memsets the block
 
