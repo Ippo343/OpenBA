@@ -53,7 +53,6 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/ui/SpriteSheet.h"
 
-#include <atomic>
 #include <new>
 
 namespace {

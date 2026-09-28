@@ -36,7 +36,6 @@
 // Layout: runtime/types/ui/ClipRegionDescription.h over DescriptionsBatch1.h.
 // sizeof 0x78. Both ints start at 0x64 — 100, the default clip extent.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"

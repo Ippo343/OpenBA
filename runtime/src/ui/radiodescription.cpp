@@ -40,7 +40,6 @@
 //   0x180076900 Array<InternalPtr>::SetSize (array.cpp)
 //   0x1800d5750 RadioElement::FindCheckBoxes (private; widgets_input.cpp)
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>

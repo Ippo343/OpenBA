@@ -49,7 +49,6 @@
 // std::atomic slots.
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"

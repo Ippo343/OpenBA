@@ -42,7 +42,6 @@
 // ExternalPtr<ElementDescription> at +0x68..+0x88 are left alone, and so are
 // the four ints. Retail's, transcribed.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"

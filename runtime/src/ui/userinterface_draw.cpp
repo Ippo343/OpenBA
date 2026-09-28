@@ -149,7 +149,6 @@
 #include "../../types/collection/Collection.h"
 #include "../../funcs/runtime_funcs.h"   // RtGraphics_Camera_Ctor
 
-#include <atomic>
 
 namespace {
 

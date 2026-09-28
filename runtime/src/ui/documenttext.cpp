@@ -100,7 +100,6 @@
 #include "../../types/ui/SpriteSheet.h"
 #include "../../types/ui/String.h"
 
-#include <atomic>
 
 namespace O = UI::DocumentTextElementOffsets;
 using UI::DocumentItem;

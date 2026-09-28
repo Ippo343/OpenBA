@@ -43,7 +43,6 @@
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"
 
-#include <atomic>
 #include <new>
 
 namespace {

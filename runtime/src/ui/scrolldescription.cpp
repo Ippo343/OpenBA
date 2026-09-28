@@ -32,7 +32,6 @@
 // Every helper is already ported, including ??0ScrollElement@UI@@ (0x18011a7f0,
 // ui_factory_wave28.cpp), so this file adds none.
 // ============================================================================
-#include <atomic>
 #include <new>
 #include <cstddef>
 #include <cstdint>

@@ -86,7 +86,6 @@
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>

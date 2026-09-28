@@ -42,7 +42,6 @@
 // RT_DELDTOR row and the interpreter rows, are gone; so is element_bodies_b5.cpp's
 // ??0TextElement door (TextElement's real ctor is spelled below).
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 

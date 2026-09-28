@@ -47,7 +47,6 @@
 // file — RULE B6-8). The doors delegate with a QUALIFIED call. CreateInstance
 // writes a real `UI::NumberElement`.
 // ============================================================================
-#include <atomic>
 
 #include "element_common.h"   // rtuielem::AtomicExport (RULE B6-5), ResolveAddr
 #include "../../types/ui/NumberDescription.h"

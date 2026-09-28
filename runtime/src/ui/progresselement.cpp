@@ -25,7 +25,6 @@
 // with its own ctor is retail's and is reproduced.
 // ============================================================================
 
-#include <atomic>
 
 #include <new>
 

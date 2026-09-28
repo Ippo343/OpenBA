@@ -105,7 +105,6 @@
 // live in numberelement.cpp.
 // ============================================================================
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 

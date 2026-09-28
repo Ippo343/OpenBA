@@ -46,7 +46,6 @@
 // Layout: runtime/types/ui/ComboDescription.h over DescriptionsBatch1.h.
 // sizeof 0xb8.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"

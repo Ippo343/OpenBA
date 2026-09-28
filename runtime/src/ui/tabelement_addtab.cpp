@@ -86,7 +86,6 @@
 // brain to close, because there is no second caller.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <new>

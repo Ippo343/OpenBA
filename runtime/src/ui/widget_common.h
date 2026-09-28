@@ -12,10 +12,8 @@
 //   * the byte accessors every body needs (these objects are addressed by
 //     offset, not by a C++ struct, because most of the fourteen have no
 //     complete layout header and inventing one would be a guess),
-//   * the small set of Runtime functions they CALL rather than reimplement,
-//     each reached through ResolveAddr so a sibling port of the same address
-//     is picked up automatically
-//     (reference_resolveaddr_consults_port_registry_first.md),
+//   * the small set of Runtime functions they CALL rather than reimplement
+//     (called by name since B3R RT-UI),
 //   * `InlineGetPaddedSize`, which is `?GetPaddedSize@Element@UI@@`
 //     (0x180115f10) INLINED — the compiler inlined it into a dozen of these
 //     bodies and the inlined copy is what is transcribed, not a call.
@@ -27,11 +25,9 @@
 // 0x1800d2dc0, ListElement::DrawHighlight 0x1800d3f70, ScrollElement::
 // GetBarLayout 0x18011a2d0, SliderElement::UpdateNumber 0x1800d6c20,
 // TableElement::GetRowHeight/GetColumnWidth 0x18011e090/0x18011e1a0,
-// SpriteContext::AddSprite/AddFont). Those are REACHED, by address, and the
-// address literal is written at each use so the census can see it.
+// SpriteContext::AddSprite/AddFont). Those are called by name at each use.
 // ============================================================================
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -39,12 +35,6 @@
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../../types/ui/Element.h"     // B3X W0: InlineGetPaddedSize calls ComputeSize by name
 #include "../../types/system/MemoryAllocator.h"   // B3R RT-UI: MemFree, direct
-
-// ResolveAddr lives in standalone/resolve.h, which drags in <windows.h>; PLAN
-// §4.1 keeps that out of runtime/src. Declared here exactly as ~30 sibling
-// runtime files declare it; the linker checks the two agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace rtui {
 
@@ -65,11 +55,6 @@ inline uint32_t U32c(const void* p, int off) { return *reinterpret_cast<const ui
 inline float    F32c(const void* p, int off) { return *reinterpret_cast<const float*>(B(p, off)); }
 inline uint8_t  U8c (const void* p, int off) { return *reinterpret_cast<const uint8_t*>(B(p, off)); }
 inline void*    PTRc(const void* p, int off) { return *reinterpret_cast<void* const*>(B(p, off)); }
-
-template <typename Fn>
-inline Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
 
 // ---------------------------------------------------------------------------
 // UI::Element field offsets. Every one of them is asserted against
@@ -145,30 +130,6 @@ inline uint32_t ModulateColor(uint32_t c, uint8_t alpha) {
     return ((((c >> 8) & 0xffff0000u) * alpha) ^ c) & 0xffffffu
            ^ (((c >> 8) & 0xff0000u) * alpha);
 }
-
-// ---------------------------------------------------------------------------
-// The Runtime functions these bodies call.
-// ---------------------------------------------------------------------------
-using GetPaddedSizeFn  = void (*)(void* self, int32_t* w, int32_t* h);
-using AdjustUpperLeftFn= void (*)(void* self, int32_t dx, int32_t dy);
-using PlayFn           = void (*)(void* ui, int32_t soundId);
-using ArrayDtorFn      = void (*)(void* hdr);
-using ArraySetSizeFn   = void (*)(void* hdr, int32_t n);
-using ArraySetSizeFillFn = void (*)(void* hdr, int32_t n, const void* fill);
-using MemFreeFn        = void (*)(void* p);
-using ToIntegerFn      = int32_t (*)(const char* s);
-using IsDerivedFromFn  = bool (*)(const void* self, uint32_t typeId);
-
-// `?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHI@Z`      0x18011cf00
-using AddSprite3Fn = void (*)(void* ctx, const void* sprite, int32_t x, int32_t y, uint32_t c);
-// `?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z`    0x18011d3c0
-using AddSprite5Fn = void (*)(void* ctx, const void* sprite, int32_t x0, int32_t y0,
-                              int32_t x1, int32_t y1, uint32_t c);
-// `?AddFont@SpriteContext@UI@@QEAAXV?$ExternalPtr@VFont@UI@@@Object@@AEBVString@System@@
-//   _NHW4Justify@Font@2@HHHI@Z`                               0x18011ccb0
-using AddFontFn    = void (*)(void* ctx, void* font, const void* str, uint8_t wrap,
-                              int32_t a, int32_t justify, int32_t width,
-                              int32_t x, int32_t y, uint32_t c);
 
 inline void MemFree(void* p)        { System::MemoryAllocator::MemFree(p); }
 

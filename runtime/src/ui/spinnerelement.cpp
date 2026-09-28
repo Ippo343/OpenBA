@@ -39,7 +39,6 @@
 // vtable. That is retail's unguarded deref and CLAUDE.md says not to guard it.
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"

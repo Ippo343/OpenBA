@@ -49,7 +49,6 @@
 // TextElement fields are TextElement's). The registered doors delegate with a
 // QUALIFIED call. Font / SpriteContext / Sprite calls are direct member calls.
 // ============================================================================
-#include <atomic>
 
 #include "element_common.h"
 #include "../../types/ui/LabelElement.h"

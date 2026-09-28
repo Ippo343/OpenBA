@@ -117,7 +117,6 @@
 // ([[reference_uncalled_port_is_not_verified]]).
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 

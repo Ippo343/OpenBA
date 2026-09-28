@@ -37,7 +37,6 @@
 // That address is already registered by runtime/src/collection/array_destroy.cpp.
 // ============================================================================
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 

@@ -29,7 +29,6 @@
 // instructions at 0x180049ee0, a bare tail jump to ~Element.
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"

@@ -45,19 +45,7 @@
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../../types/system/MemoryAllocator.h"   // B3R RT-UI: MemAlloc / MemFree, direct
 
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — that header drags in <windows.h>, which PLAN.md §4.1 keeps out of
-// runtime/src/. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace rtuielem {
-
-template <typename Fn>
-inline Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
 
 // (B3X W0: `VTableOf`, `VSlot<Fn>(o, INDEX)`, the `kSlot*` Element slot
 // indices and the four slot typedefs are gone -- every UI::Element slot is

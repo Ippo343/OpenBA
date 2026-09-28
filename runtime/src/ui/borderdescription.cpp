@@ -30,7 +30,6 @@
 // System::Strings and the base's _textName. That is retail's, transcribed, not
 // an omission; the same is true of ~ImageDescription.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"

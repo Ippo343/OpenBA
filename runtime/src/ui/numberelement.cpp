@@ -29,7 +29,6 @@
 // SpriteContext calls are direct.
 // ============================================================================
 
-#include <atomic>
 
 #include "element_common.h"
 #include "../../types/ui/NumberElement.h"

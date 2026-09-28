@@ -229,7 +229,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <atomic>
 #include <new>
 
 #include "../../funcs/rt_port.h"

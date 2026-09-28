@@ -58,7 +58,6 @@
 // ElementDescription) are reproduced: they are four instructions in the shipped
 // bytes and collapsing them would be a divergence for no gain.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>

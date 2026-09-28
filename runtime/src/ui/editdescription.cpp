@@ -28,7 +28,6 @@
 // batch that open-codes TWO refcounted String ASSIGNMENTS (not releases) — the
 // increment side of the protocol, which no other member of this batch does.
 // ============================================================================
-#include <atomic>
 
 #include "description_common.h"
 #include "../../types/ui/EditDescription.h"

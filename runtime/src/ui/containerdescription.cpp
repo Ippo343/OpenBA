@@ -38,7 +38,6 @@
 // ctor door the members reach are cached in namespace-scope std::atomic slots,
 // never in a function-local static.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"

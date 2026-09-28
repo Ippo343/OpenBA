@@ -65,7 +65,6 @@
 #include "element_common.h"
 #include "../../types/collection/Collection.h"
 
-#include <atomic>
 #include <new>
 
 namespace {

@@ -33,7 +33,6 @@
 // GetFileVersion is 0x2304 — the largest constant in this batch, and read from
 // this class's own body. It is NOT its base's.
 // ============================================================================
-#include <atomic>
 
 #include "description_common.h"
 #include "../../types/ui/LabelDescription.h"

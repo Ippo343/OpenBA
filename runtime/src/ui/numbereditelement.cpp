@@ -24,7 +24,6 @@
 // at EditElement's end (the old 0xE8 + pad arithmetic is gone). The text field
 // this class reads is EditElement's `_text` at +0xC8.
 // ============================================================================
-#include <atomic>
 
 #include "element_common.h"
 #include "../../types/ui/NumberEditElement.h"

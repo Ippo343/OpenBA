@@ -61,7 +61,6 @@
 // the dtor stays a DOOR (B4b-2). RULE B6-5: every export the members reach is
 // cached in a namespace-scope std::atomic slot, never in a function-local static.
 // ============================================================================
-#include <atomic>
 #include <new>
 #include <cstddef>
 #include <cstdint>

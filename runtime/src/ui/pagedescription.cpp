@@ -34,7 +34,6 @@
 // doors and the ??0 / ??1 doors, read only by the retired minted table, its
 // RT_DELDTOR row and ui_factory_wave28.cpp's row, are gone.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>

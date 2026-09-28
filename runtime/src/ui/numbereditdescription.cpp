@@ -49,7 +49,6 @@
 // and dtor stay DOOR bodies. CreateInstance writes a real
 // `UI::NumberEditElement` (EditElement's 0xf8 + `_min`/`_max`).
 // ============================================================================
-#include <atomic>
 
 #include "element_common.h"   // rtuielem::AtomicExport (RULE B6-5), ResolveAddr
 #include "../../types/ui/NumberEditDescription.h"

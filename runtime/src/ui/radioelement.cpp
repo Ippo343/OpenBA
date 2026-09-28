@@ -31,7 +31,6 @@
 // ui_factory_wave28.cpp's row, are gone.
 // ============================================================================
 
-#include <atomic>
 #include <cstring>
 
 #include "widget_common.h"

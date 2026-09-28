@@ -50,7 +50,6 @@
 // the ??1 door, read only by the retired minted table and its RT_DELDTOR row,
 // are gone. The applier's door (non-slot) stays.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>

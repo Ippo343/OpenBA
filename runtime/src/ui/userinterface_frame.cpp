@@ -157,7 +157,6 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/system/MemoryAllocator.h"
 
-#include <atomic>
 
 namespace {
 

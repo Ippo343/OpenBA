@@ -71,7 +71,6 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "element_common.h"

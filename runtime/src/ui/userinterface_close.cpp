@@ -156,7 +156,6 @@
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/collection/Collection.h"
 
-#include <atomic>
 
 extern "C" void RtUi_UserInterface_CloseDialog(UI::UserInterface* self, void** dlgPtr);
 

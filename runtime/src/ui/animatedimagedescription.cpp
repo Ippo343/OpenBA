@@ -50,7 +50,6 @@
 // doors and the ??1 door, read only by the retired minted table and its
 // RT_DELDTOR row, are gone.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>

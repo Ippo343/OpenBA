@@ -23,7 +23,6 @@
 // against DescriptionsBatch1.h's POD); each registered door is a one-line
 // QUALIFIED delegation. The dtor stays a door (B4b-2).
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"

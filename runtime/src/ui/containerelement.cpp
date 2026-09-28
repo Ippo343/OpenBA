@@ -55,7 +55,6 @@
 // RULE B6-5: the type-info records, the vtable and the Video::Device singleton
 // the members read are cached in namespace-scope std::atomic slots.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "element_common.h"

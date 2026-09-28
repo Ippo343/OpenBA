@@ -38,7 +38,6 @@
 // `?SelectCharacter@` (element_bodies_b5.cpp's door, reached by address); the
 // constructor 0x1800d0f10 (EditElement.h since B.3.9).
 // ============================================================================
-#include <atomic>
 #include <cstring>
 
 #include "element_common.h"

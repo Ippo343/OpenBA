@@ -37,7 +37,6 @@
 // ui_factory_wave28.cpp) and ?IsDerivedFrom@Base@Object@@ (0x1800c0390, reached
 // by its export name).
 // ============================================================================
-#include <atomic>
 #include <new>
 #include <cstddef>
 #include <cstdint>

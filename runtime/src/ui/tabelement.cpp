@@ -30,7 +30,6 @@
 // one-line QUALIFIED delegation. The ctor / dtor stay doors (B4b-2).
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"

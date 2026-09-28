@@ -42,7 +42,6 @@
 //   0x180079870  ~Array<Cell>, the canonical free-and-zero body
 // ??0TableElement@UI@@ (0x18011e2f0) is already ported (ui_factory_wave28.cpp).
 // ============================================================================
-#include <atomic>
 #include <new>
 #include <cstddef>
 #include <cstdint>

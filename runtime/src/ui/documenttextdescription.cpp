@@ -44,7 +44,6 @@
 // Layout: runtime/types/ui/DocumentTextDescription.h (cross-asserted against
 // DescriptionsBatch1.h's POD). sizeof 0xe8.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"

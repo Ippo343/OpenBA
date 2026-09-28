@@ -49,13 +49,6 @@
 #include "../../types/io/Serializer.h"           // B3R RT-UI: RtIo_SerializeStringArray
 #include <new>
 
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — resolve.h drags in <windows.h> and PLAN.md §4.1 keeps it out of
-// runtime/src/. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace rtdesc {
 
 // ---- the IO::Serializer pair -----------------------------------------------
@@ -91,23 +84,9 @@ constexpr int kElemParent   = 0x98;   // MOV [RCX+0x98],<parent>
 constexpr int kElemChildren = 0xa0;   // Array<Element*>: _data +0xa0, _size +0xa8
 constexpr uint32_t kElementFlagNeedsSizeCalc = 0x08000000u;
 
-template <typename Fn>
-inline Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
-
 inline void** VTableOf(const void* o) {
     return *const_cast<void***>(reinterpret_cast<void** const*>(o));
 }
-
-// ---- the vtables and the allocator, resolved by name ------------------------
-// RT_DATA_SLOT caches a HIT only, so a lookup that runs before the mint has
-// published the symbol is retried rather than frozen as null.
-// A class's OWN vtable and BaseTypeInfo are resolved in that class's own file,
-// through RT_DATA_SLOT. They are deliberately NOT wrapped in a helper here:
-// RT_DATA_SLOT's cache is one static per EXPANSION, so a single shared helper
-// taking the name as a runtime argument would cache the first class's vtable
-// and hand it to all ten.
 
 // B3R RT-UI: `?MemFree@MemoryAllocator@System@@` (0x1800c7ad0), called
 // directly (B3R_RULES R9, correction 1).

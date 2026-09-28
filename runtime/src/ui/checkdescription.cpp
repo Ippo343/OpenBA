@@ -40,7 +40,6 @@
 // Layout: runtime/types/ui/CheckDescription.h over DescriptionsBatch1.h.
 // sizeof 0xa8.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"
