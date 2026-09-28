@@ -64,10 +64,8 @@
 //  2/3/4. `?OpenFile@...` (0x1800ac880), `?ReadFile@...` (0x1800ace00),
 //     `?CloseFile@...` (0x1800accc0), and the unexported memset at
 //     0x1800881b0. All four are inside `if (Exists("<root>cmd.txt"))`. There
-//     is no cmd.txt in the install; if one is ever dropped there, this port
-//     reaches four RT_EXPORT_ONCE doors with nothing behind them at cutover
-//     and dies with their names on the [RtUnresolved] list rather than
-//     silently. That is the honest failure and it is preferred to a guard.
+//     is no cmd.txt in the install. (B3R RT-IO: OpenFile / ReadFile /
+//     CloseFile / SetCommandLine are direct member calls now.)
 //
 //  5. `?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z`
 //     (0x1800c5300, ord 2495) — four call sites, every one behind a
@@ -127,13 +125,6 @@
 #include "../../src/system/widestring.h"
 #include "../../src/system/setupdir_helpers.h"
 
-// ResolveAddr, forward-declared at FILE scope rather than pulled in from
-// standalone/resolve.h — that header drags in its own <windows.h> assumptions
-// and PLAN §4.1 wants runtime/src/ to name it, not include it. Must stay
-// byte-identical to resolve.h's declaration.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // ENDGAME B.3.1 step 2: the two Wave-2 lane-A entry points this file used to
 // forward-declare here (`RtSystem_String_Format` 0x1800c9730 and
 // `RtSystem_Filename_AdjustDelimiters` 0x1800c6970) are gone from this
@@ -175,20 +166,6 @@ using RtSystem::RtSystem_WideString_AsUTF8;
 
 namespace {
 
-// ENDGAME B.3.1 step 2: these are file-local typedefs for calls OUT through a
-// resolve door, not entry-point signatures, so they now name the classes that
-// occupy the same eight bytes. The callee keeps the retail POD shape; the
-// `reinterpret_cast<...Fn>` at each call site is the one that was always there.
-typedef bool  (*ExistsInPackfileFn)(const FileSystem*, const System::Filename*);
-typedef void* (*OpenFileFn)(FileSystem*, FileInfo*, const System::Filename*);
-typedef bool  (*ReadFileFn)(FileSystem*, FileInfo*, int, void*);
-typedef void  (*CloseFileFn)(FileSystem*, FileInfo*);
-typedef void  (*SetCommandLineFn)(void*, const System::String*);
-typedef System::String* (*GetCommandLineStringFn)(const void*, System::String*,
-                                                  const System::String*);
-typedef void* (*MapFindFn)(void* map, const System::String* wanted);
-typedef void  (*SetupDirectoriesFn)(FileSystem*);
-
 // `?_singleton@Configuration@System@@0PEAV12@EA`, ord 4803, retail 0x1801fc6f8.
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static `::System::Configuration::_singleton`
 // IS this cell now (name door, address door and this member are the same eight
@@ -216,12 +193,10 @@ bool ConfigHasKey(void* cfg, const char* key) {
     // class static, so retail's genuinely-unguarded dereference is restored.
     System::String k(key);
     void* map = static_cast<uint8_t*>(cfg) + 0x10;
-    // Unexported (no name in either build), so by address. ResolveAddr consults
-    // the PORT REGISTRY FIRST and runtime/src/system/configuration.cpp
-    // registers 0x18002ace0, so this reaches our port today and at cutover
-    // (reference_resolveaddr_consults_port_registry_first.md).
-    return reinterpret_cast<MapFindFn>(
-        ResolveAddr(Module::Runtime, 0x18002ace0))(map, &k) != nullptr;
+    // Unexported (no name in either build): 0x18002ace0 is
+    // RtSystem_ConfigMap_Find (runtime/src/system/configuration.cpp).
+    return RtSystem_ConfigMap_Find(
+        map, reinterpret_cast<const RtSystem::String*>(&k)) != nullptr;   // B.3.x bridge
 }
 
 // The `-pathres` / `-pathdat` / `-pathpkg` override, which retail emits three
@@ -232,12 +207,10 @@ void ApplyPathOverride(void* cfg, const char* key, System::Filename* target,
     if (!ConfigHasKey(cfg, key)) return;
 
     System::String k(key);
-    // The hidden return slot of GetCommandLineString. `value` holds null here,
-    // so the callee constructing into the slot overwrites nothing.
-    System::String value;
-    RT_EXPORT_ONCE(GetCommandLineStringFn,
-        "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
-            cfg, &value, &k);
+    // The by-value return constructs `value` in place (retail's hidden
+    // return slot), as the door that stood here did into a null String.
+    System::String value(
+        static_cast<const ::System::Configuration*>(cfg)->GetCommandLineString(k));
 
     // assign-then-AdjustDelimiters == Filename::operator=(const String&),
     // retail 0x180026d40. The three manual releases retail's compiler emitted
@@ -373,9 +346,7 @@ void FileSystem::SetupDirectories() {
         System::Filename f(cmdPath);
 
         if (_existsInPackfileGate != 0 &&
-            RT_EXPORT_ONCE(RtIO::ExistsInPackfileFn,
-                "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(
-                    reinterpret_cast<const RtIO::FileSystem*>(this), &f)) {
+            ExistsInPackfile(*reinterpret_cast<const RtSystem::Filename*>(&f))) {   // B.3.x bridge
             exists = true;
         } else if (_platformExistsGate == 0) {
             exists = false;
@@ -394,8 +365,7 @@ void FileSystem::SetupDirectories() {
     }
 
     // --- 0x1800abe08-0x1800abf50: the cmd.txt response file ----------------
-    // NOT REACHED on any boot of this project (there is no cmd.txt); the four
-    // doors inside are unported and will name themselves if it ever is.
+    // NOT REACHED on any boot of this project (there is no cmd.txt).
     if (exists) {
         RtIO::FileInfo fi;
         {
@@ -403,9 +373,7 @@ void FileSystem::SetupDirectories() {
             // immediately after the OpenFile call (0x1800abe6a), which is what
             // this inner scope is.
             System::Filename f(cmdPath);
-            RT_EXPORT_ONCE(RtIO::OpenFileFn,
-                "?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z")(
-                    reinterpret_cast<RtIO::FileSystem*>(this), &fi, &f);
+            OpenFile(&fi, *reinterpret_cast<const RtSystem::Filename*>(&f));   // B.3.x bridge
         }
 
         if (fi.handle != -1) {
@@ -414,16 +382,11 @@ void FileSystem::SetupDirectories() {
             char* buf = static_cast<char*>(
                 RtIO::RtMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(n)), 4));
             std::memset(buf, 0, static_cast<size_t>(n));   // 0x1800881b0
-            RT_EXPORT_ONCE(RtIO::ReadFileFn,
-                "?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z")(
-                    reinterpret_cast<RtIO::FileSystem*>(this), &fi, size, buf);
-            RT_EXPORT_ONCE(RtIO::CloseFileFn,
-                "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(
-                    reinterpret_cast<RtIO::FileSystem*>(this), &fi);
+            ReadFile(fi, size, buf);
+            CloseFile(fi);
 
             System::String text(buf);
-            RT_EXPORT_ONCE(RtIO::SetCommandLineFn,
-                "?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z")(cfg, &text);
+            static_cast<::System::Configuration*>(cfg)->SetCommandLine(text);
             RtIO::RtMemFree(buf);
             // ~text is retail's release at 0x1800abf4b.
         }
@@ -439,10 +402,8 @@ void FileSystem::SetupDirectories() {
     System::String sub("");
     if (RtIO::ConfigHasKey(cfg, "bin")) {
         System::String k("bin");
-        System::String value;
-        RT_EXPORT_ONCE(RtIO::GetCommandLineStringFn,
-            "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
-                cfg, &value, &k);
+        System::String value(
+            static_cast<const ::System::Configuration*>(cfg)->GetCommandLineString(k));
         sub = value;   // retail's inlined operator= at 0x1800ac0b2
     }
 

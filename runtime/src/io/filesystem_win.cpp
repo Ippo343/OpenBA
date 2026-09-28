@@ -71,6 +71,8 @@
 #include "../../src/system/pod_bridge.h"
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.4a closing: the member
+#include "../../types/system/Error.h"
+#include "../../types/system/WideString.h"
 
 // ENDGAME B.3.1 step 2: three of the four Wave-2 lane-A entry points this file
 // forward-declared here are gone from this translation unit.
@@ -90,24 +92,10 @@ using RtSystem::Filename;
 using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 // WideString is not modelled as its own type (out of this lane's 7-symbol
-// scope): every use here is through a resolved export, and the only fact
+// scope): every use here goes through System::WideString by cast, and the only fact
 // this file relies on is the single-pointer, String-shaped release idiom
 // documented above — RtSystem::String already models exactly that.
 using WideStringHandle = String;
-
-typedef void     (*fn_WideStringSet_t)(WideStringHandle*, const wchar_t*);
-typedef void*    (*fn_WideStringAsUTF8_t)(const WideStringHandle*, void* retval);
-typedef void     (*fn_ErrorSetText_t)(const char*, bool);
-typedef void*    (*fn_GetSaveDirectory_t)(const void* fs, void* retval);
-
-const char* const kNameGetSaveDirectory =
-    "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ";
-const char* const kNameWideStringSet =
-    "?Set@WideString@System@@QEAAXPEB_W@Z";
-const char* const kNameWideStringAsUTF8 =
-    "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ";
-const char* const kNameErrorSetText =
-    "?SetText@Error@System@@SAXPEBD_N@Z";
 
 bool SameFilenameText(const Filename* a, const Filename* b) {
     if ((a->data == nullptr) != (b->data == nullptr)) return false;
@@ -168,7 +156,7 @@ System::Filename FileSystem::GetSaveDirectory() const {
     wchar_t buf[264];
     const HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, buf);
     if (hr != S_OK) {
-        RT_EXPORT_ONCE(RtIO::fn_ErrorSetText_t, RtIO::kNameErrorSetText)(
+        System::Error::SetText(
             "FileSystem: Unable to retrive the Documents folder for saving!", true);
         // Retail's `*(longlong*)in_RDX = 0` is the default ctor (0x180006220),
         // not a store through a live object.
@@ -176,14 +164,15 @@ System::Filename FileSystem::GetSaveDirectory() const {
     }
 
     RtIO::WideStringHandle ws{nullptr};
-    RT_EXPORT_ONCE(RtIO::fn_WideStringSet_t, RtIO::kNameWideStringSet)(&ws, buf);
+    reinterpret_cast<System::WideString*>(&ws)->Set(buf);          // B.3.x bridge
 
     // AsUTF8's hidden return slot is still POD-shaped (System::WideString is
     // not a B.3.1 class), so the value lands in a POD and is then STOLEN into
     // the class: the move ctor is a pure pointer steal, so `utf8Pod` is left
     // null and exactly one release happens, `utf8`'s destructor.
     RtSystem::String utf8Pod{nullptr};
-    RT_EXPORT_ONCE(RtIO::fn_WideStringAsUTF8_t, RtIO::kNameWideStringAsUTF8)(&ws, &utf8Pod);
+    new (&RtSystem::Sys(utf8Pod)) System::String(                 // B.3.x bridge
+        reinterpret_cast<const System::WideString*>(&ws)->AsUTF8());
     System::String utf8(std::move(RtSystem::Sys(utf8Pod)));
 
     System::String formatted = System::String::Format(

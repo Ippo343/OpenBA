@@ -62,23 +62,6 @@ using RtSystem::StringLength;
 using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 using RtSystem::SysFile;  //   "
 
-// ---- Raw ABI typedefs for the originals -----------------------------------
-typedef bool     (*fn_Exists_t)(const void* fs, const void* filename);
-typedef void*    (*fn_GetDirectory_t)(const void* fs, void* retval);
-typedef uint32_t (*fn_GetPackfileId_t)(const void* fs, const void* filename);
-typedef int      (*fn_ModFind_t)(const void* mod, const void* filename);
-
-const char* const kNameExists =
-    "?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z";
-const char* const kNameGetDataDirectory =
-    "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ";
-const char* const kNameGetSourceDirectory =
-    "?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ";
-const char* const kNameGetPackfileId =
-    "?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z";
-const char* const kNameModFind =
-    "?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z";
-
 // Case-insensitive ASCII compare, sign-preserving (needed by GetPackfileId's
 // tree descent, not just equality). Duplicated rather than shared from
 // filename.cpp's file-local StriCmpAscii for the same reason that one gives:
@@ -267,36 +250,16 @@ namespace IO {
 bool FileSystem::Exists(const RtSystem::Filename& pathRef) const {
     const RtSystem::Filename* const path = &pathRef;
 
-    // RT_EXPORT_ONCE, not bare the raw DLL door and not the raw DLL door.
-    //
-    // The _ONCE half is the original reason and still holds: these two calls
-    // are on the NORMAL path, not inside a diff guard, and bare the raw DLL door is
-    // GetProcAddress -- an export-table binary search by string under the
-    // loader lock on EVERY call. Two of them in the body of a function the
-    // quicksave path calls per file is the Wave 2 perf-gate defect exactly
-    // (WAVE3_LANE_P.md): it cost 5.6 points of sim time from inside
-    // System::Time and was invisible to both profilers because it lands in
-    // ntdll self time.
-    //
-    // WAVE 9 LANE V2, 2026-09-07 changed only the DOOR. These two calls ARE
-    // Exists's logic, so they are a REAL DEPENDENCY, and the raw door resolves
-    // to NULL with Runtime-x64.dll absent. Note rawdoor_audit did NOT report
-    // these: its resolve-and-call regex is per-line and here the argument list
-    // opens on the following line. Found by a paren-matching re-scan, not by
-    // the checker.
-    //
-    // The diff line below stays on the raw DLL door deliberately -- it is the oracle,
-    // it must reach the SHIPPED body, and it only evaluates under the guard.
+    // B3R RT-IO: the two arms call ExistsInPackfile / PlatformExists as
+    // members (filesystem_find_win.cpp); they were RT_EXPORT_ONCE doors.
     bool ours;
     if (_existsInPackfileGate != 0 &&
-        RT_EXPORT_ONCE(RtIO::fn_Exists_t,
-            "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(this, path)) {
+        ExistsInPackfile(*path)) {
         ours = true;
     } else if (_platformExistsGate == 0) {
         ours = false;
     } else {
-        ours = RT_EXPORT_ONCE(RtIO::fn_Exists_t,
-            "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z")(this, path);
+        ours = PlatformExists(*path);
     }
 
     return ours;
