@@ -32,6 +32,7 @@
 #include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 CB: 0x1401c3f78 cell class
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"
@@ -1539,7 +1540,7 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             *reinterpret_cast<uint32_t*>(param_1 + 4) = after;
             changed = after ^ before;
         } else {
-            int32_t* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+            int32_t* settings = g_gameSettings;
             if (inited && settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
                 (int)param_1[0x20] < 0) {
                 uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))

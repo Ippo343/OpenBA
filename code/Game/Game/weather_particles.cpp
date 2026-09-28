@@ -36,6 +36,7 @@
 #include "graphics/Camera.h"    // ENDGAME B.3.5 batch K1 — Graphics::Renderer
 #include "graphics/Material.h"  // Graphics::MaterialInstance
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
@@ -64,8 +65,8 @@ constexpr float kBoundLo  = -1024.0f;  // DAT_1401722ac (SetBounds min)
 constexpr float kUVScale  = 1.0f;      // g_fUVScale
 
 inline uint8_t SettingsByte(int off) {
-    if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr) return 0;
-    return reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[off];
+    if (g_gameSettings == nullptr) return 0;
+    return reinterpret_cast<const uint8_t*>(g_gameSettings)[off];
 }
 }  // namespace
 

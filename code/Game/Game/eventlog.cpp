@@ -24,6 +24,7 @@
 //   TileIndex         0x140095030  — entity -> map tile index (null entity => -1)
 
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
@@ -305,8 +306,8 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     // when the settings byte +0x17 ("pause on events") is set. Speed lives in
     // the EntityUI obj (gw+0x120)+0x34. Present in ALL THREE retail writers.
     if (eventType > 0xa && (eventType < 0xd || (unsigned)(eventType - 0x1e) < 2u)) {
-        if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
-            *((const char*)*g_pGameSettingsPtr + 0x17) != 0) {
+        if (g_gameSettings != nullptr &&
+            *((const char*)g_gameSettings + 0x17) != 0) {
             void* speedObj = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_entityUI;   // B.3.8 bridge
             if (speedObj) *(int32_t*)((uintptr_t)speedObj + 0x34) = 1;
         }

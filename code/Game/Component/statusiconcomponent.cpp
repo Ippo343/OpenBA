@@ -24,6 +24,7 @@
 #include "Component/MultiObjectComponent.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "perf_experimental.h"
@@ -459,7 +460,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     } else {
         // At least one status bit set → ensure the icon is in the scene (visibility on)
         // and position it via component vtable+0x40 (OnRemove).
-        void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+        void* settings = g_gameSettings;
         uint8_t vis = settings ? reinterpret_cast<uint8_t*>(settings)[0xc] : 0;
         // Retail guarantees the geometry has its sprite before it can be added to the
         // Scene, because slot 11 (0x14012bf40) re-runs slot 4 on every call and slot 11
@@ -591,7 +592,7 @@ void StatusIconComponent::Tick(void* /*time*/) {
         return;
     }
 
-    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+    void* settings = g_gameSettings;
     if (!settings || GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
     void* scene = *(void**)(gw + 0x60);

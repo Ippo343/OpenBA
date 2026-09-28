@@ -154,7 +154,6 @@ fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
 // fn_HelpUI_ArrayResize — now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
 // NewGameDialog support
-void** g_pNewGameSettings = nullptr;
 // fn_GenerateTownName — REMOVED, now reimplemented in newgamedialog.cpp
 fn_NameDB_GenerateName_t fn_NameDB_GenerateName = nullptr;
 fn_StartNewGame_t fn_StartNewGame = nullptr;
@@ -171,7 +170,6 @@ fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor = nullptr;
 fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
-int32_t** g_pGameSettingsPtr = nullptr;
 
 // StorageUI support
 // fn_StorageUI_SortItems — reimplemented as StorageUI_SortItems() in storageui.cpp
@@ -819,7 +817,6 @@ bool EngineFuncsInit() {
     // fn_OptionsDialog_PopulateInputBindList — reimplemented
     // fn_OptionsDialog_OnInputBindClick — reimplemented
     // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call)
-    g_pGameSettingsPtr = reinterpret_cast<int32_t**>(ResolveAddr(Module::Exe, 0x1401c3de0));
 
     // --- StorageUI support ---
     // fn_StorageUI_SortItems — reimplemented in storageui.cpp as StorageUI_SortItems()
@@ -871,7 +868,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140070030));
 
     // --- NewGameDialog support ---
-    g_pNewGameSettings = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
     // fn_GenerateTownName — REIMPLEMENTED, now resolve inner helpers
     fn_NameDB_GenerateName = reinterpret_cast<fn_NameDB_GenerateName_t>(
         ResolveAddr(Module::Exe, 0x1400a4b30));

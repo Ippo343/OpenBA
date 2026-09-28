@@ -66,6 +66,7 @@
 #include "graphics/Mesh.h"
 #include "Component/Component.h"   // B.3.x W0: Component slots by name
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -270,7 +271,7 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                         changed = after ^ before;
                     } else {
                         // mask non-empty -> ensure in scene + run vtable+0x40 update
-                        int32_t* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+                        int32_t* settings = g_gameSettings;
                         if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
                             *reinterpret_cast<int32_t*>(mi + 0x100) < 0) {
                             uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))

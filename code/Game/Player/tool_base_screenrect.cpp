@@ -33,6 +33,7 @@
 // the autostart A/B test, so it is ported from disasm, not the muddled decompile).
 
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
@@ -283,8 +284,8 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
 
     // Scale by (gameSettings UI value / 100.0) on both axes (in place operator*=).
     float uiScale = 1.0f;
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-        uiScale = static_cast<float>((*g_pGameSettingsPtr)[0]) / scaleDiv;
+    if (g_gameSettings != nullptr)
+        uiScale = static_cast<float>(g_gameSettings[0]) / scaleDiv;
     {
         Math::Vector2 sv(uiScale, uiScale);
         reinterpret_cast<Math::Vector2*>(runMin)->operator*=(sv);

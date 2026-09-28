@@ -21,6 +21,7 @@
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -192,8 +193,8 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
         *(uint32_t*)(mesh + 4) = new4;
         changed = new4 ^ old4;
     } else {
-        if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
-            ((uint8_t*)*g_pGameSettingsPtr)[0xc] != '\0' && (int)mesh[0x20] < 0) {
+        if (g_gameSettings != nullptr &&
+            ((uint8_t*)g_gameSettings)[0xc] != '\0' && (int)mesh[0x20] < 0) {
             if (GameUpdateLoop::_singleton) {
                 uint32_t id = reinterpret_cast<Graphics::Scene*>(
                     *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60))

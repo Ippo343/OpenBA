@@ -31,6 +31,7 @@
 // All magic constants are taken verbatim from the exe .rdata (addresses noted).
 
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "options.h"
@@ -101,8 +102,8 @@ inline bool ScreenSize(int& w, int& h) {
 
 // Game-settings byte at a given offset (DAT_1401c3de0 -> settings base).
 inline char SettingByte(int byteOffset) {
-    if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr) return 0;
-    return *((char*)(*g_pGameSettingsPtr) + byteOffset);
+    if (g_gameSettings == nullptr) return 0;
+    return *((char*)g_gameSettings + byteOffset);
 }
 
 } // namespace

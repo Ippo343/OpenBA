@@ -75,6 +75,14 @@ void Game_WeatherDtor(void* self);  // 0x140093eb0
 extern "C" void GameSettings_Load(int32_t* settings);  // 0x140098b60
 extern "C" void GameSettings_Save(int32_t* settings);  // 0x140098970
 
+// ---- game_main.cpp
+// The exe cell 0x1401c3de0 (B3R STORAGE): the 0x34-byte settings block GameMain
+// allocates and stores there (0x14004202e). Not a class in the tree, so a
+// namespace-scope pointer; was the file-static g_storage_GameSettingsPtr of
+// standalone/address_registry.cpp, read through g_pGameSettingsPtr /
+// g_pNewGameSettings. Null outside RunGameMain's settings lifetime.
+extern int32_t* g_gameSettings;
+
 // ---- gamegrid_serialize.cpp
 extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream);  // 0x14009f100
 

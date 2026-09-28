@@ -42,6 +42,7 @@
 // safe after <windows.h> here.
 #include "video/Device.h"
 #include "Game/game.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/inputbindings.h"
 #include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP
 #include "Game/GameLoaderLoop.h"    // ENDGAME B.3.8 LOOP
@@ -61,6 +62,10 @@
 // into the fake exref chain at slot 0x140151738 so that triple-deref reads
 // (g_pInputConfigSingletonExref) reach the real KeyMap inside Input::Configuration.
 extern "C" void SetStandaloneKeyMap(void* keyMap);
+
+// The exe cell 0x1401c3de0 (B3R STORAGE): GameMain's settings block
+// (Game/exe_bodies.h).
+int32_t* g_gameSettings = nullptr;
 
 // Defined in standalone/menudialogloopt_stubs.cpp. Loads
 // Dialog/SpriteSheet.rsc + constructs the "White" / "SaveLoadEmpty" Sprites
@@ -510,9 +515,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     settings[9] = 0;            // LastMapSize
                     settings[10] = 1;           // LastClimate
                     *reinterpret_cast<int64_t*>(&settings[11]) = 1;  // LastStart + LastDisaster
-                    if (g_pGameSettingsPtr) {
-                        *g_pGameSettingsPtr = settings;
-                    }
+                    g_gameSettings = settings;
                     // Retail GameMain calls this immediately after the defaults
                     // (0x14004203d -> 0x140098b60): every field above is only a
                     // fallback for a key IO::Persistence does not have yet. Without
@@ -713,7 +716,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     // terrain / size / climate / start / disaster picks outlive
                     // the process.
                     GameSettings_Save(settings);
-                    if (g_pGameSettingsPtr) *g_pGameSettingsPtr = nullptr;
+                    g_gameSettings = nullptr;
                     System::MemoryAllocator::MemFree(settings);
                     printf("[GameMain] Settings freed.\n");
                 }

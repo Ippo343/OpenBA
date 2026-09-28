@@ -23,6 +23,7 @@
 #include "Dialog/ui_panels.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
@@ -485,7 +486,7 @@ found_happiness:
     // Check if Celsius mode (game settings byte +0x15 = showCelsius, see
     // optionsdialog.cpp). Null-guarded: the settings slot can be unresolved in
     // standalone — default to Fahrenheit (setting off) like a fresh install.
-    void* settings = (g_pNewGameSettings ? *g_pNewGameSettings : nullptr);
+    void* settings = g_gameSettings;
     if (settings && *(uint8_t*)((uintptr_t)settings + 0x15) != 0) {
         displayTemp = ((rawTemp - kFreezingF) * kFtoC_Num) / kFtoC_Den;
     }

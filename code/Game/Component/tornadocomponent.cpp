@@ -48,6 +48,7 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
@@ -800,8 +801,8 @@ void TornadoComponent::Startup() {
     new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
 
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
-        *(reinterpret_cast<const char*>(*g_pGameSettingsPtr) + 0x17) != 0) {
+    if (g_gameSettings != nullptr &&
+        *(reinterpret_cast<const char*>(g_gameSettings) + 0x17) != 0) {
         void* speedObj = *reinterpret_cast<void**>(g + 0x120);
         if (speedObj) *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(speedObj) + 0x34) = 1;
     }

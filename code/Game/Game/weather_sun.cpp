@@ -34,6 +34,7 @@
 #include "graphics/SunLight.h"
 #include "video/Context.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "math/Math.h"
 #include "resolve.h"
@@ -174,8 +175,8 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // — the sun angle stays on the base day-cycle value during precipitation. No-op
     // when no effects are active, so the base look is intact.
     {
-        uint8_t weatherSetting = (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-            ? reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[0x16] : 0;
+        uint8_t weatherSetting = (g_gameSettings != nullptr)
+            ? reinterpret_cast<const uint8_t*>(g_gameSettings)[0x16] : 0;
         if (weatherSetting != 0 && wsim) {
             uint8_t* ws = reinterpret_cast<uint8_t*>(wsim);
             int cnt = *reinterpret_cast<int*>(ws + 0x58);

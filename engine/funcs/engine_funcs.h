@@ -709,14 +709,9 @@ extern fn_ModDialog_Ctor_t fn_ModDialog_Ctor;  // 0x140070030
 // NewGameDialog support functions
 // ============================================================
 
-// Game settings pointer (DAT_1401c3de0 in exe .data section)
-// Allocated in GameMain, 0x34 bytes. Contains:
-//   +0x20: terrain generator combo index
-//   +0x24: terrain size combo index
-//   +0x28: climate combo index
-//   +0x2c: map condition/generator combo index
-//   +0x30: disaster combo index
-extern void** g_pNewGameSettings;  // DAT_1401c3de0
+// DAT_1401c3de0, GameMain's 0x34-byte settings block: g_gameSettings
+// (code/Game/Game/exe_bodies.h; B3R STORAGE). +0x20 terrain generator, +0x24 size,
+// +0x28 climate, +0x2c map condition, +0x30 disaster combo indices.
 
 // System::Random::Rand(uint) and ::RandFloat() — REMOVED, ENDGAME B.3.4b System
 // closing (0 CALLs). Callers use the members on System::Random (system/Value.h);
@@ -765,12 +760,10 @@ typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);  // kept for Populate
 
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 
-// OptionsDialog game settings global — DAT_1401c3de0 in exe
-// int[8] array: [0]=uiScale, [1]=autosaveInterval, [2]=statusIconDist,
-// [3]=statusIconEnabled, [4]=statusIconScale, [5]=edgeScroll,
-// [6]=autopause, [7]=lastTab
-// Byte offsets: +0x15=showCelsius, +0x16=showWeather, +0x17=autoslow
-extern int32_t** g_pGameSettingsPtr;  // DAT_1401c3de0 — pointer TO pointer to game settings
+// OptionsDialog reads g_gameSettings (DAT_1401c3de0; B3R STORAGE): int [0]=uiScale,
+// [1]=autosaveInterval, [2]=statusIconDist, [3]=statusIconEnabled, [4]=statusIconScale,
+// [5]=edgeScroll, [6]=autopause, [7]=lastTab; bytes +0x15 showCelsius, +0x16 showWeather,
+// +0x17 autoslow.
 
 // ============================================================
 // StorageUI support functions
