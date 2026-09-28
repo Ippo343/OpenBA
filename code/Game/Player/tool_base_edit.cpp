@@ -9,7 +9,7 @@
 // Each body is a literal port of the decompiled exe helper — no "improvements".
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Player/exe_bodies.h"
@@ -39,7 +39,7 @@ void* PlayerEdit_EntityAtCell_a0280(uintptr_t entityList, void* retIBP, int cell
         reinterpret_cast<uintptr_t*>(retIBP)[0] = cell[1];
         return retIBP;
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (retIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return retIBP;
 }
 
@@ -59,18 +59,9 @@ void* PlayerEdit_EntityAtCell_a0280(uintptr_t entityList, void* retIBP, int cell
 // returned; if the row range is empty the result is 0.
 //
 // Caller signature (via 0x1400dbf90): float fn(void* gameWorld, int p2,p3,p4,p5)
-typedef void (*fn_TerrainHeight_f3e0_t)(void* mapGrid, float* outPos, float* inPos,
-                                        char p4, void* outExtra);
+// (0x14009f3e0 = Reimpl_MapGetTerrainPos, Game/exe_bodies.h, called by name.)
 
 float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int p4, int p5) {
-    static fn_TerrainHeight_f3e0_t s_fn_f3e0 = nullptr;
-    static bool s_init = false;
-    if (!s_init) {
-        s_fn_f3e0 = reinterpret_cast<fn_TerrainHeight_f3e0_t>(
-            ResolveAddr(Module::Exe, 0x14009f3e0));
-        s_init = true;
-    }
-
     // The original ignores its param_1 and reads g_pGameWorldSingleton directly.
     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
@@ -104,7 +95,7 @@ float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int 
             inPos[1] = static_cast<float>(idx / width) - halfW;  // y = row
 
             float outPos[3] = {0.0f, 0.0f, 0.0f};
-            if (s_fn_f3e0) s_fn_f3e0(mapGrid, outPos, inPos, '\0', nullptr);
+            Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', nullptr);
 
             // scaled = outPos * uvScale ; accum += scaled  (Vector3::operator+= inlined)
             accum[0] += outPos[0] * uvScale;
@@ -138,22 +129,11 @@ float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int 
 //
 // Caller (fencedtool.cpp):
 //   uint64_t fn(void* self, uint32_t* p2,p3,p4,p5, float* p6, uint32_t* p7)
-typedef float (*fn_AvgTerrainHeight_t)(void* gw, int p2, int p3, int p4, int p5);
+// (0x140101730 = PlayerEdit_AvgTerrainHeight_101730, above, called by name.)
 
 uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, uint32_t* param_3,
                                            uint32_t* param_4, uint32_t* param_5,
                                            float* param_6, uint32_t* param_7) {
-    static fn_AvgTerrainHeight_t s_fn_avg = nullptr;
-    static fn_TerrainHeight_f3e0_t s_fn_f3e0 = nullptr;
-    static bool s_init = false;
-    if (!s_init) {
-        s_fn_avg  = reinterpret_cast<fn_AvgTerrainHeight_t>(
-            ResolveAddr(Module::Exe, 0x140101730));
-        s_fn_f3e0 = reinterpret_cast<fn_TerrainHeight_f3e0_t>(
-            ResolveAddr(Module::Exe, 0x14009f3e0));
-        s_init = true;
-    }
-
     const float halfCell = 0.5f;  // DAT_140172114
 
     int startCell = *reinterpret_cast<int*>(self + 0x2c);
@@ -247,8 +227,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
     // World-space anchor: average of the two corner cells' terrain positions, with
     // the mean height from the rect-average helper (0x140101730).
     mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
-    float avgHeight = 0.0f;
-    if (s_fn_avg) avgHeight = s_fn_avg(*g_pGameWorldSingleton,
+    float avgHeight = PlayerEdit_AvgTerrainHeight_101730(*g_pGameWorldSingleton,
                                        static_cast<int>(*param_2), static_cast<int>(*param_3),
                                        static_cast<int>(*param_4), static_cast<int>(*param_5));
 
@@ -258,7 +237,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
     float in0[3] = {static_cast<float>(idx0 % w0) - half0,
                     static_cast<float>(idx0 / w0) - half0, 0.0f};
     float out0[3] = {0.0f, 0.0f, 0.0f};
-    if (s_fn_f3e0) s_fn_f3e0(mapGrid, out0, in0, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, out0, in0, '\0', nullptr);
 
     int w1 = *mapGrid;
     int idx1 = w1 * static_cast<int>(*param_5) + static_cast<int>(*param_4);
@@ -266,7 +245,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
     float in1[3] = {static_cast<float>(idx1 % w1) - half1,
                     static_cast<float>(idx1 / w1) - half1, 0.0f};
     float out1[3] = {0.0f, 0.0f, 0.0f};
-    if (s_fn_f3e0) s_fn_f3e0(mapGrid, out1, in1, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, out1, in1, '\0', nullptr);
 
     // param_6 = (out1 + out0) * 0.5 ; then param_6.z is overwritten with avgHeight.
     param_6[0] = (out1[0] + out0[0]) * halfCell;

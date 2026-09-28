@@ -367,3 +367,6 @@ int fn_StorageCountQuery(void* component);  // 0x14012e5c0 (NOT the registered b
 // ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
 // caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
 void ResolveExternalByName_Impl(void* nameString);  // 0x14001b1d0
+
+// ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
+int CreateNaturalResource_helper_e2c0(int* param_1, int param_2);  // 0x14009e2c0

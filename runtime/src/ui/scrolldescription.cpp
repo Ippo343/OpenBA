@@ -32,7 +32,6 @@
 // Every helper is already ported, including ??0ScrollElement@UI@@ (0x18011a7f0,
 // ui_factory_wave28.cpp), so this file adds none.
 // ============================================================================
-#include <atomic>
 #include <new>
 #include <cstddef>
 #include <cstdint>
@@ -41,6 +40,11 @@
 #include "../../types/ui/ScrollDescription.h"
 #include "../../types/ui/ScrollElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/ui/SpriteSheet.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 // ENDGAME B.3.6 block C4: the layout moved to runtime/types/ui/
 // ScrollDescription.h (the real class). Every slot body below is a MEMBER; each
@@ -48,27 +52,7 @@
 // DOORS (B4b-2). RULE B6-5: every export the members reach is cached in a
 // namespace-scope std::atomic slot, never in a function-local static.
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_getSpriteIndex{nullptr};
-std::atomic<void*> g_memFree{nullptr};
-
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -86,15 +70,12 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using MemFreeFn = void (*)(void*);
-
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        reinterpret_cast<MemFreeFn>(AtomicExport(
-            g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(*field);
+        System::MemoryAllocator::MemFree(*field);
     } else {
         *field = nullptr;
     }
@@ -137,10 +118,9 @@ bool ScrollDescription::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 18011a98a
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);   // 18011a998
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));   // 18011a998
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
-        RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteNames[i], &ser);
+        reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(&ser);
 
     rw->SerializeBool(reinterpret_cast<bool&>(_vertical), nullptr);
     rw->SerializeInt(_inset, nullptr);
@@ -170,8 +150,7 @@ bool ScrollDescription::Serialize(void* streamv) {
 // in destination order would swap two element fields.
 Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* /*dialog — never read*/) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x178, 8);  // 18011ab00 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0x178, 8);  // 18011ab00 (inlined)
 
     void* obj = raw;
     if (raw != nullptr)                                        // 18011ab2a
@@ -187,15 +166,12 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
         &elem->_thumbStart, &elem->_thumbMiddle, &elem->_thumbEnd,
         &elem->_hotStart,   &elem->_hotMiddle,   &elem->_hotEnd };
 
-    using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
     uint64_t idxSlot;                                          // [RBP-0x10]
     for (int i = 0; i < 9; ++i) {
         void* sheet = _spriteSheet;                            // RE-READ each time
         if (sheet != nullptr) {
-            const int32_t idx = reinterpret_cast<GetIdxFn>(AtomicExport(
-                g_getSpriteIndex,
-                "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"))(
-                    sheet, &_spriteNames[i]);
+            const int32_t idx = static_cast<const SpriteSheet*>(sheet)   // B.3.x bridge
+                ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteNames[i]));
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // DWORD store
         } else {
             const int32_t minusOne = -1;
@@ -246,19 +222,6 @@ Object::Base* ScrollDescription::CreateInPlaceObject(void* place) {
 // `??_7ScrollDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // ScrollDescription now wears the compiler's table.
 // ============================================================================
-
-int RtUiScrollDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ScrollDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ScrollDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003a210ull, (void*)&UI::ScrollDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ScrollDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003a290ull, (void*)&UI::ScrollDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ScrollDescription's own type record, built at CRT init

@@ -144,16 +144,12 @@
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
-
 namespace RtUi {
 
 using RtUI::DialogInstance;
 
 namespace {
 
-using SerCtorFn = void* (*)(void* self, void* stream, int version);
 
 // (B3X W0: the slot offsets that lived here -- DialogInstance +0x48, the
 // DialogController's +0x10/+0x28/+0x30/+0x50 and the ReaderWriter's
@@ -304,8 +300,9 @@ inline void MsCtor(void* ms) {
 inline void MsDtor(void* ms) {
     static_cast<IO::MemoryStream*>(ms)->IO::MemoryStream::~MemoryStream();
 }
+// ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z, the real constructor.
 inline void SerCtor(void* ser, void* ms) {
-    RT_EXPORT_ONCE(RtUi::SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(ser, ms, 0);
+    ::new (ser) IO::Serializer(*reinterpret_cast<IO::Stream*>(ms), 0);   // B.3.x bridge
 }
 
 }  // namespace
@@ -443,20 +440,3 @@ void DialogInstance::OnOpened() {                              // [4]
 }
 
 }  // namespace UI
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtUiDialogSettingsRegister() {
-    using namespace RtUi;
-    int n = 0;
-
-    RegisterRuntimeExport("?SaveSettings@DialogInstance@UI@@QEAAXXZ",
-                          (void*)&RtUi_DialogInstance_SaveSettings); ++n;
-    RegisterRuntimeAddr(0x180114240, (void*)&RtUi_DialogInstance_SaveSettings);
-
-    // (ENDGAME B.3.9 UI-D: the OnClosed / OnOpened slot doors went with the
-    // minted `??_7DialogInstance@UI@@6B@`; nothing else reached them.)
-
-    return n;
-}

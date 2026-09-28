@@ -30,11 +30,11 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "element_common.h"
 #include "../../types/ui/GraphElement.h"
+#include "../../types/ui/SpriteContext.h"
 
 using namespace rtuielem;
 
@@ -51,10 +51,7 @@ static_assert(kSeries == 0xf0 && kSeriesCnt == 0xf8,
 
 // UI::SpriteContext::AddLine(ctx, const Sprite&, x0, y0, x1, y1, color) — block
 // D's class, reached by address (its door stays a door).
-using AddLineFn = void (*)(void* ctx, const void* sprite,
-                           int x0, int y0, int x1, int y1, uint32_t color);
 
-using SeriesArrayFn     = void* (*)(void* array);                 // ~Array<GraphSeries>
 
 // 0x180161694 and 0x18016169c, read out of the DLL's float pool for this batch.
 constexpr float kHalf = 0.5f;
@@ -107,8 +104,6 @@ void GraphElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // The series scale `(1.0f / _yRange) * _layoutHeight` is computed ONCE,
 // before the loop, and each point is `bottom - (int)(value * scale)`.
 void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    void* const ctx = &context;
-
     if (_border != nullptr)
         reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
@@ -116,18 +111,17 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
     alpha = DimAlpha(this, alpha);
     const uint32_t c = rtuielem::ComputeColor(base, alpha);   // NOT the (unported) member
 
-    const void* sprite = &_lineSprite;
-    const auto line = RtAddr<AddLineFn>(0x18011cbe0ull);
+    const UI::Sprite& sprite = _lineSprite;   // ?AddLine@SpriteContext@UI@@ 0x18011cbe0
 
     const int L = _layoutLeft;
     const int T = _layoutTop;
     const int R = _layoutRight;
     const int B = _layoutBottom;
 
-    line(ctx, sprite, L, T, L, B, c);
-    line(ctx, sprite, L, T, R, T, c);
-    line(ctx, sprite, L, B, R, B, c);
-    line(ctx, sprite, R, T, R, B, c);
+    context.AddLine(sprite, L, T, L, B, c);
+    context.AddLine(sprite, L, T, R, T, c);
+    context.AddLine(sprite, L, B, R, B, c);
+    context.AddLine(sprite, R, T, R, B, c);
 
     // ---- horizontal grid, `_yDivisions + 1` lines, ticks to the LEFT -------
     {
@@ -138,7 +132,7 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
         if (divs >= 0) {
             for (int i = 0; i <= _yDivisions; ++i) {
                 const int yy = static_cast<int>(run + kHalf);
-                line(ctx, sprite, L - _tickSize, yy, R, yy, c);
+                context.AddLine(sprite, L - _tickSize, yy, R, yy, c);
                 run += static_cast<float>(y1 - y0) / static_cast<float>(divs);
             }
         }
@@ -153,7 +147,7 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
         if (divs >= 0) {
             for (int i = 0; i <= _xDivisions; ++i) {
                 const int xx = static_cast<int>(run + kHalf);
-                line(ctx, sprite, xx, B, xx, _tickSize + B, c);
+                context.AddLine(sprite, xx, B, xx, _tickSize + B, c);
                 run += static_cast<float>(x1 - x0) / static_cast<float>(divs);
             }
         }
@@ -173,7 +167,7 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
             const int32_t* pts = static_cast<const int32_t*>(*reinterpret_cast<void* const*>(
                 rec + GraphElementOffsets::kSeriesPointsArray));
             const float xn = xf + static_cast<float>(width) / static_cast<float>(segments);
-            line(ctx, sprite,
+            context.AddLine(sprite,
                  static_cast<int>(xf),
                  B - static_cast<int>(static_cast<float>(pts[p]) * scale),
                  static_cast<int>(xn),
@@ -189,7 +183,7 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
 // the same helper `?RemoveGraphs@` tail-calls). The entry restamp and the
 // tail into ~Element are the compiler's.
 GraphElement::~GraphElement() {
-    RtAddr<SeriesArrayFn>(0x1800416d0ull)(reinterpret_cast<uint8_t*>(this) + kSeries);
+    rtcoll::RtColl_ArrayDtorElem_1800416d0(reinterpret_cast<uint8_t*>(this) + kSeries);
 }
 
 // ?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ 0x180040550 --
@@ -207,24 +201,6 @@ Object::Base* GraphElement::CreateInPlaceObject(void* place) {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors (Type .. Draw), the copy-ctor door and
-// the ??1 door are gone. Their only readers were the minted
-// `??_7GraphElement@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
-// ============================================================================
-int RtUiGraphElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@GraphElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::GraphElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180040550ull, (void*)&UI::GraphElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::GraphElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x1800405d0ull, (void*)&UI::GraphElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::GraphElement's own type record, built at CRT init

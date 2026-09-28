@@ -36,7 +36,6 @@
 // Layout: runtime/types/ui/ClipRegionDescription.h over DescriptionsBatch1.h.
 // sizeof 0x78. Both ints start at 0x64 — 100, the default clip extent.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"
@@ -81,8 +80,7 @@ bool ClipRegionDescription::Serialize(void* streamv) {
     rw->SerializeInt(_width, nullptr);                      // 1800cc06e
     rw->SerializeInt(_height, nullptr);                     // 1800cc083
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_childDesc, &ser);  // 1800cc092
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), IoSer(&ser));  // 1800cc092
 
     if (rw != nullptr) delete rw;                 // 1800cc0aa
     return true;
@@ -158,22 +156,6 @@ Object::Base* ClipRegionDescription::CreateInPlaceObject(void* place) {
     return ::new (place) ClipRegionDescription();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the eight slot doors and the ??1 door are
-// gone -- their only reader was the minted `??_7ClipRegionDescription@UI@@6B@`
-// (and its RT_DELDTOR row). The factory pair (B39_RULES D2) is the class's own.
-// ============================================================================
-int RtUiClipRegionDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ClipRegionDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180037a80ull, (void*)&UI::ClipRegionDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ClipRegionDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180037b80ull, (void*)&UI::ClipRegionDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ClipRegionDescription's own type record, built at CRT init

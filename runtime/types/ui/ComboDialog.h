@@ -118,3 +118,6 @@ static_assert(offsetof(ComboDialog, _parentDialog) == offsetof(RtUI::ComboDialog
 static_assert(offsetof(ComboDialog, _combo) == offsetof(RtUI::ComboDialog, _combo), "alias _combo");
 
 }  // namespace UI
+
+// ==== B3R RT-UI: the operator new body (ui/combodialog_ctor.cpp), called by name ====
+extern "C" void* RtUi_ComboDialog_OperatorNew(uint64_t bytes);  // 0x180074770 ??2ComboDialog@UI@@SAPEAX_K@Z

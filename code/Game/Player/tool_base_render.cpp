@@ -72,7 +72,6 @@
 #include "graphics/Material.h"   // ENDGAME B.3.5 batch K1 — Graphics::MaterialInstance
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/HighlightComponent.h"
 #include "Component/HighlightDescription.h"
@@ -87,6 +86,12 @@
 #include "object/VSlot.h"      // B.3.x W0: ReportBadSelectionRef's slot probe
 #include "system/Value.h"      // System::Time (Geometry::Update by name)
 #include "Player/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "volume/Volume.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 
 // [diag] last entities committed into EditTool+0x30 (edittool_select.cpp step 6).
 extern "C" void* g_LastSelectStore[4];
@@ -100,31 +105,18 @@ namespace {
 // ---- exe .rdata float constants (NULL in standalone -> real-value fallback) ----
 constexpr float kCenterBias = 0.5f;      // DAT_140172114 = 0x3f000000
 
-// ---- exe helper functions (registered; resolved as direct exe pointers) -------
-typedef float* (*fn_f3e0_t)(void* grid, float* out, const float* in, char flag, void* extra);
-typedef void*  (*fn_ibp_out_t)(int64_t obj, void* outIBP);   // FUN_140004680 / _140004740 / ClearPathQueue
-typedef void   (*fn_void1_t)(void* self);                    // FUN_1400c3470
-
-fn_f3e0_t     s_f3e0  = nullptr;   // 0x14009f3e0 CharacterComponent_impl_f3e0 (cell->world+height)
-fn_ibp_out_t  s_4680  = nullptr;   // 0x140004680 -> entity footprint rect (IBP)
-fn_ibp_out_t  s_4740  = nullptr;   // 0x140004740 -> entity component container (IBP)
-fn_ibp_out_t  s_3f60  = nullptr;   // 0x140003f60 Entity_ClearPathQueue (misnomer: FindComponent)
-fn_void1_t    s_c3470 = nullptr;   // 0x1400c3470 (flag-change notify)
-
+// ---- exe helper functions, called by name ------------------------------------
+//   0x14009f3e0 Reimpl_MapGetTerrainPos (Game/exe_bodies.h) -- cell -> world + height
+//   0x140004680 FloorComponent_FindResData -- entity footprint rect (IBP)
+//   0x140004740 InteractComponent_FindWorkplaceComponent -- entity component
+//               container (IBP) (Component/exe_bodies.h)
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470 (Action/exe_bodies.h) -- flag-change
+//               notify
+// (0x140003f60 Entity_ClearPathQueue was resolved here and never called: FindModelComp
+// below does that lookup inline. The dead reader is gone.)
 // ENDGAME B.3.8 callers: DAT_1401c4410 / DAT_1401c4448 / DWORD_1401c7a50 are
 // HighlightComponent / HighlightDescription / ModelComponent's type ids, read through
 // the classes (the ResolveTid ti-cell + by-name cache is gone).
-bool     s_resolved = false;
-
-void EnsureFuncs() {
-    if (s_resolved) return;
-    s_f3e0  = reinterpret_cast<fn_f3e0_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_4680  = reinterpret_cast<fn_ibp_out_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_4740  = reinterpret_cast<fn_ibp_out_t>(ResolveAddr(Module::Exe, 0x140004740));
-    s_3f60  = reinterpret_cast<fn_ibp_out_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_c3470 = reinterpret_cast<fn_void1_t>(ResolveAddr(Module::Exe, 0x1400c3470));
-    s_resolved = true;
-}
 
 
 // The four growable locals of the outline builder: { data @+0, size @+8, cap @+0xC }.
@@ -185,11 +177,11 @@ void Sub7080(int64_t container, void* outIBP) {
             uint64_t* slot2 = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
             void* comp2 = *reinterpret_cast<void**>(slot2);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
+            if (Object::IsDerivedFromNullSafe(comp2, tid)) found = comp2;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
@@ -215,11 +207,11 @@ void FindModelComp(int64_t container, void* outIBP) {
         uint32_t ct = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (ct == tid) {
             void* comp2 = *reinterpret_cast<void**>(slot);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
+            if (Object::IsDerivedFromNullSafe(comp2, tid)) found = comp2;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
@@ -320,13 +312,12 @@ inline void RelVec(float* dst, const float* p, float ox, float oy) {
 //   self = HighlightComponent*.
 // ===========================================================================
 void Impl_b930(int64_t self) {
-    EnsureFuncs();
     int64_t gw = reinterpret_cast<int64_t>(*g_pGameWorldSingleton);
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
 
     // Entity footprint rect (short fields at +0x28 x, +0x2a y, +0x2c w, +0x2e h).
     uint64_t rectIBP = 0;
-    if (s_4680) s_4680(*reinterpret_cast<int64_t*>(self + 0x10), &rectIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(self + 0x10), &rectIBP);
     int rx = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x28);
     int ry = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2a);
     int rw = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2c);
@@ -342,7 +333,7 @@ void Impl_b930(int64_t self) {
     float centerCell[3], centerWorld[3];
     *reinterpret_cast<Math::Vector3*>(centerCell) = Math::Vector3(
         (float)(centerIdx % g) - bias, (float)(centerIdx / g) - bias, 0.0f);
-    if (s_f3e0) s_f3e0(mapGrid, centerWorld, centerCell, 0, nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, centerWorld, centerCell, 0, nullptr);
     float ox = centerWorld[0];
     float oy = centerWorld[1];
 
@@ -361,7 +352,7 @@ void Impl_b930(int64_t self) {
         float cell[3], world[3];
         *reinterpret_cast<Math::Vector3*>(cell) = Math::Vector3(
             (float)(idx % g) - (float)(g >> 1), (float)(idx / g) - (float)(g >> 1), 0.0f);
-        if (s_f3e0) s_f3e0(mapGrid, world, cell, 0, nullptr);
+        Reimpl_MapGetTerrainPos(mapGrid, world, cell, 0, nullptr);
         RelVec(rel, world, ox, oy);
     };
 
@@ -391,7 +382,7 @@ void Impl_b930(int64_t self) {
     IdxArray    fillIdx;   // local_1f0 / local_1e8 (short indices)
     TriVtxArray fillVtx;   // local_268 / local_260 (8-byte TriangleVertex)
     uint8_t box[24];
-    if (fn_Box_Ctor) fn_Box_Ctor(box);
+    RtVolume_Box_Ctor(reinterpret_cast<struct Box*>(box));
 
     int bottomRow = ry + rh;
     int rightCol  = rx + rw;
@@ -412,10 +403,13 @@ void Impl_b930(int64_t self) {
                 // 3. append the TriangleVertex
                 fillVtx.SetSizeFill(fillVtx._size + 1, tvtx);
                 // 4. extend bounding box by the corner
-                if (fn_Box_Extend && fn_Box_Assign) {
+                {
                     uint8_t tmp[24];
-                    fn_Box_Extend(box, tmp, cv);
-                    fn_Box_Assign(box, tmp);
+                    RtVolume_Box_Extend(reinterpret_cast<const struct Box*>(box),
+                                        reinterpret_cast<struct Box*>(tmp),
+                                        reinterpret_cast<const Math::Vector3*>(cv));
+                    RtVolume_Box_Assign(reinterpret_cast<struct Box*>(box),
+                                        reinterpret_cast<const struct Box*>(tmp));
                 }
                 pf += 3;
             }
@@ -430,7 +424,7 @@ void Impl_b930(int64_t self) {
     }
 
     // Allocate + construct a fresh EdgeMesh.
-    void* mesh = fn_MemAllocStatic ? fn_MemAllocStatic(0x180, 8) : nullptr;
+    void* mesh = System::MemoryAllocator::MemAlloc(0x180, 8);
     if (mesh) {
         ::new (mesh) Graphics::EdgeMesh();   // B.3.9 GFX: the real ctor (was the ??0 door)
     }
@@ -470,7 +464,7 @@ void Impl_b930(int64_t self) {
     // Materials from the HighlightDescription (self+0x18): +0x30, +0x38 (yellow).
     void* obj = *reinterpret_cast<void**>(self + 0x18);
     const uint32_t tidDesc = HighlightDescription::TypeId();
-    void* desc = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tidDesc)) ? obj : nullptr;
+    void* desc = Object::IsDerivedFromNullSafe(obj, tidDesc) ? obj : nullptr;
     // B.3.5 bridge — the four parameters are `Object::ExternalPtr<MaterialInstance>`
     // BY VALUE, and constructing them from the raw pointers the HighlightDescription
     // holds adds NO refcount traffic the door did not do: `ExternalPtr(T*)` is a bare
@@ -502,7 +496,6 @@ void Impl_b930(int64_t self) {
 //   per-cell prebuilt mesh from the description table. self = HighlightComponent*.
 // ===========================================================================
 void Impl_c4a0(int64_t self) {
-    EnsureFuncs();
     int64_t gw = reinterpret_cast<int64_t>(*g_pGameWorldSingleton);
     void* scene = *reinterpret_cast<void**>(gw + 0x60);
 
@@ -525,7 +518,7 @@ void Impl_c4a0(int64_t self) {
         uint32_t f1 = f0 & 0xfffffffb;
         *reinterpret_cast<uint32_t*>(self + 0x20) = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(self + 0x10) != 0) {
-            if (s_c3470) s_c3470(*reinterpret_cast<void**>(self + 0x10));
+            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(self + 0x10));
         }
     }
     // Release the built EdgeMesh (vtable slot 0).
@@ -542,12 +535,12 @@ void Impl_c4a0(int64_t self) {
     // Look up per-cell prebuilt mesh indices (charComp +0x164/+0x166) + the
     // "any neighbour already highlighting" test over sibling components.
     uint64_t charIBP = 0, compIBP = 0;
-    FindModelComp(*reinterpret_cast<int64_t*>(self + 0x10), &charIBP);   // was s_3f60 (null tid in SA)
-    if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x10), &compIBP);
+    FindModelComp(*reinterpret_cast<int64_t*>(self + 0x10), &charIBP);   // was 0x140003f60 (null tid in SA)
+    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x10), &compIBP);
 
     void* ownerObj = *reinterpret_cast<void**>(self + 0x18);
     const uint32_t tidDesc = HighlightDescription::TypeId();
-    void* desc = (fn_IsDerivedFrom && fn_IsDerivedFrom(ownerObj, tidDesc)) ? ownerObj : nullptr;
+    void* desc = Object::IsDerivedFromNullSafe(ownerObj, tidDesc) ? ownerObj : nullptr;
 
     int iVar10 = -1, iVar11 = -1;
     if (charIBP != 0) {
@@ -580,7 +573,7 @@ void Impl_c4a0(int64_t self) {
     // No per-cell mesh (both indices < 0) -> build+submit our own EdgeMesh.
     if (iVar10 < 0 || iVar11 < 0) {
         uint64_t footprintIBP = 0;
-        void* r = s_4680 ? s_4680(*reinterpret_cast<int64_t*>(self + 0x10), &footprintIBP) : nullptr;
+        void* r = FloorComponent_FindResData(*reinterpret_cast<void**>(self + 0x10), &footprintIBP);
         if (r && *reinterpret_cast<int64_t*>(r) != 0 &&
             desc && *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(desc) + 0x30) != 0) {
             Impl_b930(self);
@@ -590,7 +583,7 @@ void Impl_c4a0(int64_t self) {
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)
                 ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x100));   // B.3.5 bridge
             uint8_t time[8];
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(time), 0.0f);
             void* inst = reinterpret_cast<void*>(self + 0x28);
             reinterpret_cast<Graphics::Geometry*>(inst)->Update(
                 *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
@@ -672,7 +665,7 @@ add_prebuilt:
                 ->SetTransform(*reinterpret_cast<const Math::Transform*>(charIBP + 0x148));   // B.3.5 bridge
         }
         uint8_t time[8];
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(time), 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
         reinterpret_cast<Graphics::Geometry*>(inst)->Update(
             *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
@@ -683,7 +676,7 @@ add_prebuilt:
         uint32_t f1 = f0 | 4;
         *reinterpret_cast<uint32_t*>(self + 0x20) = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(self + 0x10) != 0) {
-            if (s_c3470) s_c3470(*reinterpret_cast<void**>(self + 0x10));
+            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(self + 0x10));
         }
     }
 }
@@ -758,7 +751,6 @@ void ReportDeadSelectedEntity(int64_t self, uint64_t ent, uint64_t arr, int32_t 
 }
 
 void Impl_cb40(int64_t self) {
-    EnsureFuncs();
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;
     {
         const uint64_t ref = *reinterpret_cast<uint64_t*>(self + 0x30);
@@ -777,7 +769,7 @@ void Impl_cb40(int64_t self) {
     }
 
     uint64_t contIBP = 0;
-    if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x30), &contIBP);
+    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x30), &contIBP);
     if (contIBP != 0) {
         int cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
         int64_t off = 0;
@@ -811,12 +803,11 @@ void Impl_cb40(int64_t self) {
 //   self = EditTool*.
 // ===========================================================================
 void Impl_c9e0(int64_t self) {
-    EnsureFuncs();
     Impl_cb40(self);
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;
 
     uint64_t contIBP = 0;
-    if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x30), &contIBP);
+    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x30), &contIBP);
     if (contIBP != 0) {
         int cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
         int64_t off = 0;
@@ -871,7 +862,6 @@ void Impl_c9e0(int64_t self) {
 // runs the full teardown unmodified.)
 // ===========================================================================
 void Impl_cc90(int64_t self) {
-    EnsureFuncs();
     Impl_cb40(self);   // clear the previous entity's outline; leave dialog/refs alone
 }
 
@@ -901,7 +891,6 @@ void Impl_cc90(int64_t self) {
 // harmless no-op for them.
 // ===========================================================================
 void Impl_HighlightFollow(int64_t self) {
-    EnsureFuncs();
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;      // nothing selected
     int64_t entity = *reinterpret_cast<int64_t*>(self + 0x30);
     // Dead / non-canonical ref (a torn-down entity leaves the -1 sentinel) — Sub7080
@@ -952,7 +941,7 @@ void Impl_HighlightFollow(int64_t self) {
     if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip
 
     uint8_t time[8];
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(time), 0.0f);
     // vtable slot [1] = EdgeMeshInstance::Update(time): pulls the current transform
     // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
     reinterpret_cast<Graphics::Geometry*>(inst)->Update(

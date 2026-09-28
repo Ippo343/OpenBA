@@ -321,3 +321,7 @@ void* Ctor_AudioDevice(void* self);                      // 0x1800de3a0
 void* Ctor_AudioConfiguration(void* self);               // 0x1800ddeb0
 }  // namespace rtengine
 // ==== end B3R RT-Core ====
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+extern "C" ::Engine::Engine* RtEngine_Engine_Ctor(::Engine::Engine* self, void* platformHandle);  // ??0Engine@0@QEAA@PEAX@Z
+extern "C" void RtEngine_Engine_Dtor(::Engine::Engine* self);  // ??1Engine@0@QEAA@XZ
+// ==== end B3R G-Game ====

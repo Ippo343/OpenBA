@@ -146,20 +146,6 @@ Object::Base* ImageElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiImageElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ImageElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x1800363a0ull, (void*)&UI::ImageElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ImageElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180036450ull, (void*)&UI::ImageElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ImageElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ImageElement@UI@@ (0x1801fac48): name "ImageElement", parent

@@ -33,6 +33,7 @@
 // instruction-for-instruction so a future A/B trace can verify equivalence.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -58,7 +59,7 @@ struct ArrayHeader16 {
 void SubArrayDeepCopy(void* dstHdrPtr, const void* srcHdrPtr,
                       size_t stride, size_t copySize, int alignment) {
     if (!dstHdrPtr || !srcHdrPtr || dstHdrPtr == srcHdrPtr) return;
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
+    if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Struct60B::SubArrayDeepCopy] MemAlloc/Free unavailable — "
@@ -74,7 +75,7 @@ void SubArrayDeepCopy(void* dstHdrPtr, const void* srcHdrPtr,
 
     // Free any existing buffer in dst.
     if (dst->data) {
-        fn_MemFreeStatic(dst->data);
+        System::MemoryAllocator::MemFree(dst->data);
     }
     dst->data = nullptr;
     // Retail's `param_1[1] = 0` is ONE qword store over offsets 0x08..0x0f, so it
@@ -88,7 +89,7 @@ void SubArrayDeepCopy(void* dstHdrPtr, const void* srcHdrPtr,
     if (srcCount > 0) {
         dst->capacity = srcCount;
         size_t bytes = static_cast<size_t>(srcCount) * stride;
-        dst->data = fn_MemAlloc(g_pMemAllocSingleton, bytes, alignment);
+        dst->data = System::MemoryAllocator::MemAlloc(bytes, alignment);
     }
 
     if (dst->count <= 0 || !dst->data || !src->data) return;
@@ -132,20 +133,12 @@ void* Struct60B_CopyCtor_Body(void* dst, const void* src) {
     // freshly-zeroed memory from the Resize allocation path).
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
     *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    if (fn_Struct60B_SubArrayCopyStride14) {
-        fn_Struct60B_SubArrayCopyStride14(d + 0x08, s + 0x08);
-    } else {
-        SubArrayDeepCopy(d + 0x08, s + 0x08, /*stride*/ 0x14, /*copy*/ 0x14, /*align*/ 2);
-    }
+    Reimpl_Struct60B_SubArrayCopyStride14(d + 0x08, s + 0x08);
 
     // +0x18 : sub-array (stride 0x02, alignment 2).
     *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
     *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
-    if (fn_Struct60B_SubArrayCopyStride02) {
-        fn_Struct60B_SubArrayCopyStride02(d + 0x18, s + 0x18);
-    } else {
-        SubArrayDeepCopy(d + 0x18, s + 0x18, /*stride*/ 0x02, /*copy*/ 0x02, /*align*/ 2);
-    }
+    Reimpl_Struct60B_SubArrayCopyStride02(d + 0x18, s + 0x18);
 
     // +0x28..+0x5d : raw byte copy of the trailing scalar fields.
     // The decompile lists each field individually but the net effect is a
@@ -187,16 +180,6 @@ void* Struct60B_CopyCtor_Body(void* dst, const void* src) {
 // `MemFree(lVar1-0x1c)` cadence).
 void Struct60B_DtorRange_Body(void* /*unused*/, void* first, int count) {
     if (count <= 0 || !first) return;
-    if (!fn_MemFreeStatic) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Struct60B::DtorRange] fn_MemFreeStatic unavailable — "
-                   "leaking %d elements\n", count);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
 
     auto* p = reinterpret_cast<uint8_t*>(first);
     for (int i = 0; i < count; ++i) {
@@ -204,13 +187,13 @@ void Struct60B_DtorRange_Body(void* /*unused*/, void* first, int count) {
 
         // Release embedded sub-array at +0x18 (stride-2 array).
         void** subData18 = reinterpret_cast<void**>(elem + 0x18);
-        if (*subData18) fn_MemFreeStatic(*subData18);
+        if (*subData18) System::MemoryAllocator::MemFree(*subData18);
         *reinterpret_cast<uint64_t*>(elem + 0x18) = 0;
         *reinterpret_cast<uint64_t*>(elem + 0x20) = 0;
 
         // Release embedded sub-array at +0x08 (stride-0x14 array).
         void** subData08 = reinterpret_cast<void**>(elem + 0x08);
-        if (*subData08) fn_MemFreeStatic(*subData08);
+        if (*subData08) System::MemoryAllocator::MemFree(*subData08);
         *reinterpret_cast<uint64_t*>(elem + 0x08) = 0;
         *reinterpret_cast<uint64_t*>(elem + 0x10) = 0;
     }
@@ -276,7 +259,7 @@ void Struct60B_Resize_Body(void* arrayHeaderPtr, unsigned int newCount) {
         }
         return;
     }
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+    if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Struct60B::Resize] MemAlloc unavailable — leaving array unchanged "
@@ -301,7 +284,7 @@ void Struct60B_Resize_Body(void* arrayHeaderPtr, unsigned int newCount) {
             hdr->capacity = static_cast<int32_t>(newCount) * 3;
         }
         size_t bytes = static_cast<size_t>(hdr->capacity) * kStruct60B_Size;
-        hdr->data = fn_MemAlloc(g_pMemAllocSingleton, bytes, /*align*/ 8);
+        hdr->data = System::MemoryAllocator::MemAlloc(bytes, /*align*/ 8);
     }
 
     // copyStart = oldCount if buffer NOT reallocated, else 0
@@ -317,11 +300,7 @@ void Struct60B_Resize_Body(void* arrayHeaderPtr, unsigned int newCount) {
                 // Copy from old buffer (sub-array deep copy needed).
                 const uint8_t* srcElem =
                     reinterpret_cast<const uint8_t*>(oldData) + off;
-                if (fn_Struct60B_CopyCtor) {
-                    fn_Struct60B_CopyCtor(elem, srcElem);
-                } else {
-                    Struct60B_CopyCtor_Body(elem, srcElem);
-                }
+                Reimpl_Struct60B_CopyCtor(elem, srcElem);
             } else {
                 // Zero-init new slot. Original sets +0x28 to 0xFFFFFFFF
                 // and zeros all other fields.
@@ -337,25 +316,15 @@ void Struct60B_Resize_Body(void* arrayHeaderPtr, unsigned int newCount) {
             uint8_t* tail =
                 reinterpret_cast<uint8_t*>(oldData) +
                 static_cast<size_t>(newCount) * kStruct60B_Size;
-            if (fn_Struct60B_DtorRange) {
-                fn_Struct60B_DtorRange(nullptr, tail,
+            Reimpl_Struct60B_DtorRange(nullptr, tail,
                                        static_cast<int>(oldCount - newCount));
-            } else {
-                Struct60B_DtorRange_Body(nullptr, tail,
-                                         static_cast<int>(oldCount - newCount));
-            }
         }
     } else {
         // Realloc happened — dtor the entire old buffer + free it.
         if (oldData) {
-            if (fn_Struct60B_DtorRange) {
-                fn_Struct60B_DtorRange(nullptr, oldData,
+            Reimpl_Struct60B_DtorRange(nullptr, oldData,
                                        static_cast<int>(oldCount));
-            } else {
-                Struct60B_DtorRange_Body(nullptr, oldData,
-                                         static_cast<int>(oldCount));
-            }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+            System::MemoryAllocator::MemFree(oldData);
         }
     }
 }

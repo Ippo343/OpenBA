@@ -40,7 +40,6 @@
 //   0x180076900 Array<InternalPtr>::SetSize (array.cpp)
 //   0x1800d5750 RadioElement::FindCheckBoxes (private; widgets_input.cpp)
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>
@@ -144,8 +143,7 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
         if (child != nullptr)
             child->_parent = elem;                             // 1800d59c0
 
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                                elem->_children._size + 1,
                                                made);          // 1800d59d9
 
@@ -153,12 +151,12 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
             n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
-    // The PRIVATE `FindCheckBoxes(InternalPtr<Element>)` (0x1800d5750) — a
-    // widgets_input.cpp door (fragment pass); retail passes the address of a
-    // SECOND stack slot holding the element (RULE B6-11).
+    // The PRIVATE `FindCheckBoxes(InternalPtr<Element>)` (0x1800d5750);
+    // retail passes the address of a SECOND stack slot holding the element
+    // (RULE B6-11).
     void* self2 = elem;                                        // 1800d59fe
-    using FindCheckBoxesFn = void (*)(void* elem, void** root);
-    rtdesc::RtAddr<FindCheckBoxesFn>(0x1800d5750ull)(elem, &self2);   // 1800d5a0b
+    elem->FindCheckBoxes(                                      // 1800d5a0b
+        reinterpret_cast<Object::InternalPtr<Element>*>(&self2));   // B.3.x bridge
 
     const int32_t want = _activeRadio;
     if (want != elem->_activeIndex) {                          // 1800d5a13
@@ -202,20 +200,6 @@ Object::Base* RadioDescription::CreateInPlaceObject(void* place) {
     return ::new (place) RadioDescription();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiRadioDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::RadioDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180047760ull, (void*)&UI::RadioDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::RadioDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x1800477e0ull, (void*)&UI::RadioDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::RadioDescription's own type record, built at CRT init

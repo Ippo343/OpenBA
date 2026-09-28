@@ -24,6 +24,7 @@
 // name inside Volume.h's own static_asserts (Mesh.h -> Geometry.h -> Volume.h).
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -66,6 +67,12 @@
 #include "Component/WorkPlaceComponent.h"
 #include "Component/WildAnimalComponent.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "utility/PerlinNoise.h"       // RtUtility_PerlinNoise_Ctor / _Generate (B3R)
+#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Action/exe_bodies.h"         // ActRm_StorageAdd_d000, Pf_EntityAnchorCell_7fb0
+#include "Component/exe_bodies.h"      // ResidenceComponent_*, CitizenComp_*, RawMaterialComponent_RegisterRawMaterial
+#include "Work/exe_bodies.h"           // WorkGrid_FindCell_9ccf0, WorkBase_ValidateCell_a00f0, WorkBase_FindComponent_6270
+#include "Game/exe_constants.h"        // kRdata_14017214c, kRdata_140172220
 extern "C" void MapComponent_ReportDc20Evictions(const char* tag);  // keystone_a_map.cpp
 #include <cstdint>
 #include <cstdio>
@@ -218,7 +225,7 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
     const int h0 = swapped ? fpW : fpH;
 
     uintptr_t nullIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     int marked = 0, freed = 0, roadCells = 0;
     for (int iy = 0; iy < fpH; ++iy)
@@ -485,7 +492,7 @@ static void StartTown_TileToWorld(void* gameVoid, int tileX, int tileY, float ou
     const int idx = dim * tileY + tileX;
     const float center = (float)(dim >> 1) - kCenterBias;
     float in[3] = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
-    fn_MapGetTerrainPos(gameVoid, out3, in, 0, nullptr);   // flag=0 (our f3e0 defers picking refine)
+    Reimpl_MapGetTerrainPos(gameVoid, out3, in, 0, nullptr);   // flag=0 (our f3e0 defers picking refine)
 }
 
 // Camera portion of FUN_1400a3300: locate the start-town spawn tile and return
@@ -493,7 +500,7 @@ static void StartTown_TileToWorld(void* gameVoid, int tileX, int tileY, float ou
 // writes it to PlayerController+0x1c/+0x20/+0x24.
 extern "C" void StartTown_ComputeCamera(void* startConfig, void* game, float camPosOut[3]) {
     camPosOut[0] = camPosOut[1] = camPosOut[2] = 0.0f;
-    if (!startConfig || !game || !fn_MapGetTerrainPos) return;
+    if (!startConfig || !game) return;
     int size = *(int32_t*)((uint8_t*)startConfig + 0x3c);   // townSize (mapGen+0x3c)
     if (size <= 0) size = 1;
 
@@ -506,10 +513,10 @@ extern "C" void StartTown_ComputeCamera(void* startConfig, void* game, float cam
 // ECS SPAWN — the spawn portion of FUN_1400a3300 (steps 4-7). Built up one
 // pool at a time. The shared keystones already exist:
 //   * ResolveExternalByName_Impl  — resolve a pool entry's description template
-//   * fn_EntityFactory_CreateEntity (= ComponentEntity_CopyCtor, 0x1400c3720)
+//   * ComponentEntity_CtorFromDescription (0x1400c3720)
 //       — instantiate a fresh ComponentEntity from a template
-//   * fn_InternalBasePtr_Ctor     — wrap the new entity in a tracked IBP
-//   * fn_EntityList_RegisterEntity (FUN_1400c48a0) — register with the world
+//   * the Object::InternalBasePtr ctor — wrap the new entity in a tracked IBP
+//   * EntityList_RegisterEntity_Impl (FUN_1400c48a0) — register with the world
 //       entity list at world+0xe8 under a category id (= *(template+0x20))
 //
 // The world base (= g_pGameWorldSingleton in the original) is the GameUpdateLoop
@@ -528,17 +535,12 @@ static constexpr int TEMPLATE_CATEGORY = 0x20;  // *(template+0x20) = entity-lis
 // if an entity was created. Mirrors the inner body shared by every spawn loop.
 static bool SpawnAndRegister(void* tmpl, void* entityList) {
     if (!tmpl) return false;
-    // Foundation B (ECS instantiate/register) not yet wired in standalone: these
-    // exe primitives resolve to NULL until reimplemented. Guard so a populated
-    // pool can't fault here before B lands.
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return false;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
-    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
+    void* ent = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tmpl) : nullptr;
     void* ibp = nullptr;
     new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
     int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
-    fn_EntityList_RegisterEntity(entityList, &ibp, category);
+    EntityList_RegisterEntity_Impl(entityList, &ibp, category);
     return ent != nullptr;
 }
 
@@ -628,7 +630,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
 // when the block moved, fill at index count, old block freed only when it
 // moved. Every arm matched.
 void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
-    if (!townMgr || !desc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!townMgr || !desc || !System::MemoryAllocator::_singleton) return;
     void**  arr   = *(void***)(townMgr + 0x120);
     int     count = *(int32_t*)(townMgr + 0x128);
     // Dedup: already present -> nothing to do.
@@ -684,7 +686,7 @@ static void StartTown_SeedAvailableAgriculture(uint8_t* sc, void* game,
     // held in R13 across the loop).
     float centre[3] = { 0.0f, 0.0f, 0.0f };
     bool haveCentre = false;
-    if (game && fn_MapGetTerrainPos) {
+    if (game) {
         StartTown_TileToWorld(game, spawnX, spawnY, centre);
         haveCentre = true;
     }
@@ -695,8 +697,8 @@ static void StartTown_SeedAvailableAgriculture(uint8_t* sc, void* game,
     int a = SeedAgriPool(sc, townMgr, rng, 0xd0, 0xd8, 0xe8, "livestock",
                          haveCentre ? centre : nullptr);
     if (!haveCentre)
-        fprintf(stderr, "[AgriSeed] no town centre (game=%p MapGetTerrainPos=%p) — "
-                "starting herd SKIPPED\n", game, (void*)fn_MapGetTerrainPos);
+        fprintf(stderr, "[AgriSeed] no town centre (game=%p) — "
+                "starting herd SKIPPED\n", game);
     fprintf(stderr, "[AgriSeed] available-agriculture seeded: plants=%d trees=%d "
             "livestock=%d; townMgr+0x120 count %d -> %d\n",
             p, t, a, before, *(int32_t*)(townMgr + 0x128));
@@ -878,20 +880,7 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             // rather than an invariant becomes a lie and disguises the gap it creates.
             //
             // Call the init half directly, skipping the erase.
-            {
-                typedef void (*fn_ResidenceInit_t)(void*);
-                uintptr_t initFn = ResolveAddr(Module::Exe, 0x140129ef0);
-                if (initFn) {
-                    (*(fn_ResidenceInit_t)initFn)(comp);
-                } else {
-                    fprintf(stderr, "[startTown::housing] RESIDENCE_REGISTRY: 0x140129ef0 "
-                            "unresolved — falling back to slot 7 (erase still happens)\n");
-                    fflush(stderr);
-                    // Slot 7 (vtable +0x38) of the proved ResidenceComponent (its
-                    // Type() matched just above): the class names it OnRemove.
-                    reinterpret_cast<ResidenceComponent*>(comp)->OnRemove();   // B.3.8 bridge
-                }
-            }
+            ResidenceComponent_ResidenceInit(comp);   // 0x140129ef0
             // Capture the house's owner-entity IBP (ResidenceComponent+0x10 — the exact
             // value the original registration uses) for the founding-housing pass. We keep
             // the house IBPs here and pair them to families directly; that pairing is
@@ -1114,22 +1103,23 @@ static std::function<void*(void* /*tmpl*/, int /*tileX*/, int /*tileY*/, int /*o
 // parks one slot short of state 10 forever — a harness siting fault that reads exactly
 // like a port bug. Hoisted to file scope (it was a lambda inside StartTown_SpawnStructures
 // and captured nothing but globals) so the deferred placement applies the identical test.
+// 0x1400a00f0 WorkBase_ValidateCell_a00f0 returns uint64_t; every reader in this file
+// was typed `char (*)(int*, uint32_t, uint32_t, int)` and read AL only. B3R keeps
+// today's bits with the cast (a behaviour: candidate).
+static inline char ST_CanPathTo(int* grid, uint32_t mask, uint32_t destCell, int srcCell) {
+    return static_cast<char>(WorkBase_ValidateCell_a00f0(grid, mask, destCell, srcCell));
+}
+
 static bool ST_SiteIsWorkable(int tx, int ty, int fw, int fh) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return true;
     int* grid = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
     if (!grid) return true;
-    typedef int (*FNP_t)(int*, int, int, uint32_t);
-    static FNP_t s_fnp = nullptr;
-    static bool s_r = false;
-    if (!s_r) { s_fnp = reinterpret_cast<FNP_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
-                s_r = true; }
-    if (!s_fnp) return true;
     const int mapW = *grid;
     for (int yy = 0; yy < fh; ++yy) {
         for (int xx = 0; xx < fw; ++xx) {
             const int cell = (ty + yy) * mapW + (tx + xx);
             if (cell < 0 || cell >= mapW * mapW) return false;
-            if (s_fnp(grid, cell, cell, 0xe0f) < 0) return false;
+            if (WorkGrid_FindCell_9ccf0(grid, cell, cell, 0xe0f) < 0) return false;   // 0x14009ccf0
         }
     }
     return true;
@@ -1244,15 +1234,11 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
     };
     for (const STRect& r : g_stOccupied) mark(r.x, r.y, r.w, r.h);
 
-    typedef int (*FNP_t)(int*, int, int, uint32_t);
-    FNP_t nearestPassable = reinterpret_cast<FNP_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
-    typedef char (*CanPathTo_t)(int*, uint32_t, uint32_t, int);
-    CanPathTo_t canPath = reinterpret_cast<CanPathTo_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
     std::vector<int8_t> workable(cells, -1);
     auto cellWorkable = [&](int cell) -> bool {
         if (cell < 0 || (size_t)cell >= cells) return false;
         if (workable[cell] < 0) {
-            workable[cell] = (!nearestPassable || nearestPassable(grid, cell, cell, 0xe0f) >= 0) ? 1 : 0;
+            workable[cell] = (WorkGrid_FindCell_9ccf0(grid, cell, cell, 0xe0f) >= 0) ? 1 : 0;   // 0x14009ccf0
         }
         return workable[cell] == 1;
     };
@@ -1287,9 +1273,6 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         for (const DoorOff& d : doorOffs) if (std::strcmp(d.path, path) == 0) { *dx = d.dx; *dy = d.dy; return true; }
         return false;
     };
-    typedef int (*fn_AccessCell_t)(void* entityIBP, float* outPos);
-    static fn_AccessCell_t s_accessCell =
-        reinterpret_cast<fn_AccessCell_t>(ResolveAddr(Module::Exe, 0x140087fb0));
 
     // doorDx/doorDy >= 0: the footprint cell that must stay reachable (blocked cells of the
     // new footprint exclude it). w == 0: verify an ALREADY-placed footprint (marked in occ):
@@ -1417,7 +1400,7 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         for (int yy = 0; yy < h; ++yy)
             for (int xx = 0; xx < w; ++xx)
                 if (!cellWorkable((ty + yy) * mapW + (tx + xx))) return false;
-        if (canPath && !canPath(grid, 0xe1f, (uint32_t)((ty + h / 2) * mapW + (tx + w / 2)), townCell)) {
+        if (!ST_CanPathTo(grid, 0xe1f, (uint32_t)((ty + h / 2) * mapW + (tx + w / 2)), townCell)) {
             ++reachRejects; return false;
         }
         if (!allowPockets && createsPocket(tx, ty, w, h, doorDx, doorDy)) { ++pocketRejects; return false; }
@@ -1473,9 +1456,9 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         reachCount = floodTown(reach, 0, 0, 0, 0, -1, -1);
         // Learn (first instance) or verify (later ones) the template's door cell, and keep
         // the door notch walkable in occ so every later pocket test sees it as ground.
-        if (s_accessCell) {
+        {
             void* entIBP = ent;
-            const int cell = s_accessCell(&entIBP, nullptr);
+            const int cell = Pf_EntityAnchorCell_7fb0(&entIBP, nullptr);   // 0x140087fb0
             if (cell >= 0) {
                 const int ddx = cell % mapW - bestX, ddy = cell / mapW - bestY;
                 occ[(size_t)cell] = 0;
@@ -1554,10 +1537,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     const int count = *(int32_t*)(startConfig + 0x88);
     uint8_t* pool   = *(uint8_t**)(startConfig + 0x80);
     if (count <= 0 || !pool) return 0;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc)
-        return 0;
-
     const uint32_t tidCreatePlaced  = CreatePlacedDescription::TypeId();
     const uint32_t tidMapComponent  = MapComponent::TypeId();
     const uint32_t tidModelComponent = ModelComponent::TypeId();
@@ -1580,8 +1559,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                               void* tmpl, int tileX, int tileY, int orient,
                               int w0, int h0, bool isDemoFoundation, int logIndex) -> void* {
         // Instantiate + wrap.
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
-        void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
+        void* ent = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tmpl) : nullptr;
         uintptr_t entIBP = 0;
         new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
 
@@ -1691,7 +1670,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //   corner1  = dim*tileY + tileX                (footprint origin)
         //   corner2  = (tileY+fpH)*dim + tileX + fpW    (footprint far corner)
         //   worldXY  = f3e0(mapGrid, {idx%dim - (dim>>1), idx/dim - (dim>>1), 0})
-        //              == fn_MapGetTerrainPos (0x14009f3e0, verified identical)
+        //              == Reimpl_MapGetTerrainPos(0x14009f3e0, verified identical)
         //   centre   = (world1 + world2) * DAT_140172114  (=0.5f, kCenterBias)
         //   yaw      = (float)orient   (raw entry+0x28, pre-normalisation); pitch = 0
         // Retail then: FromYawPitchOffset(tmp,&yaw,&pitch,&centre) ->
@@ -1699,7 +1678,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //   Graphics::Geometry::SetTransform(model+0x28, model+0x148)  (0x1400a250f).
         // `game` is the already-deref'd mapGrid (caller: game = *(gw+0xf8), line ~2790),
         // so dim = *(int*)game and f3e0's first arg is `game`, exactly retail's *local_b0.
-        if (game && fn_MapGetTerrainPos) {
+        if (game) {
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
                 uintptr_t mcIBP = 0;
@@ -1713,12 +1692,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     int idx1 = dim * tileY + tileX;
                     float in1[3] = { (float)(idx1 % dim) - half, (float)(idx1 / dim) - half, 0.0f };
                     float p1[3] = {0,0,0};
-                    fn_MapGetTerrainPos(game, p1, in1, '\0', nullptr);
+                    Reimpl_MapGetTerrainPos(game, p1, in1, '\0', nullptr);
                     // corner2 — footprint far corner (tileX+fpW, tileY+fpH).
                     int idx2 = (tileY + fpH) * dim + tileX + fpW;
                     float in2[3] = { (float)(idx2 % dim) - half, (float)(idx2 / dim) - half, 0.0f };
                     float p2[3] = {0,0,0};
-                    fn_MapGetTerrainPos(game, p2, in2, '\0', nullptr);
+                    Reimpl_MapGetTerrainPos(game, p2, in2, '\0', nullptr);
                     float center[3] = { (p1[0]+p2[0])*kCenterBias,     // DAT_140172114 = 0.5f
                                         (p1[1]+p2[1])*kCenterBias,
                                         (p1[2]+p2[2])*kCenterBias };
@@ -1886,7 +1865,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
 
         // Register with the world entity list (category = template+0x20).
         int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
-        fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+        EntityList_RegisterEntity_Impl(entityList, &entIBP, category);
 
         // Close the instant-build bracket opened above — retail clears the bit on the
         // very next instruction after RegisterEntity, so everything from here on (the
@@ -3244,13 +3223,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 // passability check on every tick and not one fishing action is ever
                 // created. Measured 2026-08-15: a dock at (158,102) with 327 fishable
                 // tiles produced ZERO accepted spots for a whole run.
-                typedef char (*CanPathTo_t)(int*, uint32_t, uint32_t, int);
-                static CanPathTo_t s_canPath = nullptr;
-                static bool s_canPathResolved = false;
-                if (!s_canPathResolved) {
-                    s_canPath = reinterpret_cast<CanPathTo_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-                    s_canPathResolved = true;
-                }
                 const int townCell = townCy * width + townCx;
                 int candidates = 0, unreachable = 0;
 
@@ -3280,8 +3252,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         ++candidates;
 
                         // Reachable from town, or the worker can never stand on it.
-                        if (s_canPath &&
-                            !s_canPath(reinterpret_cast<int*>(mapObj), 0xe1f,
+                        if (!ST_CanPathTo(reinterpret_cast<int*>(mapObj), 0xe1f,
                                        (uint32_t)((ty + fh / 2) * width + (tx + fw / 2)),
                                        townCell)) {
                             ++unreachable;
@@ -3424,11 +3395,10 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
                                                                  : nullptr;
     void* game = gws ? reinterpret_cast<GameUpdateLoop*>(gws)->m_game : nullptr;   // B.3.8 bridge
     void* gridPtr = gws ? reinterpret_cast<GameUpdateLoop*>(gws)->m_characterGrid : nullptr;   // B.3.8 bridge
-    if (!gws || !game || !g_stPlaceStructure || !fn_MapGetTerrainPos) {
+    if (!gws || !game || !g_stPlaceStructure) {
         fprintf(stderr, "[startTown::hunterlodge] deferred placement ABORTED at frame %d "
-                "(world=%p map=%p placeStructure=%s terrainPos=%s); nothing spawned\n",
-                frameNum, gws, game, g_stPlaceStructure ? "yes" : "NO",
-                fn_MapGetTerrainPos ? "yes" : "NO");
+                "(world=%p map=%p placeStructure=%s); nothing spawned\n",
+                frameNum, gws, game, g_stPlaceStructure ? "yes" : "NO");
         fflush(stderr);
         return;
     }
@@ -3496,13 +3466,6 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
     //
     // So apply the identical predicate at siting time. Without it, density scoring is
     // actively harmful: the denser ground is often the far side of a river.
-    typedef char (*CanPathTo_t)(int*, uint32_t, uint32_t, int);
-    static CanPathTo_t s_canPath = nullptr;
-    static bool s_canPathResolved = false;
-    if (!s_canPathResolved) {
-        s_canPath = reinterpret_cast<CanPathTo_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-        s_canPathResolved = true;
-    }
     const int townCell = g_deferredLodge.townCy * mapW + g_deferredLodge.townCx;
 
     if (!animals.empty()) {
@@ -3516,7 +3479,7 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
                 ++candidates;
 
                 const int cell = (ty + h / 2) * mapW + (tx + w / 2);
-                if (s_canPath && !s_canPath(reinterpret_cast<int*>(game), 0xe1f,
+                if (!ST_CanPathTo(reinterpret_cast<int*>(game), 0xe1f,
                                             (uint32_t)cell, townCell)) {
                     ++unreachable;
                     continue;
@@ -3574,7 +3537,7 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
                     if (ST_ClashesWithStartTown(tx, ty, w, h)) continue;
                     if (!ST_SiteIsWorkable(tx, ty, w, h)) continue;
                     const int fcell = (ty + h / 2) * mapW + (tx + w / 2);
-                    if (s_canPath && !s_canPath(reinterpret_cast<int*>(game), 0xe1f,
+                    if (!ST_CanPathTo(reinterpret_cast<int*>(game), 0xe1f,
                                                 (uint32_t)fcell, townCell)) continue;
                     bestX = tx; bestY = ty; bestScore = 0; found = true;
                 }
@@ -3836,21 +3799,14 @@ extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
 static void CitizenCarryStorageInit(void* ent) {
     if (!ent) return;
 
-    static bool s_res = false;
-    static void* (*s_find6270)(uintptr_t, void*) = nullptr;
-    if (!s_res) {
-        s_find6270 = reinterpret_cast<void* (*)(uintptr_t, void*)>(ResolveAddr(Module::Exe, 0x140006270));
-        s_res = true;
-    }
     static int s_log = 0;
     bool logThis = (s_log < 6);
-    if (!s_find6270) { if (logThis) { ++s_log; fprintf(stderr, "[CarryInit] BAIL find6270 null\n"); fflush(stderr); } return; }
 
     // `ent` IS the citizen entity; find its StorageComponent directly. (GRM Execute's
     // `citizenEnt` is instead a component whose +0x10 dereferences to this same entity,
     // hence GRM's extra +0x10 hop — which does NOT apply here.)
     uintptr_t stIbp = 0;
-    s_find6270(reinterpret_cast<uintptr_t>(ent), &stIbp);
+    WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(ent), &stIbp);   // 0x140006270
     if (!stIbp) { if (logThis) { ++s_log; fprintf(stderr, "[CarryInit] BAIL no storage (ent=%p)\n", ent); fflush(stderr); } return; }
     void* stComp = reinterpret_cast<void*>(stIbp);   // FindComponent writes the component ptr into the IBP
 
@@ -3880,15 +3836,7 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
 
 // CitizenComponent_helper_68a0 (0x1401168a0) — splice `member` into `host`'s family
 // ring (host +0x260 head, member +0x268/+0x270 links, member +0x258 host back-ref).
-// Ported as CitizenComp_JoinRoster_68a0 and registered by reg_citizen_25.cpp.
-static void (*s_fn_JoinFamily_68a0)(void* host, void* memberIBP) = nullptr;
-static bool s_familyFuncsResolved = false;
-static void EnsureFamilyFuncs() {
-    if (s_familyFuncsResolved) return;
-    s_familyFuncsResolved = true;
-    s_fn_JoinFamily_68a0 = reinterpret_cast<void (*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1401168a0));
-}
+// Ported as CitizenComp_JoinRoster_68a0 (Component/exe_bodies.h), called by name.
 
 // ---- Founding-family housing (BANISHED_LIVE_HOUSING) ------------------------
 // Vanilla has NO dedicated founding-family→house placement: the founding spawner
@@ -3948,14 +3896,7 @@ static bool StartTown_EnsureResidenceRoster(void* resComp) {
     if (capacity < 1) capacity = 1;
     if (capacity > 16) capacity = 16;                  // sanity clamp (guards a garbage read)
 
-    typedef void (*fn_Resize_t)(void* arrayFieldPtr, int newCount);   // 0x140037ad0 (registered)
-    fn_Resize_t resize = reinterpret_cast<fn_Resize_t>(ResolveAddr(Module::Exe, 0x140037ad0));
-    if (!resize) {
-        fprintf(stderr, "[startTown::housing] residence roster: ResizeResidentArray(140037ad0) "
-                "unresolved\n"); fflush(stderr);
-        return false;
-    }
-    resize(reinterpret_cast<void*>(rc + 0x50), capacity);
+    ResidenceComponent_ResizeResidentArray(reinterpret_cast<void*>(rc + 0x50), capacity);   // 0x140037ad0
 
     int64_t sa = *reinterpret_cast<int64_t*>(rc + 0x50);
     int sc = *reinterpret_cast<int32_t*>(rc + 0x58);
@@ -4117,9 +4058,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         townMgr = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList;   // B.3.8 bridge
     if (!townMgr) return;
 
-    typedef void (*fn_AddItem_t)(int64_t storage, int64_t material, int n);   // 0x14012d000
-    fn_AddItem_t addItem = reinterpret_cast<fn_AddItem_t>(ResolveAddr(Module::Exe, 0x14012d000));
-    if (!addItem) { fprintf(stderr, "[startTown::housing] AddItem(14012d000) unresolved — no house food\n"); fflush(stderr); return; }
+    // AddItem: ActRm_StorageAdd_d000 (0x14012d000), called by name.
 
     // Pick an edible raw-material template (RawMaterialDescription+0x5c & 0x20 = edible)
     // from the town template pool (townMgr+0x110 base / +0x118 count).
@@ -4160,9 +4099,8 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
 
     uint32_t tidStorage = StorageComponent::TypeId();                 // 0x1401c7e78
     uint32_t tidResidence = ResidenceComponent::TypeId();             // 0x1401c7cf0
-    // Storage_GetResourceCount (0x14012a9d0) — for the home-food read-back verification.
-    typedef int (*fn_GetResCount_t)(int64_t comp);
-    fn_GetResCount_t getResCount = reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
+    // Storage_GetResourceCount (0x14012a9d0, CitizenComp_Storage_GetResourceCount) — for
+    // the home-food read-back verification.
     // Firewood stand-in size. Deliberately generous: the point is to take the first
     // winter OUT of the measurement, not to model a fuel economy.
     const int kSeedFuelPerHouse = 400;
@@ -4257,7 +4195,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             seedN = maxFoodUnits;
         }
 
-        if (seedN > 0) addItem(reinterpret_cast<int64_t>(sc), foodTmpl, seedN);
+        if (seedN > 0) ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(sc), foodTmpl, seedN);   // 0x14012d000
         ++seeded;
 
         // Firewood stand-in (see the note at the template pick). The heat tick burns one
@@ -4277,13 +4215,13 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
                 fuelUnits = maxFuelUnits;
             }
             if (fuelUnits > 0) {
-                addItem(reinterpret_cast<int64_t>(sc), fuelTmpl, fuelUnits);
+                ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(sc), fuelTmpl, fuelUnits);   // 0x14012d000
                 ++fuelSeeded;
             }
         }
         // Verify through the exe-faithful read path: GetResourceCount(rescomp) walks
         // owner→StorageComponent and sums the edible units we just added.
-        int have = (getResCount && rescomp) ? getResCount(reinterpret_cast<int64_t>(rescomp)) : -1;
+        int have = rescomp ? CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(rescomp)) : -1;
         fprintf(stderr, "[startTown::housing] house food(c7e78): storage=%p residents=%d "
                 "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount(res)=%d %s\n",
                 sc, residents, reqInt, threshold, seedN, have,
@@ -4310,14 +4248,11 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     const int famCount  = *(int32_t*)(startConfig + FAMILY_CNT);
     uint8_t*  families  = *(uint8_t**)(startConfig + FAMILY_ARR);
     if (famCount <= 0 || !families) return 0;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return 0;
-
     // Town-centre world position (same tile->world mapping as the camera) +
     // founding-family spawn jitter radius (startConfig+0x40). FUN_1400a3300 found
     // this tile once and reused it for both camera and the spawn passes.
     float townBase[3] = { 0.0f, 0.0f, 0.0f };
-    if (game && fn_MapGetTerrainPos)
+    if (game)
         StartTown_TileToWorld(game, spawnX, spawnY, townBase);
 
     // Resolve the shared citizen template once (ExternalRef at startConfig+0x48,
@@ -4373,7 +4308,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         for (size_t i = 0; i < g_stressHouseTiles.size(); ++i) {
             const STRectFwd& hr = g_stressHouseTiles[i];
             FamSpec sp = { (i % 3 == 0) ? 1 : 0, 3, { townBase[0], townBase[1], townBase[2] }, false };
-            if (game && fn_MapGetTerrainPos)
+            if (game)
                 StartTown_TileToWorld(game, hr.x + hr.w / 2, hr.y + hr.h / 2, sp.base);
             specs.push_back(sp);
         }
@@ -4447,10 +4382,9 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
             // impl_0dd0 @0x1400a0fcd: helper_68a0(res8, &child) — the child joins the
             // SECOND adult's ring (+0x260 head, child +0x258 host back-ref).
             if (adultB && kid) {
-                EnsureFamilyFuncs();
-                if (s_fn_JoinFamily_68a0) {
+                {
                     int64_t node = reinterpret_cast<int64_t>(kid);
-                    s_fn_JoinFamily_68a0(adultB, &node);
+                    CitizenComp_JoinRoster_68a0(adultB, &node);   // 0x1401168a0
                     ++linkedKids;
                 }
             }
@@ -4498,7 +4432,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
 // resource entities exist + are registered but carry inert components and don't
 // render, same gate as structures/citizens. a12b0 also queries height/slope via a
 // Picking-ray variant of QuarryComponent_helper_aa20 (NULL in standalone); we use
-// the heightmap sampler (fn_MapGetTerrainPos, which fills height + slope) instead.
+// the heightmap sampler (Reimpl_MapGetTerrainPos, which fills height + slope) instead.
 // ============================================================================
 
 static constexpr int RES_ARR      = 0x70;     // startConfig+0x70 resource pool array
@@ -4548,8 +4482,7 @@ static void* ResMeshFromModelDesc(void* modelDesc, int variantIdx, int modelVari
 // then does the single scene-add, rather than the original's remove/re-add.)
 static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
                                       int16_t variantIdx, int16_t modelVariant) {
-    // B.3.5: the SetMesh readiness term went with the door.
-    if (!fn_InternalBasePtr_Ctor) return;
+    // B.3.5: the SetMesh readiness term went with the door; B3R: the IBP ctor's too.
     void* mc = FindComponentOnEntity(entity, tidModel);
     if (!mc) return;
     uintptr_t mcIBP = 0;
@@ -4589,14 +4522,8 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
 //     are populated — i.e. when GrowthComponent is LIVE (BANISHED_LIVE_GROWTH) and
 //     its Startup has run. Default-inert build → those are zero → growth is a
 //     no-op (never a null deref), exactly as the rest of the inert spawn path.
-static float* s_pYaw180 = nullptr;     // DAT_140172220 = 180.0
-static bool   s_pYaw180Init = false;
 static float ResYawScale() {
-    if (!s_pYaw180Init) {
-        s_pYaw180Init = true;
-        s_pYaw180 = (float*)ResolveAddr(Module::Exe, 0x140172220);
-    }
-    return s_pYaw180 ? *s_pYaw180 : 180.0f;
+    return kRdata_140172220;   // DAT_140172220 = 180.0
 }
 
 // ---- CreateNaturalResource grid marking (impl_dee0 chain) ------------------
@@ -4648,7 +4575,7 @@ static int StartTown_ClassifyCell(void* game, int dim, int idx) {
     float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
     float out[3] = { 0, 0, 0 };
     float tri[4] = { 0, 0, 0, 0 };
-    fn_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only (matches e2c0)
+    Reimpl_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only (matches e2c0)
     const float h = out[2], slope = tri[2];
     if (h < kClassDeepWaterMax) return 8;
     if (h < kClassShoreMax)     return 7;
@@ -4702,7 +4629,7 @@ static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint
 // the MapDescription+0x28 char-grid String buffer (null/empty for a 1x1 resource).
 static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, int tileX,
                                            int tileY, int w, int h, const char* shape, int rot) {
-    if (!gameVoid || w <= 0 || h <= 0 || !fn_MapGetTerrainPos) return;
+    if (!gameVoid || w <= 0 || h <= 0) return;
     uint8_t* game = (uint8_t*)gameVoid;
     const int dim = *(int32_t*)game;
     uint8_t* cells = *(uint8_t**)(game + GAME_CELLS);
@@ -4768,13 +4695,13 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
             // landmine documented for FUN_1401253d0); here we trust the linked entity.
             if (occupied && ownerEntity) {
                 uintptr_t entIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+                new (&entIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(ownerEntity));   // B.3.3 bridge
                 *(uintptr_t*)(cell + 0x08) = entIBP;   // dc20: *(cell+8) = owner entity
             } else {
                 // dee0's clear (occupancy disabled, or non-occupied footprint cell).
                 uintptr_t nullIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 *(uintptr_t*)(cell + 0x08) = nullIBP;
             }
         }
@@ -4793,7 +4720,7 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
 // (CitizenAI leisure box scan, forester scan) faults on the freed entity.
 extern "C" void StartTown_UnmarkResourceCellGrid(void* gameVoid, void* ownerEntity, int tileX,
                                                  int tileY, int w, int h, const char* shape, int rot) {
-    if (!gameVoid || w <= 0 || h <= 0 || !fn_MapGetTerrainPos) return;
+    if (!gameVoid || w <= 0 || h <= 0) return;
     uint8_t* game = (uint8_t*)gameVoid;
     const int dim = *(int32_t*)game;
     uint8_t* cells = *(uint8_t**)(game + GAME_CELLS);
@@ -4854,7 +4781,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     //     stops overlap once OnCreate writes occupancy). Plain data writes — always
     //     safe on the inert MapComponent (size 0x38; fields +0x28..+0x2f). ---
     void* mapComp = FindComponentOnEntity(entity, tidMap);
-    if (mapComp && fn_InternalBasePtr_Ctor) {
+    if (mapComp) {
         uintptr_t mapIBP = 0;
         new (&mapIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
         uint8_t* mc = (uint8_t*)mapIBP;
@@ -4886,8 +4813,6 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     // --- jittered ModelComponent transform (the rest of 6540). Mirrors the
     //     committed SetEntityModelTransform but with the per-resource position jitter
     //     (desc+0x60) + random yaw the original applies. ---
-    if (!fn_MapGetTerrainPos) return;
-
     // jitter radius from the NaturalResourceDescription (NRComp+0x18, +0x60).
     float jitter = 0.0f;
     void* nrComp = FindComponentOnEntity(entity, tidNR);
@@ -4900,7 +4825,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     const float center = (float)(dim >> 1) - kCenterBias;
     float in[3]  = { (float)(cellIdx % dim) - center, (float)(cellIdx / dim) - center, 0.0f };
     float pos[3] = {0,0,0};
-    fn_MapGetTerrainPos(game, pos, in, 0, nullptr);
+    Reimpl_MapGetTerrainPos(game, pos, in, 0, nullptr);
 
     // Per-resource jitter/yaw tolerance — byte-faithful to Entity_impl_6540, which
     // uses System::Random::RandFloatTol → [-1,1]. fn_Random_RandFloatTol is the
@@ -4914,7 +4839,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     float yaw = rtol() * ResYawScale();   // RandFloatTol * 180 -> full [-180,180] rotation
 
     void* modelComp = FindComponentOnEntity(entity, tidModel);
-    if (!modelComp || !fn_InternalBasePtr_Ctor) return;
+    if (!modelComp) return;
     uintptr_t mIBP = 0;
     new (&mIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
     uint8_t* m = (uint8_t*)mIBP;
@@ -4942,7 +4867,7 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // action_b
 static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void* rng) {
     if (!entity) return;
     void* gComp = FindComponentOnEntity(entity, tidGrowth);
-    if (!gComp || !fn_InternalBasePtr_Ctor) return;
+    if (!gComp) return;
     uintptr_t gIBP = 0;
     new (&gIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(gComp));   // B.3.3 bridge
     uint8_t* s = (uint8_t*)gIBP;
@@ -5009,14 +4934,6 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     const int count = *(int32_t*)(startConfig + RES_CNT);
     uint8_t* pool   = *(uint8_t**)(startConfig + RES_ARR);
     if (count <= 0 || !pool) return 0;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc ||
-        !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate ||
-        !fn_MapGetTerrainPos) {
-        fprintf(stderr, "[startTown::res] primitives unwired — skip\n"); fflush(stderr);
-        return 0;
-    }
-
     void* game = reinterpret_cast<GameUpdateLoop*>(world)->m_game;   // B.3.8 bridge
     if (!game) return 0;
     const int dim = *(int32_t*)game;
@@ -5025,7 +4942,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     if (dim <= 0 || !cells || !rng) return 0;
 
     void* entityList = reinterpret_cast<GameUpdateLoop*>(world)->m_entityList;   // +0xe8  B.3.8 bridge
-    const float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    const float uvScale = kRdata_14017214c;   // DAT_14017214c == 1.0
     const uint32_t tidNatRes = NaturalResourceDescription::TypeId();
     const uint32_t tidModel  = ModelComponent::TypeId();
     // Type-ids for the per-cell setup (Entity_impl_6540 + FUN_140120db0).
@@ -5043,7 +4960,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     const int poolCap = RES_POOL_CAP;
 
     // FAITHFUL RNG ALIGNMENT (FUN_1400a12b0 prologue). Before the pool loop the
-    // original constructs THREE PerlinNoise objects (freq = g_fUVScale on both axes)
+    // original constructs THREE PerlinNoise objects (freq = DAT_14017214c on both axes)
     // that are never subsequently used — but the 6 Random::RandTol draws they consume
     // offset the shared world RNG (world+0xd8). Omitting them shifts every downstream
     // draw, so the scatter can't reproduce a vanilla map seed. Replicate exactly: 6
@@ -5054,7 +4971,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         for (int i = 0; i < 3; ++i) {
             int t1 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
             int t2 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
-            fn_PerlinNoise_Ctor(throwaway, uvScale, uvScale, t2, t1);
+            RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(throwaway), uvScale, uvScale, t2, t1);
         }
     }
 
@@ -5113,7 +5030,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 int vs1 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
                 int vs2 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
                 if (vi < MAX_VARIANTS)
-                    fn_PerlinNoise_Ctor(vPerlin[vi], vFreqX, vFreqY, vs2, vs1);
+                    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(vPerlin[vi]), vFreqX, vFreqY, vs2, vs1);
             }
         }
         if (variantCount > MAX_VARIANTS) variantCount = MAX_VARIANTS;
@@ -5122,7 +5039,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
         int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
         uint8_t perlin[0x100] = {};
-        fn_PerlinNoise_Ctor(perlin, persist, octaves, s2, s1);
+        RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(perlin), persist, octaves, s2, s1);
 
         const bool doVariant = hasVariants && modelDesc && variantCount > 0;
         fprintf(stderr, "[startTown::res] [%d] variants:has=%d count=%d thr=%.3f denom=%d "
@@ -5135,7 +5052,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         bool capped = false;
         for (int y = 0; y < dim && !capped; ++y) {
             for (int x = 0; x < dim; ++x) {
-                float p = fn_PerlinNoise_Generate(perlin, (float)x * scale, (float)y * scale);
+                float p = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(perlin), (float)x * scale, (float)y * scale);
                 if (threshold > p * 0.5f + 0.5f) continue;
                 if (reinterpret_cast<System::Random*>(rng)->RandFloat() > density) continue;   // B.3.4b bridge
 
@@ -5168,13 +5085,13 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 const float center = (float)(dim >> 1) - kCenterBias;
                 float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
                 float pos[3] = {0,0,0}, tri[3] = {0,0,0};
-                fn_MapGetTerrainPos(game, pos, in, 0, tri);
+                Reimpl_MapGetTerrainPos(game, pos, in, 0, tri);
                 const float h = pos[2], slope = tri[2];
                 if (h < hMin || h >= hMax || slope < slopeMin) continue;
 
                 // Instantiate, place its model at the tile (Foundation F), register.
-                void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
-                void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+                void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
+                void* ent = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tmpl) : nullptr;
                 uintptr_t entIBP = 0;
                 new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
                 // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY,
@@ -5193,7 +5110,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 if (doVariant && ent) {
                     int variantIdx = 0;
                     for (int vi = 0; vi < variantCount; ++vi) {
-                        float v = fn_PerlinNoise_Generate(vPerlin[vi], (float)x * vScale, (float)y * vScale);
+                        float v = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(vPerlin[vi]), (float)x * vScale, (float)y * vScale);
                         variantIdx = vi;
                         if (vThresh <= v * 0.5f + 0.5f) break;
                         variantIdx = 0;
@@ -5212,7 +5129,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 // BANISHED_LIVE_GROWTH is on it stages the tree at a random growth value.
                 StartTown_GrowthInitResource(ent, tidGrowth, rng);
 
-                fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+                EntityList_RegisterEntity_Impl(entityList, &entIBP, category);
 
                 // Wild-food chain diag (see tidSpawnComp above) + the initial
                 // sub-resource seed (ComponentEntity_impl_5cc0, retail call site
@@ -5291,10 +5208,8 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
 static bool SpawnEnvVolumeAndRegister(void* tmpl, void* entityList,
                                       int gridX, int gridY, int chunk) {
     if (!tmpl) return false;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return false;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
-    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
+    void* ent = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tmpl) : nullptr;
     if (!ent) return false;
 
     const uint32_t s_tidEnv = AmbientEnvironmentComponent::TypeId();   // caller batch CB6: was a lazy cache
@@ -5307,7 +5222,7 @@ static bool SpawnEnvVolumeAndRegister(void* tmpl, void* entityList,
     void* ibp = nullptr;
     new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
     int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
-    fn_EntityList_RegisterEntity(entityList, &ibp, category);
+    EntityList_RegisterEntity_Impl(entityList, &ibp, category);
     return true;
 }
 
@@ -5424,9 +5339,7 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fflush(stderr);
 
     // DIAG — fn-pointer state + per-pool first-entry resolution probe.
-    fprintf(stderr, "[startTown::spawn] fns: CreateEntity=%p Register=%p IBPCtor=%p MemAlloc=%p ExtFactory=%p\n",
-            (void*)fn_EntityFactory_CreateEntity, (void*)fn_EntityList_RegisterEntity,
-            (void*)fn_InternalBasePtr_Ctor, (void*)fn_MemAlloc,
+    fprintf(stderr, "[startTown::spawn] ExtFactory=%p\n",
             ::Object::ExternalFactory::_singleton);
     // Probe: resolve the first entry of each pool + the mapGen _citizen ref
     // (+0x48, a known "Template\Citizen.rsc" reference). Dump the String text so
@@ -5547,14 +5460,11 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
         void* townMgr = nullptr;
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
             townMgr = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList;   // B.3.8 bridge
-        typedef void (*fn_RegisterRawMat_t)(void* townMgr, void* templateEntity);
-        fn_RegisterRawMat_t regRawMat = reinterpret_cast<fn_RegisterRawMat_t>(
-            ResolveAddr(Module::Exe, 0x140091e60));
 
         const int rmCount = *(int32_t*)(sc + 0xa8);
         uint8_t* rmPool   = *(uint8_t**)(sc + 0xa0);
         int registered = 0;
-        if (townMgr && regRawMat && rmPool) {
+        if (townMgr && rmPool) {
             for (int i = 0; i < rmCount; ++i) {
                 // Retail resolves a copy of the ExternalRef by name (FUN_14001b1d0)
                 // and registers the resolved template; unresolved entries are
@@ -5565,7 +5475,7 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
                     fflush(stderr);
                     continue;
                 }
-                regRawMat(townMgr, tmpl);
+                RawMaterialComponent_RegisterRawMaterial(townMgr, tmpl);   // 0x140091e60
                 ++registered;
             }
         }

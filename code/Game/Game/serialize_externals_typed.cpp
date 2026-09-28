@@ -39,8 +39,7 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
                                       const char* typeName) {
     if (!refField || !serializer) return;
 
-    if (!fn_IsDerivedFrom ||
-        !::Object::ExternalFactory::_singleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[ExternalPtr::Serialize_7140<%s>] runtime primitives unwired — "

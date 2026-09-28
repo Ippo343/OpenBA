@@ -25,7 +25,9 @@
 //   +0x48..0x58 float UV params (when modeFlag==0)
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "math/Math.h"
+#include "system/MemoryAllocator.h"
+#include "Action/exe_bodies.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -48,78 +50,38 @@ extern "C" void     TradeWork_helper_14b00(int64_t ctx, void* node);
 
 namespace {
 
-// ---- already-registered exe sub-callees ------------------------------------------
-typedef void (*Cc10_t)(int64_t self, int x, int y, int64_t outDesc, int variant, uint8_t b3c);
-typedef int  (*E180_t)(uint64_t a0, char a1, char a2, char a3, char a4,
-                       char a5, char a6, char a7, char a8);
-typedef void (*Ee40_t)(int64_t* vb, int count);
-typedef void (*Pool8d0_t)(int64_t* pool, int newCount, void* rec);
-
-// ---- static MemAlloc/MemFree (slot 0x140152b60/0x140152b68) -----------------------
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
-typedef void  (*MemFreeStatic_t)(void* ptr);                       // SAXPEAX
-MemAllocStatic_t s_memAlloc = nullptr;
-MemFreeStatic_t  s_memFree  = nullptr;
-bool s_memInit = false;
-void EnsureMem() {
-    if (s_memInit) return;
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x140152b60));
-    if (!s_memAlloc) s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));  // (uint64 size, int align)
-    s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x140152b68));
-    if (!s_memFree) s_memFree = reinterpret_cast<MemFreeStatic_t>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    s_memInit = true;
+// ---- exe sub-callees, called by name (Action/exe_bodies.h) -------------------------
+//   0x1400acc10 Pf_RoadQuad_cc10, 0x1400ae180 Pf_TileShapeLut_ae180,
+//   0x14001ee40 Pf_VectorResize14_ee40, 0x14001f8d0 Pf_VectorResize14Fill_f8d0.
+// Static MemAlloc/MemFree (slots 0x140152b60/0x140152b68) are
+// System::MemoryAllocator::MemAlloc / MemFree.
+//
+// ---- engine Transform2/Vector2 ops (.rdata dispatch slots), called as the members of
+// Math::Transform2 / Math::Vector2 exactly as their C doors (RtMath_*) did:
+//   0x140151e58 Vector2::Vector2()            -> *p = Math::Vector2()
+//   0x140152648 Transform2(Scalar&, Vector2&)  -> *self = Math::Transform2(s, v)
+//   0x140152650 Transform2::FromYawOffset      -> *ret = Transform2::FromYawOffset(s, v)
+//   0x140152640 Transform2::operator*(T2)      -> *ret = lhs * rhs   (RCX=lhs, RDX=ret, R8=rhs)
+//   0x140152658 Transform2::operator*(Vector2) -> *ret = self * v    (RCX=self, RDX=ret, R8=v)
+inline void* T2Ctor(void* self, const void* s, const void* v) {   // B.3.x bridge
+    *static_cast<Math::Transform2*>(self) = Math::Transform2(
+        *static_cast<const Math::Scalar*>(s), *static_cast<const Math::Vector2*>(v));
+    return self;
 }
-inline void* MemAlloc(uint64_t sz, uint32_t al) { return s_memAlloc ? s_memAlloc(sz, al) : nullptr; }
-inline void  MemFree(void* p) { if (s_memFree && p) s_memFree(p); }
-
-// ---- resolved sub-callee fn-ptrs --------------------------------------------------
-Cc10_t    fnCc10 = nullptr;
-E180_t    fnE180 = nullptr;
-Ee40_t    fnEe40 = nullptr;
-Pool8d0_t fnPool = nullptr;
-bool s_fnInit = false;
-void EnsureFns() {
-    if (s_fnInit) return;
-    fnCc10 = reinterpret_cast<Cc10_t>(ResolveAddr(Module::Exe, 0x1400acc10));
-    fnE180 = reinterpret_cast<E180_t>(ResolveAddr(Module::Exe, 0x1400ae180));
-    fnEe40 = reinterpret_cast<Ee40_t>(ResolveAddr(Module::Exe, 0x14001ee40));
-    fnPool = reinterpret_cast<Pool8d0_t>(ResolveAddr(Module::Exe, 0x14001f8d0));
-    s_fnInit = true;
+inline void* T2FromYawOffset(void* ret, const void* s, const void* v) {   // B.3.x bridge
+    *static_cast<Math::Transform2*>(ret) = Math::Transform2::FromYawOffset(
+        *static_cast<const Math::Scalar*>(s), *static_cast<const Math::Vector2*>(v));
+    return ret;
 }
-
-// ---- engine Transform2/Vector2 op typedefs (via .rdata dispatch slots) ------------
-typedef void* (*Vec2Ctor_t)(void* self);                                   // 0x140151e58
-typedef void* (*T2FromScalarVec_t)(void* self, void* scalar, void* vec);   // 0x140152648
-typedef void* (*T2FromYaw_t)(void* self, void* scalar, void* vec);         // 0x140152650
-// operator*(Transform2): 3-arg member form: RCX=acc(lhs), RDX=outBuf, R8=rhs -> RDX.
-typedef void* (*T2MulT2_t)(void* acc, void* outBuf, void* rhs);            // 0x140152640
-// operator*(Vector2): RCX=this(Transform2), RDX=out Vector2, R8=in Vector2 -> RDX.
-typedef void* (*T2MulVec_t)(void* self, void* outVec, void* inVec);        // 0x140152658
-
-Vec2Ctor_t        opVec2Ctor = nullptr;
-T2FromScalarVec_t opT2Scalar = nullptr;
-T2FromYaw_t       opT2YawOff = nullptr;
-T2MulT2_t         opT2MulT2  = nullptr;
-T2MulVec_t        opT2MulVec = nullptr;
-bool s_opInit = false;
-void EnsureOps() {
-    if (s_opInit) return;
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    opVec2Ctor = reinterpret_cast<Vec2Ctor_t>(slot(0x140151e58));
-    opT2Scalar = reinterpret_cast<T2FromScalarVec_t>(slot(0x140152648));
-    opT2YawOff = reinterpret_cast<T2FromYaw_t>(slot(0x140152650));
-    opT2MulT2  = reinterpret_cast<T2MulT2_t>(slot(0x140152640));
-    opT2MulVec = reinterpret_cast<T2MulVec_t>(slot(0x140152658));
-    s_opInit = true;
+inline void* T2MulT2(const void* lhs, void* ret, const void* rhs) {   // B.3.x bridge
+    *static_cast<Math::Transform2*>(ret) =
+        *static_cast<const Math::Transform2*>(lhs) * *static_cast<const Math::Transform2*>(rhs);
+    return ret;
+}
+inline void* T2MulVec(const void* self, void* ret, const void* v) {   // B.3.x bridge
+    *static_cast<Math::Vector2*>(ret) =
+        *static_cast<const Math::Transform2*>(self) * *static_cast<const Math::Vector2*>(v);
+    return ret;
 }
 
 // The two growable lists inside a highlight slot:
@@ -170,7 +132,7 @@ inline void EmitVertex(int64_t lVar16, int64_t* poolRoot, int64_t* pool,
         // descriptor bytes; every shared-corner dedup hit then returns a wild index and the
         // triangle stretches off toward the bogus vertex (the "sliver to map center" bug).
         TradeWork_impl_1f6b0(poolRoot, outNode, rec);                  // 0x14001f6b0 (key = rec)
-        if (fnPool) fnPool(pool, curCount + 1, desc);                  // 0x14001f8d0 (vertex = desc)
+        Pf_VectorResize14Fill_f8d0(pool, curCount + 1, reinterpret_cast<uint64_t*>(desc));   // 0x14001f8d0 (vertex = desc)
     } else {
         idx = *reinterpret_cast<uint16_t*>(node + 0x14);
     }
@@ -184,8 +146,6 @@ inline void EmitVertex(int64_t lVar16, int64_t* poolRoot, int64_t* pool,
 // =================================================================================
 extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                                      int param_4, int param_5) {
-    EnsureMem(); EnsureFns(); EnsureOps();
-
     const float fUV = (g_fUVScale ? *g_fUVScale : 1.0f);   // g_fUVScale (1.0f in retail)
 
     int64_t lVar16 = (int64_t)param_2 * 0x60 + *reinterpret_cast<int64_t*>(param_1 + 0x1f0);
@@ -196,7 +156,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     uint8_t cornerBuf[0x20];
     {
         uint8_t* p = cornerBuf;
-        for (int i = 3; i >= 0; --i) { if (opVec2Ctor) opVec2Ctor(p); p += 8; }
+        for (int i = 3; i >= 0; --i) { *reinterpret_cast<Math::Vector2*>(p) = Math::Vector2(); p += 8; }
     }
 
     float fVar3 = fUV;
@@ -287,17 +247,17 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     // with {0,0} r168 offset, decal V now maps positive/in-atlas (barn f5=3456=0.84375·4096).
     float yawOffset[2] = { 0.0f, 0.0f };   // disasm [RBP-0x60] clean {0,0}
     void* r138 = nullptr; void* r168 = nullptr; void* r108 = nullptr;
-    if (opT2Scalar) r138 = opT2Scalar(T_138, &local_2a0, &local_228);          // 0x140152648 (ctor1)
-    if (opT2YawOff) r168 = opT2YawOff(T_168, &local_29c, yawOffset);           // 0x140152650 (yawOff)
-    if (opT2Scalar) r108 = opT2Scalar(T_108, &local_2b0_0, &local_2a8);        // 0x140152648 (ctor3)
+    r138 = T2Ctor(T_138, &local_2a0, &local_228);                             // 0x140152648 (ctor1)
+    r168 = T2FromYawOffset(T_168, &local_29c, yawOffset);                     // 0x140152650 (yawOff)
+    r108 = T2Ctor(T_108, &local_2b0_0, &local_2a8);                           // 0x140152648 (ctor3)
 
-    if (opT2MulT2) {
+    {
         void* acc;
-        acc = opT2MulT2(TF_flip, T_160, r108);   // 0x140152640  flip   * ctor3(r108)
-        acc = opT2MulT2(acc, T_148, r168);        //              (..)   * yawOff(r168)
-        acc = opT2MulT2(acc, T_118, r138);        //              (..)   * ctor1(r138)
-        acc = opT2MulT2(acc, T_e8,  TF_uvRect);   //              (..)   * uvRect
-        acc = opT2MulT2(acc, T_1f0, TF_scale);    //              (..)   * scale  -> T_1f0
+        acc = T2MulT2(TF_flip, T_160, r108);   // 0x140152640  flip   * ctor3(r108)
+        acc = T2MulT2(acc, T_148, r168);        //              (..)   * yawOff(r168)
+        acc = T2MulT2(acc, T_118, r138);        //              (..)   * ctor1(r138)
+        acc = T2MulT2(acc, T_e8,  TF_uvRect);   //              (..)   * uvRect
+        acc = T2MulT2(acc, T_1f0, TF_scale);    //              (..)   * scale  -> T_1f0
         (void)acc;
     }
 
@@ -306,8 +266,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     uint64_t* corner = reinterpret_cast<uint64_t*>(cornerBuf);
     auto mulVec = [&](uint64_t packedCorner) -> uint64_t {
         local_2a8 = packedCorner;
-        if (!opT2MulVec) return 0;
-        uint64_t* r = reinterpret_cast<uint64_t*>(opT2MulVec(T_1f0, local_298, &local_2a8));
+        uint64_t* r = reinterpret_cast<uint64_t*>(T2MulVec(T_1f0, local_298, &local_2a8));
         return *r;
     };
     corner[0] = mulVec(0x0);                   // {0,0}
@@ -370,8 +329,8 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                             cVar17 = ((iVar13b < iVar25b) && (iVar18 - 1 < *reinterpret_cast<int*>(lVar16 + 0x30))) ? '\0' : '\x01';
                             cVar12 = ((iVar11   < iVar14 ) && (iVar18 - 1 < *reinterpret_cast<int*>(lVar16 + 0x30))) ? '\0' : '\x01';
                             bool bVar2 = iVar18 + 1 <= *reinterpret_cast<int*>(lVar16 + 0x38);
-                            if (fnE180) iVar13 = fnE180(
-                                (uint64_t)((uintptr_t)ppvVar9 & ~0xffULL) | (uint8_t)bVar2,
+                            iVar13 = Pf_TileShapeLut_ae180(
+                                reinterpret_cast<void*>((uint64_t)((uintptr_t)ppvVar9 & ~0xffULL) | (uint8_t)bVar2),
                                 (char)(iVar25b <= iVar13b), (char)(iVar14 <= iVar11),
                                 (char)(*reinterpret_cast<int*>(lVar16 + 0x30) <= iVar18 - 1),
                                 (char)bVar2, cVar12, cVar17, cVar23, cVar26);
@@ -380,8 +339,8 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
 
                         // cc10: emit the 4 corner descriptors into descBlock.
                         uint8_t descBlock[0x60];
-                        if (fnCc10) fnCc10(param_1, iVar22, iVar18, (int64_t)descBlock, iVar13,
-                                           *reinterpret_cast<uint8_t*>(lVar16 + 0x3c));
+                        Pf_RoadQuad_cc10(param_1, iVar22, iVar18, (int64_t)descBlock, iVar13,
+                                         *reinterpret_cast<uint8_t*>(lVar16 + 0x3c));
 
                         // per-tile UV: 4 corners, write short pos pair into descBlock.
                         {
@@ -397,7 +356,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                                 float v = (float)((yOff[k] - *reinterpret_cast<int*>(lVar16 + 0x30)) + iVar18)
                                           * (fVar3 / (float)iVar28);
                                 local_2a8 = ((uint64_t)(uint32_t&)v << 32) | (uint32_t&)u;
-                                if (opT2MulVec) opT2MulVec(T_1f0, local_298, &local_2a8);
+                                T2MulVec(T_1f0, local_298, &local_2a8);
                                 puVar19[-1] = (int16_t)(int)local_298[0];
                                 puVar19[0]  = (int16_t)(int)local_298[1];
                                 puVar19 += 10;
@@ -436,7 +395,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     }
 
     // finalize: copy pooled vertices into the slot's vertex buffer.
-    if (fnEe40) fnEe40(plVar30, pool.count);
+    Pf_VectorResize14_ee40(plVar30, pool.count);
     int     total   = pool.count;
     int64_t vbBase  = *plVar30;
     int64_t srcBase = pool.base;
@@ -450,11 +409,11 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     if (bst.root != 0) {
         TradeWork_helper_14b00(reinterpret_cast<int64_t>(&bst.root), *reinterpret_cast<void**>(bst.root + 0x20));
         TradeWork_helper_14b00(reinterpret_cast<int64_t>(&bst.root), *reinterpret_cast<void**>(bst.root + 0x28));
-        MemFree(reinterpret_cast<void*>(bst.root));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(bst.root));   // bst.root != 0 here
     }
     bst.root  = 0;
     bst.count = 0;
-    MemFree(reinterpret_cast<void*>(pool.base));
+    if (pool.base) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(pool.base));
 
     (void)local_208; (void)local_200; (void)local_1f8; (void)local_280; (void)local_220;
     (void)local_218; (void)local_210; (void)local_290_lo; (void)local_2e8; (void)uStack_2e0;

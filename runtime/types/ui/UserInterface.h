@@ -534,3 +534,7 @@ extern "C" void RtUi_UserInterface_Dtor(UI::UserInterface* self);  // 0x180120b9
 // B3R RT-Core: the ctor body the Engine dialog loops call by name.
 extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
 // ==== end B3R W0-P0c ====
+
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
+// ==== end B3R G-Game ====

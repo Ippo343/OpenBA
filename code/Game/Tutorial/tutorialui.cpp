@@ -11,6 +11,9 @@
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
 #include "engine_funcs.h"
+#include "save/SaveLoad.h"             // RtSave_SaveLoad_Dtor
+#include "system/MemoryAllocator.h"
+#include "system/Value.h"               // RtSystem_Time_Ctor
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -98,15 +101,15 @@ void TutorialUI::QuitTutorial() {
     // Destroy and free the SaveLoad object stored at eng+0x140
     void* saveLoad = *(void**)(eng + 0x140);
     if (saveLoad) {
-        fn_SaveLoad_Dtor(saveLoad);
-        fn_MemFreeStatic(saveLoad);
+        RtSave_SaveLoad_Dtor(reinterpret_cast<Save::SaveLoad*>(saveLoad));   // ??1SaveLoad 0x1800c3c90
+        System::MemoryAllocator::MemFree(saveLoad);
     }
     *(void**)(eng + 0x140) = nullptr;
 
     // --- Step 1: Allocate and construct the MenuDialogLoopT (0xc00 bytes) ---
     // This is the main menu dialog loop that will display after the loading screen.
     // ENDGAME B.3.9 EXA: the real class (ctor 0x14009bb00, which retail CALLs).
-    void* menuLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xc00, 8);
+    void* menuLoop = System::MemoryAllocator::MemAlloc(0xc00, 8);
     Engine::UpdateLoop* pMenuLoop = nullptr;
     if (menuLoop) {
         System::String menuNameStr("Dialog/MainMenu.rsc");
@@ -116,12 +119,12 @@ void TutorialUI::QuitTutorial() {
     // --- Step 2: Allocate and construct the GameLoadDialogLoopT (0xb60 bytes) ---
     // Wraps the menu loop; shows "Dialog/Loading.rsc" while the menu is loading.
     // The real class: its ctor is the subclass init retail inlines here.
-    void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
+    void* dlLoop = System::MemoryAllocator::MemAlloc(0xb60, 4);
     Engine::UpdateLoop* pDlLoop = nullptr;
     if (dlLoop) {
         // Delay constant is 1.0f (DAT_14017214c — bytes 0x3f800000).
         uint64_t delayTime = 0;
-        fn_Time_Ctor_Float(&delayTime, 1.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), 1.0f);
 
         System::String loadingNameStr("Dialog/Loading.rsc");
         pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
@@ -130,11 +133,11 @@ void TutorialUI::QuitTutorial() {
 
     // --- Step 3: Allocate and construct the outer GameLoaderLoop (0x48 bytes) ---
     // Wraps the GameLoadDialogLoopT with a zero-delay outer loader.
-    void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+    void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
     void* pOuterLoop = nullptr;
     if (outerLoop) {
         uint64_t zeroTime = 0;
-        fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
         pOuterLoop = ::new (outerLoop) GameLoaderLoop(
             pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
     }

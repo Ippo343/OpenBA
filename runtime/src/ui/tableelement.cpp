@@ -44,7 +44,6 @@
 // and type-info record are cached in namespace-scope std::atomic slots.
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"
@@ -56,7 +55,6 @@ namespace {
 
 // `?GetRowHeight@` (0x18011e090) / `?GetColumnWidth@` (0x18011e1a0) — declared
 // on the class, bodies still element_bodies_b5.cpp's doors (fragment pass).
-using ExtentFn = int32_t (*)(void* self, int32_t index);
 
 }  // namespace
 
@@ -81,7 +79,7 @@ void TableElement::ComputeSize() {
     bool first = true;
     for (int32_t c = 0; c < _columnCount; ++c) {
         int32_t* cols = _columnSizes._data;                                 // loaded BEFORE the call
-        cols[c] = RtAddr<ExtentFn>(0x18011e1a0ull)(this, c);                // GetColumnWidth
+        cols[c] = GetColumnWidth(c);                                        // 0x18011e1a0
         cols = _columnSizes._data;                                          // re-read
         _layoutWidth = _layoutWidth + cols[c];
         if (cols[c] != 0) {
@@ -93,7 +91,7 @@ void TableElement::ComputeSize() {
     first = true;
     for (int32_t r = 0; r < _rowCount; ++r) {
         int32_t* rows = _rowSizes._data;                                    // loaded BEFORE the call
-        rows[r] = RtAddr<ExtentFn>(0x18011e090ull)(this, r);                // GetRowHeight
+        rows[r] = GetRowHeight(r);                                          // 0x18011e090
         rows = _rowSizes._data;                                             // re-read
         _layoutHeight = rows[r] + _layoutHeight;
         if (rows[r] != 0) {
@@ -187,8 +185,8 @@ void TableElement::Draw(SpriteContext& context, uint8_t alpha) const {
 // ~Arrays afterwards are no-ops). The restamp and the tail into ~Element are
 // the compiler's.
 TableElement::~TableElement() {
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(&_columnSizes);
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(&_rowSizes);
+    rtcoll::RtColl_ArrayDtor_18001c750(&_columnSizes);
+    rtcoll::RtColl_ArrayDtor_18001c750(&_rowSizes);
 }
 
 // ?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ 0x1800793c0 --
@@ -213,19 +211,6 @@ Object::Base* TableElement::CreateInPlaceObject(void* place) {
 // `??_7TableElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // TableElement now wears the compiler's table.
 // ============================================================================
-
-int RtUiTableElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@TableElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TableElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x1800793c0ull, (void*)&UI::TableElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TableElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180079440ull, (void*)&UI::TableElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TableElement's own type record, built at CRT init

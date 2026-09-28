@@ -48,11 +48,12 @@
 // RULE B6-5: the vtable and type-info record are cached in namespace-scope
 // std::atomic slots.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/ScrollElement.h"
+#include "../../types/ui/SpriteContext.h"
+#include "../../types/ui/UserInterface.h"
 
 using namespace rtui;
 
@@ -79,8 +80,6 @@ SpriteCopy LoadSprite(const ::Sprite& src) {
 
 // `?GetBarLayout@ScrollElement@UI@@AEBAXAEAH000@Z` (0x18011a2d0) — declared on
 // the class, body still element_bodies_b5.cpp's door (fragment pass).
-using GetBarLayoutFn = void (*)(const void* self, int32_t* x0, int32_t* y0,
-                                int32_t* x1, int32_t* y1);
 
 }  // namespace
 
@@ -183,37 +182,33 @@ void ScrollElement::Draw(SpriteContext& context, uint8_t alpha) const {
     int32_t ex0, ey0, ex1, ey1;    // the END slice's rectangle, common tail
     if (_vertical == 0) {
         const int32_t w0 = SpriteWidth(&_trackStart, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackStart,
-                                             left, top, left + w0, botY, trackColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackStart, left, top, left + w0, botY, trackColor);
         const int32_t w2 = SpriteWidth(&_trackEnd, 0);
         const int32_t w0b = SpriteWidth(&_trackStart, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
-                                             left + w0b, top, rightX - w2, botY, trackColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left + w0b, top, rightX - w2, botY, trackColor);
         ex0 = rightX - SpriteWidth(&_trackEnd, 0);
         ey0 = top;
         ex1 = rightX;
         ey1 = botY;
     } else {
         const int32_t h0 = SpriteHeight(&_trackStart, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackStart,
-                                             left, top, rightX, top + h0, trackColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackStart, left, top, rightX, top + h0, trackColor);
         const int32_t h2 = SpriteHeight(&_trackEnd, 0);
         const int32_t h0b = SpriteHeight(&_trackStart, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
-                                             left, top + h0b, rightX, botY - h2, trackColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left, top + h0b, rightX, botY - h2, trackColor);
         ex0 = left;
         ey0 = botY - SpriteHeight(&_trackEnd, 0);
         ex1 = rightX;
         ey1 = botY;
     }
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackEnd, ex0, ey0, ex1, ey1, trackColor);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackEnd, ex0, ey0, ex1, ey1, trackColor);
 
     raw = _barColor;
     if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
     const uint32_t barColor = ModulateColor(raw, alpha);
 
     int32_t bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
-    RtAddr<GetBarLayoutFn>(0x18011a2d0ull)(this, &bx0, &by0, &bx1, &by1);
+    GetBarLayout(bx0, by0, bx1, by1);                 // 0x18011a2d0
 
     // The thumb uses the HOT set while the element is interactive and the
     // scroll actually has range.
@@ -224,22 +219,20 @@ void ScrollElement::Draw(SpriteContext& context, uint8_t alpha) const {
 
     if (_vertical == 0) {
         const int32_t w0 = SpriteWidth(&s0, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &s0, bx0, by0, bx0 + w0, by1, barColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s0), bx0, by0, bx0 + w0, by1, barColor);
         const int32_t w2  = SpriteWidth(&s2, 0);
         const int32_t w0b = SpriteWidth(&s0, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &s1, bx0 + w0b, by0,
-                                             bx1 - w2, by1, barColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s1), bx0 + w0b, by0, bx1 - w2, by1, barColor);
         bx0 = bx1 - SpriteWidth(&s2, 0);
     } else {
         const int32_t h0 = SpriteHeight(&s0, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &s0, bx0, by0, bx1, by0 + h0, barColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s0), bx0, by0, bx1, by0 + h0, barColor);
         const int32_t h2  = SpriteHeight(&s2, 0);
         const int32_t h0b = SpriteHeight(&s0, 0);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &s1, bx0, by0 + h0b,
-                                             bx1, by1 - h2, barColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s1), bx0, by0 + h0b, bx1, by1 - h2, barColor);
         by0 = by1 - SpriteHeight(&s2, 0);
     }
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &s2, bx0, by0, bx1, by1, barColor);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s2), bx0, by0, bx1, by1, barColor);
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +252,7 @@ void ScrollElement::Update(const System::Time& time, UserInterface* ui,
 
     if (state.buttonPressed != 0 && (_flags & kFlagInteractive) != 0) {
         int32_t bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
-        RtAddr<GetBarLayoutFn>(0x18011a2d0ull)(this, &bx0, &by0, &bx1, &by1);
+        GetBarLayout(bx0, by0, bx1, by1);                 // 0x18011a2d0
 
         const int32_t mx = state.mouseX;
         const int32_t my = state.mouseY;
@@ -282,7 +275,7 @@ void ScrollElement::Update(const System::Time& time, UserInterface* ui,
             played = true;
         }
 
-        if (played) RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
+        if (played) static_cast<UI::UserInterface*>(ui)->Play(4);
 
         if (_currentValue < 0.0f) _currentValue = 0.0f;
         if (_maxValue < _currentValue) _currentValue = _maxValue;
@@ -300,7 +293,7 @@ void ScrollElement::Update(const System::Time& time, UserInterface* ui,
         if ((flags & kFlagDragging) != 0 && state.b04 != 0) {
             SetFlags(this, flags & ~kFlagDragging);
             if (!isNear) return;
-            RtAddr<PlayFn>(0x1801223d0ull)(ui, 5);
+            static_cast<UI::UserInterface*>(ui)->Play(5);
         }
         if (isNear && (_flags & kFlagDragging) != 0) {
             _currentValue = _dragValue;
@@ -349,19 +342,6 @@ Object::Base* ScrollElement::CreateInPlaceObject(void* place) {
 // `??_7ScrollElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // ScrollElement now wears the compiler's table.
 // ============================================================================
-
-int RtUiScrollElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ScrollElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ScrollElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003a940ull, (void*)&UI::ScrollElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ScrollElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003a9c0ull, (void*)&UI::ScrollElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ScrollElement's own type record, built at CRT init

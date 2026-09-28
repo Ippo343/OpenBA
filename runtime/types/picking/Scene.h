@@ -349,3 +349,7 @@ static_assert(offsetof(Scene, _freeEntry)  == 0x58, "Scene::_freeEntry @ +0x58")
 static_assert(offsetof(Scene, _queryStamp) == 0x5c, "Scene::_queryStamp @ +0x5c");
 
 }  // namespace Picking
+
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+extern "C" Picking::Scene* RtPicking_Scene_Ctor(void* selfv);  // 0x1801258e0
+// ==== end B3R G-Game ====

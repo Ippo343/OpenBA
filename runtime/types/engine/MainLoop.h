@@ -320,3 +320,8 @@ static_assert(offsetof(MainLoop, _postUpdate)      == 0x90, "MainLoop::_postUpda
 // B7-6: one definition per layout. Every `RtEngine::MainLoop` spelling in the
 // runtime tree now names the class.
 namespace RtEngine { using MainLoop = ::Engine::MainLoop; }
+
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+extern "C" ::Engine::MainLoop* RtEngine_MainLoop_Ctor(::Engine::MainLoop* self, ::Engine::Engine* engine);  // 0x1800dd6b0
+extern "C" void RtEngine_MainLoop_Dtor(::Engine::MainLoop* self);  // 0x1800dd640
+// ==== end B3R G-Game ====

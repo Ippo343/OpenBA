@@ -66,8 +66,11 @@
 //      SetCitizenSpawnTransform already applied. The field is read raw from the .rsc.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "resolve.h"
+#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Component/exe_bodies.h"            // CitizenComp_DeferredInit_117080
+#include "Game/exe_bodies.h"                 // fn_Random_RandFloatTol
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()
 #include "Component/CitizenComponent.h"     // caller batch CB6: TypeId()
@@ -92,13 +95,10 @@ static constexpr int ENTITY_SIZE     = 0x48;   // ComponentEntity allocation
 
 static constexpr float kAdultAgeBias = 0.5f;   // DAT_140172114
 
-// CitizenComp_DeferredInit_117080 (0x140117080) — the whole per-citizen init. Called
-// through ResolveAddr (project style) rather than directly, and with the age argument
-// correctly typed as FLOAT: it was long declared `int` and only worked because every
-// existing caller passed literal 0 (same bit pattern as 0.0f). See open H.
-typedef void (*fn_DeferredInit_117080_t)(int64_t self, void* pos, uint32_t gender,
-                                         char isChild, float age, char educated,
-                                         int64_t* parentIBP, int64_t laborerProf);
+// CitizenComp_DeferredInit_117080 (0x140117080) — the whole per-citizen init, called by
+// name (Component/exe_bodies.h), with the age argument typed as FLOAT: it was long
+// declared `int` and only worked because every existing caller passed literal 0 (same
+// bit pattern as 0.0f). See open H.
 
 static int  s_trace = 0;
 static bool TraceOn() { return s_trace < 24; }   // first-N
@@ -136,9 +136,8 @@ static void FoundingSpawn_FindCitizenComp(void* entity, uintptr_t* outIBP) {
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    else                         *outIBP = reinterpret_cast<uintptr_t>(found);
 }
 
 // The head of impl_0dd0: find the CitizenDescription in the citizen template's
@@ -256,19 +255,14 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
                                                float age, char genderSel, char educated,
                                                uint8_t** outCitizenComp) {
     if (outCitizenComp) *outCitizenComp = nullptr;
-    if (!fn_MemAlloc || !fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor) {
-        fprintf(stderr, "[FoundingSpawn] BAIL: entity primitives unresolved\n");
-        fflush(stderr);
-        return nullptr;
-    }
-
     void* rng = FoundingSpawn_Rng();
 
     // 1. allocate + copy-construct the entity from the (re-resolved) citizen template
     void* tmpl = FoundingSpawn_RefreshTemplate(startConfig, citizenTemplate);
-    void* mem  = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
-    void* ent  = (mem && tmpl) ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+    void* mem  = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
+    void* ent  = (mem && tmpl)
+                     ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tmpl)   // 0x1400c3720
+                     : nullptr;
     if (!ent) {
         fprintf(stderr, "[FoundingSpawn] BAIL: CopyCtor produced no entity "
                 "(mem=%p tmpl=%p)\n", mem, tmpl);
@@ -296,9 +290,9 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
 
     // 3. the linked CitizenDescription (derive-or-trust, deviation (b))
     void* desc = *reinterpret_cast<void**>(comp + 0x18);
-    if (desc && fn_IsDerivedFrom) {
+    if (desc) {
         uint32_t tid = TidCitizenDescription();
-        if (tid != 0 && !fn_IsDerivedFrom(desc, tid)) {
+        if (tid != 0 && !::Object::IsDerivedFromNullSafe(desc, tid)) {
             // Retail takes NULL here and then reads desc+0x44 off it — a fault. Keep the
             // linked description and say so once (deviation (b)).
             static bool s_said = false;
@@ -335,22 +329,10 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
     // 7. the whole per-citizen init
     int64_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    static fn_DeferredInit_117080_t s_deferredInit = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_resolved = true;
-        s_deferredInit = reinterpret_cast<fn_DeferredInit_117080_t>(
-            ResolveAddr(Module::Exe, 0x140117080));
-    }
-    if (s_deferredInit) {
-        s_deferredInit(static_cast<int64_t>(compIBP), pos,
-                       static_cast<uint32_t>(genderSel == '\0'),
-                       isChild ? '\x01' : '\0', age, educated, &nullIBP, laborerProf);
-    } else {
-        fprintf(stderr, "[FoundingSpawn] WARN: 0x140117080 unresolved — colonist gets no "
-                "name/age/gender/transform\n");
-        fflush(stderr);
-    }
+    CitizenComp_DeferredInit_117080(static_cast<int64_t>(compIBP), pos,   // 0x140117080
+                                    static_cast<uint32_t>(genderSel == '\0'),
+                                    isChild ? '\x01' : '\0', age, educated, &nullIBP,
+                                    laborerProf);
 
     // 8. register with the world entity list under the template's category
     tmpl = FoundingSpawn_RefreshTemplate(startConfig, tmpl);
@@ -358,7 +340,7 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
                               reinterpret_cast<uint8_t*>(tmpl) + TEMPLATE_CATEGORY)
                         : 0;
     uintptr_t regIBP = entIBP;
-    fn_EntityList_RegisterEntity(entityList, &regIBP, category);
+    EntityList_RegisterEntity_Impl(entityList, &regIBP, category);   // 0x1400c48a0
 
     if (outCitizenComp) *outCitizenComp = comp;
 

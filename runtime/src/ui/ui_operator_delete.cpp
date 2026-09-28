@@ -129,8 +129,3 @@ extern "C" void RtUi_ClassOperatorDelete(void* p) {
 //   0x180079360  ??3TableElement@UI@@SAXPEAX@Z
 //   0x180041b60  ??3TextDescription@UI@@SAXPEAX@Z
 //   0x180041f80  ??3TextElement@UI@@SAXPEAX@Z
-
-// Now registers nothing; the coordinator removes its call (runtime/src/ui/rt_ui_port.cpp).
-int RtUiClassOperatorDeleteRegister() {
-    return 0;
-}

@@ -37,7 +37,6 @@
 // ui_factory_wave28.cpp) and ?IsDerivedFrom@Base@Object@@ (0x1800c0390, reached
 // by its export name).
 // ============================================================================
-#include <atomic>
 #include <new>
 #include <cstddef>
 #include <cstdint>
@@ -48,38 +47,22 @@
 #include "../../types/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
 #include "../../types/ui/RibbonElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/ui/SpriteSheet.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 // ENDGAME B.3.6 block C4: the layout moved to runtime/types/ui/
 // ListDescription.h (the real class). Every slot body below is a MEMBER; each
 // registered door is a one-line QUALIFIED delegation. The ctor and dtor stay
-// DOORS (B4b-2). RULE B6-5: every export the members reach is cached in a
-// namespace-scope std::atomic slot, never in a function-local static.
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// DOORS (B4b-2). B3R RT-UI: every export the members reach is a direct call.
 
 namespace {
-
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_getSpriteIndex{nullptr};
-std::atomic<void*> g_isDerivedFrom{nullptr};
-std::atomic<void*> g_memFree{nullptr};
 
 // The two type ids the tail of CreateInstance tests against: retail reads the
 // first dword of RibbonElement's (0x1801fa2e0) and ClipRegionElement's
 // (0x1801f9d68) `_typeInfo` -- `X::TypeId()` (ENDGAME B.3.9 TI-UI).
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -97,29 +80,30 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using MemFreeFn = void (*)(void*);
-
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        reinterpret_cast<MemFreeFn>(AtomicExport(
-            g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(*field);
+        System::MemoryAllocator::MemFree(*field);
     } else {
         *field = nullptr;
     }
 }
 
 void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
-    using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-    void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, slot, childDesc);
+    // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+    // placed in the caller's slot.
+    void** made = slot;
+    new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
+        static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                static_cast<UI::ElementDescription*>(childDesc))));
 
     UI::Element* child = static_cast<UI::Element*>(*made);
     if (child != nullptr) child->_parent = elem;
 
-    using PushFn = void (*)(void* array, int n, const void* fill);
-    RtAddr<PushFn>(0x180076900ull)(&elem->_children, elem->_children.GetSize() + 1, made);
+    rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children, elem->_children.GetSize() + 1, made);
 
     for (UI::Element* n = elem; n != nullptr; n = n->_parent)
         n->_flags |= UI::kElementFlagNeedsSizeCalc;
@@ -161,11 +145,10 @@ bool ListDescription::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 1800d485a
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[0], &ser);  // 1800d4868
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[1], &ser);  // 1800d4876
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);   // 1800d4884
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);    // 1800d4895
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_partDescs[0]), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800d4868
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_partDescs[1]), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800d4876
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));   // 1800d4884
+    reinterpret_cast<System::String*>(&_spriteName)->Serialize(&ser);   // 1800d4895
 
     rw->SerializeUInt(_hoverColor, nullptr);
     rw->SerializeUInt(_selectColor, nullptr);
@@ -204,8 +187,7 @@ bool ListDescription::Serialize(void* streamv) {
 // runs first.
 Object::InternalPtr<Element>* ListDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x100, 8);  // 1800d4634 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0x100, 8);   // 1800d4634 (inlined)
 
     ListElement* elem = nullptr;
     if (raw != nullptr)                                        // 1800d4662
@@ -224,11 +206,8 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
         void* sheet = _spriteSheet;
         uint64_t idxSlot;                                      // [RSP+0x30]
         if (sheet != nullptr) {                                // 1800d472d
-            using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
-            const int32_t idx = reinterpret_cast<GetIdxFn>(AtomicExport(
-                g_getSpriteIndex,
-                "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"))(
-                    sheet, &_spriteName);
+            const int32_t idx = static_cast<const SpriteSheet*>(sheet)       // B.3.x bridge
+                ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteName));
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // 1800d473e  DWORD store
         } else {
             const int32_t minusOne = -1;
@@ -241,22 +220,20 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
     elem->_hoverColor  = _hoverColor;                          // 1800d4765
     elem->_selectColor = _selectColor;                         // 1800d4771
 
-    using IsDerivedFromFn = bool (*)(const void* self, uint32_t typeId);
-    const IsDerivedFromFn isDerivedFrom = reinterpret_cast<IsDerivedFromFn>(
-        AtomicExport(g_isDerivedFrom, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-
     {   // THREE levels down: children[1]->children[0]->children[0]
         Element* const k1   = elem->_children[1];              // 1800d4777 / 1800d477a
         Element* const kk0  = k1->_children[0];                // 1800d477e / 1800d4785
         Element* const cand = kk0->_children[0];               // 1800d4788 / 1800d478f
-        const bool ok = isDerivedFrom(cand, UI::RibbonElement::TypeId());   // 1800d479b
+        const bool ok = reinterpret_cast<const Object::Base*>(cand)          // B.3.x bridge
+            ->IsDerivedFrom(UI::RibbonElement::TypeId());                        // 1800d479b
         elem->_ribbon = ok ? cand : nullptr;                   // 1800d47a9
     }
 
     {   // TWO levels down: children[1]->children[0]
         Element* const k1   = elem->_children[1];              // 1800d47b0 / 1800d47b3
         Element* const cand = k1->_children[0];                // 1800d47b7 / 1800d47be
-        const bool ok = isDerivedFrom(cand, UI::ClipRegionElement::TypeId());  // 1800d47ca
+        const bool ok = reinterpret_cast<const Object::Base*>(cand)          // B.3.x bridge
+            ->IsDerivedFrom(UI::ClipRegionElement::TypeId());                    // 1800d47ca
         elem->_clip = ok ? cand : nullptr;                     // 1800d47d5
     }
 
@@ -294,19 +271,6 @@ Object::Base* ListDescription::CreateInPlaceObject(void* place) {
 // `??_7ListDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // ListDescription now wears the compiler's table.
 // ============================================================================
-
-int RtUiListDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ListDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ListDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ListDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180044c90ull, (void*)&UI::ListDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ListDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ListDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180044d10ull, (void*)&UI::ListDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ListDescription's own type record, built at CRT init

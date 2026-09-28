@@ -57,7 +57,6 @@
 // ENDGAME B.3.6 block E: the RULE B6-5 atomic door caches.
 #include "element_common.h"
 
-#include <atomic>
 
 namespace {
 
@@ -69,9 +68,6 @@ namespace {
 // `const Time&` -- and hands that straight to Audio::Scene::Update, whose two
 // `VTime@System@@` parameters are by-value `System::Time` (B7-5).
 // ---------------------------------------------------------------------------
-using UiUpdateFn   = int   (*)(void* ui, const void* time);
-using UiDrawFn     = void  (*)(void* ui, void* videoContext);
-using RandomCtorFn = void* (*)(void* self);
 
 // --- entry counters, printed unconditionally (see userinterface_hover.cpp) ---
 uint64_t g_updEntries   = 0;
@@ -90,9 +86,6 @@ struct StandAloneSummary {
 StandAloneSummary g_standAloneSummary;
 
 constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
-
-// RULE B6-5: namespace-scope atomic slots for the doors other namespaces own.
-std::atomic<void*> g_randomCtorSlot{nullptr};
 
 }  // namespace
 
@@ -136,8 +129,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
 
     // 0x180120336..0x180120386 -- the inlined System::Random default ctor.
     ::Random rng;   // runtime/types/system/Value.h -- global namespace, unlike RtSystem::String
-    reinterpret_cast<RandomCtorFn>(
-        rtuielem::AtomicExport(g_randomCtorSlot, "??0Random@System@@QEAA@XZ"))(&rng);
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(&rng));   // 0x1800c7f20
 
     void* const scene = *reinterpret_cast<void* const*>(
         reinterpret_cast<const uint8_t*>(ui) + kUI_AudioScene);       // 0x180120388
@@ -197,10 +189,6 @@ int RtUiStandAloneRegister() {
     RegisterRuntimeExport("?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z",
                           (void*)&RtUi_UserInterface_UpdateStandAloneUI);
     RegisterRuntimeAddr(0x180120310, (void*)&RtUi_UserInterface_UpdateStandAloneUI);  ++n;
-
-    RegisterRuntimeExport("?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z",
-                          (void*)&RtUi_UserInterface_DrawStandAloneUI);
-    RegisterRuntimeAddr(0x1801203f0, (void*)&RtUi_UserInterface_DrawStandAloneUI);    ++n;
 
     return n;
 }

@@ -30,7 +30,6 @@
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Random
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -38,141 +37,37 @@
 #include "object/Internal.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "input/Input.h"        // ENDGAME B.3.7 callers (K3)
+#include "Player/exe_bodies.h"
+#include "Component/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 
 // ============================================================
-// Locally resolved function pointers (exe addresses)
-// Resolved from IAT dispatch slots and direct addresses in the exe.
-// IAT slot addresses verified against Ghidra disassembly of OnKey/Serialize.
+// Exe helpers, called by name:
+//   0x1400b0d00 DecalComponent_TerrainDecalRemove (Component/exe_bodies.h) --
+//               the highlight/overlay removal
+//   0x1400fd960 PlacementToolPlace_FlipVariant_d960, 0x1400fda00
+//   PlayerRay_PlacementPosCalc_fda00, 0x1400fd650 ToolTile_ValidateCreate_fd650,
+//   0x14009d580 ToolTile_FootprintValidity_d580, 0x1400ffc60 UpdateToolUI_fc60,
+//   0x140005160 DragTool_FindDescription_5160, 0x1400ffbf0 DragTool_PlayTickSound_ffbf0,
+//   0x1401000f0 DragTool_PlayPlaceSound_1000f0, 0x140100140 DragTool_PlayErrorSound_100140,
+//   0x1400ff9e0 ToolUI_OpenToolDialog_ff9e0, 0x140055430 Player_HighlightAdd_55430,
+//   0x140101380 PlayerTileRender_BuildRecords_1380 (Player/exe_bodies.h)
+//   0x14009f3e0 Reimpl_MapGetTerrainPos (Game/exe_bodies.h)
+// Import slot 0x140152a90 is Object::InternalBasePtr's ctor (placement new).
+// The bodies' return types are wider than the bool / char the old door typedefs
+// read: each call reads the low byte (AL), as the door did.
 // ============================================================
 
-// HighlightRemove — direct call at 0x1400b0d00
-typedef void (*fn_HighlightRemove_t)(void* highlightMgr, int overlayId);
-static fn_HighlightRemove_t s_fn_HighlightRemove = nullptr;
-
-// InternalBasePtr::Ctor — IAT dispatch slot [0x140152a90]
-typedef void* (*fn_IBP_Ctor_t)(void* self, void* internal);
-static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
-
-
-// 🔑 Returns Math::Transform BY VALUE (member fn, hidden retbuf ABI: RCX=this,
-// RDX=retbuf). MUST be called with a retbuf — calling it (mesh) with no retbuf leaves
-// RDX garbage and the fn writes the Transform through it → hard-fault (WRITE into
-// Runtime code). Signature: void GetTransform(Geometry* this, Transform* retbuf).
-
-// PlacementTool_sub_d960 — mirror/flip handler at 0x1400fd960
-typedef void (*fn_sub_d960_t)(void* self);
-static fn_sub_d960_t s_fn_sub_d960 = nullptr;
-
-// PlacementTool_sub_da00 — placement position calc at 0x1400fda00
-typedef bool (*fn_sub_da00_t)(void* self, int* outStartCol, int* outStartRow,
-    int* outEndCol, int* outEndRow, float* outPos, float* outYaw);
-static fn_sub_da00_t s_fn_sub_da00 = nullptr;
-
-// PlacementTool_helper_d650 — placement validation+create at 0x1400fd650
-typedef bool (*fn_helper_d650_t)(void* self, int startCol, int startRow,
-    int endCol, int endRow, float* pos, float yaw);
-static fn_helper_d650_t s_fn_helper_d650 = nullptr;
-
-// Tile validity check at 0x14009d580 (NOT 0x1400fd580!)
-// Verified from Serialize disasm at 0x1400fe09e: CALL 0x14009d580
-// Signature: (mapSize*, startCol, startRow, width, height, flags, ptr1, ptr2,
-//   float, float, float, char, ptr3, yawInt, ptr4) -> bool
-typedef bool (*fn_PlaceTileCheck_t)(void* mapSize, int startCol, int startRow,
-    int width, int height, uint32_t flags, void* ptr1, void* ptr2,
-    float f1, float f2, float f3, char c1, void* ptr3, int yawInt, void* ptr4);
-static fn_PlaceTileCheck_t s_fn_TileValidityCheck = nullptr;
-
-// operator_impl_fc60 �� dialog update with placement info at 0x1400ffc60
-// Verified from Serialize disasm at 0x1400fe1fd: CALL 0x1400ffc60
-// Params: (dialogPtr, 0, 0, costStringPtr, valid, 1, 0, 1, -1, -1, bbox*, transform*)
-typedef void (*fn_operator_fc60_t)(void* dialogPtr, int a2, int a3, void* costStringPtr,
-    char valid, char c2, char c3, int i1, int i2, int i3, void* bbox, void* transform);
-static fn_operator_fc60_t s_fn_operator_fc60 = nullptr;
-
-// FUN_140005160 — entity lookup helper
-typedef void (*fn_FUN_140005160_t)(void* descPtr, void* outResult);
-static fn_FUN_140005160_t s_fn_FUN_140005160 = nullptr;
-
-// FUN_1400ffbf0 — tick sound / cell change notify
-typedef void (*fn_FUN_1400ffbf0_t)(void* dialogPtr);
-static fn_FUN_1400ffbf0_t s_fn_FUN_1400ffbf0 = nullptr;
-
-// FUN_1401000f0 — placement success finalize
-typedef void (*fn_FUN_1401000f0_t)(void* self);
-static fn_FUN_1401000f0_t s_fn_FUN_1401000f0 = nullptr;
-
-// FUN_140100140 — placement failure handler
-typedef void (*fn_FUN_140100140_t)(void* self);
-static fn_FUN_140100140_t s_fn_FUN_140100140 = nullptr;
-
-// FUN_1400ff9e0 — dialog open helper
-typedef void* (*fn_FUN_1400ff9e0_t)(void* dialogIBP, void* outResult, void* descPtr);
-static fn_FUN_1400ff9e0_t s_fn_FUN_1400ff9e0 = nullptr;
-
-// FUN_140055430 — radius highlight add (used when radiusComponent != nullptr)
-typedef int (*fn_HighlightAdd_t)(void* radiusComponent, int cellIndex);
-static fn_HighlightAdd_t s_fn_HighlightAdd = nullptr;
-
-// PlacementTool_OnRemove_sub_1380 — tile render + validate helper at 0x140101380
-// Builds tile record array for placement overlay, validates terrain, then renders.
-// 19 params: (occupancyGrid, context, startCol, startRow, endCol, endRow,
-//   terrainMask, ptr1, ptr2, f1, f2, f3, forceRed, allowOverlap,
-//   occupancyGridPtr, yawInt, yawAngle, isExisting, entityTemplate)
-typedef void (*fn_sub_1380_t)(void* occupancyGrid, void* context, int startCol, int startRow,
-    uint32_t endCol, int endRow, uint32_t terrainMask, void* ptr1, void* ptr2,
-    float f1, float f2, float f3, char forceRed, char allowOverlap,
-    void* occupancyGridPtr, int yawInt, int yawAngle, char isExisting, int64_t entityTemplate);
-static fn_sub_1380_t s_fn_sub_1380 = nullptr;
-
-// DAT_140172248 — constant float (0.5)
-static float* s_pFloat_halfCell = nullptr;
-
-static bool s_funcsResolved = false;
-
-static void EnsureFuncs() {
-    if (s_funcsResolved) return;
-
-    // IAT dispatch slots: read function pointer from .rdata indirect slot
-    auto resolveIAT = [](uintptr_t ghidraAddr) -> void* {
-        uintptr_t slot = ResolveAddr(Module::Exe, ghidraAddr);
-        if (slot) return *reinterpret_cast<void**>(slot);
-        return nullptr;
-    };
-
-    // IAT slots verified against Serialize/OnKey disassembly
-    s_fn_IBP_Ctor          = (fn_IBP_Ctor_t)resolveIAT(0x140152a90);
-    // These IAT dispatch slots are unregistered in standalone (→ null). The resolved
-    // engine_funcs globals are the canonical fallback (SetEditMode uses them). A null
-    // IBP_Ctor silently makes an IBP wrapping a NON-null object come out 0 — e.g. the
-    // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
-    if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
-
-
-    // Direct exe function addresses
-    s_fn_HighlightRemove   = (fn_HighlightRemove_t)ResolveAddr(Module::Exe, 0x1400b0d00);
-    s_fn_sub_d960          = (fn_sub_d960_t)ResolveAddr(Module::Exe, 0x1400fd960);
-    s_fn_sub_da00          = (fn_sub_da00_t)ResolveAddr(Module::Exe, 0x1400fda00);
-    s_fn_helper_d650       = (fn_helper_d650_t)ResolveAddr(Module::Exe, 0x1400fd650);
-    s_fn_TileValidityCheck = (fn_PlaceTileCheck_t)ResolveAddr(Module::Exe, 0x14009d580);
-    s_fn_operator_fc60     = (fn_operator_fc60_t)ResolveAddr(Module::Exe, 0x1400ffc60);
-    s_fn_FUN_140005160     = (fn_FUN_140005160_t)ResolveAddr(Module::Exe, 0x140005160);
-    s_fn_FUN_1400ffbf0     = (fn_FUN_1400ffbf0_t)ResolveAddr(Module::Exe, 0x1400ffbf0);
-    s_fn_FUN_1401000f0     = (fn_FUN_1401000f0_t)ResolveAddr(Module::Exe, 0x1401000f0);
-    s_fn_FUN_140100140     = (fn_FUN_140100140_t)ResolveAddr(Module::Exe, 0x140100140);
-    s_fn_FUN_1400ff9e0     = (fn_FUN_1400ff9e0_t)ResolveAddr(Module::Exe, 0x1400ff9e0);
-    s_fn_HighlightAdd      = (fn_HighlightAdd_t)ResolveAddr(Module::Exe, 0x140055430);
-
-    // Float constants in .rdata
-    s_pFloat_halfCell = (float*)ResolveAddr(Module::Exe, 0x140172248);
-
-    // PlacementTool_OnRemove_sub_1380: the big tile render+validate helper
-    // Used by PlacementTool::Draw to render placement overlay tiles.
-    // Takes 19 parameters including placement bounds, terrain info, rotation, etc.
-    // Internally builds 0x14-byte tile records and calls CharacterComponent_impl_08c0.
-    // Original: 0x140101380
-    s_fn_sub_1380 = (fn_sub_1380_t)ResolveAddr(Module::Exe, 0x140101380);
-
-    s_funcsResolved = true;
+// DAT_140172248 (.rdata): the float the tile-validity / tile-render calls pass as
+// their second float. The registered cell holds 0x447a0000 = 1000.0f (NOT the 0.5
+// an older comment here claimed); that is the value these calls have read.
+static inline float Rdata_140172248() {
+    float f;
+    memcpy(&f, &kRdata_140172248, sizeof f);
+    return f;
 }
 
 // ============================================================
@@ -196,8 +91,6 @@ static inline uintptr_t GetGameWorld() {
 // and closes the associated dialog.
 // Original: 0x1400fe4e0
 void PlacementTool::Shutdown() {
-    EnsureFuncs();
-
     // Remove scene object if added (sceneObjectIdx >= 0)
     if ((int)sceneObjectIdx >= 0) {
         void* scene = *(void**)(GetGameWorld() + 0x60);
@@ -210,8 +103,8 @@ void PlacementTool::Shutdown() {
     // Remove radius display highlight if active (radiusDisplayIdx >= 0)
     if (radiusDisplayIdx >= 0) {
         void* highlightMgr = *(void**)(GetGameWorld() + 0x110);
-        if (s_fn_HighlightRemove && highlightMgr) {
-            s_fn_HighlightRemove(highlightMgr, radiusDisplayIdx);
+        if (highlightMgr) {
+            DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
         }
     }
 
@@ -235,9 +128,7 @@ void PlacementTool::Shutdown() {
 
         // Clear the InternalBasePtr and write back
         uintptr_t localIBP = ibpVal;
-        if (s_fn_IBP_Ctor) {
-            s_fn_IBP_Ctor(&localIBP, nullptr);
-        }
+        new (&localIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *ibpPtr = localIBP;
     }
 }
@@ -272,8 +163,6 @@ void PlacementTool::Shutdown() {
 //
 // Original: 0x1400fe2a0
 char PlacementTool::OnKey(char param2) {
-    EnsureFuncs();
-
 
     // dialogPtr at +0x10 points to an InternalBasePtr value (8 bytes)
     uintptr_t* dialogIBP = (uintptr_t*)dialogPtr;
@@ -289,18 +178,15 @@ char PlacementTool::OnKey(char param2) {
                     reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&localIBP));
             }
             // Clear IBP: construct with null
-            if (s_fn_IBP_Ctor) {
-                s_fn_IBP_Ctor(&localIBP, nullptr);
-            }
+            new (&localIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *dialogIBP = localIBP;
         }
     } else {
         // Open dialog if not already open
         if (*dialogIBP == 0) {
             uintptr_t localResult = 0;
-            if (s_fn_FUN_1400ff9e0) {
-                s_fn_FUN_1400ff9e0(dialogIBP, &localResult, descriptionPtr);
-            }
+            ToolUI_OpenToolDialog_ff9e0(dialogIBP, &localResult,
+                                        reinterpret_cast<uint64_t>(descriptionPtr));
         }
     }
 
@@ -340,9 +226,7 @@ char PlacementTool::OnKey(char param2) {
             // Key 0x15: Flip/Mirror
             bool flip = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x15);  // B.3.7 bridge
             if (flip) {
-                if (s_fn_sub_d960) {
-                    s_fn_sub_d960(this);
-                }
+                PlacementToolPlace_FlipVariant_d960(this);
             }
         }
     }
@@ -356,26 +240,24 @@ char PlacementTool::OnKey(char param2) {
             float pos[3] = {0.0f, 0.0f, 0.0f};
             float yaw[2] = {0.0f, 0.0f};
 
-            if (s_fn_sub_da00) {
-                bool valid = s_fn_sub_da00(this, &startCol, &startRow,
-                                            &endCol, &endRow, pos, yaw);
+            {
+                bool valid = PlayerRay_PlacementPosCalc_fda00(reinterpret_cast<uintptr_t>(this),
+                                                              &startCol, &startRow,
+                                                              &endCol, &endRow, pos, yaw) != 0;
                 if (valid) {
                     // Try to place via helper_d650
-                    if (s_fn_helper_d650) {
-                        bool placed = s_fn_helper_d650(this, startCol, startRow,
-                                                        endCol, endRow, pos, yaw[0]);
+                    {
+                        bool placed = static_cast<uint8_t>(ToolTile_ValidateCreate_fd650(
+                            reinterpret_cast<long long>(this), startCol, startRow,
+                            endCol, endRow, pos, yaw[0])) != 0;
                         if (placed) {
                             // Placement success — finalize
-                            if (s_fn_FUN_1401000f0) {
-                                s_fn_FUN_1401000f0(this);
-                            }
+                            DragTool_PlayPlaceSound_1000f0(reinterpret_cast<uint64_t>(this));
                             return 1;
                         }
                     }
                     // Placement failed — run failure handler
-                    if (s_fn_FUN_140100140) {
-                        s_fn_FUN_140100140(this);
-                    }
+                    DragTool_PlayErrorSound_100140(reinterpret_cast<uint64_t>(this));
                 }
             }
         }
@@ -419,8 +301,6 @@ char PlacementTool::OnKey(char param2) {
 //
 // Original: 0x1400fdee0
 void PlacementTool::Update(void* /*param2*/, char param3) {
-    EnsureFuncs();
-
     uintptr_t gameWorld = GetGameWorld();
 
     float pos[3] = {0.0f, 0.0f, 0.0f};
@@ -428,8 +308,9 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
     float yaw[2] = {0.0f, 0.0f};
 
     bool valid = false;
-    if (param3 != 0 && s_fn_sub_da00) {
-        valid = s_fn_sub_da00(this, &startCol, &startRow, &endCol, &endRow, pos, yaw);
+    if (param3 != 0) {
+        valid = PlayerRay_PlacementPosCalc_fda00(reinterpret_cast<uintptr_t>(this), &startCol,
+                                                 &startRow, &endCol, &endRow, pos, yaw) != 0;
     }
 
 
@@ -445,8 +326,8 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
         }
         if (radiusDisplayIdx >= 0) {
             void* highlightMgr = *(void**)(gameWorld + 0x110);
-            if (s_fn_HighlightRemove && highlightMgr) {
-                s_fn_HighlightRemove(highlightMgr, radiusDisplayIdx);
+            if (highlightMgr) {
+                DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
             }
             radiusDisplayIdx = -1;
         }
@@ -467,14 +348,13 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
             // Remove old highlight
             if (radiusDisplayIdx >= 0) {
                 void* highlightMgr = *(void**)(gameWorld + 0x110);
-                if (s_fn_HighlightRemove && highlightMgr) {
-                    s_fn_HighlightRemove(highlightMgr, radiusDisplayIdx);
+                if (highlightMgr) {
+                    DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
                 }
             }
             // Add new highlight
-            if (s_fn_HighlightAdd) {
-                radiusDisplayIdx = s_fn_HighlightAdd(radiusComponent, centerCell);
-            }
+            radiusDisplayIdx = Player_HighlightAdd_55430(
+                reinterpret_cast<int64_t>(radiusComponent), centerCell);
             lastCenterCell = centerCell;
         }
     }
@@ -536,28 +416,28 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
     int yawInt = (int)yaw[0];  // CVTTSS2SI EDI, XMM6
     char tileValid = 1;
 
-    if (s_fn_TileValidityCheck && descComp) {
+    if (descComp) {
         // Match the calling convention from disasm at 0x1400fe09e:
         // RCX=mapSize, EDX=startCol, R8D=startRow, R9D=width
         // stack: height, flags(+0x20), ptr(+0x30), ptr(+0x28), 0.0, DAT_140172248, 0.0,
         //        0, mapComp+0x28, yawInt, desc+0x50
         uintptr_t mapComp = (uintptr_t)mapComponent;  // +0x30
-        tileValid = (char)s_fn_TileValidityCheck(
+        tileValid = (char)(static_cast<uint8_t>(ToolTile_FootprintValidity_d580(
             mapSize,
             startCol,       // R14D (from disasm)
             startRow,       // ESI (from disasm)
             width,          // R9D
             height,         // [RSP+0x20]
             *(uint32_t*)(descComp + 0x20),    // [RSP+0x28]
-            (void*)(descComp + 0x30),         // [RSP+0x30] — LEA, not deref
-            (void*)(descComp + 0x28),         // [RSP+0x38] — LEA, not deref
+            (long long*)(descComp + 0x30),    // [RSP+0x30] — LEA, not deref
+            (long long*)(descComp + 0x28),    // [RSP+0x38] — LEA, not deref
             0.0f,                              // [RSP+0x40]
-            s_pFloat_halfCell ? *s_pFloat_halfCell : 0.5f,  // [RSP+0x48]
+            Rdata_140172248(),                 // [RSP+0x48] DAT_140172248
             0.0f,                              // [RSP+0x50]
             0,                                 // [RSP+0x58]
-            (void*)(mapComp + 0x28),          // [RSP+0x60] — mapComponent+0x28
+            (long long*)(mapComp + 0x28),     // [RSP+0x60] — mapComponent+0x28
             yawInt,                            // [RSP+0x68]
-            *(void**)(descComp + 0x50));       // [RSP+0x70]
+            *(long long*)(descComp + 0x50))) != 0);   // [RSP+0x70]
     }
 
     // Check dialog constraint (if dialogPtr has constraint flag at +0x80)
@@ -578,9 +458,7 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
 
     // Get cost/status strings from description entity
     uintptr_t costResult = 0;
-    if (s_fn_FUN_140005160) {
-        s_fn_FUN_140005160(descriptionPtr, &costResult);
-    }
+    DragTool_FindDescription_5160(reinterpret_cast<uintptr_t>(descriptionPtr), &costResult);
 
     // Build cost string: index into string array at (costResult+0x50)
     // Index is 0 (valid) or 1 (invalid), based on tileValid
@@ -637,8 +515,8 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
     //   [RSP+0x48] = -1 (int)
     //   [RSP+0x50] = &bbox
     //   [RSP+0x58] = transform*
-    if (s_fn_operator_fc60) {
-        s_fn_operator_fc60(
+    {
+        UpdateToolUI_fc60(
             dialogPtr,        // RCX: dialogPtr at +0x10
             0, 0,                   // EDX, R8D
             &costString,            // R9: pointer to cost string
@@ -656,9 +534,7 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
     if (lastStartCol != startCol || lastStartRow != startRow) {
         lastStartCol = startCol;
         lastStartRow = startRow;
-        if (s_fn_FUN_1400ffbf0) {
-            s_fn_FUN_1400ffbf0(dialogPtr);
-        }
+        DragTool_PlayTickSound_ffbf0(reinterpret_cast<uintptr_t>(dialogPtr));
     }
 }
 
@@ -687,11 +563,7 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
 //
 // Original: 0x1400fdcc0
 void PlacementTool::Draw(void* context, char param3) {
-    EnsureFuncs();
-
-    if (!s_fn_sub_1380) return;
-
-    float halfCell = s_pFloat_halfCell ? *s_pFloat_halfCell : 0.5f;
+    float halfCell = Rdata_140172248();
     uintptr_t gameWorld = GetGameWorld();
 
     // --- Section 1: Active placement preview (param3 == 0) ---
@@ -702,11 +574,9 @@ void PlacementTool::Draw(void* context, char param3) {
         float pos[3] = {0.0f, 0.0f, 0.0f};
         float yaw = 0.0f;
 
-        bool valid = false;
-        if (s_fn_sub_da00) {
-            valid = s_fn_sub_da00(this, &startCol, &startRow,
-                                  (int*)&endCol, &endRow, pos, &yaw);
-        }
+        bool valid = PlayerRay_PlacementPosCalc_fda00(reinterpret_cast<uintptr_t>(this),
+                                                      &startCol, &startRow,
+                                                      (int*)&endCol, &endRow, pos, &yaw) != 0;
 
         if (valid) {
             // Read descComponent before CheckPtr (used for yawAngle and entityTemplate)
@@ -725,22 +595,22 @@ void PlacementTool::Draw(void* context, char param3) {
             // yawAngle from first descComponent read (+0x40)
             int yawAngle = *(int*)(descComp1 + 0x40);
 
-            s_fn_sub_1380(
-                (void*)(mapComp + 0x28),        // param1: mapComponent+0x28
+            PlayerTileRender_BuildRecords_1380(
+                (uint64_t)(mapComp + 0x28),     // param1: mapComponent+0x28
                 context,                         // param2: render context
                 startCol,                        // param3: startCol
                 startRow,                        // param4: startRow
                 endCol,                          // param5: endCol
                 endRow,                          // param6: endRow
                 *(uint32_t*)(descComp2 + 0x20), // param7: terrainMask
-                (void*)(descComp2 + 0x30),      // param8: desc+0x30 (LEA)
-                (void*)(descComp2 + 0x28),      // param9: desc+0x28 (LEA)
+                (int64_t*)(descComp2 + 0x30),   // param8: desc+0x30 (LEA)
+                (int64_t*)(descComp2 + 0x28),   // param9: desc+0x28 (LEA)
                 0.0f,                            // param10
                 halfCell,                        // param11: DAT_140172248
                 0.0f,                            // param12
                 0,                               // param13: forceRed = false
                 0,                               // param14: allowOverlap = false
-                (void*)(mapComp + 0x28),        // param15: mapComp+0x28 (same as param1)
+                (int64_t*)(mapComp + 0x28),     // param15: mapComp+0x28 (same as param1)
                 yawInt,                          // param16: rotation*90
                 yawAngle,                        // param17: desc+0x40
                 0,                               // param18: isExisting = false
@@ -760,23 +630,23 @@ void PlacementTool::Draw(void* context, char param3) {
         int existEnd = *(int*)(dialogCtrl + 0x9c);
         uint32_t existYaw = *(uint32_t*)(dialogCtrl + 0xa0);
 
-        s_fn_sub_1380(
-            (void*)(uintptr_t)existYaw,         // param1: existYaw as uint->void*
+        PlayerTileRender_BuildRecords_1380(
+            (uint64_t)existYaw,                 // param1: existYaw as uint->void*
             context,                             // param2: render context
             existStart % mapSz2,                // param3: startCol
             existStart / mapSz2,                // param4: startRow
             (uint32_t)(existEnd % mapSz1),      // param5: endCol
             existEnd / mapSz1,                  // param6: endRow
             *(uint32_t*)(descComp + 0x20),      // param7: terrainMask
-            (void*)(descComp + 0x30),           // param8: desc+0x30
-            (void*)(descComp + 0x28),           // param9: desc+0x28
+            (int64_t*)(descComp + 0x30),        // param8: desc+0x30
+            (int64_t*)(descComp + 0x28),        // param9: desc+0x28
             0.0f,                                // param10
             halfCell,                            // param11
             0.0f,                                // param12
             0,                                   // param13: forceRed = false
             0,                                   // param14: allowOverlap = false
-            (void*)((uintptr_t)mapComponent + 0x28), // param15: mapComp+0x28
-            existYaw,                            // param16: yawInt
+            (int64_t*)((uintptr_t)mapComponent + 0x28), // param15: mapComp+0x28
+            (int)existYaw,                       // param16: yawInt
             *(int*)(descComp + 0x40),           // param17: yaw angle from desc
             1,                                   // param18: isExisting = true
             *(int64_t*)(descComp + 0x50)        // param19: entityTemplate
@@ -818,11 +688,10 @@ void PlacementTool::Draw(void* context, char param3) {
 //
 // Original: 0x1400fe580
 
-static bool s_startupFuncsResolved = false;
+static bool s_startupTypeIdsLogged = false;
 
-static void EnsureStartupFuncs() {
-    if (s_startupFuncsResolved) return;
-    EnsureFuncs();  // resolve common funcs (IBP_Ctor, etc.)
+static void LogStartupTypeIds() {
+    if (s_startupTypeIdsLogged) return;
 
     // ENDGAME B.3.9 EXA: the MeshInstance ctor slot (0x140151490) and the exe
     // table (0x14015e240) reads went: the preview mesh is `::new` of the class.
@@ -848,11 +717,11 @@ static void EnsureStartupFuncs() {
             ModelDescription::TypeId(), RadiusDescription::TypeId());
     fflush(stderr);
 
-    s_startupFuncsResolved = true;
+    s_startupTypeIdsLogged = true;
 }
 
 void PlacementTool::Startup() {
-    EnsureStartupFuncs();
+    LogStartupTypeIds();
 
     uintptr_t entity = (uintptr_t)descriptionPtr;  // +0x20
 
@@ -863,7 +732,7 @@ void PlacementTool::Startup() {
     // IsDerivedFrom, it stops (returns nullptr), matching original break-on-match.
 
     auto findComp = [&](uint32_t targetTypeId) -> void* {
-        if (!entity || !fn_IsDerivedFrom) return nullptr;
+        if (!entity) return nullptr;
         int count = *(int*)(entity + 0x30);
         void** components = *(void***)(entity + 0x28);
         for (int i = 0; i < count; i++) {
@@ -871,7 +740,7 @@ void PlacementTool::Startup() {
             if (!comp) continue;
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (typeId == targetTypeId) {
-                if (fn_IsDerivedFrom(comp, targetTypeId)) {
+                if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
                     return comp;
                 }
                 return nullptr;
@@ -898,8 +767,8 @@ void PlacementTool::Startup() {
     // Read resolved pointer, check IsDerivedFrom RotationSetting
     void* ibpVal = toolSetting;
     void* rotSetting = nullptr;
-    if (fn_IsDerivedFrom && ibpVal) {
-        bool isDerived = fn_IsDerivedFrom(ibpVal, RotationSetting::TypeId());   // cell 0x1401c63c8
+    if (ibpVal) {
+        bool isDerived = Object::IsDerivedFromNullSafe(ibpVal, RotationSetting::TypeId());   // cell 0x1401c63c8
         if (isDerived) {
             rotSetting = ibpVal;
         }
@@ -907,16 +776,12 @@ void PlacementTool::Startup() {
 
     // Construct IBP with the resolved RotationSetting, store at +0x48
     uint64_t localIBP = 0;
-    if (s_fn_IBP_Ctor) {
-        s_fn_IBP_Ctor(&localIBP, rotSetting);
-    }
+    new (&localIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(rotSetting));   // B.3.3 bridge
     rotationIBP = localIBP;
 
     // --- Allocate and construct MeshInstance (0x120 bytes) ---
-    void* meshMem = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
-        meshMem = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
-    }
+    void* meshMem = System::MemoryAllocator::MemAlloc(0x120, 8);
 
     void* meshInst = nullptr;
     if (meshMem) {
@@ -1036,7 +901,7 @@ DEFINE_EXE_TYPE(PlacementTool, "Tool")
 // ============================================================
 extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
     PlacementTool* self = (PlacementTool*)toolSelf;
-    EnsureStartupFuncs();  // resolves the ResolveAddr-based helpers (and logs the 4 type-ids)
+    LogStartupTypeIds();  // logs the 4 type-ids
 
     uintptr_t entity = (uintptr_t)self->descriptionPtr;  // +0x20
     if (!entity) {
@@ -1165,23 +1030,20 @@ static bool HarnessCellPlacement(PlacementTool* self, int centerCell,
 
     // World-centre position = average of the two diagonal corner cells' world
     // positions via GridToWorld (CharacterComponent_impl_f3e0 @ 0x14009f3e0). 0.5.
-    typedef float* (*fn_GridToWorld_t)(int*, float*, float*, char, void*);
-    static fn_GridToWorld_t gridToWorld = nullptr;
-    if (!gridToWorld) gridToWorld = (fn_GridToWorld_t)ResolveAddr(Module::Exe, 0x14009f3e0);
     const float halfCell = 0.5f;
     pos[0] = pos[1] = pos[2] = 0.0f;
-    if (gridToWorld) {
+    {
         int gw = grid[0];
         float centerOff = (float)(gw >> 1) - halfCell;
         int idxA = startRow * gw + startCol;
         float inA[3] = { (float)(idxA % gw) - centerOff, (float)(idxA / gw) - centerOff, 0.0f };
         float worldA[3] = {0.0f, 0.0f, 0.0f};
-        gridToWorld(grid, worldA, inA, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(grid, worldA, inA, '\0', nullptr);
 
         int idxB = endRow * gw + endCol;
         float inB[3] = { (float)(idxB % gw) - centerOff, (float)(idxB / gw) - centerOff, 0.0f };
         float worldB[3] = {0.0f, 0.0f, 0.0f};
-        gridToWorld(grid, worldB, inB, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(grid, worldB, inB, '\0', nullptr);
 
         pos[0] = (worldB[0] + worldA[0]) * halfCell;
         pos[1] = (worldB[1] + worldA[1]) * halfCell;
@@ -1198,18 +1060,13 @@ static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
     if (!HarnessCellPlacement(self, centerCell, &startCol, &startRow, &endCol, &endRow, pos))
         return 0;
 
-    typedef uint64_t (*fn_helper_d650_t)(void* self, int, int, int, int, const void*, float);
-    static fn_helper_d650_t create = nullptr;
-    if (!create) create = (fn_helper_d650_t)ResolveAddr(Module::Exe, 0x1400fd650);
-    if (!create) return 0;
-    uint64_t placed = create(self, startCol, startRow, endCol, endRow, pos, 0.0f /*yaw*/);
+    uint64_t placed = ToolTile_ValidateCreate_fd650(reinterpret_cast<long long>(self), startCol,
+                                                    startRow, endCol, endRow, pos, 0.0f /*yaw*/);
     return (int)(placed & 0xff);
 }
 
 extern "C" int PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell) {
     PlacementTool* self = (PlacementTool*)toolSelf;
-    EnsureFuncs();
-
     if (!self->descComponent) {
         fprintf(stderr, "[Placement] PLACE: descComponent(+0x28) NULL — run Startup first\n");
         fflush(stderr);
@@ -1248,13 +1105,13 @@ extern "C" int PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell) 
                             "ring=%d after %d attempts — building entity materialized\n",
                             cell, cc, rr, rad, attempts);
                     fflush(stderr);
-                    if (s_fn_FUN_1401000f0) s_fn_FUN_1401000f0(self);  // finalize (place sound)
+                    DragTool_PlayPlaceSound_1000f0(reinterpret_cast<uint64_t>(self));  // finalize (place sound)
                     return 1;
                 }
             }
         }
     }
-    if (s_fn_FUN_140100140) s_fn_FUN_140100140(self);  // fail (error sound)
+    DragTool_PlayErrorSound_100140(reinterpret_cast<uint64_t>(self));  // fail (error sound)
     fprintf(stderr, "[Placement] PLACE: FAILED — no buildable cell within radius %d (%d attempts)\n",
             kMaxRadius, attempts);
     fflush(stderr);
@@ -1272,8 +1129,6 @@ extern "C" int PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell) 
 // the log. Does NOT create a permanent entity (that's HarnessPlaceAtCell).
 extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell) {
     PlacementTool* self = (PlacementTool*)toolSelf;
-    EnsureFuncs();
-
     if (!self->descComponent || !self->meshInstance) {
         fprintf(stderr, "[Preview] descComponent(+0x28)=%p meshInstance(+0x68)=%p — run Startup first\n",
                 (void*)self->descComponent, (void*)self->meshInstance);

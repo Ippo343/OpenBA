@@ -30,7 +30,6 @@
 // System::Strings and the base's _textName. That is retail's, transcribed, not
 // an omission; the same is true of ~ImageDescription.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"
@@ -125,10 +124,9 @@ bool BorderDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };                   // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);  // 18010fe62 / 18010fe67
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser); // 18010fe78 ExternalPtr<SpriteSheet>
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 18010fe78
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
-        RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName[i], &ser);
+        StringSerialize(&_spriteName[i], &ser);             // 0x1800c9930
 
     if (rw != nullptr) delete rw;                 // 18010ff23
     return true;                                            // MOV AL,1
@@ -184,27 +182,6 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
 }
 
 }  // namespace UI
-
-// ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the eight slot doors (Type / TypeName /
-// GetFileVersion / Construct / Reconstruct / Destruct / Serialize /
-// CreateInstance) and the ??1 door are gone -- their only reader was the minted
-// `??_7BorderDescription@UI@@6B@` (and, for ??1, its RT_DELDTOR row). What is
-// left is the factory pair (B39_RULES D2): the class's OWN statics, by name
-// and address, so the minted `?_typeInfo@BorderDescription@UI@@` record
-// (MintTypeInfos resolves its factory pointers by name, after every
-// *PortInit) builds a real BorderDescription.
-// ============================================================================
-int RtUiBorderDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::BorderDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180040ad0ull, (void*)&UI::BorderDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@BorderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::BorderDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180040b50ull, (void*)&UI::BorderDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::BorderDescription's own type record, built at CRT init

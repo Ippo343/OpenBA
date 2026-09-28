@@ -11,7 +11,9 @@
 // exe helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"
+#include "system/Value.h"
+#include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
 #include "Component/ToolbarDescription.h"
 #include <cstdint>
@@ -48,7 +50,7 @@ void* DragTool_FindDescription_5160(uintptr_t descList, void* retval) {
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (t == s_tid_c7f58) {
                 void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid_c7f58)) ? c : nullptr;
+                found = Object::IsDerivedFromNullSafe(c, s_tid_c7f58) ? c : nullptr;
                 break;
             }
         }
@@ -80,7 +82,7 @@ void DragTool_CloseToolDialog_ff980(uint64_t* param_1) {
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
         reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&local));
-        if (fn_InternalBasePtr_Ctor) new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *param_1 = local;
     }
 }
@@ -107,7 +109,7 @@ void DragTool_CloseToolDialog_ff980(uint64_t* param_1) {
 void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
     if (*reinterpret_cast<int64_t*>(param_1 + 0x48) < 1) {
         uint64_t timeBuf[4] = {0};  // System::Time (8 bytes used)
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeBuf, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
 
         void* scene = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
@@ -119,7 +121,7 @@ void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
 
         // Re-set the throttle timer to 0.05s (DAT_1401720d4 == 0.05f).
         uint64_t throttle[4] = {0};
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(throttle, 0.05f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(throttle), 0.05f);
         *reinterpret_cast<uint64_t*>(param_1 + 0x48) = throttle[0];
     }
 }
@@ -140,7 +142,7 @@ void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
 // g_pKeyMapSingleton. No exe sub-calls.
 void DragTool_PlayPlaceSound_1000f0(uint64_t /*unused*/) {
     uint64_t timeBuf[4] = {0};
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeBuf, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
     void* scene = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
@@ -162,7 +164,7 @@ void DragTool_PlayPlaceSound_1000f0(uint64_t /*unused*/) {
 // g_pKeyMapSingleton. No exe sub-calls.
 void DragTool_PlayErrorSound_100140(uint64_t /*unused*/) {
     uint64_t timeBuf[4] = {0};
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeBuf, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
     void* scene = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
@@ -196,21 +198,11 @@ void DragTool_PlayErrorSound_100140(uint64_t /*unused*/) {
 //   - FUN_140003110  (DynArraySetCount)    — REGISTERED (Action wave)
 //   - fn_InternalBasePtr_CheckPtr           — engine_funcs export
 //   - g_pGameWorldSingleton                 — singleton global
-typedef void (*fn_MarkEntityRemoval_c2ea0_t)(uintptr_t entity);
-typedef void (*fn_DynArraySetCount_003110_t)(int64_t* arr, int newCount, void* elem);
-static fn_MarkEntityRemoval_c2ea0_t s_fn_MarkRemoval = nullptr;
-static fn_DynArraySetCount_003110_t s_fn_ArrSetCount = nullptr;
-static bool s_clearPathInit = false;
+// (Both called by name: ActHunt_MarkEntityRemoval_c2ea0 / ActHunt_DynArraySetCount_3110,
+// Action/exe_bodies.h.)
 
 void DragPlacementTool_ClearPathEntities_1018d0(void* self, int minCol, int minRow,
                                                 int maxCol, int maxRow, int64_t entityTemplate) {
-    if (!s_clearPathInit) {
-        s_fn_MarkRemoval = reinterpret_cast<fn_MarkEntityRemoval_c2ea0_t>(
-            ResolveAddr(Module::Exe, 0x1400c2ea0));
-        s_fn_ArrSetCount = reinterpret_cast<fn_DynArraySetCount_003110_t>(
-            ResolveAddr(Module::Exe, 0x140003110));
-        s_clearPathInit = true;
-    }
     if (entityTemplate == 0) return;
 
     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -232,11 +224,11 @@ void DragPlacementTool_ClearPathEntities_1018d0(void* self, int minCol, int minR
                     void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
                     // skip if flag bit 10 (0x400) already set at entity+0x40
                     if ((*reinterpret_cast<uint32_t*>(resolved + 0x40) >> 10 & 1) == 0) {
-                        if (s_fn_MarkRemoval) s_fn_MarkRemoval(resolved);
-                        if (s_fn_ArrSetCount) {
+                        ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(resolved));
+                        {
                             uintptr_t el = reinterpret_cast<uintptr_t>(entityList);
-                            s_fn_ArrSetCount(
-                                reinterpret_cast<int64_t*>(el + 0xd0),
+                            ActHunt_DynArraySetCount_3110(
+                                reinterpret_cast<void*>(el + 0xd0),
                                 *reinterpret_cast<int*>(el + 0xd8) + 1,
                                 &resolved);
                         }
