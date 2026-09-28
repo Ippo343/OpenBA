@@ -138,17 +138,16 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../funcs/rt_libm.h"        // rtcrt::StrICmp
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/system/WideString.h"
 #include "../../src/system/string.h"
 #include "../../src/system/pod_bridge.h"
 
 #include <new>        // placement new into a raw FileInfo Filename slot
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // ENDGAME B.3.1 step 2: this file no longer forward-declares lane String's
 // `RtSystem_Filename_AdjustDelimiters` (0x1800c6970). Every call it made was
@@ -166,37 +165,19 @@ using RtSystem::SysFile;  //   "
 
 namespace {
 
-typedef FileInfo* (*OpenFileFn)(FileSystem*, FileInfo*, const Filename*);
-typedef bool      (*ReadFileFn)(FileSystem*, FileInfo*, int32_t, void*);
-typedef bool      (*PlatformOpenFileFn)(FileSystem*, FileInfo*, const Filename*);
-typedef FileInfo* (*GetFileInfoFn)(const PackageFileView*, FileInfo*);
-typedef FileInfo* (*FileInfoCopyFn)(FileInfo*, const FileInfo*);
-typedef FileInfo* (*FileInfoAssignFn)(FileInfo*, const FileInfo*);
-typedef void      (*CloseFileFn)(FileSystem*, FileInfo*);
-// ENDGAME B.3.1 step 2: the three doors that used to reach String::Set,
-// Filename::AdjustDelimiters and the Filename copy ctor BY NAME are gone. They
-// are members of a class this translation unit now holds, so calling them by
-// name would only have been a way to reach the shipped copy by accident.
-typedef void*     (*WideStringCtorFn)(void*, const String*);
-typedef int       (*StrICmpFn)(const char*, const char*);
-
-// The CRT `_stricmp` OpenFile's BST walk uses. Unexported, so ResolveAddr is the
-// proper door — the same one lane PKG's `PathStrICmp` uses for the same address.
+// The CRT `_stricmp` OpenFile's BST walk uses: 0x18007eefc, rtcrt::StrICmp
+// (runtime/src/crt/msvc_stricmp.cpp), called by name (B3R RT-IO).
 // It must NOT be replaced by std::strcasecmp or shared with
 // runtime/src/system/configuration.cpp's comparator: 0x18007eec0
 // (`__ascii_stricmp`, the tail it jumps to) lowers only 'A'-'Z' and compares
 // UNSIGNED, while the config map inlines a SIGNED-char strcmp. They disagree on
 // any byte >= 0x80 and a package path can contain one.
 int PathStrICmp(const char* a, const char* b) {
-    static StrICmpFn fn =
-        reinterpret_cast<StrICmpFn>(ResolveAddr(Module::Runtime, 0x18007eefc));
-    return fn(a, b);
+    return rtcrt::StrICmp(a, b);
 }
 
 // FileInfo::operator= is now PORTED (rung 4, below) -- it used to be reached
 // here by ResolveAddr(0x18000c200), which was rung 3's one new cutover blocker.
-// The typedef stays because the probe still needs a raw door to the shipped
-// body to diff against.
 
 inline int32_t StrLenOf(const char* data) {
     // retail: `if (p) len = [p-8] else len = 0` — the String block's length word.
@@ -357,7 +338,7 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
 // Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
 // this translation unit's `RtIO`-scoped names — including the
-// anonymous-namespace helpers `PathStrICmp`, `StrLenOf` and `WideStringCtorFn`
+// anonymous-namespace helpers `PathStrICmp` and `StrLenOf`
 // — as `RtIO::X`. Every POD is spelled `RtIO::` or `RtSystem::` and every real
 // class `System::` (B34_RULES section 7.2).
 //
@@ -399,10 +380,11 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     RtIO::SysFile(blank._name1).~Filename();   // 1800add45
     RtIO::SysFile(blank._name0).~Filename();   // 1800add75
 
-    // WideString ws(*name); CreateFileW(ws, ...). The ctor is lane FS's port.
+    // WideString ws(*name); CreateFileW(ws, ...). ??0WideString(const String&),
+    // constructed into the POD slot and released by hand, as before.
     struct { void* data; } ws = { nullptr };                 // 1800add98
-    RT_EXPORT_ONCE(RtIO::WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
-        &ws, reinterpret_cast<const RtSystem::String*>(name));  // 1800addad
+    ::new (static_cast<void*>(&ws)) System::WideString(       // B.3.x bridge
+        *reinterpret_cast<const System::String*>(name));     // 1800addad
 
     // 1800addb3..1800addd7 — the argument block, transcribed rather than named
     // from habit: dwDesiredAccess 0x80000000 (GENERIC_READ), dwShareMode 1

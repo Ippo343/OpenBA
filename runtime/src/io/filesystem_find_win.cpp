@@ -410,18 +410,6 @@ static const String* AsPodString(const System::String& s) {
     return reinterpret_cast<const String*>(&s);
 }
 
-// ---- Raw ABI typedefs for the originals ------------------------------------
-typedef bool (*fn_ExistsOne_t)(const void* fs, const Filename* path);
-typedef void (*fn_FindFiles_t)(const void* fs, const String* dir, const String* pattern,
-                               bool recursive, FilenameArray* out);
-
-const char* const kNameExistsInPackfile =
-    "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z";
-const char* const kNamePlatformExists =
-    "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z";
-const char* const kNameFindFiles =
-    "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z";
-
 // Case-insensitive ASCII compare, sign-preserving. Duplicated from
 // filesystem.cpp for the reason that file gives: runtime/src stays free of a
 // CRT `_stricmp` whose locale behaviour differs between toolchains (PLAN.md
