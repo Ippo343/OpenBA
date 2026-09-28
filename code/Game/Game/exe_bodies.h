@@ -280,3 +280,7 @@ inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
         }
     }
 }
+
+// ---- citizenlist_serialize.cpp (B3R G-Game: external linkage given; read by citizenbehavior.cpp)
+void ResizeStride0x10(void* hdr, int n);  // 0x140017640
+void ResizeStride0x20(void* hdr, int n);  // 0x1400177c0

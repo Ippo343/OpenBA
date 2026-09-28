@@ -96,7 +96,7 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
         // Retail reads the type id through the import slot 0x140152870
         // (?_typeInfo@External@Object@@). ENDGAME B.3.9 TR: the class accessor; the
         // slot row (reg_unreg_lane1.cpp) is gone with its last reader.
-        if (fn_IsDerivedFrom && fn_IsDerivedFrom(found, ::Object::External::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(found, ::Object::External::TypeId())) {
             result = found;
         }
     }

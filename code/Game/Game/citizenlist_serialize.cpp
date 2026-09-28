@@ -331,6 +331,11 @@ using IntPairArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 
 }  // namespace
 
+// ResizeStride0x10 / ResizeStride0x20 have external linkage (B3R R5): CitizenBehavior's
+// ctor (code/Game/Entity/citizenbehavior.cpp) calls them by name through
+// Game/exe_bodies.h. The file's anonymous namespace closes around them.
+}  // namespace
+
 // ------------------------------------------------------------
 // FUN_140017640 ("StatsArray::Init") — stride-0x10 outer array resize
 // {ptr,count/cap}[N]; each element itself a stride-4 int array header,
@@ -352,6 +357,8 @@ void ResizeStride0x20(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
     reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);
 }
+
+namespace {
 
 // ------------------------------------------------------------
 // FUN_140017f60 — stride-8 (two int32) array resize; grows ×3 on the
