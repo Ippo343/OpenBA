@@ -141,7 +141,7 @@
 
 #include "dx11_seam.h"
 #include "VideoDX11Data.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // B.3R DX: MemAlloc / MemFree, direct
 
 // ENDGAME B.3.5 block C, RULE B5-3 — the real `Video::ImageBufferData` abstract
 // base (block A), so this file's destructor can call its base destructor as a
@@ -167,59 +167,20 @@ namespace VideoDX11 {
 namespace {
 
 // ============================================================
-// Runtime-x64.dll imports.
+// Runtime-x64.dll imports — DIRECT REFERENCES (ENDGAME B.3R, block DX)
 //
-// Resolved lazily in this translation unit only — deliberately NOT added to
-// engine/funcs/engine_funcs.h, which the other five lanes are also editing.
-// Mangled names read out of VideoDX11's own import-name table (RVAs 0x1c106+,
-// IAT 0x180013398..0x1800134d0), so they are exactly the strings the shipped
-// DLL resolves.
+// This was an `Imports` struct of two pointers resolved at first use by
+// `ResolveExport`, with an all-or-nothing readiness test; every slot forwarded
+// to `Dx11OriginalSlot` when it failed. Both names bound to a body in this
+// build, so the test was always true; the struct, the test and the forwarding
+// arms are GONE (B3R_RULES R2, R8):
+//   ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z -> System::MemoryAllocator::MemAlloc
+//   ?MemFree@MemoryAllocator@System@@SAXPEAX@Z    -> System::MemoryAllocator::MemFree
+// The nine `Video::ImageBuffer` rows went in ENDGAME B.3.5 block J (RULE B5-14,
+// `ImgOf` below) and the base dtor in block C (RULE B5-3, `Destructor`). The
+// 84-slot seam and `Dx11SeamInstall()`'s completeness check are untouched
+// (RULE B5-8).
 // ============================================================
-struct Imports {
-    // ENDGAME B.3.5 block J, RULE B5-14 — THE NINE `Video::ImageBuffer` ROWS ARE
-    // GONE. Each was a mangled name resolved into a function pointer and called
-    // indirectly; `Video::ImageBuffer` is a real class (runtime/types/video/
-    // ImageBuffer.h, bodies in runtime/src/video/buffers.cpp) and every one of
-    // them is a const member call now, through the one `ImgOf` bridge below:
-    //   ?Width@ ?Height@ ?GetLevelCount@   -> int  members
-    //   ?IsDynamic@ ?IsCompressed@ ?IsRenderBuffer@ ?IsDepthBuffer@
-    //   ?IsRendered@ ?IsGenerated@         -> bool members
-    // `MemAlloc`/`MemFree` and the two singleton reads STAY (the allocator is a
-    // door; the singletons are RULE B4b-4 static-storage reads), so `g_imOk` is
-    // still an all-or-nothing test over everything this file resolves at run time
-    // and every `if (!GetImports())` guard stays. The 84-slot seam and
-    // `Dx11SeamInstall()`'s completeness check are untouched (RULE B5-8).
-    // ENDGAME B.3.5 block C, RULE B5-3: `void (*BaseDtor)(void*)` —
-    // `??1ImageBufferData@Video@@UEAA@XZ` — is GONE from this struct. It was
-    // spelling 9 of the nine caller bindings (RULE B5-14), a mangled name
-    // resolved into a table and called indirectly, one of dx11's 76 literals.
-    // The Runtime base is a real class now; see `Destructor` below.
-    void* (*MemAlloc)(uint64_t, int);// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
-    void  (*MemFree)(void*);         // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-};
-
-Imports  g_im;
-bool     g_imResolved = false;
-bool     g_imOk       = false;
-
-// Returns nullptr when any import is missing. Every slot then forwards to the
-// original code rather than dereferencing a null — the seam keeps the shipped
-// implementation available for exactly this.
-const Imports* GetImports() {
-    if (!g_imResolved) {
-        g_imResolved = true;
-        std::memset(&g_im, 0, sizeof(g_im));
-
-        g_im.MemAlloc       = (void* (*)(uint64_t, int))ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-        g_im.MemFree        = (void  (*)(void*))ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-
-        const void* const* p = reinterpret_cast<const void* const*>(&g_im);
-        g_imOk = true;
-        for (size_t i = 0; i < sizeof(Imports) / sizeof(void*); ++i)
-            if (p[i] == nullptr) g_imOk = false;
-    }
-    return g_imOk ? &g_im : nullptr;
-}
 
 // ============================================================
 // Field accessors — raw offsets, no invented struct
@@ -241,7 +202,7 @@ inline const ::Video::ImageBuffer* ImgOf(void* imageBuffer) {
 // does not check either).
 // ENDGAME B.3.9 VID: Video::Device::_singleton is the class static; the import
 // row that resolved it by name is gone.
-inline void* VideoDevice(const Imports*) { return ::Video::Device::_singleton; }
+inline void* VideoDevice() { return ::Video::Device::_singleton; }
 
 // Active Video::DeviceData* at Video::Device+0x100.
 inline DeviceData* ActiveDeviceData(void* device) {
@@ -264,7 +225,7 @@ const int kFormatBytes[8]  = {    8,   16,   16,    1,    1,    4,    4,    4 };
 // growth. NOTE FOR LANE L6: this belongs to DeviceData; hoist it when
 // DeviceData lands (see the header comment).
 // ============================================================
-void TrackImageBuffer(DeviceData* dd, void* imageBuffer, const Imports* im) {
+void TrackImageBuffer(DeviceData* dd, void* imageBuffer) {
     const int   oldCount = dd->trackedCount;
     void* const oldData  = dd->trackedImages;
 
@@ -282,7 +243,7 @@ void TrackImageBuffer(DeviceData* dd, void* imageBuffer, const Imports* im) {
     if (dd->trackedCapacity < newCount) {
         dd->trackedCapacity = newCount;
         if (oldCount != 0) dd->trackedCapacity = newCount * 3;
-        dd->trackedImages = im->MemAlloc(static_cast<uint64_t>(dd->trackedCapacity) * 8, 8);
+        dd->trackedImages = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(dd->trackedCapacity) * 8, 8);
     }
 
     // If the block was reused, only the tail needs filling; if it moved, the
@@ -294,7 +255,7 @@ void TrackImageBuffer(DeviceData* dd, void* imageBuffer, const Imports* im) {
             *dst = (i < oldCount) ? static_cast<void**>(oldData)[i] : imageBuffer;
     }
 
-    if (oldData != dd->trackedImages) im->MemFree(oldData);
+    if (oldData != dd->trackedImages) System::MemoryAllocator::MemFree(oldData);
 }
 
 // The matching stable shift-erase, inlined into ~ImageBufferData at
@@ -334,7 +295,7 @@ void ReleaseInterfaces(ImageBufferData* self) {
 // 0x180002720 — create the sampler state (private; called by slot 3 only,
 // including on the CreateTexture2D failure path).
 // ============================================================
-void CreateSamplerState(ImageBufferData* self, const Imports* im) {
+void CreateSamplerState(ImageBufferData* self) {
     void* const ib = self->imageBuffer;
 
     // Both tables are stack locals in the original and are *patched* before
@@ -366,7 +327,7 @@ void CreateSamplerState(ImageBufferData* self, const Imports* im) {
     }
     // aniso > 0: table stays ANISOTROPIC and the value is kept.
 
-    void* const device = VideoDevice(im);
+    void* const device = VideoDevice();
     const int maxAniso = *reinterpret_cast<int*>(static_cast<uint8_t*>(device) + 0x98);
     if (aniso > maxAniso) aniso = maxAniso;
 
@@ -394,7 +355,7 @@ void CreateSamplerState(ImageBufferData* self, const Imports* im) {
 // ============================================================
 // 0x180002430 — ~ImageBufferData (private; tail-called by slot 0)
 // ============================================================
-void Destructor(ImageBufferData* self, const Imports* im) {
+void Destructor(ImageBufferData* self) {
     // MSVC's "restore this class's vptr before running the dtor body". The
     // live vtable, so a later virtual call reaches whichever slots are
     // installed — our exe-owned array in Standalone mode, the shipped DLL's
@@ -405,7 +366,7 @@ void Destructor(ImageBufferData* self, const Imports* im) {
 
     // Untrack. Note bits 4|5|6 = 0x70 here, unlike slot 3 which only tests bit 6.
     if (ImgOf(ib)->IsGenerated() || (IbU32(ib, 0x34) & 0x70) != 0 || ImgOf(ib)->IsRendered())
-        UntrackImageBuffer(ActiveDeviceData(VideoDevice(im)), ib);
+        UntrackImageBuffer(ActiveDeviceData(VideoDevice()), ib);
 
     ReleaseInterfaces(self);
 
@@ -428,13 +389,8 @@ void Destructor(ImageBufferData* self, const Imports* im) {
 // slot 0 — 0x180002400 — scalar deleting destructor
 // ============================================================
 void* ImageBufferData_ScalarDeletingDtor(ImageBufferData* self, unsigned int flags) {
-    const Imports* im = GetImports();
-    if (!im) {
-        typedef void* (*orig_t)(ImageBufferData*, unsigned int);
-        return reinterpret_cast<orig_t>(Dx11OriginalSlot(Vt::ImageBufferData, 0))(self, flags);
-    }
-    Destructor(self, im);
-    if (flags & 1) im->MemFree(self);
+    Destructor(self);
+    if (flags & 1) System::MemoryAllocator::MemFree(self);
     return self;
 }
 
@@ -447,14 +403,7 @@ void* ImageBufferData_ScalarDeletingDtor(ImageBufferData* self, unsigned int fla
 // the reset registry. No sampler and no SRV are created.
 // ============================================================
 void ImageBufferData_AttachColorBuffer(ImageBufferData* self) {
-    const Imports* im = GetImports();
-    if (!im) {
-        typedef void (*orig_t)(ImageBufferData*);
-        reinterpret_cast<orig_t>(Dx11OriginalSlot(Vt::ImageBufferData, 1))(self);
-        return;
-    }
-
-    void* const device = VideoDevice(im);
+    void* const device = VideoDevice();
     DeviceData* const dd = ActiveDeviceData(device);
     void* const ib = self->imageBuffer;
 
@@ -477,7 +426,7 @@ void ImageBufferData_AttachColorBuffer(ImageBufferData* self) {
     dev->CreateRenderTargetView(static_cast<ID3D11Resource*>(self->texture), nullptr,
                                 reinterpret_cast<ID3D11RenderTargetView**>(&self->renderTargetView));
 
-    TrackImageBuffer(dd, ib, im);   // tail call in the original
+    TrackImageBuffer(dd, ib);   // tail call in the original
 }
 
 // ============================================================
@@ -485,14 +434,7 @@ void ImageBufferData_AttachColorBuffer(ImageBufferData* self) {
 // Mirror of slot 1 with the depth format, kind 1, flag bit 5, and a DSV.
 // ============================================================
 void ImageBufferData_AttachDepthBuffer(ImageBufferData* self) {
-    const Imports* im = GetImports();
-    if (!im) {
-        typedef void (*orig_t)(ImageBufferData*);
-        reinterpret_cast<orig_t>(Dx11OriginalSlot(Vt::ImageBufferData, 2))(self);
-        return;
-    }
-
-    void* const device = VideoDevice(im);
+    void* const device = VideoDevice();
     DeviceData* const dd = ActiveDeviceData(device);
     void* const ib = self->imageBuffer;
 
@@ -516,7 +458,7 @@ void ImageBufferData_AttachDepthBuffer(ImageBufferData* self) {
     dev->CreateDepthStencilView(static_cast<ID3D11Resource*>(self->texture), nullptr,
                                 reinterpret_cast<ID3D11DepthStencilView**>(&self->depthStencilView));
 
-    TrackImageBuffer(dd, ib, im);
+    TrackImageBuffer(dd, ib);
 }
 
 // ============================================================
@@ -552,7 +494,7 @@ struct SubresArray {
 
 // Array::SetLength(count+1) then fill, inlined by the original at
 // 0x180002b18-0x180002bbe with stride 0x10. x3 growth, first alloc exactly 1.
-void PushSubresource(SubresArray* arr, const D3D11_SUBRESOURCE_DATA& value, const Imports* im) {
+void PushSubresource(SubresArray* arr, const D3D11_SUBRESOURCE_DATA& value) {
     D3D11_SUBRESOURCE_DATA* const oldData = arr->data;
     const int oldCount = arr->count;
     const int newCount = oldCount + 1;
@@ -562,7 +504,7 @@ void PushSubresource(SubresArray* arr, const D3D11_SUBRESOURCE_DATA& value, cons
         arr->capacity = newCount;
         if (oldCount != 0) arr->capacity = newCount * 3;
         arr->data = static_cast<D3D11_SUBRESOURCE_DATA*>(
-            im->MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x10, 8));
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x10, 8));
     }
 
     const int start = (oldData == arr->data) ? oldCount : 0;
@@ -572,16 +514,10 @@ void PushSubresource(SubresArray* arr, const D3D11_SUBRESOURCE_DATA& value, cons
             *dst = (i < oldCount) ? oldData[i] : value;
     }
 
-    if (oldData != arr->data) im->MemFree(oldData);
+    if (oldData != arr->data) System::MemoryAllocator::MemFree(oldData);
 }
 
 bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels) {
-    const Imports* im = GetImports();
-    if (!im) {
-        typedef bool (*orig_t)(ImageBufferData*, const ImageLevelArray*);
-        return reinterpret_cast<orig_t>(Dx11OriginalSlot(Vt::ImageBufferData, 3))(self, levels);
-    }
-
     void* const ib = self->imageBuffer;
     const int width  = ImgOf(ib)->Width();
     const int height = ImgOf(ib)->Height();
@@ -590,11 +526,11 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
     if (!ImgOf(ib)->IsGenerated() && !ImgOf(ib)->IsRendered() && (width == 0 || height == 0))
         return true;
 
-    DeviceData* const dd = ActiveDeviceData(VideoDevice(im));
+    DeviceData* const dd = ActiveDeviceData(VideoDevice());
 
     // Add to the reset registry. Only bit 6 here (the dtor also honours 4 and 5).
     if (ImgOf(ib)->IsGenerated() || ImgOf(ib)->IsRendered() || ((IbU32(ib, 0x34) >> 6) & 1) != 0)
-        TrackImageBuffer(dd, ib, im);
+        TrackImageBuffer(dd, ib);
 
     ReleaseInterfaces(self);
 
@@ -643,7 +579,7 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
             entry.SysMemPitch      = static_cast<UINT>(kFormatBytes[IbI32(ib, 0x30)] * rowUnits);
             entry.SysMemSlicePitch = 0;   // hoisted out of the loop by the original
 
-            PushSubresource(&subres, entry, im);
+            PushSubresource(&subres, entry);
 
             // Next mip; BC formats floor at a 4-pixel (one-block) row. When the
             // mip chain is exhausted, restart it — that is how the six faces of
@@ -711,8 +647,8 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
     // Reached from every path, including a failed CreateTexture2D: the sampler
     // is created regardless, and the scratch array is always freed (the
     // original calls MemFree even when the pointer is null).
-    CreateSamplerState(self, im);
-    im->MemFree(subres.data);
+    CreateSamplerState(self);
+    System::MemoryAllocator::MemFree(subres.data);
     return hr == 0;
 }
 
@@ -724,15 +660,9 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
 // nothing is invented. Sampler first, then SRV — that order is observable.
 // ============================================================
 void ImageBufferData_Bind(ImageBufferData* self, void* unknownArg, unsigned int slot) {
-    const Imports* im = GetImports();
-    if (!im) {
-        typedef void (*orig_t)(ImageBufferData*, void*, unsigned int);
-        reinterpret_cast<orig_t>(Dx11OriginalSlot(Vt::ImageBufferData, 4))(self, unknownArg, slot);
-        return;
-    }
     (void)unknownArg;   // never read by the original either
 
-    ID3D11DeviceContext* const ctx = D3DContext(ActiveDeviceData(VideoDevice(im)));
+    ID3D11DeviceContext* const ctx = D3DContext(ActiveDeviceData(VideoDevice()));
     ctx->PSSetSamplers(slot, 1, reinterpret_cast<ID3D11SamplerState**>(&self->sampler));
     ctx->PSSetShaderResources(slot, 1, reinterpret_cast<ID3D11ShaderResourceView**>(&self->shaderResourceView));
 }
@@ -745,13 +675,7 @@ void ImageBufferData_Bind(ImageBufferData* self, void* unknownArg, unsigned int 
 // path only (dynamic UI/terrain textures), not the compressed one.
 // ============================================================
 bool ImageBufferData_Update(ImageBufferData* self, void* data, int width, int height) {
-    const Imports* im = GetImports();
-    if (!im) {
-        typedef bool (*orig_t)(ImageBufferData*, void*, int, int);
-        return reinterpret_cast<orig_t>(Dx11OriginalSlot(Vt::ImageBufferData, 5))(self, data, width, height);
-    }
-
-    ID3D11DeviceContext* const ctx = D3DContext(ActiveDeviceData(VideoDevice(im)));
+    ID3D11DeviceContext* const ctx = D3DContext(ActiveDeviceData(VideoDevice()));
 
     if (ImgOf(self->imageBuffer)->IsDynamic()) {
         D3D11_MAPPED_SUBRESOURCE mapped;
@@ -777,12 +701,6 @@ bool ImageBufferData_Update(ImageBufferData* self, void* data, int width, int he
 // silently diverging here would hide a real failure during A/B capture.
 // ============================================================
 bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int height) {
-    const Imports* im = GetImports();
-    if (!im) {
-        typedef bool (*orig_t)(ImageBufferData*, void*, int, int);
-        return reinterpret_cast<orig_t>(Dx11OriginalSlot(Vt::ImageBufferData, 6))(self, dst, width, height);
-    }
-
     D3D11_TEXTURE2D_DESC desc;
     desc.Width              = static_cast<UINT>(width);
     desc.Height             = static_cast<UINT>(height);
@@ -796,7 +714,7 @@ bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int heigh
     desc.CPUAccessFlags     = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;  // 0x30000
     desc.MiscFlags          = 0;
 
-    DeviceData* const dd = ActiveDeviceData(VideoDevice(im));
+    DeviceData* const dd = ActiveDeviceData(VideoDevice());
     ID3D11DeviceContext* const ctx = D3DContext(dd);
 
     ID3D11Texture2D* staging = nullptr;

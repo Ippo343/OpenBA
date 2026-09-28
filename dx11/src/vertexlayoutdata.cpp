@@ -121,7 +121,7 @@ static void* VertexLayoutData_Dtor(VertexLayoutData* self, unsigned flags) {
     reinterpret_cast< ::Video::VertexLayoutData*>(self)
         -> ::Video::VertexLayoutData::~VertexLayoutData();   // B.3.5 bridge
 
-    if (flags & 1) Dx11MemFree(self);
+    if (flags & 1) System::MemoryAllocator::MemFree(self);
     return self;
 }
 

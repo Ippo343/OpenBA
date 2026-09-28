@@ -138,171 +138,43 @@ namespace VideoDX11 {
 namespace {
 
 // ============================================================
-// Runtime-x64.dll imports
+// Runtime-x64.dll imports — DIRECT REFERENCES (ENDGAME B.3R, block DX)
 //
-// Same policy as L3/L5: resolve lazily by mangled name with the VideoDX11 IAT
-// slot as a fallback, and if ANY of them is missing, every slot in this file
-// forwards to the shipped implementation rather than dereferencing a null.
+// This was the `Imports` struct: 21 function pointers filled at first use by a
+// loop over a {field, mangled name, VideoDX11 IAT slot} table through
+// `Dx11ResolveRuntimeImport`, with an all-or-nothing readiness test that made
+// every slot below forward to the shipped implementation when any row was
+// missing. Every one of the 21 names bound to a body in this build, so the test
+// was always true: the struct, the table, the test and each slot's dead
+// forwarding arm are GONE, and each use is a call of the body the NAME bound
+// (B3R_RULES R2, R8):
+//
+//   retail IAT   mangled name                                  now
+//   0x1800134c0  ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z System::MemoryAllocator::MemAlloc
+//   0x1800134d0  ?MemFree@MemoryAllocator@System@@SAXPEAX@Z    System::MemoryAllocator::MemFree
+//   0x180013478  ??0ContextData@Video@@…        (and the ten  ::new (p) ::Video::XData(owner)
+//   …            other ??0XData@Video@@ ctors, slot 9..19)    in AllocData below
+//   0x180013250  ??0Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Ctor
+//   0x1800132b8  ??0Adapter@Device@Video@@QEAA@AEBU012@@Z      RtVideo_Adapter_CopyCtor
+//   0x1800134c8  ??1Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Dtor
+//   0x1800132d0  ??0GraphicsInterface@Device@Video@@QEAA@XZ    RtVideo_GraphicsInterface_Ctor
+//   0x1800132b0  ??0GraphicsInterface@…@@QEAA@AEBU012@@Z       RtVideo_GraphicsInterface_CopyCtor
+//   0x1800132c8  ??1GraphicsInterface@Device@Video@@QEAA@XZ    RtVideo_GraphicsInterface_Dtor
+//   0x180013308  ??0DisplayMode@Device@Video@@QEAA@HH@Z        Video_DisplayMode_Ctor
+//   0x1800132f8  ??1DisplayMode@Device@Video@@QEAA@XZ          Video_DisplayMode_Dtor
+//
+// The six Adapter / GraphicsInterface / DisplayMode bodies are C functions
+// because none of those nested value types has a real C++ constructor or
+// destructor yet (B4b-2; Device.h records why per type). The eleven `??0XData`
+// names bound to one-line doors whose whole body is `::new (self) XData(owner)`;
+// AllocData performs that construction itself. The 84-slot seam, its
+// completeness check (RULE B5-8) and the twelve `*Data` classes are untouched.
+//
+// The earlier removals (the Video::Device members, System::String /
+// WideString, Application, ImageBuffer::CopyFromTexture and the DeviceData
+// base dtor) are recorded in git history (ENDGAME B.3.1 / B.3.4b / B.3.5 J /
+// B.3.7 / B.3.9).
 // ============================================================
-struct Imports {
-    // --- object lifetime -------------------------------------------------
-    void* (*MemAlloc)(size_t, int);                    // 0x1800134c0
-    void  (*MemFree)(void*);                           // 0x1800134d0
-    // ENDGAME B.3.5 block J: `??1DeviceData@Video@@UEAA@XZ` and its table row are
-    // GONE. Block D2 made slot 0 call `~DeviceData()` by qualified non-virtual
-    // name and kept the row so `g_imOk` would still fail when the Runtime side was
-    // absent. It no longer can be absent for THIS binding: a member call is
-    // resolved by the LINKER, which is a stronger guarantee than a run-time null
-    // test, so the row was testing a symbol nobody reads. Every row that is still
-    // resolved at run time is still in the all-or-nothing test below, and
-    // `Dx11SeamInstall()`'s completeness check is untouched (RULE B5-8).
-
-    // --- the eleven base ctors, in DeviceData slot 9..19 order -----------
-    void* (*CtorContextData)(void*, void*);            // 0x180013478
-    void* (*CtorImageBufferData)(void*, void*);        // 0x1800133e8
-    void* (*CtorConstantBufferData)(void*, void*);     // 0x180013490
-    void* (*CtorIndexBufferData)(void*, void*);        // 0x180013390
-    void* (*CtorVertexBufferData)(void*, void*);       // 0x180013340
-    void* (*CtorVertexLayoutData)(void*, void*);       // 0x180013330
-    void* (*CtorVertexProgramData)(void*, void*);      // 0x180013320
-    void* (*CtorPixelProgramData)(void*, void*);       // 0x180013360
-    void* (*CtorRenderStateData)(void*, void*);        // 0x180013350
-    void* (*CtorVideoProgramData)(void*, void*);       // 0x1800134a0
-    void* (*CtorRenderBufferData)(void*, void*);       // 0x1800134b0
-
-    // --- Video::Device ---------------------------------------------------
-    // ENDGAME B.3.5 block J, RULE B5-14: ALL EIGHT ROWS ARE GONE. `Video::Device`
-    // is a real class (runtime/types/video/Device.h) and every one of them is a
-    // direct member call now. `GetDisplayMode` is the by-value one and is
-    // converted in the ONLY shape B5-12 allows for a caller — "the door body
-    // moved to the call site": one placement-new of the member's prvalue into the
-    // same caller storage the retail retslot pointed at, and nothing else.
-    //   ?Lock@                       -> Video::Device::Lock
-    //   ?Unlock@                     -> Video::Device::Unlock
-    //   ?ReleaseDynamic@             -> Video::Device::ReleaseDynamic
-    //   ?RecreateDynamic@            -> Video::Device::RecreateDynamic
-    //   ?AdjustDisplay@              -> Video::Device::AdjustDisplay
-    //   ?GetDisplayMode@             -> Video::Device::GetDisplayMode  (by value)
-    //   ?GetMultisampleModeCount@    -> Video::Device::GetMultisampleModeCount
-    //   ?IsMultisampleModeSupported@ -> Video::Device::IsMultisampleModeSupported
-
-    // --- Video::Device::Adapter / GraphicsInterface / DisplayMode --------
-    // THE SEVEN CTOR/DTOR ROWS STAY (B4b-2, B35_RULES section 2.4 and 11): none
-    // of these four nested value types has a real C++ constructor or destructor —
-    // Device.h records why per type — so there is no member to call. Only
-    // `Adapter::FindOrAddMode`, which IS a real member, converted.
-    void* (*AdapterCtor)(void*);                       // 0x180013250
-    void* (*AdapterCopyCtor)(void*, const void*);      // 0x1800132b8
-    void  (*AdapterDtor)(void*);                       // 0x1800134c8
-    void* (*GfxIfaceCtor)(void*);                      // 0x1800132d0
-    void* (*GfxIfaceCopyCtor)(void*, const void*);     // 0x1800132b0
-    void  (*GfxIfaceDtor)(void*);                      // 0x1800132c8
-    void* (*DisplayModeCtor)(void*, int, int);         // 0x180013308
-    void  (*DisplayModeDtor)(void*);                   // 0x1800132f8
-
-    // --- System::String / WideString -------------------------------------
-    // ENDGAME B.3.1 step 2: the six System::String imports (0x180013248,
-    // 0x180013218, 0x1800132c0, 0x180013260, 0x180013270, 0x180013268) and
-    // Format (0x180013288) are gone — System::String is a real class in this
-    // build and the plugin calls its members directly.
-    // ENDGAME B.3.4b closing: the WideString ctor / dtor / StrLength imports
-    // (0x1800132e0, 0x1800132d8, 0x180013278) are gone with their call sites —
-    // System::WideString is a real class here too.
-    //
-    // ENDGAME B.3.5 block J: `?AsUTF8@WideString@System@@` IS GONE TOO, and the
-    // reason this row gave for staying was stale. It said the member form "cannot
-    // reproduce" a hidden retslot written into a String the caller had already
-    // constructed — but the caller only default-constructed that String because
-    // the DOOR's ABI needed somewhere to write. `System::WideString::AsUTF8()` is
-    // a real const member returning `System::String` by value
-    // (runtime/src/system/widestring.cpp), and both sides of the call are
-    // GCC-compiled C++, so direct-initialising the local FROM the prvalue is one
-    // construction into the same storage — strictly fewer than the two the door
-    // shape performed. The retslot hazard RULE B5-12 warns about is a
-    // door/virtual-slot hazard; it does not arise for a non-virtual member called
-    // from C++.
-
-    // --- Video::ImageBuffer ----------------------------------------------
-    // ENDGAME B.3.5 block J: `?CopyFromTexture@ImageBuffer@Video@@` is
-    // `Video::ImageBuffer::CopyFromTexture` (runtime/src/video/buffers.cpp).
-
-    // --- Application ------------------------------------------------------
-    // ENDGAME B.3.7 callers (K5): the three function imports are GONE —
-    // 0x180013290 `?RegisterMessageCallback@Application@1@`, 0x180013298
-    // `?UnregisterMessageCallback@Application@1@`, 0x1800132a8
-    // `?GetInstance@Application@1@`. `Application::Application` is a real C++
-    // class since B.3.7 block B1 (runtime/types/application/Application.h), and
-    // the plugin calls the three members directly on the object read through
-    // `Application::Application::_singleton`, the class static since ENDGAME
-    // B.3.9 (ENG made it one; VID's commit dropped the import row, AppOf below).
-    // The Video::Device and Video::Configuration slots went the same way.
-};
-
-Imports g_im;
-bool    g_imResolved = false;
-bool    g_imOk       = false;
-
-const Imports* GetImports() {
-    if (g_imResolved) return g_imOk ? &g_im : nullptr;
-    g_imResolved = true;
-    std::memset(&g_im, 0, sizeof(g_im));
-
-    struct Entry { void** dst; const char* mangled; uintptr_t iat; };
-    const Entry table[] = {
-        { (void**)&g_im.MemAlloc,               "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",                 0x1800134c0 },
-        { (void**)&g_im.MemFree,                "?MemFree@MemoryAllocator@System@@SAXPEAX@Z",                    0x1800134d0 },
-
-        { (void**)&g_im.CtorContextData,        "??0ContextData@Video@@QEAA@PEAVContext@1@@Z",                    0x180013478 },
-        { (void**)&g_im.CtorImageBufferData,    "??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@@Z",            0x1800133e8 },
-        { (void**)&g_im.CtorConstantBufferData, "??0ConstantBufferData@Video@@QEAA@PEAVConstantBuffer@1@@Z",      0x180013490 },
-        { (void**)&g_im.CtorIndexBufferData,    "??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer@1@@Z",            0x180013390 },
-        { (void**)&g_im.CtorVertexBufferData,   "??0VertexBufferData@Video@@QEAA@PEAVVertexBuffer@1@@Z",          0x180013340 },
-        { (void**)&g_im.CtorVertexLayoutData,   "??0VertexLayoutData@Video@@QEAA@PEAVVertexLayout@1@@Z",          0x180013330 },
-        { (void**)&g_im.CtorVertexProgramData,  "??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z",        0x180013320 },
-        { (void**)&g_im.CtorPixelProgramData,   "??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@1@@Z",          0x180013360 },
-        { (void**)&g_im.CtorRenderStateData,    "??0RenderStateData@Video@@QEAA@PEAVRenderState@1@@Z",            0x180013350 },
-        { (void**)&g_im.CtorVideoProgramData,   "??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z",          0x1800134a0 },
-        { (void**)&g_im.CtorRenderBufferData,   "??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z",          0x1800134b0 },
-
-
-        { (void**)&g_im.AdapterCtor,            "??0Adapter@Device@Video@@QEAA@XZ",                              0x180013250 },
-        { (void**)&g_im.AdapterCopyCtor,        "??0Adapter@Device@Video@@QEAA@AEBU012@@Z",                      0x1800132b8 },
-        { (void**)&g_im.AdapterDtor,            "??1Adapter@Device@Video@@QEAA@XZ",                              0x1800134c8 },
-        { (void**)&g_im.GfxIfaceCtor,           "??0GraphicsInterface@Device@Video@@QEAA@XZ",                    0x1800132d0 },
-        { (void**)&g_im.GfxIfaceCopyCtor,       "??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z",            0x1800132b0 },
-        { (void**)&g_im.GfxIfaceDtor,           "??1GraphicsInterface@Device@Video@@QEAA@XZ",                    0x1800132c8 },
-        { (void**)&g_im.DisplayModeCtor,        "??0DisplayMode@Device@Video@@QEAA@HH@Z",                        0x180013308 },
-        { (void**)&g_im.DisplayModeDtor,        "??1DisplayMode@Device@Video@@QEAA@XZ",                          0x1800132f8 },
-
-
-    };
-    g_imOk = true;
-    for (const Entry& e : table) {
-        *e.dst = Dx11ResolveRuntimeImport(e.mangled, e.iat);
-        // Name the casualty. The whole-struct scan below can only say "some
-        // field is null", which cost a debugging session when Standalone mode
-        // removed the VideoDX11 IAT fallback and one import started failing:
-        // the symptom was DeviceData::EnumerateInterfaces silently declining to
-        // enumerate, three layers away from the cause.
-        if (!*e.dst) {
-            fprintf(stderr, "[Dx11] devicedata import UNRESOLVED: %s\n", e.mangled);
-            g_imOk = false;
-        }
-    }
-
-    // Also catch a field that has no table entry at all — that one is a
-    // straightforward coding error and shows up as a permanent null.
-    const void* const* p = reinterpret_cast<const void* const*>(&g_im);
-    for (size_t i = 0; i < sizeof(Imports) / sizeof(void*); ++i) {
-        if (p[i] == nullptr) {
-            fprintf(stderr, "[Dx11] devicedata Imports field #%zu is null "
-                            "(no table entry?)\n", i);
-            g_imOk = false;
-        }
-    }
-    if (!g_imOk) fflush(stderr);
-    return g_imOk ? &g_im : nullptr;
-}
 
 // ============================================================
 // d3d11.dll / dxgi.dll entry points
@@ -448,8 +320,8 @@ inline ::Video::ImageBuffer* VImg(void* imageBuffer) {
 }
 // ENDGAME B.3.9 VID: Video::Configuration::_singleton is the class static; the
 // import row that resolved it by name is gone.
-inline void* ConfigOf(const Imports*)    { return ::Video::Configuration::_singleton; }
-inline void* AppOf(const Imports*)       { return ::Application::Application::_singleton; }
+inline void* ConfigOf()    { return ::Video::Configuration::_singleton; }
+inline void* AppOf()       { return ::Application::Application::_singleton; }
 
 // ============================================================
 // Runtime value types this file constructs on the stack
@@ -555,9 +427,9 @@ template <typename Fn> Fn Orig(int slot) {
 //     no-op when nothing changed. Kept, because it is the difference between
 //     touching and not touching the Configuration singleton.
 // ============================================================
-int ResolveMultisampleMode(DeviceData* self, const Imports* im) {
+int ResolveMultisampleMode(DeviceData* self) {
     void* dev = DeviceOf(self);
-    void* cfg = ConfigOf(im);
+    void* cfg = ConfigOf();
 
     int index = Field<int32_t>(cfg, Cfg::kMultisample);
     if (index >= VDev(dev)->GetMultisampleModeCount())
@@ -598,9 +470,9 @@ int ResolveMultisampleMode(DeviceData* self, const Imports* im) {
 // width/height in it are ignored here (Device+0x04/+0x08 already hold the
 // post-AdjustDisplay client size).
 // ============================================================
-void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc, const Imports* im) {
+void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc) {
     void* dev = DeviceOf(self);
-    void* cfg = ConfigOf(im);
+    void* cfg = ConfigOf();
 
     // ENDGAME B.3.5 block J, RULE B5-12 / CALLER_BATCH_BRIEF "by-value returns":
     // the door body moved to the call site. `Video::Device::GetDisplayMode` returns
@@ -638,7 +510,7 @@ void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc, const Impor
     desc->SwapEffect   = DXGI_SWAP_EFFECT_DISCARD;
     desc->Flags        = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;      // 2
 
-    im->DisplayModeDtor(&mode);
+    Video_DisplayMode_Dtor(&mode);
 }
 
 // ============================================================
@@ -657,7 +529,7 @@ void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc, const Impor
 // EndCommands does a ResolveSubresource.
 // ============================================================
 bool CreateAttachment(DeviceData* self, void** slot, DXGI_FORMAT format,
-                      UINT bindFlags, const Imports* im) {
+                      UINT bindFlags) {
     Dx11Release(*slot);
     *slot = nullptr;
 
@@ -669,7 +541,7 @@ bool CreateAttachment(DeviceData* self, void** slot, DXGI_FORMAT format,
     desc.MipLevels          = 1;
     desc.ArraySize          = 1;
     desc.Format             = format;
-    desc.SampleDesc.Count   = static_cast<UINT>(ResolveMultisampleMode(self, im));
+    desc.SampleDesc.Count   = static_cast<UINT>(ResolveMultisampleMode(self));
     desc.SampleDesc.Quality = 0;
     desc.Usage              = D3D11_USAGE_DEFAULT;
     desc.BindFlags          = bindFlags;
@@ -682,13 +554,13 @@ bool CreateAttachment(DeviceData* self, void** slot, DXGI_FORMAT format,
     return hr == 0;
 }
 
-bool CreateColorBuffer(DeviceData* self, const Imports* im) {
+bool CreateColorBuffer(DeviceData* self) {
     return CreateAttachment(self, &self->colorBuffer, DXGI_FORMAT_B8G8R8A8_UNORM,
-                            D3D11_BIND_RENDER_TARGET, im);
+                            D3D11_BIND_RENDER_TARGET);
 }
-bool CreateDepthBuffer(DeviceData* self, const Imports* im) {
+bool CreateDepthBuffer(DeviceData* self) {
     return CreateAttachment(self, &self->depthBuffer, DXGI_FORMAT_D24_UNORM_S8_UINT,
-                            D3D11_BIND_DEPTH_STENCIL, im);
+                            D3D11_BIND_DEPTH_STENCIL);
 }
 
 // ============================================================
@@ -775,10 +647,10 @@ void PickGoodSize(void* cfg, const DisplayMode& mode, int* w, int* h) {
     *w = mode.width; *h = mode.height;
 }
 
-void TraceGeom(const char* stage, void* dev, const Imports* im) {
+void TraceGeom(const char* stage, void* dev) {
     if (!ResizeTraceOn()) return;
     HWND hwnd = Field<HWND>(dev, Dev::kHwnd);
-    void* cfg = ConfigOf(im);
+    void* cfg = ConfigOf();
     RECT wr{}, cr{};
     GetWindowRect(hwnd, &wr);
     GetClientRect(hwnd, &cr);
@@ -861,14 +733,9 @@ void TraceContainingOutput(IDXGISwapChain* sc) {
 // reproduced verbatim — see the quirks list.
 // ============================================================
 int DeviceData_Resize(DeviceData* self) {
-    const Imports* im = GetImports();
-    // No fallback to the shipped 0x180004340: VideoDX11-x64.dll is never mapped
-    // (ENDGAME.md A.1). An unresolved import table is a real failure.
-    if (!im) return 0;
-
     void* dev = DeviceOf(self);
     ++g_resizeTraceCalls;
-    TraceGeom("entry", dev, im);
+    TraceGeom("entry", dev);
     Field<uint8_t>(dev, Dev::kResetPending) = 1;
 
     if (!IsWindowVisible(Field<HWND>(dev, Dev::kHwnd)))
@@ -901,7 +768,7 @@ int DeviceData_Resize(DeviceData* self) {
     self->depthBuffer = nullptr;
     self->colorBuffer = nullptr;
 
-    void* cfg = ConfigOf(im);
+    void* cfg = ConfigOf();
 
     // The same by-value shape as FillSwapChainDesc's — see the note there.
     DisplayMode mode;
@@ -941,9 +808,9 @@ int DeviceData_Resize(DeviceData* self) {
         Field<int32_t>(dev, Dev::kHeight) = gh;
     }
 
-    TraceGeom("pre-AdjustDisplay", dev, im);
+    TraceGeom("pre-AdjustDisplay", dev);
     VDev(dev)->AdjustDisplay();
-    TraceGeom("post-AdjustDisplay", dev, im);
+    TraceGeom("post-AdjustDisplay", dev);
 
     // Guard, second half. If the external actor re-collapsed the window inside
     // that call, AdjustDisplay has just latched the bad size into both the
@@ -991,9 +858,9 @@ int DeviceData_Resize(DeviceData* self) {
     // ResizeTarget is called first and unconditionally in the shipped order, so
     // hoisting it out of the short-circuit chain preserves semantics exactly.
     TraceContainingOutput(sc);
-    TraceGeom("pre-ResizeTarget", dev, im);
+    TraceGeom("pre-ResizeTarget", dev);
     const HRESULT hrTarget = sc->ResizeTarget(&target);
-    TraceGeom("post-ResizeTarget", dev, im);
+    TraceGeom("post-ResizeTarget", dev);
     if (ResizeTraceOn()) {
         fprintf(stderr, "[ResizeTrace #%d] ResizeTarget(%ux%u @ %u/%u fmt=%u) "
                 "-> 0x%08lX\n", g_resizeTraceCalls, target.Width, target.Height,
@@ -1011,14 +878,14 @@ int DeviceData_Resize(DeviceData* self) {
                           DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) == 0 &&
         sc->SetFullscreenState(Field<uint8_t>(cfg, Cfg::kFullscreen) != 0 ? TRUE : FALSE,
                                nullptr) == 0 &&
-        CreateColorBuffer(self, im) &&
-        CreateDepthBuffer(self, im)) {
+        CreateColorBuffer(self) &&
+        CreateDepthBuffer(self)) {
         VDev(dev)->RecreateDynamic();
         Field<uint8_t>(dev, Dev::kResetPending) = 0;
         ok = true;
     }
 
-    im->DisplayModeDtor(&mode);
+    Video_DisplayMode_Dtor(&mode);
     return ok ? 1 : 0;
 }
 
@@ -1054,10 +921,7 @@ int DeviceData_Resize(DeviceData* self) {
 // ============================================================
 int __cdecl DeviceData_OnActivate(HWND /*hwnd*/, unsigned /*msg*/,
                                   unsigned long long wParam, long long /*lParam*/) {
-    const Imports* im = GetImports();
-    if (!im) return 1;
-
-    void* cfg = ConfigOf(im);
+    void* cfg = ConfigOf();
     void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
     DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
 
@@ -1088,9 +952,6 @@ int __cdecl DeviceData_OnActivate(HWND /*hwnd*/, unsigned /*msg*/,
 // ============================================================
 int __cdecl DeviceData_OnSetCursor(HWND /*hwnd*/, unsigned /*msg*/,
                                    unsigned long long /*w*/, long long /*l*/) {
-    const Imports* im = GetImports();
-    if (!im) return 1;
-
     void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
     DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
 
@@ -1121,12 +982,9 @@ int __cdecl DeviceData_OnSetCursor(HWND /*hwnd*/, unsigned /*msg*/,
 // without slot 3 leaks every COM object. That is the shipped contract.
 // ============================================================
 DeviceData* DeviceData_Dtor(DeviceData* self, unsigned flags) {
-    const Imports* im = GetImports();
-    if (!im) return Orig<DeviceData* (*)(DeviceData*, unsigned)>(0)(self, flags);
-
     self->vptr = Dx11VtableAddress(Vt::DeviceData);
 
-    im->MemFree(self->trackedImages);
+    System::MemoryAllocator::MemFree(self->trackedImages);
     self->trackedImages   = nullptr;
     self->trackedCount    = 0;
     self->trackedCapacity = 0;
@@ -1137,13 +995,13 @@ DeviceData* DeviceData_Dtor(DeviceData* self, unsigned flags) {
     // re-enter this slot. The cast is the bridge the declared leave (RULE B5-8)
     // requires: this class mirrors the base's two fields rather than deriving.
     // ENDGAME B.3.5 block J: `Imports::DeviceDataBaseDtor` and its table row are
-    // GONE — see the note at the struct. The readiness test above still guards
-    // `MemFree`, which this body really does resolve at run time.
+    // GONE; ENDGAME B.3R block DX removed the rest of the struct and the
+    // readiness test with it (`MemFree` is a direct call now).
     reinterpret_cast<Video::DeviceData*>(self)
         ->Video::DeviceData::~DeviceData();   // B.3.5 bridge
 
     if (flags & 1)
-        im->MemFree(self);
+        System::MemoryAllocator::MemFree(self);
 
     return self;
 }
@@ -1180,17 +1038,14 @@ DeviceData* DeviceData_Dtor(DeviceData* self, unsigned flags) {
 //     as-is; "fixing" it changes observable behaviour.
 // ============================================================
 void DeviceData_Shutdown(DeviceData* self) {
-    const Imports* im = GetImports();
-    if (!im) { Orig<void (*)(DeviceData*)>(3)(self); return; }
-
-    void* app = AppOf(im);
+    void* app = AppOf();
     reinterpret_cast< ::Application::Application*>(app)->UnregisterMessageCallback(0x20);  // B.3.7 bridge
     reinterpret_cast< ::Application::Application*>(app)->UnregisterMessageCallback(6);     // B.3.7 bridge
 
     if (self->cursor)
         DestroyCursor(static_cast<HCURSOR>(self->cursor));
 
-    void* cfg = ConfigOf(im);
+    void* cfg = ConfigOf();
     if (self->wasFullscreen != 0)
         Field<uint8_t>(cfg, Cfg::kFullscreen) = 1;
 
@@ -1266,9 +1121,6 @@ void DeviceData_Shutdown(DeviceData* self) {
 //     post-failure DumpVideoState() sees.
 // ============================================================
 bool DeviceData_CreateDevice(DeviceData* self) {
-    const Imports* im = GetImports();
-    if (!im) return Orig<bool (*)(DeviceData*)>(2)(self);
-
     CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
     D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
     if (!createFactory || !createDevice) return Orig<bool (*)(DeviceData*)>(2)(self);
@@ -1298,7 +1150,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 
     StallDebug::Mark("  DX11 DXGI factory + adapter + output enum");
 
-    void* cfg = ConfigOf(im);
+    void* cfg = ConfigOf();
 
     // 4 — start from the selected display mode.
     const DisplayMode* modeTable =
@@ -1348,7 +1200,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 
     // 9
     DXGI_SWAP_CHAIN_DESC desc;
-    FillSwapChainDesc(self, &desc, im);
+    FillSwapChainDesc(self, &desc);
 
     // 10
     const D3D_FEATURE_LEVEL levels[3] = {
@@ -1405,8 +1257,8 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     factory->Release();
 
     // 16
-    if (!CreateColorBuffer(self, im)) {
-        int aa = ResolveMultisampleMode(self, im);
+    if (!CreateColorBuffer(self)) {
+        int aa = ResolveMultisampleMode(self);
         const System::String msg = System::String::Format(
             "VideoDX11: Failed to create color buffer with format "
             "DXGI_FORMAT_B8G8R8A8_UNORM [%ix%i %ixAA]",
@@ -1415,8 +1267,8 @@ bool DeviceData_CreateDevice(DeviceData* self) {
         System::Error::SetText(msg._data, false);   // B.3.4 bridge
         return false;
     }
-    if (!CreateDepthBuffer(self, im)) {
-        int aa = ResolveMultisampleMode(self, im);
+    if (!CreateDepthBuffer(self)) {
+        int aa = ResolveMultisampleMode(self);
         const System::String msg = System::String::Format(
             "VideoDX11: Failed to create a valid depth buffer format "
             "DXGI_FORMAT_D24_UNORM_S8_UINT [%ix%i %AA]!",
@@ -1429,7 +1281,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     StallDebug::Mark("  DX11 swapchain + color/depth buffers");
 
     // 17
-    void* app = AppOf(im);
+    void* app = AppOf();
     reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
         0x20, reinterpret_cast< ::Application::Application::MessageCallback>(&DeviceData_OnSetCursor));
     reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
@@ -1467,9 +1319,6 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 // CopyFromTexture stages through the immediate context.
 // ============================================================
 void DeviceData_SetImageBuffer(DeviceData* self, void* imageBuffer, int hotX, int hotY) {
-    const Imports* im = GetImports();
-    if (!im) { Orig<void (*)(DeviceData*, void*, int, int)>(8)(self, imageBuffer, hotX, hotY); return; }
-
     if (imageBuffer == self->cursorImage &&
         hotX == self->cursorHotspotX &&
         hotY == self->cursorHotspotY)
@@ -1511,7 +1360,7 @@ void DeviceData_SetImageBuffer(DeviceData* self, void* imageBuffer, int hotX, in
 
     HCURSOR cursor = CreateCursor(
         static_cast<HINSTANCE>(
-            reinterpret_cast<const ::Application::Application*>(AppOf(im))->GetInstance()),  // B.3.7 bridge
+            reinterpret_cast<const ::Application::Application*>(AppOf())->GetInstance()),  // B.3.7 bridge
         hotX, hotY, 32, 32, andPlane, xorPlane);
     self->cursor = cursor;
     SetCursor(cursor);
@@ -1536,7 +1385,7 @@ void DeviceData_SetImageBuffer(DeviceData* self, void* imageBuffer, int hotX, in
 // the block did NOT move, only the tail past the new length is destroyed.
 // ============================================================
 void GfxInterfaceArraySetLength(void* arrayBase, int newCount,
-                                const GraphicsInterface* proto, const Imports* im) {
+                                const GraphicsInterface* proto) {
     GraphicsInterface** dataP = reinterpret_cast<GraphicsInterface**>(arrayBase);
     int32_t* countP = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(arrayBase) + 8);
     int32_t* capP   = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(arrayBase) + 12);
@@ -1555,7 +1404,7 @@ void GfxInterfaceArraySetLength(void* arrayBase, int newCount,
             *capP = cap;
         }
         *dataP = static_cast<GraphicsInterface*>(
-            im->MemAlloc(static_cast<size_t>(cap) * sizeof(GraphicsInterface), 8));
+            System::MemoryAllocator::MemAlloc(static_cast<size_t>(cap) * sizeof(GraphicsInterface), 8));
     }
 
     GraphicsInterface* base = *dataP;
@@ -1564,16 +1413,16 @@ void GfxInterfaceArraySetLength(void* arrayBase, int newCount,
         GraphicsInterface* dst = base + i;
         if (!dst) continue;
         const GraphicsInterface* src = (i < oldCount) ? (oldBase + i) : proto;
-        im->GfxIfaceCopyCtor(dst, src);
+        RtVideo_GraphicsInterface_CopyCtor(dst, src);
     }
 
     if (oldBase != base) {
         for (int j = 0; j < oldCount; ++j)
-            im->GfxIfaceDtor(oldBase + j);
-        im->MemFree(oldBase);
+            RtVideo_GraphicsInterface_Dtor(oldBase + j);
+        System::MemoryAllocator::MemFree(oldBase);
     } else {
         for (int j = newCount; j < oldCount; ++j)
-            im->GfxIfaceDtor(oldBase + j);
+            RtVideo_GraphicsInterface_Dtor(oldBase + j);
     }
 }
 
@@ -1581,7 +1430,7 @@ void GfxInterfaceArraySetLength(void* arrayBase, int newCount,
 // identical growth rule. The shipped code has two separate expansions of the
 // same template; they are byte-for-byte the same algorithm.
 void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
-                           const Adapter* proto, const Imports* im) {
+                           const Adapter* proto) {
     const int oldCount = gi->adapterCount;
     if (newCount == oldCount) return;
 
@@ -1596,7 +1445,7 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
             gi->adapterCapacity = cap;
         }
         gi->adapterData = static_cast<Adapter*>(
-            im->MemAlloc(static_cast<size_t>(cap) * sizeof(Adapter), 8));
+            System::MemoryAllocator::MemAlloc(static_cast<size_t>(cap) * sizeof(Adapter), 8));
     }
 
     Adapter* base = gi->adapterData;
@@ -1605,16 +1454,16 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
         Adapter* dst = base + i;
         if (!dst) continue;
         const Adapter* src = (i < oldCount) ? (oldBase + i) : proto;
-        im->AdapterCopyCtor(dst, src);
+        RtVideo_Adapter_CopyCtor(dst, src);
     }
 
     if (oldBase != base) {
         for (int j = 0; j < oldCount; ++j)
-            im->AdapterDtor(oldBase + j);
-        im->MemFree(oldBase);
+            RtVideo_Adapter_Dtor(oldBase + j);
+        System::MemoryAllocator::MemFree(oldBase);
     } else {
         for (int j = newCount; j < oldCount; ++j)
-            im->AdapterDtor(oldBase + j);
+            RtVideo_Adapter_Dtor(oldBase + j);
     }
 }
 
@@ -1694,11 +1543,10 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
 // modes through d3d9). Byte-for-byte the shipped walk; only `dev` and the
 // interface name are parameters now.
 static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
-                                       const Imports* im,
                                        CreateDXGIFactory1_t createFactory,
                                        D3D11CreateDevice_t  createDevice) {
     GraphicsInterface gi;
-    im->GfxIfaceCtor(&gi);
+    RtVideo_GraphicsInterface_Ctor(&gi);
     {
         // B.3.1 bridge: GraphicsInterface::name is a POD slot on a struct this
         // plugin shares with the engine and that is not converted yet.
@@ -1708,7 +1556,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
 
     IDXGIFactory1* factory = nullptr;
     if (createFactory(kIID_IDXGIFactory1, reinterpret_cast<void**>(&factory)) != 0) {
-        im->GfxIfaceDtor(&gi);
+        RtVideo_GraphicsInterface_Dtor(&gi);
         return false;
     }
 
@@ -1723,7 +1571,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
         for (UINT outputIndex = 0; ; ++outputIndex) {
             // A fresh record per output, seeded from the adapter description.
             Adapter rec;
-            im->AdapterCtor(&rec);
+            RtVideo_Adapter_Ctor(&rec);
             {
                 WideStringStorage w;
                 ::new (static_cast<void*>(&w)) System::WideString(adapterDesc.Description);   // B.3.4 bridge
@@ -1751,7 +1599,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
 
             IDXGIOutput* output = nullptr;
             if (dxgiAdapter->EnumOutputs(outputIndex, &output) == DXGI_ERROR_NOT_FOUND) {
-                im->AdapterDtor(&rec);
+                RtVideo_Adapter_Dtor(&rec);
                 break;
             }
 
@@ -1804,7 +1652,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                                            &modeCount, nullptr) == 0) {
                 if (modeCount != 0)
                     modes = static_cast<DXGI_MODE_DESC*>(
-                        im->MemAlloc(static_cast<size_t>(modeCount) * sizeof(DXGI_MODE_DESC), 4));
+                        System::MemoryAllocator::MemAlloc(static_cast<size_t>(modeCount) * sizeof(DXGI_MODE_DESC), 4));
 
                 if (output->GetDisplayModeList(static_cast<DXGI_FORMAT>(28), 0,
                                                &modeCount, modes) == 0) {
@@ -1812,13 +1660,13 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                         const DXGI_MODE_DESC& m = modes[i];
                         if (m.Width < 800) continue;
                         DisplayMode dm;
-                        im->DisplayModeCtor(&dm, static_cast<int>(m.Width),
+                        Video_DisplayMode_Ctor(&dm, static_cast<int>(m.Width),
                                             static_cast<int>(m.Height));
                         RefreshRate rr;
                         rr.numerator   = static_cast<int32_t>(m.RefreshRate.Numerator);
                         rr.denominator = static_cast<int32_t>(m.RefreshRate.Denominator);
                         rec.FindOrAddMode(dm, rr);
-                        im->DisplayModeDtor(&dm);
+                        Video_DisplayMode_Dtor(&dm);
                     }
                 }
             }
@@ -1850,7 +1698,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                                 rec.multisampleCap = cap;
                             }
                             rec.multisampleData = static_cast<uint8_t*>(
-                                im->MemAlloc(static_cast<size_t>(cap), 1));
+                                System::MemoryAllocator::MemAlloc(static_cast<size_t>(cap), 1));
                         }
                         unsigned char* base = rec.multisampleData;
                         int i = (oldBase == rec.multisampleData) ? oldCount : 0;
@@ -1858,7 +1706,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                             if (i < oldCount)
                                 base[i] = oldBase[i];
                         if (oldBase != rec.multisampleData)
-                            im->MemFree(oldBase);
+                            System::MemoryAllocator::MemFree(oldBase);
                     }
 
                     unsigned char* msaa = rec.multisampleData;
@@ -1873,12 +1721,12 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                     probeCtx->Release();
                     probeDev->Release();
 
-                    AdapterArraySetLength(&gi, gi.adapterCount + 1, &rec, im);
+                    AdapterArraySetLength(&gi, gi.adapterCount + 1, &rec);
                 }
             }
 
-            im->MemFree(modes);
-            im->AdapterDtor(&rec);
+            System::MemoryAllocator::MemFree(modes);
+            RtVideo_Adapter_Dtor(&rec);
         }
 
         dxgiAdapter->Release();
@@ -1891,22 +1739,19 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
         void* arrayBase = static_cast<uint8_t*>(dev) + Dev::kInterfaces;
         GfxInterfaceArraySetLength(arrayBase,
                                    Field<int32_t>(dev, Dev::kInterfaceCount) + 1,
-                                   &gi, im);
+                                   &gi);
     }
 
-    im->GfxIfaceDtor(&gi);
+    RtVideo_GraphicsInterface_Dtor(&gi);
     return any;
 }
 
 bool DeviceData_EnumerateInterfaces(DeviceData* self) {
-    const Imports* im = GetImports();
-    if (!im) return Orig<bool (*)(DeviceData*)>(1)(self);
-
     CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
     D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
     if (!createFactory || !createDevice) return Orig<bool (*)(DeviceData*)>(1)(self);
 
-    return EnumerateDxgiInterfaceInto(DeviceOf(self), "DirectX 11", im,
+    return EnumerateDxgiInterfaceInto(DeviceOf(self), "DirectX 11",
                                       createFactory, createDevice);
 }
 
@@ -1935,14 +1780,13 @@ void Dx9P_DeletingDtor(Dx9Placeholder* self, int flag) {   // vtable +0x00
     if (flag & 1) delete self;
 }
 bool Dx9P_EnumerateInterfaces(Dx9Placeholder* self) {       // vtable +0x08
-    const Imports* im = GetImports();
     CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
     D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
-    if (!im || !createFactory || !createDevice) return false;
+    if (!createFactory || !createDevice) return false;
     // The same adapters and modes DX11 lists, under the DX9 name: what the
     // real plugin reports on this machine. A zero-adapter entry was tried
     // first and selecting it in Options died in UserInterface::Draw.
-    return EnumerateDxgiInterfaceInto(self->device, "DirectX 9", im,
+    return EnumerateDxgiInterfaceInto(self->device, "DirectX 9",
                                       createFactory, createDevice);
 }
 bool Dx9P_Create(Dx9Placeholder*)  { return false; }        // vtable +0x10
@@ -2005,25 +1849,26 @@ const char* Dx9P_NameImpl() { return "DirectX 9"; }
 // assigning the named fields rather than memsetting the tail.
 //
 // The `this` argument (RCX) is the DeviceData and is ignored by all eleven.
+//
+// ENDGAME B.3R block DX: the base-ctor step was a call through the import row
+// `??0XData@Video@@QEAA@PEAVX@1@@Z`, whose body was the Runtime door
+// `Video_XData_Ctor` = `::new (self) Video::XData(owner)`. That construction is
+// now written here, against the real class (runtime/types/video/CompanionData.h):
+// it stores the owner at +0x08 and a vptr the next line overwrites with dx11's
+// hand table, exactly as the door did. The readiness guard that forwarded each
+// factory to `Orig<>(slot)` when an import was missing is gone with the struct.
 // ============================================================
-template <typename T>
-T* AllocData(size_t size, void* (*baseCtor)(void*, void*), void* owner,
-             Vt vt, const Imports* im) {
-    T* p = static_cast<T*>(im->MemAlloc(size, 4));
+template <typename T, typename Base>
+T* AllocData(size_t size, void* owner, Vt vt) {
+    T* p = static_cast<T*>(System::MemoryAllocator::MemAlloc(size, 4));
     if (!p) return nullptr;
-    baseCtor(p, owner);
+    ::new (static_cast<void*>(p)) Base(owner);   // retail: CALL [IAT ??0XData@Video@@]
     p->vptr = Dx11VtableAddress(vt);
     return p;
 }
-
-#define DX11_FACTORY_PROLOGUE(slotIndex)                                   \
-    const Imports* im = GetImports();                                      \
-    if (!im) return Orig<void* (*)(DeviceData*, void*)>(slotIndex)(self, owner)
-
-void* Factory_ContextData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(9);
-    ContextData* p = AllocData<ContextData>(0x20, im->CtorContextData, owner,
-                                            Vt::ContextData, im);
+void* Factory_ContextData(DeviceData* /*self*/, void* owner) {
+    ContextData* p = AllocData<ContextData, ::Video::ContextData>(0x20, owner,
+                                            Vt::ContextData);
     if (!p) return nullptr;
     p->topology   = 0;
     p->pad14      = 0;
@@ -2031,10 +1876,9 @@ void* Factory_ContextData(DeviceData* self, void* owner) {
     return p;
 }
 
-void* Factory_ImageBufferData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(10);
-    ImageBufferData* p = AllocData<ImageBufferData>(0x38, im->CtorImageBufferData, owner,
-                                                    Vt::ImageBufferData, im);
+void* Factory_ImageBufferData(DeviceData* /*self*/, void* owner) {
+    ImageBufferData* p = AllocData<ImageBufferData, ::Video::ImageBufferData>(0x38, owner,
+                                                    Vt::ImageBufferData);
     if (!p) return nullptr;
     p->sampler            = nullptr;
     p->texture            = nullptr;
@@ -2044,10 +1888,9 @@ void* Factory_ImageBufferData(DeviceData* self, void* owner) {
     return p;
 }
 
-void* Factory_ConstantBufferData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(11);
-    ConstantBufferData* p = AllocData<ConstantBufferData>(0x28, im->CtorConstantBufferData,
-                                                          owner, Vt::ConstantBufferData, im);
+void* Factory_ConstantBufferData(DeviceData* /*self*/, void* owner) {
+    ConstantBufferData* p = AllocData<ConstantBufferData, ::Video::ConstantBufferData>(0x28,
+                                                          owner, Vt::ConstantBufferData);
     if (!p) return nullptr;
     p->activeIndex    = -1;          // sentinel: no rung bound yet
     p->pad14          = 0;
@@ -2061,10 +1904,9 @@ void* Factory_ConstantBufferData(DeviceData* self, void* owner) {
     return p;
 }
 
-void* Factory_IndexBufferData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(12);
-    IndexBufferData* p = AllocData<IndexBufferData>(0x20, im->CtorIndexBufferData, owner,
-                                                    Vt::IndexBufferData, im);
+void* Factory_IndexBufferData(DeviceData* /*self*/, void* owner) {
+    IndexBufferData* p = AllocData<IndexBufferData, ::Video::IndexBufferData>(0x20, owner,
+                                                    Vt::IndexBufferData);
     if (!p) return nullptr;
     p->buffer      = nullptr;
     p->writeCursor = 0;
@@ -2072,10 +1914,9 @@ void* Factory_IndexBufferData(DeviceData* self, void* owner) {
     return p;
 }
 
-void* Factory_VertexBufferData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(13);
-    VertexBufferData* p = AllocData<VertexBufferData>(0x20, im->CtorVertexBufferData, owner,
-                                                      Vt::VertexBufferData, im);
+void* Factory_VertexBufferData(DeviceData* /*self*/, void* owner) {
+    VertexBufferData* p = AllocData<VertexBufferData, ::Video::VertexBufferData>(0x20, owner,
+                                                      Vt::VertexBufferData);
     if (!p) return nullptr;
     p->buffer      = nullptr;
     p->writeCursor = 0;
@@ -2083,37 +1924,33 @@ void* Factory_VertexBufferData(DeviceData* self, void* owner) {
     return p;
 }
 
-void* Factory_VertexLayoutData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(14);
-    VertexLayoutData* p = AllocData<VertexLayoutData>(0x18, im->CtorVertexLayoutData, owner,
-                                                      Vt::VertexLayoutData, im);
+void* Factory_VertexLayoutData(DeviceData* /*self*/, void* owner) {
+    VertexLayoutData* p = AllocData<VertexLayoutData, ::Video::VertexLayoutData>(0x18, owner,
+                                                      Vt::VertexLayoutData);
     if (!p) return nullptr;
     p->inputLayout = nullptr;
     return p;
 }
 
-void* Factory_VertexProgramData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(15);
-    VertexProgramData* p = AllocData<VertexProgramData>(0x30, im->CtorVertexProgramData, owner,
-                                                        Vt::VertexProgramData, im);
+void* Factory_VertexProgramData(DeviceData* /*self*/, void* owner) {
+    VertexProgramData* p = AllocData<VertexProgramData, ::Video::VertexProgramData>(0x30, owner,
+                                                        Vt::VertexProgramData);
     if (!p) return nullptr;
     for (int i = 0; i < 4; ++i) p->variants[i] = nullptr;
     return p;
 }
 
-void* Factory_PixelProgramData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(16);
-    PixelProgramData* p = AllocData<PixelProgramData>(0x30, im->CtorPixelProgramData, owner,
-                                                      Vt::PixelProgramData, im);
+void* Factory_PixelProgramData(DeviceData* /*self*/, void* owner) {
+    PixelProgramData* p = AllocData<PixelProgramData, ::Video::PixelProgramData>(0x30, owner,
+                                                      Vt::PixelProgramData);
     if (!p) return nullptr;
     for (int i = 0; i < 4; ++i) p->variants[i] = nullptr;
     return p;
 }
 
-void* Factory_RenderStateData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(17);
-    RenderStateData* p = AllocData<RenderStateData>(0x28, im->CtorRenderStateData, owner,
-                                                    Vt::RenderStateData, im);
+void* Factory_RenderStateData(DeviceData* /*self*/, void* owner) {
+    RenderStateData* p = AllocData<RenderStateData, ::Video::RenderStateData>(0x28, owner,
+                                                    Vt::RenderStateData);
     if (!p) return nullptr;
     p->blendState        = nullptr;
     p->depthStencilState = nullptr;
@@ -2121,19 +1958,16 @@ void* Factory_RenderStateData(DeviceData* self, void* owner) {
     return p;
 }
 
-void* Factory_VideoProgramData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(18);
-    return AllocData<VideoProgramData>(0x10, im->CtorVideoProgramData, owner,
-                                       Vt::VideoProgramData, im);
+void* Factory_VideoProgramData(DeviceData* /*self*/, void* owner) {
+    return AllocData<VideoProgramData, ::Video::VideoProgramData>(0x10, owner,
+                                       Vt::VideoProgramData);
 }
 
-void* Factory_RenderBufferData(DeviceData* self, void* owner) {
-    DX11_FACTORY_PROLOGUE(19);
-    return AllocData<RenderBufferData>(0x10, im->CtorRenderBufferData, owner,
-                                       Vt::RenderBufferData, im);
+void* Factory_RenderBufferData(DeviceData* /*self*/, void* owner) {
+    return AllocData<RenderBufferData, ::Video::RenderBufferData>(0x10, owner,
+                                       Vt::RenderBufferData);
 }
 
-#undef DX11_FACTORY_PROLOGUE
 
 }  // namespace
 

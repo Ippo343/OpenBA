@@ -18,51 +18,29 @@
 
 #include "dx11_backend_access.h"
 #include "dx11_seam.h"
+#include "video/CompanionData.h"   // ::Video::DeviceData, the base ctor (B.3R DX)
 
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
+#include <new>
 
 namespace VideoDX11 {
-namespace {
 
 // ============================================================
-// Imports (two of them — this file is deliberately self-contained)
+// Imports — DIRECT REFERENCES (ENDGAME B.3R, block DX)
+//
+// This was `ExportImports`: two pointers resolved at first use through
+// `Dx11ResolveRuntimeImport`, with a readiness test. Both names bound to a
+// body in this build, so the test was always true; the struct, the test and
+// the null arm below are GONE (B3R_RULES R2, R8):
+//
+//   IAT 0x1800134c0  ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
+//                    -> System::MemoryAllocator::MemAlloc
+//   IAT 0x180013220  ??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z
+//                    -> ::new (p) ::Video::DeviceData(device) — the body of the
+//                       Runtime door the name bound (runtime/src/video/
+//                       companion_data.cpp), against the real class
 // ============================================================
-struct ExportImports {
-    void* (*MemAlloc)(size_t, int);            // IAT 0x1800134c0
-    void* (*CtorDeviceData)(void*, void*);     // IAT 0x180013220
-};
-
-ExportImports g_im;
-bool g_imResolved = false;
-bool g_imOk       = false;
-
-const ExportImports* GetExportImports() {
-    if (g_imResolved) return g_imOk ? &g_im : nullptr;
-    g_imResolved = true;
-
-    g_im.MemAlloc = reinterpret_cast<void* (*)(size_t, int)>(
-        Dx11ResolveRuntimeImport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",
-                                 0x1800134c0));
-    // Slot 0x180013220 -> import-by-name RVA 0x1c602, confirmed against
-    // objdump's listing for the shipped DLL. Its neighbour 0x180013228 is
-    // ??1DeviceData, which devicedata.cpp already resolves.
-    g_im.CtorDeviceData = reinterpret_cast<void* (*)(void*, void*)>(
-        Dx11ResolveRuntimeImport("??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z",
-                                 0x180013220));
-
-    g_imOk = g_im.MemAlloc && g_im.CtorDeviceData;
-    if (!g_imOk) {
-        fprintf(stderr, "[Dx11] exports: Runtime imports unresolved "
-                        "(MemAlloc=%p CtorDeviceData=%p)\n",
-                reinterpret_cast<void*>(g_im.MemAlloc),
-                reinterpret_cast<void*>(g_im.CtorDeviceData));
-    }
-    return g_imOk ? &g_im : nullptr;
-}
-
-}  // namespace
 
 // ============================================================
 // 0x1800011a0 — CreateDeviceData(Video::Device* device) -> Video::DeviceData*
@@ -84,20 +62,10 @@ const ExportImports* GetExportImports() {
 //     BOTH cursorHotspotX and cursorHotspotY to -1 — not just the first.
 // ============================================================
 DeviceData* Dx11_CreateDeviceData(void* device) {
-    const ExportImports* im = GetExportImports();
-    if (!im) {
-        // No forwarding target exists here: the detour has already replaced the
-        // original, so there is nothing to fall back to. Failing to allocate is
-        // what the original does when MemAlloc returns null, and Runtime
-        // handles it (Video::Device::CreateVideoInterface null-checks).
-        fprintf(stderr, "[Dx11] CreateDeviceData: imports unresolved, returning null\n");
-        return nullptr;
-    }
-
-    DeviceData* p = static_cast<DeviceData*>(im->MemAlloc(0x70, 4));
+    DeviceData* p = static_cast<DeviceData*>(System::MemoryAllocator::MemAlloc(0x70, 4));
     if (!p) return nullptr;
 
-    im->CtorDeviceData(p, device);
+    ::new (static_cast<void*>(p)) ::Video::DeviceData(device);   // retail: CALL [IAT 0x180013220]
     p->vptr = Dx11VtableAddress(Vt::DeviceData);
 
     p->unk10          = nullptr;

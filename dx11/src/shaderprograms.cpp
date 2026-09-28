@@ -103,7 +103,7 @@ static void* VertexProgramData_Dtor(VertexProgramData* self, unsigned flags) {
     reinterpret_cast< ::Video::VertexProgramData*>(self)
         -> ::Video::VertexProgramData::~VertexProgramData();   // B.3.5 bridge
 
-    if (flags & 1) Dx11MemFree(self);
+    if (flags & 1) System::MemoryAllocator::MemFree(self);
     return self;
 }
 
@@ -215,7 +215,7 @@ static void* PixelProgramData_Dtor(PixelProgramData* self, unsigned flags) {
     reinterpret_cast< ::Video::PixelProgramData*>(self)
         -> ::Video::PixelProgramData::~PixelProgramData();      // B.3.5 bridge
 
-    if (flags & 1) Dx11MemFree(self);
+    if (flags & 1) System::MemoryAllocator::MemFree(self);
     return self;
 }
 
