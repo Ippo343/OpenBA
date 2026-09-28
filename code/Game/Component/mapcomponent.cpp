@@ -16,57 +16,17 @@
 #include "Component/MapDescription.h"
 #include "options.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <new>
 #include "Component/exe_bodies.h"
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// fn_IsDerivedFrom — dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// MapComponent_sub_41b0 — map overlay update helper (0x1401241b0)
-typedef void (*fn_MapUpdateOverlay_t)(void* self);
-static fn_MapUpdateOverlay_t s_fn_MapUpdateOverlay = nullptr;
-
-// CreateNaturalResource_impl_4750 — map initialization (0x140124750)
-typedef void (*fn_MapInit_t)(void* self);
-static fn_MapInit_t s_fn_MapInit = nullptr;
-
-// MapComponent_helper_4d30 — terrain clear helper (0x1400a4d30)
-typedef void (*fn_TerrainClear_t)(void* terrainPtr, int param2, int x0, int y0, int x1, int y1);
-static fn_TerrainClear_t s_fn_TerrainClear = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    uintptr_t slot;
-
-    // Dispatch slots — read function pointer from .rdata slot at runtime
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // Direct exe addresses
-
-    s_fn_MapUpdateOverlay = reinterpret_cast<fn_MapUpdateOverlay_t>(
-        ResolveAddr(Module::Exe, 0x1401241b0));
-
-    s_fn_MapInit = reinterpret_cast<fn_MapInit_t>(
-        ResolveAddr(Module::Exe, 0x140124750));
-
-    s_fn_TerrainClear = reinterpret_cast<fn_TerrainClear_t>(
-        ResolveAddr(Module::Exe, 0x1400a4d30));
-
-    s_helpersResolved = true;
-}
+// Helpers, called by name (B3R): Object::Base::IsDerivedFrom (import slot 0x140152a98),
+// MapComponent_sub_41b0 (0x1401241b0), MapComponent_DetachOccupancy_4750 (0x140124750 —
+// the registered body; keystone_a_map.cpp's CreateNaturalResource_impl_4750 is not),
+// MapTerrainClear_Reimpl (0x1400a4d30, below).
 
 // ============================================================
 // Reimpl of FUN_1400a4d30 (MapComponent terrain-clear / rect fill)
@@ -95,13 +55,12 @@ extern "C" void MapTerrainClear_Reimpl(void* gridPtr, int value, int x, int y,
 // Pattern: IsDerivedFrom(self->_description, MapDescription typeId)
 // Returns the component pointer if type matches, else nullptr.
 static void* GetMapDescription(MapComponent* self) {
-    EnsureHelpers();
-    if (!s_fn_IsDerivedFrom_dispatch) return nullptr;
 
     void* obj = self->_description;
     if (!obj) return nullptr;
 
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, MapDescription::TypeId());
+    bool derived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(
+        MapDescription::TypeId());   // B.3.x bridge (slot 0x140152a98)
     return derived ? obj : nullptr;
 }
 
@@ -121,34 +80,16 @@ static void* GetMapDescription(MapComponent* self) {
 //   CALL MapComponent_sub_41b0     ; update map overlay
 
 void MapComponent_Draw(MapComponent* self) {
-    EnsureHelpers();
-
     void* building = GetMapDescription(self);
     if (!building) return;
 
     // Check building[0x30] != 0 (byte flag: hasMapOverlay)
     uint8_t flag = *(uint8_t*)((uintptr_t)building + 0x30);
     if (flag != 0) {
-        if (s_fn_MapUpdateOverlay) {
-            s_fn_MapUpdateOverlay(self);
-        }
+        MapComponent_sub_41b0(reinterpret_cast<int64_t>(self));   // 0x1401241b0
     }
 }
 
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void MapComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[MapComponent] Funcs resolved: IsDerivedFrom=%p "
-           "MapUpdateOverlay=%p MapInit=%p TerrainClear=%p\n",
-           (void*)s_fn_IsDerivedFrom_dispatch,
-           (void*)s_fn_MapUpdateOverlay, (void*)s_fn_MapInit,
-           (void*)s_fn_TerrainClear);
-#endif
-}
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
@@ -257,11 +198,7 @@ extern "C" void MapComponent_ApplyOccupancy_41b0(void* mapCompV) {
     uint32_t after  = before | 0x100000u;
     *(uint32_t*)(mc + 0x20) = after;
     if (((after ^ before) & 0xffff) != 0 && *(int64_t*)(mc + 0x10) != 0) {
-        static void (*s_c3470)(void*) = nullptr;
-        static bool s_init = false;
-        if (!s_init) { s_init = true;
-            s_c3470 = reinterpret_cast<void(*)(void*)>(ResolveAddr(Module::Exe, 0x1400c3470)); }
-        if (s_c3470) s_c3470(*(void**)(mc + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*(void**)(mc + 0x10));   // 0x1400c3470
     }
 }
 
@@ -454,19 +391,17 @@ void MapComponent::OnRemove() {
     // B.3.8 CB1b: the ported retail removal body (0x1401242f0), folded in from the
     // free MapComponent_OnCreate.
 
-    EnsureHelpers();
-
     void* building = GetMapDescription(this);
     if (building) {
         // Check building[0x32] != 0 (byte flag: needsTerrainClear)
         uint8_t clearFlag = *(uint8_t*)((uintptr_t)building + 0x32);
         if (clearFlag != 0) {
             // Get terrain subsystem from game world singleton
-            if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_TerrainClear) {
+            if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
                 uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
                 void* terrainPtr = *(void**)(gameWorld + 0x148);
                 if (terrainPtr) {
-                    s_fn_TerrainClear(terrainPtr, 0,
+                    MapTerrainClear_Reimpl(terrainPtr, 0,   // 0x1400a4d30
                         (int)(int16_t)tileX0,
                         (int)(int16_t)tileY0,
                         (int)(int16_t)tileX1,
@@ -476,10 +411,8 @@ void MapComponent::OnRemove() {
         }
     }
 
-    // Always call map initialization (tail call in original)
-    if (s_fn_MapInit) {
-        s_fn_MapInit(this);
-    }
+    // Always call map initialization (tail call in original): 0x140124750
+    MapComponent_DetachOccupancy_4750(this);
 }
 // Slot 12 (+0x60) — the per-component MESSAGE slot, retail `MapComponent_Slot12`
 // (0x1401243c0), which is only three instructions:
