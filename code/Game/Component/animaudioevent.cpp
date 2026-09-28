@@ -23,7 +23,10 @@
 // address, so its RegisterExeAddr row is gone (B38 D5).
 
 #include "Component/AnimAudioEvent.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "object/Internal.h"  // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"

@@ -17,7 +17,8 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

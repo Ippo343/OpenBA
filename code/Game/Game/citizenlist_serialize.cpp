@@ -97,7 +97,6 @@
 // Both are implemented but not soak-tested; if a genuinely ancient save ever
 // exercises them, verify against Ghidra before trusting the result.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields

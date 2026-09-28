@@ -32,7 +32,6 @@
 // serialize_externals.cpp. The cleaned-C path mirrors the original
 // instruction-for-instruction so a future A/B trace can verify equivalence.
 
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>

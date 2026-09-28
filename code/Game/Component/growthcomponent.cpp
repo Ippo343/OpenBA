@@ -19,7 +19,8 @@
 
 #include "Component/growthcomponent_funcs.h"
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // ActHunt_*, ActCNR_* helpers

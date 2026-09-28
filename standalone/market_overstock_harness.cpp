@@ -44,7 +44,6 @@
 // Trace lines are [MarketOverstock]; pair with BANISHED_MARKETBST_TRACE=1 to see
 // the resulting "gate=SURPLUS_SHED" from marketwork.cpp.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "options.h"

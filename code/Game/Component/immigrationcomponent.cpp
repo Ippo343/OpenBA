@@ -26,7 +26,7 @@
 #include "Component/ImmigrationComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>

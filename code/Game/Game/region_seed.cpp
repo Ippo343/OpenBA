@@ -29,7 +29,6 @@
 // a no-op and Map+0x70/+0x78 stay 0 (zeroed by the Game ctor), preserving the euclidean
 // fallback exactly as before.
 
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"   // Pf_RegionGraphCtor_8670, Pf_RegionPairCache_Build, Pf_FlushDirtyChunks_8a90
 #include <cstdint>

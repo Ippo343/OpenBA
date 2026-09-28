@@ -28,7 +28,6 @@
 //
 // Faithful offset-by-offset port.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/Work.h"   // B.3.8 CB1a (Work::GetTarget)
 #include "resolve.h"

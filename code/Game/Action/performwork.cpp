@@ -23,7 +23,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "PerformWork.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Action/exe_bodies.h"   // ActMv_* helpers
 #include "Game/exe_constants.h"  // kRdata_*
 #include "math/Math.h"           // Math::Vector3::FromYawPitch, Math::Scalar

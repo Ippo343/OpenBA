@@ -11,7 +11,8 @@
 
 #include "Component/multiobjectcomponent_funcs.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A

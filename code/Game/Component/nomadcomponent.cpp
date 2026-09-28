@@ -11,7 +11,6 @@
 
 #include "Component/nomadcomponent_funcs.h"
 #include "Dialog/EntityUI.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/exe_bodies.h"   // Toolbar_ShowGroup_Impl
 #include "Player/exe_bodies.h"   // PlayerTrade_BSTFindRemove_2c690

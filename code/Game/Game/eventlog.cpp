@@ -23,7 +23,7 @@
 //   IconIndex         0x1400950d0  — eventType -> icon index switch
 //   TileIndex         0x140095030  — entity -> map tile index (null entity => -1)
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields

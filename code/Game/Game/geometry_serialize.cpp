@@ -45,7 +45,7 @@
 // <windows.h>, whose <wingdi.h> `Rectangle()` hides Volume.h's global
 // `struct Rectangle`) is kept so a later include change cannot break it silently.
 #include "video/Buffers.h"   // Video::{Vertex,Index}Buffer
-#include "engine_funcs.h"
+#include "math/Math.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B

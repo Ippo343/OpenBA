@@ -12,7 +12,8 @@
 // "improve" behavior.
 //
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/exe_constants.h"       // kRdata_140172234
 #include "system/Value.h"             // RtSystem_Time_Ctor
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree

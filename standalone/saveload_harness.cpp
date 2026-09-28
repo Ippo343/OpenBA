@@ -12,7 +12,6 @@
 // the log shows exactly what got written (file, size, age). No pass/fail
 // judgement here — the .sav content is verified outside the process.
 
-#include "engine_funcs.h"
 #include "resolve.h"
 #include "options.h"
 #include <cstdint>

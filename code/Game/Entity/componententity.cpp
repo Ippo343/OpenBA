@@ -26,7 +26,6 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include <windows.h>
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Object/factory_registration.h"

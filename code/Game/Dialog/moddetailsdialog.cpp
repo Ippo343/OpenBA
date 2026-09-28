@@ -30,7 +30,7 @@
 #include <cstdio>
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "runtime/types/ui/DialogInstance.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

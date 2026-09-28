@@ -23,7 +23,8 @@
 #include "graphics/Mesh.h"
 #include "Player/FencedTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Player/exe_bodies.h"

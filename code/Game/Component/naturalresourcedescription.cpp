@@ -35,7 +35,8 @@
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340, 0x140018020)
 #include "system/Value.h"      // RtSystem_Time_Ctor
 #include <cstring>

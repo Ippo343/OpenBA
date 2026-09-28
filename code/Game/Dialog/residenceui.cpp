@@ -17,7 +17,12 @@
 
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>

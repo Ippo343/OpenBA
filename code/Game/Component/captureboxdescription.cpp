@@ -23,7 +23,9 @@
 // protected ctor (block RB). Nothing reads 0x14015d4a0 back by address, so its
 // RegisterExeAddr row is gone (B38 D5).
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "system/String.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "object/Internal.h"  // Object::detail::InternalMemAlloc / InternalMemFree

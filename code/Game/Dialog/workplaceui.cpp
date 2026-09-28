@@ -10,7 +10,13 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/dialog_exe_helpers.h"   // B3R: Dialog_FindComponent_d6c0
 #include "Work/exe_bodies.h"             // B3R: WorkBase_FindComponent_2ed0

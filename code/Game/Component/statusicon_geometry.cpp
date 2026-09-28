@@ -27,7 +27,9 @@
 #include "graphics/InterpolatedState.h"   // ENDGAME B.3.5 closing pass --
                                           // Graphics::InterpolatedState<Transform>
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "object/External.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "math/Math.h"
 #include <cstdint>

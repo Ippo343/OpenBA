@@ -35,7 +35,10 @@
 
 #include "Object/factory_registration.h"
 #include "options.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"      // ResolveExport — HelpUI's Runtime BaseTypeInfo type-id heal
 #include <cstdint>
 #include <cstddef>

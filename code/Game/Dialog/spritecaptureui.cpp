@@ -14,7 +14,8 @@
 //   FileSystem::GetSourceDirectory + edit text + ".rsc", calls External::SaveText.
 
 #include "ui/Panels.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External

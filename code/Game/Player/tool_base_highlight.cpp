@@ -23,7 +23,6 @@
 //
 // Port is 1:1 with the Ghidra decompile + disasm-verified — do NOT "improve".
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"

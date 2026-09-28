@@ -14,7 +14,8 @@
 
 #include "Player/PathTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"
 #include "system/MemoryAllocator.h"

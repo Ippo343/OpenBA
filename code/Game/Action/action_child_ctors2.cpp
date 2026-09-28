@@ -23,7 +23,7 @@
 #include "Action/DropOffRawMaterial.h"
 #include "Action/HuntAnimal.h"
 #include "Action/PickupStoredRawMaterial.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_6270, WorkLeaf_FreeStorageCapacity_116540
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree

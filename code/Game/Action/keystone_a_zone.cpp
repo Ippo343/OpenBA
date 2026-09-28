@@ -29,7 +29,8 @@
 // RoadTool (param_1 of 9ce00): +0x68 (ptr) worker-thread queue object (Thread*).
 // ============================================================================
 
-#include "engine_funcs.h"
+#include <windows.h>
+#include <new>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

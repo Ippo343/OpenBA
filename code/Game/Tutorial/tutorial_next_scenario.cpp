@@ -40,7 +40,7 @@
 // step branches on a controller's +0xC0. SetEngineNextLoop() is byte-for-byte
 // 0D70's tail.
 
-#include "engine_funcs.h"
+#include "Game/exe_bodies.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"

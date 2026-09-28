@@ -66,7 +66,9 @@
 // end-to-end); BANISHED_LIVE_DESTROY is now a kill-switch (=0). See
 // destroycomponent.cpp.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/ClearStorage.h"   // B.3.8 CB1a (Vtable)
 #include "Work/Work.h"           // B.3.x W0: Work::GetPriority by name

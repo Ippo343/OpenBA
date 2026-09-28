@@ -6,7 +6,11 @@
 //         +0x38 = checkPin element, +0x40 = pages element
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>

@@ -38,7 +38,6 @@
 // and stored at the node as height = max(leftH, rightH); balance = rightH - leftH.
 // ===========================================================================
 
-#include "engine_funcs.h"
 #include "Component/exe_bodies.h"      // CitizenAI_Reg_helper_e360
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>

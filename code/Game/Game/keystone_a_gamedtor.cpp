@@ -57,7 +57,7 @@
 // chains, free lists, node chains, the cell BST and the `MemFree` with no
 // header stores (a6720's [thread+0x158]) are not arrays and are untouched.
 #include "Game/PathfinderThread.h"
-#include "engine_funcs.h"
+#include <windows.h>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "picking/Scene.h"
 #include "Action/exe_bodies.h"   // Pf_BstFreeRecursive_d400, Pf_FreeArray30_e490

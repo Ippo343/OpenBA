@@ -6,7 +6,11 @@
 //         +0x38 = sub-component (InternalBasePtr) found via component array search
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include <new>
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

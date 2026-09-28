@@ -17,7 +17,8 @@
 //
 // All disasm citations are exe addresses (base 0x140000000).
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name

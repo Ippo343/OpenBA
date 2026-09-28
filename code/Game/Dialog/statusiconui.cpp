@@ -9,7 +9,11 @@
 
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>

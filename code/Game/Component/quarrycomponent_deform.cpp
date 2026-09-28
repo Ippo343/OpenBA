@@ -40,7 +40,8 @@
 #include "Component/QuarryComponent.h"
 #include "Component/ConsumeProduceDescription.h"
 #include "Component/QuarryDescription.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "perf_terrain.h"

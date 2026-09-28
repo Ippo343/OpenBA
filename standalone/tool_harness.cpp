@@ -19,7 +19,13 @@
 #include "tool_harness.h"
 #include "resolve.h"
 #include "options.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include "math/Math.h"
+#include "ui/UserInterface.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"   // -Iruntime/types; the operator_fc60 probe
 #include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (pinpanel controller lookup)

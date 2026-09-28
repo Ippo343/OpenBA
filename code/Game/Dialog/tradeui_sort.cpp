@@ -45,7 +45,8 @@
 // trade rows relative to retail. That is cosmetic, but it is not nothing, and it
 // would be invisible in testing.
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/External.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>

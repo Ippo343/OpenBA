@@ -16,7 +16,8 @@
 
 #include "Tutorial/TutorialImageInputKey.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "system/String.h"
+#include "ui/UserInterface.h"
 #include "Tutorial/exe_bodies.h"
 #include "object/TypeInfo.h"
 #include <cstdint>

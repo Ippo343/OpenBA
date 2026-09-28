@@ -25,7 +25,8 @@
 #include "Component/ResidenceComponent.h" // B.3.8 CB1a (TypeId)
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "options.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include <atomic>
 #include <cstdint>

@@ -8,7 +8,9 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>

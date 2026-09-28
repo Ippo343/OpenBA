@@ -22,7 +22,8 @@
 // <wingdi.h>'s global `Rectangle` function hides `Volume::Rectangle`'s class
 // name inside Volume.h's own static_asserts (Geometry.h includes Volume.h).
 #include "graphics/Scene.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()

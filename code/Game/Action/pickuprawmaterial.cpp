@@ -26,7 +26,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "PickupRawMaterial.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActRm_*, ActHunt_* helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

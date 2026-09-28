@@ -18,7 +18,8 @@
 // (skipped if unregistered, matching project semantics). They are NOT registered here.
 //
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "math/Math.h"

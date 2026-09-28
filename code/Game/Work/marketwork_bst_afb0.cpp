@@ -107,7 +107,6 @@
 // unregistered-callee (EXEC-of-0) risk.
 
 #include "Work/marketwork_bst_afb0.h"
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"
 
 #include <cstddef>

@@ -33,7 +33,9 @@
 // UI::UserInterface sends on a real click, which is how autostart.cpp already
 // drives the front-end menu.
 #include "resolve.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/Internal.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>

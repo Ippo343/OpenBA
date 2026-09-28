@@ -41,7 +41,7 @@
 //   (saveloaddialog.cpp's inline copy of this ctor passes p8=1 and therefore writes
 //    +0xD0 = 0; that is a DIFFERENT call site, not a discrepancy with this one.)
 
-#include "engine_funcs.h"
+#include "system/Value.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/String.h"
 #include "Game/GameLoaderLoop.h"   // ENDGAME B.3.8 LOOP

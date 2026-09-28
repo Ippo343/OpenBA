@@ -7,7 +7,7 @@
 //   CitizenUI_BuildIconArray   — FUN_14006abf0
 
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

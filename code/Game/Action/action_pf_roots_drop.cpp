@@ -38,7 +38,6 @@
 // bbea0 inlines the RemoveAnimal ctor; ENDGAME B.3.8 ACT: `new (p) RemoveAnimal(animal)`.
 
 #include "Action/RemoveAnimal.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_6270, WorkBase_TaskListCleanup_c5400
 #include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl

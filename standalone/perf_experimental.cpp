@@ -7,7 +7,8 @@
 #include "graphics/Camera.h"
 #include "graphics/Geometry.h"
 #include "perf_terrain.h"
-#include "engine_funcs.h"
+#include <cstdint>
+#include "system/Value.h"
 #include "resolve.h"
 #include "options.h"
 #include <cstdio>

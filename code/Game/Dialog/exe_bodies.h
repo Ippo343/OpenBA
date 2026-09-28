@@ -11,7 +11,7 @@
 //
 // Also here: the declarations and inline bodies of this module that lived in
 // engine/funcs/engine_funcs.h, moved verbatim with their comments (that
-// header includes this one, so none of its includers changes).
+// header is gone since B3R W2-EZ: its includers include this one directly).
 //
 // Declared in another header already (not redeclared here):
 //   AutoSaveDialog_Slot4                   0x14005e120  (code/Game/Dialog/AutoSaveDialog.h)
@@ -19,7 +19,7 @@
 //   ToolbarDialog_Ctor_Impl                0x1400b9910  (code/Game/Dialog/ToolbarDialog.h)
 
 #include <cstdint>
-#include "engine_funcs.h"   // the globals the moved inline bodies still read
+#include "system/Value.h"   // System::Random (fn_GetCurrentProductIndex); was reached through engine_funcs.h
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
@@ -188,8 +188,7 @@ extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count, void
 // ---- unreg_lane2_mapparamsdialog_ctor.cpp
 extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006bd80
 
-// ---- engine/funcs/engine_funcs.cpp (B3R Leftovers: declared here, copied from the
-// definition, so moddialog.cpp calls it by name; W2 moves the body into this module)
+// ---- moddialog.cpp (the body moved there from engine/funcs/engine_funcs.cpp, B3R W2-EZ)
 void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* elementPtr);  // 0x140012a60
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)

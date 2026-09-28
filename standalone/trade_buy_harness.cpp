@@ -31,7 +31,9 @@
 // it never ran, not that it traded nothing.
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include "object/TypeInfo.h"
+#include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"

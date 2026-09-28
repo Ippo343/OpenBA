@@ -23,7 +23,9 @@
 // Faithful offset-by-offset port of the Ghidra decompilation of 0x140108290. All
 // exe-internal helpers are resolved guarded; if one is unavailable the step is skipped.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)

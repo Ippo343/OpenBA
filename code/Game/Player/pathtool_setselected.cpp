@@ -31,7 +31,8 @@
 
 #include "Player/PathTool.h"
 #include "Component/HighlightComponent.h"
-#include "engine_funcs.h"
+#include <new>
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"

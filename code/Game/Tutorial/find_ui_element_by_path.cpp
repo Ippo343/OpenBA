@@ -31,7 +31,6 @@
 // parts with System::String::SubString so every part is a real System::String —
 // the two FindElement overloads and String::operator!= all take String const&.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"           // RegisterExeAddr (the 0x1400e1870 row stays: engine_funcs reads it)
 #include "address_registry.h"

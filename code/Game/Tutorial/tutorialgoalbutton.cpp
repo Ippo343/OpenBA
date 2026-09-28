@@ -19,7 +19,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Tutorial/TutorialGoalButton.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/External.h"
 #include "system/String.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B; InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"

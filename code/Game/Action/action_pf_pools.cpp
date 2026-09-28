@@ -24,7 +24,6 @@
 //     (0x14001fb80, 0x60-stride element free) — neither is in this batch; both are now
 //     Reimpl_Struct60B_CopyCtor / Reimpl_Struct60B_DtorRange (Game), called by name.
 
-#include "engine_funcs.h"
 #include "Game/exe_bodies.h"          // Reimpl_Struct60B_CopyCtor, Reimpl_Struct60B_DtorRange
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>

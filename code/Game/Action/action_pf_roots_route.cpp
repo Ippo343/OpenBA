@@ -54,7 +54,8 @@
 //   source comp/list ptr; param_5 = qty; param_6 = use-capacity-check flag; param_7 = out vec3;
 //   param_8 = exclude-entity IBP.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"            // WorkBase_* (a00f0, 8830, 2ed0)
 #include "Game/exe_bodies.h"            // Reimpl_MapGetTerrainPos

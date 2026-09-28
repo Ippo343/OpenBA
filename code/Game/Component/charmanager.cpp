@@ -42,7 +42,7 @@
 //
 
 
-#include "engine_funcs.h"
+#include <new>
 #include "resolve.h"
 #include <cstdint>
 #include <vector>

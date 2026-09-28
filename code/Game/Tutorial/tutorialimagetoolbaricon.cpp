@@ -18,7 +18,7 @@
 
 #include "Tutorial/TutorialImageToolbarIcon.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
 #include "system/Filename.h"
 #include "system/String.h"
 #include "Tutorial/exe_bodies.h"

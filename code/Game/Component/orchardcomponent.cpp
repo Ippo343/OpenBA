@@ -14,7 +14,8 @@
 #include "Component/FruitComponent.h"
 #include "Component/FruitDescription.h"
 #include "Component/OrchardDescription.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable

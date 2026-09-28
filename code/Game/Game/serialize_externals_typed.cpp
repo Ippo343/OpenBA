@@ -17,7 +17,8 @@
 // file's `ExternalPtrSerializeGeneric` is exposed (it's currently in an
 // anonymous namespace, so we duplicate the body here under a new name).
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "system/Filename.h"
 #include "system/String.h"

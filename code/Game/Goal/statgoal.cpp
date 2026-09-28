@@ -23,7 +23,8 @@
 #include "Goal/StatGoal.h"
 #include "Goal/goal_exe_helpers.h"
 #include "Goal/statvaluedispatch.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "resolve.h"

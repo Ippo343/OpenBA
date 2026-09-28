@@ -13,7 +13,8 @@
 // decompiled exe helper; do not "improve" behavior.
 //
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"      // B3R: Pf_IsDstReachable_f810, Pf_ZoneRefresh_9c480

@@ -37,7 +37,8 @@
 // All field offsets verified against Ghidra disassembly via the worldgen recon
 // workflow (notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
 
-#include "engine_funcs.h"
+#include <new>
+#include "system/String.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields

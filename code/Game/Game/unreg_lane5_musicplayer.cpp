@@ -86,7 +86,7 @@
 //   DWORD_1401c7190 = the "CitizenDescription" type id (same global the
 //   citizenai_* files resolve; see code/Game/Component/citizenai_gather.cpp:63)
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"

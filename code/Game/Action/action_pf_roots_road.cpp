@@ -20,7 +20,6 @@
 //
 // g_pGameWorldSingleton + X  ==  (uintptr_t)*g_pGameWorldSingleton + X.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include "Work/exe_bodies.h"       // WorkBST_BSTRemove_a6e0

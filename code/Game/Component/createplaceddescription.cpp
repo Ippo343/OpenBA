@@ -44,7 +44,9 @@
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>

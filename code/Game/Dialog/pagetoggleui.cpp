@@ -6,7 +6,8 @@
 //         +0x40 = saved page index (int32)
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
 #include <cstdio>
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include "system/String.h"

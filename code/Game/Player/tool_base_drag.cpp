@@ -10,7 +10,8 @@
 // Player registration wave (P1 — drag). Each function is a 1:1 port of the decompiled
 // exe helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
-#include "engine_funcs.h"
+#include <new>
+#include "runtime/types/ui/DialogInstance.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"

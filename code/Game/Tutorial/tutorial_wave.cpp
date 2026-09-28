@@ -39,7 +39,7 @@
 // disassembly, not just the Ghidra pseudo-C, for 0x1400E01D0 / 0x1400E1260 /
 // 0x1400E2700 where the decompiler mis-renders the stack arguments.
 
-#include "engine_funcs.h"
+#include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/MemoryAllocator.h"

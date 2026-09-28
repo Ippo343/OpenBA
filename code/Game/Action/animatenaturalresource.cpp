@@ -13,7 +13,8 @@
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden
 // by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 batch K1
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Action/exe_bodies.h"   // ActCNR_* helpers
 #include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

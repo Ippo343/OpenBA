@@ -31,7 +31,10 @@
 #include "Component/StatusIconComponent.h"     // ENDGAME B.3.9 TR
 #include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 CB: 0x1401c3f78 cell class
 #include "options.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Tutorial/exe_bodies.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"

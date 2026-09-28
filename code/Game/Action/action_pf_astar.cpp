@@ -53,7 +53,7 @@
 //   +0x5c(byte) on-worker-thread, +0x60 tail, +0x68 head, +0x70 count.
 // ============================================================================
 
-#include "engine_funcs.h"
+#include <windows.h>
 #include "Work/exe_bodies.h"          // WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/coll_bridge.h"

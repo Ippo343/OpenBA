@@ -23,7 +23,9 @@
 // declares a global `Rectangle` FUNCTION that hides `Volume::Rectangle`'s class
 // name inside Volume.h's own static_asserts (Mesh.h -> Geometry.h -> Volume.h).
 #include "graphics/Mesh.h"
-#include "engine_funcs.h"
+#include <new>
+#include "graphics/Camera.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"

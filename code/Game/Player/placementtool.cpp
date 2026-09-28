@@ -26,7 +26,10 @@
 #include "Component/RadiusDescription.h"
 #include "PlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
-#include "engine_funcs.h"
+#include <windows.h>
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/External.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/String.h"

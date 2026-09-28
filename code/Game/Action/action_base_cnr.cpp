@@ -17,7 +17,11 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"
 #include "graphics/Mesh.h"      // ENDGAME B.3.5 batch K1: reaches Volume.h, so BEFORE resolve.h
-#include "engine_funcs.h"
+#include <new>
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_3050, WorkAcc_FindComponent_*
 #include "Component/exe_bodies.h"         // FloorComponent_FindResData, ModelComponentNotify_Reimpl

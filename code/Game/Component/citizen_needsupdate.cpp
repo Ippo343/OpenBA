@@ -40,7 +40,6 @@
 //   - msg 8: +0x88 |= 0x40000.
 //
 
-#include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>

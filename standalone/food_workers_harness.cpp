@@ -25,7 +25,7 @@
 // Do NOT touch the component ports from here; this file only pokes published entry points.
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName

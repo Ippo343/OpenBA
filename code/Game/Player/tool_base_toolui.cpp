@@ -10,7 +10,8 @@
 // Player registration wave (round 2c — tool-ui). 1:1 port of the decompiled exe
 // helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

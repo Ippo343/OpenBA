@@ -30,7 +30,8 @@
 // 0x140110330 / 0x140030b90 are therefore reimplemented (their shared priority
 // predicate is ProfessionPriorityOf below), not registered.
 
-#include "engine_funcs.h"
+#include <new>
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"

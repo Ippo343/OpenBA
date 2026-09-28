@@ -23,7 +23,7 @@
 
 #include "Component/coll_bridge.h"
 #include "Component/ConsumeProduceDescription.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>

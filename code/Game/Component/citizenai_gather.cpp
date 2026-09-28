@@ -81,7 +81,8 @@
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "Component/Component.h"   // B.3.x W0: Component slots by name
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"

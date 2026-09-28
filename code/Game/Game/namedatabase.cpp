@@ -31,7 +31,9 @@
 // pointers (a non-atomic first-call cache, B6-5) and the C entry points.
 
 #include "Game/NameDatabase.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "resolve.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B

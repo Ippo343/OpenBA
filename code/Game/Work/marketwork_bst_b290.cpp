@@ -30,7 +30,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/marketwork_bst_b290.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

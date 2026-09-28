@@ -329,7 +329,7 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV);  // 0x140088e20
 
 // ============================================================
 // Moved from engine/funcs/engine_funcs.h's "TO MOVE: Component" section (B3R G-CompD).
-// engine_funcs.h includes this header, so its includers still see them.
+// (engine_funcs.h is gone since B3R W2-EZ: its includers include this header directly.)
 // ============================================================
 
 // ---- storagecomponent.cpp

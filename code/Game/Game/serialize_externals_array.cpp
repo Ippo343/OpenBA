@@ -33,7 +33,8 @@
 // those reads. Reuses the exact resolved helpers of the single-element sibling —
 // no new resolution mechanism.
 
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include "Game/serialize_externals.h"
 #include "Component/ComponentDescription.h"

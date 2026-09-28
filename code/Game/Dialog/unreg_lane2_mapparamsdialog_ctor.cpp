@@ -29,7 +29,9 @@
 // placement-news it.
 
 #include "Dialog/MapParamsDialog.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/Internal.h"
 #include <cstdint>
 #include <new>
 #include "Dialog/exe_bodies.h"

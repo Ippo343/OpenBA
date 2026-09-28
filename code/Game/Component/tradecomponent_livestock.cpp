@@ -57,7 +57,9 @@
 // "Repairing" it to TEST ECX,ECX would fire a visual-refresh call retail never makes.
 
 #include "Component/AnimalComponent.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

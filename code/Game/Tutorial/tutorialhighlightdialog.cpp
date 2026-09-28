@@ -11,7 +11,8 @@
 // `Rectangle()` once <windows.h> has been seen.
 #include "volume/Volume.h"
 #include "Tutorial/TutorialHighlightDialog.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time

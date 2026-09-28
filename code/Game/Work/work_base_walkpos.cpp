@@ -23,7 +23,7 @@
 //   i.e. out = obj.transform * record[i].pos. The draft applied the transform to garbage.
 //
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Action/exe_bodies.h"   // B3R: ActCNR_FindComponent_3f60, Pf_IsDstReachable_f810

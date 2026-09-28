@@ -32,7 +32,8 @@
 //                        0x140152a18 GetEmitterCount, 0x140152a20 RemoveEmitter
 //
 
-#include "engine_funcs.h"
+#include <new>
+#include "math/Math.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <windows.h>
 #include <cstdio>

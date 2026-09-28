@@ -38,7 +38,7 @@
 // for its own sibling-find (GetTypeIdByName, not the raw .rdata global).
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>

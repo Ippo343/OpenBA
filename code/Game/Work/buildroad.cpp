@@ -10,7 +10,9 @@
 
 #include "Work/BuildRoad.h"
 #include "buildroad_funcs.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Work/exe_bodies.h"

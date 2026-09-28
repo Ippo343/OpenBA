@@ -15,7 +15,6 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Camera.h"
 #include <new>
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"

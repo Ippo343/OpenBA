@@ -14,7 +14,7 @@
 // Engine::Startup so OptionsDialog can poll hotkey bindings without crashing.
 
 #include "inputbindings.h"
-#include "engine_funcs.h"
+#include <cstdint>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
 #include "system/String.h"

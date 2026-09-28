@@ -27,7 +27,10 @@
 #include "Dialog/EventNotifyDialog.h"
 #include "Dialog/EventPopupDialog.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"

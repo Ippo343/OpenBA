@@ -47,7 +47,8 @@
 #include "Component/tornadocomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "options.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"

@@ -13,7 +13,11 @@
 
 #include "resolve.h"
 #include "address_registry.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
+#include "Dialog/exe_bodies.h"
+#include "Component/exe_bodies.h"
 #include "Game/game.h"
 #include "Game/exe_bodies.h"      // B3R STORAGE: g_gameSettings (cell 0x1401c3de0)
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton (cell 0x1401c3dd8)

@@ -24,7 +24,10 @@
 // handler behind it. Structure follows orchardui.cpp exactly.
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "Dialog/exe_bodies.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"
 #include "Work/exe_bodies.h"        // B3R: WorkAcc_FindComponent_5380

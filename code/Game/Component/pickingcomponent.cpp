@@ -12,7 +12,9 @@
 #include "Component/pickingcomponent_funcs.h"
 #include "Component/ModelComponent.h"
 #include "Component/MapComponent.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A

@@ -20,7 +20,8 @@
 #include "Action/exe_bodies.h"    // ActHunt_DynArraySetCount_3110
 #include "Component/exe_bodies.h" // ResidenceComponent_impl_7230, AttendanceComponent_GetJobHostComponent
 #include "Tutorial/exe_bodies.h"  // WorkComponent_CalcMaxWorkers
-#include "engine_funcs.h"
+#include <new>
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()

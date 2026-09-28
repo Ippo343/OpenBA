@@ -56,7 +56,7 @@
 // out. Noted here so the next reader does not go looking for the missing use.
 #include "resolve.h"
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)

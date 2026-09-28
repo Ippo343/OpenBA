@@ -32,7 +32,9 @@
                                           // Graphics::InterpolatedState<Transform>
 #include "video/Context.h"
 #include "video/ImageBuffer.h"   // B.3.x W0: ~WorldGeometry deletes _heightImage by name
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "object/External.h"
+#include "Game/exe_bodies.h"
 #include "math/Math.h"
 #include "volume/Volume.h"        // RtVolume_Frustum_MulTransform3 / _Contains
 #include "Game/exe_constants.h"   // kRdata_*

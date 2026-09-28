@@ -39,7 +39,7 @@
 //   BANISHED_AUTOSTAFF_TRACE=1  log every considered building, not just seats
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"

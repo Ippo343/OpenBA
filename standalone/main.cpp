@@ -17,7 +17,6 @@
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device / Configuration::_singleton
 #include "options.h"
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "runtime_funcs.h"
 #include "dx11_seam.h"
 #include "video_interface.h"
@@ -1325,11 +1324,8 @@ static bool Init() {
     AddressRegistryInit();
     StallDebug::Mark("AddressRegistryInit");
 
-    // 4. Resolve engine function pointers from Runtime DLL
-    printf("[Standalone] Resolving engine functions...\n");
-    if (!EngineFuncsInit()) {
-        printf("[Standalone] WARNING: Some engine functions not resolved (non-critical)\n");
-    }
+    // 4. (B3R W2-EZ: EngineFuncsInit() and engine/funcs/ are gone; nothing binds
+    //    engine function pointers any more.)
     RuntimeFuncsInit();
     StallDebug::Mark("EngineFuncsInit + RuntimeFuncsInit");
 

@@ -15,7 +15,9 @@
 // We extract the shared body into ExternalPtrSerializeGeneric, parameterised
 // by the typeIdPtr.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"

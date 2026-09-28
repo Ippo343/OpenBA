@@ -19,7 +19,7 @@
 //   +0x2a  int16   height
 // Root struct: root[0] = root node ptr, root[+0x8] = node count (int).
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

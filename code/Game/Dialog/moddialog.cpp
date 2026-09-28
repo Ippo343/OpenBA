@@ -54,7 +54,11 @@
 #include "Dialog/ModDetailsDialog.h"
 #include "Dialog/MessageDialog.h"
 #include "Dialog/ui_dialogs.h"
-#include "engine_funcs.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Game/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
@@ -90,6 +94,50 @@
 // `int 0` wrote only the low dword — leaving the high dword as whatever was there
 // (0x00007ffc... on the first Mods click), which ImageBufferData_Create then
 // dereferenced as `levels->count`. The C++ member types it, so that cannot recur.
+
+// ============================================================
+// ModDialog thumbnail array push (was ResolveAddr(Module::Exe, 0x140012a60), FUN_140012a60).
+// ============================================================
+// B3R W2-EZ: moved here, verbatim, from engine/funcs/engine_funcs.cpp (declared in
+// Dialog/exe_bodies.h).
+// {ptr,count:i32,cap:i32} header at +0x00/+0x08/+0x0C, 0x58-byte (11 qword) elements.
+// Byte-faithful: grows (3x over-allocation on a plain +1 append), copies surviving old
+// elements, and fills every newly-uncovered slot [oldCount, newCount) from elementPtr —
+// in the common case that is just the appended slot at index oldCount.
+// Capacity growth: when newCount == oldCount + 1 and oldCount != 0:
+//   new capacity = newCount * 3
+// Otherwise capacity = newCount (exact fit or shrink).
+void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* elementPtr) {
+    uint8_t* base   = (uint8_t*)arrayHeader;
+    void**   pData  = (void**)base;
+    int*     pCount = (int*)(base + 0x08);
+    int*     pCap   = (int*)(base + 0x0C);
+    static constexpr uint64_t kStride = 0x58;
+    static constexpr int kWords = kStride / 8;
+
+    if (newCount == *pCount) return;
+    void* oldData  = *pData;
+    int   oldCount = *pCount;
+    *pCount = newCount;
+
+    if (*pCap < newCount) {
+        *pCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        *pData = System::MemoryAllocator::MemAlloc((uint64_t)*pCap * kStride, 8);
+    }
+
+    int startIdx = (oldData == *pData) ? oldCount : 0;
+    for (int i = startIdx; i < newCount; ++i) {
+        uint64_t* dst = (uint64_t*)((uint8_t*)*pData + (uint64_t)i * kStride);
+        const uint64_t* src = (i < oldCount)
+            ? (const uint64_t*)((uint8_t*)oldData + (uint64_t)i * kStride)
+            : (const uint64_t*)elementPtr;
+        for (int f = 0; f < kWords; ++f) dst[f] = src[f];
+    }
+
+    if (oldData != *pData) {
+        System::MemoryAllocator::MemFree(oldData);
+    }
+}
 
 // ============================================================
 // Filename equality check — compares two System::Filename/String objects

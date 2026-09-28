@@ -67,7 +67,7 @@
 #include "Work/HarvestArea.h"
 #include "Work/TendArea.h"
 #include <new>
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

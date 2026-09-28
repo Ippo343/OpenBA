@@ -7,7 +7,8 @@
 // Decompiled from Application-x64.exe @ 0x14007b730 (Serialize / vtable +0x20).
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/Internal.h"
 #include "system/String.h"
 #include <cstdint>
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)

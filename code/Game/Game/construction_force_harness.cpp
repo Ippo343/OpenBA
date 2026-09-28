@@ -34,7 +34,8 @@
 
 
 #include "options.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/BuildComponent.h"   // caller batch CB6: TypeId()

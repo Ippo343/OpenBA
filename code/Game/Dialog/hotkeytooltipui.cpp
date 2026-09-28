@@ -24,7 +24,8 @@
 // The (device,key) -> UI::String step mirrors the proven GetInputKeyName helper
 // already used by optionsdialog.cpp in standalone.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Dialog/HotKeyToolTipUI.h"
 #include "Object/factory_registration.h"

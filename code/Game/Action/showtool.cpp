@@ -20,7 +20,10 @@
 #include "graphics/GraphicsMesh.h"
 #include "graphics/Scene.h"
 #include "system/Value.h"       // System::Time, for Geometry::Update's argument
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActCt_HideTool_1176e0, ActCt_ShowToolOnEntity_1173b0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

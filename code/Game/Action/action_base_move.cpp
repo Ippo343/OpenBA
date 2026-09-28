@@ -11,7 +11,8 @@
 //
 #include "Action/exe_bodies.h"
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"   // kRdata_140172114

@@ -16,7 +16,6 @@
 // the global UI .rsc). We just copy those 16 bytes into the UI struct.
 
 #include "Game/uifade.h"
-#include "engine_funcs.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include <cstdint>
 #include <cstdio>

@@ -24,7 +24,6 @@
 //   elements' sub-arrays via e420. In the fresh-build path (8670's only call, growing
 //   an empty array) NEITHER f9e0 NOR e420 is reached.
 
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 

@@ -14,7 +14,7 @@
 #include "Component/SpawnDescription.h"
 #include "Component/GrowthDescription.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"

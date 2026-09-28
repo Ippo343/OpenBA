@@ -49,7 +49,6 @@
 // DO NOT build standalone yet — Vector2/Random-Float engine pointers below are
 // declared extern and must be wired in engine_funcs before this links.
 
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // fn_Random_RandFloatTol
 #include "math/Math.h"

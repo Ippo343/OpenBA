@@ -49,7 +49,7 @@
 // below 1.0 as a discount must be.
 #include "resolve.h"
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)

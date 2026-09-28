@@ -38,7 +38,8 @@
 #include "Component/LivestockDescription.h"
 #include "Component/RawMaterialComponent.h"
 #include "Component/AutoPickupComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Object/factory_registration.h"

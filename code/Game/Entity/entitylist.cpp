@@ -30,7 +30,7 @@
 #include <vector>
 #include "Entity/componententity_funcs.h"
 #include "Entity/ComponentEntity.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
@@ -178,100 +178,10 @@ void EntityList_PostUpdateNodeHandler(int64_t entity) {
     } while (ci < compCount);
 }
 
-// ============================================================
-// IBP BST insert/remove (fn_IBPTreeInsert 0x140021a30 / fn_IBPTreeRemove
-// 0x14001a6e0) — standalone reimplementation
-// ============================================================
-// The originals are an AVL tree (the node carries balance/height at +0x20/+0x22).
-// In standalone those exe addresses are unmapped, so fn_IBPTreeInsert/Remove
-// resolve to NULL and crash the first Update tick once any entity has an
-// update-capable component. The tree is only ever consumed by in-order walks
-// (TreeMinimum/TreeSuccessor) and key lookups, so balancing is a performance
-// optimization, not a correctness requirement: a plain BST with the identical
-// node layout is functionally equivalent. The node key is the (CheckPtr-resolved)
-// entity IBP value, matching the originals' comparison.
-//
-// The tree-root holder is {EntityTreeNode* root @ +0x00, int count @ +0x08} —
-// i.e. &EntityList::updateTreeRoot (root +0x68, count +0x70).
-namespace {
-struct TreeHolder { EntityTreeNode* root; int64_t count; };
-
-EntityTreeNode* IBPTree_AllocNode(uint64_t key, EntityTreeNode* parent) {
-    if (!System::MemoryAllocator::_singleton) return nullptr;
-    EntityTreeNode* n = (EntityTreeNode*)System::MemoryAllocator::MemAlloc(0x28, 8);
-    if (!n) return nullptr;
-    n->entityIBP = key; n->parent = parent;
-    n->left = nullptr; n->right = nullptr;
-    n->balance = 0; n->height = 0; n->_pad24 = 0;
-    return n;
-}
-
-// Splice `child` into `node`'s slot in the tree (CLRS transplant).
-void IBPTree_Transplant(TreeHolder* h, EntityTreeNode* node, EntityTreeNode* child) {
-    EntityTreeNode* p = node->parent;
-    if (p == nullptr)        h->root = child;
-    else if (p->left == node) p->left = child;
-    else                      p->right = child;
-    if (child) child->parent = p;
-}
-} // namespace
-
-extern "C" void* IBPTreeInsert_CppImpl(void* treeRootPtr, void* outBuf, void* ibpPtr) {
-    TreeHolder* h = (TreeHolder*)treeRootPtr;
-    void** outNode = (void**)outBuf;
-    uint64_t key = *(uint64_t*)ibpPtr;
-    if (h->root == nullptr) {
-        EntityTreeNode* n = IBPTree_AllocNode(key, nullptr);
-        h->root = n;
-        if (outNode) *outNode = n;
-    } else {
-        EntityTreeNode* cur = h->root;
-        for (;;) {
-            if (key < cur->entityIBP) {
-                if (cur->left == nullptr) {
-                    EntityTreeNode* n = IBPTree_AllocNode(key, cur);
-                    cur->left = n; if (outNode) *outNode = n; break;
-                }
-                cur = cur->left; continue;
-            }
-            if (key <= cur->entityIBP) {           // equal — already present
-                if (outNode) *outNode = cur;
-                return outBuf;                      // original returns w/o bumping count
-            }
-            if (cur->right == nullptr) {
-                EntityTreeNode* n = IBPTree_AllocNode(key, cur);
-                cur->right = n; if (outNode) *outNode = n; break;
-            }
-            cur = cur->right; continue;
-        }
-    }
-    *(int32_t*)((uint8_t*)treeRootPtr + 8) = (int32_t)h->count + 1;
-    return outBuf;
-}
-
-extern "C" void IBPTreeRemove_CppImpl(void* treeRootPtr, void* nodeV) {
-    TreeHolder* h = (TreeHolder*)treeRootPtr;
-    EntityTreeNode* node = (EntityTreeNode*)nodeV;
-    if (!node) return;
-    *(int32_t*)((uint8_t*)treeRootPtr + 8) = (int32_t)h->count - 1;
-    if (node->left == nullptr) {
-        IBPTree_Transplant(h, node, node->right);
-    } else if (node->right == nullptr) {
-        IBPTree_Transplant(h, node, node->left);
-    } else {
-        EntityTreeNode* succ = node->right;        // in-order successor
-        while (succ->left) succ = succ->left;
-        if (succ->parent != node) {
-            IBPTree_Transplant(h, succ, succ->right);
-            succ->right = node->right;
-            succ->right->parent = succ;
-        }
-        IBPTree_Transplant(h, node, succ);
-        succ->left = node->left;
-        succ->left->parent = succ;
-    }
-    System::MemoryAllocator::MemFree(node);
-}
+// (B3R W2-EZ: IBPTreeInsert_CppImpl / IBPTreeRemove_CppImpl, the plain-BST
+// stand-ins engine_funcs.cpp installed when 0x140021a30 / 0x14001a6e0 resolved null,
+// are gone with it. Both addresses are registered (the AVL ports in
+// code/Game/Work/work_base_bst.cpp), so the fallback never ran; nothing else called them.)
 
 // ============================================================
 // Tree-walk corruption guard + diagnostics

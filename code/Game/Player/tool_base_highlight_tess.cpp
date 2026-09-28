@@ -24,7 +24,6 @@
 //   +0x3c byte (passed to cc10)  +0x44 char modeFlag (cVar1)
 //   +0x48..0x58 float UV params (when modeFlag==0)
 
-#include "engine_funcs.h"
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "system/MemoryAllocator.h"

@@ -28,7 +28,9 @@
 #include "Dialog/AchievementDialog.h"
 #include "Dialog/GoalDialog.h"
 #include "Dialog/ui_dialogs.h"
-#include "engine_funcs.h"
+#include "options.h"
+#include "system/Value.h"
+#include "runtime/types/ui/DialogInstance.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/ScenarioDialog.h"      // B3R: ScenarioDialog_Ctor

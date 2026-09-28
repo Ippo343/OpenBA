@@ -28,7 +28,6 @@
 //   [4]     word-boundary flag (nonzero => this transition can end the name)
 //   [8..11] bitmask of possible next chars (bits 0..25 = 'a'..'z', bit 26 = end)
 
-#include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

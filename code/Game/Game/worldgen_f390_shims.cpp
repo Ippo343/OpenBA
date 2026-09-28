@@ -8,7 +8,6 @@
 //   - TradeComponent_helper_f9e0 copies a stride-4 {data,count,cap} int bucket
 //   - fn_Random_RandFloatTol   advances the engine RNG -> must hit the real Runtime export
 
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>

@@ -27,7 +27,8 @@
 
 #include "Player/roadtool_funcs.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
-#include "engine_funcs.h"
+#include <new>
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // RoadTool_sub_ce00 (0x14009ce00), called by name
 #include "Player/exe_bodies.h"

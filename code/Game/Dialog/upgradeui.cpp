@@ -8,7 +8,13 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
 #include "Player/exe_bodies.h"   // B3R: RemovalCalc_StateMachine_dfa0
 #include <cstdint>
 #include <cstdio>

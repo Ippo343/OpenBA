@@ -34,7 +34,8 @@
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_GraphicsMesh, Reimpl_Array_Serialize_External_GraphicsMesh
 #include <cstdint>

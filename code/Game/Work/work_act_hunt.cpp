@@ -19,7 +19,7 @@
 //
 // Disasm references cite Application-x64.exe addresses (base 0x140000000).
 
-#include "engine_funcs.h"
+#include <new>
 #include "system/MemoryAllocator.h"
 #include "Action/CreateNaturalResource.h"   // ENDGAME B.3.8 CB3
 #include "Action/ShowTool.h"   // ENDGAME B.3.8 CB3

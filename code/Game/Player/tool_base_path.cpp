@@ -25,7 +25,8 @@
 // its float-march pointer-aliased body is too risky to port faithfully in this
 // wave; a wrong port is silent corruption). See reg_player_path.cpp.
 
-#include "engine_funcs.h"
+#include <new>
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_bodies.h"
 #include "Work/exe_bodies.h"

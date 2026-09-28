@@ -6,7 +6,7 @@
 // Decompiled from Application-x64.exe via Ghidra.
 
 #include "goal_exe_helpers.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"

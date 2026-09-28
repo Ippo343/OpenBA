@@ -30,7 +30,10 @@
 #include "graphics/GraphicsMesh.h"
 #include "graphics/Scene.h"
 #include "system/Value.h"       // System::Time, for Geometry::Update's argument
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"      // WorkCellBST_Remove_ca60, WorkBST_BSTRemove_a6e0
 #include "Game/exe_constants.h"  // kRdata_14017214c

@@ -103,7 +103,6 @@
 // executes once a reimplemented caller reaches it — the employment tick FUN_1400d6f00
 // (+ its ctx) is the remaining dependency; until that caller is ported it stays dormant.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

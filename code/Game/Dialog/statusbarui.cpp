@@ -22,7 +22,11 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_panels.h"
 #include "Dialog/citizen_icon_helpers.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"

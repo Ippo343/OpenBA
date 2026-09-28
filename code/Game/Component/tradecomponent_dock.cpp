@@ -59,7 +59,10 @@
 // GATED: reached only through BANISHED_LIVE_TRADE_CTRL. Nothing else in the build calls
 // any of these four addresses.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()

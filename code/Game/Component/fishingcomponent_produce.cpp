@@ -12,7 +12,7 @@
 // guarded on the latch so a double enter/exit cannot drift the shared grid counter —
 // that guard is retail's, not ours.
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

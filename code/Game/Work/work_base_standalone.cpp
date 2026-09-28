@@ -5,7 +5,6 @@
 // Work_Slot11_HasActiveTasks, Work_SerializeNop, Work_PureCall) went with the last
 // hand-built leaf table: every leaf is a real class now.
 
-#include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "Object/exe_type.h"               // DEFINE_EXE_VTABLE

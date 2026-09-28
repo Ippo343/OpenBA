@@ -20,7 +20,8 @@
 //
 // Every non-obvious offset/constant cites its disasm address.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Action/Action.h"   // ENDGAME B.3.8 CB3
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name

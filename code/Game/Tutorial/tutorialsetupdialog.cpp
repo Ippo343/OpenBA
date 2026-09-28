@@ -8,7 +8,7 @@
 // tutorial_dialog_vtables.cpp is gone. Field map: the header.
 
 #include "Tutorial/TutorialSetupDialog.h"
-#include "engine_funcs.h"
+#include "runtime/types/ui/DialogInstance.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "system/String.h"

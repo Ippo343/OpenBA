@@ -21,7 +21,9 @@
 #include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/FloorDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"          // GetTypeIdByName

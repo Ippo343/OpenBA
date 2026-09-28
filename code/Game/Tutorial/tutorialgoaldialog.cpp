@@ -9,7 +9,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Tutorial/TutorialGoalDialog.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "Tutorial/exe_bodies.h"
+#include "Component/exe_bodies.h"
 #include "object/TypeInfo.h"
 #include "system/String.h"
 #include "system/Filename.h"

@@ -26,7 +26,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
-#include "engine_funcs.h"
+#include "runtime/types/ui/DialogInstance.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "system/String.h"

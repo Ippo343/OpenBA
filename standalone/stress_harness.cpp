@@ -27,7 +27,7 @@
 #include "stress_harness.h"
 #include "resolve.h"
 #include "options.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / GetTypeNameById
 #include <cstdint>

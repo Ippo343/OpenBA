@@ -12,7 +12,9 @@
 
 #include "Component/clearareacomponent_funcs.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A

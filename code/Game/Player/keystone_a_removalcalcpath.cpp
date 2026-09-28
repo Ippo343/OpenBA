@@ -39,7 +39,8 @@
 // NOT autostart-exercised (player RemovalTool path) — Ghidra-verified only.
 
 #include "Player/RemovalTool.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include <cstdint>

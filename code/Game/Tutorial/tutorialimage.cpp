@@ -14,7 +14,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Tutorial/TutorialImage.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
 #include "Tutorial/exe_bodies.h"
 #include "object/TypeInfo.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree

@@ -37,7 +37,7 @@
 //   natRes +0x28 maturity; fruit +0x30 ripeness
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "options.h"

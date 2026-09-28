@@ -52,7 +52,6 @@
 //
 // All offsets verified against live Ghidra disassembly of Application-x64.exe.
 
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "resolve.h"

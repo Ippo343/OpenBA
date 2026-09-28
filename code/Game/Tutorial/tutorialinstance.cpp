@@ -13,7 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Tutorial/TutorialInstance.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Tutorial/exe_bodies.h"   // 0x1400262b0 TutWave_SerializeTutorialRef
 #include "Object/factory_registration.h"
 #include <cstdint>

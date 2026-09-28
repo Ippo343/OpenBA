@@ -29,7 +29,10 @@
 #include "graphics/Mesh.h"
 #include "Component/herdcomponent_funcs.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // Pf_HerdStartMigration_122340, ActCNR_*, ActHunt_*, ActMv_*

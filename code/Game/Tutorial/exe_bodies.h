@@ -11,10 +11,17 @@
 //
 // Also here: the declarations and inline bodies of this module that lived in
 // engine/funcs/engine_funcs.h, moved verbatim with their comments (that
-// header includes this one, so none of its includers changes).
+// header is gone since B3R W2-EZ: its includers include this one directly).
 
 #include <cstdint>
-#include "engine_funcs.h"   // the globals the moved inline body still reads
+// The inline body's own needs (it reached these through engine/funcs/engine_funcs.h
+// until B3R W2-EZ deleted it):
+#include <cstring>                               // memcpy
+#include <new>                                   // placement new
+#include "ui/UserInterface.h"                    // UI::UserInterface::_dialogs
+#include "runtime/types/ui/DialogInstance.h"     // UI::DialogInstance::GetController
+#include "object/Internal.h"                     // Object::InternalPtr
+#include "object/TypeInfo.h"                     // Object::Factory, Object::Base::IsA
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 
 // ---- find_ui_element_by_path.cpp

@@ -11,7 +11,9 @@
 // Decompiled from Application-x64.exe.
 
 #include "Game/Scenario.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "system/String.h"

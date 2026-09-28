@@ -14,7 +14,8 @@
 #include "Component/TradeDescription.h"
 #include "Component/coll_bridge.h"
 #include "Work/tradework_funcs.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"

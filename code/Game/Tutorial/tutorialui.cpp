@@ -10,7 +10,7 @@
 #include "Game/MenuDialogLoopT.h"       // ENDGAME B.3.9 EXA: the real loop classes
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "save/SaveLoad.h"             // RtSave_SaveLoad_Dtor

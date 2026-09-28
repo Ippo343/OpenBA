@@ -74,7 +74,10 @@
 #include "graphics/Geometry.h"
 #include "Component/controller_state_table.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include <new>
+#include "math/Math.h"
+#include "system/Value.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

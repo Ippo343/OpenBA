@@ -18,7 +18,6 @@
 //
 // HARNESS ONLY: reads published fields, writes nothing. Default off.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "options.h"

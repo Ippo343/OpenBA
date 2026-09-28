@@ -39,7 +39,8 @@
 // NOTE the UI::String temporary is never destructed in retail either (it holds an
 // ExternalPtr + an index, no owned heap String). Kept faithful.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/String.h"

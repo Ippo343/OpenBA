@@ -35,7 +35,6 @@
 #include "graphics/Scene.h"     // also brings Graphics::Geometry
 #include "graphics/Camera.h"    // ENDGAME B.3.5 batch K1 — Graphics::Renderer
 #include "graphics/Material.h"  // Graphics::MaterialInstance
-#include "engine_funcs.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree

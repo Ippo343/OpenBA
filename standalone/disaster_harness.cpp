@@ -102,7 +102,6 @@
 //
 // Grep tags: [Disaster] [Fire] [Tornado] [Sick] [Infest]
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "options.h"

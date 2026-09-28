@@ -19,7 +19,10 @@
 #include "Component/modelcomponent_funcs.h"
 #include "scene_watch.h"
 #include "Object/internal_factory_audit.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470

@@ -38,7 +38,7 @@
 // ADD-ONLY: this file does not modify worldgen.cpp. The orchestrator wires these
 // three extern "C" entry points into the kFullPipeline branch separately.
 
-#include "engine_funcs.h"
+#include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>

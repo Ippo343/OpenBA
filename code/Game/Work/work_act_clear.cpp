@@ -29,7 +29,8 @@
 // addresses resolve to 0 unless the address is registered, in which case the
 // guarded call is skipped (project norm).
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Action/Action.h"   // ENDGAME B.3.8 CB3
 #include "Action/RemoveNaturalResource.h"   // ENDGAME B.3.8 CB3

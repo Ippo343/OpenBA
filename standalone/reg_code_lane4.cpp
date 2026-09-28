@@ -18,7 +18,6 @@
 // standalone/address_registry.cpp alongside the other reg_*.cpp entry points.
 
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "system/Value.h"     // ENDGAME B.3.4b System callers: System::Time
 #include <cstdint>
 

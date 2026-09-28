@@ -22,7 +22,9 @@ void* g_StandaloneSaveLoadDialog = nullptr;
 // TutorialDialog are ONE class -- the Tutorial button is the only way to reach it.
 void* g_StandaloneScenarioDialog = nullptr;
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/Internal.h"
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
 extern "C" void* ModDialog_LastOpened();

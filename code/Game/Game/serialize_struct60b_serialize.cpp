@@ -30,7 +30,8 @@
 // shape (no instruction-for-instruction guarantee — the dispatch slots for
 // the per-primitive serialize calls aren't all wired yet, so we soft-fail).
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "system/Filename.h"
 #include "system/String.h"
