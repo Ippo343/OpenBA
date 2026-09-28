@@ -22,6 +22,3 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime);
 // workplace based on job availability and region priority.
 // Returns: true if citizen should switch.
 bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self);
-
-// Init: resolve all internal function pointers (called once at startup)
-void CitizenComponent_InitFuncs();

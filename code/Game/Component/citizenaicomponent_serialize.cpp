@@ -71,9 +71,9 @@ void CitizenAIComponent::Persist(void* stream) {
 
     reinterpret_cast<Object::InternalBasePtr*>(At(this, 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* sibling = *reinterpret_cast<void**>(At(this, 0x38));
-    if (sibling && fn_IsDerivedFrom) {
+    if (sibling) {
         uint32_t tid = CitizenAISer_TidCitizenComponent();
-        if (tid && !fn_IsDerivedFrom(sibling, tid))
+        if (tid && !Object::IsDerivedFromNullSafe(sibling, tid))
             *reinterpret_cast<void**>(At(this, 0x38)) = nullptr;
     }
 
@@ -84,10 +84,8 @@ void CitizenAIComponent::Persist(void* stream) {
     if (version < 5) {
         for (int i = 0; i < 14; ++i, timer += 8)
             reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-        if (fn_Time_Ctor_Float) {
-            fn_Time_Ctor_Float(At(this, 0xb0), 0.0f);
-            fn_Time_Ctor_Float(At(this, 0xb8), 0.0f);
-        }
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(At(this, 0xb0)), 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(At(this, 0xb8)), 0.0f);
     } else {
         for (int i = 0; i < 16; ++i, timer += 8)
             reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
