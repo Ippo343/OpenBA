@@ -35,6 +35,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_GraphicsMesh, Reimpl_Array_Serialize_External_GraphicsMesh
 #include <cstdint>
 #include <new>
 
@@ -84,7 +85,6 @@ ModelDescription::~ModelDescription() {
 
 // [5] 0x140124dc0: stream order as retail.
 bool ModelDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize_GraphicsMesh || !fn_Array_Serialize_External_GraphicsMesh) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_meshGroupCount, nullptr);   // meshGroupCount
     int count = _meshGroupCount;
@@ -103,7 +103,7 @@ bool ModelDescription::Serialize(void* stream) {
     }
     
     for (int i = 0; i < count; ++i, e += 0x18) {
-        fn_ExternalPtr_Serialize_GraphicsMesh(e, &ser);      // mesh ref (elem+0)
+        Reimpl_ExternalPtr_Serialize_GraphicsMesh(e, &ser);      // mesh ref (elem+0)
     
         ser.Serialize(*reinterpret_cast<int*>(e + 0x10), nullptr);   // materialCount, elem+0x10
         int matCount = *(int32_t*)(e + 0x10);
@@ -113,7 +113,7 @@ bool ModelDescription::Serialize(void* stream) {
             for (int j = 0; j < matCount; ++j) *(uint64_t*)(m + j * 8) = 0;
         }
         // serialize materialArray of External* (elem+8 base)
-        fn_Array_Serialize_External_GraphicsMesh(&ser, matCount, *(void**)(e + 8));
+        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, matCount, *(void**)(e + 8));
     }
     ser.Serialize(_lod0, nullptr);
     ser.Serialize(_lod1, nullptr);

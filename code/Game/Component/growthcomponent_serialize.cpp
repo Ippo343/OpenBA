@@ -40,7 +40,6 @@
 //   * Serializer is {Stream* stream; int version; ...}; ctor(self, stream, v).
 //   * After serializing an InternalBasePtr, retail validates the pointee with
 //     IsDerivedFrom(ptr, typeId) and nulls the ref on mismatch.
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
@@ -52,25 +51,13 @@
 
 namespace {
 
-typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
-
 // (The base serialize 0x1401189b0 is Component::Persist, called qualified.)
-fn_IsDerived_t           s_IsDerived = nullptr; // slot 0x140152a98
-
-bool s_resolved = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
-    s_resolved = true;
-}
 
 inline void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
     reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && s_IsDerived && tid && !s_IsDerived(obj, tid))
+    // slot 0x140152a98 = ?IsDerivedFrom@Base@Object@@QEBA_NI@Z
+    if (obj && tid && !reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(tid))   // B.3.x bridge
         *reinterpret_cast<uint64_t*>(ibp) = 0;
 }
 
@@ -85,7 +72,6 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 
 void GrowthComponent::Persist(void* stream) {
-    Resolve();
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 

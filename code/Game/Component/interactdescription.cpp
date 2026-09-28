@@ -38,6 +38,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x14000bf40)
 #include "system/String.h"
 #include "math/Math.h"
 #include "io/Stream.h"
@@ -96,10 +97,9 @@ InteractDescription::~InteractDescription() {
 
 // [5] 0x140123500: stream order as retail.
 bool InteractDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // ---- stream-accurate: single ExternalPtr (+0x20) ----
-    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
     
     // ---- post-load build (load only; reads from the resolved external) ----
     // Direction flag: retail tests *(int*)(stream + 8) == 0 (FUN_140123500 reads
