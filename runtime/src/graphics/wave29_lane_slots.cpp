@@ -491,37 +491,6 @@ extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
                      *reinterpret_cast<Video::Context*>(ctx), packed, t);
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-//
-// BY NAME ONLY, AND THAT IS A DECISION.
-//
-// Both slots are RT_MINT_NAMED in standalone/rt_data_mint_tables.inc, so the
-// NAME door is the one the minted table needs in order to stop being a trap.
-// The ADDRESS door is NOT opened for either, because
-// `standalone/scene_watch.cpp` uses MeshInstance vtable-slot addresses as
-// IDENTITY TOKENS — that is precisely what kept `?AddDrawItems@MeshInstance@`
-// (0x180100f20) unregisterable until Wave 27 rebuilt the token. Before writing
-// this, `grep -rn 0x180100800` and `grep -rn 0x180101660` were run across
-// runtime/ code/ standalone/ engine/ dx11/ to check that neither of THESE two
-// addresses is such a token; neither is. The address doors are still left shut,
-// because nothing in the tree calls either body by address and an address door
-// nobody needs is a registration nobody can audit.
-//
-// *** THE MANGLED NAMES BELOW ARE EACH ON ONE SOURCE LINE, ON PURPOSE. ***
-// This lane's headline finding is that tools/mint_slot_sweep.py parses
-// registrations LINE BY LINE and is therefore blind to a C adjacent-string
-// concatenation split across two lines — 67 of this tree's registrations are
-// invisible to it, and nine of the sixteen slots this lane was briefed to port
-// were ALREADY PORTED behind exactly that blind spot. Splitting a name here
-// would hide these two from the next lane the same way.
-// (reference_literal_grep_blind_to_variables.md, one blind spot over.)
-extern "C" int RtGraphicsWave29SlotsRegister() {
-    int count = 0;
-    return count;
-}
-
 // Kickoff warning 10: a `*Summary()` nothing calls reports a zero that means
 // "never printed", not "never called". This one IS wired — see the call added
 // beside its siblings in runtime/src/graphics/rt_graphics_port.cpp.

@@ -312,15 +312,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
             arg4, arg5, arg6, arg7, arg8, arg9, arg10);
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtGraphicsWave9GfxRegister() {
-    int n = 0;
-
-    return n;
-}
-
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC — the member bodies whose live doors are the
 // functions above. Their own `namespace Graphics { }` block (B34_BRIEFS A.2:

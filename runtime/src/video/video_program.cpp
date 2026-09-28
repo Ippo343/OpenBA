@@ -193,13 +193,3 @@ void VideoProgram::SetupShaders(void* ctxv) const {
 }
 
 }  // namespace Video
-
-// ----------------------------------------------------------------------------
-// Registration. The mangled name is spelled as a LITERAL at the
-// RegisterRuntimeExport call site, which is what tools/runtime_census.py
-// matches — a named constant here would make a live port invisible to the
-// census (reference_census_cannot_see_nonliteral_registrations.md).
-// ----------------------------------------------------------------------------
-int RtVideoVideoProgramRegister() {
-    return 1;
-}

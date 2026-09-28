@@ -493,19 +493,3 @@ Object::Base* EdgeMesh::CreateInPlaceObject(void* place) {
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// ENDGAME B.3.9 block GFX: THE EIGHT SLOT DOORS ARE RETIRED (Type, TypeName,
-// GetFileVersion, Compile, Serialize, Reconstruct, Destruct, Construct) --
-// their only reader was the minted `??_7EdgeMesh@Graphics@@6B@` (retired), and
-// none of the eight addresses is an identity token anywhere in the tree (the
-// grep this banner used to record). Every EdgeMesh wears the compiler's table.
-//
-// REGISTRATION: the factory pair (B39_RULES D2), the class's own statics, by
-// name AND address; the minted `?_typeInfo@EdgeMesh` record resolves them.
-// ============================================================================
-int RtGraphicsEdgeMeshVtableRegister() {
-    int n = 0;
-
-    return n;   // 2
-}

@@ -466,63 +466,6 @@ extern "C" void RtGraphics_AnimationManager_Update(void* self, const void* time,
             *reinterpret_cast<const System::Time*>(time), rootOnly);    // B.3.5 bridge
 }
 
-// ============================================================================
-// Registration.
-//
-// NAMES ONLY, AND EVERY ADDRESS WAS CHECKED FIRST rather than skipped.
-// wave21_lane_gfxbody.cpp:311 explains why that check is not ceremony: this
-// same namespace contains `?AddDrawItems@MeshInstance@`, where a
-// RegisterRuntimeAddr is ACTIVE HARM because standalone/scene_watch.cpp:400
-// compares that retail address against a live vtable slot as an IDENTITY TOKEN.
-//
-//   0x1800a3d10, 0x1800a3c80, 0x1800a3b70  — occur ONLY in the holdback table
-//                                            at runtime/src/graphics/
-//                                            animation.cpp:27-29 (comments).
-//   0x1800a3b20                            — animation.cpp:30 and
-//                                            saveload_draw.cpp:83, both comments.
-//   0x1800fc240                            — animation.cpp:20 and
-//                                            standalone/address_registry.cpp:1522,
-//                                            both comments; the registration on
-//                                            the line below :1522 is a
-//                                            RegisterDispatchSlot keyed on the
-//                                            EXE slot 0x140152050 and filled by
-//                                            ResolveExport(<name>), so it is a
-//                                            NAME door and this registration
-//                                            reaches it.
-//
-// No hit is an identity token and none is a call door a name would miss, so an
-// address registration would be dead code (reference_count_the_doors_not_the_calls.md).
-//
-// THE DOORS THESE FIVE ACTUALLY HAVE, stated so nobody has to re-derive them:
-//   ctor / dtor / Create / Generate  <- code/Game/Game/w2_takescreenshot.cpp:148-154
-//                                       resolves ALL FOUR by ResolveExport name.
-//   ctor                             <- runtime/src/save/saveload_draw.cpp:453
-//                                       (RT_EXPORT_ONCE, a name door). Create and
-//                                       Generate are reached there through the
-//                                       object's DLL vtable instead, which is NOT
-//                                       a door while ??_7FrameCopyImageBuffer is
-//                                       unpromoted.
-//   AnimationManager::Update         <- standalone/address_registry.cpp:1523,
-//                                       exe dispatch slot 0x140152050.
-// RuntimePortInit() runs BEFORE AddressRegistryInit() (standalone/main.cpp), so
-// that dispatch slot is filled AFTER this registration and picks it up.
-//
-// Each mangled name is its own STRING LITERAL, never a named constant:
-// tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"` and cannot
-// see through a constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-int RtGraphicsWave23GfxbodyRegister() {
-    int count = 0;
-
-    // ENDGAME B.3.9 block GFX: the four FrameCopyImageBuffer doors (??0, ??1,
-    // Create, Generate) are retired -- every builder is `::new (p) X()`, the
-    // destructor is reached through slot 0, and Create / Generate only through
-    // the object's own (compiler) table.
-
-    return count;   // 1
-}
-
 // One line beside the other wave summaries, so a run that entered none of these
 // says so rather than staying silent.
 void RtGraphicsWave23GfxbodySummary() {

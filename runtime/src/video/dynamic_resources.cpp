@@ -621,25 +621,3 @@ extern "C" void Video_Device_RecreateDynamic(void* self) {
 extern "C" void Video_Device_ReleaseDynamic(void* self) {
     reinterpret_cast<Video::Device*>(self)->Video::Device::ReleaseDynamic();   // B.3.5 bridge
 }
-
-// ============================================================================
-// Registration
-//
-// Every name is spelled as a LITERAL here, a second time, because
-// tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"` and
-// cannot see through a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// Address doors are registered alongside the name doors for the four functions
-// retail reaches by direct near CALL from a body this lane also ports
-// (`Device::RecreateDynamic`/`ReleaseDynamic` -> the eight statics, and
-// `RenderBuffer::RecreateDynamic` -> `Recreate`). Our own forwarders call the
-// C++ symbols directly, so those doors exist for any OTHER caller that still
-// goes by address; they are not counted twice
-// (reference_census_three_blind_spots.md).
-// ============================================================================
-int RtVideoDynamicResourcesRegister() {
-    int n = 0;
-
-    return n;
-}

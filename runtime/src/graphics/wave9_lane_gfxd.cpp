@@ -121,7 +121,6 @@
 #include "../../types/graphics/Camera.h"
 #include "../collection/array_destroy_internal.h"
 #include "../collection/array_internal.h"
-#include "wave9_lane_gfxd.h"
 
 using RtGraphics::Camera;
 using RtGraphics::Renderer;
@@ -641,17 +640,3 @@ void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuf
 // registered only 0x18001c7e0, the `~Array` that calls it. This lane registers
 // the callee, and does not re-prove what that probe proved.
 // ============================================================================
-
-int RtGraphicsWave9GfxdRegister() {
-    int exports = 0;
-
-    // ---- Graphics::Renderer, two of the four exports Draw calls ------------
-
-    // ---- Graphics::Camera, two MORE of its thirteen exports ---------------
-    // renderer.cpp says "all five of the class's exports". The export table says
-    // thirteen; these are the sixth and seventh. See the file banner.
-
-    // ---- the seven unexported internals underneath them -------------------
-
-    return exports;
-}

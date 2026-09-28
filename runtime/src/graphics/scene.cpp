@@ -143,7 +143,6 @@
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Scene.h"
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
-#include "wave9_lane_gfxd.h"
 #include "scene_grid.h"                 // rtgfxgrid:: the Scene grid bodies
 #include "../picking/scene_grid.h"      // rtpickgrid::BoxTransform
 #include "../../types/math/Math.h"
@@ -1559,8 +1558,7 @@ void Scene::AddDrawItems(Renderer& renderer) const {
 // because tools/runtime_census.py cannot see through a named constant
 // (reference_census_cannot_see_nonliteral_registrations.md).
 //
-// `count` counts NAMES, one per distinct exported function: 17 (the ??0 / ??1
-// Geometry doors retired, ENDGAME B.3.9 GFX).
+// `count` counts NAMES, one per distinct exported function.
 // ============================================================================
 int RtGraphicsSceneRegister() {
     int count = 0;
@@ -1585,8 +1583,6 @@ int RtGraphicsSceneRegister() {
 
     RegisterRuntimeExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z", (void*)&RtGraphics_Scene_RemoveObject); ++count;
     RegisterRuntimeAddr(0x180102600, (void*)&RtGraphics_Scene_RemoveObject);
-
-    // ENDGAME B.3.5 block F — the twentieth row, read out of the DLL this pass.
 
     return count;
 }

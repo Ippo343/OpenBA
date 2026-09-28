@@ -969,20 +969,3 @@ void SunLight::DrawShadowMap(Video::Context& context, Renderer& rendererRef,
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// Registration — name AND address for every body.
-// ============================================================================
-int RtGraphicsLightsVtableRegister() {
-    int n = 0;
-
-    // ---- Graphics::AmbientLight / Graphics::SpotLight ----------------------
-    // ENDGAME B.3.9 block GFX: nothing. The ??0 / ??1 doors and the five slot
-    // doors of each class are gone: their only readers were the minted
-    // `??_7AmbientLight@` / `??_7SpotLight@` tables and their RT_DELDTOR rows,
-    // all retired (tools/rt_mint_retired/gfx.txt). The bodies are the members.
-
-    // ---- Graphics::SunLight -------------------------------------------------
-
-    return n;
-}

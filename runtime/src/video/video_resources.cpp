@@ -585,11 +585,6 @@ int RtVideoResourcesRegister() {
     RegisterRuntimeAddr(0x1800f7290, (void*)&Video_Device_Dtor);
     n++;
 
-    // Wave 26 lane INT33 — 0x180010f00, the per-GraphicsInterface element
-    // destroy. ADDRESS ONLY: it has no exported name in either shipped build
-    // (checked against the export directory, not asserted from the `internal`
-    // bucket's label). See the comment above RtVideo_ArrayInterfaceElemDestroy.
-
     printf("[RtPort] Video resource lifecycle (Wave 18 lane VRES): %d exports registered\n", n);
     return n;
 }

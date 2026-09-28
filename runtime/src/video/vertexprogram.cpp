@@ -423,12 +423,3 @@ extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, vo
         reinterpret_cast<System::String*>(e + 0x10)->Serialize(ser);   // B.3.1 bridge
     }
 }
-
-int RtVideoVertexProgramRegister() {
-    int n = 0;
-    // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
-
-    // Batch D1: unexported in both builds, address door only.
-
-    return n;
-}

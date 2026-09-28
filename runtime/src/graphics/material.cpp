@@ -179,10 +179,3 @@ Object::Base* Material::CreateInPlaceObject(void* place) {
 // their only readers were the minted `??_7Material@Graphics@@6B@` and its
 // RT_DELDTOR row. Every live Material wears the compiler's table.
 // ============================================================================
-
-int RtGraphicsMaterialRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@Material` record resolves them.
-    return n;
-}

@@ -666,56 +666,6 @@ extern "C" bool RtGraphics_AnimationState_Update(
             rootOnly, applyEvents);
 }
 
-// ============================================================================
-// REGISTRATION
-//
-// NAMES FOR THE THREE EXPORTS, one ADDRESS for the one unexported body this lane
-// ported. Every mangled name below is its own STRING LITERAL, never a named
-// constant: tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"`
-// and cannot see through a constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// THE ADDRESS REGISTRATION WAS CHECKED FOR HARM BEFORE IT WAS WRITTEN, because
-// in this same namespace a RegisterRuntimeAddr is ACTIVE HARM on at least one
-// row: standalone/scene_watch.cpp compares `?AddDrawItems@MeshInstance@`'s retail
-// address against a live vtable slot as an IDENTITY TOKEN, so registering it
-// would break the comparison. 0x180060d30 occurs NOWHERE in code/, engine/,
-// runtime/ or standalone/ — grepped, empty — so it is neither an identity token
-// nor a shadowed address, and it is a real CALL door this lane's own
-// BuildParameters needs at cutover
-// (reference_count_the_doors_not_the_calls.md).
-//
-// THE DOORS THESE THREE ACTUALLY HAVE, so nobody re-derives them:
-//   BuildParameters  <- engine/funcs/engine_funcs.cpp:3492 (ResolveExport name),
-//                       standalone/reg_unreg_lane3.cpp:154 (an exe dispatch slot
-//                       filled by ResolveExport), runtime/src/save/
-//                       saveload_draw.cpp:596 and runtime/src/graphics/
-//                       wave24_lane_gfxmat.cpp:656 (both RT_EXPORT_ONCE).
-//                       FOUR name doors — this row goes live immediately.
-//   Draw             <- code/Game/Game/gameupdateloop.cpp:628 and
-//                       engine/funcs/engine_funcs.cpp:3615, both ResolveExport
-//                       by name. THE EVERY-FRAME 3D RENDER CALL.
-//   AnimationState::Update
-//                    <- runtime/src/graphics/wave23_lane_gfxbody.cpp:555, an
-//                       RT_EXPORT_ONCE inside the ported
-//                       AnimationManager::Update. That is a name door and this
-//                       registration reaches it, so this row goes live on every
-//                       sim iteration that has an animated mesh registered.
-//
-// Because Draw and AnimationState::Update both go live the moment they are
-// registered, they share a kill switch (RT_GFXBIG) with
-// BuildParameters and each is separately attributable in the log through its
-// own attendance counter.
-// ============================================================================
-int RtGraphicsWave27GfxbigRegister() {
-    int count = 0;
-
-    // BATCH 8b: the draw-item sort and its selection-sort callee — see the
-    // banner above RtGraphics_Renderer_DrawItemSort.
-
-    return count;   // 6
-}
-
 // One line beside the other wave summaries, so a run that entered none of these
 // says so rather than staying silent. The BRANCH counters sit next to the door
 // counters on purpose: `Draw calls=N sorts=0` is a completely different finding
@@ -729,9 +679,7 @@ void RtGraphicsWave27GfxbigSummary() {
 
 }  // namespace rtgfxbig
 
-extern "C" int RtGraphicsWave27GfxbigRegisterC() { return rtgfxbig::RtGraphicsWave27GfxbigRegister(); }
 void RtGraphicsWave27GfxbigSummary() { rtgfxbig::RtGraphicsWave27GfxbigSummary(); }
-int  RtGraphicsWave27GfxbigRegister() { return rtgfxbig::RtGraphicsWave27GfxbigRegister(); }
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC -- the member bodies whose live doors are the

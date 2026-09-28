@@ -893,53 +893,6 @@ bool RtVideo_Viewport_NotEqual(const Viewport* self, const Viewport* other) {
 // pick up this port as well, without this file touching them.
 // ============================================================================
 
-int RtVideoContextRegister() {
-    int count = 0;
-
-    // ---- state mutators (replay oracle) ------------------------------------
-
-    // WAVE 28 LANE MISC. Name spelled out as a literal, not kSetTransformScale,
-    // for the same reason the banner at the top of this file gives: the census
-    // cannot see through a named constant.
-
-    // ---- backend forwarders (thunk oracle) ---------------------------------
-    // Each site is static so it survives past this function and shows up in
-    // with the one call VerifyThunk makes.
-    {
-    }
-    {
-    }
-    {
-    }
-    {
-    }
-    {
-    }
-    {
-    }
-    {
-    }
-    {
-    }
-    {
-    }
-
-    // BATCH 8: Math::Matrix::operator!=, a non-virtual leaf with no slot to verify.
-
-    // BATCH 8: SetBones — a plain public export, no vtable slot to verify.
-
-    // ENDGAME B.3.5 block D1 — `Video::Viewport`'s two comparison operators.
-    // NEW ROWS. Both names were read out of the shipped export directory and
-    // both bodies out of the shipped bytes this pass (0x180018240 / 0x180018270);
-    // neither had a port before, and neither address appeared anywhere in the
-    // tree (grepped across code/, engine/, runtime/, standalone/, dx11/ before
-    // the rows were written). The other three `Video::Viewport` exports — the two
-    // constructors 0x180018210 / 0x180018220 and `??4` 0x1800181f0 — stay
-    // unported DOORS for the triviality reason in Context.h's banner.
-
-    return count;
-}
-
 // ============================================================================
 // STALE COMMENTS THIS LANE DISPROVED (PLAN §6 step 8)
 // ============================================================================

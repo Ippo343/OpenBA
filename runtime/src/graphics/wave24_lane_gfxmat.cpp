@@ -711,36 +711,6 @@ extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
             *reinterpret_cast<IO::Serializer*>(serv));                  // B.3.5 bridge
 }
 
-// ============================================================================
-// Registration.
-//
-// NAMES ONLY. Measured, not assumed: all six rows have ZERO rel32 callers in
-// the DLL's `.text` (scanner and its positive control in
-// WAVE24_LANE_GFXMAT.md §2), so there is no in-DLL traffic for an address
-// registration to catch, and none of the six addresses occurs anywhere in
-// code/ engine/ runtime/ standalone/ dx11/ — no identity token of the
-// `?AddDrawItems@MeshInstance@` kind to break
-// (reference_a_ported_row_can_be_permanently_unpromotable.md).
-//
-// Each mangled name is its own STRING LITERAL, never a named constant:
-// tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"` and
-// cannot see through a constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// The four MaterialInstance slot names are spelled EXACTLY as the export
-// directory spells them — `UEAA` (virtual), not `QEAA`
-// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). All four were confirmed
-// present in the directory by `pefile` before this file was written.
-// ============================================================================
-int RtGraphicsWave24GfxmatRegister() {
-    int count = 0;
-
-    // ENDGAME B.3.9 GFX: the four MaterialInstance slot doors are retired; the
-    // factory pair (B39_RULES D2) is the class's own, by name AND address.
-
-    return count;   // 4
-}
-
 // A run that entered none of these says so rather than staying silent, and the
 // oracle line is separate from the attendance line so a reader cannot mistake
 // "the body ran" for "the body was compared"

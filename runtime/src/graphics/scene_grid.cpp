@@ -561,36 +561,4 @@ void FreeGlobals(GlobalList* list) {
     reinterpret_cast<Collection::LinkedList<void*>*>(list)->Clear();
 }
 
-// ============================================================================
-// Registration.
-//
-// FIVE addresses named by the census plus TWO from their closure. There is no
-// exported name for any of the seven — `tools/pe_exports.py` returns nothing
-// for any of them — so `RegisterRuntimeAddr` is the only door, and this is the
-// whole reason the file exists.
-//
-// THE MOMENT THIS RUNS, five forwarders in runtime/src/graphics/scene.cpp stop
-// reaching the DLL: `ResolveAddr` consults the port registry FIRST
-// (reference_resolveaddr_consults_port_registry_first.md). Those forwarders
-// carry comments saying they call "the retail body"; they are corrected in the
-// same commit.
-//
-// NOT REGISTERED HERE, deliberately, each checked by grep across runtime/,
-// standalone/, code/ and engine/ before a line was written:
-//   * 0x18001f470  — lane PICK owns the body AND the registration
-//                    (runtime/src/picking/scene_grid.cpp:1215).
-//   * 0x180009c30  — lane COLL owns it (runtime/src/collection/linkedlist.cpp).
-//   * 0x18002fea0  — lane Q owns it (runtime/src/collection/array.cpp:1386).
-//   * 0x18005fb00  — registered by lane Q's file, in lane Q's family, by this
-//                    lane's commit. ONE registration, there, not here.
-// A duplicate `RegisterRuntimeAddr` is last-binding-wins and silently makes one
-// body dead code, which is why this list is shorter than the closure.
-// ============================================================================
-int Register() {
-    int n = 0;
-    return n;
-}
-
 }  // namespace rtgfxgrid
-
-int RtGraphicsGridRegister() { return rtgfxgrid::Register(); }

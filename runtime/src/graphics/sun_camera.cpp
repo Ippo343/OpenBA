@@ -391,8 +391,3 @@ extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* r
                 *reinterpret_cast<::Graphics::Renderer*>(rendererv)));
     return ret;
 }
-
-int RtGraphicsSunCameraRegister() {
-    int n = 0;
-    return n;
-}

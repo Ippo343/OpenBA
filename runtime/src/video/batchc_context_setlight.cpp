@@ -199,15 +199,3 @@ extern "C" void RtVideo_Context_SetLight(void* self,
         direction, attenuation, colour, position,
         nearPlane, farPlane, shadowResolution);
 }
-
-// ============================================================================
-// Registration — BOTH DOORS, unconditionally.
-//
-// 0x18001a950 was grepped across code/, engine/, runtime/, standalone/ and
-// dx11/ before the address door was written: it appears only in
-// lights_vtable.cpp's comment and Context.h's comment, never as an identity
-// token, so registering it is safe.
-// ============================================================================
-extern "C" int RtVideoBatchCSetLightRegister() {
-    return 1;
-}

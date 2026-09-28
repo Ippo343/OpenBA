@@ -824,32 +824,3 @@ void Video::Context::AssignConstants() {
 extern "C" void RtVideo_Context_AssignConstants(void* self) {
     static_cast<Video::Context*>(self)->Video::Context::AssignConstants();
 }
-
-// ============================================================================
-// Registration
-//
-// All four mangled names checked against the shipped export directory with
-// pefile BEFORE any body was written:
-//   ?BeginConstants@ConstantBuffer@Video@@QEAAXAEBVString@System@@0HH_N1H@Z  1636
-//   ?AddConstant@ConstantBuffer@Video@@QEAAXAEBVString@System@@0H@Z          1540
-//   ?EndConstants@ConstantBuffer@Video@@QEAAXH@Z                             2306
-//   ?PlatformCreate@ConstantBuffer@Video@@AEAA_NXZ                           3349
-//
-// Three ADDRESS-ONLY rows: 0x180053510, 0x18001cab0 and 0x18001cfc0 are
-// unexported (checked against the retail directory AND Runtime-x64-profile's
-// 5,182 names), so RegisterRuntimeExport has nothing to register under.
-// ============================================================================
-int RtVideoConstantBufferRegister() {
-    int n = 0;
-
-    // ENDGAME B.3.5 block D1 — NEW ROW. `?GetNextUploadIndex@` (0x1800eef90,
-    // ordinal 2831) was the body this file carried as the file-local
-    // `NextSlotAfter` with no door at all; `?AssignConstants@` drives it seven
-    // times per Context construction. The name was checked against
-    // standalone/rt_export_addrs.inc, and 0x1800eef90 appeared nowhere in the
-    // tree before this row.
-
-    // Phase 1's two, now that they have callers outside context_lifecycle.cpp.
-
-    return n;
-}

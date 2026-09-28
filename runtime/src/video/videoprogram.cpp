@@ -221,10 +221,3 @@ bool VideoProgram::Serialize(void* streamv) {
 }
 
 }  // namespace Video
-
-// ENDGAME B.3.9 VID: the factory pair, by retail NAME and VA (B39_RULES D2); the
-// minted ?_typeInfo@VideoProgram record resolves its factory pointers by name.
-int RtVideoProgramRegister() {
-    int n = 0;
-    return n;
-}

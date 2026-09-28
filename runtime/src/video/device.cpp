@@ -590,17 +590,3 @@ bool Video::Configuration::Startup() {
 bool Video_Configuration_Startup(Configuration* self) {
     return self->Video::Configuration::Startup();
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtVideoDeviceRegister() {
-    int n = 0;
-
-    // Own kill switch, narrower than the file's RT_VIDDEVICE: this is
-    // the one function here that Engine::Startup calls on the BOOT path
-    // (engine_lifecycle.cpp:653), so it must be switchable without taking the
-    // other nine registrations down with it.
-
-    return n;
-}

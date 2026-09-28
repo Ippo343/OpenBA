@@ -279,10 +279,3 @@ bool VertexLayout::Serialize(void* streamv) {
 }
 
 }  // namespace Video
-
-// ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2), and
-// the unexported element loop by address.
-int RtVideoVertexLayoutRegister() {
-    int n = 0;
-    return n;
-}

@@ -301,7 +301,6 @@ int32_t* FrameIndexPtr() {
 // (the function-local cache over the minted record is gone, B9-10).
 uint32_t ParticleSystemTypeId() { return Graphics::ParticleSystem::TypeId(); }
 
-using IsDerivedFromFn = bool (*)(const void* obj, uint32_t typeId);
 using SetBoundsFn     = void (*)(void* geometry, const void* box);
 
 // ---------------------------------------------------------------------------
@@ -1153,14 +1152,6 @@ void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const 
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// Registration
-// ============================================================================
-extern "C" int RtGraphicsWave28PartsysRegister() {
-    int count = 0;
-    return count;
-}
 
 void RtGraphicsWave28PartsysSummary() {
     printf("[PARTSYS28] PSI::Update entries=%llu earlyOut=%llu spawned=%llu aged=%llu killed=%llu\n",

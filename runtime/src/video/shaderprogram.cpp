@@ -392,11 +392,3 @@ bool ShaderProgram::Serialize(void* streamv) {
 }
 
 }  // namespace Video
-
-int RtVideoShaderProgramRegister() {
-    int n = 0;
-    // ENDGAME B.3.9 VID: the (null) factory pair by retail NAME and VA (B39_RULES D2).
-
-    // The two by-value name getters are registered by shader_program_names.cpp.
-    return n;
-}

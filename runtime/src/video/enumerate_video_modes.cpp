@@ -188,7 +188,3 @@ bool Video::Device::EnumerateVideoModes() {
 extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
     return self->Video::Device::EnumerateVideoModes();
 }
-
-int RtVideoEnumerateModesRegister() {
-    return 1;
-}

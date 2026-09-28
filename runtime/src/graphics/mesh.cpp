@@ -1846,35 +1846,6 @@ extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const void* self,
 int RtGraphicsMeshVtableRegister() {
     int n = 0;
 
-    // NOT a vtable slot -- the row this lane's own
-    // ?GetInstanceTransform@EdgeMeshInstance@ opened. Registered here so the lane
-    // closes it rather than handing it on. Note the trailing `M`: this is the
-    // (int,float) overload, ordinal 2814, and the (int) overload registered by
-    // RtGraphicsMeshRegister above is a DIFFERENT function at a DIFFERENT address.
-    //
-    // *** QEBA, NOT UEBA, AND THIS LINE HAD IT WRONG FIRST. *** This overload is
-    // a PUBLIC NON-VIRTUAL const member, so `QEBA`; it is not a vtable slot and
-    // never was. The first draft of this registration wrote `UEBA` by analogy
-    // with the four slot bodies above it, which IS a name the DLL does not
-    // export -- so RegisterRuntimeExport would have registered a symbol nothing
-    // can ever ask for, leaving the body written and unreachable by name while
-    // every door in this file kept resolving the DLL's
-    // (reference_resolveexport_phantom_names.md, and the QEAA/UEAA form of the
-    // same trap in reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-    // It was NOT caught by reading the code. `tools/runtime_census.py --unported
-    // --namespace Graphics` kept listing the symbol as unported AFTER the
-    // registration was added, which is what a phantom name looks like from the
-    // outside. The spelling below is the one pefile reads out of the retail
-    // export directory at 0x180016c20, ordinal 2814.
-    //
-    // AND IT IS ON ONE LINE ON PURPOSE. runtime_census.py cannot see a mangled
-    // name split across a C++ string-literal concatenation
-    // (reference_census_three_blind_spots.md), so a registration spelled over two
-    // lines is invisible to it and reads as an ABSENT port
-    // (reference_half_registered_port_reads_as_absent.md). Every
-    // RegisterRuntimeExport this lane added is single-line for that reason, even
-    // where it overruns the column width.
-
     // ---- WAVE 28 LANE SLOTS ------------------------------------------------
     // The two ?AddDrawItems@ overrides. BOTH mangled names were read out of the
     // retail export directory at the VAs the two vtables hold, with objdump's
@@ -1898,7 +1869,7 @@ int RtGraphicsMeshVtableRegister() {
                           (void*)&RtGraphics_MeshInstance_AddDrawItems); ++n;
     RegisterRuntimeAddr(0x180100f20ull, (void*)&RtGraphics_MeshInstance_AddDrawItems);
 
-    return n;   // 7
+    return n;
 }
 
 // ============================================================================
@@ -1937,8 +1908,6 @@ int RtGraphicsMeshRegister() {
     RegisterRuntimeExport("?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ",
                           (void*)&RtGraphics_MeshInstance_UpdateHierarchy); ++count;
 
-    // ---- Graphics::GraphicsMesh ----
-
     // ---- Graphics::EdgeMesh ----
     RegisterRuntimeExport("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z",
                           (void*)&RtGraphics_EdgeMesh_TriangleVertex_Ctor); ++count;
@@ -1949,7 +1918,7 @@ int RtGraphicsMeshRegister() {
     // ENDGAME B.3.9 GFX (W2): the EdgeMesh ??0 door and the EdgeMeshInstance
     // ??0 / copy ??0 / ??1 doors are retired with their minted tables.
 
-    return count;   // 14
+    return count;
 }
 
 // ============================================================================

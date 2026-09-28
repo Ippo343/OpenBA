@@ -383,10 +383,3 @@ extern "C" void RtVideo_RenderState_PlatformDestructExport(void* selfv) {
     RenderStateDoorAccess::PlatformDestruct(
         reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
 }
-
-int RtVideoRenderStateRegister() {
-    int n = 0;
-    // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
-
-    return n;
-}

@@ -493,8 +493,3 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
 }
 
 }  // namespace Graphics
-
-int RtGraphicsCullRegister() {
-    int n = 0;
-    return n;
-}

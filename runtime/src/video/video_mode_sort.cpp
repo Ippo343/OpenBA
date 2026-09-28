@@ -441,10 +441,3 @@ extern "C" void RtVideo_SmallSortRefreshRates(RefreshRate* lo, RefreshRate* hi) 
 extern "C" void RtVideo_SwapDisplayMode(DisplayMode* a, DisplayMode* b) {
     SwapMode(a, b);
 }
-
-// ============================================================================
-// Registration — addresses only; none of the five is exported.
-// ============================================================================
-int RtVideoModeSortRegister() {
-    return 5;
-}

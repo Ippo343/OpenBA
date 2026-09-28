@@ -552,14 +552,6 @@ Transform* RtGraphics_Animation_GetRootPoseAtTime(const void* self,
     return ret;                                   // RAX carries the slot back
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtGraphicsWave29GfxbodyRegister() {
-    int count = 0;
-    return count;
-}
-
 }  // namespace rtgfxbody29
 
 // ############################################################################
@@ -834,10 +826,6 @@ Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
 }
 
 }  // namespace Graphics
-
-int RtGraphicsWave29GfxbodyRegister() {
-    return rtgfxbody29::RtGraphicsWave29GfxbodyRegister();
-}
 
 // Wave 28 defect #7: every lane's summary is written and NOTHING CALLS IT, so a
 // zero means "never printed" rather than "never called". This one is WIRED —

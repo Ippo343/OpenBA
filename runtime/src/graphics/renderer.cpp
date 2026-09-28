@@ -937,27 +937,12 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
 int RtGraphicsRendererRegister() {
     int count = 0;
 
-    // --- Graphics::Camera (all five of the class's exports) -----------------
+    // --- Graphics::Camera ------------------------------------------------------
     RegisterRuntimeExport("??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z",
                           (void*)&RtGraphics_Camera_Ctor); ++count;
     RegisterRuntimeAddr(0x1800fe960, (void*)&RtGraphics_Camera_Ctor);
 
-    // --- Graphics::Camera, the FIVE exports block F added -------------------
-    // With these, ALL THIRTEEN of the class's exports are ported: five here from
-    // wave 6 lane F, two in wave9_lane_gfxd.cpp (the two constructors), ONE —
-    // `operator=` — in wave28_lane_gfxbody.cpp, and these five. Every address
-    // below was checked for a pre-existing `RegisterRuntime*` across runtime/,
-    // standalone/, code/, engine/ and dx11/ (a duplicate is last-binding-wins and
-    // silently turns one body into dead code,
-    // reference_grep_for_the_port_before_writing_it.md) — AND the address grep
-    // was not enough: `operator=` came back with comments only, because
-    // wave28_lane_gfxbody.cpp registers it by NAME and never by address. It took
-    // a link error to find. Sized by the EXPORT LIST, not by the grep.
-
-    // ??4Camera@ (0x180017c40) is registered in wave28_lane_gfxbody.cpp. NOT
-    // duplicated here — see the note above its door.
-
-    // --- Graphics::Renderer (4 of the 6 rows this lane owns) ----------------
+    // --- Graphics::Renderer ----------------------------------------------------
     RegisterRuntimeExport("??0Renderer@Graphics@@QEAA@XZ",
                           (void*)&RtGraphics_Renderer_Ctor); ++count;
     RegisterRuntimeAddr(0x180105180, (void*)&RtGraphics_Renderer_Ctor);
@@ -965,13 +950,6 @@ int RtGraphicsRendererRegister() {
     RegisterRuntimeExport("??1Renderer@Graphics@@QEAA@XZ",
                           (void*)&RtGraphics_Renderer_Dtor); ++count;
     RegisterRuntimeAddr(0x1800180a0, (void*)&RtGraphics_Renderer_Dtor);
-
-    // --- Graphics::Renderer, the ELEVEN accessors block F added -------------
-    // All eleven are one to six instructions, read as disassembly this pass, and
-    // all eleven addresses came back with zero pre-existing registrations.
-
-    // --- Graphics::MaterialInstance (2 rows; ENDGAME B.3.9 GFX: the ??0 door
-    // 0x180103980 is retired -- the class is built by its real ctor) --------
 
     return count;
 }

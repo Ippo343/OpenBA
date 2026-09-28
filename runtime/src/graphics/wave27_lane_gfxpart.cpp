@@ -1191,26 +1191,6 @@ extern "C" void* RtGraphics_ParticlePoolRecord_Ctor(void* recv, void* particlev)
     return recv;
 }
 
-int RtGraphicsWave27GfxpartRegister() {
-    int count = 0;
-
-    // Cutover closure batch D1. No exported name in either build; the address
-    // is the only door. Registered unconditionally (DIRECTION.md §2).
-
-    // ENDGAME B.3.9 block GFX: Particle's factory pair (D2), the class's own
-    // statics, replacing its FACTREST row; the Serialize slot door is retired.
-    // (ENDGAME B.3.9 GFX: the four ParticleInstance slot doors and the
-    // ParticleSystemInstance SetParticle door are retired with the two minted
-    // tables, their only reader.)
-
-    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -------------
-    // Unexported in both builds, so RegisterRuntimeAddr only (these do not
-    // move `count`, which is the EXPORT count this lane's attendance line
-    // prints).
-
-    return count;   // 2 exports + 3 batch-D1 addresses (batch-D2 not counted)
-}
-
 // The attendance line names THIS lane, so a run log carries a line only this
 // build emits — the on-disk md5 says which exe is on disk, not which one ran.
 // Attendance is printed SEPARATELY from any comparison so a reader cannot

@@ -89,7 +89,6 @@ using Graphics::GraphicsMesh;
 // ---------------------------------------------------------------------------
 using VoidThisFn  = void  (*)(void*);
 using PtrThisFn   = void* (*)(void*);
-using SerMemberFn = void  (*)(void*, Serializer*);
 
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
 // the member System::String::Serialize. B.3.x bridge: the field is a String.
@@ -604,17 +603,3 @@ bool GraphicsMesh::Serialize(void* streamv) {
 }  // namespace Graphics
 
 // (ENDGAME B.3.9 block GFX: the slot-5 door is gone with the minted table.)
-
-// ============================================================================
-// Registration — name AND address for every body that has a name, address only
-// for the one that does not (TriangleList::Serialize is unexported in both
-// shipped builds; checked against the export directory, not assumed).
-// ============================================================================
-int RtGraphicsMeshVtableBatch6Register() {
-    int n = 0;
-
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address. The ctor / dtor / slot doors are retired (above).
-
-    return n;
-}

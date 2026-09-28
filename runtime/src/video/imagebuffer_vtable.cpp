@@ -419,18 +419,3 @@ extern "C" void* Video_ImageBuffer_Reconstruct(Video::ImageBuffer* self) {
 extern "C" bool Video_ImageBuffer_Serialize(Video::ImageBuffer* self, void* stream) {
     return self->Video::ImageBuffer::Serialize(stream);
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BY NAME **AND** BY ADDRESS for all seven (WAVE18_KICKOFF §4.5): 13 live sites
-// reach Runtime symbols through `ResolveAddr(Module::Runtime, …)`, which is
-// registry-first, so a name-only registration is invisible to them. Each name
-// is one string LITERAL on one line so `tools/runtime_census.py` can see it —
-// it cannot follow a named constant.
-// ============================================================================
-int RtVideoImageBufferVtableRegister() {
-    int n = 0;
-
-    return n;
-}

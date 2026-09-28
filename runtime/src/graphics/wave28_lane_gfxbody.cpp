@@ -753,27 +753,6 @@ extern "C" void* RtGraphics_Camera_Assign(void* self, const void* src) {
     return self;
 }
 
-// ============================================================================
-// REGISTRATION
-//
-// Every mangled name below is its own STRING LITERAL, never a named constant:
-// tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"` and cannot
-// see through a constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// NO RegisterRuntimeAddr IN THIS FILE. The one unexported helper this lane
-// reaches (0x1800638e0) is called THROUGH ResolveAddr rather than registered,
-// because registering it would claim a port that does not exist.
-// ============================================================================
-int RtGraphicsWave28GfxbodyRegister() {
-    int count = 0;
-
-    // Not one of the ten; see §6 -- porting BeginDrawGroup is what put this row
-    // into the `called` column, so this lane closes it rather than moving it.
-
-    return count;
-}
-
 // One line beside the other wave summaries, so a run that entered none of these
 // says so rather than staying silent.
 void RtGraphicsWave28GfxbodySummary() {
@@ -797,7 +776,6 @@ void RtGraphicsWave28GfxbodySummary() {
 
 }  // namespace rtgfxbody28
 
-int  RtGraphicsWave28GfxbodyRegister() { return rtgfxbody28::RtGraphicsWave28GfxbodyRegister(); }
 void RtGraphicsWave28GfxbodySummary()  { rtgfxbody28::RtGraphicsWave28GfxbodySummary(); }
 
 // ############################################################################

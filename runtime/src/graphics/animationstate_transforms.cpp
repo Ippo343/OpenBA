@@ -405,15 +405,6 @@ extern "C" void* RtGraphics_InterpolatedState_Transform_Lerp(
     return ret;
 }
 
-// ============================================================================
-// Registration. Unconditional (DIRECTION.md §2: a port registers, no flag).
-// ============================================================================
-int RtGraphicsAnimationTransformsRegister() {
-    int n = 0;
-
-    return n;
-}
-
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC — the `Graphics::AnimationState` member bodies
 // whose live doors are the `extern "C"` functions above.

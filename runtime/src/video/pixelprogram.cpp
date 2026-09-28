@@ -324,10 +324,3 @@ bool PixelProgram::Serialize(void* streamv) {
 }
 
 }  // namespace Video
-
-int RtVideoPixelProgramRegister() {
-    int n = 0;
-    // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
-
-    return n;
-}

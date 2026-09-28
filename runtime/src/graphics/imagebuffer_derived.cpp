@@ -694,32 +694,3 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
 // `??_7ReflectionImageBuffer@Graphics@@6B@` (retired). Every live reflection
 // image wears the compiler's table.
 // ############################################################################
-
-// ============================================================================
-// Registration — BY NAME and BY ADDRESS for every body.
-//
-// A body PORTED but never REGISTERED is indistinguishable from an ABSENT one,
-// and the mint fills a slot by NAME for RT_MINT_NAMED rows and by ADDRESS
-// otherwise, so each row gets whichever door its slot uses and the other one
-// too. Each mangled name is its own STRING LITERAL on one line so
-// tools/runtime_census.py can see it — it cannot follow a named constant.
-//
-// The three slot-0 deleting destructors of these classes are NOT here: they are
-// table rows in runtime/src/object/deleting_dtor.cpp, where the whole family
-// lives as one body.
-// ============================================================================
-int RtGraphicsImageBufferDerivedRegister() {
-    int n = 0;
-
-    // ---- Graphics::GeneratedImageBuffer / FrameCopyImageBuffer -------------
-    // ENDGAME B.3.9 block GFX: the ctor / dtor / slot doors are retired (see the
-    // banner above the Reflection section). The factory pairs (B39_RULES D2) are
-    // the classes' own statics, by name AND address; the minted `?_typeInfo@`
-    // records resolve them.
-
-    // ---- Graphics::ReflectionImageBuffer -----------------------------------
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ReflectionImageBuffer` record resolves them.
-
-    return n;
-}

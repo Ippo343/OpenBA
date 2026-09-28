@@ -958,30 +958,3 @@ const Case kCases[] = {
 constexpr int kNCases = static_cast<int>(sizeof(kCases) / sizeof(kCases[0]));
 
 }  // namespace
-
-// ============================================================================
-// Registration — BOTH DOORS for both symbols.
-// ============================================================================
-// Lane VID2 §R5: `??3Context@Video@@` sat address-bound-only for three phases
-// because nothing had yet asked for it by name. An exported symbol with a port
-// gets the NAME door AND the ADDRESS door, not whichever one its first caller
-// happened to use. Our dx11/ backend reaches these two through
-// `Dx11ResolveRuntimeImport`, which tries `ResolveExport` (the name) first and
-// only then falls back to VideoDX11's own IAT slot, so the name door is the one
-// that carries today; the address door is registered so a future by-address
-// caller cannot walk past the port (reference_bypassed_port_needs_a_source_checker.md).
-// Neither address had any other reader in the tree before this file — checked
-// by grepping 0x1800ef060 and 0x1800ef330 across code/, engine/, runtime/,
-// standalone/ and dx11/, which returned nothing.
-//
-// Both mangled names were read out of the shipped export directory of
-// C:\GOG Games\Banished\Runtime-x64.dll with pefile BEFORE this file was
-// written: `?BindResources@Context@Video@@AEAAXXZ` at 0x1800ef060 ordinal 1664,
-// `?BindTextures@Context@Video@@AEAAXXZ` at 0x1800ef330 ordinal 1667. Note the
-// `AEAA` — both are PRIVATE members, and a `QEAA` guess would resolve NULL in
-// silence forever (reference_resolveexport_phantom_names.md). dx11/ already
-// spells them `AEAA`, for the same reason and with the same note.
-int RtVideoContextBindRegister() {
-    int n = 0;
-    return n;
-}

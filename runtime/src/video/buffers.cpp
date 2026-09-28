@@ -1006,8 +1006,6 @@ bool Video_VertexBuffer_Set(VertexBuffer* self, int sizeBytes, int offsetBytes, 
 int RtVideoBuffersRegister() {
     int n = 0;
 
-    // ENDGAME B.3.9 VS (B39_RULES D2): the class's own factory pair, by name AND VA.
-
     RegisterRuntimeExport("??0IndexBuffer@Video@@QEAA@XZ", (void*)&Video_IndexBuffer_Ctor);
     RegisterRuntimeAddr(0x1800f3490, (void*)&Video_IndexBuffer_Ctor);
     n++;
@@ -1015,10 +1013,6 @@ int RtVideoBuffersRegister() {
     RegisterRuntimeExport("??0VertexBuffer@Video@@QEAA@XZ", (void*)&Video_VertexBuffer_Ctor);
     RegisterRuntimeAddr(0x1800f55f0, (void*)&Video_VertexBuffer_Ctor);
     n++;
-
-    // ---- Wave 9 lane W: the six Platform{Construct,Destruct} bodies ----
-
-    // ---- Wave 9 lane GFX2: the fourth pair ----
 
     // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — HELD BACK, see above.
 

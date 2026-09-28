@@ -568,22 +568,3 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// Registration — name AND address for both.
-//
-// *** THE ADDRESS DOOR NEEDED A CHECK BEFORE IT WAS WRITTEN. *** This namespace
-// contains one row where a RegisterRuntimeAddr is ACTIVE HARM:
-// `standalone/scene_watch.cpp` compares `?AddDrawItems@MeshInstance@`'s retail
-// address against a live vtable slot as an IDENTITY TOKEN, so registering that
-// address makes the comparison lie (wave21_lane_gfxbody.cpp:311). Both
-// addresses below were grepped across code/, engine/, runtime/, standalone/ and
-// dx11/ before this block was written: 0x180100960 and 0x1800a3150 appear only
-// in the generated mint table and in this batch's own comments, so neither is
-// an identity token and both doors are safe.
-// ============================================================================
-int RtGraphicsMeshInstanceDrawRegister() {
-    int n = 0;
-
-    return n;
-}

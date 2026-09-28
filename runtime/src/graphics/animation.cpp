@@ -574,10 +574,6 @@ void ParticleInstance::IncrementInstanceIndex() {
 int RtGraphicsAnimationRegister() {
     int count = 0;
 
-    // ENDGAME B.3.9 block GFX: AnimationEvent's factory pair, the class's own
-    // statics (B39_RULES D2), replacing its FACTREST row. The ??0 / ??1 doors
-    // are retired (above).
-
     RegisterRuntimeExport("??0AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Ctor); ++count;
     RegisterRuntimeAddr(0x1800fc430, (void*)&RtGraphics_AnimationManager_Ctor);
 

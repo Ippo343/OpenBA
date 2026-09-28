@@ -490,6 +490,5 @@ int RtVideoContextCtorRegister() {
                           (void*)&RtVideo_RenderBuffer_OperatorNew); ++n;
     RegisterRuntimeAddr(0x18001f2e0, (void*)&RtVideo_RenderBuffer_OperatorNew);
 
-    // Unexported, so address-only.
     return n;
 }

@@ -830,14 +830,3 @@ bool ParticleSystem::Serialize(void* streamv) {
 }
 
 }  // namespace Graphics
-
-int RtGraphicsBatch7AnimGroupParticleSystemRegister() {
-    int n = 0;
-    // AnimationGroup: the factory pair (B39_RULES D2), the class's own statics,
-    // by name AND address; the minted `?_typeInfo@AnimationGroup` record
-    // resolves them. The slot doors are retired (above).
-
-    // ParticleSystem: the factory pair (B39_RULES D2), the class's own statics,
-    // by name AND address. Its ctor / slot doors are retired (above).
-    return n;
-}
