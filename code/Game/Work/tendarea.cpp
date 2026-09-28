@@ -15,7 +15,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/TendArea.h"
-#include "Work/tendarea_funcs.h"
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
@@ -62,12 +61,6 @@
 // This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-
-// B3R: resolves nothing. Kept only because cropfieldcomponent_states.cpp (another
-// block's file) still calls it; delete it with that call.
-bool TendArea_ResolveFuncs() {
-    return true;
-}
 
 
 // ============================================================

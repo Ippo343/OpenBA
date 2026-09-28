@@ -259,8 +259,6 @@ extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
 // ⚠ the second int is genuinely an INT, not a float: retail loads it with
 // `MOV R9D,dword ptr [RBX+0x3c]` — the integer register, not XMM3. Checked
 // deliberately because a float arg declared int lands in the wrong register.
-bool ConsumeProduce_ResolveFuncs();
-
 extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
                                            const int* productIdx, int second);
 
@@ -317,7 +315,6 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
 extern "C" void ConsumeProduce_DumpRecipes(void* cpDesc, int selected);
 
 extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* out) {
-    ConsumeProduce_ResolveFuncs();
 
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(

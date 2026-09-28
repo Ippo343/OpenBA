@@ -17,7 +17,6 @@
 //
 
 #include "Work/ConsumeProduce.h"
-#include "Work/consumeproduce_funcs.h"
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
@@ -58,12 +57,6 @@
 // Object::Internal ctor/dtor (IAT 0x140152768 / 0x140152770) and Work::Serialize
 // (0x1400f7400) are the real base classes. 0x1400032e0 / 0x1400021d0 are
 // GameColl::AsArray<T> member calls (ENDGAME B.3.2 step 2).
-
-// B3R: resolves nothing. Kept only because resourceproduce_creatework.cpp (another
-// block's file) still calls it; delete it with that call.
-bool ConsumeProduce_ResolveFuncs() {
-    return true;
-}
 
 // ============================================================
 // Constructor (0x1400e9340)

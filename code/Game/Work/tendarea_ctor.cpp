@@ -22,7 +22,6 @@
 // caller's storage.
 
 #include "Work/TendArea.h"
-#include "tendarea_funcs.h"
 #include <new>
 #include "engine_funcs.h"
 #include "resolve.h"

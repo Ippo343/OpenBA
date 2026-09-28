@@ -82,11 +82,6 @@
 #include "Game/exe_constants.h"
 #include <cstring>
 
-// Work reimpl resolvers — see the note in CF_MakeAreaWork.
-bool PlantArea_ResolveFuncs();
-bool TendArea_ResolveFuncs();
-bool HarvestArea_ResolveFuncs();
-
 // Watched by the citizen idle claim walk (citizenai_housing_idle.cpp) so we can tell
 // "never reached" from "reached and rejected".
 extern "C" void* g_pCropPlantWork = nullptr;
@@ -173,16 +168,6 @@ void* FindInDescList(uintptr_t list, uint32_t tid) {
 enum class CF_AreaWork { PlantArea, HarvestArea, TendArea };
 void* CF_MakeAreaWork(uintptr_t comp, int size, CF_AreaWork kind,
                       bool perSlotArray, uint64_t descListField, bool hasDescField) {
-    // Each Work reimpl resolves its engine-function pointers in a *_ResolveFuncs() that
-    // ONLY the factory path calls. These works are constructed directly, exactly as
-    // retail does, so the resolver has to be called here or the work ships with null
-    // helper pointers and dies the first time the scheduler asks it anything — measured:
-    // PlantArea_GetTarget_Impl called a null pointer from inside the scheduler insert,
-    // three frames away from the construction that caused it. Same trap the
-    // ResourceProduce CreateWork family hit; cheap and idempotent, so call all three.
-    PlantArea_ResolveFuncs();
-    TendArea_ResolveFuncs();
-    HarvestArea_ResolveFuncs();
     if (!::System::MemoryAllocator::_singleton) return nullptr;
     void* mem = ::System::MemoryAllocator::MemAlloc(size, 8);
     if (!mem) return nullptr;

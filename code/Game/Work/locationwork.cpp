@@ -13,7 +13,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/LocationWork.h"
-#include "Work/locationwork_funcs.h"
 #include "engine_funcs.h"
 #include "Work/exe_bodies.h"
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
@@ -48,12 +47,6 @@
 // The Work BASE vtable is 0x140161a80, byte-verified in retail: LocationWork_Ctor
 // disassembles to `0x1400efc7d: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
 // (0x1401612e0, used earlier, is an INTERIOR address of FireWork's vtable.)
-
-// B3R: resolves nothing. Kept only because attendancecomponent_states.cpp (another
-// block's file) still calls it; delete it with that call.
-bool LocationWork_ResolveFuncs() {
-    return true;
-}
 
 
 // ============================================================
