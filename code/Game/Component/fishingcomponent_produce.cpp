@@ -21,28 +21,17 @@
 #include "Component/FishingComponent.h"
 #include "Component/RadiusDescription.h"    // ENDGAME B.3.9 C1: 0x1401c4870 cell class
 #include "Component/FishingDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7698 cell class
+#include "Component/exe_bodies.h"
 
 namespace {
 
-// 0x14009f990 FishingComponent_BrushTile(mgr, state, cx, cy, r, delta) — already
-// ported (happinesscomponent.cpp) and registered (reg_component_gap_B.cpp). Adds
-// `delta` to the byte at cell+0x1c+state over a disk of radius r, then to the
-// per-state total at mgr+0x90+state*2. The fishing dock uses state 8.
-typedef void (*fn_BrushTile_t)(int* mgr, int state, int cx, int cy, int r, short delta);
-typedef void (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);   // 0x140004680 -> MapComponent
-
-fn_BrushTile_t s_brush   = nullptr;
-fn_FindComp_t  s_findMap = nullptr;
-bool           s_resolved = false;
+// 0x14009f990 FishingComponent_BrushTile(mgr, state, cx, cy, r, delta) — ported
+// (happinesscomponent.cpp), called directly. Adds `delta` to the byte at
+// cell+0x1c+state over a disk of radius r, then to the per-state total at
+// mgr+0x90+state*2. The fishing dock uses state 8. The MapComponent finder
+// 0x140004680 is FloorComponent_FindResData.
 
 constexpr int kFishingCoverageState = 8;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_brush   = reinterpret_cast<fn_BrushTile_t>(ResolveAddr(Module::Exe, 0x14009f990));
-    s_findMap = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_resolved = true;
-}
 
 // Walk the owning entity's component list (entity+0x28) for the RadiusDescription and
 // return its radius (+0x28). Retail inlines this scan in both eed0 and the tick; it
@@ -51,7 +40,6 @@ void Resolve() {
 // an unguarded deref. We return -1 instead ONLY because the standalone can legitimately
 // build a dock whose description set is still partly inert; see the callers.
 int RadiusOf(uintptr_t comp) {
-    Resolve();
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
     if (!entity) return -1;
     const uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x28);
@@ -72,12 +60,10 @@ int RadiusOf(uintptr_t comp) {
 //   cx = (mc+0x2c >> 1) + mc+0x28 ,  cy = (mc+0x2e >> 1) + mc+0x2a
 // (+0x28/+0x2a are the footprint origin, +0x2c/+0x2e its extent, all int16.)
 bool TileCentre(uintptr_t comp, int* cx, int* cy) {
-    Resolve();
-    if (!s_findMap) return false;
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
     if (!entity) return false;
     uintptr_t mcIbp = 0;
-    s_findMap(entity, &mcIbp);
+    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &mcIbp);
     if (!mcIbp) return false;
     // mcIbp already IS the MapComponent: the finder writes the component into the
     // out-param and returns that out-param's address, so retail's `*self_00` and this
@@ -90,17 +76,16 @@ bool TileCentre(uintptr_t comp, int* cx, int* cy) {
 
 // retail 0x14011eed0 — FishingComponent_helper_eed0(self, delta)
 void StampCoverage(uintptr_t comp, short delta) {
-    Resolve();
     const int r = RadiusOf(comp);
     int cx = 0, cy = 0;
-    if (r < 0 || !TileCentre(comp, &cx, &cy) || !s_brush ||
+    if (r < 0 || !TileCentre(comp, &cx, &cy) ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
         return;
     }
     int* mgr = *reinterpret_cast<int**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
     if (!mgr) return;
-    s_brush(mgr, kFishingCoverageState, cx, cy, r, delta);
+    FishingComponent_BrushTile(mgr, kFishingCoverageState, cx, cy, r, delta);
 }
 
 }  // namespace
@@ -133,7 +118,6 @@ char FishingComponent::OnExitProducing() {
 // A dock with no water in range therefore rates 0 and produces nothing — which is the
 // retail behaviour players see when a dock is placed too far up the bank.
 char FishingComponent::ProduceTick(void* /*time*/) {
-    Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
 
     const int r = RadiusOf(comp);

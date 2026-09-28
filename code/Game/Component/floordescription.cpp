@@ -24,6 +24,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x140034660 / createInPlace 0x1400346d0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -36,13 +37,8 @@ FloorDescription::FloorDescription()
 // [5] 0x14011f680: stream order as retail.
 bool FloorDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    {
-        // +0x20 ExternalPtr through exe 0x14000b7b0 (resolved by address).
-        typedef void (*ExtPtrRefSerialize_t)(void* field, void* serializer);
-        ExtPtrRefSerialize_t extSer =
-            reinterpret_cast<ExtPtrRefSerialize_t>(ResolveAddr(Module::Exe, 0x14000b7b0));
-        if (extSer) extSer(&_ref20, &ser);
-    }
+    // +0x20 ExternalPtr through exe 0x14000b7b0 (Reimpl_ExternalPtr_Serialize_StringTable).
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     ser.Serialize(_b28, nullptr);
     return true;
 }

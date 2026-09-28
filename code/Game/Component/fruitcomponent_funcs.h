@@ -10,6 +10,3 @@
 // Vtable: 0x140159450
 // Size: 0x38 bytes
 // ============================================================
-
-// Init: resolve all internal function pointers (called once at startup)
-void FruitComponent_InitFuncs();
