@@ -55,6 +55,11 @@ PATTERNS = collections.OrderedDict([
     ('B3X helper-returned table indexed', re.compile(r'\b(?:VTable\w*|VtblOf|Vtbl|RwVTable|VtOf)\s*\([^;]*?\)\s*\[')),
     ('B3X slot helper names', re.compile(r'\b(?:VSlot|RwSlot|SourceSlot|ReadVtableSlot|CompanionSlot|ComSlot|Slot\d*|SlotFn\w*|RenderStateSlot\d*|SerializeBufferSlot|DeletingDtorOf|GetTypeIdVirtual|SerializeVirtual|CallGetTypeId|EncCall\w+|ComCall|DestroyReaderWriter|DeleteRw|SerScalar|RwScalar)\s*[<(]')),
     ('B3X cast vptr indexed', re.compile(r'\(\s*\*\s*(?:static_cast|reinterpret_cast)\s*<\s*(?:const\s+)?\w+\s*\*\s*(?:const\s*)?\*\s*(?:const\s*)?\*?\s*>\s*\([^)]*\)\s*\)\s*\[|\(\s*\*\s*reinterpret_cast\s*<\s*\w+\s*\*\s*>\s*\(\s*\*\s*reinterpret_cast\s*<\s*(?:const\s+)?void\s*\*\s*(?:const\s*)?\*\s*>\s*\(')),
+    # --- the four shapes b3x_session/W0_AUDIT.md section 6 found missing (B3R owed 6) ---
+    ('B3R static_cast byte offset on the vptr', re.compile(r'(?:static_cast|reinterpret_cast)\s*<\s*(?:const\s+)?(?:uint8_t|char)\s*\*\s*>\s*\(\s*\*\s*reinterpret_cast\s*<\s*(?:const\s+)?void\s*\*\s*(?:const\s*)?\*\s*>\s*\([^)]*\)\s*\)\s*\+')),
+    ('B3R POD field _vftable', re.compile(r'\b_vftable\b')),
+    ('B3R typed fn-pointer table indexed', re.compile(r'\(\s*\*\s*reinterpret_cast\s*<\s*[\w:]+\s*\*\s*(?:const\s*)?\*\s*>\s*\([^)]*\)\s*\)\s*\[')),
+    ('B3R typed slot-0 read, no index', re.compile(r'\*\s*reinterpret_cast\s*<\s*\w+\s*\*\s*>\s*\(\s*\*\s*reinterpret_cast\s*<\s*void\s*\*\*\s*>\s*\(\w+\)\s*\)')),
 ])
 
 counts = {k: collections.Counter() for k in PATTERNS}
