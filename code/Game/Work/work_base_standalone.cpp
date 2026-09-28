@@ -26,9 +26,8 @@ Work::Work()
       field_20(-1), field_24(0), field_28(-1), field_2c(0),
       field_30(nullptr), field_38(nullptr), field_40(0) {}
 
-// 0x1400f72e0 (Work_Ctor25): `??0Internal`, the compiler's stamp, then the one
-// body it shares with its by-address door (Work::InitFromEntity,
-// work_base_reimpl.cpp).
+// 0x1400f72e0 (Work_Ctor25): `??0Internal`, the compiler's stamp, then
+// Work::InitFromEntity (work_base_reimpl.cpp).
 Work::Work(void* pEntityIBP) : Object::Internal() {
     InitFromEntity(pEntityIBP);
 }

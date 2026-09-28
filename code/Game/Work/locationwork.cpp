@@ -470,6 +470,10 @@ LocationWork::LocationWork() : Work(), _field48(nullptr) {
     LocationWork_ResolveFuncs();
 }
 
+LocationWork::LocationWork(void* pEntityIBP) : Work(pEntityIBP), _field48(nullptr) {
+    LocationWork_ResolveFuncs();
+}
+
 // ============================================================
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================

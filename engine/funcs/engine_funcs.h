@@ -2522,11 +2522,6 @@ typedef void (*fn_StringHash_t)(void* str);
 // Tutorial Goal helpers (exe-internal)
 // ============================================================
 
-// Object::Internal::Internal(this) — base constructor for Internal objects
-// Resolved from dispatch slot 0x140152768. Returns this (void*).
-typedef void* (*fn_ObjectInternal_Ctor_t)(void* self);
-extern fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor;
-
 // FinishTutorialGoal_helper_01f0 (0x1401001f0) — tree insert for tutorial dialog setup
 // Inserts tutorial entry into the tree at gameWorld+0x120 (tutorial map).
 // Params: (treeRoot, tutorialExternalId, param3, screenHeight-0x1d0)

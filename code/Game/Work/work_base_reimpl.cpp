@@ -112,29 +112,11 @@ void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
 // the work target cell (+0x28) from its MapComponent footprint (via FUN_140004680) and
 // store its WorkComponent (+0x18, via FUN_140003050). Faithful 1:1 port.
 //
-// NOT registered before: works built via the factory use Work_GenericCtor, but direct
-// Ctor ports (e.g. GatherRawMaterials_Ctor_Impl) call 0x1400f72e0 — NULL in standalone —
-// leaving the Work base (incl. the +0x10 entity ptr) uninitialised, so Execute later
-// deref'd *(work+0x10)=null. Registering this fixes those direct-construction paths.
-//
-// ENDGAME B.3.8 (WRK): ONE body, two entry points (B8-1). `Work::InitFromEntity` is
-// the ctor MINUS its `??0Internal` call and vptr store; `Work::Work(void*)` runs it
-// after the compiler's stamps, and this by-address door (reached from the component
-// CreateWork bodies of other blocks, which then stamp the leaf table over it) runs it
-// after `??0Internal` and the 0x140161a80 stamp — the table Work::Vtable() serves.
-void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    // Was 0x1401612e0, which is not a vtable at all: it is the INTERIOR of FireWork's
-    // 13-slot vtable (starts 0x1401612a0, ends 0x140161308 where the "FishingWork" name
-    // string sits), i.e. FireWork vtable + 0x40 = slot 8. Ghidra reports ZERO xrefs to
-    // 0x1401612e0; every Work-hierarchy ctor/dtor LEAs 0x140161a80 instead
-    // (0x1400f730a LEA RAX,[0x140161a80] right here in retail's Work_Ctor25).
-    // Work is abstract (no ctor to run on a raw object): stamp the compiler table.
-    *reinterpret_cast<const void**>(self) = Work::Vtable();
-    reinterpret_cast<Work*>(self)->InitFromEntity(pEntityIBP);   // B.3.8 bridge (door onto a raw object)
-    return self;
-}
-
+// ENDGAME B.3.9 OBJ: `Work(void*)` (work_base_standalone.cpp) is the ONE entry point.
+// The by-address door `Work_Ctor25_Impl` (0x1400f72e0: the `??0Internal` door through
+// import slot 0x140152768, a stamp of Work's table, then this body) went with its last
+// callers, the attendance / destroy / fire CreateWork builders, which now construct the
+// real leaf (LocationWork / ClearStorage / FireWork) through `Work(void*)`.
 void Work::InitFromEntity(void* pEntityIBP) {
     field_10 = nullptr;
     field_10 = pEntityIBP ? *reinterpret_cast<void**>(pEntityIBP) : nullptr;

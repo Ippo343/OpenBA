@@ -85,8 +85,6 @@ void TradeComponent_OnCreate(TradeComponent* self) {
 typedef void (*fn_FindWorkPlace_t)(int64_t entity, void* outIBP);      // 0x140002e10
 // FUN_140003050 — find the component the work scheduler is posted through.
 typedef void (*fn_FindWorkSched_t)(int64_t entity, void* outIBP);      // 0x140003050
-// FUN_1400f72e0 — Work base ctor (Work_Ctor25), takes the owning entity IBP.
-typedef void (*fn_WorkCtor25_t)(void* work, void* entityIBP);          // 0x1400f72e0
 // FUN_14012ec60 — post a Work to the scheduler (stop existing slot, then install).
 typedef void (*fn_PostWork_t)(int64_t sched, uint32_t code, char flag, void* workIBP); // 0x14012ec60
 // FUN_14012eb50 — cancel whatever work is currently posted on that scheduler.
@@ -96,7 +94,6 @@ typedef void (*fn_SetAccepting_t)(int64_t workPlaceComp, char accepting); // 0x1
 
 static fn_FindWorkPlace_t  s_tc_FindWorkPlace = nullptr;
 static fn_FindWorkSched_t  s_tc_FindWorkSched = nullptr;
-static fn_WorkCtor25_t     s_tc_WorkCtor25 = nullptr;
 static fn_PostWork_t       s_tc_PostWork = nullptr;
 static fn_CancelWork_t     s_tc_CancelWork = nullptr;
 static fn_SetAccepting_t   s_tc_SetAccepting = nullptr;
@@ -106,7 +103,6 @@ static void EnsureTradeWorkHelpers() {
     if (s_tcWorkResolved) return;
     s_tc_FindWorkPlace = reinterpret_cast<fn_FindWorkPlace_t>(ResolveAddr(Module::Exe, 0x140002e10));
     s_tc_FindWorkSched = reinterpret_cast<fn_FindWorkSched_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_tc_WorkCtor25    = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_tc_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
     s_tc_CancelWork    = reinterpret_cast<fn_CancelWork_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     s_tc_SetAccepting  = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
@@ -115,9 +111,9 @@ static void EnsureTradeWorkHelpers() {
     // Report the OUTCOME of each dependency, not "resolve ran". A single null here
     // silently turns the toggle into a no-op that still repaints — believable and
     // wrong, the failure mode this subsystem keeps producing.
-    fprintf(stderr, "[TradeComp] work deps: findWP=%p findSched=%p workCtor=%p post=%p "
+    fprintf(stderr, "[TradeComp] work deps: findWP=%p findSched=%p post=%p "
             "cancel=%p setAccept=%p\n",
-            (void*)s_tc_FindWorkPlace, (void*)s_tc_FindWorkSched, (void*)s_tc_WorkCtor25,
+            (void*)s_tc_FindWorkPlace, (void*)s_tc_FindWorkSched,
             (void*)s_tc_PostWork, (void*)s_tc_CancelWork, (void*)s_tc_SetAccepting);
     fflush(stderr);
 }

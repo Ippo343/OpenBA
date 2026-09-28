@@ -29,6 +29,7 @@
 #include "Component/CitizenDescription.h"   // ENDGAME B.3.9 D5: CitizenDescription::TypeId()
 #include "Component/InteractDescription.h"  // ENDGAME B.3.9 D5: InteractDescription::TypeId()
 #include <cstdint>
+#include <cstring>
 #include <cstddef>
 #include <cstdio>
 #include <new>
@@ -650,6 +651,14 @@ int FireWork::GetPriority() {
 // the file's helper pointers (the old factory did the same).
 // ============================================================
 FireWork::FireWork() : Work(), _field48(nullptr), _field50(nullptr), _field58(0) {
+    FireWork_ResolveFuncs();
+}
+
+// 0x1400e9bd0: `MOV dword [RDI+0x48],EBX` -- a DWORD store into the qword
+// field, so its upper half keeps whatever the allocation held (retail's).
+FireWork::FireWork(void* pEntityIBP, uint32_t capacity)
+    : Work(pEntityIBP), _field50(nullptr), _field58(0) {
+    std::memcpy(&_field48, &capacity, sizeof capacity);
     FireWork_ResolveFuncs();
 }
 

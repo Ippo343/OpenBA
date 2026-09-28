@@ -101,7 +101,6 @@ namespace {
 // and binding by address keeps these ports immune to the naming question.
 typedef void*    (*fn_Find_t)(int64_t entity, void* outIBP);
 typedef char     (*fn_HasWorkSlot_t)(int64_t sched);
-typedef void*    (*fn_WorkCtor25_t)(void* work, void* entityIBP);
 typedef uint64_t (*fn_PostWork_t)(int64_t sched, int code, char flag, void* workIBP);
 typedef void*    (*fn_TimeCtor_t)(void* outTime, float seconds);
 typedef void*    (*fn_EntityCopyCtor_t)(void* mem, void* templateEntity);
@@ -112,7 +111,6 @@ typedef void     (*fn_ListErase_t)(void* listBase, void* valuePtr);
 fn_Find_t         s_FindWorkPlace = nullptr;   // 0x140002e10
 fn_Find_t         s_FindSched     = nullptr;   // 0x140003050
 fn_HasWorkSlot_t  s_HasWorkSlot   = nullptr;   // 0x14012ead0
-fn_WorkCtor25_t   s_WorkCtor25    = nullptr;   // 0x1400f72e0
 fn_PostWork_t     s_PostWork      = nullptr;   // 0x14012ec60
 fn_TimeCtor_t     s_TimeCtor      = nullptr;   // dispatch slot [0x140152b00]
 // Layer 2 (merchant spawn / teardown) leaves.
@@ -128,7 +126,6 @@ void Resolve() {
     s_FindWorkPlace = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140002e10));
     s_FindSched     = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003050));
     s_HasWorkSlot   = reinterpret_cast<fn_HasWorkSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
-    s_WorkCtor25    = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
     s_EntityCopyCtor   = reinterpret_cast<fn_EntityCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
     s_EntityListAdd    = reinterpret_cast<fn_EntityListAdd_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
@@ -140,10 +137,10 @@ void Resolve() {
     // Report the OUTCOME of every dependency. A single null here turns the whole
     // state machine into a machine that runs and does nothing — believable and wrong.
     std::fprintf(stderr,
-        "[TradeCtrl] deps: findWP=%p findSched=%p hasWork=%p workCtor=%p post=%p "
+        "[TradeCtrl] deps: findWP=%p findSched=%p hasWork=%p post=%p "
         "timeCtor=%p entityCopy=%p entityAdd=%p smTick=%p erase=%p\n",
         reinterpret_cast<void*>(s_FindWorkPlace), reinterpret_cast<void*>(s_FindSched),
-        reinterpret_cast<void*>(s_HasWorkSlot),   reinterpret_cast<void*>(s_WorkCtor25),
+        reinterpret_cast<void*>(s_HasWorkSlot),
         reinterpret_cast<void*>(s_PostWork),      reinterpret_cast<void*>(s_TimeCtor),
         reinterpret_cast<void*>(s_EntityCopyCtor), reinterpret_cast<void*>(s_EntityListAdd),
         reinterpret_cast<void*>(s_StateMachineTick), reinterpret_cast<void*>(s_ListErase));

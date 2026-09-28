@@ -39,6 +39,10 @@ class ClearStorage final : public Work {
 
 public:
     ClearStorage();                                                 // (Work_GenericCtor shape, see above)
+    // DestroyComponent's state-3 exit (retail builds it inline, 0x14011cfd0):
+    // the entity-seeded Work base ctor 0x1400f72e0, then +0x48..+0x60 zero as
+    // four qwords. ENDGAME B.3.9 OBJ: replaces the `??0Internal` door + stamp.
+    explicit ClearStorage(void* pEntityIBP);
 
     Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a100
     void  Persist(void* stream) override;                           // [3]  0x1400e7350

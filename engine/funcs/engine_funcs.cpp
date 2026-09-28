@@ -419,7 +419,6 @@ fn_FindWorkplaceComp_t fn_FindWorkplaceComp = nullptr;
 fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
 fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
 fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
-fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
 fn_TutorialTreeInsert_t fn_TutorialTreeInsert = nullptr;
 fn_TutorialStepExecute_t fn_TutorialStepExecute = nullptr;
 
@@ -1429,13 +1428,6 @@ bool EngineFuncsInit() {
     fn_FindUIElementByPath = reinterpret_cast<fn_FindUIElementByPath_t>(
         ResolveAddr(Module::Exe, 0x1400e1870));
 
-    // Object::Internal::Internal — dispatch slot 0x140152768
-    if (!fn_ObjectInternal_Ctor) {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152768));
-        if (slot && *slot)
-            fn_ObjectInternal_Ctor = reinterpret_cast<fn_ObjectInternal_Ctor_t>(*slot);
-    }
-
     // FinishTutorialGoal_helper_01f0 — tutorial tree insert (exe-internal)
     fn_TutorialTreeInsert = reinterpret_cast<fn_TutorialTreeInsert_t>(
         ResolveAddr(Module::Exe, 0x1401001f0));
@@ -1448,7 +1440,6 @@ bool EngineFuncsInit() {
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase K: Tutorial goal helpers resolved\n");
     printf("  FindUIElementByPath   = %p\n", (void*)fn_FindUIElementByPath);
-    printf("  ObjectInternal::Ctor  = %p\n", (void*)fn_ObjectInternal_Ctor);
     printf("  TutorialTreeInsert    = %p\n", (void*)fn_TutorialTreeInsert);
     printf("  TutorialStepExecute   = %p\n", (void*)fn_TutorialStepExecute);
 #endif
