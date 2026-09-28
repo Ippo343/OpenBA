@@ -84,6 +84,9 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Work/Work.h"      // B.3.x W0 G-B: Work::Validate / Execute by name
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
 extern "C" void* g_pBuildStructureWork;
@@ -96,31 +99,8 @@ extern "C" void* g_pCropPlantWork;
 
 namespace {
 
-// --- registered exe sub-callees ---
-typedef char     (*fn_canHouse_t)(void* citizen);                                       // 0x140115be0
-typedef void     (*fn_e320_t)(void* root, void* child);                                 // 0x14000e320 (free)
-typedef int      (*fn_f810_t)(int* mapGrid, uint32_t fromCell, uint32_t toCell, char addCache); // 0x14009f810
-typedef float    (*fn_sqrtf_t)(float v);                                                // 0x140132010
-typedef int64_t  (*fn_rot_t)(int64_t* rootSlot, int64_t node);                          // 0x14000e450 / 0x14000e580
+// --- registered exe sub-callees: called by name (Component/Action/Work exe_bodies.h) ---
 
-static fn_canHouse_t s_canHouse = nullptr;
-static fn_e320_t     s_e320     = nullptr;
-static fn_f810_t     s_f810     = nullptr;
-static fn_sqrtf_t    s_sqrtf    = nullptr;
-static fn_rot_t      s_rot_e450 = nullptr;
-static fn_rot_t      s_rot_e580 = nullptr;
-
-static bool s_init = false;
-static void EnsureInit() {
-    if (s_init) return;
-    s_canHouse = reinterpret_cast<fn_canHouse_t>(ResolveAddr(Module::Exe, 0x140115be0));
-    s_e320     = reinterpret_cast<fn_e320_t>(ResolveAddr(Module::Exe, 0x14000e320));
-    s_f810     = reinterpret_cast<fn_f810_t>(ResolveAddr(Module::Exe, 0x14009f810));
-    s_sqrtf    = reinterpret_cast<fn_sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_rot_e450 = reinterpret_cast<fn_rot_t>(ResolveAddr(Module::Exe, 0x14000e450));
-    s_rot_e580 = reinterpret_cast<fn_rot_t>(ResolveAddr(Module::Exe, 0x14000e580));
-    s_init = true;
-}
 
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 
@@ -138,7 +118,7 @@ static inline bool ValidNode(int64_t p) {
 }
 
 static inline void* NodeAlloc() {
-    return fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc(0x30, 8);
 }
 
 // Idle work-search counters, read by standalone/road_probe.cpp. The road wave needs to
@@ -196,10 +176,10 @@ void Helper_e360(int64_t* rootSlot, int64_t* param_2) {
             if (ValidNode(rc)) {
                 // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
                 if (*reinterpret_cast<short*>(rc + 0x28) < 1 && *reinterpret_cast<short*>(rc + 0x28) < 0) {
-                    if (s_rot_e580) s_rot_e580(rootSlot, rc);
+                    Pf_AvlRotateB_e580(rootSlot, rc);
                     n = *param_2;
                 }
-                if (ValidNode(n) && s_rot_e450) s_rot_e450(rootSlot, n);
+                if (ValidNode(n)) Pf_AvlRotateB_e450(rootSlot, n);
             }
         }
         n = *param_2;
@@ -208,10 +188,10 @@ void Helper_e360(int64_t* rootSlot, int64_t* param_2) {
             if (ValidNode(lc)) {
                 // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
                 if (*reinterpret_cast<short*>(lc + 0x28) > -1 && *reinterpret_cast<short*>(lc + 0x28) > 0) {
-                    if (s_rot_e450) s_rot_e450(rootSlot, lc);
+                    Pf_AvlRotateB_e450(rootSlot, lc);
                     n = *param_2;
                 }
-                if (ValidNode(n) && s_rot_e580) s_rot_e580(rootSlot, n);
+                if (ValidNode(n)) Pf_AvlRotateB_e580(rootSlot, n);
             }
         }
         *param_2 = parent;
@@ -381,13 +361,13 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
 
         if (doInsert) {
             uint32_t toCell = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(cur + 8) + 0x28);
-            int cost = s_f810 ? s_f810(mapGrid, fromCell, toCell, '\x01') : -1;
+            int cost = Pf_IsDstReachable_f810(mapGrid, fromCell, toCell, '\x01');
             if (cost < 0) {
                 // unreachable via path graph -> euclidean fallback on grid coords
                 int gw = *mapGrid;
                 int dr = static_cast<int>(fromCell) / gw - static_cast<int>(toCell) / gw;
                 int dc = static_cast<int>(fromCell) % gw - static_cast<int>(toCell) % gw;
-                float d = s_sqrtf ? s_sqrtf(static_cast<float>(dr * dr + dc * dc)) : 0.0f;
+                float d = WorkImpl_Sqrtf_132010(static_cast<float>(dr * dr + dc * dc));
                 cost = static_cast<int>(d) + gw;
             }
             int64_t payload = *reinterpret_cast<int64_t*>(cur + 8);   // local_38
@@ -564,7 +544,7 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
 
     int64_t ctorBuf[2] = {0, 0};  // local_res10 (IBP-Ctor scratch + 7b60 citizen holder)
     if (param_6 != '\0') {
-        if (fn_InternalBasePtr_Ctor) new (ctorBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (ctorBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         gate = ctorBuf[0];   // fresh empty IBP -> typically 0
     }
 
@@ -613,7 +593,7 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
         // TODO(2c-B follow-up): root-cause why some SA citizens have citizen+0x1f0 == 0.
         if ((local_res20 != 0 && *reinterpret_cast<char*>(local_res20 + 0x4c) != '\0') || (param_6 != '\0')) {
             int64_t freshIbp[2] = {0, 0};
-            if (fn_InternalBasePtr_Ctor) new (freshIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (freshIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint8_t hit = BuildAndWalk(freshIbp[0]);
             ret = (hit != 0) ? 1 : 0;
         }
@@ -623,11 +603,9 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
     // free the transient result tree
     int64_t r = resultPair[0];
     if (r != 0) {
-        if (s_e320) {
-            s_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x18));
-            s_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x20));
-        }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(r));
+        WorkBase_TreeNodeFree_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x18));
+        WorkBase_TreeNodeFree_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x20));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(r));
     }
     return ret;
 }
@@ -640,13 +618,12 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
 //   Returns CONCAT71(.., walkSucceeded).
 // ============================================================
 uint64_t Helper_7550(int64_t param_1, void** param_2) {
-    EnsureInit();
     // 0x78-byte candidate buffer, slots at +i*8, low byte = state code, init 0xFF (terminator).
     unsigned char buf[0x78];
     Helper_3f010(buf, 0xffffffff, 0x78);
     char allFlag = 0;        // cVar9 / R15B
 
-    char canHouse = s_canHouse ? s_canHouse(*reinterpret_cast<void**>(param_2)) : 0;
+    char canHouse = CitizenComp_CanFindHousing(*reinterpret_cast<int64_t*>(param_2));
 
     uint32_t n;  // candidate count -> Rand range
     if (canHouse != 0) {
@@ -800,7 +777,6 @@ static uint64_t HandlerEpilogue(int64_t param_1) {
 // 0x14010b340 — CitizenAI_State_FindHousing  (state id 2)
 // ============================================================
 extern "C" uint64_t CitizenAI_State_FindHousing(int64_t param_1) {
-    EnsureInit();
     int64_t citizenHolder = *reinterpret_cast<int64_t*>(param_1 + 0x38);  // local_res8[0]
     int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
     void* holder = reinterpret_cast<void*>(citizenHolder);
@@ -812,7 +788,6 @@ extern "C" uint64_t CitizenAI_State_FindHousing(int64_t param_1) {
 // 0x14010b2d0 — CitizenAI_State_Idle  (state id 9)
 // ============================================================
 extern "C" uint64_t CitizenAI_State_Idle(int64_t param_1) {
-    EnsureInit();
     int64_t citizenHolder = *reinterpret_cast<int64_t*>(param_1 + 0x38);  // local_res8[0]
     int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
     void* holder = reinterpret_cast<void*>(citizenHolder);

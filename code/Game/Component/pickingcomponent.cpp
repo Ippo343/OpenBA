@@ -24,16 +24,6 @@
 #include "Entity/ComponentEntity.h"   // ENDGAME B.3.9 CB: ComponentEntity::TypeId()
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// IsDerivedFrom
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-static bool s_initialized = false;
-
 
 
 // ============================================================
@@ -79,7 +69,6 @@ static void* PC_FindModelComponent(void* entity) {
 
 void PickingComponent_RegisterMesh(void* pc) {
     if (!pc) return;
-    PickingComponent_InitFuncs();
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     uint8_t* p = (uint8_t*)pc;
@@ -206,19 +195,6 @@ void PickingComponent_RegisterMeshForEntity(void* entity) {
     }
 }
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void PickingComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_initialized = true;
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — PickingComponent as a REAL class (PickingComponent.h).
 //
@@ -243,10 +219,6 @@ PickingComponent::PickingComponent() : pickingId(-1), _pad2C{}, field30(nullptr)
 // PickingComponent::Persist (vtable slot [3], 0x140128bb0)
 // ============================================================
 void PickingComponent::Persist(void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: Shutdown never resolved
-    // its own helpers (only DetachVSlot/RegisterMesh did), so on a load-from-save path
-    // where Shutdown fires first every s_fn_* below could still be null.
-    PickingComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
@@ -263,8 +235,9 @@ void PickingComponent::Persist(void* stream) {
     // field (+8) of Description's record, whose only retail reader is Description's
     // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
     void* ibpVal = *(void**)(selfAddr + 0x30);
-    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d) {
-        if (!s_fn_IsDerivedFrom_d(ibpVal, ComponentEntity::TypeId())) {
+    if (ibpVal != nullptr) {
+        // ?IsDerivedFrom@Base@Object@@ (import slot 0x140152a98)
+        if (!reinterpret_cast<const Object::Base*>(ibpVal)->IsDerivedFrom(ComponentEntity::TypeId())) {   // B.3.x bridge
             *(uintptr_t*)(selfAddr + 0x30) = 0;
         }
     }
@@ -294,7 +267,6 @@ void PickingComponent::OnAdded() { PickingComponent_RegisterMesh(this); }
 // If pickingId >= 0, calls Picking::Scene::RemoveMesh and resets to -1.
 
 void PickingComponent::OnRemove() {
-    PickingComponent_InitFuncs();   // the file's exe-slot/type-id statics (RemoveMesh is a member call)
     if ((int)pickingId >= 0) {
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* pickingScene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);

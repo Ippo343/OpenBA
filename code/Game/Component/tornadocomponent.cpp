@@ -48,10 +48,17 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "math/Math.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
+#include "Component/exe_bodies.h"      // the Component finders / leaves below
+#include "Component/firecomponent_funcs.h"   // the fire lane's three bodies
+#include "Action/exe_bodies.h"         // ActCNR_FindComponent_c460/_3f60, ActHunt_*
+#include "Work/exe_bodies.h"           // WorkBase_FindComponent_52c0
+#include "Player/exe_bodies.h"         // PlayerPath_FindComponent_5780
+#include "Dialog/dialog_exe_helpers.h" // Dialog_FindComponent_d6c0
 #include <new>
 #include <cstdint>
 #include <cstdio>
@@ -100,63 +107,28 @@ constexpr int kPathLast  = 0x80;
 constexpr int kPathNodes = kPathLast + 1;   // 129
 
 // ============================================================
-// Resolved helpers
+// Helpers, by retail address
 // ============================================================
-
-
 // Entity component finders. All take (entity, InternalBasePtr* out) and write the
 // component pointer (or null) into *out.
-typedef void* (*fn_Finder_t)(void* entity, void* outIbp);
-
-typedef void  (*fn_ParticleReverse_t)(void* particleComp, int index);          // 0x140053720
-typedef void  (*fn_AudioMoveEmitters_t)(void* audioComp, void* newPos);        // 0x140042960
-typedef float*(*fn_TerrainClamp_t)(void* map, float* out, const float* in, char flag, void* extra); // 0x14009f3e0
-typedef void  (*fn_MarkForRemoval_t)(void* entity);                            // 0x1400c2ea0
-typedef void  (*fn_EntityListDestroy_t)(void* entityList, void* ibp);          // 0x1400c49d0
-typedef void  (*fn_ClearPathQueue_t)(void* entity, void* outIbp);              // 0x140003f60
-typedef void  (*fn_GrowthKnockdown_t)(void* naturalResourceComp);              // 0x140126780
-typedef bool  (*fn_FireBurning_t)(void* fireComp);                             // 0x14011e690
-typedef bool  (*fn_FireIgnite_t)(void* fireComp, void* time);                  // 0x14011e7b0
-typedef void  (*fn_FireIgniteFinish_t)(void* fireComp);                        // 0x14011ea10
-typedef void  (*fn_CitizenLifeEvent_t)(void* citizenComp, int event, const char* p); // 0x140116dd0
-typedef void* (*fn_Map_RadiusQuery_t)(float* map, void** out, float* pos, float* radius,
-                                      int typeId, void* outArr);               // 0x140092990
-
-// Graphics leaf reached through the exe's own .rdata dispatch slot.
-
-struct Helpers {
-    fn_Finder_t               findParticle         = nullptr;  // 0x140005200
-    fn_Finder_t               findAudio            = nullptr;  // 0x140002280
-    fn_Finder_t               findNaturalResource  = nullptr;  // 0x1400052c0
-    fn_Finder_t               findGrowth           = nullptr;  // 0x14000c460
-    fn_Finder_t               findBuild            = nullptr;  // 0x14000d6c0
-    fn_Finder_t               findFire             = nullptr;  // 0x140005840
-    fn_Finder_t               findFireOwner        = nullptr;  // 0x140005780
-    fn_Finder_t               findCitizen          = nullptr;  // 0x140009790
-    fn_Finder_t               findAnimal           = nullptr;  // 0x140005500 AnimalComponent
-
-    fn_ParticleReverse_t      particleReverse      = nullptr;
-    fn_AudioMoveEmitters_t    audioMoveEmitters    = nullptr;
-    fn_TerrainClamp_t         terrainClamp         = nullptr;
-    fn_MarkForRemoval_t       markForRemoval       = nullptr;
-    fn_ClearPathQueue_t       clearPathQueue       = nullptr;
-    fn_GrowthKnockdown_t      growthKnockdown      = nullptr;
-    fn_FireBurning_t          fireBurning          = nullptr;
-    fn_FireIgnite_t           fireIgnite           = nullptr;
-    fn_FireIgniteFinish_t     fireIgniteFinish     = nullptr;
-    fn_CitizenLifeEvent_t     citizenLifeEvent     = nullptr;
-    fn_Map_RadiusQuery_t      radiusQuery          = nullptr;
-
-};
-
-Helpers g_h;
-bool g_helpersReady = false;
-
-template <typename T>
-T ResolveSlotPtr(uintptr_t slotAddr) {
-    uintptr_t slot = ResolveAddr(Module::Exe, slotAddr);
-    return slot ? *reinterpret_cast<T*>(slot) : nullptr;
-}
+//   0x140005200 NaturalResourceComponent_FindComponentByType (ParticleComponent)
+//   0x140002280 Entity_FindAudioComponent — NOT PORTED (PORT GAP, see Tick)
+//   0x1400052c0 WorkBase_FindComponent_52c0 (NaturalResourceComponent)
+//   0x14000c460 ActCNR_FindComponent_c460  (GrowthComponent)
+//   0x14000d6c0 Dialog_FindComponent_d6c0  (BuildComponent)
+//   0x140005840 Entity_FindComponent_Fire_5840
+//   0x140005780 PlayerPath_FindComponent_5780 (the fire owner)
+//   0x140009790 Entity_FindComponent_Citizen_9790
+//   0x140005500 ActHunt_FindComponent_5500 (AnimalComponent)
+//   0x140003f60 ActCNR_FindComponent_3f60  (the mesh, "clear path queue")
+// Leaves:
+//   0x140053720 Tornado_ParticleReverse_53720   0x140042960 Tornado_AudioMoveEmitters_42960
+//   0x14009f3e0 Reimpl_MapGetTerrainPos (terrain clamp)
+//   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0 (0x1400c49d0 EntityList::QueueDestroy is inlined)
+//   0x140126780 GrowthComponent_ResetGrowthState (knockdown)
+//   0x14011e690 / 0x14011e7b0 / 0x14011ea10 the fire lane's IsBeingDemolished /
+//               BeginBurning / StopBurning
+//   0x140116dd0 CitizenComponent_HandleLifeEvent   0x140092990 Map_RadiusQuery_92990
 
 // ---- tracing -------------------------------------------------------------
 // The lane is opt-in and the volume is a handful of lines per tornado (spawn,
@@ -193,81 +165,48 @@ void* TornadoDesc(void* self) {
     // GetTypeIdByName returns 0xFFFFFFFF before Object::Factory::Startup has run, so
     // only latch a real id — otherwise the sentinel gets cached forever.
     const uint32_t typeId = TornadoDescription::TypeId();
-    if (!fn_IsDerivedFrom || typeId == 0 || typeId == 0xFFFFFFFFu) return obj;
-    return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
+    if (typeId == 0 || typeId == 0xFFFFFFFFu) return obj;
+    return Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;
 }
 
 
 }  // namespace
 
 // ============================================================
-// Init: resolve function pointers
+// The arm-viability report
 // ============================================================
-void TornadoComponent_InitFuncs() {
-    if (g_helpersReady) return;
-    g_helpersReady = true;
-
-    g_h.findParticle        = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005200));
-    g_h.findAudio           = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140002280));
-    g_h.findNaturalResource = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x1400052c0));
-    g_h.findGrowth          = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x14000c460));
-    g_h.findBuild           = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x14000d6c0));
-    g_h.findFire            = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005840));
-    g_h.findFireOwner       = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005780));
-    g_h.findCitizen         = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140009790));
-    g_h.findAnimal           = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005500));
-
-    g_h.particleReverse   = reinterpret_cast<fn_ParticleReverse_t>(ResolveAddr(Module::Exe, 0x140053720));
-    g_h.audioMoveEmitters = reinterpret_cast<fn_AudioMoveEmitters_t>(ResolveAddr(Module::Exe, 0x140042960));
-    g_h.terrainClamp      = reinterpret_cast<fn_TerrainClamp_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    g_h.markForRemoval    = reinterpret_cast<fn_MarkForRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    g_h.clearPathQueue    = reinterpret_cast<fn_ClearPathQueue_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    g_h.growthKnockdown   = reinterpret_cast<fn_GrowthKnockdown_t>(ResolveAddr(Module::Exe, 0x140126780));
-    g_h.citizenLifeEvent  = reinterpret_cast<fn_CitizenLifeEvent_t>(ResolveAddr(Module::Exe, 0x140116dd0));
-    g_h.radiusQuery       = reinterpret_cast<fn_Map_RadiusQuery_t>(ResolveAddr(Module::Exe, 0x140092990));
-
-    // The FIRE lane owns these three (0x14011e690 / 0x14011e7b0 / 0x14011ea10).
-    // They are resolved, never ported here — see the note on Tornado_StrikeEntity.
-    g_h.fireBurning     = reinterpret_cast<fn_FireBurning_t>(ResolveAddr(Module::Exe, 0x14011e690));
-    g_h.fireIgnite      = reinterpret_cast<fn_FireIgnite_t>(ResolveAddr(Module::Exe, 0x14011e7b0));
-    g_h.fireIgniteFinish= reinterpret_cast<fn_FireIgniteFinish_t>(ResolveAddr(Module::Exe, 0x14011ea10));
-
-    // ── Arm-viability report ────────────────────────────────────────────────
-    // Each damage arm needs EVERY leaf on its own path; a single null one makes the
-    // arm silently unreachable and its counter reads 0 exactly like "the funnel never
-    // crossed one". That is what hid an unregistered FindComponent<FireComponent>
-    // (0x140005840) for a whole wave: the building arm could not fire, and
-    // `building=0 building-NOFIRE=0` on 40,000 damage ticks looked like bad luck.
-    // Print each arm's verdict ONCE, unconditionally — not behind the trace env,
-    // because the case that matters is the one nobody is looking at.
+// Each damage arm needs EVERY leaf on its own path; a missing one makes the arm
+// silently unreachable and its counter reads 0 exactly like "the funnel never crossed
+// one". Printed ONCE, unconditionally, on the first call into the class. Every leaf is
+// a direct call now, so the verdicts are fixed; the audio arm stays DEAD until
+// Entity_FindAudioComponent (0x140002280) is ported.
+static void Tornado_ReportArmsOnce() {
+    static bool s_reported = false;
+    if (s_reported) return;
+    s_reported = true;
     {
         auto arm = [](const char* name, bool ok, const char* missing) {
             std::fprintf(stderr, "[Tornado] arm %-9s %s%s%s\n", name,
                          ok ? "LIVE" : "DEAD", ok ? "" : " — unresolved: ",
                          ok ? "" : missing);
         };
-        arm("tree",     g_h.findNaturalResource && g_h.findGrowth && g_h.growthKnockdown,
-            "findNaturalResource/findGrowth/growthKnockdown");
-        arm("building", g_h.findBuild && g_h.findFire && g_h.findFireOwner &&
-                        g_h.fireIgnite && g_h.fireIgniteFinish,
+        arm("tree",     true, "findNaturalResource/findGrowth/growthKnockdown");
+        arm("building", true,
             "findBuild(d6c0)/findFire(5840)/findFireOwner(5780)/ignite(e7b0)/finish(ea10)");
-        arm("animal",   g_h.findAnimal && g_h.markForRemoval,
-            "findAnimal(5500)/markForRemoval");
-        arm("citizen",  g_h.findCitizen && g_h.citizenLifeEvent,
-            "findCitizen(9790)/citizenLifeEvent(116dd0)");
-        arm("audio",    g_h.findAudio && g_h.audioMoveEmitters,
-            "findAudio(2280)/audioMoveEmitters");
-        arm("path",     g_h.terrainClamp != nullptr,
-            "terrainClamp(9f3e0) - endpoints are NOT terrain-clamped");
+        arm("animal",   true, "findAnimal(5500)/markForRemoval");
+        arm("citizen",  true, "findCitizen(9790)/citizenLifeEvent(116dd0)");
+        arm("audio",    false, "findAudio(2280)/audioMoveEmitters");
+        arm("path",     true, "terrainClamp(9f3e0) - endpoints are NOT terrain-clamped");
         std::fflush(stderr);
     }
 
-
     TORNADO_TRACE("init: fire lane %s (e690=%p e7b0=%p ea10=%p) — the building arm is "
                   "%s until the fire lane lands\n",
-                  (g_h.fireIgnite && g_h.fireIgniteFinish) ? "RESOLVED" : "NULL",
-                  (void*)g_h.fireBurning, (void*)g_h.fireIgnite, (void*)g_h.fireIgniteFinish,
-                  (g_h.fireIgnite && g_h.fireIgniteFinish) ? "live" : "INERT");
+                  "RESOLVED",
+                  (void*)&FireComponent_IsBeingDemolished_11e690,
+                  (void*)&FireComponent_BeginBurning_11e7b0,
+                  (void*)&FireComponent_StopBurning_11ea10,
+                  "live");
 }
 
 // 0x140058b80 door: registered by address (standalone/reg_tornado.cpp).
@@ -380,31 +319,35 @@ extern "C" bool Tornado_PathAdvance_a71e0(uint8_t* block, const float* pos,
 // outright junk (`cellIndex * 6`). It is kept in the signature, and the junk is
 // still passed, so the port matches the binary rather than tidying it.
 //
-// The building arm ignites via the FIRE lane's 0x14011e7b0 / 0x14011ea10. Those are
-// NOT ported here (a peer owns them); when they resolve null the arm is inert and
-// says so, instead of silently doing nothing.
+// The building arm ignites via the FIRE lane's 0x14011e7b0 / 0x14011ea10 (ported in
+// firecomponent_smstate.cpp, called by name). The "NOKNOCK" / "NOFIRE" counters counted
+// the unresolved-leaf arms, which cannot happen now that the leaves are direct calls;
+// they stay in the trace line and read 0.
 static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
                                  int* hitTree, int* hitTreeNoKnock,
                                  int* hitBuilding, int* hitBuildingNoFire,
                                  int* hitAnimal, int* hitCitizen) {
     (void)unusedFirstArg;
+    (void)hitTreeNoKnock;
+    (void)hitBuildingNoFire;
 
     void* entity = *reinterpret_cast<void**>(entityIbp);
 
     int64_t fireComp = 0, buildComp = 0, growthComp = 0, natResComp = 0;
     int64_t citizenComp = 0, animalComp = 0;
 
-    if (g_h.findFire)            { g_h.findFire(entity, &fireComp); }
-    if (g_h.findBuild)           { g_h.findBuild(entity, &buildComp); }
-    if (g_h.findGrowth)          { g_h.findGrowth(entity, &growthComp); }
-    if (g_h.findNaturalResource) { g_h.findNaturalResource(entity, &natResComp); }
-    if (g_h.findCitizen)         { g_h.findCitizen(entity, &citizenComp); }
-    if (g_h.findAnimal)           { g_h.findAnimal(entity, &animalComp); }
+    const uintptr_t e = reinterpret_cast<uintptr_t>(entity);
+    Entity_FindComponent_Fire_5840(e, &fireComp);
+    Dialog_FindComponent_d6c0(entity, &buildComp);
+    ActCNR_FindComponent_c460(e, &growthComp);
+    WorkBase_FindComponent_52c0(e, &natResComp);
+    Entity_FindComponent_Citizen_9790(e, &citizenComp);
+    ActHunt_FindComponent_5500(e, &animalComp);
 
     // The first few buildings the funnel touches, and which way the arm went.
     // Unconditional and one-shot: if this never appears, no tornado has swept a
     // building's cell and the arm is merely untested — a fact `building=0` cannot
-    // convey on its own. See the arm-viability report in TornadoComponent_InitFuncs.
+    // convey on its own. See the arm-viability report, Tornado_ReportArmsOnce.
     if (buildComp) {
         if (s_tornadoStruckTraced.fetch_add(1, std::memory_order_relaxed) < 4) {
             std::fprintf(stderr, "[Tornado] STRUCK a building: entity=%p build=%llx fire=%llx"
@@ -419,7 +362,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     if (natResComp != 0 && growthComp != 0) {
         // --- tree / crop: stop it walking its growth queue and knock it down ---
         int64_t meshIbp = 0;
-        if (g_h.clearPathQueue) { g_h.clearPathQueue(entity, &meshIbp); }
+        ActCNR_FindComponent_3f60(e, &meshIbp);
         const bool animating =
             meshIbp
                 ? reinterpret_cast<const Graphics::MeshInstance*>(
@@ -429,13 +372,8 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
             *reinterpret_cast<int32_t*>(static_cast<uintptr_t>(natResComp) + 0x28) = 0;
             // 0x140126780 is what actually FELLS the tree: it sets flag bit 0x200000,
             // notifies, and starts fall animation mode 2. Zeroing +0x28 alone only empties
-            // the resource. Count the two outcomes apart -- a hitTree that also counted an
-            // unresolved knockdown would report a felled forest that is still standing.
-            if (!g_h.growthKnockdown) {
-                if (hitTreeNoKnock) ++*hitTreeNoKnock;
-                return;
-            }
-            g_h.growthKnockdown(reinterpret_cast<void*>(static_cast<uintptr_t>(natResComp)));
+            // the resource.
+            GrowthComponent_ResetGrowthState(reinterpret_cast<void*>(static_cast<uintptr_t>(natResComp)));
             if (hitTree) ++*hitTree;
         }
         return;
@@ -444,22 +382,18 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     if (buildComp != 0 && fireComp != 0) {
         // --- building: set it alight (the tornado does NOT demolish) ---
         int64_t fireOwner = 0;
-        if (g_h.findFireOwner) { g_h.findFireOwner(entity, &fireOwner); }
+        PlayerPath_FindComponent_5780(e, &fireOwner);
         const bool alreadyBurning =
-            (g_h.fireBurning && fireOwner)
-                ? g_h.fireBurning(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)))
+            fireOwner
+                ? FireComponent_IsBeingDemolished_11e690(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)))
                 : false;
         if (!alreadyBurning) {
-            if (!g_h.fireIgnite || !g_h.fireIgniteFinish) {
-                if (hitBuildingNoFire) ++*hitBuildingNoFire;
-                return;
-            }
             int64_t zero = 0;
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&zero, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zero), 0.0f);
             const bool lit =
-                g_h.fireIgnite(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)), &zero);
+                FireComponent_BeginBurning_11e7b0(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)), &zero);
             if (lit) {
-                g_h.fireIgniteFinish(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)));
+                FireComponent_StopBurning_11ea10(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)));
                 if (hitBuilding) ++*hitBuilding;
             }
         }
@@ -487,8 +421,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
         if (entityMgr && ibp != 0) {
             const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(ibp) + 0x40);
             if (((f >> 10) & 1) == 0) {
-                if (g_h.markForRemoval)
-                    g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(ibp)));
+                ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(static_cast<uintptr_t>(ibp)));
                 uintptr_t mgr = reinterpret_cast<uintptr_t>(entityMgr);
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(mgr + 0xd0))
@@ -501,9 +434,8 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
 
     if (citizenComp != 0) {
         // --- citizen: life event 5 (killed) ---
-        if (g_h.citizenLifeEvent)
-            g_h.citizenLifeEvent(reinterpret_cast<void*>(static_cast<uintptr_t>(citizenComp)),
-                                 5, nullptr);
+        CitizenComponent_HandleLifeEvent(reinterpret_cast<void*>(static_cast<uintptr_t>(citizenComp)),
+                                         5, nullptr);
         if (hitCitizen) ++*hitCitizen;
     }
 }
@@ -569,9 +501,7 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
             *reinterpret_cast<int64_t*>(cells + 8 + static_cast<uintptr_t>(iy * N + ix) * 0x30);
         if (cellEntity != 0) {
             int64_t probe = 0;
-            if (g_h.findNaturalResource)
-                g_h.findNaturalResource(reinterpret_cast<void*>(static_cast<uintptr_t>(cellEntity)),
-                                        &probe);
+            WorkBase_FindComponent_52c0(static_cast<uintptr_t>(cellEntity), &probe);
             if (probe != 0) {
                 int64_t ibp = cellEntity;
                 Tornado_StrikeEntityCounted(cellEntity, &ibp, &hitTree, &hitTreeNoKnock,
@@ -601,12 +531,11 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
         // that gate off gw+0x88 is legitimately null here, so skip the query rather
         // than fault. Every other deref in this function stays unguarded.
         void* quadtree = *reinterpret_cast<void**>(g + 0x88);
-        if (g_h.radiusQuery && quadtree)
-            g_h.radiusQuery(reinterpret_cast<float*>(quadtree), &scratch, pos, &radius, 0, &found);
+        if (quadtree)
+            Map_RadiusQuery_92990(reinterpret_cast<float*>(quadtree), &scratch, pos, &radius, 0, &found);
         else
-            queryState = quadtree ? "SKIPPED(no radiusQuery fn)"
-                                  : "SKIPPED(GameWorld+0x88 quadtree is null - "
-                                    "CharManager_Seed gated off by MoveTickEnabled)";
+            queryState = "SKIPPED(GameWorld+0x88 quadtree is null - "
+                         "CharManager_Seed gated off by MoveTickEnabled)";
 
         for (int i = 0; i < found.count; i++) {
             void* slot = reinterpret_cast<void*>(found.data + static_cast<uintptr_t>(i) * 8);
@@ -642,7 +571,7 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
         }
     }
 
-    if (found.data && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(found.data));
+    if (found.data) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(found.data));
 
     TORNADO_TRACE("damage at (%.1f,%.1f) radius=%d scatter=%d: tree=%d tree-NOKNOCK=%d "
                   "building=%d building-NOFIRE=%d animal=%d citizen=%d "
@@ -689,8 +618,8 @@ extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
     void* obj = *reinterpret_cast<void**>(p + 0x18);
     const uint32_t typeId = ParticleDescription::TypeId();
     void* desc = obj;
-    if (fn_IsDerivedFrom && typeId != 0 && typeId != 0xFFFFFFFFu)
-        desc = fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
+    if (typeId != 0 && typeId != 0xFFFFFFFFu)
+        desc = Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;
 
     uintptr_t geoArray = *reinterpret_cast<uintptr_t*>(p + 0x38);
     uintptr_t entries  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
@@ -754,7 +683,7 @@ TornadoComponent::TornadoComponent()
 // Stream order: Vector3 waypoint(+0x30), int pathIndex(+0x50), int pathCount(+0x48),
 // [on load: resize the Vector3 array], each waypoint, Time(+0x28), Vector3 pos(+0x58).
 void TornadoComponent::Persist(void* stream) {
-    TornadoComponent_InitFuncs();
+    Tornado_ReportArmsOnce();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
@@ -790,7 +719,7 @@ void TornadoComponent::Persist(void* stream) {
 // TornadoComponent::Startup — vtable slot 4 (+0x20), 0x1400585a0
 // ============================================================
 void TornadoComponent::Startup() {
-    TornadoComponent_InitFuncs();
+    Tornado_ReportArmsOnce();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     void* desc = TornadoDesc(this);
     uintptr_t d = reinterpret_cast<uintptr_t>(desc);
@@ -827,8 +756,8 @@ void TornadoComponent::Startup() {
                         static_cast<float>(lin / n) - half,
                         0.0f };
         float clamped[3] = { in[0], in[1], 0.0f };
-        if (g_h.terrainClamp) {
-            float* r = g_h.terrainClamp(map, clamped, in, 0, nullptr);
+        {
+            float* r = Reimpl_MapGetTerrainPos(map, clamped, in, 0, nullptr);   // 0x14009f3e0
             if (r) { clamped[0] = r[0]; clamped[1] = r[1]; clamped[2] = r[2]; }
         }
         out[0] = clamped[0]; out[1] = clamped[1]; out[2] = clamped[2];
@@ -867,7 +796,7 @@ void TornadoComponent::Startup() {
     // --- post the warning to the event log, and pause if the setting says so ---
     void* eventLog = *reinterpret_cast<void**>(g + 0x138);
     int64_t nullIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
 
     if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
@@ -894,9 +823,9 @@ void TornadoComponent::Startup() {
     }
 
     int64_t particleIbp = 0;
-    if (g_h.findParticle) {
+    {
         void* owner = *reinterpret_cast<void**>(s + 0x10);
-        g_h.findParticle(owner, &particleIbp);
+        NaturalResourceComponent_FindComponentByType(owner, &particleIbp);   // 0x140005200
     }
 
     TORNADO_TRACE("spawn: start=(%.1f,%.1f) end=(%.1f,%.1f) waypoints=%d "
@@ -917,7 +846,7 @@ void TornadoComponent::Startup() {
 // along the path, integrate the position, damage, then push the new transform and
 // audio position out.
 void TornadoComponent::Tick(void* time) {
-    TornadoComponent_InitFuncs();
+    Tornado_ReportArmsOnce();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     const int64_t* dt = reinterpret_cast<const int64_t*>(time);
     void* desc = TornadoDesc(this);
@@ -928,7 +857,7 @@ void TornadoComponent::Tick(void* time) {
 
     void* owner = *reinterpret_cast<void**>(s + 0x10);
     int64_t particleIbp = 0;
-    if (g_h.findParticle) g_h.findParticle(owner, &particleIbp);
+    NaturalResourceComponent_FindComponentByType(owner, &particleIbp);   // 0x140005200
     int* map = *reinterpret_cast<int**>(g + 0xf8);
 
     // FAITHFUL: retail dereferences the ParticleComponent unguarded — Tornado.rsc
@@ -946,8 +875,7 @@ void TornadoComponent::Tick(void* time) {
         if (entity != 0) {
             const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(entity) + 0x40);
             if (((f >> 10) & 1) == 0) {
-                if (g_h.markForRemoval)
-                    g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
+                ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityMgr + 0xd0))
                     .SetSizeFill(*reinterpret_cast<int*>(entityMgr + 0xd8) + 1, &entity);
@@ -976,7 +904,7 @@ void TornadoComponent::Tick(void* time) {
 
     if (!stillOnPath) {
         // Path exhausted: reverse the particle's playback so the funnel winds down.
-        if (g_h.particleReverse) g_h.particleReverse(reinterpret_cast<void*>(pc), 0);
+        Tornado_ParticleReverse_53720(reinterpret_cast<void*>(pc), 0);
         TORNADO_TRACE("path exhausted at waypoint %d of %d — funnel winding down\n",
                       idxAfter, *reinterpret_cast<int*>(s + 0x48));
     } else {
@@ -997,9 +925,9 @@ void TornadoComponent::Tick(void* time) {
     *reinterpret_cast<float*>(s + 0x5c) += unit.y * step;
     *reinterpret_cast<float*>(s + 0x60) += unit.z * step;
 
-    if (g_h.terrainClamp) {
+    {
         float out[3] = { 0.0f, 0.0f, 0.0f };
-        float* r = g_h.terrainClamp(map, out, reinterpret_cast<float*>(s + 0x58), 1, nullptr);
+        float* r = Reimpl_MapGetTerrainPos(map, out, reinterpret_cast<float*>(s + 0x58), 1, nullptr);   // 0x14009f3e0
         if (r) {
             *reinterpret_cast<float*>(s + 0x58) = r[0];
             *reinterpret_cast<float*>(s + 0x5c) = r[1];
@@ -1021,17 +949,19 @@ void TornadoComponent::Tick(void* time) {
 
     // --- move the audio emitters and refresh the volume ---
     {
+        // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it
+        // here, twice (FindAudioComponent(owner, &audioIbp) before each step below). The
+        // finder is unregistered, so both IBPs stay null and both audio steps are skipped,
+        // as they are today.
         int64_t audioIbp = 0;
-        if (g_h.findAudio) g_h.findAudio(owner, &audioIbp);
-        if (audioIbp && g_h.audioMoveEmitters)
-            g_h.audioMoveEmitters(reinterpret_cast<void*>(static_cast<uintptr_t>(audioIbp)),
-                                  reinterpret_cast<void*>(s + 0x58));
+        if (audioIbp)
+            Tornado_AudioMoveEmitters_42960(reinterpret_cast<void*>(static_cast<uintptr_t>(audioIbp)),
+                                            reinterpret_cast<void*>(s + 0x58));
 
         const float volume =
             *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 0x7c);
 
-        int64_t audioIbp2 = 0;
-        if (g_h.findAudio) g_h.findAudio(owner, &audioIbp2);
+        int64_t audioIbp2 = 0;   // PORT GAP 0x140002280 (see above)
         if (audioIbp2) {
             uintptr_t a = static_cast<uintptr_t>(audioIbp2);
             uint32_t* emitter = *reinterpret_cast<uint32_t**>(a + 0x38);

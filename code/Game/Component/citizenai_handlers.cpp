@@ -36,53 +36,16 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
-// --- registered exe sub-callees (called via ResolveAddr) ---
-typedef void  (*fn_taskCleanup_t)(int64_t* stackAt48);                       // 0x1400c5400
-typedef void  (*fn_actPush_t)(int64_t* stackAt48, void* srcIBP);            // 0x1400c54e0
-typedef void* (*fn_sendMsgCopyCtor_t)(void* mem, uint64_t* entityIBP,
-                                      uint32_t* msgId, uint32_t a4,
-                                      uint64_t* destIBP, uint32_t a6);       // 0x1400cb1d0
-typedef void* (*fn_findFamily_t)(uintptr_t entity, void* retIBP);           // 0x1400012d0
-typedef void* (*fn_moveToCtor_t)(void* self, void* familyIBP, uint32_t pathType,
-                                 int a4, float* dest, int a6, int a7, float speed); // 0x1400c9170
-typedef int   (*fn_findCell_t)(int* grid, int from, int to, uint32_t mask); // 0x14009ccf0
-typedef float* (*fn_terrainPos_t)(void* game, float* out3, float* inXY2,
-                                  char flag, void* outTri);                 // 0x14009f3e0
-
-static fn_taskCleanup_t     s_fn_taskCleanup    = nullptr;
-static fn_actPush_t         s_fn_actPush        = nullptr;
-static fn_sendMsgCopyCtor_t s_fn_sendMsgCopy    = nullptr;
-static fn_findFamily_t      s_fn_findFamily     = nullptr;
-static fn_moveToCtor_t      s_fn_moveToCtor     = nullptr;
-static fn_findCell_t        s_fn_findCell       = nullptr;
-static fn_terrainPos_t      s_fn_terrainPos     = nullptr;
-
-
-// --- float / dword constants (exe .rdata) ---
-static const float*    s_pf_172114    = nullptr;   // 0.5  (cell-centre bias)
-static const float*    s_pf_172180    = nullptr;   // 3.0  (anim-time base)
-static const float*    s_pf_1721a0    = nullptr;   // 7.0  (anim-time scale)
-static const float*    s_pf_172280    = nullptr;   // -1.0 (MoveTo speed sentinel)
-
-static bool s_init = false;
-static void EnsureInit() {
-    if (s_init) return;
-    s_fn_taskCleanup = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_actPush     = reinterpret_cast<fn_actPush_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_fn_sendMsgCopy = reinterpret_cast<fn_sendMsgCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400cb1d0));
-    s_fn_findFamily  = reinterpret_cast<fn_findFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
-    s_fn_moveToCtor  = reinterpret_cast<fn_moveToCtor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
-    s_fn_findCell    = reinterpret_cast<fn_findCell_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
-    s_fn_terrainPos  = reinterpret_cast<fn_terrainPos_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_pf_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_pf_172180 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172180));
-    s_pf_1721a0 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721a0));
-    s_pf_172280 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
-    s_init = true;
-}
+// --- registered exe sub-callees: called by name (Action/Work/Game exe_bodies.h); the
+//     .rdata constants are exe_constants.h ---
 
 } // namespace
 
@@ -106,43 +69,38 @@ static void EnsureInit() {
 // chain: citizen = *param_1 ; character = *(citizen+0x278) ; stack = character+0x48.
 // ============================================================
 void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTime) {
-    EnsureInit();
     int64_t citizen = *reinterpret_cast<int64_t*>(param_1);
     int64_t character = *reinterpret_cast<int64_t*>(citizen + 0x278);
     int64_t* stack = reinterpret_cast<int64_t*>(character + 0x48);
 
-    if (s_fn_taskCleanup) s_fn_taskCleanup(stack);
+    WorkBase_TaskListCleanup_c5400(stack);
 
     // (2) SendComponentMessage action -> CharacterComponent+0x58
     void* msgAction = nullptr;
-    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x40, 8);
     if (mem) {
         int64_t destIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-        msgAction = s_fn_sendMsgCopy
-                    ? s_fn_sendMsgCopy(mem, &entityIBP, msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0)
-                    : mem;
+        msgAction = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0);
     }
     int64_t msgIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&msgIBP) ::Object::InternalBasePtr(
+    new (&msgIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(msgAction));   // B.3.3 bridge
     if (*reinterpret_cast<int64_t*>(character + 0x58) != 0) {
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(character + 0x58))->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(character + 0x58))->DeletePtr(
             );   // B.3.3 bridge
     }
     *reinterpret_cast<int64_t*>(character + 0x58) = msgIBP;
 
     // (3) PlayAnimation action (only when animTime > 0)
     if (0.0f < animTime) {
-        void* pmem = (fn_MemAlloc && g_pMemAllocSingleton)
-                     ? fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8) : nullptr;
+        void* pmem = System::MemoryAllocator::MemAlloc(0x40, 8);
         void* animAction = nullptr;
         if (pmem) {
             int64_t timeStore = 0;
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStore, animTime);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStore), animTime);
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
             // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
             // two stamps); then retail's inlined leaf stores.
@@ -154,36 +112,33 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
             animAction = pmem;
         }
         int64_t animIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&animIBP) ::Object::InternalBasePtr(
+        new (&animIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(animAction));   // B.3.3 bridge
-        if (s_fn_actPush) s_fn_actPush(stack, &animIBP);
+        Pf_ActStackPush_54e0(stack, &animIBP);
     }
 
     // (4) MoveTo action (always)
     void* moveAction = nullptr;
-    void* mmem = (fn_MemAlloc && g_pMemAllocSingleton)
-                 ? fn_MemAlloc(g_pMemAllocSingleton, 0x480, 8) : nullptr;
+    void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
         int64_t entityVal = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
         int64_t familyOut = 0;
-        if (s_fn_findFamily) s_fn_findFamily(static_cast<uintptr_t>(entityVal), &familyOut);
+        ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entityVal), &familyOut);
         if (familyOut == 0) {
             // Standalone: the CharacterComponent type-id global (DAT_1401c7078) read by
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The
             // "family" component IS the citizen's own CharacterComponent (citizen+0x278),
             // populated by Brick 2/4a — use it directly (Brick self-contained pattern).
-            if (fn_InternalBasePtr_Ctor) new (&familyOut) ::Object::InternalBasePtr(
+            new (&familyOut) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(character));   // B.3.3 bridge
         }
-        float speed = s_pf_172280 ? *s_pf_172280 : -1.0f;
-        moveAction = s_fn_moveToCtor
-                     ? s_fn_moveToCtor(mmem, &familyOut, 1 /*Slow*/, 0, dest, 0xe1f, 0, speed)
-                     : mmem;
+        float speed = kRdata_140172280;
+        moveAction = Pf_MoveToCtor_9170(mmem, &familyOut, 1 /*Slow*/, 0, dest, 0xe1f, 0, speed);
     }
     int64_t moveIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&moveIBP) ::Object::InternalBasePtr(
+    new (&moveIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(moveAction));   // B.3.3 bridge
-    if (s_fn_actPush) s_fn_actPush(stack, &moveIBP);
+    Pf_ActStackPush_54e0(stack, &moveIBP);
 }
 
 // ============================================================
@@ -209,7 +164,6 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
 // by the position math — reproduced here as `halfMapF`.
 // ============================================================
 bool CitizenAI_State_Wander(int64_t param_1) {
-    EnsureInit();
     int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
 
     int64_t target = *reinterpret_cast<int64_t*>(*self + 0x258);
@@ -253,12 +207,10 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     if (sy < 0) sy = 0;
     if (mapSize <= sy) sy = mapSize - 1;
 
-    int cell = s_fn_findCell
-               ? s_fn_findCell(grid, mapSize * ty + tx, mapSize * sy + sx, 0xe1f)
-               : -1;
+    int cell = WorkGrid_FindCell_9ccf0(grid, mapSize * ty + tx, mapSize * sy + sx, 0xe1f);
     if (cell < 0) return false;
 
-    float kBias = s_pf_172114 ? *s_pf_172114 : 0.5f;
+    float kBias = kRdata_140172114;
     float K = static_cast<float>(half) - kBias;
     float inVec[3] = {
         static_cast<float>(cell % mapSize) - K,
@@ -266,11 +218,11 @@ bool CitizenAI_State_Wander(int64_t param_1) {
         0.0f,
     };
     float worldPos[3] = { 0.0f, 0.0f, 0.0f };
-    if (s_fn_terrainPos) s_fn_terrainPos(grid, worldPos, inVec, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(grid, worldPos, inVec, '\0', nullptr);
 
     int64_t citizenIBP = *self;   // raw CitizenComponent ptr in a stack IBP holder
     float r = rng ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
-    float animTime = r * (s_pf_1721a0 ? *s_pf_1721a0 : 7.0f) + (s_pf_172180 ? *s_pf_172180 : 3.0f);
+    float animTime = r * kRdata_1401721a0 + kRdata_140172180;
     CitizenAI_PlayAnimationActionCtor5(&citizenIBP, worldPos, animTime);
 
     return true;

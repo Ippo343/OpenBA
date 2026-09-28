@@ -38,10 +38,9 @@ RadiusDescription::RadiusDescription()
 
 // [5] 0x140055530: stream order as retail.
 bool RadiusDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize3) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_radius, nullptr);
-    fn_ExternalPtr_Serialize3(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_ref20, &ser);
     return true;
 }
 

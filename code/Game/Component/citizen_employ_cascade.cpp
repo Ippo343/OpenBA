@@ -36,37 +36,27 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"   // Pf_EntityAnchorCell_7fb0 (0x140087fb0)
+#include "Work/exe_bodies.h"     // WorkBase_CalcDistance_8830 (0x140008830)
+#include "Game/exe_bodies.h"     // FindAvailableBuilding (0x14008d100)
 
-// ---- deps ported elsewhere (link to them) ----
-class CitizenComponent;   // opaque — only for matching the AssignHousing mangled name
-extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey); // 0x14008d100
-extern void  CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingIBPptr);    // 0x140111ee0 -> +0x248
-extern void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);        // 0x140008090 -> c7cf0
+// Deps ported elsewhere, called by name through their headers:
+//   0x140087fb0 Pf_EntityAnchorCell_7fb0 — an entity IBP's anchor cell (used for distance).
+//   0x140008830 WorkBase_CalcDistance_8830 — distance between two cells (game = *(gw+0xf8)).
+//   0x1401163d0 CitizenComponent_AssignWorkplace(self, workplaceIBP, slotIndex).
+//     Passing &nullIBP,-1 detaches the citizen from any workplace worker list and clears
+//     citizen+0x238 (workplace) / +0x240 (slot) — the "become an unassigned laborer" clear.
+//   0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
+//   into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
 
 namespace {
 
-// 0x140087fb0 — Entity_impl_7fb0: resolve an entity IBP's anchor cell (used for distance).
-typedef int   (*fn_Anchor7fb0_t)(void* entityIBPptr, float* out);
-// 0x140008830 — WorkBase distance metric between two cells (game = *(gw+0xf8)).
-typedef int   (*fn_CalcDist8830_t)(int* game, uint32_t cellA, uint32_t cellB);
-// 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
-// into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
-// 0x1401163d0 — CitizenComponent::AssignWorkplace(self, workplaceIBP, slotIndex).
-//   Passing &nullIBP,-1 detaches the citizen from any workplace worker list and clears
-//   citizen+0x238 (workplace) / +0x240 (slot) — the "become an unassigned laborer" clear.
-typedef void  (*fn_AssignWorkplace_t)(void* self, void* workplaceIBP, int slotIndex);
-
-fn_Anchor7fb0_t      s_anchor7fb0      = nullptr;
-fn_CalcDist8830_t    s_calcDist8830    = nullptr;
-fn_AssignWorkplace_t s_assignWorkplace = nullptr;
 uint32_t          s_tidResidence = 0;   // ResidenceComponent (c7cf0) — self-resolved
 bool              s_init         = false;
 
+// Resolves no door: it only caches the ResidenceComponent type id.
 void EnsureFns() {
     if (s_init) return;
-    s_anchor7fb0   = reinterpret_cast<fn_Anchor7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_calcDist8830 = reinterpret_cast<fn_CalcDist8830_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_assignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(ResolveAddr(Module::Exe, 0x1401163d0));
     if (s_tidResidence == 0) s_tidResidence = ResidenceComponent::TypeId();
     s_init = true;
 }
@@ -75,7 +65,7 @@ inline uintptr_t GW()          { return reinterpret_cast<uintptr_t>(*g_pGameWorl
 inline int64_t   TownMgr()     { return *reinterpret_cast<int64_t*>(GW() + 0xf0); }
 inline int*      GameObj()     { return *reinterpret_cast<int**>(GW() + 0xf8); }
 inline int64_t   LaborerKey()  { return *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30); }
-inline void Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) new (self) ::Object::InternalBasePtr(
+inline void Ctor(void* self, void* obj) { new (self) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
 // citizen adult (desc+0x44 <= cz+0x3c) && idle (cz+0x208 == 0). No CheckPtr (caller
@@ -100,7 +90,7 @@ void* FindResidenceComp(int64_t entity) {
         if (tid == s_tidResidence) {
             void* elem2 = reinterpret_cast<void*>(arr + off);
             void* compVal = *reinterpret_cast<void**>(elem2);
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(compVal, s_tidResidence)) ? compVal : nullptr;
+            return Object::IsDerivedFromNullSafe(compVal, s_tidResidence) ? compVal : nullptr;
         }
         ++i; off += 8;
         cnt = *reinterpret_cast<int*>(entity + 0x38);   // faithful re-read
@@ -167,7 +157,7 @@ void* Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
     int* game = GameObj();
     int64_t availAnchorArg = *availPtr;
-    uint32_t availCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&availAnchorArg, nullptr) : 0xffffffff;
+    uint32_t availCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&availAnchorArg, nullptr);
     int bestDist = 0x7ffffff;
     int64_t best = 0;
     int cnt = *reinterpret_cast<int*>(townMgr + 0xa8);
@@ -178,8 +168,8 @@ void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
             if (*reinterpret_cast<int64_t*>(cz + 0x1f0) == LaborerKey()) {
                 if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
                     int64_t resAnchor = *reinterpret_cast<int64_t*>(cz + 0x238);
-                    uint32_t czCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&resAnchor, nullptr) : 0;
-                    int d = s_calcDist8830 ? s_calcDist8830(game, czCell, availCell) : 0x7ffffff;
+                    uint32_t czCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&resAnchor, nullptr);
+                    int d = WorkBase_CalcDistance_8830(game, czCell, availCell);
                     if (d <= bestDist) { best = cz; bestDist = d; }
                 }
             }
@@ -206,7 +196,7 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     uint32_t availCell = 0xffffffff;      // local_78
     if (*availPtr != 0) {
         int64_t availAnchorArg = *availPtr;
-        availCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&availAnchorArg, nullptr) : 0xffffffff;
+        availCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&availAnchorArg, nullptr);
     }
     int bestDist = 0x7ffffff;             // iVar14
     int64_t bestRes = 0;                  // local_70
@@ -221,10 +211,10 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
         int64_t res = *reinterpret_cast<int64_t*>(cz + 0x238);   // local_90 = their residence
         if (res == 0) continue;
         int64_t resAnchor = res;                                 // local_68
-        uint32_t resCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&resAnchor, nullptr) : 0;
+        uint32_t resCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&resAnchor, nullptr);
         int d = bestDist;
         if ((int)availCell >= 0) {
-            d = s_calcDist8830 ? s_calcDist8830(game, resCell, availCell) : bestDist;
+            d = WorkBase_CalcDistance_8830(game, resCell, availCell);
             if (d > bestDist) continue;
         }
 
@@ -527,9 +517,9 @@ extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity,
             // worker-list detach + +0x238=0 / +0x240=-1) so the healthy-branch gather block,
             // gated `if(+0x238!=0)`, is skipped and the builder falls through to Idle -> build.
             int64_t prevWp = *reinterpret_cast<int64_t*>(seatedCz + 0x238);
-            if (prevWp != 0 && s_assignWorkplace) {
+            if (prevWp != 0) {
                 int64_t nullIBP = 0;
-                s_assignWorkplace(reinterpret_cast<void*>(seatedCz), &nullIBP, -1);
+                CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(seatedCz), &nullIBP, -1);
             }
         } else {
             break;

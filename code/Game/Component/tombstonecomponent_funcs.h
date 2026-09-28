@@ -8,4 +8,3 @@
 // random tombstone lifetime from entity data.
 void TombstoneComponent_Serialize(TombstoneComponent* self);
 
-void TombstoneComponent_InitFuncs();

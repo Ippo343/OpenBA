@@ -20,39 +20,19 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "Tutorial/exe_bodies.h"   // WorkComponent_CalcMaxWorkers (0x14012e5c0, the registered body)
+#include "Action/exe_bodies.h"     // ActCt_TaskCleanup_8e30 (0x1400f8e30)
+#include "Work/exe_bodies.h"       // WorkBase_FindComponent_2f90 (0x140002f90)
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
-
-// FUN_14012e5c0 — compute work capacity for this component
-typedef int (*fn_ComputeWorkCapacity_t)(void* self);
-static fn_ComputeWorkCapacity_t s_fn_ComputeWorkCapacity = nullptr;
-
-// FUN_14012ead0 — check if work slot is available (BST lookup)
-typedef bool (*fn_CheckWorkSlot_t)(void* self);
-static fn_CheckWorkSlot_t s_fn_CheckWorkSlot = nullptr;
-
-// FUN_14012eb50 — register work slot
-typedef void (*fn_RegisterWorkSlot_t)(void* self);
-static fn_RegisterWorkSlot_t s_fn_RegisterWorkSlot = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_ComputeWorkCapacity = reinterpret_cast<fn_ComputeWorkCapacity_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-
-    s_fn_CheckWorkSlot = reinterpret_cast<fn_CheckWorkSlot_t>(
-        ResolveAddr(Module::Exe, 0x14012ead0));
-
-    s_fn_RegisterWorkSlot = reinterpret_cast<fn_RegisterWorkSlot_t>(
-        ResolveAddr(Module::Exe, 0x14012eb50));
-
-    s_initialized = true;
-}
+// FUN_14012e5c0 — compute work capacity for this component. TWO bodies exist for
+//   it: WorkComponent_CalcMaxWorkers (registered, what this file's door resolved)
+//   and fn_StorageCountQuery at the bottom of this file (its own readers). Each
+//   reader keeps the body it reached.
+// FUN_14012ead0 WorkComponent_CheckWorkSlot / FUN_14012eb50
+//   WorkComponent_RegisterWorkSlot — defined below.
 
 
 // ============================================================
@@ -61,38 +41,17 @@ static void EnsureHelpers() {
 // Compute the effective work capacity and store it at +0x30.
 
 void WorkComponent_Draw(WorkComponent* self) {
-    EnsureHelpers();
-
-    if (s_fn_ComputeWorkCapacity) {
-        int capacity = s_fn_ComputeWorkCapacity(self);
-        self->workState = capacity;
-    }
+    int capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(self));   // 0x14012e5c0
+    self->workState = capacity;
 }
 
 
 // ============================================================
 // Reimpl helpers for the work-slot BST functions
 // ============================================================
-// CitizenAI_impl_8e30(tree, workId) — notify AI of slot change (0x1400f8e30)
-typedef void (*fn_CitizenAI_8e30_t)(void* tree, int workId);
-static fn_CitizenAI_8e30_t s_fn_CitizenAI_8e30 = nullptr;
-// Entity_FindComponent_MeshInstance (0x140002f90)
-typedef void* (*fn_WC_FindComp_t)(uintptr_t entity, void* retbuf);
-static fn_WC_FindComp_t s_fn_WC_FindComp = nullptr;
-// FUN_14012c3f0(comp, idx, char) — set mesh flag (0x14012c3f0)
-typedef void (*fn_WC_SetMeshFlag_t)(void* comp, int idx, char p3);
-static fn_WC_SetMeshFlag_t s_fn_WC_SetMeshFlag = nullptr;
-static bool s_wcHelpersResolved = false;
-static void EnsureWorkSlotHelpers() {
-    if (s_wcHelpersResolved) return;
-    s_fn_CitizenAI_8e30 = reinterpret_cast<fn_CitizenAI_8e30_t>(
-        ResolveAddr(Module::Exe, 0x1400f8e30));
-    s_fn_WC_FindComp = reinterpret_cast<fn_WC_FindComp_t>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-    s_fn_WC_SetMeshFlag = reinterpret_cast<fn_WC_SetMeshFlag_t>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_wcHelpersResolved = true;
-}
+// 0x1400f8e30 ActCt_TaskCleanup_8e30(tree, workId) — notify AI of slot change
+// 0x140002f90 WorkBase_FindComponent_2f90 — Entity_FindComponent_MeshInstance
+// 0x14012c3f0 CitizenComp_FUN_14012c3f0(comp, idx, char) — set mesh flag
 
 // ============================================================
 // Reimpl of FUN_14012ead0 (check whether this work slot is occupied:
@@ -128,7 +87,7 @@ bool WorkComponent_CheckWorkSlot(void* selfP) {
     }
     // not found: construct an empty IBP and report non-null (matches original)
     int64_t ibp[1] = {0};
-    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (ibp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return ibp[0] != 0;
 }
 
@@ -137,7 +96,6 @@ bool WorkComponent_CheckWorkSlot(void* selfP) {
 //   when occupied, sync worker id, poke the AI tree, refresh mesh flags 2 & 3)
 // ============================================================
 void WorkComponent_RegisterWorkSlot(void* selfP) {
-    EnsureWorkSlotHelpers();
     uintptr_t self = (uintptr_t)selfP;
     if (!WorkComponent_CheckWorkSlot(selfP)) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
@@ -158,33 +116,19 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
         }
     }
     if (!found) {
-        if (fn_InternalBasePtr_Ctor) new (valueIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (valueIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     }
 
     *(uint32_t*)(self + 0x2c) = *(uint32_t*)(valueIbp[0] + 0x24);
 
-    if (s_fn_CitizenAI_8e30)
-        s_fn_CitizenAI_8e30(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118), key);
+    ActCt_TaskCleanup_8e30(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118), key);   // 0x1400f8e30
 
     int64_t compIbp[1] = {0};
-    if (s_fn_WC_FindComp) s_fn_WC_FindComp(*(uintptr_t*)(self + 0x10), compIbp);
+    WorkBase_FindComponent_2f90(*(uintptr_t*)(self + 0x10), compIbp);   // 0x140002f90
     if (compIbp[0] != 0) {
-        if (s_fn_WC_SetMeshFlag) s_fn_WC_SetMeshFlag((void*)compIbp[0], 2, '\0');
-        if (s_fn_WC_SetMeshFlag) s_fn_WC_SetMeshFlag((void*)compIbp[0], 3, '\0');
+        CitizenComp_FUN_14012c3f0((int64_t*)compIbp[0], 2, '\0');   // 0x14012c3f0
+        CitizenComp_FUN_14012c3f0((int64_t*)compIbp[0], 3, '\0');
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void WorkComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[WorkComponent] Funcs resolved: "
-           "ComputeWorkCapacity=%p CheckWorkSlot=%p RegisterWorkSlot=%p\n",
-           (void*)s_fn_ComputeWorkCapacity, (void*)s_fn_CheckWorkSlot,
-           (void*)s_fn_RegisterWorkSlot);
-#endif
 }
 
 // ============================================================================
@@ -218,8 +162,6 @@ WorkComponent::WorkComponent()
 //   - Version >= 2: serialize workFlags (+0x2c)
 
 void WorkComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     alignas(8) uint8_t serializerBuf[24];
@@ -289,13 +231,9 @@ void WorkComponent::OnAdded() {}
 // one per haul, zero exceptions. See [[reference_ported_registered_but_unwired]].
 
 void WorkComponent::OnRemove() {
-    EnsureHelpers();
-
-    if (s_fn_CheckWorkSlot && s_fn_RegisterWorkSlot) {
-        bool available = s_fn_CheckWorkSlot(this);
-        if (available) {
-            s_fn_RegisterWorkSlot(this);
-        }
+    bool available = WorkComponent_CheckWorkSlot(this);   // 0x14012ead0
+    if (available) {
+        WorkComponent_RegisterWorkSlot(this);             // 0x14012eb50
     }
 }
 
@@ -322,7 +260,7 @@ DEFINE_EXE_TYPE(WorkComponent, "Component")
 int fn_StorageCountQuery(void* component) {
     uintptr_t c = (uintptr_t)component;
     void* base = *(void**)(c + 0x18);
-    void* jobType = fn_IsDerivedFrom(base, WorkDescription::TypeId()) ? base : nullptr;
+    void* jobType = Object::IsDerivedFromNullSafe(base, WorkDescription::TypeId()) ? base : nullptr;
     if (!jobType) return 0;
     uintptr_t jt = (uintptr_t)jobType;
     if (*(uint8_t*)(jt + 0x34) == 0) {

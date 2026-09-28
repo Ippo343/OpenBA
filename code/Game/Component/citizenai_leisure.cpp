@@ -77,39 +77,19 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
 // --- registered exe sub-callees ---
-typedef float*   (*fn_gridToWorld_t)(void* grid, float* out3, float* inXY2, char flag, void* outTri); // 0x14009f3e0
-typedef void     (*fn_avl_a8c0_t)(int64_t* root, int64_t* node);                     // 0x14001a8c0
-typedef void*    (*fn_findMap_t)(int64_t entity, void* outIBP);                      // 0x140004680
-typedef void     (*fn_bstFree_t)(void* root, void* node);                            // 0x140014c30
-typedef void     (*fn_zoneRefresh_t)(int* grid, void* p2, void* p3, int p4);         // 0x14009c480
-typedef uint8_t  (*fn_reach_t)(int* grid, uint32_t mask, uint64_t from, uint32_t to);// 0x1400a00f0
-typedef void     (*fn_playAnim_t)(void* holder, int64_t* entityIBP, uint32_t* dest, float time, uint32_t flag); // 0x1400ba6b0
-typedef void*    (*fn_findPos_t)(int64_t entity, void* outIBP);                      // 0x140002ed0
-typedef void     (*fn_2e20_t)(int64_t comp, void* outVec3, int, int, void*);         // 0x140122e20
-typedef uint32_t (*fn_7fb0_t)(void* ibp, float* outVec3orNull);                      // 0x140087fb0
-typedef char     (*fn_checkWork_t)(void* citizen, void* arg);                        // 0x1401158d0
-typedef void*    (*fn_bstInsert_t)(int64_t* tree, void* outNode, void* keyIBP);      // 0x140021a30
 
-static fn_gridToWorld_t s_gridToWorld = nullptr;
-static fn_avl_a8c0_t    s_avl         = nullptr;
-static fn_findMap_t     s_findMap     = nullptr;
-static fn_bstFree_t     s_bstFree     = nullptr;
-static fn_zoneRefresh_t s_zoneRefresh = nullptr;
-static fn_reach_t       s_reach       = nullptr;
-static fn_playAnim_t    s_playAnim    = nullptr;
-static fn_findPos_t     s_findPos     = nullptr;
-static fn_2e20_t        s_2e20        = nullptr;
-static fn_7fb0_t        s_7fb0        = nullptr;
-static fn_checkWork_t   s_checkWork   = nullptr;
-static fn_bstInsert_t   s_bstInsert   = nullptr;
 
 // AVL/BST node allocator (System::MemoryAllocator::MemAlloc(0x28,8)) and free wrapper.
 static inline void* NodeAlloc(uint64_t sz) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, sz, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc(sz, 8);
 }
 
 static uint32_t s_tid_CitizenDescription   = 0;  // DWORD_1401c7190
@@ -128,18 +108,6 @@ static const float kAgeMult      = 5.0f;   // g_pAgeMultiplier (0x140172198)
 static bool s_init = false;
 static void EnsureInit() {
     if (s_init) return;
-    s_gridToWorld = reinterpret_cast<fn_gridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_avl         = reinterpret_cast<fn_avl_a8c0_t>(ResolveAddr(Module::Exe, 0x14001a8c0));
-    s_findMap     = reinterpret_cast<fn_findMap_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_bstFree     = reinterpret_cast<fn_bstFree_t>(ResolveAddr(Module::Exe, 0x140014c30));
-    s_zoneRefresh = reinterpret_cast<fn_zoneRefresh_t>(ResolveAddr(Module::Exe, 0x14009c480));
-    s_reach       = reinterpret_cast<fn_reach_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_playAnim    = reinterpret_cast<fn_playAnim_t>(ResolveAddr(Module::Exe, 0x1400ba6b0));
-    s_findPos     = reinterpret_cast<fn_findPos_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_2e20        = reinterpret_cast<fn_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_7fb0        = reinterpret_cast<fn_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_checkWork   = reinterpret_cast<fn_checkWork_t>(ResolveAddr(Module::Exe, 0x1401158d0));
-    s_bstInsert   = reinterpret_cast<fn_bstInsert_t>(ResolveAddr(Module::Exe, 0x140021a30));
     if (s_tid_CitizenDescription == 0)   s_tid_CitizenDescription   = CitizenDescription::TypeId();
     if (s_tid_HappinessDescription == 0) s_tid_HappinessDescription = HappinessDescription::TypeId();
     if (s_tid_HappinessComponent == 0)   s_tid_HappinessComponent   = HappinessComponent::TypeId();
@@ -178,7 +146,7 @@ static void* ScanArrAt(int64_t* node, int arrOff, int cntOff, uint32_t wantTid) 
         if (VGetTypeId(slot) == wantTid) {
             int64_t* slot2 = reinterpret_cast<int64_t*>(arr + static_cast<uint64_t>(i) * 8);
             void* obj = *reinterpret_cast<void**>(slot2);
-            bool ok = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, wantTid);
+            bool ok = Object::IsDerivedFromNullSafe(obj, wantTid);
             return ok ? obj : nullptr;
         }
     }
@@ -207,7 +175,7 @@ static void* ScanType5(int64_t* node, uint32_t wantTid) {
 // ============================================================
 static char CitizenAI_helper_a720(int64_t param_1) {
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    void* narrowed = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, s_tid_HappinessDescription)) ? obj : nullptr;
+    void* narrowed = Object::IsDerivedFromNullSafe(obj, s_tid_HappinessDescription) ? obj : nullptr;
     if ((narrowed == nullptr || *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(narrowed) + 0x20) != 5)
         && *reinterpret_cast<char*>(param_1 + 0x28) != '\0') {
         // NOTE: original derefs narrowed+0x20 even when narrowed==0 (reads 0x20). Guarded
@@ -236,14 +204,14 @@ static int64_t* CitizenAI_State_Leisure_sub_fd50(int64_t param_1, int64_t* param
         if (VGetTypeId(slot) == s_tid_HappinessComponent) {
             int64_t* slot2 = reinterpret_cast<int64_t*>(arrBase + static_cast<int64_t>(idx) * 8);
             void* obj = *reinterpret_cast<void**>(slot2);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, s_tid_HappinessComponent))
+            if (Object::IsDerivedFromNullSafe(obj, s_tid_HappinessComponent))
                 result = obj;
             break;
         }
         ++idx;
         byteOff += 8;
     }
-    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+    new (param_2) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(result));   // B.3.3 bridge
     return param_2;
 }
@@ -263,15 +231,9 @@ static int64_t* CitizenAI_State_Leisure_sub_fd50(int64_t param_1, int64_t* param
 // null InternalBasePtr if no candidate qualifies. Returns param_2.
 //   param_3 = source grid cell (citizen pos), param_4 = max distance (in cells, *2 budget)
 // ============================================================
-typedef int      (*fn_buildStruct_f810_t)(int* grid, uint32_t fromCell, uint32_t toCell, char flag); // 0x14009f810
-typedef float    (*fn_sqrtf_132010_t)(float v);                                                       // 0x140132010
-static fn_buildStruct_f810_t s_f810  = nullptr;
-static fn_sqrtf_132010_t     s_sqrtf = nullptr;
-
+// Path cost 0x14009f810 = Pf_IsDstReachable_f810, sqrtf 0x140132010 = WorkImpl_Sqrtf_132010.
 static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param_2,
                                                  uint32_t param_3, int param_4) {
-    if (s_f810 == nullptr)  s_f810  = reinterpret_cast<fn_buildStruct_f810_t>(ResolveAddr(Module::Exe, 0x14009f810));
-    if (s_sqrtf == nullptr) s_sqrtf = reinterpret_cast<fn_sqrtf_132010_t>(ResolveAddr(Module::Exe, 0x140132010));
 
     int* mapGrid = MapGrid();
     uint32_t outCap = 0;          // (local_50 high dword)
@@ -290,12 +252,12 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             void* interact = nullptr;
             interact = ScanArrAt(reinterpret_cast<int64_t*>(entObj), 0x30, 0x38, s_tid_InteractComponent);
             int64_t interactIBP[2] = {0, 0};
-            if (fn_InternalBasePtr_Ctor) new (interactIBP) ::Object::InternalBasePtr(
+            new (interactIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
 
             // resolve world pos -> clamped grid cell
             float posVec[4] = {0, 0, 0, 0};
-            if (s_2e20) s_2e20(interactIBP[0], posVec, 0, 0, nullptr);
+            Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP[0]), posVec, 0, 0, nullptr);
             int w = *mapGrid;
             int col = static_cast<int>(posVec[0] + static_cast<float>(w >> 1));
             int row = static_cast<int>(posVec[1] + static_cast<float>(w >> 1));
@@ -304,21 +266,20 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             uint32_t destCell = static_cast<uint32_t>(w * row + col);
 
             // structure-path cost (or manhattan-ish euclidean fallback if unreachable)
-            int cost = s_f810 ? s_f810(mapGrid, param_3, destCell, '\x01') : -1;
+            int cost = Pf_IsDstReachable_f810(mapGrid, param_3, destCell, '\x01');
             if (cost < 0) {
                 int wgrid = *mapGrid;
                 int dx = static_cast<int>(param_3) % wgrid - static_cast<int>(destCell) % wgrid;
                 int dy = static_cast<int>(param_3) / wgrid - static_cast<int>(destCell) / wgrid;
-                float d = s_sqrtf ? s_sqrtf(static_cast<float>(dy * dy + dx * dx)) : 0.0f;
+                float d = WorkImpl_Sqrtf_132010(static_cast<float>(dy * dy + dx * dx));
                 cost = static_cast<int>(d) + wgrid;
             }
 
-            if (cost < param_4 * 2 &&
-                s_reach && (static_cast<char>(s_reach(mapGrid, 0xe1f, param_3, destCell)) != '\0')) {
+            if (cost < param_4 * 2 && (static_cast<char>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, destCell)) != '\0')) {
                 int64_t* slot2 = reinterpret_cast<int64_t*>(byteOff + *reinterpret_cast<int64_t*>(param_1 + 0x50));
                 int64_t node = *slot2;
                 void* prim = *reinterpret_cast<void**>(node + 0x18);
-                void* narrowed = (fn_IsDerivedFrom && fn_IsDerivedFrom(prim, s_tid_HappinessDescription)) ? prim : nullptr;
+                void* narrowed = Object::IsDerivedFromNullSafe(prim, s_tid_HappinessDescription) ? prim : nullptr;
                 if ((narrowed == nullptr || *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(narrowed) + 0x20) != 5)
                     && *reinterpret_cast<char*>(node + 0x28) != '\0') {
                     int64_t listBase = *reinterpret_cast<int64_t*>(param_1 + 0x50);
@@ -340,7 +301,7 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
                                 if (dst) { *dst = 0; *dst = *src; }
                             }
                         }
-                        if (curArr != fresh && curArr != nullptr && fn_MemFreeStatic) fn_MemFreeStatic(curArr);
+                        if (curArr != fresh && curArr != nullptr) System::MemoryAllocator::MemFree(curArr);
                         curArr = fresh;
                     } else {
                         // in-place append of the current entity into curArr[oldN]
@@ -362,12 +323,12 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             int64_t node = *chosen;
             *param_2 = 0;
             *param_2 = *reinterpret_cast<int64_t*>(node + 0x10);
-            if (curArr && fn_MemFreeStatic) fn_MemFreeStatic(curArr);
+            if (curArr) System::MemoryAllocator::MemFree(curArr);
             return param_2;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    if (curArr && fn_MemFreeStatic) fn_MemFreeStatic(curArr);
+    new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    if (curArr) System::MemoryAllocator::MemFree(curArr);
     return param_2;
 }
 
@@ -390,7 +351,7 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
 
     // pvVar26 = CitizenDescription on the citizen (citizen+0x18, IsDerivedFrom 0x1c7190).
     void* descRaw = *reinterpret_cast<void**>(*self + 0x18);
-    void* pvVar26 = (fn_IsDerivedFrom && fn_IsDerivedFrom(descRaw, s_tid_CitizenDescription)) ? descRaw : nullptr;
+    void* pvVar26 = Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription) ? descRaw : nullptr;
 
     // citizen ModelComponent transform -> grid cell (uVar37=srcCell).
     uintptr_t citizen = static_cast<uintptr_t>(*self);
@@ -409,7 +370,7 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
         uVar14 = 0xffffffff;
     } else {
         int64_t homeIBP = *reinterpret_cast<int64_t*>(*self + 0x238);
-        uVar14 = s_7fb0 ? s_7fb0(&homeIBP, nullptr) : 0xffffffff;
+        uVar14 = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
     }
 
     int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37)) * 0x30;   // srcCell byte off
@@ -419,7 +380,7 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
         float fVar39 = reinterpret_cast<System::Random*>(pRVar6)->RandFloat();   // B.3.4b bridge
         if (fVar39 < kRandThresh) {
             int64_t nullIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             local_res20 = reinterpret_cast<int64_t*>(nullIBP);
         }
     }
@@ -445,16 +406,16 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
         if (cVar12 == '\0') goto LAB_14010a7e0;
 
         int64_t posIBP = 0;
-        int64_t* pp = s_findPos ? reinterpret_cast<int64_t*>(s_findPos(reinterpret_cast<int64_t>(local_res20), &posIBP)) : nullptr;
+        int64_t* pp = reinterpret_cast<int64_t*>(WorkBase_FindComponent_2ed0(reinterpret_cast<int64_t>(local_res20), &posIBP));
         float dpos[4] = {0, 0, 0, 0};
-        if (pp && s_2e20) s_2e20(*pp, dpos, 0, 0, nullptr);
+        if (pp) Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(*pp), dpos, 0, 0, nullptr);
         int w = *piVar5;
         int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos[0]);
         int trow = static_cast<int>(static_cast<float>(w >> 1) + dpos[1]);
         if (tcol < 0) tcol = 0; if (w <= tcol) tcol = w - 1;
         if (trow < 0) trow = 0; if (w <= trow) trow = w - 1;
         uint32_t uVar35 = static_cast<uint32_t>(w * trow + tcol);
-        uint8_t reach = s_reach ? s_reach(piVar5, 0xe1f, uVar37, uVar35) : 0;
+        uint8_t reach = WorkBase_ValidateCell_a00f0(piVar5, 0xe1f, uVar37, uVar35);
         if (static_cast<char>(reach) == '\0') goto LAB_14010a7e0;
         goto LAB_14010a83d;   // target validated
     }
@@ -500,19 +461,19 @@ LAB_14010a846:
                         static_cast<int64_t>(w * boxRow + dxo + baseCol) * 0x30 + CellArrayBase(piVar5));
                     int64_t cand = 0;     // local_res18
                     if (plVar20[0] == 0) {
-                        if (plVar20[1] == 0) { if (fn_InternalBasePtr_Ctor) new (&cand) ::Object::InternalBasePtr(
+                        if (plVar20[1] == 0) { new (&cand) ::Object::InternalBasePtr(
                             nullptr); }   // B.3.3 bridge
                         else cand = plVar20[1];
                     } else cand = plVar20[0];
                     if (cand != 0) {
                         int64_t mapBuf = 0;     // local_b0
-                        if (s_findMap) s_findMap(cand, &mapBuf);
+                        FloorComponent_FindResData(reinterpret_cast<void*>(cand), &mapBuf);
                         if (mapBuf != 0) {
                             int64_t workArg = cand;   // local_b8 = cand
-                            char ok = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &workArg) : 0;
+                            char ok = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(*self), &workArg);
                             if (ok != '\0') {
                                 int64_t outNode = 0;   // &local_a0 (out-node, result unused)
-                                if (s_bstInsert) { s_bstInsert(reinterpret_cast<int64_t*>(&local_d8), &outNode, &cand);
+                                { WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&local_d8), &outNode, &cand);
                                                    local_d0 = local_d0 + 1; }
                             }
                         }
@@ -526,7 +487,7 @@ LAB_14010a846:
         iVar27 = 6;
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
             int64_t key = *reinterpret_cast<int64_t*>(*self + 0x238);   // local_res10
-            char ok = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &key) : 0;
+            char ok = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(*self), &key);
             if (ok != '\0') {
                 key = *reinterpret_cast<int64_t*>(*self + 0x238);
                 if (local_d8 == nullptr) {
@@ -546,7 +507,7 @@ LAB_14010a846:
                                 int64_t* nd = reinterpret_cast<int64_t*>(NodeAlloc(0x28));
                                 if (nd) { nd[0] = static_cast<int64_t>(keyVal); nd[1] = reinterpret_cast<int64_t>(ins); nd[2] = 0; nd[3] = 0; *reinterpret_cast<int*>(nd + 4) = 0; }
                                 ins[3] = reinterpret_cast<int64_t>(nd);
-                                if (s_avl) s_avl(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));
+                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));
                                 local_d0 = local_d0 + 1; done = true; break;
                             }
                         } else {
@@ -555,7 +516,7 @@ LAB_14010a846:
                                 int64_t* nd = reinterpret_cast<int64_t*>(NodeAlloc(0x28));
                                 if (nd) { nd[0] = static_cast<int64_t>(keyVal); nd[1] = reinterpret_cast<int64_t>(ins); nd[2] = 0; nd[3] = 0; *reinterpret_cast<int*>(nd + 4) = 0; }
                                 ins[2] = reinterpret_cast<int64_t>(nd);
-                                if (s_avl) s_avl(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));
+                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));
                                 local_d0 = local_d0 + 1; done = true; break;
                             }
                         }
@@ -587,9 +548,9 @@ LAB_14010a846:
             local_res20 = (chosen != nullptr) ? reinterpret_cast<int64_t*>(*chosen) : nullptr;
         }
         if (local_d8 != nullptr) {
-            if (s_bstFree) { s_bstFree(&local_d8, reinterpret_cast<void*>(local_d8[2]));
-                             s_bstFree(&local_d8, reinterpret_cast<void*>(local_d8[3])); }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(local_d8);
+            { WorkBase_TreeNodeFree_14c30(&local_d8, reinterpret_cast<void*>(local_d8[2]));
+                             WorkBase_TreeNodeFree_14c30(&local_d8, reinterpret_cast<void*>(local_d8[3])); }
+            System::MemoryAllocator::MemFree(local_d8);
         }
         local_d8 = nullptr; local_d0 = 0;
         goto LAB_after_target;   // local_res20 set (or still null) -> bound decision
@@ -620,19 +581,19 @@ LAB_after_target:
     {
         void* hcomp = ScanArr(local_res20, s_tid_HappinessComponent);
         int64_t local_res18 = 0;
-        if (fn_InternalBasePtr_Ctor) new (&local_res18) ::Object::InternalBasePtr(
+        new (&local_res18) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(hcomp));   // B.3.3 bridge
         if (local_res18 == 0) {
             happinessMode = false;   // LAB_14010adba
         } else {
             void* hcomp2 = ScanArr(local_res20, s_tid_HappinessComponent);
             int64_t local_res10n = 0;
-            if (fn_InternalBasePtr_Ctor) new (&local_res10n) ::Object::InternalBasePtr(
+            new (&local_res10n) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(hcomp2));   // B.3.3 bridge
             // LAB_14010ad7a: node[3] = HappinessDescription (0x1c42f8); if +0x20==5 || node[5]==0 -> false.
             int64_t* hnode = reinterpret_cast<int64_t*>(local_res10n);
             void* hdRaw = reinterpret_cast<void*>(hnode[3]);
-            void* hd = (fn_IsDerivedFrom && fn_IsDerivedFrom(hdRaw, s_tid_HappinessDescription)) ? hdRaw : nullptr;
+            void* hd = Object::IsDerivedFromNullSafe(hdRaw, s_tid_HappinessDescription) ? hdRaw : nullptr;
             if (!((hd && *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(hd) + 0x20) == 5)
                   || static_cast<char>(hnode[5]) == '\0')) {
                 happinessMode = true;   // local_res10 low byte = 1
@@ -641,7 +602,7 @@ LAB_after_target:
         // third scan: MapComponent (0x1c79e0) -> local_b8; read bounds shorts (+0x28..+0x2e).
         void* mapc = ScanArr(local_res20, s_tid_MapComponent);
         int64_t local_b8 = 0;
-        if (fn_InternalBasePtr_Ctor) new (&local_b8) ::Object::InternalBasePtr(
+        new (&local_b8) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mapc));   // B.3.3 bridge
         int64_t* mnode = reinterpret_cast<int64_t*>(local_b8);
         iVar30          = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x28));
@@ -665,7 +626,7 @@ LAB_14010ae8a:
                     int cellIdx = w * iVar13 + cc + (iVar30 - iVar27);
                     int64_t lv = static_cast<int64_t>(cellIdx);
                     if (*reinterpret_cast<uint8_t*>(CellArrayBase(piVar5) + 0x29 + lv * 0x30) < 3) {
-                        if (s_zoneRefresh) s_zoneRefresh(piVar5, reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<uint32_t>(boxH))), nullptr, iVar27);
+                        Pf_ZoneRefresh_9c480(piVar5, reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<uint32_t>(boxH))), nullptr, iVar27);
                         int64_t arrBase = CellArrayBase(piVar5);
                         uint32_t mNew = 1u << (*reinterpret_cast<uint8_t*>(arrBase + lv * 0x30 + 0x29) & 0x1f);
                         uint32_t mSrc = 1u << (*reinterpret_cast<uint8_t*>(arrBase + local_a8 + 0x29) & 0x1f);
@@ -696,7 +657,7 @@ LAB_14010ae8a:
                                             int* nd = reinterpret_cast<int*>(NodeAlloc(0x28));
                                             if (nd) { nd[0] = cellIdx; *reinterpret_cast<int64_t*>(nd + 2) = reinterpret_cast<int64_t>(ins); *reinterpret_cast<int64_t*>(nd + 4) = 0; *reinterpret_cast<int64_t*>(nd + 6) = 0; nd[8] = 0; }
                                             ins[2] = reinterpret_cast<int64_t>(nd);
-                                            if (s_avl) s_avl(reinterpret_cast<int64_t*>(&local_c8), reinterpret_cast<int64_t*>(&ins));
+                                            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_c8), reinterpret_cast<int64_t*>(&ins));
                                             local_c0 = local_c0 + 1; done = true; break;
                                         }
                                     } else if (cellIdx <= *reinterpret_cast<int*>(cur)) {
@@ -707,7 +668,7 @@ LAB_14010ae8a:
                                             int* nd = reinterpret_cast<int*>(NodeAlloc(0x28));
                                             if (nd) { nd[0] = cellIdx; *reinterpret_cast<int64_t*>(nd + 2) = reinterpret_cast<int64_t>(ins); *reinterpret_cast<int64_t*>(nd + 4) = 0; *reinterpret_cast<int64_t*>(nd + 6) = 0; nd[8] = 0; }
                                             ins[3] = reinterpret_cast<int64_t>(nd);
-                                            if (s_avl) s_avl(reinterpret_cast<int64_t*>(&local_c8), reinterpret_cast<int64_t*>(&ins));
+                                            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_c8), reinterpret_cast<int64_t*>(&ins));
                                             local_c0 = local_c0 + 1; done = true; break;
                                         }
                                     }
@@ -749,9 +710,9 @@ LAB_14010ae8a:
             float inXY[2] = { static_cast<float>(chosenCell % iv) - fVar39c,
                               static_cast<float>(chosenCell / iv) - fVar39c };
             uVar41 = 0;
-            if (s_gridToWorld) {
+            {
                 float out3[4] = {0, 0, 0, 0};
-                s_gridToWorld(piVar5, out3, inXY, '\0', nullptr);
+                Reimpl_MapGetTerrainPos(piVar5, out3, inXY, '\0', nullptr);
                 local_a0 = out3[0]; local_9c = out3[1]; local_98 = out3[2];
             }
             // random offset within a disk.
@@ -763,14 +724,14 @@ LAB_14010ae8a:
             // entity to anim toward (local_res18): if happinessMode use target else null IBP.
             char cVar12 = happinessMode ? 1 : 0;
             int64_t entIBP;
-            if (cVar12 == '\0') { entIBP = 0; if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+            if (cVar12 == '\0') { entIBP = 0; new (&entIBP) ::Object::InternalBasePtr(
                 nullptr); }   // B.3.3 bridge
             else entIBP = reinterpret_cast<int64_t>(local_res20);
             int64_t local_res18 = entIBP;
 
             int64_t local_a8h = *self;   // holder citizen (PlayAnimation self IBP)
             float fVar39t = reinterpret_cast<System::Random*>(pRVar6)->RandFloatTol();   // B.3.4b bridge
-            if (s_playAnim) s_playAnim(&local_a8h, &local_res18, reinterpret_cast<uint32_t*>(dest),
+            CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, &local_res18, reinterpret_cast<uint32_t*>(dest),
                                        fVar39t * kAgeMult + kAnimTimeBase,
                                        static_cast<uint32_t>(static_cast<unsigned char>(cVar12)));
 
@@ -783,9 +744,9 @@ LAB_14010ae8a:
         }
 
         if (local_c8 != nullptr) {
-            if (s_bstFree) { s_bstFree(&local_c8, reinterpret_cast<void*>(local_c8[2]));
-                             s_bstFree(&local_c8, reinterpret_cast<void*>(local_c8[3])); }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(local_c8);
+            { WorkBase_TreeNodeFree_14c30(&local_c8, reinterpret_cast<void*>(local_c8[2]));
+                             WorkBase_TreeNodeFree_14c30(&local_c8, reinterpret_cast<void*>(local_c8[3])); }
+            System::MemoryAllocator::MemFree(local_c8);
         }
         return uVar41;
     }

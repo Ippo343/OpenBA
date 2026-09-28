@@ -17,4 +17,3 @@
 void StorageDisplayComponent_Update(StorageDisplayComponent* self);
 
 // Init: resolve all internal function pointers (called once at startup)
-void StorageDisplayComponent_InitFuncs();
