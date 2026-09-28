@@ -32,6 +32,7 @@
 #include <atomic>
 #include <new>
 #include "system/MemoryAllocator.h"
+#include "Component/exe_bodies.h"
 
 
 // ---- internal: serializer "stream error" word (serializer->stream + 8 == 0 ⇒ ok)
