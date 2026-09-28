@@ -11,15 +11,15 @@
 // reaches by raw byte offset:
 //
 //   * `Video::ImageBuffer` (0x68, 10 slots, `Object::CompiledExternal`), whose
-//     slot 9 `Create` is reached from `imagebuffer_platform_serialize.cpp` as a
-//     virtual and from `saveload_draw.cpp` by a hand-inlined +0x48, and whose
+//     slot 9 `Create` is reached from `imagebuffer_platform_serialize.cpp` and
+//     `saveload_draw.cpp` (:455) as a virtual by name, and whose
 //     `_data` at +0x60 is what `dx11/src/dx11_backend_access.h` reads now that
 //     its `ImageBufferOwner` view is gone;
 //   * the CHAIN across the namespace boundary — `Graphics::GeneratedImageBuffer`
 //     (0x70, 12 slots, abstract, adds `Generate` 10 and `Render` 11 as pure) and
 //     its two concretes `FrameCopyImageBuffer` (0x88) and
-//     `ReflectionImageBuffer` (0x90), whose slot 0x50 `saveload_draw.cpp:83`
-//     walks by hand;
+//     `ReflectionImageBuffer` (0x90), whose retail slot +0x50 `Generate`
+//     `saveload_draw.cpp:468` calls by name;
 //   * `Video::RenderState` (0x80, 9 slots, `Object::External` DIRECTLY) and its
 //     three nested value types.
 //
@@ -277,9 +277,10 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
 
     // SLOTS 10 AND 11 ARE `Generate` AND `Render`, INTRODUCED BY
     // `Graphics::GeneratedImageBuffer` — one level past the namespace boundary.
-    // +0x50 is the offset `runtime/src/save/saveload_draw.cpp:83` walks by hand
-    // to find `?Generate@FrameCopyImageBuffer@Graphics@@`, which is the
-    // independent corroboration of this index.
+    // +0x50 is retail's offset of `?Generate@FrameCopyImageBuffer@Graphics@@`
+    // (the export walk in `runtime/src/save/saveload_draw.cpp`'s banner, :85),
+    // the independent corroboration of this index; that file's call (:468) is
+    // `->Generate(ctx, 1)` by name.
     Reset(); SlotAt<GenerateFn, ProbeGenerated>(&probe, 0x50)(&probe, nullptr, 42);
     CHECK_EQ(g_lastMark, 10); CHECK_EQ(g_lastArg, 42LL);
     Reset(); SlotAt<RenderFn, ProbeGenerated>(&probe, 0x58)(&probe, nullptr, nullptr, nullptr, 7);
@@ -288,8 +289,8 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
     // TWELVE retail slots, THIRTEEN compiler entries: B3X W1 gave the chain a
     // virtual destructor, and Itanium spends TWO slots on it, so `Generate` and
     // `Render` (retail +0x50 / +0x58) sit at compiler +0x58 / +0x60 — which is
-    // why a hand-walked retail offset (`saveload_draw.cpp`) must now go by name
-    // or through RetailByteOffset.
+    // why every caller (`saveload_draw.cpp:468` included) goes by name and a
+    // test goes through RetailByteOffset.
     CHECK(!std::is_polymorphic<int>::value);   // sanity: the trait is live
     CHECK(std::has_virtual_destructor<ProbeGenerated>::value == true);
     CHECK_EQ(RetailByteOffset<ProbeGenerated>(0x50), (uintptr_t)0x58);
