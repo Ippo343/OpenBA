@@ -38,15 +38,11 @@
 //   FUN_140002cc0 CemeteryListErase_Reimpl (the list erase, below)
 //   FUN_140004680 FloorComponent_FindResData -- FindComponent<MapComponent>(entity, outIBP)
 //   FUN_140004740 InteractComponent_FindWorkplaceComponent -- FindComponent<MultiObjectComponent>
-//   0x1400a8c90 Pf_FineCellDirty_a8c90
+//   0x1400a6fe0 Pf_EnqueueCmd2_a6fe0 (pfQueue, cellIdx, cmd) / 0x1400a8c90 Pf_FineCellDirty_a8c90
 //   the game-world cell 0x1401c3dd8, read through g_pGameWorldSingleton.
 
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-
-// 0x1400a6fe0 PfEnqueueCmd2(pfQueue, cellIdx, cmd).
-typedef void (*fn_PfEnqueueCmd2_t)(void* queue, int cellIdx, int cmd);
-static fn_PfEnqueueCmd2_t s_fn_PfEnqueueCmd2 = nullptr;
 
 // System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr) dispatch slots.
 typedef void* (*fn_CemMemAlloc_t)(uint64_t size, int align);
@@ -171,8 +167,6 @@ void CemeteryComponent_InitFuncs() {
 
     uintptr_t slot;
 
-    s_fn_PfEnqueueCmd2 = reinterpret_cast<fn_PfEnqueueCmd2_t>(
-        ResolveAddr(Module::Exe, 0x1400a6fe0));
     slot = ResolveAddr(Module::Exe, 0x140152b60);
     if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_CemMemAlloc_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b68);
@@ -257,9 +251,14 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
             if (fine && mapWidth)
                 Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(fine), cellIdx, cellIdx / mapWidth);
         }
-        if (s_fn_PfEnqueueCmd2) {
+        {
             void* pf = *reinterpret_cast<void**>(world + 0x68);
-            if (pf) s_fn_PfEnqueueCmd2(pf, cellIdx, 2);
+            // Retail 0x140047145: RCX = pf, EDX = cellIdx, R8D = 2, R9 not set. The body's
+            // fourth parameter reaches only Pf_WorkerApplyCmd_a6430's cmd-5 arm; this is
+            // cmd 2, so it is never read (quarrycomponent_deform.cpp / starttown.cpp pass
+            // nullptr the same way).
+            if (pf) Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(pf), static_cast<uint32_t>(cellIdx),
+                                         reinterpret_cast<void*>(static_cast<uintptr_t>(2)), nullptr);
         }
 
         uint8_t nullIbp[24] = {};
