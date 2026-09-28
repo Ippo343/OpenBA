@@ -8,6 +8,7 @@
 //
 //   0x140042890  ShowTool_Action_Ctor                 (trivial field-copy ctor)
 //   0x1400cadf0  RemoveNaturalResource_Action_CopyCtor (trivial field-copy ctor)
+#include "Action/exe_bodies.h"
 //   0x1400c57d0  AnimateNaturalResource_Action_CopyCtor(trivial field-copy ctor)
 //   0x1400c6a20  CreateNaturalResource_Action_CopyCtor (trivial field-copy ctor)
 //   0x1400c29a0  Entity_impl_29a0  (heading-toward-path-target; returns float XMM0)

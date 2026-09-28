@@ -7,6 +7,7 @@
 // (0x140050800) builds the harvest work item with
 // `HarvestOrchard_Ctor(MemAlloc(0x68, 8), &orchard->+0x10)` — note NO tree-type argument,
 // unlike PlantOrchard_Ctor.
+#include "Work/exe_bodies.h"
 //
 // ABI, read from the decompile at 0x1400ee060 (not inferred):
 //   HarvestOrchard* __fastcall HarvestOrchard_CtorFromEntity(void* mem /*RCX*/,

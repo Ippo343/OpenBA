@@ -3,6 +3,7 @@
 //
 //   FireWork_helper_81d0          @ 0x1400881d0  -> FireWork_SpiralSearch_81d0
 //   FireWork_helper_81d0_sub_8730 @ 0x140088730  -> FireWork_SpiralCell_8730
+#include "Work/exe_bodies.h"
 //
 // FireWork_SpiralSearch_81d0 scans the TownManager's coarse cell index in an
 // expanding ring spiral around a centre cell (param_2). For every in-bounds cell it

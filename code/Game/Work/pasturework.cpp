@@ -10,6 +10,7 @@
 // - Checking animal count vs max workers
 // - Resource capacity checks
 // - Removing animals from pasture (via RemoveAnimal action)
+#include "Work/exe_bodies.h"
 // - Finding empty pasture positions for animals
 // - Creating grazing work actions
 //

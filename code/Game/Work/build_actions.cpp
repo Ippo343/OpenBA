@@ -5,6 +5,7 @@
 // global fn_SetupBuildActions == ResolveAddr(Exe, 0x1400c0690)). Unported/NULL in
 // standalone was the EXEC-of-0 crash blocking organic build labor.
 //
+#include "Work/exe_bodies.h"
 // Signature (matches buildstructure.cpp's call = fn_SetupBuildActions(&citizenEntityVal,
 // self->field_20, (void*)(bs+0x10), bestPos, chosenIndex, (uint8_t)self->field_48)):
 //   param_1 = citizen entity InternalBasePtr* (the builder)

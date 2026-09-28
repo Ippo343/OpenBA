@@ -2,6 +2,7 @@
 // Shared Work grid / work-assignment helpers (hand-ported + Ghidra-verified).
 //
 // Resolved via ResolveAddr(Module::Exe, 0xADDR) from many code/Game/Work/*.cpp; registered
+#include "Work/exe_bodies.h"
 // via RegisterWorkGridBatch in standalone/reg_work_grid.cpp. Faithful 1:1 ports.
 //
 // NOTE: this replaces an earlier parallel-agent draft that was NOT faithful (the draft is

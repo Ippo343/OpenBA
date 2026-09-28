@@ -3,6 +3,7 @@
 //
 // Two instruction-faithful 1:1 ports of exe work-action constructors. Each builds
 // a chain of Action objects (SendComponentMessage / CompleteTask / ShowTool /
+#include "Work/exe_bodies.h"
 // PerformWork / MoveTo / CreateNaturalResource / HuntAnimal) and appends their
 // InternalBasePtr wrappers to the citizen's CitizenAIComponent task action list
 // (citizen+0x278 -> aiComp, list base aiComp+0x48). The SendComponentMessage action

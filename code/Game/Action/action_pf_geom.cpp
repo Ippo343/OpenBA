@@ -3,6 +3,7 @@
 //
 // Faithful 1:1 ports of nine exe sub-helpers that are pure leaves (no NEEDS-PORT
 // children — only Math::Vector3 engine exports, System::MemoryAllocator/Random
+#include "Action/exe_bodies.h"
 // exports, and bit/array/index math). In standalone these resolve to 0 (silently
 // skipped) unless registered; this file provides the reimplementations and
 // standalone/reg_pf_geom.cpp registers them.

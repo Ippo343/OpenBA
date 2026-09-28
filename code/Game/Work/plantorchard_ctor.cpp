@@ -7,6 +7,7 @@
 // handlers both allocate 0x70 bytes and call this to build the planting work item. Kept
 // out of plantorchard.cpp only to avoid an edit collision while that file is in use.
 //
+#include "Work/exe_bodies.h"
 // ⚠ NOT to be confused with PlantOrchardAddr::Ctor (0x1400f50b0), which is the zero-arg
 // deserialize/factory constructor and leaves +0x68 null. See the note in BuildActions.h.
 //

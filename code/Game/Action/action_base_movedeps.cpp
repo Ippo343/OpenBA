@@ -3,6 +3,7 @@
 //
 // These two exe helpers are the *only* members of the move-helper sub-callee set whose
 // own transitive closure is fully satisfiable in standalone (engine_funcs export-resolved
+#include "Action/exe_bodies.h"
 // pointers + already-registered helpers + data globals). Registering them unblocks wiring
 // the two closure-safe members of the deferred move-unsafe-6 set:
 //   - 0x1401250f0 (this file)  ->  unblocks 0x14010a1f0 SetAnimation

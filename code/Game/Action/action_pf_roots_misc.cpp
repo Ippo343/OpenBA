@@ -6,6 +6,7 @@
 // None are exercised on the autostart path, so a wrong port is undetectable silent
 // corruption — strictly worse than leaving the addr unregistered. Transcribed
 // literally; no "improvements". Registration in standalone/reg_pf_roots_misc.cpp.
+#include "Action/exe_bodies.h"
 //
 //   0x14009bd40  FindPlacementCell — expanding Chebyshev-ring spiral cell search
 //                (calls f3e0 grid->world + Math::Vector3 ctor + Math::Scalar::Abs)
