@@ -161,21 +161,6 @@ System::Random* RtSystem_Random_CtorSeed(System::Random* self, uint32_t seed) {
     return self;
 }
 
-// ?NextGroup@Random@System@@AEAAXXZ  retail 0x1800c7dd0, ordinal 3245.
-//
-// WAVE 28 LANE MISC.  The BODY for this row has existed since Wave 2 as the
-// file-local `NextGroupImpl` above; what was missing was the REGISTRATION, so a
-// callee census could not tell it from an absent body and Wave 27's board
-// carried it as a named unported System BODY row.  This wrapper is the whole of
-// the port -- it adds no logic, it opens the door.
-//
-// AEAA is the PRIVATE spelling, NOT the unexported one.  Verified against the
-// export directory with pefile, by name AND by RVA: both lookups return
-// (?NextGroup@Random@System@@AEAAXXZ, 0x1800c7dd0, ord 3245).  Registering the
-// name is therefore the plain door, not a workaround.
-//
-extern "C" void RtSystem_Random_NextGroup(System::Random* self) { self->NextGroup(); }
-
 // ?RandFloat@Random@System@@QEAAMXZ  retail 0x1800c7d40
 // DAT_18016165c = 1/2^32 exactly (read as bytes: 0x2f800000): maps a full
 // 32-bit draw to [0,1).
@@ -644,7 +629,6 @@ int RtSystemValueRegister() {
 
     RegisterRuntimeExport("??0Random@System@@QEAA@XZ", (void*)&RtSystem_Random_Ctor); ++n;
     // WAVE 28 LANE MISC: the body has existed since Wave 2; this line is the port.
-    RegisterRuntimeExport("?NextGroup@Random@System@@AEAAXXZ", (void*)&RtSystem_Random_NextGroup); ++n;
 
     RegisterRuntimeExport("??0Time@System@@QEAA@M@Z", (void*)&RtSystem_Time_Ctor); ++n;
     RegisterRuntimeExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Time_Serialize); ++n;

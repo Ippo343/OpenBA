@@ -49,13 +49,9 @@ void RtVolumePortInit() {
     RegisterRuntimeExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z",
                            (void*)&RtVolume_Frustum_MulTransform3);
     RegisterRuntimeExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z", (void*)&RtVolume_Frustum_Contains);
-    RegisterRuntimeExport("?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z",
-                           (void*)&RtVolume_Frustum_GetCorners);
     // Wave 9 lane P. Registered by NAME only: the one in-tree caller,
     // runtime/src/graphics/renderer.cpp's RtFrustumProjection, already goes
     // through ResolveExport, and no site reaches it by address.
-    RegisterRuntimeExport("?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z",
-                           (void*)&RtVolume_Frustum_Projection);
 
     printf("[RtVolume] 12 exports registered (Box x5, Rectangle x1, Frustum x6)\n");
 }

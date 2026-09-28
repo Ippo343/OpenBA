@@ -15,7 +15,6 @@
 extern int RtSystemStringRegister();      // string.cpp
 extern int RtSystemFilenameRegister();    // filename.cpp
 extern int RtSystemValueRegister();       // value_types.cpp  (Random/Time/DateTime/Color)
-extern int RtSystemTimerRegister();       // timer.cpp        (also owns the five Timer data exports)
 extern int RtSystemAllocatorRegister();   // allocator.cpp    (System::MemoryAllocator)
 // System::Configuration::SetCommandLine plus the unexported string-keyed BST
 // find its map and IO::FileSystem both walk. On the process's single boot path
@@ -50,7 +49,6 @@ void RtSystemPortInit() {
     n += RtSystemStringRegister();
     n += RtSystemFilenameRegister();
     n += RtSystemValueRegister();
-    n += RtSystemTimerRegister();
     n += RtSystemConfigurationRegister();
     n += RtSystemErrorRegister();
     n += RtSystemWideStringRegister();

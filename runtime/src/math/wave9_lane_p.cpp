@@ -187,36 +187,7 @@ Math::Transform3 Math::Transform::AsTransform3() const {
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// TRANSITIONAL SHIMS — ENDGAME B.3.1 step 1. One line each onto the members
-// above; they and their registry rows die in step 2 with their last caller.
-// ---------------------------------------------------------------------------
-Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
-                                   const Quaternion* other, const Scalar* t) {
-    *ret = self->Lerp(*other, *t);
-    return ret;
-}
-
 Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret) {
     *ret = self->AsTransform3();
     return ret;
-}
-
-// ---- Registration ----------------------------------------------------------
-// Called from RtMathPortInit() alongside RtMathTransformRegister().
-//
-// Lerp is registered BY ADDRESS as well as by name: its only in-tree caller
-// today, runtime/src/graphics/scene.cpp's RtQuaternionLerp, reaches it through
-// ResolveAddr(Module::Runtime, 0x18001d500), and the address registry is a
-// separate table from the export registry. Registering the name alone would
-// leave that one caller — the only one — still on the DLL, which is precisely
-// the shape of the port-bypass defect lane R found in the same file.
-int RtMathWave9LanePRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z",
-                          (void*)&RtMath_Quaternion_Lerp); ++n;
-    RegisterRuntimeAddr(0x18001d500, (void*)&RtMath_Quaternion_Lerp);
-
-    return n;
 }

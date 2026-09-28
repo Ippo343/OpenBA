@@ -1137,43 +1137,5 @@ void CellIterAdvance(CellIter* it) {
     }
 }
 
-// ============================================================================
-// Registration — ADDRESS ONLY, and there is nothing else to register under.
-// ============================================================================
-// See the banner: none of these nineteen is exported in either build, so
-// `RegisterRuntimeExport` has no name to take. Every address is spelled as a
-// LITERAL here even though the comment beside it repeats it, because
-// tools/runtime_census.py counts address registrations from the literal in the
-// call and cannot see through a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md: twelve live ports
-// were invisible for a full wave).
-//
-// *** THIS CHANGES BEHAVIOUR AT SIX EXISTING CALL SITES. ***
-// `ResolveAddr(Module::Runtime, …)` consults the port registry FIRST, so from
-// the moment this runs, runtime/src/picking/scene.cpp's five forwarders and
-// runtime/src/graphics/scene.cpp:254's `0x18001f470` stop reaching the DLL and
-// reach the bodies above. Those files carry comments saying they call "the
-// retail body"; they are corrected in the same commit.
-//
-// 0x18001f470 IS A SHARED ROW. docs/runtime_port/wave9_internals.csv assigns it
-// to runtime/src/graphics/scene.cpp, i.e. to the graphics lane, and this lane
-// needs it as MeshBoundsXY's callee. It is registered here because this lane
-// ported it; if the graphics lane lands its own body the integrator should keep
-// exactly ONE registration, not two, and the loser's body should be deleted
-// rather than left as unreachable code.
-int RtPickingGridRegister() {
-    int n = 0;
-
-    // ---- the five the address-door census named --------------------------
-
-    // ---- their transitive closure ----------------------------------------
-    RegisterRuntimeAddr(0x18001b360, (void*)&TransformArrayAssign);   ++n;
-    RegisterRuntimeAddr(0x18001c100, (void*)&ArrayDtorTransform);     ++n;
-    RegisterRuntimeAddr(0x18001f470, (void*)&BoxTransform);           ++n;
-
-    return n;
-}
-
 }  // namespace rtpickgrid
 
-int RtPickingGridRegister() { return rtpickgrid::RtPickingGridRegister(); }

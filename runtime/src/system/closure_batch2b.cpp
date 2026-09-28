@@ -185,7 +185,6 @@ void RtClosureBatch2bPortInit() {
     // reader by name or by address and are deleted; their bodies above stay
     // (provenance, R3). 0x180061ae0 keeps its row: wave28_lane_partsys.cpp
     // reads it by address.
-    RegisterRuntimeAddr(0x180061ae0, (void*)&RtGraphics_Material_OperatorDelete); ++n;
 
     const int g = RtClosure2bGraphicsRegister();
     const int v = RtClosure2bVideoRegister();

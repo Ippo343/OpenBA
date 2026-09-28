@@ -3722,7 +3722,6 @@ void RtCollectionPortInit() {
     using namespace rtcoll;
 
     // ---- J1: Array<T>::~Array, one body, eleven addresses ------------------
-    RegisterRuntimeAddr(0x180013da0, (void*)&RtColl_ArrayDtor_180013da0);
     // Wave 9 lane UIF: the twelfth J1 address, reached by ??1Element@UI@@.
     // Wave 11 lane OBJLIFE: the seventeenth, reached by ??1InternalFactory@Object@@.
     // ---- THIRTEENTH THROUGH SIXTEENTH, and the number is STILL a lower bound.
@@ -3763,16 +3762,11 @@ void RtCollectionPortInit() {
     // call site is not attendance, and neither has been watched running.
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
-    RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
-    RegisterRuntimeAddr(0x180056240, (void*)&RtColl_ArraySetSize_180056240);
     // 2026-09-12 — Video::ShaderProgram's two. Registered UNCONDITIONALLY and
     // In the non-trivial tier, even though both call unexported
     // per-element helpers: they sit on ?Serialize@ShaderProgram@Video@@, which
     // is on the cutover boot path, and an unregistered address there is a call
     // to zero the moment the DLL is gone.
-    RegisterRuntimeAddr(0x180055db0, (void*)&RtColl_ArraySetSize_180055db0);
-    RegisterRuntimeAddr(0x180053f00, (void*)&RtColl_ArraySetSize_180053f00);
-    RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
     // BATCH 4 (Graphics render/cull/sun-camera cluster), two one-argument
     // constant-folded members. 0x18005f980 is a Reserve, not a SetSize — see
     // the banner over RtColl_ArrayReserve_18005f980.
@@ -3788,7 +3782,6 @@ void RtCollectionPortInit() {
     // predicted this exact EXEC-of-0 and is updated in the same commit.
     // WAVE 27 LANE FRONTIER - the read-path resize inside
     // ?Serialize@StringTable@UI@@ (0x18011d9b7), ported in the same commit.
-    RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
     // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
     // the non-trivial tier, for the same reason 0x180034860 and
@@ -3805,9 +3798,7 @@ void RtCollectionPortInit() {
     // VTABLE BATCH 2 (2026-09-12): the three read-path resizes of the
     // UI::*Description second half, plus LayoutElement's info array.
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
-    RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
     // ---- Wave 29 lane GFXBODY: Renderer::_drawables (AddLight) -------------
-    RegisterRuntimeAddr(0x180063a80, (void*)&RtColl_ArraySetSizeFill_180063a80);
     // ---- Wave 9 lane GFX3: the Graphics::Scene node array ------------------
     // ---- Wave 9 lane UIW: the five UI instantiations -----------------------
     // The two NON-TRIVIAL ones are registered HERE, unconditionally, and NOT
@@ -3827,7 +3818,6 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180029a80, (void*)&RtColl_ArraySetSize_180029a80);
 
     // ---- Wave 9 lane UIW: the one helper that is neither SetSize nor ~Array
-    RegisterRuntimeAddr(0x18001cdf0, (void*)&RtColl_I32ArrayAssign_18001cdf0);
     // WAVE 9 LANE UIF — Array<UI::SpriteDraw>: append (3-arg) and clear (0-arg).
     // WAVE 10 LANE UI3 — the two DialogInstance grow helpers. Both are
     // byte-identical to a body already registered above; the measurement and
@@ -3889,15 +3879,10 @@ void RtCollectionPortInit() {
     // (reference_census_cannot_see_nonliteral_registrations.md).
     //
     // J1 — nine more copies of the parameterless `~Array` body.
-    RegisterRuntimeAddr(0x180014d00, (void*)&RtColl_ArrayDtor_180014d00);
-    RegisterRuntimeAddr(0x180062320, (void*)&RtColl_ArrayDtor_180062320);
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
 
     // J3, two-argument.
-    RegisterRuntimeAddr(0x18005cc60, (void*)&RtColl_ArraySetSize_18005cc60);
-    RegisterRuntimeAddr(0x1800136f0, (void*)&RtColl_ArraySetSize_1800136f0);
-    RegisterRuntimeAddr(0x180061880, (void*)&RtColl_ArraySetSize_180061880);
 
     // J3, three-argument.
 
@@ -3935,27 +3920,13 @@ void RtCollectionPortInit() {
     // The Array<T>::SetSize bodies batch 7's AnimationGroup::Serialize and
     // ParticleSystem::Serialize reach by address. Spelled as LITERALS so
     // tools/runtime_census.py can see them.
-    RegisterRuntimeAddr(0x180059e70, (void*)&RtColl_ArraySetSize_180059e70);
-    RegisterRuntimeAddr(0x18005a220, (void*)&RtColl_ArraySetSize_18005a220);
-    RegisterRuntimeAddr(0x18005a410, (void*)&RtColl_ArraySetSize_18005a410);
-    RegisterRuntimeAddr(0x180059930, (void*)&RtColl_ArraySetSize_180059930);
-    RegisterRuntimeAddr(0x180021220, (void*)&RtColl_ArraySetSize_180021220);
-    RegisterRuntimeAddr(0x180020e90, (void*)&RtColl_ArraySetSize_180020e90);
 
 
     // ---- CUTOVER CLOSURE BATCH D1 (2026-09-12) ----------------------------
     // Ten J1, nine two-argument J3, two three-argument J3 and two
     // constant-folded SetSize(0). Every address is a LITERAL so
     // tools/runtime_census.py can see it.
-    RegisterRuntimeAddr(0x180013e70, (void*)&RtColl_ArrayDtor_180013e70);
-    RegisterRuntimeAddr(0x18001c020, (void*)&RtColl_ArrayDtor_18001c020);
-    RegisterRuntimeAddr(0x18001c3b0, (void*)&RtColl_ArrayDtor_18001c3b0);
-    RegisterRuntimeAddr(0x180021490, (void*)&RtColl_ArrayDtor_180021490);
 
-    RegisterRuntimeAddr(0x1800547e0, (void*)&RtColl_ArraySetSize_1800547e0);
-    RegisterRuntimeAddr(0x180054a20, (void*)&RtColl_ArraySetSize_180054a20);
-    RegisterRuntimeAddr(0x1800567d0, (void*)&RtColl_ArraySetSize_1800567d0);
-    RegisterRuntimeAddr(0x180056af0, (void*)&RtColl_ArraySetSize_180056af0);
 
 
 
@@ -3966,8 +3937,6 @@ void RtCollectionPortInit() {
     // tools/runtime_census.py can see them.
     // J1 -- seven more copies of the parameterless ~Array body.
     // J3, two-argument.
-    RegisterRuntimeAddr(0x180062110, (void*)&RtColl_ArraySetSize_180062110);
-    RegisterRuntimeAddr(0x180061bb0, (void*)&RtColl_ArraySetSize_180061bb0);
     // J3, three-argument (UI::Font::ComputeLineLayout appends one glyph).
     // The two element copy constructors the non-trivial specs above call.
     // J3, constant-folded one-argument.

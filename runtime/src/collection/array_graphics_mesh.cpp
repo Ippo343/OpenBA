@@ -352,11 +352,7 @@ void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
 // from this file's own dtor bodies. So the banner above now reads "six rows"
 // for four; the two it counted are these.
 int RtCollectionGraphicsMeshRegister() {
-    using namespace rtcoll;
-    int n = 0;
-    RegisterRuntimeAddr(0x180013fb0ull, (void*)&rtcoll::Rt_ArrayDtor_180013fb0);            ++n;
-    RegisterRuntimeAddr(0x180014160ull, (void*)&rtcoll::Rt_ArrayDtor_180014160);            ++n;
-    RegisterRuntimeAddr(0x18005d840ull, (void*)&rtcoll::Rt_SetSize_18005d840);              ++n;
-    RegisterRuntimeAddr(0x18005cda0ull, (void*)&rtcoll::Rt_SetSize_18005cda0);              ++n;
-    return n;
+    // B3R RT-Core: every row this registered lost its last reader. Kept
+    // defined, returning 0, only because runtime/src/graphics/rt_graphics_port.cpp (RT-VG) still calls it.
+    return 0;
 }

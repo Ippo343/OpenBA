@@ -16,7 +16,6 @@
 extern void RtMathTransformRegister();
 // Wave 9 lane P (runtime/src/math/wave9_lane_p.cpp): Quaternion::Lerp and
 // Transform::AsTransform3, the two Math exports waves 1-8 left on the DLL.
-extern int RtMathWave9LanePRegister();
 
 void RtMathPortInit() {
     // Volume's ports use the same RtLibm seam, so this must run before
@@ -50,8 +49,4 @@ void RtMathPortInit() {
 
     RtMathTransformRegister();  // Lane 2: Matrix/Quaternion/Transform/Transform2/Transform3
 
-    // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
-    const int n_mathwave9lanep = RtMathWave9LanePRegister();
-    printf("[RtMathPortInit] Wave 9 lane P: %d exports registered (Quaternion::Lerp, "
-           "Transform::AsTransform3)\n", n_mathwave9lanep);
 }

@@ -331,20 +331,3 @@ float System::Timer::TicksToSeconds(int64_t ticks) {
 // global -- so assignment copies nothing and returns `this`. Two instructions,
 // and it is the tenth and last export of the class.
 System::Timer& System::Timer::operator=(const System::Timer& /*other*/) { return *this; }
-
-// ============================================================================
-// ENDGAME B.3.4b -- the two delegating doors whose rows survive.
-// B3R RT-Core: the eight caller-less doors went with their rows.
-// ============================================================================
-int64_t  RtSystem_Timer_SecondsToTicks(float s)     { return System::Timer::SecondsToTicks(s); }
-float    RtSystem_Timer_TicksToSeconds(int64_t t)   { return System::Timer::TicksToSeconds(t); }
-
-// ============================================================
-// RtSystemTimerRegister — called from RtSystemPortInit() (rt_system_port.cpp).
-// ============================================================
-int RtSystemTimerRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?SecondsToTicks@Timer@System@@SA_JM@Z", (void*)&RtSystem_Timer_SecondsToTicks); ++n;
-    RegisterRuntimeExport("?TicksToSeconds@Timer@System@@SAM_J@Z", (void*)&RtSystem_Timer_TicksToSeconds); ++n;
-    return n;
-}
