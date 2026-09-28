@@ -37,7 +37,6 @@
 // That address is already registered by runtime/src/collection/array_destroy.cpp.
 // ============================================================================
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -49,7 +48,6 @@
 
 namespace {
 
-using ArrayDtorFn = void (*)(void* hdr);
 
 // System::String is ONE char* (runtime/types/system/String.h): the member
 // fields are spelled `char*`, so the Font/SpriteContext calls see them as the
@@ -72,7 +70,7 @@ namespace UI {
 TextElement::~TextElement() {
     System::StringPrivateAccess::Release(
         *reinterpret_cast<System::String*>(&_cachedText));
-    rtuielem::RtAddr<ArrayDtorFn>(0x180010ab0ull)(&_params);
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_params);
 }
 
 // slot 4 — 0x18011f060
@@ -168,20 +166,6 @@ Object::Base* TextElement::CreateInPlaceObject(void* place) {
     return ::new (place) TextElement();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiTextElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TextElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180041fe0ull, (void*)&UI::TextElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TextElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180042060ull, (void*)&UI::TextElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TextElement's own type record, built at CRT init

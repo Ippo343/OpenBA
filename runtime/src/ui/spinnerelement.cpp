@@ -39,7 +39,6 @@
 // vtable. That is retail's unguarded deref and CLAUDE.md says not to guard it.
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"
@@ -76,7 +75,6 @@ struct WidgetEvent {
 };
 static_assert(sizeof(WidgetEvent) == 0x30, "");
 
-using SetValueFn = void (*)(void* self, int32_t v);
 
 }  // namespace
 
@@ -181,27 +179,27 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     const uint32_t kButtonTypeId     = UI::ButtonElement::TypeId();       // retail [0x1801fa938]
 
     void* edit = _children.GetData()[0];
-    if (!RtAddr<IsDerivedFromFn>(0x1800c0390ull)(edit, kNumberEditTypeId)) return;
+    if (!reinterpret_cast<const Object::Base*>(edit)->IsDerivedFrom(kNumberEditTypeId)) return;
     if (edit == nullptr) return;
 
     // The "up" button is enabled only while the value is below the maximum.
     // `up` may be null (a failed IsDerivedFrom) and is dereferenced anyway —
     // retail's unguarded deref (`XOR EDI,EDI; CMOVNZ RDI,RBX`), kept.
     Element* upRaw = _children.GetData()[1];
-    Element* up = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(upRaw, kButtonTypeId)
+    Element* up = reinterpret_cast<const Object::Base*>(upRaw)->IsDerivedFrom(kButtonTypeId)
                   ? upRaw : nullptr;
     {
-        const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
+        const int32_t v = System::String::ToInteger(
             static_cast<const char*>(PTR(edit, kNeText)));
         up->Enable(v < I32(edit, kNeMax));                          // slot 8
     }
 
     // ... and the "down" button only while it is above the minimum.
     Element* downRaw = _children.GetData()[2];
-    Element* down = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(downRaw, kButtonTypeId)
+    Element* down = reinterpret_cast<const Object::Base*>(downRaw)->IsDerivedFrom(kButtonTypeId)
                     ? downRaw : nullptr;
     {
-        const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
+        const int32_t v = System::String::ToInteger(
             static_cast<const char*>(PTR(edit, kNeText)));
         down->Enable(I32(edit, kNeMin) < v);                        // slot 8
     }
@@ -216,10 +214,10 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     }
     if (step == 0) return;
 
-    const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
+    const int32_t v = System::String::ToInteger(
         static_cast<const char*>(PTR(edit, kNeText)));
-    // ?SetValue@NumberEditElement@ — block C3's class, a door by address.
-    RtAddr<SetValueFn>(0x1800d4bb0ull)(edit, step + v);
+    // ?SetValue@NumberEditElement@UI@@ (0x1800d4bb0).
+    static_cast<NumberEditElement*>(edit)->SetValue(step + v);
 
     WidgetEvent ev;
     ev.dialog    = dialog->Get();
@@ -231,7 +229,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     ev.value     = 0;
     ev.tail      = 0;
     // UserInterface's event array (block E's class): raw offsets, by address.
-    RtAddr<ArraySetSizeFillFn>(0x180033690ull)(
+    rtcoll::RtColl_ArraySetSizeFill_180033690(
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 
@@ -261,19 +259,6 @@ Object::Base* SpinnerElement::CreateInPlaceObject(void* place) {
 // `??_7SpinnerElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // SpinnerElement now wears the compiler's table.
 // ============================================================================
-
-int RtUiSpinnerElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@SpinnerElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SpinnerElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18004b200ull, (void*)&UI::SpinnerElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SpinnerElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18004b290ull, (void*)&UI::SpinnerElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::SpinnerElement's own type record, built at CRT init

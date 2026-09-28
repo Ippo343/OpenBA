@@ -58,7 +58,6 @@
 // ElementDescription) are reproduced: they are four instructions in the shipped
 // bytes and collapsing them would be a divergence for no gain.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>
@@ -134,12 +133,10 @@ bool GroupDescription::Serialize(void* streamv) {
     rw->SerializeInt(n, nullptr);                              // 180117d66
 
     if (ser.stream->mode == 0) {                               // 180117d6c (re-read)
-        using SetSizeFn = void (*)(void* array, int n);
-        rtdesc::RtAddr<SetSizeFn>(0x1800492d0ull)(&_children, n);   // 180117d7f
+        rtcoll::RtColl_ArraySetSize_1800492d0(&_children, n);   // 180117d7f
     }
 
-    using ElemSerFn = void (*)(rtdesc::Serializer* ser, int count, void* data);
-    rtdesc::RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _children._data);
+    RtObject_ExternalPtrArraySerialize_ElementDescription(IoSer(&ser), n, ExtArray(_children._data));
 
     if (rw != nullptr) delete rw;                    // 180117d9c
     return true;                                               // MOV AL,1
@@ -194,8 +191,7 @@ Object::InternalPtr<Element>* GroupDescription::CreateInstance(
 
         // Array<Element*>::SetSize(&elem->_children, size + 1, made) — the
         // three-argument (fill) form, ported as array.cpp's kSpec_Fill8Z.
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                                elem->_children._size + 1,
                                                made);          // 180117ea9
 
@@ -238,21 +234,6 @@ Object::Base* GroupDescription::CreateInPlaceObject(void* place) {
     return ::new (place) GroupDescription();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2). The slot doors and the
-// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
-// ============================================================================
-int RtUiGroupDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@GroupDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::GroupDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180046750ull, (void*)&UI::GroupDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GroupDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::GroupDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180046840ull, (void*)&UI::GroupDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::GroupDescription's own type record, built at CRT init

@@ -170,21 +170,6 @@ Object::Base* CheckElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the slot doors and the ??0 / copy / ??1
-// doors, read only by the retired minted table / RT_DELDTOR row, are gone.
-// ============================================================================
-int RtUiCheckElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@CheckElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::CheckElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180048b70ull, (void*)&UI::CheckElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@CheckElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::CheckElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180048c20ull, (void*)&UI::CheckElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::CheckElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@CheckElement@UI@@ (0x1801fa9a8): name "CheckElement", parent

@@ -105,7 +105,6 @@
 // live in numberelement.cpp.
 // ============================================================================
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -132,9 +131,6 @@
 #include "element_common.h"
 
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // ---------------------------------------------------------------------------
 // Shared field offsets. Element's come from runtime/types/ui/Element.h (the
@@ -227,10 +223,9 @@ void* InputDeviceSingleton() {            // 0x1801fe770
 //   0x180076900  stride 8, zero-then-assign   (kSpec_Fill8Z)
 //   0x180023830  stride 4                     (kSpec_Fill4)
 //   0x180024fe0  stride 8
-using ArrayGrowFn = void (*)(void* array, int32_t newSize, const void* value);
-void ArrayGrow8Z(void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x180076900ull)(a, n, v); }
-void ArrayGrow4 (void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x180023830ull)(a, n, v); }
-void ArrayGrow8 (void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x180024fe0ull)(a, n, v); }
+void ArrayGrow8Z(void* a, int32_t n, const void* v) { rtcoll::RtColl_ArraySetSizeFill_180076900(a, n, v); }
+void ArrayGrow4 (void* a, int32_t n, const void* v) { rtcoll::RtColl_ArraySetSizeFill_180023830(a, n, v); }
+void ArrayGrow8 (void* a, int32_t n, const void* v) { rtcoll::RtColl_ArraySetSizeFill_180024fe0(a, n, v); }
 
 }  // namespace
 
@@ -974,57 +969,4 @@ extern "C" void RtUi_LayoutElement_GetChildLayout(void* self, int32_t index, int
 }
 extern "C" char RtUi_EditElement_SelectCharacter(const void* self, int32_t key) {
     return reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::SelectCharacter(key);   // B.3.6 bridge
-}
-
-// ============================================================================
-// Registration — both doors, unconditionally, no kill switch.
-// ============================================================================
-int RtUiElementBodiesB5Register() {
-    int n = 0;
-
-    RegisterRuntimeExport("?GetRowHeight@TableElement@UI@@QEAAHH@Z",
-                          (void*)&RtUi_TableElement_GetRowHeight);               ++n;
-    RegisterRuntimeAddr(0x18011e090ull, (void*)&RtUi_TableElement_GetRowHeight);
-
-    RegisterRuntimeExport("?GetColumnWidth@TableElement@UI@@QEAAHH@Z",
-                          (void*)&RtUi_TableElement_GetColumnWidth);             ++n;
-    RegisterRuntimeAddr(0x18011e1a0ull, (void*)&RtUi_TableElement_GetColumnWidth);
-
-    RegisterRuntimeExport("?UpdateNumber@SliderElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_SliderElement_UpdateNumber);              ++n;
-    RegisterRuntimeAddr(0x1800d6c20ull, (void*)&RtUi_SliderElement_UpdateNumber);
-
-    RegisterRuntimeExport("?AddItem@RibbonElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z",
-                          (void*)&RtUi_RibbonElement_AddItem);                   ++n;
-    RegisterRuntimeAddr(0x1800448e0ull, (void*)&RtUi_RibbonElement_AddItem);
-
-    RegisterRuntimeExport(
-        "?AddItem@ListElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@PEAX@Z",
-        (void*)&RtUi_ListElement_AddItem);                                       ++n;
-    RegisterRuntimeAddr(0x1800d44b0ull, (void*)&RtUi_ListElement_AddItem);
-
-    RegisterRuntimeExport("?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z",
-                          (void*)&RtUi_ListElement_DrawHighlight);               ++n;
-    RegisterRuntimeAddr(0x1800d3f70ull, (void*)&RtUi_ListElement_DrawHighlight);
-
-    RegisterRuntimeExport("?GetBarLayout@ScrollElement@UI@@AEBAXAEAH000@Z",
-                          (void*)&RtUi_ScrollElement_GetBarLayout);              ++n;
-    RegisterRuntimeAddr(0x18011a2d0ull, (void*)&RtUi_ScrollElement_GetBarLayout);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@TextDescription@UI@@QEBAXV?$InternalPtr@VTextElement@UI@@@Object@@"
-        "PEBVDialog@2@@Z",
-        (void*)&RtUi_TextDescription_CreateInstance);                            ++n;
-    RegisterRuntimeAddr(0x18011ef70ull, (void*)&RtUi_TextDescription_CreateInstance);
-
-
-    RegisterRuntimeExport("?GetChildLayout@LayoutElement@UI@@AEAAXHHHHHH_N@Z",
-                          (void*)&RtUi_LayoutElement_GetChildLayout);            ++n;
-    RegisterRuntimeAddr(0x1800d2dc0ull, (void*)&RtUi_LayoutElement_GetChildLayout);
-
-    RegisterRuntimeExport("?SelectCharacter@EditElement@UI@@AEBADH@Z",
-                          (void*)&RtUi_EditElement_SelectCharacter);             ++n;
-    RegisterRuntimeAddr(0x1800cfd40ull, (void*)&RtUi_EditElement_SelectCharacter);
-
-    return n;
 }

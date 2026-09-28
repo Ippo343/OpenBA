@@ -23,7 +23,6 @@
 // against DescriptionsBatch1.h's POD); each registered door is a one-line
 // QUALIFIED delegation. The dtor stays a door (B4b-2).
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"
@@ -74,9 +73,8 @@ bool GraphDescription::Serialize(void* streamArg) {
     rw->SerializeInt(_tickSize, nullptr);                               // 1800d1ab8
     rw->SerializeUInt(_unknown74, nullptr);                             // 1800d1acd
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 1800d1adc ExternalPtr<SpriteSheet>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);             // 1800d1aed System::String
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));            // 1800d1adc ExternalPtr<SpriteSheet>
+    StringSerialize(&_spriteName, &ser);             // 1800d1aed System::String
 
     if (rw != nullptr) delete rw;                             // 1800d1b05
     return true;
@@ -150,24 +148,6 @@ Object::Base* GraphDescription::CreateInPlaceObject(void* place) {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door
-// and the FACTUI1 ??0 door are gone. Their only readers were the minted
-// `??_7GraphDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
-// ============================================================================
-int RtUiGraphDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@GraphDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::GraphDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180040180ull, (void*)&UI::GraphDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GraphDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::GraphDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180040200ull, (void*)&UI::GraphDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::GraphDescription's own type record, built at CRT init

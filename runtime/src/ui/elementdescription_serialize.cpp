@@ -117,49 +117,27 @@
 // ([[reference_uncalled_port_is_not_verified]]).
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/ElementDescription.h"
+#include "../../types/object/External.h"
+#include "../../types/system/String.h"
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
-// must stay platform-neutral. Byte-identical to resolve.h's declaration; the
-// same pair already appears in runtime/src/achievement/goal_serialize.cpp.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
-// The three unexported ExternalPtr<T>::Serialize instantiations this body
-// dispatches. Asked for BY ADDRESS because that is the only door they have —
-// and it is the door `runtime/src/object/external_ptr_serialize.cpp` registers,
-// so these resolve to OUR body rather than the DLL's.
-using PtrSerializeFn = void (*)(void*, Serializer*);
-
-PtrSerializeFn PtrSerialize(uintptr_t addr) {
-    return reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, addr));
-}
-
-using StringSerializeFn = void (*)(void*, Serializer*);
-// RULE B6-5: the member runs on the LOADER thread (every `.rsc` parse), so the
-// door is cached in a namespace-scope atomic, not a function-local static.
-std::atomic<void*> g_stringSerialize{nullptr};
-StringSerializeFn StringSerialize() {
-    void* p = g_stringSerialize.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800c9930));
-        if (p != nullptr) g_stringSerialize.store(p, std::memory_order_release);
-    }
-    return reinterpret_cast<StringSerializeFn>(p);
+// The three ExternalPtr<T>::Serialize instantiations this body dispatches
+// (runtime/src/object/external_ptr_serialize.cpp, declared in
+// runtime/types/object/External.h) and System::String::Serialize, called by name.
+RtObject::External** ExtField(void* field) {
+    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
 }
 
 // The prologue and epilogue, transcribed from 0x180116b20 and 0x180116c4d.
@@ -219,10 +197,10 @@ bool ElementDescription::Serialize(void* streamArg) {
 
     RecInt(rw, &_tabOrder);     // +0x38
 
-    PtrSerialize(0x180038f90)(&_childDesc,   &ser);   // +0x48
-    PtrSerialize(0x180076610)(&_userData,    &ser);   // +0x50
-    PtrSerialize(0x1800042a0)(&_stringTable, &ser);   // +0x58
-    StringSerialize()(&_textName, &ser);              // +0x60
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), &ser);   // +0x48 0x180038f90
+    RtObject_ExternalPtrSerialize_Dialog(ExtField(&_userData), &ser);                // +0x50 0x180076610
+    RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), &ser);        // +0x58 0x1800042a0
+    reinterpret_cast<System::String*>(&_textName)->Serialize(&ser);                  // +0x60 0x1800c9930
 
     DestroyCodec(rw);
     return true;
@@ -237,8 +215,3 @@ bool ElementDescription::Serialize(void* streamArg) {
 // retired with the minted `??_7ElementDescription@UI@@6B@`; every leaf's
 // Serialize calls the member QUALIFIED, and the exe import slot that once
 // bound the name is gone.)
-
-// ---- Registration ----------------------------------------------------------
-int RtUiElementDescriptionSerializeRegister() {
-    return 0;
-}

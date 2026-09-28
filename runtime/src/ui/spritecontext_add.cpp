@@ -145,24 +145,10 @@
 // Same forward declarations, same spelling, as spritecontext.cpp and
 // spritecontext_flush.cpp — the linker checks them against standalone/resolve.h.
 // See spritecontext.cpp's banner for why resolve.h is not included from here.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 using UI::SpriteContext;
 using UI::SpriteDraw;
-
-// ---- the mangled names, once -----------------------------------------------
-const char* const kAddSpritePoint =
-    "?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHI@Z";
-const char* const kAddSpriteRect =
-    "?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z";
-const char* const kAddSpriteRectRotated =
-    "?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHIM@Z";
-const char* const kAddFont =
-    "?AddFont@SpriteContext@UI@@QEAAXV?$ExternalPtr@VFont@UI@@@Object@@"
-    "AEBVString@System@@_NHW4Justify@Font@2@HHHI@Z";
 
 // The sheet rebind retail performs at the head of all three AddSprite bodies.
 // 0x18011cf3c..0x18011cf59 (and the identical blocks at 0x18011d3f4,
@@ -434,32 +420,4 @@ void RtUi_SpriteContext_AddFont(void* selfRaw, void* fontRaw, const void* text,
             Object::ExternalPtr<UI::Font>(static_cast<UI::Font*>(fontRaw)),
             *static_cast<const System::String*>(text),
             multiline, layoutA, justify, layoutB, x, y, color);
-}
-// ============================================================================
-int RtUiSpriteContextAddRegister() {
-    int n = 0;
-
-    // BOTH doors for every body, unconditionally — no kill switch and no env
-    // gate (DIRECTION.md §2: a port registers unconditionally). The address
-    // registration is what redirects the DLL's OWN internal callers, of which
-    // AddFont's call to the point overload at 0x18011cf00 is one.
-    RegisterRuntimeExport(kAddSpritePoint,
-                          (void*)&RtUi_SpriteContext_AddSprite_Point);
-    RegisterRuntimeAddr(0x18011cf00ull,
-                        (void*)&RtUi_SpriteContext_AddSprite_Point); ++n;
-
-    RegisterRuntimeExport(kAddSpriteRect,
-                          (void*)&RtUi_SpriteContext_AddSprite_Rect);
-    RegisterRuntimeAddr(0x18011d3c0ull,
-                        (void*)&RtUi_SpriteContext_AddSprite_Rect); ++n;
-
-    RegisterRuntimeExport(kAddSpriteRectRotated,
-                          (void*)&RtUi_SpriteContext_AddSprite_RectRotated);
-    RegisterRuntimeAddr(0x18011cb10ull,
-                        (void*)&RtUi_SpriteContext_AddSprite_RectRotated); ++n;
-
-    RegisterRuntimeExport(kAddFont, (void*)&RtUi_SpriteContext_AddFont);
-    RegisterRuntimeAddr(0x18011ccb0ull, (void*)&RtUi_SpriteContext_AddFont); ++n;
-
-    return n;
 }

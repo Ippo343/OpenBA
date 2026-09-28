@@ -29,11 +29,12 @@
 // instructions at 0x180049ee0, a bare tail jump to ~Element.
 // ============================================================================
 
-#include <atomic>
 #include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/SliderElement.h"
+#include "../../types/ui/SpriteContext.h"
+#include "../../types/ui/UserInterface.h"
 
 using namespace rtui;
 
@@ -79,7 +80,6 @@ static_assert(sizeof(WidgetEvent) == 0x30, "");
 
 // ?UpdateNumber@SliderElement@UI@@AEAAXXZ (0x1800d6c20) — its body is
 // element_bodies_b5.cpp's door (fragment pass); reached by address.
-using UpdateNumberFn = void (*)(void* self);
 
 int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
 int32_t SpriteH(const ::Sprite& s) { return SpriteHeight(&s, 0); }
@@ -109,7 +109,7 @@ void QueueEvent(UI::SliderElement* self, void* ui,
     ev.value     = 0;
     ev.tail      = 0;
     // UserInterface's event array (block E's class): raw offsets, by address.
-    RtAddr<ArraySetSizeFillFn>(0x180033690ull)(
+    rtcoll::RtColl_ArraySetSizeFill_180033690(
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 
@@ -212,24 +212,21 @@ void SliderElement::Draw(SpriteContext& context, uint8_t alpha) const {
     const int32_t ty     = top + _trackOffsetY;
 
     // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackStart, left, ty, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackStart, left, ty, c);
 
     const int32_t midH = SpriteH(_trackMiddle);
     const int32_t endW = SpriteW(_trackEnd);
     const int32_t sttW = SpriteW(_trackStart);
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
-                                         left + sttW, ty,
-                                         rightX - endW, ty + midH, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left + sttW, ty, rightX - endW, ty + midH, c);
 
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackEnd,
-                                         rightX - SpriteW(_trackEnd), ty, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackEnd, rightX - SpriteW(_trackEnd), ty, c);
 
     // The thumb's TRAVEL is measured with the idle sprite's width even when
     // the hot sprite is the one drawn (0x1800d6f3d reads +0xF0 before the
     // hover swap at 0x1800d6f5f). Reproduced.
     const int32_t pos = ThumbOffset(*this, SpriteW(_thumb));
     const ::Sprite& thumb = (_hovered != 0) ? _thumbHot : _thumb;
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &thumb, _thumbMargin + pos + left, top, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(thumb, _thumbMargin + pos + left, top, c);
 
     const Element* child = _children.GetData()[0];
     if (child != nullptr)
@@ -271,7 +268,7 @@ void SliderElement::Update(const System::Time& time, UserInterface* ui,
             }
             if (moved) {
                 QueueEvent(this, ui, dialog, state);
-                RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
+                static_cast<UI::UserInterface*>(ui)->Play(4);
             }
         }
     } else {
@@ -279,7 +276,7 @@ void SliderElement::Update(const System::Time& time, UserInterface* ui,
         if (live) {
             _dragAnchor = _value;
             SetFlags(this, _flags | kFlagDragging);
-            RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
+            static_cast<UI::UserInterface*>(ui)->Play(4);
         }
     }
 
@@ -291,14 +288,14 @@ void SliderElement::Update(const System::Time& time, UserInterface* ui,
     const uint32_t flags = _flags;
     if ((flags & kFlagDragging) != 0 && !isNear) {
         _value = _dragAnchor;
-        RtAddr<UpdateNumberFn>(0x1800d6c20ull)(this);
+        UpdateNumber();                                                     // 0x1800d6c20
         return;
     }
 
     bool doDrag = true;
     if ((flags & kFlagDragging) != 0 && state.b04 != 0) {       // +0x04: the release
         SetFlags(this, flags & ~kFlagDragging);
-        if (isNear) RtAddr<PlayFn>(0x1801223d0ull)(ui, 5);
+        if (isNear) static_cast<UI::UserInterface*>(ui)->Play(5);
         else        doDrag = false;
     }
 
@@ -317,7 +314,7 @@ void SliderElement::Update(const System::Time& time, UserInterface* ui,
     if (_value < _minimum) _value = _minimum;
     if (_maximum < _value) _value = _maximum;
 
-    RtAddr<UpdateNumberFn>(0x1800d6c20ull)(this);
+    UpdateNumber();                                                         // 0x1800d6c20
 }
 
 // ??1SliderElement@UI@@UEAA@XZ   0x180049ee0 — retail's body is a BARE TAIL
@@ -346,19 +343,6 @@ Object::Base* SliderElement::CreateInPlaceObject(void* place) {
 // `??_7SliderElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // SliderElement now wears the compiler's table.
 // ============================================================================
-
-int RtUiSliderElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@SliderElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SliderElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180049e10ull, (void*)&UI::SliderElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SliderElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180049e90ull, (void*)&UI::SliderElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::SliderElement's own type record, built at CRT init

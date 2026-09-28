@@ -86,7 +86,6 @@
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -99,6 +98,8 @@
 // standalone/resolve.h) and `rtuielem::AtomicExport`/`AtomicAddr`, the B6-5
 // door caches.
 #include "element_common.h"
+#include "../../types/ui/DialogInstance.h"
+#include "../../types/collection/Collection.h"
 
 using UI::Element;
 
@@ -118,44 +119,10 @@ namespace {
 
 
 // ---------------------------------------------------------------------------
-// THE ONE ADDRESS DOOR, declared rather than hidden.
-//
 // 0x180033690 is `Collection::Array<UI::Event>::SetSize(int, const Event*)` —
-// the grow-and-fill helper every UI event push goes through. It is NOT in the
-// export table, so there is no name door for it; runtime/src/collection/
-// array.cpp registers our port at that address, and ResolveAddr consults the
-// port registry FIRST (reference_resolveaddr_consults_port_registry_first.md).
-// Lane UI1 (userinterface_frame.cpp) and lane CLOSEDLG (userinterface_close.cpp)
-// reach the same address for the same reason.
+// the grow-and-fill helper every UI event push goes through (not exported):
+// `rtcoll::RtColl_ArraySetSizeFill_180033690`, called by name.
 // ---------------------------------------------------------------------------
-constexpr uintptr_t kEventsSetSizeAddr = 0x180033690;
-
-using SetSizeFn     = void  (*)(void* array, int32_t newSize, const void* fill);
-using ClipTestFn    = bool  (*)(const void* ui, int32_t x, int32_t y);
-using BeginToolTipFn= void  (*)(void* ui, void* dlgPtr, void* elemPtr, int32_t x, int32_t y);
-using SetUpperLeftFn= void  (*)(void* dlg, int32_t x, int32_t y, bool b);
-using EndHoverFn    = void  (*)(void* dlg, void* ui);
-using CloseDialogFn = void  (*)(void* ui, void* dlgPtr);
-using PlayFn        = void  (*)(void* ui, int32_t id);
-using EndDragDropFn = void  (*)(void* ui);
-
-std::atomic<void*> g_eventsSetSize{nullptr};
-std::atomic<void*> g_isInsideClipRegion{nullptr};
-std::atomic<void*> g_beginToolTip{nullptr};
-std::atomic<void*> g_setUpperLeft{nullptr};
-std::atomic<void*> g_endHover{nullptr};
-std::atomic<void*> g_closeDialog{nullptr};
-std::atomic<void*> g_play{nullptr};
-std::atomic<void*> g_endDragDrop{nullptr};
-
-SetSizeFn EventsSetSize() {
-    return reinterpret_cast<SetSizeFn>(
-        rtuielem::AtomicAddr(g_eventsSetSize, kEventsSetSizeAddr));
-}
-template <typename Fn>
-Fn Door(std::atomic<void*>& slot, const char* mangled) {
-    return reinterpret_cast<Fn>(rtuielem::AtomicExport(slot, mangled));
-}
 
 // ---------------------------------------------------------------------------
 // One queued UI event, 0x30 bytes — the interior runtime/types/ui/
@@ -293,12 +260,10 @@ void Element::Enable(bool enable) {
 bool Element::Contains(int32_t x, int32_t y, UserInterface* ui) const {
     if ((_flags & (kElementFlagHidden | kElementFlagNoHitTest)) != 0) return false;
 
-    ClipTestFn inClip = Door<ClipTestFn>(g_isInsideClipRegion,
-        "?IsInsideClipRegion@UserInterface@UI@@QEBA_NHH@Z");
     for (int32_t i = 0; i < _children._size; ++i) {
         const Element* child = _children._data[i];
         if (!child) continue;
-        if (!inClip(ui, x, y)) continue;
+        if (!ui->IsInsideClipRegion(x, y)) continue;                     // 0x180120830
         if (child->Contains(x, y, ui)) return true;
     }
     if (_children._size != 0) return false;
@@ -444,15 +409,15 @@ void Element::Update(const System::Time& time, UserInterface* ui,
             rec.dragData  = nullptr;
             if ((f & 0x00100000u) == 0) {                       // BT 0x14 clear
                 rec.eventId = 0xf;                              // tooltip BEGIN
-                EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
+                rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
                 void* dlgLocal  = dialog->Get();
                 void* elemLocal = this;
-                Door<BeginToolTipFn>(g_beginToolTip,
-                    "?BeginToolTip@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@"
-                    "V?$InternalPtr@VElement@UI@@@4@HH@Z")(u, &dlgLocal, &elemLocal, mx, my);
+                u->BeginToolTip(                                        // 0x180120860
+                    reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&dlgLocal),   // B.3.x bridge
+                    reinterpret_cast<Object::InternalPtr<Element>*>(&elemLocal), mx, my);
             } else {
                 rec.eventId = 0x10;                             // tooltip MOVE
-                EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
+                rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
                 void* const tip = u->_toolTipDialog;
                 if (tip) {
                     // y is offset by the tooltip ROOT ELEMENT's layout height
@@ -462,8 +427,7 @@ void Element::Update(const System::Time& time, UserInterface* ui,
                         reinterpret_cast<const uint8_t*>(tip) + 0x50);
                     const int32_t h = *reinterpret_cast<const int32_t*>(
                         reinterpret_cast<const uint8_t*>(root) + 0x64);
-                    Door<SetUpperLeftFn>(g_setUpperLeft,
-                        "?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z")(tip, mx, my - h, false);
+                    static_cast<DialogInstance*>(tip)->SetUpperLeft(mx, my - h, false);   // 0x180114a60
                 }
             }
             const uint32_t o = _flags;
@@ -472,8 +436,7 @@ void Element::Update(const System::Time& time, UserInterface* ui,
                 SetNeedsSizeCalc();                             // DEAD
 
         } else if ((f & 0x00100000u) != 0) {
-            Door<EndHoverFn>(g_endHover,
-                "?EndHover@DialogInstance@UI@@QEAAXPEAVUserInterface@2@@Z")(dialog->Get(), u);
+            dialog->Get()->EndHover(u);                                 // 0x180113d10
             void* const tip = u->_toolTipDialog;
             bool clear = false;
             if (!tip) {
@@ -484,9 +447,8 @@ void Element::Update(const System::Time& time, UserInterface* ui,
                 // (0x1801164fc). Kept: it is the body.
                 if (tip) {
                     void* local = tip;
-                    Door<CloseDialogFn>(g_closeDialog,
-                        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z")
-                        (u, &local);
+                    u->CloseDialog(                                     // 0x180120f20
+                        reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&local));   // B.3.x bridge
                 }
                 clear = true;
             }
@@ -515,10 +477,10 @@ void Element::Update(const System::Time& time, UserInterface* ui,
     if (!wasHovering) {
         if (!hovering) return;
         rec.eventId = 0;                                        // hover ENTER
-        EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
+        rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
     } else if (!hovering) {
         rec.eventId = 1;                                        // hover LEAVE
-        EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
+        rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
         return;
     }
 
@@ -532,7 +494,7 @@ void Element::Update(const System::Time& time, UserInterface* ui,
         rec.mouseY    = my;
         rec.dragId    = 0;
         rec.dragData  = nullptr;
-        EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
+        rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
     };
 
     if (state.dragActive) {
@@ -547,9 +509,9 @@ void Element::Update(const System::Time& time, UserInterface* ui,
         rec.mouseY    = my;
         rec.dragId    = u->_dragDropId;
         rec.dragData  = u->_dragDropData;
-        EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
-        Door<PlayFn>(g_play, "?Play@UserInterface@UI@@QEAAXH@Z")(u, 3);
-        Door<EndDragDropFn>(g_endDragDrop, "?EndDragDrop@UserInterface@UI@@QEAAXXZ")(u);
+        rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
+        u->Play(3);                                                     // 0x1801223d0
+        u->EndDragDrop();                                               // 0x180120af0
         return;
     }
 
@@ -567,25 +529,6 @@ void Element::Update(const System::Time& time, UserInterface* ui,
 // (ENDGAME B.3.9 UI-D: the eight slot doors that stood here -- TypeName,
 // Type, Persist, Update, Enable, Contains, SetColor, GetBorder -- are
 // retired with the minted `??_7Element@UI@@6B@`; nothing else reached them.)
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH DOORS ON EVERY ROW: a minted vtable slot is filled by NAME, but sites in
-// this tree reach exported code by ADDRESS, and a name-only registration leaves
-// those walking past the port.
-//
-// Each mangled name is spelled as a LITERAL (tools/runtime_census.py cannot see
-// through a named constant).
-int RtUiElementVtableRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?TypeId@Element@UI@@SAIXZ",
-                          (void*)&UI::Element::TypeId); ++n;
-    RegisterRuntimeAddr(0x180035430, (void*)&UI::Element::TypeId);
-
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::Element's own type record, built at CRT init

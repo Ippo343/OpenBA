@@ -42,7 +42,6 @@
 // ExternalPtr<ElementDescription> at +0x68..+0x88 are left alone, and so are
 // the four ints. Retail's, transcribed.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"
@@ -96,9 +95,8 @@ bool ButtonDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
     for (int i = 0; i < 5; ++i)                            // 18011142f .. 180111476
-        RtAddr<FieldSerFn>(0x180038f90ull)(&_childDesc[i], &ser);
+        RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc[i]), IoSer(&ser));
 
     rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word90), nullptr); // 18011147b .. 1801114d5
     rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word94), nullptr);
@@ -241,21 +239,6 @@ extern "C" void RtUi_ButtonDescription_ApplyToElement(const void* selfv,
         ->UI::ButtonDescription::CreateInstance(
             reinterpret_cast<Object::InternalPtr<UI::ButtonElement>*>(elemPtr),
             static_cast<const UI::Dialog*>(dialog));
-}
-
-int RtUiButtonDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ButtonDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ButtonDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180047f20ull, (void*)&UI::ButtonDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ButtonDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ButtonDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180047fa0ull, (void*)&UI::ButtonDescription::CreateInPlaceObject);
-
-    // ADDRESS ONLY, as before: the export name resolves to this address.
-    RegisterRuntimeAddr(0x1801108d0ull, (void*)&RtUi_ButtonDescription_ApplyToElement); ++n;
-
-    return n;
 }
 
 // ============================================================================

@@ -31,7 +31,6 @@
 // ui_factory_wave28.cpp's row, are gone.
 // ============================================================================
 
-#include <atomic>
 
 #include "widget_common.h"
 #include "../../types/ui/PageElement.h"
@@ -64,20 +63,6 @@ Object::Base* PageElement::CreateInPlaceObject(void* place) {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiPageElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::PageElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180047360ull, (void*)&UI::PageElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::PageElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180047400ull, (void*)&UI::PageElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::PageElement's own type record, built at CRT init

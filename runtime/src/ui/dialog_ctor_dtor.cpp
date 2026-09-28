@@ -178,12 +178,6 @@
 #include "../../types/system/String.h"
 #include "../../types/ui/Dialog.h"
 
-// ---- ResolveExport / ResolveAddr -------------------------------------------
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: resolve.h drags in <windows.h>. These declarations
-// must stay byte-identical to resolve.h's; the linker checks them.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // ============================================================================
 // ENDGAME B.3.9 block UI-D: the two DOORS this file carried are RETIRED. The
 // constructor above is `UI::Dialog::Dialog()` (Dialog.h, the three vptr stores
@@ -193,18 +187,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // spell `::new (p) UI::Dialog()` and `~T()` (slot 0, flags 0). With the doors go the
 // `[DLG2] FIRST LIVE CALL` lines.
 // ============================================================================
-namespace {
-
-// ---- The two `~Array` bodies the dtor still reaches by address -------------
-// Takes the ALREADY-RESOLVED pointer so the two `ResolveAddr(Module::Runtime,
-// 0x…)` literals stay visible at the call sites (see ~Dialog).
-void ArrayDtorAt(uintptr_t resolved, void* member) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(resolved)(member);
-}
-
-}  // namespace
-
 // ============================================================================
 // `??1Dialog@UI@@UEAA@XZ`  0x180112e40
 // ============================================================================
@@ -229,9 +211,9 @@ Dialog::~Dialog() {
     // `array_destroy.cpp`'s J2 entries (`RtColl_ArrayDtorElem_180039360` /
     // `_180039280`): they destroy each element's embedded `System::String`
     // via a `DestroySpec` — a different mechanism from `rtcoll::ArraySpec` —
-    // so they stay free-function calls through the seam.
-    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039360), p + 0x58);  // 180112e78
-    ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039280), p + 0x48);  // 180112e82
+    // so they stay free-function calls, by name.
+    rtcoll::RtColl_ArrayDtorElem_180039360(p + 0x58);                  // 180112e78
+    rtcoll::RtColl_ArrayDtorElem_180039280(p + 0x48);                  // 180112e82
 
     // ---- the System::String release at +0x28, ASYMMETRY AND ALL ------------
     // String's own Release (0x1800c9870): the freeing branch leaves the field

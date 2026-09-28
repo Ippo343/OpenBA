@@ -49,20 +49,16 @@
 // and dtor stay DOOR bodies. CreateInstance writes a real
 // `UI::NumberEditElement` (EditElement's 0xf8 + `_min`/`_max`).
 // ============================================================================
-#include <atomic>
 
 #include "element_common.h"   // rtuielem::AtomicExport (RULE B6-5), ResolveAddr
 #include "../../types/ui/NumberEditDescription.h"
 #include "../../types/ui/NumberEditElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/system/String.h"
+#include <new>
 
 namespace {
-
-// RULE B6-5: the members resolve through namespace-scope atomics.
-std::atomic<void*> g_memFreeSlot{nullptr};
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -80,11 +76,7 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using MemFreeFn = void (*)(void*);
-void MemFree(void* p) {
-    reinterpret_cast<MemFreeFn>(rtuielem::AtomicExport(
-        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
-}
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 int32_t& RefCount(char* s) { return *reinterpret_cast<int32_t*>(s - 4); }
 
 // `System::String::operator=` INLINED, as retail has it at both of this file's
@@ -157,8 +149,7 @@ bool NumberEditDescription::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 1800d4f2a
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x18003f1e0ull)(&_font, &ser);          // 1800d4f38
+    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 1800d4f38
 
     rw->SerializeInt(_i70, nullptr);
     rw->SerializeInt(_i78, nullptr);
@@ -196,8 +187,7 @@ bool NumberEditDescription::Serialize(void* streamv) {
 // and falls straight through into `MOV [RDI+0xc0],RAX`. That deref is retail's.
 Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* /*dialog*/) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x100, 8);  // 1800d4cff (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0x100, 8);   // 1800d4cff (inlined)
 
     NumberEditElement* elem = static_cast<NumberEditElement*>(raw);
     if (raw != nullptr)                                        // 1800d4d2c
@@ -217,8 +207,9 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
     // `elem` a moment ago, so the temporary and that slot are one object.
     {
         char* tmp = nullptr;                                   // [RSP+0x50]
-        using FormatFn = char** (*)(char** ret, const char* fmt, ...);
-        char** made = RtAddr<FormatFn>(0x1800c9730ull)(&tmp, "%i", _i70);  // 1800d4d87
+        new (static_cast<void*>(&tmp)) System::String(                     // 1800d4d87
+            System::String::Format("%i", _i70));                   // 0x1800c9730, retslot = &tmp
+        char** made = &tmp;
 
         StringAssignInline(&elem->_text, *made);               // 1800d4d8f
         StringReleaseInline(&tmp);                             // 1800d4dd8
@@ -233,8 +224,7 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
         const char* set = _b80 != 0 ? "0123456789-" : "0123456789";  // 1800d4e1c
 
         char* tmp = nullptr;                                   // 1800d4e27
-        using SetFn = void (*)(char** self, const char* src);
-        RtAddr<SetFn>(0x1800c95d0ull)(&tmp, set);              // 1800d4e31
+        reinterpret_cast<System::String*>(&tmp)->Set(set);    // 1800d4e31  0x1800c95d0
 
         char* value = tmp;                                     // 1800d4e3e  RBX
         StringAssignInline(&elem->_filter, value);             // 1800d4e37
@@ -287,22 +277,6 @@ Object::Base* NumberEditDescription::CreateInPlaceObject(void* place) {
     return ::new (place) NumberEditDescription();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the slot doors and the ??0 / ??1 doors,
-// read only by the retired minted table / RT_DELDTOR row / FACTUI2 row, are
-// gone. The factory pair (B39_RULES D2) is the class's own.
-// ============================================================================
-int RtUiNumberEditDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@NumberEditDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::NumberEditDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180045f80ull, (void*)&UI::NumberEditDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@NumberEditDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::NumberEditDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180046000ull, (void*)&UI::NumberEditDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberEditDescription's own type record, built at CRT init

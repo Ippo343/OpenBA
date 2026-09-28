@@ -39,13 +39,7 @@
 #include "../../types/ui/CharacterSet.h"
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // IO::Stream / IO::Serializer, the two-field pair every Serialize in this
 // family builds on its stack. Same shape as animatedimagedescription.cpp's.
@@ -130,8 +124,7 @@ bool CharacterSet::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                   // 1800cb7ed
 
-    using StrSerFn = void (*)(void* str, Serializer* ser);
-    RtAddr<StrSerFn>(0x1800c9930ull)(&_string20, &ser);      // 1800cb7fb
+    reinterpret_cast<System::String*>(&_string20)->Serialize(&ser);      // 1800cb7fb
 
     if (rw != nullptr) {                                     // 1800cb806
         delete rw;                                 // 1800cb813
@@ -151,25 +144,6 @@ CharacterSet::~CharacterSet() {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// Registration. ENDGAME B.3.9 UI-D: the seven slot doors and the ??1 door are
-// gone -- their only reader was the minted `??_7CharacterSet@UI@@6B@` (and,
-// for ??1, its RT_DELDTOR row). What is left is the factory pair (B39_RULES
-// D2): the class's OWN statics, by name and address, so the minted
-// `?_typeInfo@CharacterSet@UI@@` record (MintTypeInfos resolves its factory
-// pointers by name, after every *PortInit) builds a real CharacterSet.
-// ============================================================================
-int RtUiCharacterSetRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@CharacterSet@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::CharacterSet::CreateNewObject);       ++n;
-    RegisterRuntimeAddr(0x180037540ull, (void*)&UI::CharacterSet::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@CharacterSet@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::CharacterSet::CreateInPlaceObject);   ++n;
-    RegisterRuntimeAddr(0x1800375f0ull, (void*)&UI::CharacterSet::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::CharacterSet's own type record, built at CRT init
