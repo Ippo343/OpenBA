@@ -64,46 +64,23 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Component/animalcomponent_funcs.h"   // AnimalComponent_UpdateBehavior (0x140107320)
+#include "Component/herdcomponent_funcs.h"     // HerdComponent_Helper7400 (0x140107400)
+#include "Entity/componententity_funcs.h"      // 0x1400c3720 / 0x1400c48a0
+#include "Action/exe_bodies.h"                 // Pf_EntityResolvePos_2e20, ActHunt_NotifyEntityChanged_c3470
+#include "Work/exe_bodies.h"                   // WorkBase_FindComponent_2ed0
+#include "Game/exe_constants.h"                // kRdata_140172220 / kRdata_140172114
+#include "system/MemoryAllocator.h"
 
 namespace {
 
-typedef void* (*fn_Find_t)(int64_t entity, void* outIBP);                      // 0x140002ed0
-typedef void  (*fn_GetPoint_t)(void* comp, void* outVec3, int kind, int index,
-                               const float* opt);                              // 0x140122e20
-typedef void* (*fn_EntityCopyCtor_t)(void* mem, int64_t tmpl);                 // 0x1400c3720
-typedef void  (*fn_RegisterEntity_t)(void* entityList, void* entIBP, int cat); // 0x1400c48a0
-typedef void  (*fn_HerdPlace_t)(int64_t animalComp, void* pos3, float yaw,
-                               bool female);                                   // 0x140107400
-typedef void  (*fn_AnimalBehaviour_t)(void* animalComp);                       // 0x140107320
-typedef void  (*fn_ModelRefresh_t)(void* model);                               // 0x1400c3470
-
-fn_Find_t            s_FindFootprint = nullptr;
-fn_GetPoint_t        s_GetPoint      = nullptr;
-fn_EntityCopyCtor_t  s_EntityCopy    = nullptr;
-fn_RegisterEntity_t  s_RegEntity     = nullptr;
-fn_HerdPlace_t       s_HerdPlace     = nullptr;
-fn_AnimalBehaviour_t s_AnimalBehav   = nullptr;
-fn_ModelRefresh_t    s_ModelRefresh  = nullptr;
-const float*         s_pYawSpread    = nullptr;   // 0x140172220
-const float*         s_pPhaseScale   = nullptr;   // 0x140172114
-bool                 s_resolved      = false;
-
-template <class T> T R(uintptr_t a) { return reinterpret_cast<T>(ResolveAddr(Module::Exe, a)); }
-
-void Resolve() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_FindFootprint = R<fn_Find_t>(0x140002ed0);
-    s_GetPoint      = R<fn_GetPoint_t>(0x140122e20);
-    s_EntityCopy    = R<fn_EntityCopyCtor_t>(0x1400c3720);
-    s_RegEntity     = R<fn_RegisterEntity_t>(0x1400c48a0);
-    s_HerdPlace     = R<fn_HerdPlace_t>(0x140107400);
-    s_AnimalBehav   = R<fn_AnimalBehaviour_t>(0x140107320);
-    s_ModelRefresh  = R<fn_ModelRefresh_t>(0x1400c3470);
-    s_pYawSpread    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172220));
-    s_pPhaseScale   = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-}
-
+// Leaves, by retail address:
+//   0x140002ed0 WorkBase_FindComponent_2ed0 (footprint)   0x140122e20 Pf_EntityResolvePos_2e20
+//   0x1400c3720 ComponentEntity_CtorFromDescription       0x1400c48a0 EntityList_RegisterEntity_Impl
+//   0x140107400 HerdComponent_Helper7400 (the registered row is reg_herd_live.cpp's
+//               one-line thunk to it)                     0x140107320 AnimalComponent_UpdateBehavior
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470 (model refresh)
+//   .rdata 0x140172220 (yaw spread) / 0x140172114 (phase scale) -> kRdata_ constants.
 
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
@@ -132,22 +109,19 @@ inline int ToCell(float world, float half, int mapSize) {
 // ============================================================
 extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
                                                        unsigned int qty) {
-    Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     // ── the post's footprint corners ─────────────────────────────────────────────
     uint64_t fpIBP[2] = {0, 0};
-    if (s_FindFootprint) s_FindFootprint(*reinterpret_cast<int64_t*>(comp + 0x10), fpIBP);
+    WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(comp + 0x10), fpIBP);
 
     // Corner 0 and corner 1 of the footprint. Three floats each: 0x140122e20 writes a
     // full Vector3 through its out-param, and a 2-float array here would let it scribble
     // over whatever local sits next on the stack (reference_out_param_buffer_too_small).
     float a[3] = {0.0f, 0.0f, 0.0f};
     float b[3] = {0.0f, 0.0f, 0.0f};
-    if (s_GetPoint) {
-        s_GetPoint(*reinterpret_cast<void**>(fpIBP), a, 2, 0, nullptr);
-        s_GetPoint(*reinterpret_cast<void**>(fpIBP), b, 2, 1, nullptr);
-    }
+    Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(fpIBP), a, 2, 0, nullptr);
+    Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(fpIBP), b, 2, 1, nullptr);
 
     const uintptr_t w = World();
     if (!w) return;
@@ -184,27 +158,14 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
 
     const int rectW = maxX - minX + 1;
     const int rectH = maxY - minY + 1;
-    const float yawSpread  = s_pYawSpread  ? *s_pYawSpread  : 180.0f;
-    const float phaseScale = s_pPhaseScale ? *s_pPhaseScale : 1.0f;
-
-    // Guard the VALUE, not just the pointer: a type-id slot that is registered but
-    // filled with zero matches nothing, and would silently spawn `qty` entities with no
-    // AnimalComponent attached (reference_registered_but_filled_with_zero).
-    if (!s_EntityCopy || !fn_MemAlloc) {
-        std::fprintf(stderr, "[TradeLivestock] cannot spawn %u animal(s): animalTid=%u "
-                     "copyCtor=%p memAlloc=%p — purchase is committed but no animals "
-                     "will appear\n",
-                     qty, AnimalComponent::TypeId(),
-                     reinterpret_cast<void*>(s_EntityCopy),
-                     reinterpret_cast<void*>(fn_MemAlloc));
-        std::fflush(stderr);
-        return;
-    }
+    const float yawSpread  = kRdata_140172220;
+    const float phaseScale = kRdata_140172114;
 
     int spawned = 0;
     for (unsigned int i = 0; i < qty; ++i) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-        void* ent = mem ? s_EntityCopy(mem, reinterpret_cast<int64_t>(tmpl)) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+        void* ent = mem ? ComponentEntity_CtorFromDescription(
+                              reinterpret_cast<ComponentEntity*>(mem), tmpl) : nullptr;
         uint64_t entIBP = MakeIBP(ent);
         if (!entIBP) continue;
 
@@ -240,11 +201,10 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
             a[2] + (b[2] - a[2]) * 0.0f,     // XORPS XMM9,XMM9 — always corner-0's Z
         };
 
-        const float yaw = (fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f)
-                          * yawSpread;
-        if (animalIBP && s_HerdPlace)
-            s_HerdPlace(static_cast<int64_t>(animalIBP),
-                        const_cast<float*>(pos), yaw, female);
+        const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
+        if (animalIBP)
+            HerdComponent_Helper7400(static_cast<int64_t>(animalIBP),
+                                     const_cast<float*>(pos), yaw, (char)female);
         female = !female;   // alternate AFTER placing, as retail does
 
         if (animalIBP) {
@@ -257,7 +217,7 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
             *reinterpret_cast<uint32_t*>(an + 0x20) = after;
             if (static_cast<uint16_t>(before) != static_cast<uint16_t>(after) &&
                 *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
-                if (s_ModelRefresh) s_ModelRefresh(*reinterpret_cast<void**>(an + 0x10));
+                ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(an + 0x10));
             }
 
             // The roam rect: where this animal is allowed to wander.
@@ -269,13 +229,12 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
             const float span = *reinterpret_cast<float*>(an + 0x48);
             *reinterpret_cast<float*>(an + 0x44) =
                 reinterpret_cast<System::Random*>(rng)->RandFloat() * span * phaseScale;   // B.3.4b bridge
-            if (s_AnimalBehav) s_AnimalBehav(reinterpret_cast<void*>(an));
+            AnimalComponent_UpdateBehavior(reinterpret_cast<AnimalComponent*>(an));
         }
 
         uint64_t regIBP = entIBP;
-        if (s_RegEntity)
-            s_RegEntity(*reinterpret_cast<void**>(w + 0xe8), &regIBP,
-                        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
+        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(w + 0xe8), &regIBP,
+                                       *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
         ++spawned;
     }
 
