@@ -77,3 +77,4 @@ Typetable after TR: 428 lines (md5 b983f144) = the 433-line table minus 5 `Resol
 readers are `X::TypeId()` now (the gate's lazy-lookup rule: equal). Baseline and `TYPETABLE_414.txt` refreshed to
 it so later comparisons are strict. `NOT IMPLEMENTED` hits on the new-game route: 23 → 11 (rows of deleted
 readers; none new).
+| b39-TIR (W3: 29 Runtime type records folded into DEFINE_TYPE — Graphics 11, Video 7, Achievement 4, Collision2D 2, Audio 2, Picking, Pathfinding, IO) | b0835c71 | ok | 0 | 909 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/74/10 | 4 | tools x3 exit 0; typetable == baseline (428 lines, identical ids) | 0 |
