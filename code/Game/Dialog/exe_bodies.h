@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include "engine_funcs.h"   // the globals the moved inline bodies still read
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 class MainMenuDialog;  // code/Game/Dialog/MainMenuDialog.h
 class TradeUI;         // code/Game/Dialog/TradeUI.h
@@ -215,7 +216,7 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
     if (dstArray == srcArray) return;
     uint64_t* dst = (uint64_t*)dstArray;
     uint64_t* src = (uint64_t*)srcArray;
-    fn_MemFreeStatic((void*)*dst);
+    System::MemoryAllocator::MemFree((void*)*dst);
     dst[1] = 0;
     dst[0] = 0;
     int count = (int)(uint32_t)src[1];  // low 32 bits of src[1]
@@ -223,7 +224,7 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
     if (count > 0) {
         // High word of dst[1]+4 = capacity (same as count on fresh alloc)
         *(int*)((uintptr_t)dst + 0xc) = count;
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 16, 8);
+        void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)count * 16, 8);
         *dst = (uint64_t)newBuf;
     }
     // Copy entries

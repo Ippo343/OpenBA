@@ -122,7 +122,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
     }
     UI::UserInterface* ui =
         *reinterpret_cast<UI::UserInterface**>((uintptr_t)gameWorld + 0x98);
-    if (!ui || !fn_IsA) {
+    if (!ui) {
         *(uintptr_t*)ret = 0;
         return retval;
     }
@@ -143,7 +143,8 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
         void* dialog = *(void**)node;
         if (dialog) {
             // Check IsA against dialogTypeId
-            if (fn_IsA(dialog, dialogTypeId)) {
+            // ?IsA@Base@Object@@QEBA_NI@Z 0x1800491c0, the member (B3R Leftovers).
+            if (reinterpret_cast<const ::Object::Base*>(dialog)->IsA(dialogTypeId)) {  // B.3.x bridge
                 if (controllerTypeId == 0 || partCount != 2) {
                     // Match found, no controller check needed
                     *(uintptr_t*)ret = (uintptr_t)dialog;

@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include "engine_funcs.h"   // the globals the moved inline bodies still read
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 // ---- citizen_names.cpp
 extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng, int minLen, int maxLen);  // 0x1400a4b30
@@ -220,10 +221,11 @@ inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop
 // extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
 inline void* GetLoadingSoundString(void* retStr) {
     uint8_t rng[2520];  // System::Random is large (~2512 bytes)
-    fn_Random_Default_Ctor(rng);
+    // ??0Random@System@@QEAA@XZ 0x1800c7f20, called by name (B3R Leftovers).
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng));
     // B.3.4b bridge: the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
     // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and
-    // Rand(int,int). The ctor door above STAYS (B.3.4b keeps ctor/dtor doors).
+    // Rand(int,int).
     uint32_t variant = reinterpret_cast<System::Random*>(rng)->Rand(12u);
     // BANISHED_MENU_SCENE pins every random front-end pick, this one included:
     // the loading image it selects stays resident and is numbered into the
@@ -263,7 +265,7 @@ inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
             // Grow: triple capacity if non-empty, else use newCount
             capacity = (count != 0) ? newCount * 3 : newCount;
             *(int*)(gw + 0x12c) = capacity;
-            void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)capacity * 8, 8);
+            void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)capacity * 8, 8);
             *(void**)(gw + 0x120) = newBuf;
         }
         uintptr_t* newArr = *(uintptr_t**)(gw + 0x120);
@@ -276,7 +278,7 @@ inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
             }
         }
         if (oldArr != newArr) {
-            fn_MemFreeStatic(oldArr);
+            System::MemoryAllocator::MemFree(oldArr);
         }
     }
 }
