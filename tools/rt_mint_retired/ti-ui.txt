@@ -38,3 +38,15 @@
 ?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::EditElement, "Element") in editelement.cpp; readers: own accessor slot gone
 ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberEditElement, "EditElement") in numbereditelement.cpp; readers: own accessor slot gone, spinnerelement, widgets_input by-address 0x1801fa190 -> NumberEditElement::TypeId() (cluster 1)
 ?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberElement, "Element") in numberelement.cpp; readers: own accessor slot gone, element_bodies_b5 -> NumberElement::TypeId() (cluster 1)
+
+# -- cluster 4: Container / Layout / List / Scroll / Table --
+?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ContainerDescription, "ElementDescription") in containerdescription.cpp; readers: own accessor slot gone
+?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LayoutDescription, "ElementDescription") in layoutdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ListDescription, "ElementDescription") in listdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ScrollDescription, "ElementDescription") in scrolldescription.cpp; readers: own accessor slot gone
+?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TableDescription, "ElementDescription") in tabledescription.cpp; readers: own accessor slot gone
+?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ContainerElement, "Element") in containerelement.cpp; readers: own accessor slot gone, combodialog_ctor -> ContainerElement::TypeId() (cluster 1)
+?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LayoutElement, "Element") in layoutelement.cpp; readers: own accessor slot gone
+?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ListElement, "Element") in listelement.cpp; readers: own accessor slot gone, combodialog_ctor / comboelement -> ListElement::TypeId() (cluster 1)
+?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ScrollElement, "Element") in scrollelement.cpp; readers: own accessor slot gone, containerelement / element -> ScrollElement::TypeId() (cluster 1)
+?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TableElement, "Element") in tableelement.cpp; readers: own accessor slot gone

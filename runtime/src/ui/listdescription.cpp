@@ -70,15 +70,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_getSpriteIndex{nullptr};
 std::atomic<void*> g_isDerivedFrom{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
-const uint8_t* ListDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // The two type ids the tail of CreateInstance tests against: retail reads the
 // first dword of RibbonElement's (0x1801fa2e0) and ClipRegionElement's
 // (0x1801f9d68) `_typeInfo` -- `X::TypeId()` (ENDGAME B.3.9 TI-UI).
@@ -137,19 +132,6 @@ void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDes
 // ============================================================================
 namespace UI {
 
-uint32_t ListDescription::Type() const {
-    const uint8_t* ti = ListDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t ListDescription::TypeId() {
-    const uint8_t* ti = ListDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ListDescription::TypeName() const {
-    const uint8_t* ti = ListDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t ListDescription::GetFileVersion() const { return 0x104; }
 
 // 0x180044d40 — the ctor, placement (the null test sat in the retired door).
@@ -328,3 +310,12 @@ int RtUiListDescriptionRegister() {
     RegisterRuntimeAddr(0x180044d10ull, (void*)&UI::ListDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ListDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ListDescription@UI@@ (0x1801fa0e8): name "ListDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ListDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ListDescription, "ElementDescription", nullptr)

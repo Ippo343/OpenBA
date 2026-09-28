@@ -64,22 +64,6 @@ constexpr int kGridVertical = 0xC0;   // byte
 constexpr int kGridSpacing  = 0xC4;   // int32
 constexpr int kGridExtents  = 0xC8;   // Array<int32>::_data
 
-std::atomic<void*> g_typeInfo{nullptr};
-
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-const uint8_t* TypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 // `?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z` 0x1800d3f70 —
 // declared on the class, body still element_bodies_b5.cpp's door.
 using DrawHighlightFn = void (*)(const void* self, void* ctx, int32_t index, uint32_t color);
@@ -97,20 +81,6 @@ using OnElementEventFn = void (*)(void* dlg, void** elem, int32_t kind, int32_t 
 // The member bodies (ENDGAME B.3.6 block C4)
 // ============================================================================
 namespace UI {
-
-uint32_t ListElement::Type() const {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t ListElement::TypeId() {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ListElement::TypeName() const {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 
 // slot 4 — 0x1800d4380
 void ListElement::ComputeSize() {
@@ -304,3 +274,12 @@ int RtUiListElementRegister() {
     RegisterRuntimeAddr(0x180045100ull, (void*)&UI::ListElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ListElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ListElement@UI@@ (0x1801fa120): name "ListElement", parent
+// "Element" (retail ?_ParentTypeName@ListElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ListElement, "Element", nullptr)

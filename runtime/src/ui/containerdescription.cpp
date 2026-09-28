@@ -55,25 +55,6 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5 door cache: RT_DATA_SLOT's never-cache-a-null contract, in a
-// namespace-scope atomic instead of a function-local static.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_typeInfo{nullptr};
-
-const uint8_t* ContainerTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 // ============================================================================
@@ -81,19 +62,6 @@ const uint8_t* ContainerTypeInfo() {
 // ============================================================================
 namespace UI {
 
-uint32_t ContainerDescription::Type() const {
-    const uint8_t* ti = ContainerTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ContainerDescription::TypeName() const {
-    const uint8_t* ti = ContainerTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
-// static 0x1800398c0 -- the same read as slot 2 (the minted record until W3).
-uint32_t ContainerDescription::TypeId() {
-    const uint8_t* ti = ContainerTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
 int32_t ContainerDescription::GetFileVersion() const { return 0x204; }
 
 // 0x180039a70 — the ctor, placement. (Retail's `TEST RCX,RCX` sat in the
@@ -293,3 +261,12 @@ int RtUiContainerDescriptionRegister() {
     RegisterRuntimeAddr(0x180039a40ull, (void*)&UI::ContainerDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ContainerDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ContainerDescription@UI@@ (0x1801f9da0): name "ContainerDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ContainerDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ContainerDescription, "ElementDescription", nullptr)

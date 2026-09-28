@@ -63,14 +63,9 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_getSpriteIndex{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
-const uint8_t* ScrollDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
@@ -113,19 +108,6 @@ void ReleaseStringField(char** field) {
 // ============================================================================
 namespace UI {
 
-uint32_t ScrollDescription::Type() const {
-    const uint8_t* ti = ScrollDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t ScrollDescription::TypeId() {
-    const uint8_t* ti = ScrollDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ScrollDescription::TypeName() const {
-    const uint8_t* ti = ScrollDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t ScrollDescription::GetFileVersion() const { return 0x104; }
 
 // 0x18003a2c0 — the ctor, placement (the null test sat in the retired door).
@@ -280,3 +262,12 @@ int RtUiScrollDescriptionRegister() {
     RegisterRuntimeAddr(0x18003a290ull, (void*)&UI::ScrollDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ScrollDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ScrollDescription@UI@@ (0x1801fad60): name "ScrollDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ScrollDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ScrollDescription, "ElementDescription", nullptr)

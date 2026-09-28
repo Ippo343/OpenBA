@@ -93,8 +93,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180043290
-    uint32_t    Type() const override;                            // [2] 0x180043270
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180043290, Type 0x180043270, _TypeName 0x180043250, _ParentTypeName 0x180043260
+    DECLARE_TYPE(LayoutElement)
+public:
     void ComputeSize() override;                                  // [4] 0x1800d3100
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t right, int32_t bottom) override;   // [5] 0x1800d2af0
@@ -114,9 +117,6 @@ public:
 
     LayoutElement(const LayoutElement& src);                      // 0x180043470  not ported
     LayoutElement& operator=(const LayoutElement& src);           // 0x1800434d0  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1LayoutElement@UI@@UEAA@XZ` (0x1800d32a0): NON-VIRTUAL (no virtual dtor until
@@ -125,9 +125,6 @@ protected:
     ~LayoutElement();
 
 private:
-    static const char* _TypeName();                               // 0x180043250 -> "LayoutElement"
-    static const char* _ParentTypeName();                         // 0x180043260 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fa0b0 (minted)
 
 public:
     // ---- the 0x10 bytes after Element --------------------------------------

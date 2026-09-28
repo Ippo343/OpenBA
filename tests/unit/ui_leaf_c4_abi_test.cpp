@@ -71,6 +71,10 @@ long long   g_arg  = 0;
 void Note(const void* self, int mark, long long arg = 0) { g_self = self; g_mark = mark; g_arg = arg; }
 void Reset() { g_self = nullptr; g_mark = -1; g_arg = 0; }
 
+// Slots 1/2 (ENDGAME B.3.9 TI-UI): the record of the class `tag` names.
+const ::Object::BaseTypeInfo* WhoRecord(int tag);
+
+
 enum Tag : int {
     kContainerD = 1, kContainerE = 2, kLayoutD = 3, kLayoutE = 4, kListD = 5,
     kListE = 6, kScrollD = 7, kScrollE = 8, kTableD = 9, kTableE = 10,
@@ -144,8 +148,6 @@ struct BareExternalProbe final : Object::External {
 // The leaves' out-of-line members, AS MARKERS.
 // ===========================================================================
 #define C4_DESC_MARKERS(CLS, TAG)                                                          \
-    const char* UI::CLS::TypeName() const { Note(this, TAG * 100 + 1); return #CLS; }       \
-    uint32_t UI::CLS::Type() const { Note(this, TAG * 100 + 2); return TAG; }               \
     int32_t UI::CLS::GetFileVersion() const { Note(this, TAG * 100 + 3); return TAG; }      \
     bool UI::CLS::Serialize(void* s) {                                                      \
         Note(this, TAG * 100 + 5, reinterpret_cast<intptr_t>(s)); return true; }           \
@@ -168,8 +170,6 @@ C4_DESC_MARKERS(TableDescription,     kTableD)
 #undef C4_DESC_MARKERS
 
 #define C4_ELEM_MARKERS(CLS, TAG)                                                          \
-    const char* UI::CLS::TypeName() const { Note(this, TAG * 100 + 1); return #CLS; }       \
-    uint32_t UI::CLS::Type() const { Note(this, TAG * 100 + 2); return TAG; }               \
     void UI::CLS::ComputeSize() { Note(this, TAG * 100 + 4); }                              \
     void UI::CLS::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {                   \
         Note(this, TAG * 100 + 5, (long long)x * 1000 + h); }                               \
@@ -193,6 +193,53 @@ C4_UPDATE_MARKER(ListElement,      kListE)
 C4_UPDATE_MARKER(ScrollElement,    kScrollE)
 #undef C4_ELEM_MARKERS
 #undef C4_UPDATE_MARKER
+
+// ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
+// class's own record, so the host defines the records (the literals are the
+// ones runtime/src/ui passes) and the factory pair they point at; the
+// factories are never called here.
+#define C4_TEST_FACTORIES(CLS)                                              \
+    ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \
+    ::Object::Base* UI::CLS::CreateInPlaceObject(void*) { return nullptr; }
+C4_TEST_FACTORIES(ContainerDescription)
+DEFINE_TYPE(UI::ContainerDescription, "ElementDescription", nullptr)
+C4_TEST_FACTORIES(LayoutDescription)
+DEFINE_TYPE(UI::LayoutDescription, "ElementDescription", nullptr)
+C4_TEST_FACTORIES(ListDescription)
+DEFINE_TYPE(UI::ListDescription, "ElementDescription", nullptr)
+C4_TEST_FACTORIES(ScrollDescription)
+DEFINE_TYPE(UI::ScrollDescription, "ElementDescription", nullptr)
+C4_TEST_FACTORIES(TableDescription)
+DEFINE_TYPE(UI::TableDescription, "ElementDescription", nullptr)
+C4_TEST_FACTORIES(ContainerElement)
+DEFINE_TYPE(UI::ContainerElement, "Element", nullptr)
+C4_TEST_FACTORIES(LayoutElement)
+DEFINE_TYPE(UI::LayoutElement, "Element", nullptr)
+C4_TEST_FACTORIES(ListElement)
+DEFINE_TYPE(UI::ListElement, "Element", nullptr)
+C4_TEST_FACTORIES(ScrollElement)
+DEFINE_TYPE(UI::ScrollElement, "Element", nullptr)
+C4_TEST_FACTORIES(TableElement)
+DEFINE_TYPE(UI::TableElement, "Element", nullptr)
+#undef C4_TEST_FACTORIES
+
+namespace {
+const ::Object::BaseTypeInfo* WhoRecord(int tag) {
+    switch (tag) {
+    case kContainerD: return &UI::ContainerDescription::GetTypeInfo();
+    case kLayoutD: return &UI::LayoutDescription::GetTypeInfo();
+    case kListD: return &UI::ListDescription::GetTypeInfo();
+    case kScrollD: return &UI::ScrollDescription::GetTypeInfo();
+    case kTableD: return &UI::TableDescription::GetTypeInfo();
+    case kContainerE: return &UI::ContainerElement::GetTypeInfo();
+    case kLayoutE: return &UI::LayoutElement::GetTypeInfo();
+    case kListE: return &UI::ListElement::GetTypeInfo();
+    case kScrollE: return &UI::ScrollElement::GetTypeInfo();
+    case kTableE: return &UI::TableElement::GetTypeInfo();
+    default: return nullptr;
+    }
+}
+}  // namespace
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -450,8 +497,8 @@ void CheckDescriptionSlots(int tag) {
 
     Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, 0)(raw, 0u);
     CHECK_EQ(g_mark, 0); CHECK(g_self == raw);
-    Reset(); SlotAt<const char* (*)(const void*)>(raw, 1)(raw);   CHECK_EQ(g_mark, tag * 100 + 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(raw, 2)(raw);      CHECK_EQ(g_mark, tag * 100 + 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(raw, 1)(raw) == WhoRecord(tag)->name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, 2)(raw), WhoRecord(tag)->typeId);
     Reset(); SlotAt<int32_t (*)(const void*)>(raw, 3)(raw);       CHECK_EQ(g_mark, tag * 100 + 3);
     Reset(); SlotAt<bool (*)(void*, void*)>(raw, 5)(raw, (void*)0x55);
     CHECK_EQ(g_mark, tag * 100 + 5); CHECK_EQ(g_arg, 0x55);
@@ -485,8 +532,8 @@ void CheckElementSlots(int tag, bool ownsUpdate) {
 
     Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, 0)(raw, 0u);
     CHECK_EQ(g_mark, 0); CHECK(g_self == raw);
-    Reset(); SlotAt<const char* (*)(const void*)>(raw, 1)(raw);   CHECK_EQ(g_mark, tag * 100 + 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(raw, 2)(raw);      CHECK_EQ(g_mark, tag * 100 + 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(raw, 1)(raw) == WhoRecord(tag)->name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, 2)(raw), WhoRecord(tag)->typeId);
     Reset(); SlotAt<void (*)(void*)>(raw, 4)(raw);                CHECK_EQ(g_mark, tag * 100 + 4);
     Reset(); SlotAt<void (*)(void*, int, int, int, int)>(raw, 5)(raw, 7, 0, 0, 9);
     CHECK_EQ(g_mark, tag * 100 + 5); CHECK_EQ(g_arg, 7009);

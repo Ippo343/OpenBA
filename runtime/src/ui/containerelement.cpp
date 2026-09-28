@@ -79,12 +79,6 @@ constexpr int kClipInnerH = 0xcc;
 constexpr int kClipOffX   = 0xd0;
 constexpr int kClipOffY   = 0xd4;
 
-std::atomic<void*> g_typeInfo{nullptr};
-
-const uint8_t* ContainerElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 const uint8_t* VideoDevice() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
     return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
@@ -120,11 +114,6 @@ const uint8_t* ScaleOwnerOf(const UI::Element* e) {
 // The member bodies (ENDGAME B.3.6 block C4)
 // ============================================================================
 namespace UI {
-
-uint32_t ContainerElement::Type() const { return TypeIdOf(ContainerElementTypeInfo()); }
-// static 0x180039cb0 -- the same read as slot 2 (the minted record until W3).
-uint32_t ContainerElement::TypeId() { return TypeIdOf(ContainerElementTypeInfo()); }
-const char* ContainerElement::TypeName() const { return TypeNameOf(ContainerElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@ContainerElement@UI@@UEAAXXZ   0x1800cc850
@@ -412,3 +401,12 @@ int RtUiContainerElementRegister() {
     RegisterRuntimeAddr(0x180039e50ull, (void*)&UI::ContainerElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ContainerElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ContainerElement@UI@@ (0x1801f9dd8): name "ContainerElement", parent
+// "Element" (retail ?_ParentTypeName@ContainerElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ContainerElement, "Element", nullptr)
