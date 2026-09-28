@@ -111,17 +111,10 @@ bool Surface::Serialize(void* streamv) {
 
 }  // namespace Collision2D
 
+// B3R (registry teardown, W1 RT-Core): every row this function registered had
+// no reader by name or by address, so they went. It registers nothing and
+// stays defined only because standalone/resolve_standalone.cpp's
+// RuntimePortInit() still calls it (the coordinator removes the call).
 int RtCollision2DSurfaceRegister() {
-    int n = 0;
-    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
-    // (collision2d_type_records.cpp) carries them, so `Object::Factory` builds
-    // a real Surface.
-    RegisterRuntimeExport("?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ",
-                          (void*)&Collision2D::Surface::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x180064b60ull, (void*)&Collision2D::Surface::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Collision2D::Surface::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180064c10ull, (void*)&Collision2D::Surface::CreateInPlaceObject);
-    return n;
+    return 0;
 }

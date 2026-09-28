@@ -68,11 +68,6 @@
 #include <new>          // ENDGAME B.3.1 step 2: placement new into the object body
 
 #include "../../funcs/rt_port.h"
-// ResolveAddr, declared locally rather than via standalone/resolve.h -- that header
-// pulls in <windows.h>, which collides with names this file (or a header it
-// includes) uses -- see runtime/src/collection/array_internal.h for the same fix.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
@@ -125,65 +120,31 @@ IO::ReaderWriter* AsRw(ReaderWriter* rw) {
 //
 // Those copies are gone. Each of the seven bodies is now ported ONCE, in
 // runtime/src/collection/array{,_destroy}.cpp with the rest of its family, and
-// reached here by address -- registry-first, so these call OUR bodies from the
-// moment RtCollectionPortInit runs, and at cutover they are all that exists.
-template <typename Fn>
-static Fn RtAddrFn(uintptr_t a) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, a)); }
-
-using ArraySetSizeFn = void (*)(void*, int32_t);
-using ArrayAssignFn  = void* (*)(void*, const void*);
-using RangeDestroyFn = void (*)(void*, void*, int);
+// called here by name (B3R: they were reached by retail address before).
+// The bodies are declared in runtime/types/collection/Collection.h.
 
 // 0x1800660f0  Array<Vec2>::SetSize   (_ptsA,   stride 8, align 4, zero tail)
 void PtsASetSize(Collection::Array<Vec2>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x1800660f0ull);
-    fn(a, n);
+    rtcoll::RtColl_ArraySetSize_1800660f0(a, n);
 }
 // 0x1800666e0  Array<Vec2>::SetSize   (_ptsB AND _surfaces: retail shares one
 //              body for both, stride 8, align 8, zero tail)
 template <typename T>
 void PtsBSetSize(Collection::Array<T>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x1800666e0ull);
-    fn(a, n);
+    rtcoll::RtColl_ArraySetSize_1800666e0(a, n);
 }
 // 0x180066bc0  Array<Quad4>::SetSize   (Face::quads,   stride 8, align 2)
 void QuadArraySetSize(Collection::Array<Quad4>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x180066bc0ull);
-    fn(a, n);
+    rtcoll::RtColl_ArraySetSize_180066bc0(a, n);
 }
 // 0x180066e80  Array<Triple3>::SetSize (Face::triples, stride 6, align 2)
 void TripleArraySetSize(Collection::Array<Triple3>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x180066e80ull);
-    fn(a, n);
+    rtcoll::RtColl_ArraySetSize_180066e80(a, n);
 }
 // 0x180066350  Array<Face>::SetSize    (element copy ctor 0x180065b70, shrink /
 //              realloc destroy 0x1800664c0)
 void FaceArraySetSize(Collection::Array<Face>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x180066350ull);
-    fn(a, n);
-}
-// 0x1800664c0  the Face range destroy (frees quads THEN triples per element)
-void FreeFacesRange(Face* data, int32_t count) {
-    static RangeDestroyFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<RangeDestroyFn>(0x1800664c0ull);
-    fn(nullptr, data, count);      // retail spills RCX and never reads it
-}
-// 0x180065d40  ~Array<Face>: the range destroy above, then the plain ~Array.
-void FaceArrayDtor(Collection::Array<Face>* a) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = RtAddrFn<Fn>(0x180065d40ull);
-    fn(a);
-}
-// The four parameterless `~Array` bodies ~CollisionMesh tail-calls.
-void PlainArrayDtor(void* a, uintptr_t addr) {
-    using Fn = void* (*)(void*);
-    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, addr))(a);
+    rtcoll::RtColl_ArraySetSize_180066350(a, n);
 }
 
 // ---- the two Serialize helpers --------------------------------------------
@@ -287,10 +248,10 @@ CollisionMesh::~CollisionMesh() {
     // its header, so the compiler-emitted member `~Array`s that follow are
     // no-ops (MemFree of null). The compiler then releases `_name2` and
     // `_name1` (`~String` 0x180006c80) and chains ~External: retail's order.
-    PlainArrayDtor(&_surfaces, 0x180065e80ull);
-    FaceArrayDtor(&_faces);
-    PlainArrayDtor(&_ptsB, 0x180065bf0ull);
-    PlainArrayDtor(&_ptsA, 0x180065bf0ull);
+    rtcoll::RtColl_ArrayDtor_180065e80(&_surfaces);
+    rtcoll::RtColl_ArrayDtorElem_180065d40(&_faces);   // the Face range destroy, then ~Array
+    rtcoll::RtColl_ArrayDtor_180065bf0(&_ptsB);
+    rtcoll::RtColl_ArrayDtor_180065bf0(&_ptsA);
 }
 
 // ?Serialize@CollisionMesh@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x180108cd0)
@@ -367,22 +328,10 @@ extern "C" void RtCollision2D_CollisionMesh_SerializeQuads(void* ser, int32_t co
     SerializeQuadsBody(static_cast<Serializer*>(ser), count, static_cast<Quad4*>(base));
 }
 
+// B3R (registry teardown, W1 RT-Core): every row this function registered had
+// no reader by name or by address, so they went. It registers nothing and
+// stays defined only because standalone/resolve_standalone.cpp's
+// RuntimePortInit() still calls it (the coordinator removes the call).
 int RtCollision2DCollisionMeshRegister() {
-    int n = 0;
-    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
-    // (collision2d_type_records.cpp) carries them.
-    RegisterRuntimeExport("?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ",
-                          (void*)&Collision2D::CollisionMesh::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x180065060ull, (void*)&Collision2D::CollisionMesh::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Collision2D::CollisionMesh::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180065130ull, (void*)&Collision2D::CollisionMesh::CreateInPlaceObject);
-    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
-    // The two out-of-line halves of Serialize. Unexported in both builds, so
-    // RegisterRuntimeAddr only. Their Array callees are registered by
-    // runtime/src/collection/array{,_destroy}.cpp in the same commit.
-    RegisterRuntimeAddr  (0x1800665c0ull, (void*)&RtCollision2D_CollisionMesh_SerializeFaces);
-    RegisterRuntimeAddr  (0x180066d50ull, (void*)&RtCollision2D_CollisionMesh_SerializeQuads);
-    return n;
+    return 0;
 }

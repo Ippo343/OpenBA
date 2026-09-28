@@ -302,24 +302,10 @@ extern "C" void* RtPathfinding_PointArray_Dtor(void* a) {
 // RT_DELDTOR row): every live PointList now wears the compiler's table.
 // ============================================================================
 
+// B3R (registry teardown, W1 RT-Core): every row this function registered had
+// no reader by name or by address, so they went. It registers nothing and
+// stays defined only because standalone/resolve_standalone.cpp's
+// RuntimePortInit() still calls it (the coordinator removes the call).
 int RtPathfindingPointListRegister() {
-    int n = 0;
-    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
-    // (pathfinding_type_records.cpp) carries both, so `Object::Factory` builds
-    // a real PointList.
-    RegisterRuntimeExport("?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ",
-                          (void*)&Pathfinding::PointList::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x180070f30ull, (void*)&Pathfinding::PointList::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@PointList@Pathfinding@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Pathfinding::PointList::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180070ff0ull, (void*)&Pathfinding::PointList::CreateInPlaceObject);
-    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
-    // Unexported in both builds, so RegisterRuntimeAddr only. All three halves
-    // of the pair are registered together: at cutover retail's rel32 from
-    // 0x180071730 / 0x180071600 to 0x180071890 will not exist.
-    RegisterRuntimeAddr  (0x180071730ull, (void*)&RtPathfinding_PointArray_SetSize);
-    RegisterRuntimeAddr  (0x180071890ull, (void*)&RtPathfinding_PointArray_ReleaseRange);
-    RegisterRuntimeAddr  (0x180071600ull, (void*)&RtPathfinding_PointArray_Dtor);
-    return n;
+    return 0;
 }
