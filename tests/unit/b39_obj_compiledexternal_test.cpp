@@ -176,3 +176,20 @@ UNIT_TEST(b39_obj_base_deletingdtor_both_arms) {
     }
     CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
 }
+
+// Base's reflection record (?_typeInfo@Base@Object@@ 0x1801f9c50), the class's
+// own since the W3 fold: the ROOT -- name "Base", no parent, no extension, no
+// factory pair -- and Base::TypeId (0x18007e010) reads its +0x00.
+UNIT_TEST(b39_obj_base_record_is_the_root) {
+    const Object::BaseTypeInfo& ti = Object::Base::GetTypeInfo();
+    CHECK(std::strcmp(ti.name, "Base") == 0);
+    CHECK(ti.parentName == nullptr);
+    CHECK(ti.fileExtension == nullptr);
+    CHECK(ti.factoryFn == nullptr);
+    CHECK(ti.inPlaceFactoryFn == nullptr);
+    CHECK_EQ(Object::Base::TypeId(), ti.typeId);
+    bool inChain = false;
+    for (const Object::BaseTypeInfo* p = Object::BaseTypeInfo::_firstTypeInfo; p; p = p->next)
+        if (p == &ti) inChain = true;
+    CHECK(inChain);
+}

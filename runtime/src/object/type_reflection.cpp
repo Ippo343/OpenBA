@@ -228,6 +228,15 @@ uint32_t TypeNameCRC(const char* name) {
 // two doors (name and address 0x1801fc6e0) here, so there is exactly ONE cell.
 BaseTypeInfo* BaseTypeInfo::_firstTypeInfo = nullptr;
 
+// ?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A — retail 0x1801f9c50. ENDGAME
+// B.3.9 OBJ (B39_RULES D6 W3): the ROOT record, exactly as minted -- name
+// "Base", parent null (StripNamespace leaves a null parent alone), no
+// extension, no factory pair. Head-inserted at CRT init by the ported ctor;
+// defined after `_firstTypeInfo` so the one TU's order is plain to read (the
+// list head is constant-initialised either way). The minted record is retired
+// in the same commit.
+BaseTypeInfo Base::_typeInfo("Base", nullptr, nullptr, nullptr, nullptr);
+
 // ============================================================================
 // ??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z
 //                                        retail 0x180006320 / profile 0x1800234e0
