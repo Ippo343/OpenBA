@@ -95,47 +95,28 @@
 // counter. The write path is idempotent and the replay is sound.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/object/External.h"
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
-// must stay platform-neutral. Byte-identical to resolve.h's declaration.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 // The two ExternalBasePtr::Serialize instantiations (see the banner). Both take
 // (ExternalBasePtr* self, Serializer* ser) — RCX/RDX at the call sites — and
-// return nothing the caller reads. Both addresses are REGISTERED by
-// runtime/src/object/external_ptr_serialize.cpp, so ResolveAddr (registry
-// first) lands on the port.
-//
-// ENDGAME B.3.7: the caches are namespace-scope ATOMIC slots, not
-// function-local statics — `GoalInstance::Persist` runs on the LOADER thread
-// on every save load (B37_RULES §5, RULE B6-5).
-using PtrSerializeFn = void (*)(void*, Serializer*);
-std::atomic<void*> g_ptrSerGoal{nullptr};           // 0x1800042a0
-std::atomic<void*> g_ptrSerGoalInstance{nullptr};   // 0x180005dc0
-
-PtrSerializeFn RuntimeAddr(std::atomic<void*>& slot, uintptr_t addr) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, addr));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return reinterpret_cast<PtrSerializeFn>(p);
+// return nothing the caller reads. Both bodies are ours
+// (runtime/src/object/external_ptr_serialize.cpp, declared in
+// object/External.h) and are called by name (B3R).
+RtObject::External** AsExt(void* p) {
+    return reinterpret_cast<RtObject::External**>(p);   // B.3.x bridge
 }
 
 // The shared prologue of both bodies, transcribed once.
@@ -202,7 +183,7 @@ bool Goal::Serialize(void* streamv) {
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    RuntimeAddr(g_ptrSerGoal, 0x1800042a0)(&_stringTable, &ser);   // Goal+0x20
+    RtObject_ExternalPtrSerialize_StringTable(AsExt(&_stringTable), &ser);   // 0x1800042a0, Goal+0x20
     _text.Serialize(&ser);                                          // Goal+0x28
 
     DestroyCodec(rw);
@@ -226,7 +207,7 @@ void GoalInstance::Persist(void* streamv) {
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    RuntimeAddr(g_ptrSerGoalInstance, 0x180005dc0)(&_goal, &ser);   // GoalInstance+0x18
+    RtObject_ExternalPtrSerialize_Goal(AsExt(&_goal), &ser);        // 0x180005dc0, GoalInstance+0x18
 
     AsRw(rw)->SerializeUInt(_flags, nullptr);                       // GoalInstance+0x10, +0x98
 

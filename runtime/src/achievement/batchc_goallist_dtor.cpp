@@ -75,12 +75,3 @@ GoalList::~GoalList() {
 extern "C" void RtAch_GoalList_Dtor(Achievement::GoalList* self) {
     self->Achievement::GoalList::~GoalList();
 }
-
-// ============================================================================
-// Registration — BOTH DOORS, unconditionally.
-// ============================================================================
-extern "C" int RtAchBatchCGoalListDtorRegister() {
-    RegisterRuntimeExport("??1GoalList@Achievement@@QEAA@XZ", (void*)&RtAch_GoalList_Dtor);
-    RegisterRuntimeAddr(0x18009f420ull, (void*)&RtAch_GoalList_Dtor);
-    return 1;
-}

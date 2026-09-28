@@ -102,15 +102,10 @@
 namespace {
 
 
-// IO::Persistence — not converted by this block; reached through its exported
-// members by name (RT_EXPORT_ONCE is a constant-initialised RtResolveCached
-// slot — the B6-5 shape).
-using PersistGetBoolFn = bool (*)(const void*, const char*, const char*, bool*);
-using PersistSetBoolFn = void (*)(void*, const char*, const char*, bool);
-using PersistWriteFn   = void (*)(const void*);
-
+// IO::Persistence's members are called by name (B3R; they were read through
+// the name door before).
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-void* PersistenceSingleton() {
+::IO::Persistence* PersistenceSingleton() {
     return ::IO::Persistence::_singleton;
 }
 
@@ -167,17 +162,14 @@ void AchievementManager::RemoveAll() {
 // bool into the flag itself. `_completed._data` is dereferenced UNGUARDED.
 // ============================================================================
 void AchievementManager::ReadAchievements() {
-    void* persistence = PersistenceSingleton();
-
-    auto getFn = RT_EXPORT_ONCE(PersistGetBoolFn,
-                                "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z");
+    ::IO::Persistence* persistence = PersistenceSingleton();
 
     for (int32_t i = 0; i < _completed._size; ++i) {
         _completed._data[i] = false;
 
         System::String key = System::String::Format(kIndexFormat, i);
 
-        getFn(persistence, kSection, key._data, &_completed._data[i]);
+        persistence->Get(kSection, key._data, _completed._data[i]);   // 0x1800b8290
         // `key` releases at the bottom of the iteration — retail's 0x18009ec1a.
     }
 }
@@ -191,15 +183,12 @@ void AchievementManager::ReadAchievements() {
 bool AchievementManager::SetAchievementMet(int index) {
     _completed._data[index] = true;
 
-    void* persistence = PersistenceSingleton();
+    ::IO::Persistence* persistence = PersistenceSingleton();
 
     System::String key = System::String::Format(kIndexFormat, index);
 
-    auto setFn = RT_EXPORT_ONCE(PersistSetBoolFn, "?Set@Persistence@IO@@QEAAXPEBD0_N@Z");
-    setFn(persistence, kSection, key._data, _completed._data[index]);
-
-    auto writeFn = RT_EXPORT_ONCE(PersistWriteFn, "?WriteSettings@Persistence@IO@@QEBAXXZ");
-    writeFn(persistence);
+    persistence->Set(kSection, key._data, _completed._data[index]);   // 0x1800b8380
+    persistence->WriteSettings();                                      // 0x1800b88e0
 
     return true;   // `key` releases first — retail's 0x18009ed30
 }
@@ -266,32 +255,4 @@ void* RtAch_Achievement_CreateInstance(const Achievement::Achievement* self, voi
     new (retval) Object::InternalPtr<Achievement::AchievementInstance>(
         self->Achievement::Achievement::CreateInstance());
     return retval;   // retail's `MOV RAX,RSI`
-}
-
-// ---- Registration (unchanged) ----------------------------------------------
-int RtAchStateRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??1AchievementManager@Achievement@@QEAA@XZ",
-                          (void*)&RtAch_AchievementManager_Dtor); ++n;
-    RegisterRuntimeAddr(0x18009eab0, (void*)&RtAch_AchievementManager_Dtor);
-
-    RegisterRuntimeExport("?RemoveAll@AchievementManager@Achievement@@QEAAXXZ",
-                          (void*)&RtAch_AchievementManager_RemoveAll); ++n;
-    RegisterRuntimeAddr(0x18009e9d0, (void*)&RtAch_AchievementManager_RemoveAll);
-
-    RegisterRuntimeExport("?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ",
-                          (void*)&RtAch_AchievementManager_ReadAchievements); ++n;
-    RegisterRuntimeAddr(0x18009eb90, (void*)&RtAch_AchievementManager_ReadAchievements);
-
-    RegisterRuntimeExport("?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z",
-                          (void*)&RtAch_AchievementManager_SetAchievementMet); ++n;
-    RegisterRuntimeAddr(0x18009eca0, (void*)&RtAch_AchievementManager_SetAchievementMet);
-
-    RegisterRuntimeExport("?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@"
-                          "VAchievementInstance@Achievement@@@Object@@XZ",
-                          (void*)&RtAch_Achievement_CreateInstance); ++n;
-    RegisterRuntimeAddr(0x18009df80, (void*)&RtAch_Achievement_CreateInstance);
-
-    return n;
 }

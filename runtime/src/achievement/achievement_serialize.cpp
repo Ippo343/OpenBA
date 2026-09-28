@@ -76,21 +76,19 @@
 // plainly: the reading direction of both bodies is UNVERIFIED by this file.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/object/External.h"
+#include "../../types/object/Internal.h"
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -134,32 +132,16 @@ void DestroyCodec(ReaderWriter* rw) {
     delete AsRw(rw);
 }
 
-// ---- the unexported internals, by address ---------------------------------
-// All four are REGISTERED by runtime/src/object/ (external_ptr_serialize.cpp,
-// internal_ptr_array_serialize.cpp); ResolveAddr consults the port registry
-// first. Module::Runtime is explicit: 0x180004590 is a DIFFERENT function in
-// VideoDX11-x64.dll (dialog_vtable.cpp's note).
+// ---- the unexported internals, called by name ----------------------------
+// All four bodies are ours (runtime/src/object/external_ptr_serialize.cpp,
+// internal_ptr_array_serialize.cpp), declared in object/External.h and
+// object/Internal.h (B3R: they were read by retail address before).
 //   0x1800042a0  ExternalPtr<UI::StringTable>::Serialize      (+0x20)
 //   0x180004590  ExternalPtr<UI::SpriteSheet>::Serialize      (+0x38)
 //   0x180005220  serialize N ExternalPtr<Goal>                (+0x48)
 //   0x180009a20  serialize N InternalPtr<AchievementInstance>
-// ENDGAME B.3.7: namespace-scope ATOMIC caches (RULE B6-5 — both bodies run on
-// the LOADER thread on a save load, B37_RULES §5).
-using PtrSerializeFn   = void (*)(void*, Serializer*);
-using ArraySerializeFn = void (*)(Serializer*, int, void*);
-
-std::atomic<void*> g_ptrSerStringTable{nullptr};
-std::atomic<void*> g_ptrSerSpriteSheet{nullptr};
-std::atomic<void*> g_serGoalPtrs{nullptr};
-std::atomic<void*> g_serInstancePtrs{nullptr};
-
-void* RuntimeAddr(std::atomic<void*>& slot, uintptr_t addr) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, addr));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
+RtObject::External** AsExt(void* p) {
+    return reinterpret_cast<RtObject::External**>(p);   // B.3.x bridge
 }
 
 }  // namespace
@@ -185,12 +167,10 @@ bool Achievement::Serialize(void* streamv) {
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    reinterpret_cast<PtrSerializeFn>(RuntimeAddr(g_ptrSerStringTable, 0x1800042a0))(
-        &_stringTable, &ser);                                       // +0x20
+    RtObject_ExternalPtrSerialize_StringTable(AsExt(&_stringTable), &ser);   // +0x20
     _title.Serialize(&ser);                                         // +0x28
     _description.Serialize(&ser);                                   // +0x30
-    reinterpret_cast<PtrSerializeFn>(RuntimeAddr(g_ptrSerSpriteSheet, 0x180004590))(
-        &_spriteSheet, &ser);                                       // +0x38
+    RtObject_ExternalPtrSerialize_SpriteSheet(AsExt(&_spriteSheet), &ser);   // +0x38
     _spriteName.Serialize(&ser);                                    // +0x40
 
     int count = _goals.GetSize();                                   // +0x50
@@ -199,8 +179,7 @@ bool Achievement::Serialize(void* streamv) {
     if (stream->direction == rt::io::kDirectionReading) {
         _goals.SetSize(count);   // 0x180005110 — `GoalArray` names kSpec_U64Zero
     }
-    reinterpret_cast<ArraySerializeFn>(RuntimeAddr(g_serGoalPtrs, 0x180005220))(
-        &ser, count, _goals.GetData());                             // +0x48
+    RtObject_ExternalPtrArraySerialize_Goal(&ser, count, AsExt(_goals.GetData()));   // +0x48
 
     DestroyCodec(rw);
     return true;
@@ -234,8 +213,9 @@ void AchievementManager::Persist(IO::Stream& streamRef) {
 
     if (stream->direction == rt::io::kDirectionReading)
         _instances.SetSize(count);
-    reinterpret_cast<ArraySerializeFn>(RuntimeAddr(g_serInstancePtrs, 0x180009a20))(
-        &ser, count, _instances.GetData());
+    RtObject_InternalPtrArraySerialize_AchievementInstance(
+        reinterpret_cast<::IO::Serializer*>(&ser), count,            // B.3.x bridge
+        reinterpret_cast<RtObject::InternalBasePtr*>(_instances.GetData()));
 
     DestroyCodec(rw);
 }
@@ -249,17 +229,4 @@ void AchievementManager::Persist(IO::Stream& streamRef) {
 
 void RtAch_AchievementManager_Persist(Achievement::AchievementManager* self, IO::Stream* stream) {
     self->Achievement::AchievementManager::Persist(*stream);
-}
-
-// ---- Registration (unchanged) ----------------------------------------------
-// `?Persist@AchievementManager@…` is a LIVE door: code/Game/Game/
-// gameupdateloop_serialize.cpp resolves it by name on every save and load.
-int RtAchSerializeRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtAch_AchievementManager_Persist); ++n;
-    RegisterRuntimeAddr(0x18009e910, (void*)&RtAch_AchievementManager_Persist);
-
-    return n;
 }

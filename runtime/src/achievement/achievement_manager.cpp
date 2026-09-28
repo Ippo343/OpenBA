@@ -70,9 +70,6 @@
 // `~External`) and by address (`Array<ExternalPtr<Goal>>::operator=`
 // 0x180003970) now call the members directly.
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 // (`?_singleton@AchievementManager@Achievement@@0PEAV12@EA` is the class
@@ -425,83 +422,4 @@ void* RtAch_Achievement_GetDescription(const Achievement::Achievement* self, voi
 void* RtAch_Achievement_GetSpriteName(const Achievement::Achievement* self, void* retval) {
     new (retval) System::String(self->Achievement::Achievement::GetSpriteName());
     return retval;
-}
-
-// ============================================================================
-// Registration (unchanged). Every name is ONE string literal on ONE line —
-// the census sees no other spelling. Address rows registered alongside every
-// name (scenario.cpp reaches the Achievement lifecycle BY ADDRESS).
-// ============================================================================
-int RtAchManagerRegister() {
-    int n = 0;
-
-    // ---- AchievementManager, pure reads ------------------------------------
-    RegisterRuntimeExport("?Get@AchievementManager@Achievement@@SAPEAV12@XZ", (void*)&RtAch_AchievementManager_Get); ++n;
-    RegisterRuntimeAddr(0x1800079d0, (void*)&RtAch_AchievementManager_Get);
-
-    RegisterRuntimeExport("?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ", (void*)&RtAch_AchievementManager_GetAchievementCount); ++n;
-    RegisterRuntimeAddr(0x1800079b0, (void*)&RtAch_AchievementManager_GetAchievementCount);
-
-    RegisterRuntimeExport("?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z", (void*)&RtAch_AchievementManager_IsAchievementAwarded); ++n;
-    RegisterRuntimeAddr(0x1800079c0, (void*)&RtAch_AchievementManager_IsAchievementAwarded);
-
-    RegisterRuntimeExport("?GetAchievement@AchievementManager@Achievement@@QEBA?AV?$ExternalPtr@VAchievement@1@@Object@@H@Z", (void*)&RtAch_AchievementManager_GetAchievement); ++n;
-    RegisterRuntimeAddr(0x18009e8a0, (void*)&RtAch_AchievementManager_GetAchievement);
-
-    RegisterRuntimeExport("?GetAchievementInstance@AchievementManager@Achievement@@QEBA?AV?$InternalPtr@VAchievementInstance@Achievement@@@Object@@H@Z", (void*)&RtAch_AchievementManager_GetAchievementInstance); ++n;
-    RegisterRuntimeAddr(0x18009e8f0, (void*)&RtAch_AchievementManager_GetAchievementInstance);
-
-    // ---- AchievementManager, mutators --------------------------------------
-    RegisterRuntimeExport("?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z", (void*)&RtAch_AchievementManager_SetEventHandler); ++n;
-    RegisterRuntimeAddr(0x18009e6b0, (void*)&RtAch_AchievementManager_SetEventHandler);
-
-    RegisterRuntimeExport("?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z", (void*)&RtAch_AchievementManager_SetAchievements); ++n;
-    RegisterRuntimeAddr(0x18009e860, (void*)&RtAch_AchievementManager_SetAchievements);
-
-    RegisterRuntimeExport("?Reset@AchievementManager@Achievement@@QEAAXXZ", (void*)&RtAch_AchievementManager_Reset); ++n;
-    RegisterRuntimeAddr(0x18009e5c0, (void*)&RtAch_AchievementManager_Reset);
-
-    RegisterRuntimeExport("?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z", (void*)&RtAch_AchievementManager_Update); ++n;
-    RegisterRuntimeAddr(0x18009e6c0, (void*)&RtAch_AchievementManager_Update);
-
-    // ---- AchievementInstance ------------------------------------------------
-    // ---- the factory pairs (B39_RULES D2): the classes' OWN statics. The
-    // minted `?_typeInfo@` records resolve them by name (MintTypeInfos runs
-    // after every *PortInit). AchievementInstance's in-place half is the shared
-    // `?CreateInPlaceObject@Internal@Object@@` (Object::Internal's).
-    RegisterRuntimeExport("?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ", (void*)&Achievement::Achievement::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x180001130, (void*)&Achievement::Achievement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z", (void*)&Achievement::Achievement::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x1800011f0, (void*)&Achievement::Achievement::CreateInPlaceObject);
-    RegisterRuntimeExport("?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ", (void*)&Achievement::AchievementInstance::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x1800018b0, (void*)&Achievement::AchievementInstance::CreateNewObject);
-
-    RegisterRuntimeExport("?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z", (void*)&RtAch_AchievementInstance_SetAchievement); ++n;
-    RegisterRuntimeAddr(0x18009e440, (void*)&RtAch_AchievementInstance_SetAchievement);
-
-    RegisterRuntimeExport("?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z", (void*)&RtAch_AchievementInstance_Update); ++n;
-    RegisterRuntimeAddr(0x18009e340, (void*)&RtAch_AchievementInstance_Update);
-
-    RegisterRuntimeExport("?IsMet@AchievementInstance@Achievement@@QEBA_NXZ", (void*)&RtAch_AchievementInstance_IsMet); ++n;
-    RegisterRuntimeAddr(0x18009e2f0, (void*)&RtAch_AchievementInstance_IsMet);
-
-    RegisterRuntimeExport("?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ", (void*)&RtAch_AchievementInstance_HasFailed); ++n;
-    RegisterRuntimeAddr(0x18009e2b0, (void*)&RtAch_AchievementInstance_HasFailed);
-
-    RegisterRuntimeExport("?GetGoalList@AchievementInstance@Achievement@@QEBAAEBVGoalList@2@XZ", (void*)&RtAch_AchievementInstance_GetGoalList); ++n;
-    RegisterRuntimeAddr(0x180001960, (void*)&RtAch_AchievementInstance_GetGoalList);
-
-    // ---- Achievement (the External resource) --------------------------------
-    RegisterRuntimeExport("?GetTitle@Achievement@1@QEBA?AVString@System@@XZ", (void*)&RtAch_Achievement_GetTitle); ++n;
-    RegisterRuntimeAddr(0x1800013e0, (void*)&RtAch_Achievement_GetTitle);
-
-    RegisterRuntimeExport("?GetDescription@Achievement@1@QEBA?AVString@System@@XZ", (void*)&RtAch_Achievement_GetDescription); ++n;
-    RegisterRuntimeAddr(0x180001420, (void*)&RtAch_Achievement_GetDescription);
-
-    RegisterRuntimeExport("?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ", (void*)&RtAch_Achievement_GetSpriteName); ++n;
-    RegisterRuntimeAddr(0x1800013a0, (void*)&RtAch_Achievement_GetSpriteName);
-
-    printf("[RtPort]   Achievement::AchievementManager/Instance/Achievement: %d exports "
-           "registered here\n", n);
-    return n;
 }
