@@ -49,13 +49,18 @@
 
 #include "Object/factory_registration.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Component/pickingcomponent_funcs.h"
+#include "system/MemoryAllocator.h"
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
 extern "C" void* g_pBuildStructureWork = nullptr;                    // 2c-B probe: last spawned build work
 extern void BuildComponent_DrawReimpl(void* self);                   // 0x140108d40 mesh-list fill
-extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstructure.cpp 1-arg ctor (0x1400e5a90)
-extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim); // full ctor (0x1400e59c0)
+// BuildStructure_CreateInPlace (0x1400e5a90) and BuildStructure_CreateInPlaceFull
+// (0x1400e59c0), buildstructure.cpp, are declared in Work/exe_bodies.h.
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp);        // buildcomponent_state1.cpp
 extern "C" void BuildComponent_ClearLiveSite(void* buildComp);       // buildcomponent_state1.cpp
 // citizen_employ_cascade.cpp — drive the real ProfessionUI seat cascade (cbf0/ca20/c5f0/c4b0)
@@ -83,61 +88,36 @@ static bool BC8_DemoForce() {
 }
 static bool BC8_IsDemo(void* bc) { return g_pConstructionDemoSite && bc == g_pConstructionDemoSite; }
 
-// ---- exe helper pointers ---------------------------------------------------------
-typedef void* (*BC8_Find_t)(uintptr_t entity, void* retIBP);
-typedef void  (*BC8_Stop_t)(uintptr_t workComp);            // FUN_14012eb50
-typedef void  (*BC8_ModelRefresh_t)(uintptr_t modelComp, int mode); // 0x1400c2b70
-typedef void  (*BC8_Entity8f50_t)(void* ibpOrComp);         // 0x140128f50
+// ---- exe helpers, called directly ------------------------------------------------
+//   FUN_140003050 WorkBase_FindComponent_3050 (WorkComponent finder)
+//   FUN_14012eb50 WorkComponent_RegisterWorkSlot (stop/release the worker)
+//   0x1400c2b70   ModelComponentNotify_Reimpl (ModelComponent_helper_2b70)
+//   0x140128f50   PickingComponent_RegisterMesh (Entity_impl_8f50)
+//   0x140006270   WorkBase_FindComponent_6270 (Entity_FindComponent_Storage)
+//   0x140002f90   WorkBase_FindComponent_2f90 (Entity_FindComponent_MeshInstance)
+//   FUN_14012c3f0 CitizenComp_FUN_14012c3f0 (mesh finalize)
+//   FUN_140088f90 ActRm_GetResourceCategory_88f90
+//   0x140017550   BuildComponent_FindInQueue (BuildComponent_helper_7550)
+//   0x14012ec60   CitizenAI_WorkScheduler_Post (CitizenAI_impl_ec60, scheduler post)
 // 0x14000f090 was Collection::Array<Bytes<0x10,8>>::SetSize monomorphised into
 // the exe (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) — converted
 // at its call site below.
-typedef int   (*BC8_ResIdx_t)(void* slotArrayBase, void* matType); // 0x140088f90
-typedef int   (*BC8_FindInQueue_t)(void* arrayBase, void* ibp);    // 0x140017550
-typedef void  (*BC8_MeshFinalize_t)(void* meshInst, int a, char b); // 0x14012c3f0
-typedef void  (*BC8_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP); // 0x14012ec60
-
-static BC8_Find_t          s_find3050    = nullptr;  // FUN_140003050 (WorkComponent finder)
-static BC8_Stop_t          s_stopWorker  = nullptr;  // FUN_14012eb50
-static BC8_ModelRefresh_t  s_modelRefresh= nullptr;  // ModelComponent_helper_2b70 0x1400c2b70
-static BC8_Entity8f50_t    s_entity8f50  = nullptr;  // Entity_impl_8f50 0x140128f50
-static BC8_Find_t          s_findStorage = nullptr;  // Entity_FindComponent_Storage 0x140006270
-static BC8_Find_t          s_findMeshInst= nullptr;  // Entity_FindComponent_MeshInstance 0x140002f90
-static BC8_MeshFinalize_t  s_meshFinalize= nullptr;  // FUN_14012c3f0
-static BC8_ResIdx_t        s_resIdx      = nullptr;  // FUN_140088f90
-static BC8_FindInQueue_t   s_findInQueue = nullptr;  // BuildComponent_helper_7550
-static BC8_PostWork_t      s_postEc60    = nullptr;  // CitizenAI_impl_ec60 (scheduler post)
-static bool s_bc8_res = false;
-static void BC8_Resolve() {
-    if (s_bc8_res) return;
-    s_postEc60     = reinterpret_cast<BC8_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_find3050     = reinterpret_cast<BC8_Find_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_stopWorker   = reinterpret_cast<BC8_Stop_t>(ResolveAddr(Module::Exe, 0x14012eb50));
-    s_modelRefresh = reinterpret_cast<BC8_ModelRefresh_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
-    s_entity8f50   = reinterpret_cast<BC8_Entity8f50_t>(ResolveAddr(Module::Exe, 0x140128f50));
-    s_findStorage  = reinterpret_cast<BC8_Find_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_findMeshInst = reinterpret_cast<BC8_Find_t>(ResolveAddr(Module::Exe, 0x140002f90));
-    s_meshFinalize = reinterpret_cast<BC8_MeshFinalize_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_resIdx       = reinterpret_cast<BC8_ResIdx_t>(ResolveAddr(Module::Exe, 0x140088f90));
-    s_findInQueue  = reinterpret_cast<BC8_FindInQueue_t>(ResolveAddr(Module::Exe, 0x140017550));
-    s_bc8_res = true;
-}
 
 // Stop/release the site's build worker (FUN_140003050 -> FUN_14012eb50), as the exe does
 // before requesting the 1->8 / 8->2 transition.
 static void BC8_StopWorker(uintptr_t bc) {
-    if (!s_find3050 || !s_stopWorker) return;
     uintptr_t retIBP = 0;
-    void* self = s_find3050(*reinterpret_cast<uintptr_t*>(bc + 0x10), &retIBP);
+    void* self = WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(bc + 0x10), &retIBP);
     if (!self) return;
     uintptr_t wc = *reinterpret_cast<uintptr_t*>(self);
-    if (wc) s_stopWorker(wc);
+    if (wc) WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(wc));
 }
 
 // modelDesc of a mesh element (meshElem+0x18, gated to ModelDescription DAT_1401c7a88).
 static void* BC8_MeshModelDesc(uintptr_t meshElem) {
     void* d = *reinterpret_cast<void**>(meshElem + 0x18);
     uint32_t tid = ModelDescription::TypeId();
-    if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) return d;
+    if (d && tid && ::Object::IsDerivedFromNullSafe(d, tid)) return d;
     return nullptr;
 }
 // Frame count for a mesh element's current variant (modelDesc+0x20 group array, stride
@@ -200,7 +180,7 @@ static uintptr_t BC8_MeshElem(uintptr_t bc, int i) {
 static void* BC8_MatComp(uintptr_t bc) {
     void* d = *reinterpret_cast<void**>(bc + 0x18);
     uint32_t tid = BuildDescription::TypeId();
-    if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) return d;
+    if (d && tid && ::Object::IsDerivedFromNullSafe(d, tid)) return d;
     return nullptr;
 }
 static int BC8_Target(uintptr_t bc, void* matComp) {
@@ -244,7 +224,6 @@ extern "C" char BuildComponent_State1Update(void* buildComp, void* sm) {
     uintptr_t bc = reinterpret_cast<uintptr_t>(buildComp);
     if (!bc) return 1;
     if (BuildComponent_DemoGateSkip(buildComp)) return 1;   // don't self-advance completed/non-demo
-    BC8_Resolve();
 
     bool haveAll = BuildComponent_HaveAllMaterials(buildComp);
     if (!haveAll && BC8_DemoForce() && BC8_IsDemo(buildComp)) {
@@ -277,7 +256,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
     if (!bc) return 1;
     if (BuildComponent_DemoGateSkip(buildComp)) return 1;
     (void)sm;
-    BC8_Resolve();
 
     uint8_t instant = 0;
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
@@ -292,14 +270,14 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             if (!me) continue;
             int16_t cur = *reinterpret_cast<int16_t*>(me + 0x166);
             if (cur == 0) {
-                if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
+                ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(me + 0x10), 0);
             } else {
                 BC8_SetMeshFrame(me, 0);
                 BC8_ReaddDrawChildren(me);
             }
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                PickingComponent_RegisterMesh(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         // Brick 2c: alloc BuildStructure (0x70) + find the site WorkComponent (c8070)
@@ -309,8 +287,8 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
         // Faithful to sub_7ae0's STAGED tail. Needs the live-citizen action stack +
         // task manager (same as the gather post).
         {
-            void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                            ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
+            void* mem = (::System::MemoryAllocator::_singleton)
+                            ? ::System::MemoryAllocator::MemAlloc(0x70, 8) : nullptr;
             // Construct via the FULL retail ctor (0x1400e59c0): it routes base init through
             // Work_Ctor25 (sets field_10=site entity, +0x18 WorkComponent, +0x28 target cell)
             // AND allocates the build-position byte array field_50/field_58 from the site's
@@ -325,13 +303,13 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             if (bsWork) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
                 uintptr_t bsIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&bsIBP) ::Object::InternalBasePtr(
+                new (&bsIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge
                 // find the site WorkComponent (c8070) the work posts under
                 uintptr_t workCompIBP = 0;
-                if (s_find3050) s_find3050(*reinterpret_cast<uintptr_t*>(bc + 0x10), &workCompIBP);
-                if (s_postEc60 && workCompIBP != 0) {
-                    s_postEc60(workCompIBP, 0x2001, 1, &bsIBP);
+                WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(bc + 0x10), &workCompIBP);
+                if (workCompIBP != 0) {
+                    CitizenAI_WorkScheduler_Post(workCompIBP, 0x2001, 1, &bsIBP);
 
                     // Builders are seated by the tick-driven Builder pool
                     // (BuilderPool_Tick) through the townMgr+0x100 registration made at
@@ -363,14 +341,14 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             if (!me) continue;
             int finalFrame = BC8_MeshFrameCount(me, BC8_MeshModelDesc(me)) - 1;
             if (finalFrame == (int)*reinterpret_cast<int16_t*>(me + 0x166)) {
-                if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
+                ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(me + 0x10), 0);
             } else {
                 BC8_SetMeshFrame(me, finalFrame);
                 BC8_ReaddDrawChildren(me);
             }
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                PickingComponent_RegisterMesh(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);
@@ -387,7 +365,6 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
     uintptr_t bc = reinterpret_cast<uintptr_t>(buildComp);
     if (!bc) return 1;
     if (BuildComponent_DemoGateSkip(buildComp)) return 1;
-    BC8_Resolve();
 
     void* matComp = BC8_MatComp(bc);
     int target = BC8_Target(bc, matComp);
@@ -443,10 +420,10 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             int16_t cur = *reinterpret_cast<int16_t*>(me + 0x166);
             if (frame != (int)cur) {
                 BC8_SetMeshFrame(me, frame);
-                if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
+                ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(me + 0x10), 0);
                 uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
                 if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                    if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                    PickingComponent_RegisterMesh(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
                 }
             }
         }
@@ -461,14 +438,14 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             int finalFrame = frameCount - 1;
             int16_t cur = *reinterpret_cast<int16_t*>(me + 0x166);
             if (finalFrame == (int)cur) {
-                if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
+                ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(me + 0x10), 0);
             } else {
                 BC8_SetMeshFrame(me, finalFrame);
                 BC8_ReaddDrawChildren(me);
             }
             uintptr_t entSlot = *reinterpret_cast<uintptr_t*>(bc + 0x68) + (int64_t)i * 8;
             if (*reinterpret_cast<uintptr_t*>(entSlot) != 0) {
-                if (s_entity8f50) s_entity8f50(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                PickingComponent_RegisterMesh(*reinterpret_cast<void**>(entSlot));  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);
@@ -486,18 +463,17 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
     if (!bc) return 1;
     if (BuildComponent_DemoGateSkip(buildComp)) return 1;
     (void)sm;
-    BC8_Resolve();
 
-    if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(bc + 0x10), 4);
+    ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(bc + 0x10), 4);
 
     uintptr_t townMgr = 0;
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     uintptr_t selfIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
+    new (&selfIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
-    if (townMgr && s_findInQueue) {
-        int idx = s_findInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &selfIBP);
+    if (townMgr) {
+        int idx = BuildComponent_FindInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &selfIBP);
         if (idx >= 0) {
             int count = *reinterpret_cast<int32_t*>(townMgr + 0xd8);
             uintptr_t base = *reinterpret_cast<uintptr_t*>(townMgr + 0xd0);
@@ -507,12 +483,12 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
             *reinterpret_cast<int32_t*>(townMgr + 0xd8) = count - 1;
         }
     }
-    if (s_findMeshInst) {
+    {
         uintptr_t miIBP = 0;
-        void* mi = s_findMeshInst(*reinterpret_cast<uintptr_t*>(bc + 0x10), &miIBP);
+        void* mi = WorkBase_FindComponent_2f90(*reinterpret_cast<uintptr_t*>(bc + 0x10), &miIBP);
         if (mi) {
             uintptr_t inst = *reinterpret_cast<uintptr_t*>(mi);
-            if (inst && s_meshFinalize) s_meshFinalize(reinterpret_cast<void*>(inst), 0, 0);
+            if (inst) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(inst), 0, 0);
         }
     }
     return 1;
@@ -528,7 +504,6 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
 extern "C" void DecalComponent_MarkOwnerBuilt(void* entity);
 
 static void BuildComponent_State8Finalize(uintptr_t bc) {
-    BC8_Resolve();
     // Retail order: the 8->2 transition puts every controller into state 2, so the
     // workplace hand-off happens alongside this storage reconfigure. Do it first and
     // unconditionally — the storage half below early-returns on several data shapes
@@ -546,7 +521,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     DecalComponent_MarkOwnerBuilt(*reinterpret_cast<void**>(bc + 0x10));
 
     uintptr_t storageIBP = 0;
-    if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(bc + 0x10), &storageIBP);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(bc + 0x10), &storageIBP);
     if (storageIBP == 0) return;
     uintptr_t storage = storageIBP;
 
@@ -561,7 +536,8 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
         uintptr_t slot = slotArr + (int64_t)k * 0x10;
         int count = *reinterpret_cast<int32_t*>(slot + 8);
         void* matType = *reinterpret_cast<void**>(slot);
-        int resIdx = s_resIdx ? s_resIdx(reinterpret_cast<void*>(slotArr), matType) : -1;
+        int resIdx = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(slotArr),
+                                                     reinterpret_cast<uintptr_t>(matType));
         if (resIdx >= 0 && townMgr) {
             uintptr_t stockBase = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);
             if (stockBase) {
@@ -576,7 +552,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     {
         void* d = *reinterpret_cast<void**>(storage + 0x18);
         uint32_t tid = StorageDescription::TypeId();
-        if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) desc = d;
+        if (d && tid && ::Object::IsDerivedFromNullSafe(d, tid)) desc = d;
     }
     if (!desc) return;
     int mult = 1;
@@ -592,7 +568,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
                 void* c = *reinterpret_cast<void**>(carr + (int64_t)i * 8);
                 if (!c) continue;
                 uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-                if (t == tidMap) { if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidMap)) mapc = c; break; }
+                if (t == tidMap) { if (::Object::IsDerivedFromNullSafe(c, tidMap)) mapc = c; break; }
             }
         }
         if (mapc)

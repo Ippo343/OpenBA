@@ -2,15 +2,13 @@
 // Action-ctor + entity/storage leaf sub-helpers (pathfinding/action closure batch).
 //
 // Faithful 1:1 ports of 12 small exe helpers referenced from the Action closure.
-// In standalone these resolve to 0 (silently skipped) unless registered, so each is
-// transcribed literally from the Ghidra decompile (cross-checked against disassembly
+// Each is transcribed literally from the Ghidra decompile (cross-checked against disassembly
 // for intricate index/field math). Do NOT "improve" — none of this is exercised on the
 // autostart path, so a wrong port is undetectable latent corruption.
 //
 // Registration: RegisterPfCtorsBatch() in standalone/reg_pf_ctors.cpp.
 //
-// Sub-callees (all already registered elsewhere, called via ResolveAddr — body NOT
-// duplicated):
+// Sub-callees (called by name, B3R — body NOT duplicated):
 //   0x1400032e0  array-grow (component_people)               — c54e0
 //   0x1400c4f10  action-stack walk/clear (THIS file)         — c54e0
 //   0x1400c3470  NotifyEntityChanged (action_hunt)           — 107260
@@ -20,8 +18,8 @@
 //   0x140006270  Entity_FindComponent_Storage (work_base)    — 116760 / 1167c0
 //   0x14012d150  StorageComponent::SubtractItem (rawmat)     — 116760
 //
-// Engine helpers (engine_funcs.h): fn_IsDerivedFrom,
-//   fn_ObjectInternal_Ctor, fn_Time_Ctor_Float.
+// Engine helpers: Object::IsDerivedFromNullSafe, RtSystem_Time_Ctor
+//   (??0Time@System@@QEAA@M@Z). Constants: kRdata_1401720e4 / kRdata_14017214c.
 // Runtime export: System::Random::RandFloatTol (MoveTo speed default).
 //
 // ENDGAME B.3.8 ACT: the five action ctors (c5da0 CompleteTask, c71a0
@@ -35,10 +33,11 @@
 #include "Action/PerformWork.h"
 #include "Action/SendComponentMessage.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
-#include <atomic>
+#include "Work/exe_bodies.h"          // WorkBase_TaskListCleanup_c5400, WorkBase_FindComponent_6270
+#include "Game/exe_constants.h"       // kRdata_*
+#include <cstring>
 #include <cstdint>
 #include <new>
 #include <cstdio>
@@ -52,41 +51,12 @@
 #include "Object/factory_registration.h"           // ::Object::GetTypeIdByName
 
 namespace {
-// --- Type-ID globals (exe .rdata), resolved lazily once. ---
-// --- Float constants (exe .rdata) for MoveTo speed default. ---
-static const float* s_pDAT_1720e4 = nullptr;  // RandFloatTol scale
-static const float* s_pDAT_17214c = nullptr;  // bias
-// --- Registered exe sub-callees, called via ResolveAddr. ---
+// The .rdata float constants (Game/exe_constants.h) that are stored as bit patterns.
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 // 0x1400032e0 (Array<Ptr8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
 // is gone.
-typedef void (*fn_notify_t)(void* self);                            // 0x1400c3470
-typedef void* (*fn_findFamily_t)(uintptr_t entity, void* retIBP);   // 0x1400012d0
-typedef void (*fn_taskCleanup_t)(void* listAt48);                   // 0x1400c5400
-typedef void* (*fn_findStorage_t)(uintptr_t entity, void* retIBP);  // 0x140006270
-typedef void (*fn_storageSub_t)(uintptr_t storage, int64_t resType, int count); // 0x14012d150
-static fn_notify_t      s_fn_notify      = nullptr;
-static fn_findFamily_t  s_fn_findFamily  = nullptr;
-static fn_taskCleanup_t s_fn_taskCleanup = nullptr;
-static fn_findStorage_t s_fn_findStorage = nullptr;
-static fn_storageSub_t  s_fn_storageSub  = nullptr;
-
-// ENDGAME B.3.8 ACT (B8-10): the class ctors below call EnsureInit and are
-// reached from the loader thread too, so the once-flag is an acquire/release
-// atomic (a racing second init stores the same resolved values).
-static std::atomic<bool> s_init{false};
-static void EnsureInit() {
-    if (s_init.load(std::memory_order_acquire)) return;
-    s_pDAT_1720e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720e4));
-    s_pDAT_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_fn_notify      = reinterpret_cast<fn_notify_t>(ResolveAddr(Module::Exe, 0x1400c3470));
-    s_fn_findFamily  = reinterpret_cast<fn_findFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
-    s_fn_taskCleanup = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_findStorage = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_storageSub  = reinterpret_cast<fn_storageSub_t>(ResolveAddr(Module::Exe, 0x14012d150));
-    s_init.store(true, std::memory_order_release);
-}
 } // namespace
 
 // ============================================================
@@ -96,7 +66,6 @@ static void EnsureInit() {
 // holding the current entry. CheckPtr before every field access; advance via [obj+0x10].
 // ============================================================
 void Pf_ActStackWalkClear_4f10(void* param_1, void* param_2) {
-    EnsureInit();
     int64_t lVar1 = *reinterpret_cast<int64_t*>(param_2);
     while (lVar1 != 0) {
         int64_t obj = *reinterpret_cast<int64_t*>(param_2);
@@ -116,7 +85,6 @@ void Pf_ActStackWalkClear_4f10(void* param_1, void* param_2) {
 // param_1 = stack object ([0]=array, [1]=capacity, [3]=count); param_2 = src entry ptr.
 // ============================================================
 void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_) {
-    EnsureInit();
     uint64_t* param_2 = reinterpret_cast<uint64_t*>(param_2_);
     int iVar1 = static_cast<int>(param_1[1]);
     if (iVar1 == 0) {
@@ -215,7 +183,6 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
 // path block have no named members yet).
 MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination, int param_6,
                int param_7, float speed) {
-    EnsureInit();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     *reinterpret_cast<uint32_t*>(s + 0x20) = 0xffffffff;
     *reinterpret_cast<uint32_t*>(s + 0x24) = 0;
@@ -238,7 +205,7 @@ MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination
     void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x18);
     // DAT_1401c70b0 is CharacterDescription's type-id cell (Table 1).
     uint32_t charDescTid = CharacterDescription::TypeId();
-    bool derived = charDescTid && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, charDescTid);
+    bool derived = charDescTid && ::Object::IsDerivedFromNullSafe(obj, charDescTid);
     *reinterpret_cast<void**>(s + 0x30) = derived ? obj : nullptr;
     if (0.0f <= speed) {
         *reinterpret_cast<float*>(s + 0x478) = speed;
@@ -247,7 +214,7 @@ MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
         float r = random ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         *reinterpret_cast<float*>(s + 0x478) =
-            r * (s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.0f) + (s_pDAT_17214c ? *s_pDAT_17214c : 0.0f);
+            r * RdataF(kRdata_1401720e4) + kRdata_14017214c;   // 0x1401720e4 / 0x14017214c
     }
 }
 
@@ -270,7 +237,6 @@ void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32
 // retail stores are kept verbatim at their raw offsets.
 PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int64_t time,
                          uint8_t param_6, int param_7) {
-    EnsureInit();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x20) = *reinterpret_cast<uint64_t*>(entity);
@@ -293,11 +259,11 @@ PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int
                 // Time scaleTime(comp.f114); self.time = AsSeconds(self.time) * AsSeconds(scaleTime)
                 float compSecs = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(comp) + 0x114);
                 uint64_t scaleTimeStore = 0;
-                if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&scaleTimeStore, compSecs);
+                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&scaleTimeStore), compSecs);
                 float selfSecs  = *reinterpret_cast<float*>(s + 0x30);
                 float scaleSecs = *reinterpret_cast<float*>(&scaleTimeStore);
                 uint64_t prod = 0;
-                if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&prod, selfSecs * scaleSecs);
+                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&prod), selfSecs * scaleSecs);
                 *reinterpret_cast<uint64_t*>(s + 0x30) = prod;
             }
         }
@@ -352,19 +318,18 @@ SendComponentMessage::SendComponentMessage(uint64_t* param_2, uint32_t* param_3,
 // param_1: object whose +0x10 is the entity IBP, +0x20 the flag dword.
 // ============================================================
 void Pf_SetFlagRefreshUpdate_107260(int64_t* param_1) {
-    EnsureInit();
     uint32_t uVar1 = *reinterpret_cast<uint32_t*>(param_1 + 4);  // +0x20
     uint32_t uVar2 = uVar1 | 0x100000;
     *reinterpret_cast<uint32_t*>(param_1 + 4) = uVar2;
     if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (param_1[2] != 0)) {
-        if (s_fn_notify) s_fn_notify(reinterpret_cast<void*>(param_1[2]));
+        ActHunt_NotifyEntityChanged_c3470(reinterpret_cast<void*>(param_1[2]));   // 0x1400c3470
     }
     int64_t local_res8 = 0;
-    if (s_fn_findFamily) s_fn_findFamily(param_1[2], &local_res8);
+    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(param_1[2]), &local_res8);   // 0x1400012d0
     if (0 < *reinterpret_cast<int*>(local_res8 + 0x60) + 1) {
-        if (s_fn_taskCleanup) s_fn_taskCleanup(reinterpret_cast<void*>(local_res8 + 0x48));
+        WorkBase_TaskListCleanup_c5400(reinterpret_cast<void*>(local_res8 + 0x48));   // 0x1400c5400
         uint64_t timeStore = 0;
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStore, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStore), 0.0f);
         reinterpret_cast<Component*>(param_1)->Update(&timeStore);   // B.3.x bridge (slot 9)
     }
 }
@@ -376,9 +341,8 @@ void Pf_SetFlagRefreshUpdate_107260(int64_t* param_1) {
 // [param_1+0x30], stride 8) recurse on *child and add the result.
 // ============================================================
 int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
-    EnsureInit();
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, InteractDescription::TypeId());
+    bool derived = ::Object::IsDerivedFromNullSafe(obj, InteractDescription::TypeId());
     void* base = derived ? obj : nullptr;
     // [STANDALONE GUARD] base is null when obj is not an InteractDescription OR the
     // type-id global (0x1401c7938) is unfilled/unregistered in standalone. The real
@@ -410,7 +374,6 @@ int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
 // `found` stays null and +0x5c reads from address 0 — faithful to the original.
 // ============================================================
 int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2) {
-    EnsureInit();
     void* found = nullptr;
     int iVar = 0;
     if (0 < *reinterpret_cast<int*>(param_2 + 0x30)) {
@@ -423,8 +386,7 @@ int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2) {
             if (tid == wantTid) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(param_2 + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + static_cast<int64_t>(iVar) * 8);
-                bool derived = fn_IsDerivedFrom &&
-                               fn_IsDerivedFrom(match, RawMaterialDescription::TypeId());
+                bool derived = ::Object::IsDerivedFromNullSafe(match, RawMaterialDescription::TypeId());
                 if (derived) found = match;
                 break;
             }
@@ -442,10 +404,9 @@ int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2) {
 // (param_1+0x10) and subtract `param_3` of resource `param_2` from it (via 12d150).
 // ============================================================
 void Pf_StorageDropOff_116760(int64_t param_1, int64_t param_2, int param_3) {
-    EnsureInit();
     int64_t local_res8 = 0;
-    if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(param_1 + 0x10), &local_res8);
-    if (s_fn_storageSub) s_fn_storageSub(local_res8, param_2, param_3);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &local_res8);   // 0x140006270
+    ActRm_StorageSubtract_d150(static_cast<uintptr_t>(local_res8), param_2, param_3);   // 0x14012d150
 }
 
 // ============================================================
@@ -456,9 +417,8 @@ void Pf_StorageDropOff_116760(int64_t param_1, int64_t param_2, int param_3) {
 // at +0xc). Returns 0 if not found.
 // ============================================================
 int Pf_StorageCountDelta_1167c0(int64_t param_1, int64_t param_2) {
-    EnsureInit();
     int64_t local_res8 = 0;
-    if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(param_1 + 0x10), &local_res8);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &local_res8);   // 0x140006270
     int iVar4 = 0;
     int64_t lVar3 = 0;
     if (0 < static_cast<int64_t>(*reinterpret_cast<int*>(local_res8 + 0x30))) {

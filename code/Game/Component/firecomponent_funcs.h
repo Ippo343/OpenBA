@@ -12,9 +12,6 @@
 // byte-verified table. Slots 4-8 and 10-14 are bare `RET` base stubs.
 // ============================================================
 
-// Resolve internal function pointers (called once at startup).
-void FireComponent_InitFuncs();
-
 // ---- leaf bodies, firecomponent_ignite.cpp ----
 extern "C" void FireComponent_Ignite_610(void* self);          // 0x140049610
 extern "C" void FireComponent_Spread_130(void* self);          // 0x140049130

@@ -14,5 +14,3 @@
 extern "C" char CemeteryComponent_EnterBuilt(void* comp, void* sm);
 extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* sm);
 
-// Init: resolve all internal function pointers (called once at startup)
-void CemeteryComponent_InitFuncs();

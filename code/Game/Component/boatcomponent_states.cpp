@@ -84,135 +84,40 @@
 // ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
 // ControllerLive::TableController<BoatCtrlTag>, BoatComponent.h).
 #include "Component/BoatComponent.h"
+#include "Action/exe_bodies.h"
+#include "Player/exe_bodies.h"
+#include "Game/exe_constants.h"
 using BoatDispatch = ::ControllerLive::Dispatcher<BoatCtrlTag>;
 
 namespace {
 
-// ── Resolved leaves ──────────────────────────────────────────────────────────────
-typedef void*    (*fn_Find_t)(int64_t entity, void* outIBP);
-typedef void     (*fn_V3Ctor3f_t)(void* out, float x, float y, float z);
-typedef void     (*fn_V3CtorS_t)(void* out, const float* x, const float* y, const float* z);
-typedef void     (*fn_V3Length_t)(const void* v, float* out);
-typedef void     (*fn_V3Dot_t)(const void* a, float* out, const void* b);
-// Value-return member ABI: RCX=this, RDX=hidden 12-byte retbuf, retbuf also in RAX.
-// Passing only RCX leaves RDX holding garbage and the callee writes a Vector3 through
-// it — see the same note in action_base_move.cpp.
-typedef float*   (*fn_V3Normalize_t)(const void* v, void* retbuf);
-typedef void     (*fn_V3NormalizeLen_t)(const void* v, void* out, float* outLen);
-typedef float    (*fn_V3Heading_t)(const void* v);
-typedef void     (*fn_TimeCtor_t)(void* outTime, float seconds);
-typedef void     (*fn_SMTick_t)(void* sm, void* time, char useAlt, char run);
-typedef void     (*fn_MarkRemoval_t)(int64_t entity);
+// ── Leaves, called directly (B.3R) ───────────────────────────────────────────────
+//   0x140003f60 ActCNR_FindComponent_3f60 (ModelComponent)
+//   0x1400012d0 ActMv_FindComponentFamily_12d0 (CharacterComponent)
+//   0x140003ea0 PlayerPath_FindComponent_3ea0 (StateMachineComponent)
+//   0x1400a9660 StateMachine_TickReimpl       0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
+//   the Math import slots (Vector3 ctors 0x140152a30 / 0x140151268, Length 0x140151290,
+//   Dot 0x140151298, Normalize 0x1401512c0 / 0x1401512b8, Heading 0x1401512d8,
+//   Transform::FromYawPitchOffset 0x140151288, Transform::operator= 0x140151280) and
+//   Time(float) 0x140152b00 -> the Math members / RtSystem_Time_Ctor.
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-// Static value-return: RCX=retbuf, RDX=&yaw, R8=&pitch, R9=&offset (0x1400455db).
-typedef void*    (*fn_XformFromYPO_t)(void* out, const float* yaw, const float* pitch,
-                                      const void* offset);
-typedef void*    (*fn_XformAssign_t)(void* dst, const void* src);
-
-fn_Find_t           s_FindModel      = nullptr;   // 0x140003f60
-fn_Find_t           s_FindCharacter  = nullptr;   // 0x1400012d0
-fn_Find_t           s_FindSMC        = nullptr;   // 0x140003ea0
-fn_V3Ctor3f_t       s_V3Ctor3f       = nullptr;   // slot 0x140152a30
-fn_V3CtorS_t        s_V3CtorS        = nullptr;   // slot 0x140151268
-fn_V3Length_t       s_V3Length       = nullptr;   // slot 0x140151290
-fn_V3Dot_t          s_V3Dot          = nullptr;   // slot 0x140151298
-fn_V3Normalize_t    s_V3Normalize    = nullptr;   // slot 0x1401512c0
-fn_V3NormalizeLen_t s_V3NormalizeLen = nullptr;   // slot 0x1401512b8
-fn_V3Heading_t      s_V3Heading      = nullptr;   // slot 0x1401512d8
-fn_TimeCtor_t       s_TimeCtor       = nullptr;   // slot 0x140152b00
-fn_SMTick_t         s_SMTick         = nullptr;   // 0x1400a9660
-fn_MarkRemoval_t    s_MarkRemoval    = nullptr;   // 0x1400c2ea0
-fn_XformFromYPO_t   s_XformFromYPO   = nullptr;   // slot 0x140151288
-fn_XformAssign_t    s_XformAssign    = nullptr;   // slot 0x140151280
-
-// Float constants, by address (retail reads them from .rdata, so do we).
-const float* s_fArrive      = nullptr;   // 0x140172180  waypoint arrival radius
-const float* s_fPointSpace  = nullptr;   // 0x14017219c  min spacing to the NEXT waypoint
-const float* s_fSpeedBase   = nullptr;   // 0x14017214c  ( == g_fUVScale, 1.0f )
-const float* s_fSpeedScale  = nullptr;   // 0x1401720ec
-const float* s_fSpeedMin    = nullptr;   // 0x14017210c
-const float* s_fDockRange   = nullptr;   // 0x1401720fc  state 1 -> 2 range
-const float* s_fApproach    = nullptr;   // 0x1401721f4  state 0 -> 1 range (squared)
+//
+// Float constants, by address (retail reads them from .rdata, so do we; exe_constants.h):
+inline float BitsF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+const float kArrive     = kRdata_140172180;           // waypoint arrival radius
+const float kPointSpace = kRdata_14017219c;           // min spacing to the NEXT waypoint
+const float kSpeedBase  = kRdata_14017214c;           // ( == g_fUVScale, 1.0f )
+const float kSpeedScale = kRdata_1401720ec;
+const float kSpeedMin   = BitsF(kRdata_14017210c);    // 0.33
+const float kDockRange  = kRdata_1401720fc;           // state 1 -> 2 range
+const float kApproach   = kRdata_1401721f4;           // state 0 -> 1 range (squared)
 
 // The boat's animation ids, as retail passes them to 0x14010a1f0.
 // (0x14010a1f0 is already ported as ActMv_SetAnimation_a1f0 in action_base_move.cpp.)
-bool s_resolved = false;
 
-inline void* Slot(uintptr_t addr) {
-    uintptr_t s = ResolveAddr(Module::Exe, addr);
-    return s ? *reinterpret_cast<void**>(s) : nullptr;
-}
-inline const float* Flt(uintptr_t addr) {
-    return reinterpret_cast<const float*>(ResolveAddr(Module::Exe, addr));
-}
-// Tiny per-slot formatter so one fprintf can print seven "value or UNRESOLVED" fields.
-inline const char* FmtF(int slot, float v) {
-    static char buf[7][24];
-    std::snprintf(buf[slot], sizeof(buf[slot]), "%.3f", v);
-    return buf[slot];
-}
-
-void Resolve() {
-    if (s_resolved) return;
-    s_resolved = true;
-
-    s_FindModel      = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_FindCharacter  = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x1400012d0));
-    s_FindSMC        = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_SMTick         = reinterpret_cast<fn_SMTick_t>(ResolveAddr(Module::Exe, 0x1400a9660));
-    s_MarkRemoval    = reinterpret_cast<fn_MarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-
-    s_V3Ctor3f       = reinterpret_cast<fn_V3Ctor3f_t>(Slot(0x140152a30));
-    s_V3CtorS        = reinterpret_cast<fn_V3CtorS_t>(Slot(0x140151268));
-    s_V3Length       = reinterpret_cast<fn_V3Length_t>(Slot(0x140151290));
-    s_V3Dot          = reinterpret_cast<fn_V3Dot_t>(Slot(0x140151298));
-    s_V3Normalize    = reinterpret_cast<fn_V3Normalize_t>(Slot(0x1401512c0));
-    s_V3NormalizeLen = reinterpret_cast<fn_V3NormalizeLen_t>(Slot(0x1401512b8));
-    s_V3Heading      = reinterpret_cast<fn_V3Heading_t>(Slot(0x1401512d8));
-    s_TimeCtor       = reinterpret_cast<fn_TimeCtor_t>(Slot(0x140152b00));
-    s_XformFromYPO   = reinterpret_cast<fn_XformFromYPO_t>(Slot(0x140151288));
-    s_XformAssign    = reinterpret_cast<fn_XformAssign_t>(Slot(0x140151280));
-
-    s_fArrive     = Flt(0x140172180);
-    s_fPointSpace = Flt(0x14017219c);
-    s_fSpeedBase  = Flt(0x14017214c);
-    s_fSpeedScale = Flt(0x1401720ec);
-    s_fSpeedMin   = Flt(0x14017210c);
-    s_fDockRange  = Flt(0x1401720fc);
-    s_fApproach   = Flt(0x1401721f4);
-
-    std::fprintf(stderr,
-        "[BoatCtrl] leaves: findModel=%p findChar=%p findSMC=%p len=%p normLen=%p "
-        "norm=%p heading=%p v3ctor=%p tick=%p mark=%p\n",
-        (void*)s_FindModel, (void*)s_FindCharacter, (void*)s_FindSMC,
-        (void*)s_V3Length, (void*)s_V3NormalizeLen, (void*)s_V3Normalize,
-        (void*)s_V3Heading, (void*)s_V3Ctor3f, (void*)s_SMTick, (void*)s_MarkRemoval);
-
-    // ⚠ REPORT THE OUTCOME, NOT THE INTENT. Every use of these constants is guarded
-    // `if (s_fX && ...)`, so an unresolved one does not crash and does not log — it
-    // DELETES the test it guards. That is exactly how the first run of this file sailed a
-    // boat past its own dock: 0x1401721f4 was never registered, so the arrival test was
-    // simply not there, and the boat ran the full 987-point route and scrapped itself.
-    {
-        const bool ok = s_fArrive && s_fPointSpace && s_fSpeedBase && s_fSpeedScale &&
-                        s_fSpeedMin && s_fDockRange && s_fApproach;
-        std::fprintf(stderr,
-            "[BoatCtrl] consts: arrive(172180)=%s pointSpace(17219c)=%s "
-            "speedBase(17214c)=%s speedScale(1720ec)=%s speedMin(17210c)=%s "
-            "dockRange(1720fc)=%s approachSq(1721f4)=%s%s\n",
-            s_fArrive     ? FmtF(0, *s_fArrive)     : "UNRESOLVED",
-            s_fPointSpace ? FmtF(1, *s_fPointSpace) : "UNRESOLVED",
-            s_fSpeedBase  ? FmtF(2, *s_fSpeedBase)  : "UNRESOLVED",
-            s_fSpeedScale ? FmtF(3, *s_fSpeedScale) : "UNRESOLVED",
-            s_fSpeedMin   ? FmtF(4, *s_fSpeedMin)   : "UNRESOLVED",
-            s_fDockRange  ? FmtF(5, *s_fDockRange)  : "UNRESOLVED",
-            s_fApproach   ? FmtF(6, *s_fApproach)   : "UNRESOLVED",
-            ok ? "" : "   <-- an UNRESOLVED constant silently removes the test it guards; "
-                      "the boat will sail its whole route and never dock");
-    }
-    std::fflush(stderr);
-}
+// The by-value Math returns, taken into this file's plain float shapes.
+inline const Math::Vector3& V3(const void* p) { return *reinterpret_cast<const Math::Vector3*>(p); }   // B.3.1 bridge
 
 
 // ── Small shared shapes ──────────────────────────────────────────────────────────
@@ -239,10 +144,11 @@ inline const Vec3* ModelPos(uintptr_t boat) {
 void RequestTransition(void* smV, int desiredStateId) {
     uint8_t* sm = reinterpret_cast<uint8_t*>(smV);
     if (!sm) return;
-    if (static_cast<int8_t>(sm[9]) < 0 && s_SMTick && s_TimeCtor) {
+    if (static_cast<int8_t>(sm[9]) < 0) {
         uint8_t zeroTime[8] = {};
-        s_TimeCtor(zeroTime, 0.0f);
-        s_SMTick(smV, zeroTime, 0, 0);
+        RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(zeroTime), 0.0f);
+        // The time argument is the ADDRESS of the Time (retail passes it by reference).
+        StateMachine_TickReimpl(smV, reinterpret_cast<int64_t>(zeroTime), 0, 0);   // 0x1400a9660
     }
     ::ControllerLive::RequestStateTransition(smV, desiredStateId);
 }
@@ -256,12 +162,11 @@ void RequestTransition(void* smV, int desiredStateId) {
 // machine's current node-local index — the same +0x09 byte the node ABI uses one field
 // earlier in the struct.
 void PostEventToDestination(uintptr_t boat, int eventId) {
-    if (!s_FindSMC) return;
     const int64_t destEntity = *reinterpret_cast<int64_t*>(boat + 0x28);
     if (!destEntity) return;
 
     uint64_t smcIBP[2] = {0, 0};
-    void* out = s_FindSMC(destEntity, smcIBP);
+    void* out = PlayerPath_FindComponent_3ea0(static_cast<uintptr_t>(destEntity), smcIBP);
     const uintptr_t smc = out ? *reinterpret_cast<uintptr_t*>(out) : 0;
     if (!smc) {
         return;
@@ -290,7 +195,7 @@ void DeleteBoatEntity(uintptr_t boat) {
     if (!entityList) return;
 
     if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10) & 1) return;   // already going
-    if (s_MarkRemoval) s_MarkRemoval(entIBP);
+    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entIBP));
     {
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         void* arr = reinterpret_cast<void*>(entityList + 0xd0);
@@ -328,40 +233,35 @@ char Steer_63d0(uintptr_t boat) {
     char ok = 1;
     {
         Vec3 v = {0, 0, 0};
-        if (s_V3Ctor3f)
-            s_V3Ctor3f(&v, wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z);
+        new (&v) Math::Vector3(wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z);   // B.3.1 bridge
         v.z = 0.0f;                                   // the flatten at 0x140046473
-        float len = 0.0f;
-        if (s_V3Length) s_V3Length(&v, &len);
-        if (s_fArrive && len < *s_fArrive) {
+        const float len = V3(&v).Length().v;
+        if (len < kArrive) {
             const int idx = NextRoutePoint(boat, &modelPos);
             if (idx < 0) return 0;
             *reinterpret_cast<int32_t*>(boat + 0x70) = idx;
             const float* pt = *reinterpret_cast<const float**>(boat + 0x60) + (size_t)idx * 3;
-            const float px = pt[0], py = pt[1], pz = 0.0f;
-            if (s_V3CtorS) s_V3CtorS(reinterpret_cast<void*>(boat + 0x50), &px, &py, &pz);
+            const Math::Scalar px(pt[0]), py(pt[1]), pz(0.0f);
+            new (reinterpret_cast<void*>(boat + 0x50)) Math::Vector3(px, py, pz);   // B.3.1 bridge
         }
     }
 
     // dir = Normalize(waypoint - modelPos), with the length dropped on the floor here
     // (retail passes an out-param it does not read in this function).
     Vec3 toWp = { wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z };
-    Vec3 dir = {0, 0, 0};
-    float dropLen = 0.0f;
-    if (s_V3NormalizeLen) s_V3NormalizeLen(&toWp, &dir, &dropLen);
+    Math::Scalar dropLen;
+    const Math::Vector3 dir = V3(&toWp).Normalize(dropLen);
 
     const uintptr_t chr = *reinterpret_cast<uintptr_t*>(boat + 0x38);
     if (!chr) return ok;
     *reinterpret_cast<uint8_t*>(chr + 0x28) = 0;
 
-    Vec3 flat = { dir.x, dir.y, 0.0f };
-    Vec3 nrm = {0, 0, 0};
-    if (s_V3Normalize && s_V3Normalize(&flat, &nrm)) {
-        *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
-        *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
-        *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
-    }
-    if (s_V3Heading) *reinterpret_cast<float*>(chr + 0x3c) = s_V3Heading(&dir);
+    const Math::Vector3 flat(dir.x, dir.y, 0.0f);
+    const Math::Vector3 nrm = flat.Normalize();
+    *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
+    *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
+    *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
+    *reinterpret_cast<float*>(chr + 0x3c) = dir.Heading();
     return ok;
 }
 
@@ -395,7 +295,7 @@ extern "C" int BoatCtrl_NextRoutePoint(void* waypointField, const float* ref, fl
 
 namespace {
 int NextRoutePoint(uintptr_t boat, const Vec3* ref) {
-    const float spacing = s_fPointSpace ? *s_fPointSpace : 0.0f;
+    const float spacing = kPointSpace;
     return BoatCtrl_NextRoutePoint(reinterpret_cast<void*>(boat + 0x50),
                                    reinterpret_cast<const float*>(ref), spacing);
 }
@@ -409,7 +309,6 @@ int NextRoutePoint(uintptr_t boat, const Vec3* ref) {
 //     character+0x38 = character.model(+0x13c) * speed
 extern "C" void BoatCtrl_DriveToward(void* charComp, const float* target,
                                      float heading, float speed) {
-    Resolve();
     const uintptr_t chr = reinterpret_cast<uintptr_t>(charComp);
     if (!chr) return;
     *reinterpret_cast<uint8_t*>(chr + 0x28) = 1;
@@ -418,27 +317,25 @@ extern "C" void BoatCtrl_DriveToward(void* charComp, const float* target,
     if (!model) return;
     const float* mp = reinterpret_cast<const float*>(model + 0x158);
 
-    Vec3 v = { target[0] - mp[0], target[1] - mp[1], target[2] - mp[2] };
-    Vec3 nrm = {0, 0, 0};
-    if (s_V3Normalize && s_V3Normalize(&v, &nrm)) {
-        *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
-        *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
-        *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
-    }
+    const Math::Vector3 v(target[0] - mp[0], target[1] - mp[1], target[2] - mp[2]);
+    const Math::Vector3 nrm = v.Normalize();
+    *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
+    *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
+    *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
     const uintptr_t model2 = *reinterpret_cast<uintptr_t*>(chr + 0x68);
     *reinterpret_cast<float*>(chr + 0x3c) = heading;
     *reinterpret_cast<float*>(chr + 0x38) =
         model2 ? *reinterpret_cast<const float*>(model2 + 0x13c) * speed : 0.0f;
 }
 
-// 0x14010a1f0 SetAnimation, already ported for the citizen mover.
-extern void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4);
+// 0x14010a1f0 SetAnimation, already ported for the citizen mover (ActMv_SetAnimation_a1f0,
+// Action/exe_bodies.h).
 
 namespace {
 void SetAnim(uintptr_t boat, uint32_t animId) {
     void* chr = *reinterpret_cast<void**>(boat + 0x38);
     if (!chr) return;
-    const float f = s_fSpeedBase ? *s_fSpeedBase : 1.0f;
+    const float f = kSpeedBase;
     ActMv_SetAnimation_a1f0(chr, animId, f, f);
 }
 }  // namespace
@@ -450,16 +347,15 @@ void SetAnim(uintptr_t boat, uint32_t animId) {
 // current waypoint to the first route point far enough away, faces the hull along the
 // route and starts animation 1.
 extern "C" char BoatCtrl_State0_Enter(void* selfV) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
 
     uint64_t ibp[2] = {0, 0};
-    if (s_FindModel) {
-        void* r = s_FindModel(*reinterpret_cast<int64_t*>(boat + 0x10), ibp);
+    {
+        void* r = ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(boat + 0x10), ibp);
         *reinterpret_cast<uint64_t*>(boat + 0x30) = *reinterpret_cast<uint64_t*>(r);
     }
-    if (s_FindCharacter) {
-        void* r = s_FindCharacter(*reinterpret_cast<int64_t*>(boat + 0x10), ibp);
+    {
+        void* r = ActMv_FindComponentFamily_12d0(*reinterpret_cast<uintptr_t*>(boat + 0x10), ibp);
         *reinterpret_cast<uint64_t*>(boat + 0x38) = *reinterpret_cast<uint64_t*>(r);
     }
 
@@ -477,18 +373,16 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
     // Snap to the nearest usable route point when we are already close to route[0].
     {
         const Vec3 p0 = { route[0], route[1], 0.0f };
-        Vec3 v = {0, 0, 0};
         const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
-        if (s_V3Ctor3f) s_V3Ctor3f(&v, wp->x - p0.x, wp->y - p0.y, wp->z - 0.0f);
-        float len = 0.0f;
-        if (s_V3Length) s_V3Length(&v, &len);
-        if (s_fArrive && len < *s_fArrive) {
+        const Math::Vector3 v(wp->x - p0.x, wp->y - p0.y, wp->z - 0.0f);
+        const float len = v.Length().v;
+        if (len < kArrive) {
             const int idx = NextRoutePoint(boat, &p0);
             if (idx >= 0) {
                 *reinterpret_cast<int32_t*>(boat + 0x70) = idx;
                 const float* pt = route + (size_t)idx * 3;
-                const float px = pt[0], py = pt[1], pz = 0.0f;
-                if (s_V3CtorS) s_V3CtorS(reinterpret_cast<void*>(boat + 0x50), &px, &py, &pz);
+                const Math::Scalar px(pt[0]), py(pt[1]), pz(0.0f);
+                new (reinterpret_cast<void*>(boat + 0x50)) Math::Vector3(px, py, pz);   // B.3.1 bridge
             }
         }
     }
@@ -496,19 +390,19 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
     // Face along (waypoint - route[0]) and push the transform into the model + geometry.
     {
         const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
-        Vec3 dir = { wp->x - route[0], wp->y - route[1], wp->z - 0.0f };
+        const Math::Vector3 dir(wp->x - route[0], wp->y - route[1], wp->z - 0.0f);
         const uintptr_t model = *reinterpret_cast<uintptr_t*>(boat + 0x30);
-        if (model && s_V3Heading && s_XformFromYPO && s_XformAssign) {
-            const float yaw   = s_V3Heading(&dir);
+        if (model) {
+            const float yaw   = dir.Heading();
             const float pitch = 0.0f;
             // ⚠ The OFFSET is route[0], not the origin (R9 = [RBP-0x21] at 0x1400455db,
             // the Vector3 built from route[0] at 0x140045595). This transform is what
             // puts the newly spawned hull at the start of its route; passing a zero
             // offset would park every merchant at the map origin.
-            const Vec3 offset = { route[0], route[1], 0.0f };
-            uint8_t xform[0x30] = {};
-            s_XformFromYPO(xform, &yaw, &pitch, &offset);
-            s_XformAssign(reinterpret_cast<void*>(model + 0x148), xform);
+            const Math::Vector3 offset(route[0], route[1], 0.0f);
+            const Math::Transform xform = Math::Transform::FromYawPitchOffset(
+                Math::Scalar(yaw), Math::Scalar(pitch), offset);
+            *reinterpret_cast<Math::Transform*>(model + 0x148) = xform;   // B.3.1 bridge
             *reinterpret_cast<float*>(model + 0x168) = yaw;
             reinterpret_cast<Graphics::Geometry*>(model + 0x28)
                 ->SetTransform(*reinterpret_cast<const Math::Transform*>(model + 0x148));   // B.3.5 bridge
@@ -544,11 +438,9 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
 // keeps the port honest — and it matters, because a repaired version would advance the
 // waypoint twice per frame.
 extern "C" char BoatCtrl_State0_Update(void* selfV) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-    Vec3 zero = {0.0f, 0.0f, 0.0f};
-    float len = 0.0f;
-    if (s_V3Length) s_V3Length(&zero, &len);
+    const Math::Vector3 zero(0.0f, 0.0f, 0.0f);
+    const float len = zero.Length().v;
     if (len < 0.0f) {                     // never taken; kept for shape
         const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
         const int idx = NextRoutePoint(boat, wp);
@@ -574,7 +466,6 @@ extern "C" char BoatCtrl_State0_Update(void* selfV) {
 // therefore a squared radius. Retail calls Vector3::Dot with the same vector for both
 // operands (RCX and R8 are the same address at 0x14004532c).
 extern "C" char BoatCtrl_State0_Tick(void* selfV, void* smV, void* /*time*/) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
 
     if (!Steer_63d0(boat)) {
@@ -585,15 +476,14 @@ extern "C" char BoatCtrl_State0_Tick(void* selfV, void* smV, void* /*time*/) {
     const Vec3* mp = ModelPos(boat);
     if (!mp) return 1;
     const Vec3* dockPos = reinterpret_cast<const Vec3*>(boat + 0x40);
-    Vec3 d = { mp->x - dockPos->x, mp->y - dockPos->y, mp->z - dockPos->z };
-    float dist2 = 0.0f;
-    if (s_V3Dot) s_V3Dot(&d, &dist2, &d);
+    const Math::Vector3 d(mp->x - dockPos->x, mp->y - dockPos->y, mp->z - dockPos->z);
+    const float dist2 = d.Dot(d).v;
 
     // Bring-up trace: reports OUTCOMES, not intent — the first call proves trans30 is
     // dispatched at all, and the periodic lines show whether the hull is actually moving
     // (model pos changing) as opposed to being steered at a target it never approaches.
 
-    if (s_fApproach && *s_fApproach > dist2) {
+    if (kApproach > dist2) {
         RequestTransition(smV, 1);
     }
     return 1;
@@ -603,7 +493,6 @@ extern "C" char BoatCtrl_State0_Tick(void* selfV, void* smV, void* /*time*/) {
 // state 1 ENTER — 0x140045150
 // ============================================================
 extern "C" char BoatCtrl_State1_Enter(void* selfV) {
-    Resolve();
     SetAnim(reinterpret_cast<uintptr_t>(selfV), 2);
     return 1;
 }
@@ -623,20 +512,20 @@ extern "C" char BoatCtrl_State1_Enter(void* selfV) {
 // JA take-max` then `COMISS min,XMM6; JBE keep`, i.e. high clamp to 0x14017214c and low
 // clamp to 0x14017210c. Ghidra renders this as nonsense involving `DAT_1401720ec * 0.0`.
 extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
 
     const Vec3* mp = ModelPos(boat);
     if (!mp) return 1;
     const Vec3* dockPos = reinterpret_cast<const Vec3*>(boat + 0x40);
-    Vec3 d = { dockPos->x - mp->x, dockPos->y - mp->y, dockPos->z - mp->z };
-    Vec3 dir = {0, 0, 0};
-    float dist = 0.0f;
-    if (s_V3NormalizeLen) s_V3NormalizeLen(&d, &dir, &dist);
+    const Math::Vector3 d(dockPos->x - mp->x, dockPos->y - mp->y, dockPos->z - mp->z);
+    Math::Scalar distS;
+    const Math::Vector3 dir = d.Normalize(distS);
+    (void)dir;
+    const float dist = distS.v;
 
-    float speed = dist * (s_fSpeedScale ? *s_fSpeedScale : 0.0f);
-    const float hi = s_fSpeedBase ? *s_fSpeedBase : 1.0f;
-    const float lo = s_fSpeedMin  ? *s_fSpeedMin  : 0.0f;
+    float speed = dist * kSpeedScale;
+    const float hi = kSpeedBase;
+    const float lo = kSpeedMin;
     // 0x14005008d: COMISS speed,hi / JA take-XMM0 (XMM0 == hi)
     // 0x14005009a: COMISS lo,speed  / JBE keep      (else XMM0 == lo)
     if (speed > hi) speed = hi;
@@ -647,7 +536,7 @@ extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
         BoatCtrl_DriveToward(chr, reinterpret_cast<const float*>(boat + 0x40),
                              *reinterpret_cast<const float*>(boat + 0x4c), speed);
 
-    if (s_fDockRange && *s_fDockRange > dist) {
+    if (kDockRange > dist) {
         RequestTransition(smV, 2);
     }
     return 1;
@@ -661,12 +550,11 @@ extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
 // machine's state 0x12 has no per-frame handler at all, only events 9 and 0xb, so until
 // something raised 9 it could never reach 0x13 and run the manifest / buy-and-pay code.
 extern "C" char BoatCtrl_State2_Enter(void* selfV) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
 
     // 0x140044f8d/f95: XMM2 = 0x14017214c, XMM3 = 0 (XORPS), EDX = 0.
     if (void* chr = *reinterpret_cast<void**>(boat + 0x38))
-        ActMv_SetAnimation_a1f0(chr, 0, s_fSpeedBase ? *s_fSpeedBase : 1.0f, 0.0f);
+        ActMv_SetAnimation_a1f0(chr, 0, kSpeedBase, 0.0f);
 
     PostEventToDestination(boat, 9);
     return 1;
@@ -676,7 +564,6 @@ extern "C" char BoatCtrl_State2_Enter(void* selfV) {
 // state 2 EVENT 0 — 0x140044f00      (the post releases the merchant)
 // ============================================================
 extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
-    Resolve();
     RequestTransition(smV, 3);
     return 1;
 }
@@ -685,7 +572,6 @@ extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
 // EVENT 1 on states 0/1/2 — 0x140045670   (abort: go straight to GONE)
 // ============================================================
 extern "C" char BoatCtrl_Event1_Abort(void* /*selfV*/, void* smV) {
-    Resolve();
     RequestTransition(smV, 4);
     return 1;
 }
@@ -694,10 +580,9 @@ extern "C" char BoatCtrl_Event1_Abort(void* /*selfV*/, void* smV) {
 // state 3 ENTER — 0x140044ec0
 // ============================================================
 extern "C" char BoatCtrl_State3_Enter(void* selfV) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
     if (void* chr = *reinterpret_cast<void**>(boat + 0x38)) {
-        const float f = s_fSpeedBase ? *s_fSpeedBase : 1.0f;
+        const float f = kSpeedBase;
         ActMv_SetAnimation_a1f0(chr, 3, f, f);
     }
     return 1;
@@ -718,7 +603,6 @@ extern "C" char BoatCtrl_State3_Enter(void* selfV) {
 // the departing leg re-walks the same route array: the waypoint marching away from the
 // dock is exactly the progress signal.
 extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
 
     const Vec3* mp = ModelPos(boat);
@@ -727,28 +611,24 @@ extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
     const Vec3* dockPos = reinterpret_cast<const Vec3*>(boat + 0x40);
     const Vec3* wp      = reinterpret_cast<const Vec3*>(boat + 0x50);
 
-    Vec3 fromDock = { dockPos->x - wp->x, dockPos->y - wp->y, dockPos->z - wp->z };
-    float gate = 0.0f;
-    if (s_V3Length) s_V3Length(&fromDock, &gate);
+    const Math::Vector3 fromDock(dockPos->x - wp->x, dockPos->y - wp->y, dockPos->z - wp->z);
+    const float gate = fromDock.Length().v;
 
-    Vec3 toWp = { wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z };
-    Vec3 dir = {0, 0, 0};
-    float dropLen = 0.0f;
-    if (s_V3NormalizeLen) s_V3NormalizeLen(&toWp, &dir, &dropLen);
+    const Math::Vector3 toWp(wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z);
+    Math::Scalar dropLen;
+    const Math::Vector3 dir = toWp.Normalize(dropLen);
 
     if (const uintptr_t chr = *reinterpret_cast<uintptr_t*>(boat + 0x38)) {
         *reinterpret_cast<uint8_t*>(chr + 0x28) = 0;
-        Vec3 flat = { dir.x, dir.y, 0.0f };
-        Vec3 nrm = {0, 0, 0};
-        if (s_V3Normalize && s_V3Normalize(&flat, &nrm)) {
-            *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
-            *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
-            *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
-        }
-        if (s_V3Heading) *reinterpret_cast<float*>(chr + 0x3c) = s_V3Heading(&dir);
+        const Math::Vector3 flat(dir.x, dir.y, 0.0f);
+        const Math::Vector3 nrm = flat.Normalize();
+        *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
+        *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
+        *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
+        *reinterpret_cast<float*>(chr + 0x3c) = dir.Heading();
     }
 
-    if (s_fArrive && *s_fArrive > gate) {
+    if (kArrive > gate) {
         RequestTransition(smV, 4);
     }
     return 1;
@@ -758,7 +638,6 @@ extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
 // state 4 ENTER — 0x140044cd0
 // ============================================================
 extern "C" char BoatCtrl_State4_Enter(void* selfV) {
-    Resolve();
     SetAnim(reinterpret_cast<uintptr_t>(selfV), 1);
     return 1;
 }
@@ -769,7 +648,6 @@ extern "C" char BoatCtrl_State4_Enter(void* selfV) {
 // Same steer call, same "route exhausted" test — but no event to the post, because by
 // state 4 the post has already released this merchant. Just delete the entity.
 extern "C" char BoatCtrl_State4_Tick(void* selfV, void* /*smV*/, void* /*time*/) {
-    Resolve();
     const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
     if (!Steer_63d0(boat)) DeleteBoatEntity(boat);
     return 1;

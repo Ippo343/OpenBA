@@ -31,6 +31,8 @@
 #include <cstdio>
 #include <atomic>
 #include <new>
+#include "system/MemoryAllocator.h"
+#include "Component/exe_bodies.h"
 
 
 // ---- internal: serializer "stream error" word (serializer->stream + 8 == 0 ⇒ ok)
@@ -144,7 +146,7 @@ ComponentDescription::ComponentDescription()
 // array (the sub-descriptions themselves are owned by the ExternalFactory cache,
 // not freed here). The compiler then runs ~External.
 ComponentDescription::~ComponentDescription() {
-    if (_subDescs && fn_MemFreeStatic) fn_MemFreeStatic(_subDescs);
+    if (_subDescs) ::System::MemoryAllocator::MemFree(_subDescs);
     _subDescs = nullptr;
     _subDescCount = 0;
 }
@@ -160,8 +162,8 @@ bool ComponentDescription::Serialize(void* stream) {
     // sub-description count (+0x30) + fresh array resize (+0x28, stride 8)
     ser.Serialize(_subDescCount, nullptr);
     int count = _subDescCount;
-    if (SerStreamErr(&ser) == 0 && count > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 8, 8);
+    if (SerStreamErr(&ser) == 0 && count > 0 && ::System::MemoryAllocator::_singleton) {
+        void* buf = ::System::MemoryAllocator::MemAlloc((uint64_t)count * 8, 8);
         _subDescs = static_cast<void**>(buf);
         _subDescCap = count;
         if (buf) for (int i = 0; i < count; ++i) static_cast<void**>(buf)[i] = nullptr;
@@ -224,7 +226,7 @@ void ResolveExternalByName_Impl(void* nameString) {
     // registered, so the escape never ran).
     void* result = nullptr;
     if (found) {
-        if (fn_IsDerivedFrom(found, ComponentDescription::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
             result = found;
         }
     }

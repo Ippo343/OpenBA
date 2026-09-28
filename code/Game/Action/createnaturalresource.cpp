@@ -10,7 +10,11 @@
 
 #include "CreateNaturalResource.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"            // ActCNR_* helpers
+#include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0
+#include "Game/exe_bodies.h"              // Reimpl_ExternalPtr_Serialize_StringTable
+#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic below)
 #include <cstdio>
@@ -23,130 +27,26 @@
 #include "Entity/ComponentEntity.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- CreateNaturalResource-specific helpers)
+// Helpers, called by name (B3R)
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable -- serialize StringHash/type ref
+//   0x1400c3720 ComponentEntity_CtorFromDescription      -- clone entity from description
+//   0x14009cb00 ActCNR_CheckTerrain_cb00                 -- check terrain validity
+//   0x1400052c0 WorkBase_FindComponent_52c0  -- find component by type (ModelComponent;
+//               member ABI: RCX=entity, RDX=retbuf)
+//   0x140126540 ActCNR_SetupModelAtCell_126540 (Entity_impl_6540) -- set up model at cell
+//   0x14000c460 ActCNR_FindComponent_c460    -- find component (GrowthComponent)
+//   0x140120db0 ActCNR_SetGrowthProgress_120db0 -- set growth progress
+//   0x140003f60 ActCNR_FindComponent_3f60    -- find component (NaturalResourceComponent)
+//   0x1401252f0 ActCNR_NR_GetVariantCount_1252f0 / 0x140125320 ActCNR_NR_GetSubVariantCount_125320
+//   0x1401253d0 ActCNR_NR_SetVariant_1253d0  -- set NR variant
+//   0x1400c48a0 EntityList_RegisterEntity_Impl -- register entity with entity list
 // ============================================================
-
-// FUN_140002340 -- serialize StringHash/type ref
-static void (*s_fn_SerializeTypeRef)(void* field, void* serializer) = nullptr;
-
-// ComponentEntity_CopyCtor (0x1400c3720) -- clone entity from description
-static void* (*s_fn_ComponentEntity_CopyCtor)(void* self, void* desc) = nullptr;
-
-// CreateNaturalResource_helper_cb00 (0x14009cb00) -- check terrain validity
-static uint64_t (*s_fn_CheckTerrain)(void* mapGrid, int cellIndex) = nullptr;
-
-// FUN_1400052c0 -- find component by type (returns IBP; member ABI: RCX=entity, RDX=retbuf)
-static void* (*s_fn_FindComponent_Model)(int64_t entity, void* retbuf) = nullptr;
-
-// Entity_impl_6540 (0x140126540) -- set up model at cell
-static void (*s_fn_SetupModelAtCell)(int64_t comp, int cellIndex) = nullptr;
-
-// FUN_14000c460 -- find component (GrowthComponent?)
-static void* (*s_fn_FindComponent_Growth)(int64_t entity, void* retbuf) = nullptr;
-
-// FUN_140120db0 -- set growth progress
-static void (*s_fn_SetGrowthProgress)(int64_t comp, float progress) = nullptr;
-
-// Entity_ClearPathQueue (0x140003f60) -- find component (NaturalResourceComponent?)
-static void* (*s_fn_FindComponent_NR)(int64_t entity, void* retbuf) = nullptr;
-
-// CreateNaturalResource_helper_52f0 (0x1401252f0) -- get NR variant count
-static uint32_t (*s_fn_NR_GetVariantCount)(int64_t comp) = nullptr;
-
-// FUN_140125320 -- get NR sub-variant count
-static uint32_t (*s_fn_NR_GetSubVariantCount)(int64_t comp, int variant) = nullptr;
-
-// FUN_1401253d0 -- set NR variant
-static void (*s_fn_NR_SetVariant)(int64_t* comp, uint16_t variant, int16_t subVariant) = nullptr;
-
-// FUN_1400c48a0 -- register entity with entity list
-static void (*s_fn_RegisterEntity)(void** entityList, void* entityIBP, int typeGroup) = nullptr;
-
-static bool s_cnr_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool CreateNaturalResource_ResolveFuncs() {
-    if (s_cnr_funcs_resolved) return true;
-
-    s_fn_SerializeTypeRef = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    s_fn_ComponentEntity_CopyCtor = reinterpret_cast<void*(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400c3720));
-
-    s_fn_CheckTerrain = reinterpret_cast<uint64_t(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x14009cb00));
-
-    s_fn_FindComponent_Model = reinterpret_cast<void*(*)(int64_t, void*)>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-
-    s_fn_SetupModelAtCell = reinterpret_cast<void(*)(int64_t, int)>(
-        ResolveAddr(Module::Exe, 0x140126540));
-
-    s_fn_FindComponent_Growth = reinterpret_cast<void*(*)(int64_t, void*)>(
-        ResolveAddr(Module::Exe, 0x14000c460));
-
-    s_fn_SetGrowthProgress = reinterpret_cast<void(*)(int64_t, float)>(
-        ResolveAddr(Module::Exe, 0x140120db0));
-
-    s_fn_FindComponent_NR = reinterpret_cast<void*(*)(int64_t, void*)>(
-        ResolveAddr(Module::Exe, 0x140003f60));
-
-    s_fn_NR_GetVariantCount = reinterpret_cast<uint32_t(*)(int64_t)>(
-        ResolveAddr(Module::Exe, 0x1401252f0));
-
-    s_fn_NR_GetSubVariantCount = reinterpret_cast<uint32_t(*)(int64_t, int)>(
-        ResolveAddr(Module::Exe, 0x140125320));
-
-    s_fn_NR_SetVariant = reinterpret_cast<void(*)(int64_t*, uint16_t, int16_t)>(
-        ResolveAddr(Module::Exe, 0x1401253d0));
-
-    s_fn_RegisterEntity = reinterpret_cast<void(*)(void**, void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400c48a0));
-
-    bool ok = s_fn_SerializeTypeRef && s_fn_ComponentEntity_CopyCtor &&
-              s_fn_CheckTerrain && s_fn_FindComponent_Model &&
-              s_fn_SetupModelAtCell && s_fn_FindComponent_Growth &&
-              s_fn_SetGrowthProgress && s_fn_FindComponent_NR &&
-              s_fn_NR_GetVariantCount && s_fn_NR_GetSubVariantCount &&
-              s_fn_NR_SetVariant && s_fn_RegisterEntity &&
-              fn_InternalBasePtr_DeletePtr &&
-              fn_MemFreeStatic &&
-              fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
-              g_pGameWorldSingleton && fn_MemAlloc && g_pMemAllocSingleton;
-
-#ifdef _DEBUG
-    printf("[CreateNaturalResource] ResolveFuncs: SerTypeRef=%p CopyCtor=%p CheckTerrain=%p\n",
-           (void*)s_fn_SerializeTypeRef, (void*)s_fn_ComponentEntity_CopyCtor,
-           (void*)s_fn_CheckTerrain);
-    printf("[CreateNaturalResource]   FindModel=%p SetupModel=%p FindGrowth=%p SetGrowth=%p\n",
-           (void*)s_fn_FindComponent_Model, (void*)s_fn_SetupModelAtCell,
-           (void*)s_fn_FindComponent_Growth, (void*)s_fn_SetGrowthProgress);
-    printf("[CreateNaturalResource]   FindNR=%p NRVarCount=%p NRSubVar=%p NRSetVar=%p\n",
-           (void*)s_fn_FindComponent_NR, (void*)s_fn_NR_GetVariantCount,
-           (void*)s_fn_NR_GetSubVariantCount, (void*)s_fn_NR_SetVariant);
-    printf("[CreateNaturalResource]   Register=%p\n",
-           (void*)s_fn_RegisterEntity);
-    if (!ok) printf("[CreateNaturalResource] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_cnr_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Serialize (0x1400c6890)
 // Serializes: status(+0x18), typeRef(+0x20), int(+0x30), versioned entity(+0x28)
 // ============================================================
 void CreateNaturalResource::Persist(void* stream) {
-    // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
-    // was the one that never got it, so a save taken while one of these actions was
-    // in flight called a null serializer pointer (EXEC of 0). Found live on
-    // CompleteRoad once roads started being built; these four are the same shape.
-    CreateNaturalResource_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -158,14 +58,14 @@ void CreateNaturalResource::Persist(void* stream) {
 
     // Serialize resource data (version 1)
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    s_fn_SerializeTypeRef(s + 0x20, ser2);
+    Reimpl_ExternalPtr_Serialize_StringTable(s + 0x20, ser2);   // 0x140002340
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
 
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (parentEntity != nullptr) {
-            if (!fn_IsDerivedFrom(parentEntity, ComponentEntity::TypeId())) {
+            if (!::Object::IsDerivedFromNullSafe(parentEntity, ComponentEntity::TypeId())) {
                 parentEntity = nullptr;
             }
         }
@@ -181,7 +81,6 @@ void CreateNaturalResource::Persist(void* stream) {
 // Returns 0 on success, 2 on failure (cell occupied or invalid).
 // ============================================================
 int  CreateNaturalResource::AbstractImpl(void* actionStack) {
-    CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
@@ -218,7 +117,7 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
     }
 
     // Check terrain validity for this cell
-    uint64_t terrainResult = s_fn_CheckTerrain((void*)mapGrid, cellIndex);
+    uint64_t terrainResult = ActCNR_CheckTerrain_cb00((void*)mapGrid, cellIndex);   // 0x14009cb00
     if ((char)terrainResult != '\0') {
         CNR_BAIL("terrain check says the cell is unavailable");
     }
@@ -230,10 +129,10 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
 
     // Allocate a new ComponentEntity copied from description at +0x20
     void* desc = descEntity;
-    void* newEntityMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* newEntityMem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* newEntity = nullptr;
     if (newEntityMem != nullptr) {
-        newEntity = s_fn_ComponentEntity_CopyCtor(newEntityMem, desc);
+        newEntity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(newEntityMem), desc);   // 0x1400c3720
     }
 
     // Wrap in InternalBasePtr
@@ -242,12 +141,12 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
 
     // Find and set up ModelComponent -- place at cell
     void* modelCompIBP = nullptr;
-    s_fn_FindComponent_Model(entityIBP, &modelCompIBP);
-    s_fn_SetupModelAtCell(*(int64_t*)&modelCompIBP, cellIndex);
+    WorkBase_FindComponent_52c0(static_cast<uintptr_t>(entityIBP), &modelCompIBP);   // 0x1400052c0
+    ActCNR_SetupModelAtCell_126540(*(int64_t*)&modelCompIBP, cellIndex);   // 0x140126540
 
     // Find and set up GrowthComponent -- set progress to 0.0
     void* growthCompIBP = nullptr;
-    s_fn_FindComponent_Growth(entityIBP, &growthCompIBP);
+    ActCNR_FindComponent_c460(static_cast<uintptr_t>(entityIBP), &growthCompIBP);   // 0x14000c460
     // Retail derefs both finder results unguarded, and it is right to: the description this
     // action carries is always a natural-resource template that HAS both components. When one
     // comes back null the description (or the entity copy) is wrong upstream, and the crash
@@ -284,33 +183,33 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
             std::fflush(stderr);
         }
     }
-    s_fn_SetGrowthProgress(*(int64_t*)&growthCompIBP, 0.0f);
+    ActCNR_SetGrowthProgress_120db0(*(int64_t*)&growthCompIBP, 0.0f);   // 0x140120db0
 
     // Find NaturalResourceComponent and randomize variant
     void* randomPtr = *(void**)(gameWorld + 0xd8);
 
     void* nrCompIBP1 = nullptr;
-    s_fn_FindComponent_NR(entityIBP, &nrCompIBP1);
-    uint32_t variantCount = s_fn_NR_GetVariantCount(*(int64_t*)&nrCompIBP1);
+    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(entityIBP), &nrCompIBP1);   // 0x140003f60
+    uint32_t variantCount = ActCNR_NR_GetVariantCount_1252f0(*(int64_t*)&nrCompIBP1);   // 0x1401252f0
     uint32_t variant = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(variantCount));   // B.3.4b bridge
 
     void* nrCompIBP2 = nullptr;
-    s_fn_FindComponent_NR(entityIBP, &nrCompIBP2);
+    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(entityIBP), &nrCompIBP2);   // 0x140003f60
     int64_t nrComp = *(int64_t*)&nrCompIBP2;
 
     void* nrCompIBP3 = nullptr;
-    s_fn_FindComponent_NR(entityIBP, &nrCompIBP3);
+    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(entityIBP), &nrCompIBP3);   // 0x140003f60
     int64_t* nrCompPtr = *(int64_t**)&nrCompIBP3;
 
-    uint32_t subVariantCount = s_fn_NR_GetSubVariantCount(nrComp, (int)variant);
+    uint32_t subVariantCount = ActCNR_NR_GetSubVariantCount_125320(nrComp, (int)variant);   // 0x140125320
     uint32_t subVariant = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(subVariantCount));   // B.3.4b bridge
-    s_fn_NR_SetVariant(nrCompPtr, (uint16_t)variant, (int16_t)subVariant);
+    ActCNR_NR_SetVariant_1253d0(nrCompPtr, (uint16_t)variant, (int16_t)subVariant);   // 0x1401253d0
 
     // Register entity with the entity list
     void* entityListPtr = *(void**)(gameWorld + 0xe8);
     void* entityRef = (void*)entityIBP;
     int typeGroup = *(int*)(*(uintptr_t*)(s + 0x20) + 0x20);
-    s_fn_RegisterEntity((void**)entityListPtr, &entityRef, typeGroup);
+    EntityList_RegisterEntity_Impl(entityListPtr, &entityRef, typeGroup);   // 0x1400c48a0
 
 
 
@@ -322,7 +221,6 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
 // Returns true if param matches entity at +0x28.
 // ============================================================
 bool CreateNaturalResource::GetTarget(void* param) {
-    CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     return (*(void**)param == parentEntity) ? 1 : 0;
 }
 
@@ -348,13 +246,11 @@ CreateNaturalResource::CreateNaturalResource()
 // [9] 0x1400c6610
 
 void* CreateNaturalResource::CreateNewObject() {
-    CreateNaturalResource_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateNaturalResource), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateNaturalResource());
 }
 void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
-    CreateNaturalResource_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateNaturalResource());
 }

@@ -96,7 +96,7 @@ void BoatComponent::Persist(void* stream) {
     auto persistPtr = [&ser](uint64_t& field, uint32_t typeId) {
         reinterpret_cast<Object::InternalBasePtr*>(&field)->Serialize(ser);   // B.3.8 bridge (the field is a raw InternalBasePtr)
         void* obj = reinterpret_cast<void*>(field);
-        if (obj != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(obj, typeId))
+        if (obj != nullptr && !::Object::IsDerivedFromNullSafe(obj, typeId))
             field = 0;
     };
     persistPtr(data28, ResidenceComponent::TypeId());

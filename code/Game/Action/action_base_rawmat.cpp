@@ -1,10 +1,9 @@
 // code/Game/Action/action_base_rawmat.cpp
 // Wave 3 (Action) — raw-material cluster (batch E) closure-safe leaf sub-helpers.
 //
-// Shared exe sub-helpers resolved via ResolveAddr(Module::Exe, 0xADDR) from
+// Shared exe sub-helpers called by name (Action/exe_bodies.h, B3R) from
 // code/Game/Action/{consumerawmaterial,pickuprawmaterial,pickupstoredrawmaterial,
-// createrawmaterial}.cpp. In standalone they resolve to 0 (silently skipped) unless
-// registered. This file provides faithful 1:1 ports of the six that are *leaf*
+// createrawmaterial}.cpp. This file provides faithful 1:1 ports of the six that are *leaf*
 // (pure array ops, MemAlloc/MemFree, or engine_funcs export-resolved pointers) — i.e.
 // whose entire sub-callee closure is already satisfiable. The registration point is
 // RegisterActionRawMatBatch() in standalone/reg_action_rawmat.cpp.
@@ -30,7 +29,10 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Component/exe_bodies.h"     // FloorComponent_FindResData
+#include "Game/exe_bodies.h"          // Reimpl_MapGetTerrainPos
+#include "Game/exe_constants.h"       // kRdata_140172114
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone type-id fallback)
 #include <cstdint>
@@ -41,32 +43,15 @@
 #include "Component/RawMaterialDescription.h"
 #include "Component/TrackerComponent.h"
 
-namespace {
-
-// Exe sub-helpers / engine constants used by the PositionEntity / FindPlacementCell
-// ports below. Resolved lazily (all already registered or Runtime exports).
-//   0x140004680 / 0x140003f60 — member-ABI FindComponent (self, outIBP) -> outIBP.
-//   0x14009f3e0 — GridToWorld (mapGrid, outVec3, inVec2, char flag, void* ptr).
-typedef void* (*fn_FindCompMember_t)(uintptr_t self, void* outIBP);
-typedef void  (*fn_GridToWorld_t)(void* mapGrid, float* out3, float* in2, char flag, void* ptr);
-static fn_FindCompMember_t s_fn_FindComp_4680 = nullptr;  // 0x140004680
-static fn_FindCompMember_t s_fn_FindComp_3f60 = nullptr;  // 0x140003f60
-static fn_GridToWorld_t    s_fn_GridToWorld   = nullptr;  // 0x14009f3e0
-static const float* s_pHalfCell_172114 = nullptr;  // 0.5f cell-centre offset
-static const float* s_pDAT_17213c      = nullptr;  // slope threshold (bd40)
-static const float* s_pDAT_172248      = nullptr;  // height-diff tolerance (bd40)
-static bool s_fnInit = false;
-static void EnsureFns() {
-    if (s_fnInit) return;
-    s_fn_FindComp_4680 = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_FindComp_3f60 = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_GridToWorld   = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_pHalfCell_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_pDAT_17213c      = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017213c));
-    s_pDAT_172248      = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172248));
-    s_fnInit = true;
-}
-} // namespace
+// Exe sub-helpers / engine constants used by the PositionEntity port below, called by
+// name (B3R):
+//   0x140004680 FloorComponent_FindResData / 0x140003f60 ActCNR_FindComponent_3f60 --
+//               member-ABI FindComponent (self, outIBP) -> outIBP.
+//   0x14009f3e0 Reimpl_MapGetTerrainPos -- GridToWorld (mapGrid, outVec3, inVec2, char flag,
+//               void* ptr).
+//   DAT_140172114 = 0.5f cell-centre offset (kRdata_140172114).
+// (The slope threshold 0x14017213c and height-diff tolerance 0x140172248 this file also
+// resolved had no reader here -- FindPlacementCell lives in action_pf_roots_misc.cpp.)
 
 // ============================================================
 // FUN_14012d150 — StorageComponent::SubtractItem(storage, resType, count)
@@ -155,10 +140,8 @@ void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count) {
     if (*reinterpret_cast<int*>(storage + 0x34) < newN) {
         *reinterpret_cast<int*>(storage + 0x34) = newN;
         if (oldN != 0) *reinterpret_cast<int*>(storage + 0x34) = newN * 3;
-        void* nb = fn_MemAlloc
-            ? fn_MemAlloc(g_pMemAllocSingleton,
-                          static_cast<uint64_t>(*reinterpret_cast<int*>(storage + 0x34)) << 4, 8)
-            : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(*reinterpret_cast<int*>(storage + 0x34)) << 4, 8);
         *reinterpret_cast<void**>(storage + 0x28) = nb;
     }
     int srcIdx = (oldBuf == *reinterpret_cast<void**>(storage + 0x28)) ? oldN : 0;
@@ -174,8 +157,8 @@ void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count) {
             dst[1] = static_cast<uint64_t>(static_cast<uint32_t>(count));  // {count, 0}
         }
     }
-    if (oldBuf != *reinterpret_cast<void**>(storage + 0x28) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldBuf);
+    if (oldBuf != *reinterpret_cast<void**>(storage + 0x28))
+        System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
@@ -195,7 +178,7 @@ void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
     if (*cap < newCount) {
         *cap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) *cap = newCount * 3;
-        void* nb = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(*cap) << 4, 8) : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*cap) << 4, 8);
         arr[0] = reinterpret_cast<int64_t>(nb);
     }
     int srcIdx = (oldBuf == reinterpret_cast<void*>(arr[0])) ? oldCount : 0;
@@ -211,8 +194,8 @@ void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
             *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(dst) + 8) = 0;
         }
     }
-    if (oldBuf != reinterpret_cast<void*>(arr[0]) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldBuf);
+    if (oldBuf != reinterpret_cast<void*>(arr[0]))
+        System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
@@ -233,9 +216,7 @@ void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value) {
     if (*reinterpret_cast<int*>(self + 0x3c) < newN) {
         *reinterpret_cast<int*>(self + 0x3c) = newN;
         if (oldN != 0) *reinterpret_cast<int*>(self + 0x3c) = newN * 3;
-        void* nb = fn_MemAlloc
-            ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x3c)) << 2, 4)
-            : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x3c)) << 2, 4);
         *reinterpret_cast<void**>(self + 0x30) = nb;
     }
     int srcIdx = (oldBuf == *reinterpret_cast<void**>(self + 0x30)) ? oldN : 0;
@@ -244,8 +225,8 @@ void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value) {
         if (!dst) continue;
         *dst = (i < oldN) ? reinterpret_cast<uint32_t*>(oldBuf)[i] : value;
     }
-    if (oldBuf != *reinterpret_cast<void**>(self + 0x30) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldBuf);
+    if (oldBuf != *reinterpret_cast<void**>(self + 0x30))
+        System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
@@ -264,7 +245,7 @@ int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
         void* c = *reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
         uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) comp = c;
+            if (::Object::IsDerivedFromNullSafe(c, typeId)) comp = c;
             break;
         }
     }
@@ -314,11 +295,11 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
         if (t == typeId) {
             void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
             void* o = *ibp2;
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
+            if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -343,11 +324,11 @@ void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
         if (t == typeId) {
             void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
             void* o = *ibp2;
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
+            if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -360,16 +341,14 @@ void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
 // element from src. No-op if dst==src. Leaf (alloc only).
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
     if (dst == src) return;
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dst[0]));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dst[0]));
     dst[1] = 0;          // clears count(+8) and cap(+0xc) together (8-byte write)
     dst[0] = 0;
     int srcN = static_cast<int>(src[1]);
     *reinterpret_cast<int*>(&dst[1]) = srcN;
     if (srcN > 0) {
         *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dst) + 0xc) = srcN;
-        void* nb = fn_MemAlloc
-            ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(srcN) << 4, 8)
-            : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(srcN) << 4, 8);
         dst[0] = reinterpret_cast<int64_t>(nb);
     }
     int n = *reinterpret_cast<int*>(&dst[1]);
@@ -396,7 +375,7 @@ void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
     if (gen != *reinterpret_cast<int*>(self + 0x48)) {
         ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(self + 0x38),
                                reinterpret_cast<int64_t*>(self + 0x28));
-        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(self + 0x28));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(self + 0x28));
         *reinterpret_cast<void**>(self + 0x28) = nullptr;
         // Retail stores EIGHT bytes here -- `*(undefined8 *)(param_1 + 0x30) = 0;` --
         // which clears the count (+0x30) AND the capacity (+0x34) in one write. This was
@@ -432,10 +411,8 @@ void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
     if (*reinterpret_cast<int*>(self + 0x34) < newN) {
         *reinterpret_cast<int*>(self + 0x34) = newN;
         if (oldN != 0) *reinterpret_cast<int*>(self + 0x34) = newN * 3;
-        void* nb = fn_MemAlloc
-            ? fn_MemAlloc(g_pMemAllocSingleton,
-                          static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x34)) << 4, 8)
-            : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x34)) << 4, 8);
         *reinterpret_cast<void**>(self + 0x28) = nb;
     }
     int srcIdx = (oldBuf == *reinterpret_cast<void**>(self + 0x28)) ? oldN : 0;
@@ -451,8 +428,8 @@ void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
             d[1] = static_cast<uint64_t>(static_cast<uint32_t>(value));
         }
     }
-    if (oldBuf != *reinterpret_cast<void**>(self + 0x28) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldBuf);
+    if (oldBuf != *reinterpret_cast<void**>(self + 0x28))
+        System::MemoryAllocator::MemFree(oldBuf);
 }
 
 
@@ -489,7 +466,6 @@ void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
 // worldPos comes from GridToWorld (f3e0). Instruction-verified against the disassembly
 // (RBX reloads to B after the 003f60 IBP resolve). All callees registered/exported.
 void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
-    EnsureFns();
     void** self = reinterpret_cast<void**>(param_1 + 0x10);
     int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
     int mapWidth = *mapGrid;
@@ -497,10 +473,10 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     int row = cellIndex / mapWidth;   // ESI (quotient)
 
     uintptr_t ibpA[2] = {0, 0};
-    if (s_fn_FindComp_4680) s_fn_FindComp_4680(reinterpret_cast<uintptr_t>(*self), &ibpA);
+    FloorComponent_FindResData(*self, &ibpA);   // 0x140004680
 
     uintptr_t ibpB[2] = {0, 0};
-    if (s_fn_FindComp_3f60) s_fn_FindComp_3f60(reinterpret_cast<uintptr_t>(*self), &ibpB);
+    ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(*self), &ibpB);   // 0x140003f60
 
     uint8_t* objA = reinterpret_cast<uint8_t*>(ibpA[0]);
     int rot = static_cast<int>(rotation);   // CVTTSS2SI = truncate toward zero
@@ -515,13 +491,13 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     }
 
     // GridToWorld: localPos = ((cellIndex%w) - half, (cellIndex/w) - half, 0).
-    float half = static_cast<float>(mapWidth >> 1) - (s_pHalfCell_172114 ? *s_pHalfCell_172114 : 0.5f);
+    float half = static_cast<float>(mapWidth >> 1) - kRdata_140172114;   // 0x140172114
     float localPos[3];
     localPos[0] = static_cast<float>(cellIndex % mapWidth) - half;
     localPos[1] = static_cast<float>(cellIndex / mapWidth) - half;
     localPos[2] = 0.0f;
     float worldPos[3] = {0, 0, 0};
-    if (s_fn_GridToWorld) s_fn_GridToWorld(mapGrid, worldPos, localPos, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, worldPos, localPos, '\0', nullptr);   // 0x14009f3e0
 
     uint8_t* objB = reinterpret_cast<uint8_t*>(ibpB[0]);
     // [standalone] objB = the spawned item entity's Geometry/model component (visual transform).

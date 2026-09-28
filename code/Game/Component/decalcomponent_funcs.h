@@ -10,6 +10,3 @@ void DecalComponent_Serialize(DecalComponent* self);
 
 // Draw (vtable slot [6], 0x14011b560): a door onto DecalComponent::OnAdded, kept
 // for its by-address row (standalone/reg_code_lane6.cpp), B.3.8.
-
-// Init: resolve all internal function pointers (called once at startup)
-void DecalComponent_InitFuncs();

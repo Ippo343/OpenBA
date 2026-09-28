@@ -49,6 +49,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x140033c30 / createInPlace 0x140033ca0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -62,7 +63,6 @@ DestroyDescription::DestroyDescription()
 
 // [5] 0x14011de70: stream order as retail.
 bool DestroyDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // 1. _replaceEntity (+0x20). Retail calls FUN_140002340, the
     //    ExternalPtr<ComponentDescription> variant, which gates the resolved object on
@@ -72,7 +72,7 @@ bool DestroyDescription::Serialize(void* stream) {
     //    the cast and was stored as NULL. Only Template/IronMine.rsc and
     //    Template/Quarry.rsc author it (`ComponentDescription _replaceEntity =
     //    "destroyed"`), which is why the swap was invisible for so long.
-    fn_ExternalPtr_BuildSerialize(&_replaceEntity, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_replaceEntity, &ser);
     ser.Serialize(_damagedSkin, nullptr);
     ser.Serialize(_damagedDecal, nullptr);
     ser.Serialize(_minDamageLevel, nullptr);

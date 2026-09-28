@@ -11,5 +11,3 @@
 // Size: 0x30 bytes
 // ============================================================
 
-// Init: resolve all internal function pointers (called once at startup)
-void FloorComponent_InitFuncs();

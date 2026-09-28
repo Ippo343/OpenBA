@@ -21,7 +21,7 @@
 #include "graphics/Scene.h"
 #include "system/Value.h"       // System::Time, for Geometry::Update's argument
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActCt_HideTool_1176e0, ActCt_ShowToolOnEntity_1173b0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "math/Math.h"
 #include <cstdio>
@@ -33,15 +33,10 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- ShowTool-specific helpers)
+// Helpers, called by name (B3R)
+//   0x1401176e0 ActCt_HideTool_1176e0         -- hide tool on entity
+//   0x1401173b0 ActCt_ShowToolOnEntity_1173b0 -- show tool with specific ID on entity
 // ============================================================
-
-// FUN_1401176e0 -- hide tool on entity
-static void (*s_fn_HideTool)(void* entity) = nullptr;
-
-// FUN_1401173b0 -- show tool with specific ID on entity
-static void (*s_fn_ShowToolOnEntity)(void* entity, int toolId) = nullptr;
 
 // DAT_1401c7158 -- TypeInfo for entity type check
 
@@ -78,40 +73,9 @@ static void* ShowTool_FindComponentByTid(void* hostP, uint32_t tid) {
         if (!comp) continue;
         uint32_t got = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (got == tid)
-            return fn_IsDerivedFrom(comp, tid) ? comp : nullptr;
+            return ::Object::IsDerivedFromNullSafe(comp, tid) ? comp : nullptr;
     }
     return nullptr;
-}
-
-static bool s_showtool_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool ShowTool_ResolveFuncs() {
-    if (s_showtool_funcs_resolved) return true;
-
-    s_fn_HideTool = reinterpret_cast<void(*)(void*)>(
-        ResolveAddr(Module::Exe, 0x1401176e0));
-    s_fn_ShowToolOnEntity = reinterpret_cast<void(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x1401173b0));
-    // ENDGAME B.3.5 batch K1: the GetNodeIndexFromName / Geometry::Attach dispatch
-    // slots were NOT registered in standalone, so this used to fall back to the two
-    // Runtime addresses 0x1800fee90 / 0x1800a3fa0. Both are members of real classes
-    // now, so neither the slot read nor the fallback is needed.
-
-    bool ok = s_fn_HideTool && s_fn_ShowToolOnEntity &&
-              fn_IsDerivedFrom;
-
-#ifdef _DEBUG
-    printf("[ShowTool] ResolveFuncs: HideTool=%p ShowTool=%p\n",
-           (void*)s_fn_HideTool,
-           (void*)s_fn_ShowToolOnEntity);
-    if (!ok) printf("[ShowTool] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_showtool_funcs_resolved = ok;
-    return ok;
 }
 
 // ============================================================
@@ -119,10 +83,6 @@ bool ShowTool_ResolveFuncs() {
 // Serializes: status(+0x18), entity ptr(+0x20) with type check, int(+0x28)
 // ============================================================
 void ShowTool::Persist(void* stream) {
-    // Reached through the registered vtable, which the factory path never
-    // has to touch — an exe-ctor-built action arrives here with the file
-    // statics still null. Lazy-resolve like the other entry points do.
-    ShowTool_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -134,7 +94,7 @@ void ShowTool::Persist(void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {   // cell 0x1401c7158
+        if (!::Object::IsDerivedFromNullSafe(_field20, CitizenComponent::TypeId())) {   // cell 0x1401c7158
             _field20 = nullptr;
         }
     }
@@ -162,7 +122,7 @@ static void ShowTool_ShowCarried(void* entityV) {
     if (((*(uint32_t*)((uint8_t*)inner + 0x40)) >> 10) & 1) return;
 
     // Hide the previously-shown item first, if any.
-    if (*(int*)(e + 0x1dc) >= 0) s_fn_HideTool(entityV);
+    if (*(int*)(e + 0x1dc) >= 0) ActCt_HideTool_1176e0(entityV);   // 0x1401176e0
 
     // Character mesh holder = StateMachineComponent(+0x278) -> +0x68.
     void* smComp = *(void**)(e + 0x278);
@@ -272,11 +232,6 @@ static void ShowTool_ShowCarried(void* entityV) {
 
 int  ShowTool::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    // Lazy resolve: when this action is built via the exe action-ctor path (not our
-    // factory) ShowTool_ResolveFuncs never ran, so s_fn_* are null -> EXEC-of-null when
-    // the executor runs it (e.g. a forester's PerformWork cut sequence shows the axe).
-    // Same fix as the PerformWork vtable methods. Bail "done" if deps still missing.
-    if (!ShowTool_ResolveFuncs()) return 1;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
@@ -284,7 +239,7 @@ int  ShowTool::AbstractImpl(void* actionStack) {
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
         void* entity = _field20;
         if (!entity) return 1;  // entity removed, nothing to do
-        s_fn_HideTool(entity);
+        ActCt_HideTool_1176e0(entity);   // 0x1401176e0
         return 1;
     }
 
@@ -301,7 +256,7 @@ int  ShowTool::AbstractImpl(void* actionStack) {
         return 1;
     }
 
-    s_fn_ShowToolOnEntity(entity, (int)toolId);
+    ActCt_ShowToolOnEntity_1173b0(entity, (int)toolId);   // 0x1401173b0
     return 1;
 }
 
@@ -310,10 +265,9 @@ int  ShowTool::AbstractImpl(void* actionStack) {
 // Hides tool on the entity at +0x20.
 // ============================================================
 void ShowTool::CheckEntity() {
-    if (!ShowTool_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
     void* entity = _field20;
     if (!entity) return;  // entity already gone
-    s_fn_HideTool(entity);
+    ActCt_HideTool_1176e0(entity);   // 0x1401176e0
 }
 
 // ============================================================
@@ -321,7 +275,6 @@ void ShowTool::CheckEntity() {
 // Returns true if entity at +0x20's parent (+0x10) matches the param.
 // ============================================================
 bool ShowTool::GetTarget(void* param) {
-    if (!ShowTool_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
     void* entity = _field20;
     if (!entity) return false;  // entity gone, no match
     void* entityParent = *(void**)((uint8_t*)entity + 0x10);
@@ -353,13 +306,11 @@ void ShowTool::Exit(void*) {}
 // [9] 0x140042680
 
 void* ShowTool::CreateNewObject() {
-    ShowTool_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(ShowTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ShowTool());
 }
 void* ShowTool::CreateInPlaceObject(void* storage) {
-    ShowTool_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ShowTool());
 }

@@ -20,5 +20,3 @@ void AnimalComponent_UpdateBehavior(AnimalComponent* self);         // 0x1401073
 void AnimalComponent_SetWanderTimer(AnimalComponent* self,
                                     uint32_t animId, float seconds); // 0x140106250
 
-// Init: resolve all internal function pointers (called once at startup)
-void AnimalComponent_InitFuncs();

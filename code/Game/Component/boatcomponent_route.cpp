@@ -61,48 +61,18 @@
 #include "Component/InteractDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7938 cell class
 #include "Component/ModelComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7a50 cell class
 #include "Component/BoatComponent.h"         // ENDGAME B.3.9 C1: 0x1401c4020 cell class
+#include "Action/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include "Player/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
-// ── Resolved leaves ──────────────────────────────────────────────────────────────
-namespace {
-
-typedef void* (*fn_Find3ea0_t)(int64_t entity, void* outIBP);              // 0x140003ea0
-typedef void* (*fn_FindInteract_t)(int64_t entity, void* outIBP);          // 0x140002ed0
-typedef float*(*fn_GridToWorld_t)(int* terrain, float* out, const float* v,
-                                  char flag, void* outNormal);             // 0x14009f3e0
-typedef void  (*fn_PfSetCost_t)(void* pf, int idx, int cost, uint64_t ctx); // 0x1400a6a30
-typedef void  (*fn_PfFlags_t)(void* pf, char a, char b, char c);           // 0x1400a68b0
-typedef int   (*fn_PfRun_t)(int64_t pf, uint32_t from, uint64_t to,
-                            void* mode, int64_t outBuf, int maxLen);       // 0x1400a6e30
-
-fn_Find3ea0_t         s_Find3ea0       = nullptr;
-fn_FindInteract_t     s_FindInteract   = nullptr;
-fn_GridToWorld_t      s_GridToWorld    = nullptr;
-fn_PfSetCost_t        s_PfSetCost      = nullptr;
-fn_PfFlags_t          s_PfFlags        = nullptr;
-fn_PfRun_t            s_PfRun          = nullptr;
-const float*          s_pHalfTileBias            = nullptr;   // 0x140172114 == 0.5f
-bool                  s_resolved = false;
-
-template <typename T>
-T SlotFn(uintptr_t slotAddr) {
-    const uintptr_t slot = ResolveAddr(Module::Exe, slotAddr);
-    return slot ? *reinterpret_cast<T*>(slot) : nullptr;
-}
-
-void ResolveOnce() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_Find3ea0      = reinterpret_cast<fn_Find3ea0_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_FindInteract  = reinterpret_cast<fn_FindInteract_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_GridToWorld   = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_PfSetCost     = reinterpret_cast<fn_PfSetCost_t>(ResolveAddr(Module::Exe, 0x1400a6a30));
-    s_PfFlags       = reinterpret_cast<fn_PfFlags_t>(ResolveAddr(Module::Exe, 0x1400a68b0));
-    s_PfRun         = reinterpret_cast<fn_PfRun_t>(ResolveAddr(Module::Exe, 0x1400a6e30));
-    s_pHalfTileBias = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-}
-
-
-}  // namespace
+// ── Leaves, called directly ──────────────────────────────────────────────────────
+//   0x140003ea0 PlayerPath_FindComponent_3ea0      0x140002ed0 WorkBase_FindComponent_2ed0
+//   0x14009f3e0 Reimpl_MapGetTerrainPos            0x1400a6a30 Pf_EnqueueCmd1_a6a30 (set cost)
+//   0x1400a68b0 Pf_EnqueueCmd4_a68b0 (flags)       0x1400a6e30 RoadTool_helper_6e30 (run)
+//   0x140172114 kRdata_140172114 == 0.5f (the half-tile bias)
 
 // ============================================================
 // 0x140123880 — Entity::FindAttachPoint(name, outPos, outYaw)
@@ -121,7 +91,6 @@ void ResolveOnce() {
 // then `[RBX+8+RDI*8]`) and 140123a3c (`[RCX+RDI*8+0x14]`) — not guessed.
 extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
                                           float* outPos, float* outYaw) {
-    ResolveOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     if (!comp) return false;
 
@@ -132,8 +101,7 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     // empty (count 0 -> no name matched -> recurse).
     void* descRaw = *reinterpret_cast<void**>(comp + 0x18);
     void* desc = nullptr;
-    if (fn_IsDerivedFrom &&
-        fn_IsDerivedFrom(descRaw, InteractDescription::TypeId())) {
+    if (::Object::IsDerivedFromNullSafe(descRaw, InteractDescription::TypeId())) {
         desc = descRaw;
     }
 
@@ -177,13 +145,13 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
         if (!obj) continue;
         if (reinterpret_cast<Object::Base*>(obj)->Type() == wantedTid) {   // B.3.8 bridge (slot 2)
             void* cand = *reinterpret_cast<void**>(slot);
-            model = (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, wantedTid)) ? cand : nullptr;
+            model = (::Object::IsDerivedFromNullSafe(cand, wantedTid)) ? cand : nullptr;
             break;
         }
     }
 
     uint64_t modelIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) new (modelIBP) ::Object::InternalBasePtr(
+    new (modelIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(model));   // B.3.3 bridge
     const uintptr_t m = static_cast<uintptr_t>(modelIBP[0]);
     if (!m) return false;   // no ModelComponent: retail would fault on m+0x148
@@ -228,7 +196,6 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
 // mode of reference_gated_element_typeid_disables_controller. reg_tradeui_typeids.cpp
 // seeds it behind BANISHED_LIVE_TRADE_TIDS.
 extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
-    ResolveOnce();
     const uint32_t wanted = BoatComponent::TypeId();
     void* found = nullptr;
     const int n = entity ? *reinterpret_cast<int*>(entity + 0x38) : 0;
@@ -239,11 +206,11 @@ extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
         if (!obj) continue;
         if (reinterpret_cast<Object::Base*>(obj)->Type() == wanted) {   // B.3.8 bridge (slot 2)
             void* cand = *reinterpret_cast<void**>(slot);
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, wanted)) ? cand : nullptr;
+            found = (::Object::IsDerivedFromNullSafe(cand, wanted)) ? cand : nullptr;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
@@ -291,23 +258,23 @@ extern "C" int BoatRoute_NearestPointIndex(void* arrV, const float* pt) {
 // See reference_discarded_return_reenables_gated_branch.
 extern "C" int BoatRoute_FindWaterPath(int64_t terrain, void* /*unused2*/, uint32_t fromCell,
                                        uint64_t toCell, void* /*unused5*/, int64_t outBuf) {
-    ResolveOnce();
     void* pf = *reinterpret_cast<void**>(terrain + 0x68);
-    if (!pf || !s_PfSetCost || !s_PfFlags || !s_PfRun) {
+    if (!pf) {
         // A missing worker and "no water route" both end as 0 cells at the caller, and
         // they are completely different bugs. Say which one this was.
-        std::fprintf(stderr, "[BoatRoute] A* SKIPPED: pf=%p setCost=%p flags=%p run=%p\n",
-                     pf, reinterpret_cast<void*>(s_PfSetCost),
-                     reinterpret_cast<void*>(s_PfFlags), reinterpret_cast<void*>(s_PfRun));
+        std::fprintf(stderr, "[BoatRoute] A* SKIPPED: pf=%p\n", pf);
         std::fflush(stderr);
         return 0;
     }
 
     static const int kCost[11] = {10, 10, 10, 10, 10, 10, 10, 5, 1, 5, 10};
-    for (int i = 0; i < 11; ++i) s_PfSetCost(pf, i, kCost[i], toCell);
-    s_PfFlags(pf, 1, 0, 0);
-    const int n = s_PfRun(reinterpret_cast<int64_t>(pf), fromCell, toCell & 0xffffffffu,
-                          reinterpret_cast<void*>(0x380), outBuf, 0x1000);
+    for (int i = 0; i < 11; ++i)   // 0x1400a6a30: the cost rides in R8 (read as an int), the ctx in R9
+        Pf_EnqueueCmd1_a6a30(reinterpret_cast<int64_t>(pf), i,
+                             reinterpret_cast<void*>(static_cast<intptr_t>(kCost[i])),
+                             reinterpret_cast<void*>(toCell));
+    Pf_EnqueueCmd4_a68b0(reinterpret_cast<int64_t>(pf), 1, nullptr, nullptr);   // 0x1400a68b0 (1, 0, 0)
+    const int n = RoadTool_helper_6e30(reinterpret_cast<int64_t>(pf), fromCell, toCell & 0xffffffffu,
+                                       reinterpret_cast<void*>(0x380), outBuf, 0x1000);   // 0x1400a6e30
     return n;
 }
 
@@ -338,9 +305,8 @@ void AppendRoutePoint(uintptr_t comp, const float pt[3]) {
     if (newCount > *reinterpret_cast<int*>(comp + 0x6c)) {
         *reinterpret_cast<int*>(comp + 0x6c) = newCount;
         if (oldCount != 0) *reinterpret_cast<int*>(comp + 0x6c) = newCount * 3;
-        void* fresh = fn_MemAllocStatic
-                    ? fn_MemAllocStatic(static_cast<uint64_t>(*reinterpret_cast<int*>(comp + 0x6c)) * 0xc, 4)
-                    : nullptr;
+        void* fresh = ::System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(*reinterpret_cast<int*>(comp + 0x6c)) * 0xc, 4);
         *reinterpret_cast<void**>(comp + 0x60) = fresh;
     }
 
@@ -356,7 +322,7 @@ void AppendRoutePoint(uintptr_t comp, const float pt[3]) {
         dst[1] = src[1];
         dst[2] = src[2];
     }
-    if (oldBase != newBase && oldBase && fn_MemFreeStatic) fn_MemFreeStatic(oldBase);
+    if (oldBase != newBase && oldBase) ::System::MemoryAllocator::MemFree(oldBase);
 }
 
 // (int)(coord + mapSize/2) clamped into [0, mapSize-1] — retail's tile conversion,
@@ -378,7 +344,6 @@ inline bool TileInMap(float x, float y, int mapSize) {
 }  // namespace
 
 extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityIBP) {
-    ResolveOnce();
     const uintptr_t comp = static_cast<uintptr_t>(compI);
     const int64_t dest = destEntityIBP ? *destEntityIBP : 0;
     *reinterpret_cast<int64_t*>(comp + 0x28) = dest;
@@ -389,8 +354,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     // its +0x48 owner through vtable slot 2, passing the byte at +0x51.
     if (dest == 0) {
         uint64_t outIBP[2] = {0, 0};
-        void* found = s_Find3ea0 ? s_Find3ea0(*reinterpret_cast<int64_t*>(comp + 0x10), outIBP)
-                                 : nullptr;
+        void* found = PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(comp + 0x10), outIBP);
         if (!found) return;
         const uintptr_t state = *reinterpret_cast<uintptr_t*>(found);
         if (!state) return;
@@ -407,7 +371,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
 
     // ── Where the boat is going: the destination's "boat" attach point ───────────
     uint64_t interactIBP[2] = {0, 0};
-    if (s_FindInteract) s_FindInteract(*reinterpret_cast<int64_t*>(comp + 0x28), interactIBP);
+    WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(comp + 0x28), interactIBP);   // 0x140002ed0
 
     System::String boatName("boat");
     float* const destPos = reinterpret_cast<float*>(comp + 0x40);   // Vector3
@@ -501,8 +465,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
 
     // BOTH legs or NEITHER — retail's gate at 140045e60.
     if (nIn > 0 && nOut > 0) {
-        const float bias = static_cast<float>(*terrain >> 1) -
-                           (s_pHalfTileBias ? *s_pHalfTileBias : 0.5f);
+        const float bias = static_cast<float>(*terrain >> 1) - kRdata_140172114;
         for (int pass = 0; pass < 2; ++pass) {
             const int* cells = pass == 0 ? s_cellsIn : s_cellsOut;
             const int  n     = pass == 0 ? nIn : nOut;
@@ -513,7 +476,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
                     0.0f
                 };
                 float snapped[3] = {0.0f, 0.0f, 0.0f};
-                if (s_GridToWorld) s_GridToWorld(terrain, snapped, cellPos, '\0', nullptr);
+                Reimpl_MapGetTerrainPos(terrain, snapped, const_cast<float*>(cellPos), '\0', nullptr);   // 0x14009f3e0
                 AppendRoutePoint(comp, snapped);
             }
         }
