@@ -42,6 +42,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
 #include "string.h"
+#ifndef BANISHED_UNIT_TEST
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#endif
 
 namespace RtSystem {
 
@@ -67,14 +70,6 @@ static inline const System::String* AsSys(const String* s) {
 // NOTE: the ...@SAPEAXII@Z ("unsigned, unsigned") spelling of MemAlloc that
 // circulates in this project's notes is NOT an export of Runtime-x64.dll. The
 // only two forms are the _KH (size_t, int) and PEAX ones used here.
-#ifndef BANISHED_UNIT_TEST
-namespace {
-using MemAllocFn = void* (*)(uint64_t, int);
-using MemFreeFn  = void  (*)(void*);
-MemAllocFn g_memAlloc = nullptr;
-MemFreeFn  g_memFree  = nullptr;
-}  // namespace
-#endif
 
 // Registration is all-or-nothing (RegisterAllocatorExports registers MemAlloc
 // and MemFree together), so the two halves can never disagree about whose heap
@@ -93,18 +88,13 @@ void* RtMemAlloc(uint64_t size, int align) {
 
 void RtMemFree(void* p) { std::free(p); }
 #else
+// B3R: the two statics by name (they were lazily-filled ResolveExport caches).
 void* RtMemAlloc(uint64_t size, int align) {
-    if (!g_memAlloc)
-        g_memAlloc = reinterpret_cast<MemAllocFn>(
-            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    return g_memAlloc(size, align);
+    return System::MemoryAllocator::MemAlloc(size, align);
 }
 
 void RtMemFree(void* p) {
-    if (!g_memFree)
-        g_memFree = reinterpret_cast<MemFreeFn>(
-            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    g_memFree(p);
+    System::MemoryAllocator::MemFree(p);
 }
 #endif
 
@@ -1266,7 +1256,6 @@ int RtSystemStringRegister() {
     RegisterRuntimeExport("??1String@System@@QEAA@XZ",              (void*)&RtSystem_String_Dtor); ++n;
     RegisterRuntimeExport("??4String@System@@QEAAAEAV01@AEBV01@@Z", (void*)&RtSystem_String_Assign); ++n;
     RegisterRuntimeExport("??YString@System@@QEAA?AV01@AEBV01@@Z",  (void*)&RtSystem_String_AppendAssign); ++n;
-    RegisterRuntimeExport("??YString@System@@QEAA?AV01@PEBD@Z",     (void*)&RtSystem_String_AppendAssignCStr); ++n;
     RegisterRuntimeExport("?Set@String@System@@QEAAXPEBD@Z",        (void*)&RtSystem_String_Set); ++n;
     // BATCH 8: RtString_SetLength has had a body since this file's very first
     // wave (it backs every String mutator above) but was never itself
@@ -1311,7 +1300,6 @@ int RtSystemStringRegister() {
     RegisterRuntimeAddr(0x180006c80, (void*)&RtSystem_String_Dtor);
     RegisterRuntimeAddr(0x1800c9810, (void*)&RtSystem_String_Assign);
     RegisterRuntimeAddr(0x1800c8a90, (void*)&RtSystem_String_AppendAssign);
-    RegisterRuntimeAddr(0x1800c9120, (void*)&RtSystem_String_AppendAssignCStr);
     RegisterRuntimeAddr(0x1800c95d0, (void*)&RtSystem_String_Set);
     RegisterRuntimeAddr(0x1800c9230, (void*)&RtSystem_String_SubString);
     RegisterRuntimeAddr(0x1800c9730, (void*)&RtSystem_String_Format);

@@ -146,13 +146,6 @@ char System::Error::_errorString[0x2000] = {};   // 0x1801fc720
 bool System::Error::_hideDisplay         = false; // 0x1801fc709
 bool System::Error::_stopApplication     = false; // 0x1801fc70a
 
-// ---- Wave 22 lane ERRCFG ---------------------------------------------------
-// `ResolveAddr` for the one address-keyed callee ?Display@ has (retail's CRT
-// `exit`). Declared the way every other runtime/src file declares it rather
-// than by pulling in a header, so this file keeps its "no new include" property.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // Four kernel32 entry points, declared directly instead of including
 // <windows.h>. The banner's "no new Win32 API and no new import library" claim
 // is preserved in the sense that matters: kernel32 is already an import of this
@@ -220,11 +213,10 @@ const char kCaption[9] = { 'B','a','n','i','s','h','e','d','\0' };
 // deliberate rather than overlooked.
 void DisplayStopIfRequested() {
     if (!System::Error::_stopApplication) return;
-    typedef void (*ExitFn)(unsigned);
-    if (ExitFn rtExit = reinterpret_cast<ExitFn>(
-            ResolveAddr(Module::Runtime, 0x18007f8a8))) {
-        rtExit(0xFFFFFFFFu);      // retail's `OR ECX,0xffffffff`
-    }
+    // PORT GAP 0x18007f8a8 the Runtime CRT's exit(code): not ported; retail
+    // calls it here with 0xFFFFFFFF. Nothing registers the address, so the
+    // by-address resolve that stood here returned null and the fallback below
+    // is what runs (B3R_RULES R4).
     RtSystem_ErrorDisplayFallbackExit();
 }
 
@@ -563,10 +555,6 @@ extern "C" void RtSystem_Error_SetText(const char* text, bool stopApplication) {
     System::Error::SetText(text, stopApplication);
 }
 
-extern "C" void RtSystem_Error_Display() {
-    System::Error::Display();
-}
-
 // ============================================================================
 // Registration
 // ============================================================================
@@ -575,9 +563,6 @@ int RtSystemErrorRegister() {
 
     RegisterRuntimeExport("?SetText@Error@System@@SAXPEBD_N@Z", (void*)&RtSystem_Error_SetText); ++n;
     RegisterRuntimeAddr(0x1800c5fa0, (void*)&RtSystem_Error_SetText);
-
-    RegisterRuntimeExport("?StrAppend@String@System@@SAPEADPEADHPEBD@Z", (void*)&RtSystem_String_StrAppend); ++n;
-    RegisterRuntimeAddr(0x1800c9020, (void*)&RtSystem_String_StrAppend);
 
     // ---- Wave 22 lane ERRCFG ------------------------------------------------
     // WAS "DELIBERATELY ABSENT" UNTIL 2026-09-11. The old note read: "the
@@ -594,8 +579,6 @@ int RtSystemErrorRegister() {
     //
     // BOTH DOORS. The address closes exe import slot 0x140152b58's eventual
     // consumer and any ResolveAddr site.
-    RegisterRuntimeExport("?Display@Error@System@@SAXXZ", (void*)&RtSystem_Error_Display); ++n;
-    RegisterRuntimeAddr(0x1800c6060, (void*)&RtSystem_Error_Display);
 
     // STILL DELIBERATELY ABSENT:
     //   ?HideErrorDisplay@Error@System@@SAX_N@Z  0x1800c5f90 -- a seven-byte

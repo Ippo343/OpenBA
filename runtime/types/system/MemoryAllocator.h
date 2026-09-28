@@ -464,9 +464,8 @@ extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn);
 
 // runtime/src/system/allocator_win.cpp — installs the Win32 seam and holds the
 // six exported Platform* bodies. The portable half calls this once, under
-// #if defined(_WIN32); a _posix/_sdl twin provides the same two symbols.
+// #if defined(_WIN32); a _posix/_sdl twin provides the same symbol.
 extern "C" void RtSystemAllocatorInstallPlatform();
-extern "C" int  RtSystemAllocatorRegisterPlatformExports();
 
 // Shadow oracle (see the long comment in runtime/src/system/allocator.cpp).
 extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB);

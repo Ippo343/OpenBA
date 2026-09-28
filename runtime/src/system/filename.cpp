@@ -524,8 +524,6 @@ int RtSystemFilenameRegister() {
     RegisterRuntimeExport("??0Filename@System@@QEAA@AEBV01@@Z",
                           (void*)&RtSystem_Filename_CtorCopy); ++n;
     RegisterRuntimeExport("??1Filename@System@@QEAA@XZ",   (void*)&RtSystem_Filename_Dtor); ++n;
-    RegisterRuntimeExport("??4Filename@System@@QEAAAEAV01@AEBV01@@Z",
-                          (void*)&RtSystem_Filename_Assign); ++n;
     RegisterRuntimeExport("??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z",
                           (void*)&RtSystem_Filename_AssignString); ++n;
     RegisterRuntimeExport("??MFilename@System@@QEBA_NAEBV01@@Z",
@@ -553,7 +551,6 @@ int RtSystemFilenameRegister() {
     RegisterRuntimeAddr(0x18000c780, (void*)&RtSystem_Filename_CtorString);
     RegisterRuntimeAddr(0x1800067d0, (void*)&RtSystem_Filename_CtorCopy);
     RegisterRuntimeAddr(0x180006980, (void*)&RtSystem_Filename_Dtor);
-    RegisterRuntimeAddr(0x180006770, (void*)&RtSystem_Filename_Assign);
     RegisterRuntimeAddr(0x180026d40, (void*)&RtSystem_Filename_AssignString);
     RegisterRuntimeAddr(0x180026cb0, (void*)&RtSystem_Filename_Less);
     RegisterRuntimeAddr(0x1800c6970, (void*)&RtSystem_Filename_AdjustDelimiters);

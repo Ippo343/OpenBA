@@ -323,3 +323,6 @@ UNIT_TREE_SRCS += runtime/src/object/root_operator_delete.cpp
 # hook in the seat the statics never touch `_singleton`; nothing else in the
 # suite calls them (array.cpp / linkedlist.cpp keep their malloc seams).
 UNIT_TREE_SRCS += runtime/src/system/allocator.cpp runtime/src/system/allocator_win.cpp
+# B3R RT-Core: the allocator's out-of-memory path calls System::Error::SetText /
+# Display by name, so the Error translation unit links here too.
+UNIT_TREE_SRCS += runtime/src/system/error.cpp

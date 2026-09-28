@@ -119,9 +119,9 @@
 #include "./string.h"
 #include <new>                 // placement new into the retail hidden return slot
 #include "./pod_bridge.h"      // the ONE transitional POD<->class bridge
+#include "../collection/avl_trees.h"            // B3R: rtavl::StringMapInsert
+#include "../../types/collection/Collection.h"  // B3R: rtsetclear::Clear, rtcoll::RtColl_ArrayDtorElem_180010ab0
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // ⚠ B34_RULES §7.2 / rule B4b-5, AND IT BITES IN THIS FILE SPECIFICALLY. This
 // using-declaration makes a bare `String` at GLOBAL scope mean the POD
@@ -142,8 +142,6 @@ namespace {
 // ENDGAME B.3.1 step 2: the `??1String@System@@QEAA@XZ` door typedef is gone
 // with its two call sites — the locals in SetCommandLine are RAII objects now,
 // so their destructors ARE that call.
-typedef void  (*ParseFn)(String* ret, int* pos, const String* src);
-typedef void* (*MapInsertFn)(void* map, void** ret, const String* key, const String* val);
 // Wave 22 lane ERRCFG. THREE parameters: the hidden String return slot is the
 // SECOND, between `this` and the key. See GetCommandLineString's banner for why
 // omitting it is a wild write that still returns the right answer.
@@ -299,18 +297,9 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                 // there — val then key, retail's own order — and BEFORE the
                 // `pos >= len` test, not after it.
                 {
-                    // `String key; key.data = nullptr;` IS the default ctor
-                    // (??0String@System@@QEAA@XZ, 0x180006760).
-                    System::String key;
-                    RT_EXPORT_ONCE(ParseFn,
-                        "?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
-                            // TRANSITIONAL CAST, the class->POD direction: the
-                            // door's typedef is the C entry point's ABI shape
-                            // and Configuration is not converted yet. Same
-                            // eight bytes; the callee constructs into this
-                            // hidden return slot.
-                            reinterpret_cast<RtSystem::String*>(&key), &pos,
-                            reinterpret_cast<const RtSystem::String*>(&cmd));
+                    // System::Configuration::ParseCommand (0x1800c4a00), by
+                    // name (B3R); its by-value result constructs `key`.
+                    System::String key(System::Configuration::ParseCommand(pos, cmd));
 
                     // GetLength (0x1800063c0) returns 0 for a null buffer, so
                     // it IS retail's two-part null-or-empty test. The break
@@ -318,11 +307,8 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                     if (key.GetLength() == 0)
                         break;
 
-                    System::String val;
-                    RT_EXPORT_ONCE(ParseFn,
-                        "?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
-                            reinterpret_cast<RtSystem::String*>(&val), &pos,
-                            reinterpret_cast<const RtSystem::String*>(&cmd));
+                    // ParseValue (0x1800c4930), the same way.
+                    System::String val(System::Configuration::ParseValue(pos, cmd));
 
                     // 0x1800c4829. The insert is UNEXPORTED, so it goes by address
                     // and — unlike every other dependency in this lane — a miss here
@@ -331,19 +317,16 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                     // that crash is readable. See §2: unreachable on an empty
                     // command line, which is every automated run in this project.
                     //
-                    // NOT CONVERTED (ENDGAME B.3.2 step 2): 0x18002a090 is
-                    // `rtavl::StringMapInsert`, a
-                    // `Collection::Set<Pair<String,String>>::Insert` door.
-                    // `map` here is a raw `void*` (`self + 0x10`) — there is no
-                    // `System::Configuration` type header in runtime/types
-                    // declaring a real `Collection::Set<...>` member to call
-                    // `.Insert()` on, so this stays a by-address call.
-                    void* node = nullptr;
-                    reinterpret_cast<MapInsertFn>(
-                        ResolveAddr(Module::Runtime, 0x18002a090))(
-                            map, &node,
-                            reinterpret_cast<const RtSystem::String*>(&key),
-                            reinterpret_cast<const RtSystem::String*>(&val));
+                    // 0x18002a090 is `rtavl::StringMapInsert`
+                    // (runtime/src/collection/avl_trees.cpp), the
+                    // `Collection::Set<Pair<String,String>>::Insert` body. `map`
+                    // here is a raw `void*` (`self + 0x10`), so it is the free
+                    // body, called by name (B3R), not a member.
+                    rtsetavl::Node* node = nullptr;
+                    rtavl::StringMapInsert(
+                        static_cast<rtsetavl::Set*>(map), &node,
+                        reinterpret_cast<char* const*>(&key),
+                        reinterpret_cast<char* const*>(&val));
                 }
 
                 if (pos >= len) break;
@@ -453,16 +436,6 @@ bool SameString(const String* a, const String* b) {
 // ?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z  0x1800c4930
 //
 // Skip blanks, then take the run up to the next blank.
-// A HIDDEN-RETSLOT DOOR: `ret` is the caller's RAW BYTES, so the member's
-// prvalue is placement-CONSTRUCTED into it and the door returns that slot,
-// which is retail's `MOV RAX,R14`.
-extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
-                                                     const String* src) {
-    new (RtSystem::Sys(ret)) System::String(
-        System::Configuration::ParseValue(*pos, RtSystem::Sys(*src)));
-    return ret;
-}
-
 System::String System::Configuration::ParseValue(int& pos, const System::String& src) {
     const int posIn = pos;
 
@@ -497,14 +470,6 @@ System::String System::Configuration::ParseValue(int& pos, const System::String&
 //
 // Skip blanks, scan to '/', and if there is one take the run after it up to a
 // blank or ':'. If there is no '/', return an empty String.
-// A HIDDEN-RETSLOT DOOR, exactly as ParseValue's above.
-extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
-                                                       const String* src) {
-    new (RtSystem::Sys(ret)) System::String(
-        System::Configuration::ParseCommand(*pos, RtSystem::Sys(*src)));
-    return ret;
-}
-
 System::String System::Configuration::ParseCommand(int& pos, const System::String& src) {
     const int posIn = pos;
 
@@ -687,19 +652,6 @@ System::String System::Configuration::GetCommandLineString(
 //                the block under the allocator lock and zeroes {ptr, ptr}.
 //                Again the whole array.
 //
-// BOTH ARE ALREADY PORTED AND REGISTERED BY ADDRESS IN THIS TREE, which is why
-// this row is thirteen lines rather than a Collection lane. That was the
-// STATED blocker on this row and re-checking it first is the point
-// (reference_holdback_blockers_are_stale_check_them_first.md):
-//
-//   0x18000f7d0 -> rtsetclear::Clear               runtime/src/collection/set_clear.cpp:212
-//   0x180010ab0 -> RtColl_ArrayDtorElem_180010ab0  runtime/src/collection/array_destroy.cpp:902
-//
-// so `ResolveAddr(Module::Runtime, ...)` -- which consults the port registry
-// BEFORE the DLL (reference_resolveaddr_consults_port_registry_first.md) --
-// reaches OUR bodies today and at cutover alike. This body therefore adds no
-// new dependency on Runtime-x64.dll.
-//
 // THE THIRD SUB-OBJECT IS NOT DESTROYED, AND THAT IS RETAIL'S CHOICE.
 // ??0Configuration (engine_lifecycle.cpp) initialises THREE {pointer, int}
 // pairs -- at +0x00, +0x10 and +0x20. This dtor touches +0x10 and +0x00 and
@@ -707,38 +659,20 @@ System::String System::Configuration::GetCommandLineString(
 // already flagged inside Engine::Shutdown (Input::Device and Audio::Device),
 // and it is reproduced rather than tidied: "fixing" it would free a block
 // retail still considers live, which is strictly worse than the leak.
-//
-// ORACLE: none, and none is manufactured. A destructor's entire output is that
-// its subject is gone, so a replay would run the same two frees over the same
-// freed blocks -- a double free, not a comparison. What it gets instead is the
-// call-site counter: engine_lifecycle.cpp's ported Engine::Shutdown reaches
-// this name through RT_EXPORT_ONCE, i.e. through a DOOR, so registering moves
-// that call to this body, and `work` counts the objects actually destroyed.
-extern "C" void RtSystem_Configuration_Dtor(void* self) {
-    static_cast<System::Configuration*>(self)->~Configuration();
-}
-
 System::Configuration::~Configuration() {
-
-    typedef void (*CleanupFn)(void*);
-
     // NOT CONVERTED (ENDGAME B.3.2 step 2), both calls below: `self` is a raw
     // `void*` — there is no `System::Configuration` type header in
     // runtime/types declaring real `Collection::Set<Pair<String,String>>` /
     // `Collection::Array<T>` members at +0x10 / +0x00 to call `.Clear()` or
-    // `.~Array()` on, so both stay by-address calls (they already reach OUR
-    // ported bodies, per the banner above — `ResolveAddr` consults the port
-    // registry first).
+    // `.~Array()` on, so both stay the free bodies, called by name (B3R).
     //
-    // 0x1800c518f -- the string->string map at +0x10.
-    if (CleanupFn setClear = reinterpret_cast<CleanupFn>(
-            ResolveAddr(Module::Runtime, 0x18000f7d0)))
-        setClear(&_mapRoot);
+    // 0x1800c518f -- the string->string map at +0x10: rtsetclear::Clear
+    // (0x18000f7d0).
+    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));
 
-    // 0x1800c519d -- the tail call, on `this` itself.
-    if (CleanupFn arrayDtor = reinterpret_cast<CleanupFn>(
-            ResolveAddr(Module::Runtime, 0x180010ab0)))
-        arrayDtor(static_cast<void*>(this));
+    // 0x1800c519d -- the tail call, on `this` itself:
+    // rtcoll::RtColl_ArrayDtorElem_180010ab0.
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(static_cast<void*>(this));
 
 }
 
@@ -762,11 +696,7 @@ int RtSystemConfigurationRegister() {
     // unregistered). BOTH DOORS, ALWAYS -- registering only the name would
     // leave those two ResolveAddr sites resolving to null at cutover, which is
     // the shape reference_by_address_door_dies_at_cutover.md records.
-    RegisterRuntimeExport("?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z", (void*)&RtSystem_Configuration_ParseCommand); ++n;
-    RegisterRuntimeAddr(0x1800c4a00, (void*)&RtSystem_Configuration_ParseCommand);
 
-    RegisterRuntimeExport("?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z", (void*)&RtSystem_Configuration_ParseValue); ++n;
-    RegisterRuntimeAddr(0x1800c4930, (void*)&RtSystem_Configuration_ParseValue);
 
     // ---- Wave 22 lane ERRCFG -----------------------------------------------
     // BOTH DOORS for both rows. The NAME closes the census row and moves
@@ -777,8 +707,6 @@ int RtSystemConfigurationRegister() {
     RegisterRuntimeExport("?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z", (void*)&RtSystem_Configuration_GetCommandLineString); ++n;
     RegisterRuntimeAddr(0x1800c5300, (void*)&RtSystem_Configuration_GetCommandLineString);
 
-    RegisterRuntimeExport("??1Configuration@System@@QEAA@XZ", (void*)&RtSystem_Configuration_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800c5170, (void*)&RtSystem_Configuration_Dtor);
 
     // DELIBERATELY ABSENT, with reasons in the banner:
     //   (unexported) the map insert              0x18002a090  -> 0x18002a170

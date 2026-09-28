@@ -642,8 +642,6 @@ int RtSystemWideStringRegister() {
     // Literals, never a named constant: tools/runtime_census.py cannot see a
     // RegisterRuntimeExport whose name is a constant
     // (reference_census_cannot_see_nonliteral_registrations.md).
-    RegisterRuntimeExport("?SetLength@WideString@System@@AEAAXH@Z",
-                          (void*)&RtSystem_WideString_SetLength); ++n;
     RegisterRuntimeExport("?Set@WideString@System@@QEAAXPEB_W@Z",
                           (void*)&RtSystem_WideString_Set); ++n;
     RegisterRuntimeExport("?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",
@@ -651,29 +649,16 @@ int RtSystemWideStringRegister() {
     RegisterRuntimeExport("??0WideString@System@@QEAA@AEBVString@1@@Z",
                           (void*)&RtSystem_WideString_CtorFromString); ++n;
     // The three dx11/src/devicedata.cpp has been asking for since Wave 6.
-    RegisterRuntimeExport("??0WideString@System@@QEAA@PEB_W@Z",
-                          (void*)&RtSystem_WideString_CtorFromWide); ++n;
-    RegisterRuntimeExport("??1WideString@System@@QEAA@XZ",
-                          (void*)&RtSystem_WideString_Dtor); ++n;
-    RegisterRuntimeExport("?StrLength@WideString@System@@SAHPEB_W@Z",
-                          (void*)&RtSystem_WideString_StrLength); ++n;
     // Wave 9 lane PLAT: the fifth constructor. Verified against the shipped
     // export directory with pefile (ordinal 514, 0x1800cb110) before the body
     // was written — reference_resolveexport_phantom_names.md.
-    RegisterRuntimeExport("??0WideString@System@@QEAA@PEBD@Z",
-                          (void*)&RtSystem_WideString_CtorFromChars); ++n;
-    RegisterRuntimeAddr(0x1800cb110, (void*)&RtSystem_WideString_CtorFromChars);
 
     // The same four by address. dx11/src/devicedata.cpp reaches WideString
     // through the exe's OWN dispatch slots and its own resolver door, and this
     // project has been bitten twice by registering only the name.
-    RegisterRuntimeAddr(0x1800ca9b0, (void*)&RtSystem_WideString_SetLength);
     RegisterRuntimeAddr(0x1800caf40, (void*)&RtSystem_WideString_Set);
     RegisterRuntimeAddr(0x1800cacd0, (void*)&RtSystem_WideString_AsUTF8);
     RegisterRuntimeAddr(0x1800cab50, (void*)&RtSystem_WideString_CtorFromString);
-    RegisterRuntimeAddr(0x18000a6e0, (void*)&RtSystem_WideString_CtorFromWide);
-    RegisterRuntimeAddr(0x18000a730, (void*)&RtSystem_WideString_Dtor);
-    RegisterRuntimeAddr(0x1800cab20, (void*)&RtSystem_WideString_StrLength);
 
     // DELIBERATELY ABSENT — the other 21 exports of the class. NOTHING in
     // code/, engine/, runtime/, standalone/ or dx11/ names any of them; the
