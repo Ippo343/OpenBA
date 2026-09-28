@@ -305,10 +305,10 @@ Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
         RenderBufferPlatformDestruct(p->_destTarget);
         RenderBufferOperatorDelete(p->_destTarget);
     }
-    if (p->_backBufferImage != nullptr) {            // +0x70
-        void** const vt = *reinterpret_cast<void***>(p->_backBufferImage);
+    if (_backBufferImage != nullptr) {               // +0x70
         // EDX = 1 -> the deleting destructor frees as well as destructs.
-        reinterpret_cast<void (*)(void*, int)>(vt[0])(p->_backBufferImage, 1);
+        // By name on the real member (B3X W0): `Video::ImageBuffer*`.
+        _backBufferImage->DeletingDtor(1);
     }
 }
 

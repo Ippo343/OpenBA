@@ -130,10 +130,12 @@ bool Material::Serialize(void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    using ScalarFn = void (*)(ReaderWriter*, void*, const char*);
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_type, nullptr);
+    // B3X W0: by name on the real class. `_type` goes through +0x98
+    // `SerializeUInt` (retail's slot), so it is viewed as the uint32 it is.
+    IO::ReaderWriter* const irw = reinterpret_cast<IO::ReaderWriter*>(rw);  // B.3.x bridge
+    irw->SerializeUInt(*reinterpret_cast<uint32_t*>(&_type), nullptr);
     int32_t n = _passes._size;
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
+    irw->SerializeInt(n, nullptr);
 
     if (ser.stream->direction == 0) {
         using SetSizeFn = void (*)(void*, int);
@@ -143,8 +145,7 @@ bool Material::Serialize(void* streamv) {
     RtAddr<ElemSerFn>(0x1800605e0ull)(&ser, n, _passes._data);
 
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        irw->DeletingDtor(1);
     }
     return true;
 }

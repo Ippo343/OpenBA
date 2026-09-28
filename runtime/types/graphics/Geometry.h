@@ -176,23 +176,11 @@ enum GeometryDirty : uint32_t {
     kRolledOpacity      = 0x20,  // Clean: set when 0x04 was seen, cleared next call
 };
 
-// ============================================================
-// Vtable slot indices, for the three ported bodies that dispatch virtually.
-// ============================================================
-enum GeometryVSlot : int {
-    // BATCH 4: Scene::AddCulledDrawItems (0x1801017a0) ends by dispatching this
-    // slot on every surviving object as `(geometry, scene, renderer)` — the
-    // `CALL [RAX+0x18]` at 0x18010226e. `?AddDrawItems@SunLight@Graphics@@UEBAX
-    // AEBVScene@2@AEAVRenderer@2@@Z` (0x180106f50, ported in
-    // wave28_lane_partsys.cpp) is one override of it, which is the independent
-    // confirmation of both the index and the argument tuple.
-    kVSlotAddDrawItems         = 3,   // vt + 0x18
-    kVSlotUpdateAttached       = 4,   // vt + 0x20
-    kVSlotGetSubTransform      = 5,   // vt + 0x28
-    kVSlotGetInstanceTransform = 6,   // vt + 0x30
-    kVSlotSetSharedInstanceData= 7,   // vt + 0x38
-    kVSlotClean                = 8,   // vt + 0x40
-};
+// (B3X W0: the `GeometryVSlot` index enum -- `kVSlotAddDrawItems` .. `kVSlotClean`
+// -- is deleted. It had no reader left: every Geometry slot is a by-name
+// virtual call, and an index would mis-aim after the normal-virtual cutover.
+// Slot 3 is `AddDrawItems`, reached as `(geometry, scene, renderer)` by
+// Scene::AddCulledDrawItems' `CALL [RAX+0x18]` at 0x18010226e.)
 
 }  // namespace RtGraphics
 

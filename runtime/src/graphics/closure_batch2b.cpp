@@ -18,6 +18,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
+#include "../../types/io/Serializer.h"   // IO::ReaderWriter (B3X W0)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -282,7 +283,11 @@ extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
 // 32-bit argument, so a negative count is impossible rather than huge.
 // ============================================================================
 namespace {
-using EncodeFieldFn = void (*)(void* encoding, void* field, int flags);
+// `ctx` is the `IO::Serializer`; `[ctx+8]` is its ReaderWriter and +0xa0 is
+// `SerializeInt` (Serializer.h). B3X W0: by name on the real class.
+IO::ReaderWriter* CtxRw(void* ctx) {
+    return *reinterpret_cast<IO::ReaderWriter**>(static_cast<uint8_t*>(ctx) + 8);  // B.3.x bridge
+}
 }
 
 extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int count,
@@ -291,20 +296,13 @@ extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int co
     uint8_t* e = static_cast<uint8_t*>(data);
     uint64_t n = static_cast<uint32_t>(count);               // MOV ESI,EDX
     do {
-        void* enc = *reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + 8);
-        void** vt = *reinterpret_cast<void***>(enc);
-        EncodeFieldFn f = reinterpret_cast<EncodeFieldFn>(
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0xa0));
-        f(enc, e + 0x00, 0);
-        // Retail re-loads `ctx->encoding` and the slot before EVERY call; a
+        CtxRw(ctx)->SerializeInt(*reinterpret_cast<int32_t*>(e + 0x00), nullptr);
+        // Retail re-loads `ctx->readerWriter` and the slot before EVERY call; a
         // hoisted load would be one less indirection than retail performs and
-        // would miss an encoding swapped mid-element. Kept literal.
+        // would miss a reader/writer swapped mid-element. Kept literal: the
+        // receiver is re-read here and the virtual call re-reads the vptr.
         for (uint32_t o = 0x04; o <= 0x14; o += 4) {
-            enc = *reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + 8);
-            vt  = *reinterpret_cast<void***>(enc);
-            f   = reinterpret_cast<EncodeFieldFn>(
-                      *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0xa0));
-            f(enc, e + o, 0);
+            CtxRw(ctx)->SerializeInt(*reinterpret_cast<int32_t*>(e + o), nullptr);
         }
         e += 0x18;
     } while (--n);

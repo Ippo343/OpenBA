@@ -112,12 +112,8 @@ uint8_t* DebugDisableHandlerSlot() {
 }
 
 using CreateDeviceDataFn = void* (*)(Device*);
-using EnumerateFn        = void  (*)(void*);          // vtable +0x08
-using DeletingDtorFn     = void  (*)(void*, int32_t); // vtable +0x00, arg 1
-
-inline void* const* VtblOf(void* obj) {
-    return *reinterpret_cast<void* const* const*>(obj);
-}
+// (B3X W0: the unused `EnumerateFn` / `DeletingDtorFn` slot typedefs and the
+// `VtblOf` vptr helper are deleted; the DeviceData calls are by name.)
 
 }  // namespace
 
