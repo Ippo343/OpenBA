@@ -48,7 +48,10 @@
 #include "video/Device.h"
 #include "VideoDX11Data.h"
 #include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
-#include "resolve.h"
+// ENDGAME B.3R block DX: `System::MemoryAllocator::MemAlloc / MemFree`, the
+// direct replacement for the import rows the files below resolved by name.
+// (`resolve.h` went with `Dx11ResolveRuntimeImport`, its last user here.)
+#include "system/MemoryAllocator.h"
 
 namespace VideoDX11 {
 
@@ -347,24 +350,14 @@ inline ID3D11DepthStencilView* Dx11ImageDsv(const void* imageBuffer) {
 // Runtime imports used by the ported destructors
 // ============================================================
 //
-// Each ported slot-0 destructor has to call the same Runtime-side base
-// destructor the original called, then the same allocator. We resolve those by
-// MSVC mangled name (verified against the shipped Runtime-x64.dll export table
-// with objdump -p), and fall back to reading VideoDX11's own IAT slot — the
-// very pointer the original CALLs through — if the name lookup ever misses.
-// The fallback is what makes this immune to a mangling mistake: the IAT entry
-// is by construction the exact function the shipped code would have called.
-//
-// Resolution is lazy and cached, so there is no static-initialisation-order
-// dependency on EngineFuncsInit() or ResolveInit(). The unsynchronised cache
-// write is benign: both racers compute the same value.
-
-typedef void (*Dx11BaseDtor_t)(void* self);
-typedef void (*Dx11MemFree_t)(void* ptr);
-
-// mangled: the Runtime-x64.dll export name
-// iatGhidra: the VideoDX11 .rdata IAT slot the original calls through
-void* Dx11ResolveRuntimeImport(const char* mangled, uintptr_t iatGhidra);
+// ENDGAME B.3R block DX: GONE — `Dx11ResolveRuntimeImport` (a by-name lookup
+// in the port registry), the `Dx11BaseDtor_t` / `Dx11MemFree_t` typedefs and
+// the `Dx11MemFree` wrapper with its lazy function-local cache. Every Runtime
+// import dx11 used is now a direct reference to the body its mangled name
+// bound (B3R_RULES R2, R8). The slot-0 destructors call
+// `System::MemoryAllocator::MemFree` (VideoDX11 IAT slot 0x1800134d0,
+// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`) when (flags & 1), and their
+// base destructors by qualified name (RULE B5-3).
 
 // L6's port of 0x180004340, the DeviceData swap-chain resize/recreate helper.
 // Declared here because it is the one cross-lane call in the port: L5's
@@ -373,15 +366,6 @@ void* Dx11ResolveRuntimeImport(const char* mangled, uintptr_t iatGhidra);
 // `deviceData` is a Video::DeviceData* (void* to keep this declaration free of
 // L6's internal types).
 int Dx11_DeviceData_Resize(void* deviceData);
-
-// System::MemoryAllocator::MemFree(void*) — VideoDX11 IAT slot 0x1800134d0.
-// Called by every *Data scalar-deleting destructor when (flags & 1).
-inline void Dx11MemFree(void* p) {
-    static Dx11MemFree_t fn = reinterpret_cast<Dx11MemFree_t>(
-        Dx11ResolveRuntimeImport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z",
-                                 0x1800134d0));
-    if (fn) fn(p);
-}
 
 // The DX11 vtable a destructor must re-seat `this` on before running the base
 // destructor (MSVC emits this vptr store in every derived destructor). Handing
