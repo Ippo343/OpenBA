@@ -19,8 +19,12 @@
 #include "Work/PlantOrchard.h"
 #include "Work/plantorchard_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -34,184 +38,25 @@ extern "C" void OrchardDiag_NotePlantConstructed();
 extern "C" void OrchardDiag_NotePlantExecuted();
 
 // ============================================================
-// Local function pointers (resolved once by PlantOrchard_ResolveFuncs)
+// Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
-
-// All typedefs prefixed with POW_ to avoid conflicts
-
-typedef void* (*POW_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
-typedef void* (*POW_FindComp_OrchardDesc_t)(uintptr_t entity, void* outIBP);  // 0x140005440
-
-static POW_FindComp_MatDesc_t       s_fn_FindComp_MatDesc = nullptr;
-static POW_FindComp_OrchardDesc_t   s_fn_FindComp_OrchardDesc = nullptr;
-
-typedef int (*POW_CalcMaxWorkers_t)(uintptr_t matDesc);
-static POW_CalcMaxWorkers_t s_fn_CalcMaxWorkers = nullptr;
-
-typedef int  (*POW_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
-typedef bool (*POW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
-static POW_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr;
-static POW_Map_CanPathTo_t          s_fn_Map_CanPathTo = nullptr;
-
-typedef float* (*POW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
-                                      char param4, uint32_t* outNormal);
-static POW_GetTerrainPos_t s_fn_GetTerrainPos = nullptr;
-
-// Orchard planting action ctor (FUN_1400be6e0) -- 11 parameters.
-// ⚠ cellIdx / cellIdx2 are INTEGERS, not floats. The call site stores them with
-// `MOV dword ptr [RSP+0x30],EBX` (0x1400f4dd1) and `MOV dword ptr [RSP+0x50],EBX`
-// (0x1400f4daf), where EBX is the loop counter — there is no CVTSI2SS anywhere near them.
-// Typing them float here reinterpreted the index as its float BIT PATTERN: slot 0 still
-// came out 0, but slot 1 became 0x3F800000, so the completion message that binds a planted
-// tree into its orchard slot (OrchardComponent::OnMessage msg 0, param p1 = slot index)
-// addressed an absurd index instead of slot 1.
-typedef void (*POW_PlantAction_Ctor_t)(void* citizenIBP, int priority, void* externalPtr,
-                                        uint32_t zero, float* position, int srcCellIdx,
-                                        uint32_t cellIdx, void* entityRefPtr, uint32_t* typeConstPtr,
-                                        uint64_t unused, uint32_t cellIdx2);
-static POW_PlantAction_Ctor_t s_fn_PlantAction_Ctor = nullptr;  // 0x1400be6e0
-
-// BST operations
-typedef void* (*POW_BST_Insert_t)(void* treeRoot, void* outResult, uint32_t* keyData);
-typedef void  (*POW_BST_Remove_t)(void* treeRoot, void* node);
-typedef void  (*POW_BST_Serialize_t)(void* treeRoot, void* serializer);
-typedef void  (*POW_BST_RecursiveFree_t)(void* treeRoot, void* node);
-static POW_BST_Insert_t       s_fn_BST_Insert = nullptr;
-static POW_BST_Remove_t       s_fn_BST_Remove = nullptr;
-static POW_BST_Serialize_t    s_fn_BST_Serialize = nullptr;
-static POW_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
-
-typedef uint8_t (*POW_ValidateTask_t)(uintptr_t self, uintptr_t param2, void* ibp, void** outTask);
-static POW_ValidateTask_t s_fn_ValidateTask = nullptr;
-
-typedef void (*POW_TaskCancel_t)(void* taskList);
-static POW_TaskCancel_t s_fn_TaskCancel = nullptr;
-
-typedef void* (*POW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
-static POW_FindSubEntity_t s_fn_FindSubEntity = nullptr;
-
-typedef void (*POW_Work_Serialize_t)(void* self, void* stream);
-
-typedef void (*POW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
-static POW_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;
-
-// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
-// is gone.
-
-typedef void* (*POW_MemAlloc_t)(int64_t size, int align);
-static POW_MemAlloc_t s_fn_MemAlloc = nullptr;
-static void* POW_MemAllocViaSingleton(int64_t size, int align) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
-}
-
-// Orchard slot refresh (FUN_140051830)
-typedef void (*POW_OrchardRefresh_t)(uintptr_t orchardDescComp);
-static POW_OrchardRefresh_t s_fn_OrchardRefresh = nullptr;  // 0x140051830
-
-// Float constant
-static float* s_fHalfCellOffset = nullptr;
-
-// Type constant (DWORD_1401c46b0 -- orchard type marker)
-
-// Vtable pointers
-
-static bool s_po_funcs_resolved = false;
-
-
-// ============================================================
-// Resolution
-// ============================================================
-bool PlantOrchard_ResolveFuncs() {
-    if (s_po_funcs_resolved) return true;
-
-    s_fn_FindComp_MatDesc = reinterpret_cast<POW_FindComp_MatDesc_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_FindComp_OrchardDesc = reinterpret_cast<POW_FindComp_OrchardDesc_t>(
-        ResolveAddr(Module::Exe, 0x140005440));
-    s_fn_CalcMaxWorkers = reinterpret_cast<POW_CalcMaxWorkers_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_fn_Map_FindNearestPassable = reinterpret_cast<POW_Map_FindNearestPassable_t>(
-        ResolveAddr(Module::Exe, 0x14009ccf0));
-    s_fn_Map_CanPathTo = reinterpret_cast<POW_Map_CanPathTo_t>(
-        ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_GetTerrainPos = reinterpret_cast<POW_GetTerrainPos_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_PlantAction_Ctor = reinterpret_cast<POW_PlantAction_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400be6e0));
-    s_fn_BST_Insert = reinterpret_cast<POW_BST_Insert_t>(
-        ResolveAddr(Module::Exe, 0x140029a40));
-    s_fn_BST_Remove = reinterpret_cast<POW_BST_Remove_t>(
-        ResolveAddr(Module::Exe, 0x14001ca60));  // was 0x140029a60 (mid-function; true remove entry is 0x14001ca60)
-    s_fn_BST_Serialize = reinterpret_cast<POW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140029de0));
-    s_fn_BST_RecursiveFree = reinterpret_cast<POW_BST_RecursiveFree_t>(
-        ResolveAddr(Module::Exe, 0x14000e320));
-    s_fn_ValidateTask = reinterpret_cast<POW_ValidateTask_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_TaskCancel = reinterpret_cast<POW_TaskCancel_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_FindSubEntity = reinterpret_cast<POW_FindSubEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_ExternalRef_Serialize = reinterpret_cast<POW_ExternalRef_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-    s_fn_OrchardRefresh = reinterpret_cast<POW_OrchardRefresh_t>(
-        ResolveAddr(Module::Exe, 0x140051830));
-
-    // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
-    // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
-    // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
-    // Validate slot called it: EXEC of 0 the first harvest season a field had stale
-    // tasks (BANISHED_STRESS town at 10x, 2026-09-03). Allocate through the real
-    // allocator singleton instead; fn_MemFreeStatic pairs with it.
-    s_fn_MemAlloc = &POW_MemAllocViaSingleton;
-
-    s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-
-    bool ok = s_fn_FindComp_MatDesc && s_fn_FindComp_OrchardDesc &&
-              s_fn_CalcMaxWorkers && s_fn_Map_FindNearestPassable &&
-              s_fn_Map_CanPathTo && s_fn_GetTerrainPos &&
-              s_fn_PlantAction_Ctor &&
-              s_fn_BST_Insert && s_fn_BST_Remove &&
-              s_fn_BST_Serialize && s_fn_BST_RecursiveFree &&
-              s_fn_ValidateTask && s_fn_TaskCancel &&
-              s_fn_FindSubEntity && s_fn_ExternalRef_Serialize && s_fn_OrchardRefresh &&
-              fn_MemFreeStatic &&
-              g_pGameWorldSingleton && s_fHalfCellOffset;
-
-    s_po_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[PlantOrchard] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_FindComp_MatDesc) printf("  MISSING: FindComp_MatDesc\n");
-        if (!s_fn_FindComp_OrchardDesc) printf("  MISSING: FindComp_OrchardDesc\n");
-        if (!s_fn_CalcMaxWorkers) printf("  MISSING: CalcMaxWorkers\n");
-        if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
-        if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
-        if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_PlantAction_Ctor) printf("  MISSING: PlantAction_Ctor\n");
-        if (!s_fn_BST_Insert) printf("  MISSING: BST_Insert\n");
-        if (!s_fn_BST_Remove) printf("  MISSING: BST_Remove\n");
-        if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
-        if (!s_fn_BST_RecursiveFree) printf("  MISSING: BST_RecursiveFree\n");
-        if (!s_fn_ValidateTask) printf("  MISSING: ValidateTask\n");
-        if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
-        if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
-        if (!s_fn_OrchardRefresh) printf("  MISSING: OrchardRefresh\n");
-        // The seven conditions below were in the `ok` expression but not in this list, so a
-        // failure caused by any of them printed "FAILED" with no reason at all — which is
-        // exactly what a 2026-08-10 orchard run hit. Report every term you test.
-        if (!fn_MemFreeStatic) printf("  MISSING: MemFreeStatic\n");
-        if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
-        if (!s_fHalfCellOffset) printf("  MISSING: fHalfCellOffset (0x140172114)\n");
-    }
-#endif
-
-    return ok;
-}
+//   0x140003050  WorkBase_FindComponent_3050
+//   0x140005440  WorkAcc_FindComponent_5440
+//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x14009ccf0  WorkGrid_FindCell_9ccf0
+//   0x1400a00f0  WorkBase_ValidateCell_a00f0
+//   0x14009f3e0  Reimpl_MapGetTerrainPos
+//   0x1400be6e0  WorkAct_PlantWorkCtor_be6e0
+//   0x140029a40  WorkCellBST_Insert_9a40
+//   0x14001ca60  WorkCellBST_Remove_ca60
+//   0x140029de0  WorkCellBST_Serialize_9de0
+//   0x14000e320  WorkBase_TreeNodeFree_e320
+//   0x1400f7100  WorkBase_ValidateTask_f7100
+//   0x1400c5400  WorkBase_TaskListCleanup_c5400
+//   0x140002e10  AttendanceComponent_GetJobHostComponent
+//   0x140002340  Reimpl_ExternalPtr_Serialize_StringTable
+//   0x140051830  OrchardComponent_ValidateRefs
+//   0x140172114  kRdata_140172114 (.rdata)
 
 
 // ============================================================
@@ -251,18 +96,18 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
 
     // Step 1: Find components
     uintptr_t matDescIBP = 0;
-    s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
+    WorkBase_FindComponent_3050(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
 
     uintptr_t orchardDescIBP = 0;
-    s_fn_FindComp_OrchardDesc(*(uintptr_t*)(selfAddr + 0x10), &orchardDescIBP);
+    WorkAcc_FindComponent_5440(*(uintptr_t*)(selfAddr + 0x10), &orchardDescIBP);
 
     // Step 2: Refresh orchard slot state
-    s_fn_OrchardRefresh(orchardDescIBP);
+    OrchardComponent_ValidateRefs(reinterpret_cast<void*>(orchardDescIBP));
 
     // Step 3: Check max workers
     int treeCount = (int)selfQ[10];  // self->field_50
     if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
     if (treeCount >= *(int*)(matDescIBP + 0x30)) {
@@ -316,12 +161,12 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
             int srcCellIdx = *(int*)(orchardSlotData2 + slotOffset);
 
             // Check pathfinding
-            int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
+            int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
             if (nearestCell < 0) {
                 continue;
             }
 
-            bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
+            bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the door read AL
             if (!canPath) {
                 continue;
             }
@@ -330,20 +175,20 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
             uint32_t typeConstVal = OrchardComponent::TypeId();  // DAT_1401c46b0
             uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
-            float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
+            float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
             Math::Vector3 targetPos(
                 (float)(nearestCell % *mapGrid) - halfOffset,
                 (float)(nearestCell / *mapGrid) - halfOffset,
                 0.0f);
 
             float pathPos[4];
-            s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
+            Reimpl_MapGetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
             // Get citizen entity
             uintptr_t citizenBuf = *(uintptr_t*)entityIBP;
 
             // Call FUN_1400be6e0 orchard planting action ctor
-            s_fn_PlantAction_Ctor(
+            WorkAct_PlantWorkCtor_be6e0(
                 &citizenBuf,                      // RCX: citizenIBP
                 (int)selfQ[4],                    // EDX: priority
                 (void*)selfQ[0xd],                // R8: self->field_68 (ExternalPtr)
@@ -351,7 +196,7 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
                 pathPos,                          // [RSP+0x20]: position
                 srcCellIdx,                       // [RSP+0x28]: srcCellIdx
                 (uint32_t)i,                      // [RSP+0x30]: cellIdx (integer, EBX)
-                &entityRef,                       // [RSP+0x38]: entity ref from field_10
+                reinterpret_cast<int64_t*>(&entityRef),                       // [RSP+0x38]: entity ref from field_10
                 &typeConstVal,                    // [RSP+0x40]: type constant
                 0,                                // [RSP+0x48]: unused
                 (uint32_t)i                       // [RSP+0x50]: cellIdx again (integer, EBX)
@@ -385,7 +230,7 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
             insertKey[1] = 0;
             insertKey[2] = (uint32_t)citizenIBPVal;
             insertKey[3] = (uint32_t)(citizenIBPVal >> 32);
-            s_fn_BST_Insert((void*)(selfAddr + 0x48), insertResult, insertKey);
+            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult, insertKey);
 
             // Mark cell as planted (not available)
             validityArray[i] = 1;
@@ -419,7 +264,7 @@ int PlantOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
         } else if (param4 > *node) {
             node = *(int**)(node + 8);
         } else {
-            s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
             break;
         }
     }
@@ -447,7 +292,7 @@ int PlantOrchard::OnCancel(void* /*param2*/, void* /*param3*/, int param4) {
         } else if (param4 > *node) {
             node = *(int**)(node + 8);
         } else {
-            s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
             break;
         }
     }
@@ -476,7 +321,7 @@ int PlantOrchard::Cleanup() {
         }
 
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
     }
@@ -517,7 +362,7 @@ int PlantOrchard::Validate() {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2);
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
+        uint8_t valid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), uintptr_t{0}, (void*)&ibpData, nullptr);
 
         if (valid == 0) {
             uint32_t newCount = collectCount + 1;
@@ -529,7 +374,7 @@ int PlantOrchard::Validate() {
                         newCap = newCount * 3;
                     }
                     collectCapacity = newCap;
-                    newArray = (int*)s_fn_MemAlloc((int64_t)newCap << 2, 4);
+                    newArray = (int*)System::MemoryAllocator::MemAlloc((int64_t)newCap << 2, 4);
                     currentArray = newArray;
                 }
 
@@ -545,7 +390,7 @@ int PlantOrchard::Validate() {
                     }
                 }
                 if (collectArray != newArray) {
-                    fn_MemFreeStatic(collectArray);
+                    System::MemoryAllocator::MemFree(collectArray);
                 }
                 collectArray = newArray;
                 collectCount = newCount;
@@ -590,14 +435,14 @@ cleanup:
                 } else if (collectArray[k] > *bstNode) {
                     bstNode = *(int**)(bstNode + 8);
                 } else {
-                    s_fn_BST_Remove(bstRootPtr, bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(bstRootPtr), bstNode);
                     break;
                 }
             }
         }
     }
 
-    fn_MemFreeStatic(currentArray ? currentArray : collectArray);
+    System::MemoryAllocator::MemFree(currentArray ? currentArray : collectArray);
     return collectCount == 0;
 }
 
@@ -612,7 +457,10 @@ void* PlantOrchard::GetTarget(void* outPtr) {
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
-    void* result = s_fn_FindSubEntity(entity, subIBP);
+    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
+    // so the returned pointer is the out buffer itself.
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entity), subIBP);
+    void* result = subIBP;
 
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)result + 0x48);
 
@@ -640,7 +488,7 @@ void PlantOrchard::Persist(void* stream) {
     alignas(8) uint8_t serializerBuf[24] = {0};
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializerBuf);
 
     int cellCountBuf[2] = { *(int*)(selfAddr + 0x60), 0 };
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(cellCountBuf), nullptr);   // B.3.4 bridge
@@ -666,7 +514,7 @@ void PlantOrchard::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(
         cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
 
-    s_fn_ExternalRef_Serialize((void*)(selfAddr + 0x68), serializerBuf);
+    Reimpl_ExternalPtr_Serialize_StringTable((void*)(selfAddr + 0x68), serializerBuf);
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
@@ -680,15 +528,15 @@ void PlantOrchard::Persist(void* stream) {
 PlantOrchard::~PlantOrchard() {
     uintptr_t selfAddr = (uintptr_t)this;
 
-    fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
+    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x58));
     *(uintptr_t*)(selfAddr + 0x58) = 0;
     *(uintptr_t*)(selfAddr + 0x60) = 0;
 
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
-        fn_MemFreeStatic(bstRoot);
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
+        System::MemoryAllocator::MemFree(bstRoot);
     }
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
@@ -700,13 +548,11 @@ PlantOrchard::~PlantOrchard() {
 
 // Ctor 0x1400f50b0 (deserialize/factory variant): `??0Internal`, the Work base fields,
 // the leaf fields zeroed (+0x60/+0x64 as the one qword the old port wrote; the two
-// stamps are the compiler's). PlantOrchard_ResolveFuncs wires the file's helper
-// pointers and the orchard diagnostic counts the construction (the old factory ctor
-// did both).
+// stamps are the compiler's). The orchard diagnostic counts the construction (the old
+// factory ctor did the same).
 PlantOrchard::PlantOrchard()
     : Work(), field_48(nullptr), field_50(0), field_58(nullptr), field_60(0), field_64(0),
       field_68(nullptr) {
-    PlantOrchard_ResolveFuncs();
     OrchardDiag_NotePlantConstructed();
 }
 

@@ -16,8 +16,12 @@
 #include "Work/HerbalistWork.h"
 #include "Work/herbalistwork_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
@@ -31,96 +35,37 @@
 #include "Component/RadiusDescription.h"     // ENDGAME B.3.9 D5
 
 // ============================================================
-// Local function pointers (resolved once by HerbalistWork_ResolveFuncs)
+// Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
-
-// All typedefs prefixed with HW_ to avoid conflicts
-
-typedef int   (*HW_AutoPickup_CheckAssignments_t)(uintptr_t self, void* citizenRef);
-typedef void* (*HW_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
-typedef void* (*HW_FindComp_MeshInstance_t)(uintptr_t entity, void* outIBP);
-typedef void  (*HW_MeshInstance_SetVisible_t)(void* meshInst, uint8_t group, char visible);
-typedef int   (*HW_CalcMaxWorkers_t)(uintptr_t matDesc);
-typedef float (*HW_Sqrtf_t)(float val);
-typedef int   (*HW_Entity_GetGridCell_t)(void* entityIBP, float* outPos);
-typedef int   (*HW_Map_CalcDistance_t)(int* mapGrid, uint32_t cellA, uint32_t cellB);
-typedef int   (*HW_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
-typedef bool  (*HW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
-typedef void* (*HW_FindComp_NatRes_t)(uintptr_t entity, void* outIBP);
-typedef float*(*HW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
-                                     char param4, uint32_t* outNormal);
-typedef void  (*HW_PerformWork_Ctor3_t)(void* entityIBP, int priority, void* targetIBP,
-                                         float* position, int flag, uint8_t param6);
-typedef void  (*HW_PlayAnimation_Ctor_t)(void* entityIBP, int priority, int animIndex);
-typedef void  (*HW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
-typedef void  (*HW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
-typedef void* (*HW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
-typedef int   (*HW_StorageQueryCount_t)(void* storageComp);
-
-// Work::Serialize
-typedef void  (*HW_Work_Serialize_t)(void* self, void* stream);
-// CitizenAI_impl_96b0 — BST serialization
-typedef void  (*HW_BST_Serialize_t)(void* bstRoot, void* serializer);
-
-// FUN_1400f7100 — validate work entity
-typedef bool  (*HW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
-// System::MemoryAllocator::MemAlloc / MemFree
-typedef void* (*HW_MemAlloc_t)(int64_t size, int align);
-typedef void  (*HW_MemFree_t)(void* ptr);
-// CitizenAI_impl_a6e0 — BST node remove
-typedef void  (*HW_BSTRemove_t)(void* bstRoot, void* node);
-// CitizenAI_impl_5520 — BST find-and-remove by key
-typedef void  (*HW_BSTFindRemove_t)(void* bstRoot, void* keyIBP);
-// FUN_1400c5400 — cancel all work items in BST
-typedef void  (*HW_CancelAllWork_t)(void* bstRoot);
-// FUN_140002e10 — find sub-entity
-typedef void* (*HW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
-// Object::Internal::~Internal (dtor tail call)
-typedef void  (*HW_Internal_Dtor_t)(void* self);
-// Tree node cleanup
-typedef void  (*HW_TreeNodeCleanup_t)(void* bstRoot, void* node);
-// fn_MemFreeStatic
-typedef void  (*HW_MemFreeStatic_t)(void* ptr);
-
-static HW_AutoPickup_CheckAssignments_t s_fn_AutoPickup_CheckAssignments = nullptr;
-static HW_FindComp_MatDesc_t            s_fn_FindComp_MatDesc = nullptr;
-static HW_FindComp_MeshInstance_t       s_fn_FindComp_MeshInstance = nullptr;
-static HW_MeshInstance_SetVisible_t     s_fn_MeshInstance_SetVisible = nullptr;
-static HW_CalcMaxWorkers_t              s_fn_CalcMaxWorkers = nullptr;
-static HW_Sqrtf_t                       s_fn_Sqrtf = nullptr;
-static HW_Entity_GetGridCell_t          s_fn_Entity_GetGridCell = nullptr;
-static HW_Map_CalcDistance_t            s_fn_Map_CalcDistance = nullptr;
-static HW_Map_FindNearestPassable_t    s_fn_Map_FindNearestPassable = nullptr;
-static HW_Map_CanPathTo_t              s_fn_Map_CanPathTo = nullptr;
-static HW_FindComp_NatRes_t             s_fn_FindComp_NatRes = nullptr;
-static HW_GetTerrainPos_t              s_fn_GetTerrainPos = nullptr;
-static HW_PerformWork_Ctor3_t          s_fn_PerformWork_Ctor3 = nullptr;
-static HW_PlayAnimation_Ctor_t         s_fn_PlayAnimation_Ctor = nullptr;
-static HW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
-static HW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
-static HW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
-static HW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
-static HW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
-static HW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
-static HW_MemAlloc_t                   s_fn_MemAlloc = nullptr;
-static HW_MemFree_t                    s_fn_MemFree = nullptr;
-static HW_BSTRemove_t                  s_fn_BSTRemove = nullptr;
-static HW_BSTFindRemove_t              s_fn_BSTFindRemove = nullptr;
-static HW_CancelAllWork_t              s_fn_CancelAllWork = nullptr;
-static HW_FindSubEntity_t              s_fn_FindSubEntity = nullptr;
-static HW_TreeNodeCleanup_t            s_fn_TreeNodeCleanup = nullptr;
-static HW_MemFreeStatic_t              s_fn_MemFreeStatic = nullptr;
-
-// Type ID constants
-// Note: NatResComponent type ID not needed — FindComp_NatRes handles it internally
-
-// Float constants from .rdata
-static float* s_fPI = nullptr;             // DAT_140172184 = 3.14159265f
-static float* s_fHalfCellOffset = nullptr; // DAT_140172114 = 0.5f
-
-// Growth threshold constant (g_fUVScale)
-static float* s_fGrowthThreshold = nullptr; // DAT_14017214c = 1.0f
-
+//   0x1400e3db0  WorkGrid_AutoPickup_e3db0
+//   0x140003050  WorkBase_FindComponent_3050
+//   0x140002f90  WorkBase_FindComponent_2f90
+//   0x14012c3f0  CitizenComp_FUN_14012c3f0
+//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x140132010  WorkImpl_Sqrtf_132010
+//   0x140087fb0  Pf_EntityAnchorCell_7fb0
+//   0x140008830  WorkBase_CalcDistance_8830
+//   0x14009ccf0  WorkGrid_FindCell_9ccf0
+//   0x1400a00f0  WorkBase_ValidateCell_a00f0
+//   0x1400052c0  WorkBase_FindComponent_52c0
+//   0x14009f3e0  Reimpl_MapGetTerrainPos
+//   0x1400c1eb0  WorkAct_PerformWorkCtor_c1eb0
+//   0x1400c2490  WorkAct_PlayAnimationCtor_c2490
+//   0x140021a30  WorkBST_RegisterWork_1a30
+//   0x140115e60  CitizenAI_State_LongTermPlan
+//   0x140006270  WorkBase_FindComponent_6270
+//   0x14012cf10  CitizenComp_StorageComponent_QueryCount
+//   0x1400296b0  WorkBST_BST_Serialize_296b0
+//   0x1400f7100  WorkBase_ValidateTask_f7100
+//   0x14001a6e0  WorkBST_BSTRemove_a6e0
+//   0x140025520  WorkBST_BSTFindRemove_25520
+//   0x1400c5400  WorkBase_TaskListCleanup_c5400
+//   0x140002e10  AttendanceComponent_GetJobHostComponent
+//   0x140014c30  WorkBase_TreeNodeFree_14c30
+//   0x140172184  kRdata_140172184 (.rdata)
+//   0x140172114  kRdata_140172114 (.rdata)
+//   0x14017214c  kRdata_14017214c (.rdata)
+//
 // Vtable pointers for dtor chain
 //
 // The Work BASE vtable is 0x140161a80, byte-verified in retail: HerbalistWork_Ctor
@@ -130,140 +75,6 @@ static float* s_fGrowthThreshold = nullptr; // DAT_14017214c = 1.0f
 // These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
 // both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
 // (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
-
-static bool s_herbalist_funcs_resolved = false;
-
-// ============================================================
-// Resolution — called once during hook installation
-// ============================================================
-bool HerbalistWork_ResolveFuncs() {
-    if (s_herbalist_funcs_resolved) return true;
-
-    // Direct exe function addresses
-    s_fn_AutoPickup_CheckAssignments = reinterpret_cast<HW_AutoPickup_CheckAssignments_t>(
-        ResolveAddr(Module::Exe, 0x1400e3db0));
-    s_fn_FindComp_MatDesc = reinterpret_cast<HW_FindComp_MatDesc_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_FindComp_MeshInstance = reinterpret_cast<HW_FindComp_MeshInstance_t>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-    s_fn_MeshInstance_SetVisible = reinterpret_cast<HW_MeshInstance_SetVisible_t>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_fn_CalcMaxWorkers = reinterpret_cast<HW_CalcMaxWorkers_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_fn_Sqrtf = reinterpret_cast<HW_Sqrtf_t>(
-        ResolveAddr(Module::Exe, 0x140132010));
-    s_fn_Entity_GetGridCell = reinterpret_cast<HW_Entity_GetGridCell_t>(
-        ResolveAddr(Module::Exe, 0x140087fb0));
-    s_fn_Map_CalcDistance = reinterpret_cast<HW_Map_CalcDistance_t>(
-        ResolveAddr(Module::Exe, 0x140008830));
-    s_fn_Map_FindNearestPassable = reinterpret_cast<HW_Map_FindNearestPassable_t>(
-        ResolveAddr(Module::Exe, 0x14009ccf0));
-    s_fn_Map_CanPathTo = reinterpret_cast<HW_Map_CanPathTo_t>(
-        ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_FindComp_NatRes = reinterpret_cast<HW_FindComp_NatRes_t>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-    s_fn_GetTerrainPos = reinterpret_cast<HW_GetTerrainPos_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_PerformWork_Ctor3 = reinterpret_cast<HW_PerformWork_Ctor3_t>(
-        ResolveAddr(Module::Exe, 0x1400c1eb0));
-    s_fn_PlayAnimation_Ctor = reinterpret_cast<HW_PlayAnimation_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400c2490));
-    s_fn_CitizenAI_RegisterWork = reinterpret_cast<HW_CitizenAI_RegisterWork_t>(
-        ResolveAddr(Module::Exe, 0x140021a30));
-    s_fn_CitizenAI_LongTermPlan = reinterpret_cast<HW_CitizenAI_LongTermPlan_t>(
-        ResolveAddr(Module::Exe, 0x140115e60));
-    s_fn_FindComp_Storage = reinterpret_cast<HW_FindComp_Storage_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_StorageQueryCount = reinterpret_cast<HW_StorageQueryCount_t>(
-        ResolveAddr(Module::Exe, 0x14012cf10));
-    s_fn_BST_Serialize = reinterpret_cast<HW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400296b0));  // BST serialize (verified from original disasm)
-    s_fn_ValidateEntity = reinterpret_cast<HW_ValidateEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_BSTRemove = reinterpret_cast<HW_BSTRemove_t>(
-        ResolveAddr(Module::Exe, 0x14001a6e0));
-    s_fn_BSTFindRemove = reinterpret_cast<HW_BSTFindRemove_t>(
-        ResolveAddr(Module::Exe, 0x140025520));
-    s_fn_CancelAllWork = reinterpret_cast<HW_CancelAllWork_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_FindSubEntity = reinterpret_cast<HW_FindSubEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_TreeNodeCleanup = reinterpret_cast<HW_TreeNodeCleanup_t>(
-        ResolveAddr(Module::Exe, 0x140014c30));
-
-    // CheckPtr already from engine_funcs.h (no local copy needed)
-
-    // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
-    // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
-    // (see placementtool.cpp:78). Since that slot is registered, the pointer was
-    // non-null and WRONG, so the first array grow called GetTransform(size, align) and
-    // took an ACCESS_VIOLATION. Diagnosed in tradework.cpp, where a TradeWork actually
-    // reached its grow path; the same wrong pair was copied into five work classes.
-    s_fn_MemAlloc = reinterpret_cast<HW_MemAlloc_t>(fn_MemAllocStatic);
-    s_fn_MemFree  = reinterpret_cast<HW_MemFree_t>(fn_MemFreeStatic);
-
-    // fn_MemFreeStatic from engine_funcs
-    s_fn_MemFreeStatic = reinterpret_cast<HW_MemFreeStatic_t>(fn_MemFreeStatic);
-
-    // Float constants from .rdata
-    s_fPI = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172184));
-    s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_fGrowthThreshold = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-
-    // Vtable pointers for dtor
-
-    // Verify critical pointers
-    bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
-              s_fn_FindComp_MeshInstance && s_fn_MeshInstance_SetVisible &&
-              s_fn_CalcMaxWorkers && s_fn_Sqrtf &&
-              s_fn_Entity_GetGridCell &&
-              s_fn_Map_CalcDistance && s_fn_Map_FindNearestPassable &&
-              s_fn_Map_CanPathTo && s_fn_FindComp_NatRes &&
-              s_fn_GetTerrainPos && s_fn_PerformWork_Ctor3 &&
-              s_fn_PlayAnimation_Ctor && s_fn_CitizenAI_RegisterWork &&
-              s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
-              s_fn_StorageQueryCount &&
-              s_fn_ValidateEntity && s_fn_BSTRemove &&
-              s_fn_BSTFindRemove && s_fn_CancelAllWork &&
-              s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_fPI && s_fHalfCellOffset && s_fGrowthThreshold;
-
-    s_herbalist_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[HerbalistWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_AutoPickup_CheckAssignments) printf("  MISSING: AutoPickup_CheckAssignments\n");
-        if (!s_fn_FindComp_MatDesc) printf("  MISSING: FindComp_MatDesc\n");
-        if (!s_fn_FindComp_MeshInstance) printf("  MISSING: FindComp_MeshInstance\n");
-        if (!s_fn_MeshInstance_SetVisible) printf("  MISSING: MeshInstance_SetVisible\n");
-        if (!s_fn_CalcMaxWorkers) printf("  MISSING: CalcMaxWorkers\n");
-        if (!s_fn_Sqrtf) printf("  MISSING: Sqrtf\n");
-        if (!s_fn_Entity_GetGridCell) printf("  MISSING: Entity_GetGridCell\n");
-        if (!s_fn_Map_CalcDistance) printf("  MISSING: Map_CalcDistance\n");
-        if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
-        if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
-        if (!s_fn_FindComp_NatRes) printf("  MISSING: FindComp_NatRes\n");
-        if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_PerformWork_Ctor3) printf("  MISSING: PerformWork_Ctor3\n");
-        if (!s_fn_PlayAnimation_Ctor) printf("  MISSING: PlayAnimation_Ctor\n");
-        if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");
-        if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
-        if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
-        if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
-        if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
-        if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
-        if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
-        if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
-        if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_fn_TreeNodeCleanup) printf("  MISSING: TreeNodeCleanup\n");
-    }
-#endif
-
-    return ok;
-}
 
 
 // ============================================================
@@ -282,7 +93,7 @@ static void* FindComponentInList(uintptr_t entity, uint32_t typeId) {
         if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
             void* comp = (void*)*ibpPtr;
-            if (fn_IsDerivedFrom(comp, typeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, typeId)) {
                 return comp;
             }
             return nullptr;
@@ -303,7 +114,7 @@ static void* FindSubComponentInList(uintptr_t subObj, uint32_t typeId) {
         // slot 2 Type() (the old no-argument typedef never passed `this`)
         if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             void* comp = *(void**)(listBase + (uintptr_t)i * 8);
-            if (fn_IsDerivedFrom(comp, typeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, typeId)) {
                 return comp;
             }
             return nullptr;
@@ -337,7 +148,7 @@ static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priori
 
     // Register work with citizen AI subsystem at self+0x48
     uintptr_t citizenAISub = (uintptr_t)self + 0x48;
-    s_fn_CitizenAI_RegisterWork((void*)citizenAISub, workEntityIBP, citizenIBP);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)citizenAISub), workEntityIBP, citizenIBP);
 }
 
 
@@ -374,7 +185,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     // -------------------------------------------------------
     // Step 1: Check auto-pickup assignments
     // -------------------------------------------------------
-    int checkResult = s_fn_AutoPickup_CheckAssignments(selfAddr, &citizenRef);
+    int checkResult = WorkGrid_AutoPickup_e3db0(selfAddr, &citizenRef);
     if (checkResult == 2) {
         return 2;
     }
@@ -386,7 +197,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     // Get material description from workplace entity (self+0x10)
     uintptr_t* plVar14 = (uintptr_t*)(selfAddr + 0x10);
     uintptr_t matDescIBP = 0;
-    s_fn_FindComp_MatDesc(*plVar14, &matDescIBP);
+    WorkBase_FindComponent_3050(*plVar14, &matDescIBP);
 
     // Find WorkplaceComponent on workplace entity
     uintptr_t entity = *plVar14;
@@ -404,7 +215,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     void* radiusComp = nullptr;
     // DAT_1401c43d8 = HerbalistDescription (ENDGAME B.3.9 D5: by cell, not the
     // legacy variable name "RadiusComponent").
-    if (fn_IsDerivedFrom(workplaceDesc, HerbalistDescription::TypeId())) {
+    if (Object::IsDerivedFromNullSafe(workplaceDesc, HerbalistDescription::TypeId())) {
         radiusComp = workplaceDesc;
     }
 
@@ -426,15 +237,15 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
 
     // Set mesh visibility based on capacity (visGroup 2)
     uintptr_t meshIBP[2] = {0};
-    s_fn_FindComp_MeshInstance(*plVar14, meshIBP);
-    s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
+    WorkBase_FindComponent_2f90(*plVar14, meshIBP);
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)(*(uintptr_t*)meshIBP)), 2, atCapacity ? 1 : 0);
 
     // Get herb count (self->_field50 via qword index 10)
     int herbCount = (int)selfQ[10]; // self->_field50
 
     // If material description count is 0, calculate it
     if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
 
@@ -451,7 +262,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
 
     int workplaceRadius = *(int*)((uintptr_t)materialComp + 0x28);
     int radiusSq = workplaceRadius * workplaceRadius;
-    float searchArea = s_fn_Sqrtf((float)radiusSq * (*s_fPI));
+    float searchArea = WorkImpl_Sqrtf_132010((float)radiusSq * (kRdata_140172184));
     int mapSize = *mapGrid;
     int maxAttempts = (int)searchArea;
 
@@ -480,9 +291,9 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
 
     // Get entity's grid cell for distance calculations
     uintptr_t entityIBPBuf[2] = { *plVar14, 0 };
-    uint32_t entityGridCell = s_fn_Entity_GetGridCell(entityIBPBuf, nullptr);
+    uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
 
-    float fGrowthVal = *s_fGrowthThreshold;
+    float fGrowthVal = kRdata_14017214c;
 
 
 
@@ -516,7 +327,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
             }
 
             // Check distance is within 2x workplace radius
-            int dist = s_fn_Map_CalcDistance(mapGrid, entityGridCell, testCell);
+            int dist = WorkBase_CalcDistance_8830(mapGrid, entityGridCell, testCell);
             if (dist > workplaceRadius * 2) {
                 continue;
             }
@@ -531,7 +342,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
             // Found a resource entity — check if it's a valid herb
             // -------------------------------------------------------
             uintptr_t natResCompIBP[2] = {0};
-            s_fn_FindComp_NatRes(resourceEntity, natResCompIBP);
+            WorkBase_FindComponent_52c0(resourceEntity, natResCompIBP);
 
             if (*(uintptr_t*)natResCompIBP == 0) {
                 continue;
@@ -539,7 +350,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
 
             // Check NatRes component against the description list
             uintptr_t natResCompIBP2[2] = {0};
-            s_fn_FindComp_NatRes(resourceEntity, natResCompIBP2);
+            WorkBase_FindComponent_52c0(resourceEntity, natResCompIBP2);
 
             // Iterate through herb types in the description list
             int herbTypeCount = *(int*)((uintptr_t)radiusComp + 0x28);
@@ -566,15 +377,15 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
                 }
 
                 // Find nearest passable cell for pathfinding
-                int nearestCell = s_fn_Map_FindNearestPassable(
+                int nearestCell = WorkGrid_FindCell_9ccf0(
                     mapGrid, testCell, citizenGridCell, 0xe07);
                 if (nearestCell < 0) {
                     continue;
                 }
 
                 // Check path to the nearest passable cell
-                bool canPath = s_fn_Map_CanPathTo(
-                    mapGrid, 0xe1f, nearestCell, citizenGridCell);
+                bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
+                    mapGrid, 0xe1f, nearestCell, citizenGridCell)) != 0;   // the bool door read AL
                 if (!canPath) {
                     continue;
                 }
@@ -582,20 +393,20 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
                 // -------------------------------------------------------
                 // Valid herb found — create PerformWork action
                 // -------------------------------------------------------
-                float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
+                float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
                 Math::Vector3 cutPos(
                     (float)(nearestCell % *mapGrid) - halfOffset,
                     (float)(nearestCell / *mapGrid) - halfOffset,
                     0.0f);
 
                 float pathPos[3];
-                s_fn_GetTerrainPos(mapGrid, pathPos, &cutPos.x, 0, nullptr);
+                Reimpl_MapGetTerrainPos(mapGrid, pathPos, &cutPos.x, 0, nullptr);
 
                 uintptr_t targetRef = *(uintptr_t*)natResCompIBP2;
                 uintptr_t harvestEntityRef = *(uintptr_t*)citizenIBP;
                 uintptr_t harvestBuf[2] = { harvestEntityRef, 0 };
                 uintptr_t harvestTargetBuf[2] = { targetRef, 0 };
-                s_fn_PerformWork_Ctor3(
+                WorkAct_PerformWorkCtor_c1eb0(
                     harvestBuf,
                     (int)selfQ[4],
                     harvestTargetBuf,
@@ -620,21 +431,21 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
         uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
         uintptr_t storageIBP[2] = {0};
-        s_fn_FindComp_Storage(*(uintptr_t*)(citizenEnt + 0x10), storageIBP);
+        WorkBase_FindComponent_6270(*(uintptr_t*)(citizenEnt + 0x10), storageIBP);
 
-        int storageCount = s_fn_StorageQueryCount((void*)*(uintptr_t*)storageIBP);
+        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>((void*)*(uintptr_t*)storageIBP));
         if (storageCount < 1) {
             return 0;
         }
 
         // Citizen has items in storage — replan long term
-        s_fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
+        CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenIBP));
     }
     else {
         // Play idle animation and increment fail counter
         uintptr_t idleEntityRef = *(uintptr_t*)citizenIBP;
         uintptr_t idleBuf[2] = { idleEntityRef, 0 };
-        s_fn_PlayAnimation_Ctor(idleBuf, (int)selfQ[4], 0);
+        WorkAct_PlayAnimationCtor_c2490(idleBuf, (int)selfQ[4], 0);
 
         // Assign work (idle animation) and register with AI
         int priority = (int)selfQ[4];
@@ -654,7 +465,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
         }
 
         uintptr_t citizenAISub = (uintptr_t)this + 0x48;
-        s_fn_CitizenAI_RegisterWork((void*)citizenAISub, workEntIBP, citizenIBP);
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)citizenAISub), workEntIBP, citizenIBP);
 
         // Increment fail counter
         *(int32_t*)(selfAddr + 0x58) = failCount + 1;
@@ -670,7 +481,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
 // Calls BSTFindRemove on the BST at self+0x48, returns false.
 // ============================================================
 int HerbalistWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
     return false;
 }
 
@@ -681,7 +492,7 @@ int HerbalistWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
 int HerbalistWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
     return 0;
 }
 
@@ -709,7 +520,7 @@ int HerbalistWork::Cleanup() {
         uintptr_t citizenEntity = *(uintptr_t*)rightmost;
 
         // Navigate to citizen AI subsystem and cancel
-        s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
     }
@@ -747,7 +558,7 @@ int HerbalistWork::Validate() {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
+        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list — grow array if needed
@@ -760,7 +571,7 @@ int HerbalistWork::Validate() {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    newArr = (uintptr_t*)s_fn_MemAlloc((int64_t)newCap * 8, 8);
+                    newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
                 }
 
                 // Copy existing entries if buffer changed
@@ -778,7 +589,7 @@ int HerbalistWork::Validate() {
                     newArr[i] = val;
                 }
                 if (removeArr != newArr) {
-                    fn_MemFreeStatic(removeArr);
+                    System::MemoryAllocator::MemFree(removeArr);
                 }
                 removeArr = newArr;
                 removeCount = newCount;
@@ -819,7 +630,7 @@ int HerbalistWork::Validate() {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x10);
                 } else {
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
-                        s_fn_BSTRemove(bstRootPtr, searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRootPtr), searchNode);
                         break;
                     }
                     searchNode = *(void**)((uintptr_t)searchNode + 0x18);
@@ -828,7 +639,7 @@ int HerbalistWork::Validate() {
         }
     }
 
-    fn_MemFreeStatic(removeArr);
+    System::MemoryAllocator::MemFree(removeArr);
     return removeCount == 0;
 }
 
@@ -845,7 +656,10 @@ void* HerbalistWork::GetTarget(void* outPtr) {
 
     // Find sub-entity via FUN_140002e10
     uintptr_t subIBP[2] = {0};
-    void* result = s_fn_FindSubEntity(entityRef, subIBP);
+    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
+    // so the returned pointer is the out buffer itself.
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
+    void* result = subIBP;
 
     // CheckPtr on the result
 
@@ -877,7 +691,7 @@ void HerbalistWork::Persist(void* stream) {
     ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at self+0x48
-    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializer2);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializer2);
 
     // Serialize int at self+0x58
     reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((selfAddr + 0x58)), nullptr);   // B.3.4 bridge
@@ -899,12 +713,12 @@ HerbalistWork::~HerbalistWork() {
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
         // Clean up left subtree
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
+        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
         // Clean up right subtree
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
         // Free root node
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(bstRoot);
+        {
+            System::MemoryAllocator::MemFree(bstRoot);
         }
     }
 
@@ -924,10 +738,8 @@ int HerbalistWork::GetPriority() {
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The three stamps are the compiler's. HerbalistWork_ResolveFuncs
-// wires the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The three stamps are the compiler's.
 HerbalistWork::HerbalistWork() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(0) {
-    HerbalistWork_ResolveFuncs();
 }
 
 // ============================================================

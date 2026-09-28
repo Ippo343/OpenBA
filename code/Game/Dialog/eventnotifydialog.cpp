@@ -38,6 +38,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Game/exe_constants.h"   // B3R: kRdata_*
+#include <cstring>   // std::memcpy
 
 // ============================================================
 // EventNotifyDialog_CreatePopup — modal popup creation (Slot7 popup branch)
@@ -53,7 +56,6 @@
 // Dialog-typed External the exe reaches via self+0x18 -> Dialog::GetReference)
 // and drive the promoted EventPopupDialog standalone ctor. Returns the new
 // dialog, or null if the resource/allocation is unavailable.
-namespace eventnotify_sa { void EnsureGlobals(); }
 
 static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventIndex) {
     uintptr_t s = (uintptr_t)self;
@@ -79,13 +81,13 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
                     ->FindOrLoad(filename));
             // Accept the loaded resource if it is Dialog-derived — the same guard the
             // exe applies before using it as the popup's external context.
-            if (found && fn_IsDerivedFrom(found, UI::Dialog::TypeId()))
+            if (found && ::Object::IsDerivedFromNullSafe(found, UI::Dialog::TypeId()))
                 s_popupRes = found;
         }
     }
     if (!s_popupRes) return nullptr;
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0xC0, 8);
     if (!mem) return nullptr;
     void* popup = ::new (mem) EventPopupDialog(static_cast<UI::UserInterface*>(ui),
                                                static_cast<const UI::Dialog*>(s_popupRes),
@@ -147,7 +149,7 @@ static void EventNotifyDialog_ArrayPush_Impl(void* arrayBasePtr, int newCount, v
         if (newCount == oldCount + 1 && oldCount != 0) {
             *capacityPtr = newCount * 3;
         }
-        void* alloc = fn_MemAlloc(g_pMemAllocSingleton, (uintptr_t)*capacityPtr * 0x30, 8);
+        void* alloc = System::MemoryAllocator::MemAlloc((uintptr_t)*capacityPtr * 0x30, 8);
         *base = (uintptr_t)alloc;
         newData = (uintptr_t)alloc;
     }
@@ -195,7 +197,7 @@ static void EventNotifyDialog_ArrayPush_Impl(void* arrayBasePtr, int newCount, v
         for (int i = 0; i < oldCount; i++) {
             reinterpret_cast<System::String*>(oldData + (uintptr_t)i * 0x30 + 0x20)->~String();  // B.3.1 bridge
         }
-        fn_MemFreeStatic((void*)oldData);
+        System::MemoryAllocator::MemFree((void*)oldData);
     }
 }
 
@@ -265,7 +267,6 @@ static void EventNotifyDialog_ArrayRemove_Impl(void* arrayBasePtr, int removeInd
 void EventNotifyDialog::OnClosed() {}
 
 void EventNotifyDialog::OnOpened() {
-    eventnotify_sa::EnsureGlobals();
     uintptr_t s = (uintptr_t)this;
 
     // Find "ribbonNotify" -> store raw InternalPtr value at +0xE8
@@ -375,7 +376,6 @@ void EventNotifyDialog::OnOpened() {
 // Original: 0x140067C30.
 
 void EventNotifyDialog::OnUpdate(const System::Time& time) {
-    eventnotify_sa::EnsureGlobals();
     uintptr_t s = (uintptr_t)this;
 
     uintptr_t eventLogPtr = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
@@ -404,7 +404,10 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
     }
 
     // Phase 2: Scan event log for new events
-    float timerDuration = *g_pNotifyTimerDuration;  // 30.0f
+    // DAT_1401721cc = 30.0f, the .rdata constant kRdata_1401721cc (B3R: the engine_funcs
+    // pointer g_pNotifyTimerDuration was bound to that registered cell).
+    float timerDuration;
+    std::memcpy(&timerDuration, &kRdata_1401721cc, sizeof timerDuration);
     int lastEventIdx = *(int*)(s + 0xC4);
     int totalEvents = *(int*)(eventLogPtr + 0x20) - 1;
 
@@ -460,7 +463,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                         *(int*)(notifyEntry + 0x08) = scanIdx;
 
                         // +0x00 = timer (Time constructed from float seconds)
-                        fn_Time_Ctor_Float(notifyEntry, timerDuration);
+                        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(notifyEntry), timerDuration);
 
                         // +0x10 = sprite icon (from "EventIcon%i" format)
                         int iconIndex = *(int*)(entryOffset + 0x1C + eventArray);
@@ -550,7 +553,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
         // Play sound effect if new events were found
         if (hasNewEvents) {
             uint8_t zeroTime[8];
-            fn_Time_Ctor_Float(zeroTime, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
             void* audioScene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x78);
             uint64_t soundEffect = *(uint64_t*)(*(uintptr_t*)g_pKeyMapSingleton + 0x98);
             reinterpret_cast<Audio::Scene*>(audioScene)->PlayEffect(
@@ -611,7 +614,6 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
 //
 // Original: 0x1400680c0
 void EventNotifyDialog::OnUpdateLayout() {
-    eventnotify_sa::EnsureGlobals();
     uintptr_t s = (uintptr_t)this;
 
     // -------------------------------------------------------
@@ -703,7 +705,7 @@ void EventNotifyDialog::OnUpdateLayout() {
 
         // Check if child4 is an ImageElement; if so, copy sprite to it as well
         {
-            bool isImage = child4 && fn_IsDerivedFrom(child4, UI::ImageElement::TypeId());
+            bool isImage = child4 && ::Object::IsDerivedFromNullSafe(child4, UI::ImageElement::TypeId());
             void* imgChild = isImage ? child4 : nullptr;
             // Construct InternalBasePtr for imgChild on stack
             uint8_t imgChildPtr[16];
@@ -869,14 +871,7 @@ static void EventNotifyDialog_NavigateToEvent(EventNotifyDialog* self, int index
 
     // Step 5: terrain pick — get actual 3D world position
     float outPos[3] = {};
-    if (fn_MapGetTerrainPos) {
-        fn_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);
-    } else {
-        // Fallback: use 2D position directly (no height)
-        outPos[0] = inXY[0];
-        outPos[1] = inXY[1];
-        outPos[2] = 0.0f;
-    }
+    Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
 
     // Step 6: write to camera target at gameWorld+0xe0 (+0x1c/+0x20/+0x24)
     uintptr_t camTarget = *(uintptr_t*)(game + 0xE0);
@@ -920,21 +915,11 @@ void EventNotifyDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*eleme
 #include <cstdio>
 #include <cstdlib>
 
-namespace eventnotify_sa {
-
-// Slot7 dereferences g_pNotifyTimerDuration (raw exe .rdata -> NULL in standalone).
-// Lazy-fill so the ribbon tick can't null-deref. The timer duration is a
-// byte-faithful 30.0s (exe DAT_1401721cc).
-// ENDGAME B.3.9: the TypeId_Dialog / TypeId_ImageElement heals that used to live
-// here are dead -- UI::Dialog / UI::ImageElement have a ported TypeId() now (the old
-// heal's "External" guess for TypeId_Dialog was wrong too: that cell is UI::Dialog's
-// own _typeInfo, engine_funcs.cpp:828, and the heal never actually ran).
-void EnsureGlobals() {
-    static float s_notifyTimer = 30.0f;
-    if (!g_pNotifyTimerDuration) g_pNotifyTimerDuration = &s_notifyTimer;
-}
-
-}  // namespace eventnotify_sa
+// B3R: Slot7's timer duration is the .rdata constant kRdata_1401721cc (30.0s, exe
+// DAT_1401721cc); the old EnsureGlobals lazy-fill over g_pNotifyTimerDuration never
+// ran (the cell is registered before EngineFuncsInit binds it) and is gone.
+// ENDGAME B.3.9: the TypeId_Dialog / TypeId_ImageElement heals are dead too --
+// UI::Dialog / UI::ImageElement have a ported TypeId().
 
 // Retail EventNotifyDialog_CopyCtor (0x140068ab0): DialogInstance base ctor,
 // then the ribbon fields. The parent is the toolbar dialog (the ribbon sits just
@@ -963,7 +948,8 @@ EventNotifyDialog::~EventNotifyDialog() {
         // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
         for (int i = 0; i < activeCnt; i++, e += 0x30) reinterpret_cast<System::String*>(e + 0x20)->~String();
     }
-    if (fn_MemFreeStatic) { fn_MemFreeStatic(activeArr); fn_MemFreeStatic(*(void**)(s + 0xC8)); }
+    System::MemoryAllocator::MemFree(activeArr);
+    System::MemoryAllocator::MemFree(*(void**)(s + 0xC8));
     *(uint64_t*)(s + 0xC8) = 0; *(uint64_t*)(s + 0xD0) = 0;
     *(uint64_t*)(s + 0xD8) = 0; *(uint64_t*)(s + 0xE0) = 0;
 }

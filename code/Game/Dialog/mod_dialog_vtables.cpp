@@ -65,7 +65,8 @@
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "ui/Dialog.h"   // UI::Dialog::TypeId() (ENDGAME B.3.9 TR)
-#include "resolve.h"
+#include "Dialog/MainMenuDialog.h"   // B3R: MainMenuDialog_ReturnToMenu
+#include "save/SaveLoad.h"          // B3R: Save::SavedState
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Modification.h"   // ENDGAME B.3.4a closing: the hoisted GetCount()
@@ -79,6 +80,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ENDGAME B.3.8 block DLG: both classes are real (Dialog/ModDialog.h,
 // Dialog/ModDetailsDialog.h). The two hand-built tables, the by-name base-slot
@@ -108,7 +110,7 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
     if (resource) {
         // UI::Dialog's type id (retail: the import slot 0x140151728; ENDGAME B.3.9 TR).
         const uint32_t typeId = UI::Dialog::TypeId();
-        if (typeId && fn_IsDerivedFrom && fn_IsDerivedFrom(resource, typeId))
+        if (typeId && ::Object::IsDerivedFromNullSafe(resource, typeId))
             extRes = resource;
     }
     printf("[ModDialog] LoadDialogResource('%s') -> %p (raw %p)\n",
@@ -157,10 +159,10 @@ ModDialog::~ModDialog() {
         if (void* image = *reinterpret_cast<void**>(e + 0x40))
             delete reinterpret_cast<Video::ImageBuffer*>(image);
     }
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(entries));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(entries));
     *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;
     *reinterpret_cast<uint64_t*>(s + 0xC0) = 0;
-    if (fn_InternalBasePtr_Ctor) {
+    {
         uint64_t nullIbp = 0;
         new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uint64_t*>(s + 0xC8) = nullIbp;
@@ -240,7 +242,7 @@ extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
 extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     if (!mainMenuSelf) return;
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor) {
+    if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
         printf("[ModDialog] open: core engine fns unresolved\n");
         return;
     }
@@ -260,7 +262,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     void* extRes = ModDlg_LoadDialogResource("Dialog/Mod.rsc");
     if (!extRes) { printf("[ModDialog] open: Dialog/Mod.rsc not loaded\n"); return; }
 
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(ModDialog), 8);
+    void* dlgMem = System::MemoryAllocator::MemAlloc(sizeof(ModDialog), 8);
     if (!dlgMem) return;
 
     uint8_t nullIBP[8] = {};
@@ -314,14 +316,13 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
 
     if (gameWorld == nullptr) {
-        if (fn_MainMenu_Reload)
-            fn_MainMenu_Reload(*reinterpret_cast<void**>(s + 0xD0));
+        MainMenuDialog_ReturnToMenu(*reinterpret_cast<MainMenuDialog**>(s + 0xD0));   // 0x1400b4790
         return;
     }
 
     void* statePtr = nullptr;
-    void* savedState = fn_MemAlloc(g_pMemAllocSingleton, 0x10, 4);
-    if (savedState && fn_SavedState_Ctor) statePtr = fn_SavedState_Ctor(savedState);
+    void* savedState = System::MemoryAllocator::MemAlloc(0x10, 4);
+    if (savedState) statePtr = ::new (savedState) Save::SavedState();   // ??0SavedState 0x1800c0ee0 (its door placement-news the class)
 
     void* engine = ::Engine::MainLoop::_singleton;
     if (engine) {
@@ -335,10 +336,9 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
 
     uint64_t nullIbp = 0;
     new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    if (fn_Game_ReloadWithSave)
-        fn_Game_ReloadWithSave(*reinterpret_cast<void**>(s + 0xD0), statePtr,
-                               reinterpret_cast<void*>(static_cast<uintptr_t>(-1)),
-                               &nullIbp);
+    WorldSetup_LoadFromSave(*reinterpret_cast<void**>(s + 0xD0), statePtr,   // 0x1400b49f0
+                            reinterpret_cast<void*>(static_cast<uintptr_t>(-1)),
+                            &nullIbp);
 }
 
 

@@ -46,6 +46,7 @@
 #include "Game/ClimateGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Game/TerrainGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -168,7 +169,7 @@ static void GenerateTownName(System::String& retStr, void* random, int maxLen) {
     // _maxLength by the caller. NameDB_GenerateName (0x1400a4b30, registered by
     // standalone/reg_namedb.cpp) constructs the String in retStr even when the
     // database is missing, so retStr is always live for the suffix fix-up below.
-    fn_NameDB_GenerateName(&retStr, nameDB, random, 5, maxLen);
+    NameDB_GenerateName(&retStr, nameDB, random, 5, maxLen);   // 0x1400a4b30
 
     // Retail: a name longer than 4 chars ending in "vill" gets an "e" appended,
     // so the generator's "-vill" stems read as "-ville".
@@ -797,7 +798,7 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
         // tree has always read as a null IBP. Retail's +0xD0 is `p8 ? 0 : 0xF0`;
         // this function's `disastersOff` is the inverse sense, so p8 = !disastersOff
         // writes exactly the bytes the old inline stores wrote.
-        void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+        void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
             const uint64_t ibp = savedStateIBP ? *(uint64_t*)savedStateIBP : 0;
@@ -810,11 +811,11 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
 
         // Step 2: GameLoadDialogLoopT (0xB60 bytes) — retail inlines the subclass
         // ctor here; the real class's ctor is that body.
-        void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xB60, 4);
+        void* dlLoop = System::MemoryAllocator::MemAlloc(0xB60, 4);
         Engine::UpdateLoop* pDlLoop = nullptr;
         if (dlLoop) {
             uint64_t delayTime = 0;
-            fn_Time_Ctor_Float(&delayTime, 1.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), 1.0f);
             System::String loadingStr;
             GetLoadingSoundString(&loadingStr);
             pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
@@ -823,11 +824,11 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
 
         // Step 3: outer LoaderLoop (0x48 bytes): `??0LoaderLoop` + the 0x1401588d0
         // stamp, i.e. the real GameLoaderLoop.
-        void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+        void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
         void* pOuterLoop = nullptr;
         if (outerLoop) {
             uint64_t zeroTime = 0;
-            fn_Time_Ctor_Float(&zeroTime, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
             pOuterLoop = ::new (outerLoop) GameLoaderLoop(
                 pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
         }
@@ -977,10 +978,9 @@ NewGameDialog::NewGameDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
       editSeed(nullptr), buttonOk(nullptr), textDescription(nullptr),
       mapGeneratorList(nullptr), climateGeneratorList(nullptr),
       terrainGeneratorList(nullptr) {
-    // System::Random sub-object at +0x118.
-    if (fn_Random_Default_Ctor) {
-        fn_Random_Default_Ctor(random);
-    }
+    // System::Random sub-object at +0x118: ??0Random@System@@QEAA@XZ, whose body is
+    // RtSystem_Random_Ctor (called by name, B3R).
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(random));
     worldSetup = reinterpret_cast<void*>(parentMenu);
 }
 

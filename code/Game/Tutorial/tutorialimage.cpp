@@ -15,7 +15,8 @@
 
 #include "Tutorial/TutorialImage.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Tutorial/exe_bodies.h"
+#include "object/TypeInfo.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -29,10 +30,7 @@
 // ExternalPtr serializer for the imageRef field at +0x20 (exe 0x140027ad0).
 // ENDGAME B.3.8 (B6-5): resolved per call, not through a lazily filled static
 // (the loader thread serializes tutorial resources).
-typedef void (*fn_ExternalPtr_SerializeImage_t)(void* fieldPtr, void* serializer);
-static fn_ExternalPtr_SerializeImage_t ExternalPtrSerializeImageFn() {
-    return reinterpret_cast<fn_ExternalPtr_SerializeImage_t>(ResolveAddr(Module::Exe, 0x140027ad0));
-}
+// called by name: TutBase_SerializeImageRef (Tutorial/exe_bodies.h)
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -54,9 +52,7 @@ bool TutorialImage::Serialize(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(imageHeight, nullptr);   // B.3.4 bridge
 
     // Serialize ExternalPtr (imageRef) at +0x20
-    if (auto serializeImage = ExternalPtrSerializeImageFn()) {
-        serializeImage(static_cast<void*>(&imageRef), serializer);
-    }
+    TutBase_SerializeImageRef(static_cast<void*>(&imageRef), serializer);
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return true;

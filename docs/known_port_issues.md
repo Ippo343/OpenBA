@@ -71,3 +71,85 @@ routes.
 Every free bypassed the instrument, so its live-bytes figure only grew. Fixed 2026-09-28 by the
 registry teardown's W0-A0 block (`behaviour:` commit `33d73c9a`): the instrument sits on the
 allocator's hook and sees `MemFree`. Diagnostic only; the game was never affected.
+
+## 5. Door typedefs that disagree with their body's parameter WIDTH or sign — SUSPECTED (a list)
+
+When the registry teardown turned door calls into direct calls, the compiler exposed doors whose
+typedef did not match the body. Each call keeps the bits the door passed (a cast at the call), so
+behaviour is unchanged; none has been read against retail's call site yet.
+
+| where | address | mismatch |
+|---|---|---|
+| `code/Game/Action/action_base_move.cpp` | `0x1400a6a30`, `0x1400a68b0`, `0x14009c480`, `0x1400a6b20`, `0x1400a6c10` | the door passed `int` arguments; the bodies take pointer-width parameters |
+| `code/Game/Action/action_pf_road.cpp` | `0x1400aa810` | the door took a `uint64` bit pattern where the body takes a pointer |
+| `code/Game/Action/action_pf_region.cpp` | `0x14001dc00` | `param_4` goes through a `void*` cast |
+| `code/Game/Action/` | `0x14012c560`, `0x140087fb0` | return type `int` against `uint32_t` |
+| `code/Game/Component/` (G-CompD) | `0x14011e710` | the body returns `uint64_t`; the door read AL (kept: cast to `char`) |
+
+**What a fix must do.** Per row: read retail's call site (argument registers and their width), then
+correct the BODY's declaration or the call, as a `behaviour:` commit only if a value changes.
+
+## 6. Body names that disagree with how their address is used — naming only
+
+Not bugs: the address and the binding are right, the NAME misleads. Rename when the class gets its
+members (B.4).
+
+| address | body name | used as |
+|---|---|---|
+| `0x140004680` | `FloorComponent_FindResData` | the `MapComponent` finder |
+| `0x140026a30` | `BuildComponent_FindStorage26a30` | the `PickingComponent` finder |
+| `0x14012ee60` | `WorkPlaceComponent_OnCreateInit` | the worker-release loop |
+| `0x140124750` | `MapComponent_DetachOccupancy_4750` (registered) vs `CreateNaturalResource_impl_4750` (a second body) | — |
+
+The 19 misnamed `engine_funcs` globals of `b3r_session/INVENTORY_E_ENGINE_FUNCS.md` §5.8 die with
+the globals and are not repeated here.
+
+## 7. The zone refresh `0x14009c480` is called with a seed WE chose — OPEN
+
+**Where.** `code/Game/Work/foresterwork*.cpp`, `buildstructure*.cpp` (commits `6067e8a1`,
+`4b9d6b19`), `code/Game/Game/gamegrid_serialize.cpp` (`fn_Map_Invalidate`), and the Action callers.
+
+**What the code does.** The body `Pf_ZoneRefresh_9c480` takes four parameters and hands the fourth
+to the flood fill (`0x14009c170`) as its seed. Retail's callers `0x1400eb303`, `0x1400e532a`,
+`0x1400e54ea`, `0x1400e556c` load ONLY RCX before the call. The old door was typedef'd with one
+parameter, so our callers left RDX / R8 / R9 as whatever the compiler had there; the direct calls
+pass `(grid, 0, 0, 0)`.
+
+**Why it is open.** Either (a) the body's parameter list is wrong — Ghidra drops and invents
+arguments on forwarders, and retail's function may take ONE parameter and compute the seed itself —
+or (b) retail really reads a stale register, in which case its value at each call site is whatever
+the preceding code left there and can be read from the disassembly. Zero is neither.
+
+**What a fix must do.** Read `0x14009c480`'s prologue (which argument registers it reads before
+writing them) and `0x14009c170`'s use of the seed. If (a): correct the body's signature. If (b):
+pass what the caller's preceding instructions leave in R9.
+
+## 8. Wrong BINDINGS found in `code/Game/Dialog` — SUSPECTED
+
+| door | bound to | problem |
+|---|---|---|
+| `fn_Game_DestroyEntity` (debug UI "destroy all raw materials", retail `FUN_140060000`) | `0x140091e60` `RawMaterialComponent_RegisterRawMaterial` | the body REGISTERS where the caller means to destroy. Debug UI only |
+| `fn_DiseaseComponent_Infect` | `DiseaseComp_Infect(DiseaseComponent*)` | the caller hands it a citizen pointer |
+| `fn_StartNewGame` | `StartNewGame_Reg` | the door passed seed and terrain size as `uint32` values; the body takes pointer-width slots and reads their low dword |
+| — | `PastureComponent_ComputeCapacity` | returns `uint64_t`; the door read `int` |
+| — | `TradeComponent_SpawnPurchasedLivestock` | takes an `unsigned` quantity; the door passed `int` |
+
+Each call keeps today's bits. The first two need retail's call site read before anything changes.
+
+## 9. Bodies declared `void` whose callers read a return value — SUSPECTED
+
+| address | body | what the caller reads |
+|---|---|---|
+| `0x14009ce00` | `RoadTool_sub_ce00` (road A*) | the path length retail leaves in EAX (`roadtool.cpp`, `roadtool_calcpath.cpp`). The readers were LEFT as resolves by the registry teardown because the signature cannot be settled without retail |
+| `0x1400fd960` | — | a return value |
+| — | `Pf_RoadMeshRebuild_f370` | a return value |
+
+Today the callers read whatever the body's last computation left in EAX. **What a fix must do:**
+read each function's epilogue in retail, give the body its return type and value.
+
+## 10. `0x140172248` is 1000.0f; the code around it says otherwise — SUSPECTED
+
+The image bytes at `0x140172248` are `00 00 7a 44` (1000.0f, read in Ghidra 2026-09-28). A comment
+in the placement code calls the cell 0.5, and `code/Game/Player/tool_base_tile*.cpp` hard-codes
+`250.0f` where retail reads this cell. **What a fix must do:** read retail's instruction at the
+`tool_base_tile` site and use `kRdata_140172248` if that is the operand.

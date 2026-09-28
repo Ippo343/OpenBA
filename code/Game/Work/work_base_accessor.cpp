@@ -14,7 +14,7 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // B3R: Pf_FloodFillRegion_9c170
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CropFieldComponent.h"       // ENDGAME B.3.9 D5
@@ -45,11 +45,11 @@ static void* FindComponentByTypeIdVal(uintptr_t entity, void* retIBP, uint32_t t
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -92,7 +92,7 @@ void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
             break;
         }
     }
@@ -109,24 +109,10 @@ void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
 // flood-assigns region ids by calling FUN_14009c170 for every cell whose pass
 // byte (+0x29) has a bit in mask 0xe1f AND whose region word is still 0.
 //
-// FUN_14009c170(mapGrid, cellIndex, regionCounter, param4) is an unresolved exe
-// sub-dep — invoked guarded (mirrors the work_base_reimpl.cpp exe-subcall pattern).
-// Reported as unresolved; NOT registered here.
-//
-// Caller signature (consumeproduce.cpp / foresterwork.cpp): the function takes 4
-// args; only param1 (mapGrid) and param4 (an int) are used by the body, but we
-// declare all four so trailing register args are not dropped.
-typedef void (*fn_FloodRegion_9c170_t)(int* mapGrid, int cellIndex, short regionCounter, int param4);
-static fn_FloodRegion_9c170_t s_fn_FloodRegion_9c170 = nullptr;
-static bool s_floodInit = false;
-
+// FUN_14009c170(mapGrid, cellIndex, regionCounter, param4) is
+// Pf_FloodFillRegion_9c170 (Action/exe_bodies.h), called directly (B3R).
+// This body has no caller (the registered 0x14009c480 is Pf_ZoneRefresh_9c480).
 void WorkAcc_ZoneRefresh_9c480(int* mapGrid, uint64_t /*param2*/, uint64_t /*param3*/, int param4) {
-    if (!s_floodInit) {
-        s_fn_FloodRegion_9c170 = reinterpret_cast<fn_FloodRegion_9c170_t>(
-            ResolveAddr(Module::Exe, 0x14009c170));
-        s_floodInit = true;
-    }
-
     uintptr_t base = reinterpret_cast<uintptr_t>(mapGrid);
     // dirty flag at +0xa2
     if (*reinterpret_cast<char*>(base + 0xa2) == '\0') return;
@@ -152,7 +138,7 @@ void WorkAcc_ZoneRefresh_9c480(int* mapGrid, uint64_t /*param2*/, uint64_t /*par
         uint8_t passByte = *reinterpret_cast<uint8_t*>(cellArr + off + 0x29);
         if (((1u << (passByte & 0x1f)) & 0xe1fu) != 0 &&
             *reinterpret_cast<int16_t*>(cellArr + off + 0x26) == 0) {
-            if (s_fn_FloodRegion_9c170) s_fn_FloodRegion_9c170(mapGrid, i, regionCounter, param4);
+            Pf_FloodFillRegion_9c170(mapGrid, static_cast<uint32_t>(i), static_cast<uint16_t>(regionCounter), param4);
             regionCounter = static_cast<short>(regionCounter + 1);
         }
         off += 0x30;

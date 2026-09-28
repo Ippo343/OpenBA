@@ -21,7 +21,11 @@
 #include "Work/GatherRawMaterials.h"
 #include "Work/gatherrawmaterials_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"          // B3R: bodies called by name
+#include "Component/exe_bodies.h"       // B3R: bodies called by name
+#include "Dialog/dialog_exe_helpers.h"  // B3R: Dialog_FindComponent_d6c0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdio>
@@ -33,250 +37,46 @@
 
 
 // ============================================================
-// Local function pointers resolved at init time
-// (only those NOT already declared in engine_funcs.h)
-// All typedefs prefixed with GRM_ to avoid conflicts.
+// Sub-functions, called by name (B3R; Work/Action/Component/Dialog headers)
 // ============================================================
-
-
-// 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
-// GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
-// is gone.
-
-// CitizenAI tree set serialize: CitizenAI_impl_96b0(treePtr, serializer)
-typedef void (*GRM_TreeSerialize_t)(void* treePtr, void* serializer);
-static GRM_TreeSerialize_t s_fn_TreeSerialize = nullptr;
-
-// CitizenAI tree remove by key: CitizenAI_impl_5520 @ 0x140025520
-typedef void (*GRM_TreeRemoveByKey_t)(void* treePtr, void* entityIBP);
-static GRM_TreeRemoveByKey_t s_fn_TreeRemoveByKey = nullptr;
-
-// CitizenAI tree remove node: CitizenAI_impl_a6e0(treePtr, nodePtr)
-typedef void (*GRM_TreeRemoveNode_t)(void* treePtr, void* nodePtr);
-static GRM_TreeRemoveNode_t s_fn_TreeRemoveNode = nullptr;
-
-// CitizenAI state machine release: FUN_1400c5400(stateMachinePtr)
-typedef void (*GRM_StateMachineRelease_t)(void* smPtr);
-static GRM_StateMachineRelease_t s_fn_StateMachineRelease = nullptr;
-
-// Work::CanStartWork (FUN_1400f7100)
-typedef char (*GRM_CanStartWork_t)(void* self, void* citizenAI, void* taskIBP, void* outTask);
-static GRM_CanStartWork_t s_fn_CanStartWork = nullptr;
-
-// MemAlloc/MemFree from System::MemoryAllocator
-typedef void* (*GRM_MemAlloc_t)(int64_t size, int alignment);
-static GRM_MemAlloc_t s_fn_MemAlloc = nullptr;
-
-typedef void (*GRM_MemFree_t)(void* ptr);
-static GRM_MemFree_t s_fn_MemFree = nullptr;
-
-// Entity_FindComponent_Position: FUN_140002ed0
-typedef void (*GRM_FindCompPosition_t)(uintptr_t entity, void* retIBP);
-static GRM_FindCompPosition_t s_fn_FindComp_Position = nullptr;
-
-// FUN_14000d6c0: FindComponent by type (unknown component)
-typedef void (*GRM_FindCompUnk_t)(uintptr_t entity, void* retIBP);
-static GRM_FindCompUnk_t s_fn_FindComp_Unk = nullptr;
-
-// FUN_140002e10: FindComponent_WorkplaceExt (returns IBP)
-typedef void* (*GRM_FindCompWpExt_t)(uintptr_t entity, void* retIBP);
-static GRM_FindCompWpExt_t s_fn_FindComp_WpExt = nullptr;
-
-// FUN_14008d590: FindStorageForResource
-typedef void (*GRM_FindStorageForResource_t)(void* worldEntityList, void* outEntity,
-    uint32_t srcCell, uint64_t materialType, int amount, char param6,
-    float* searchPos, void* srcEntityIBP);
-static GRM_FindStorageForResource_t s_fn_FindStorageForResource = nullptr;
-
-// Entity_FindComponent_Storage: FUN_140006270
-typedef void* (*GRM_FindCompStorage_t)(uintptr_t entity, void* retIBP);
-static GRM_FindCompStorage_t s_fn_FindComp_Storage = nullptr;
-
-// StorageComponent_QueryCount: 0x14012cf10
-typedef int (*GRM_StorageQueryCount_t)(void* storageComp);
-static GRM_StorageQueryCount_t s_fn_StorageQueryCount = nullptr;
-
-// FUN_140116540: GetRemainingCapacity
-typedef int (*GRM_GetRemainingCapacity_t)(uintptr_t citizenEntity);
-static GRM_GetRemainingCapacity_t s_fn_GetRemainingCapacity = nullptr;
-
-// CitizenAI_State_LongTermPlan: 0x140115e60
-typedef void (*GRM_LongTermPlan_t)(void* citizenEntity);
-static GRM_LongTermPlan_t s_fn_LongTermPlan = nullptr;
-
-// Tree node cleanup (FUN_140014c30)
-typedef void (*GRM_TreeNodeCleanup_t)(void* bstRoot, void* node);
-static GRM_TreeNodeCleanup_t s_fn_TreeNodeCleanup = nullptr;
-
-// FUN_140122be0: CalcBestTargetPos (position lookup from positionComp + material desc)
-typedef uint8_t (*GRM_CalcBestTargetPos_t)(uintptr_t posComp, uintptr_t matDescField,
-    float* posOut, float* posOut2, int* distOut);
-static GRM_CalcBestTargetPos_t s_fn_CalcBestTargetPos = nullptr;
-
-// FUN_140122b00: CalcChildTargetPos (iterate sub-components for position)
-typedef uint8_t (*GRM_CalcChildTargetPos_t)(uintptr_t entity, int param2,
-    float* posOut, float* posOut2, int* distOut);
-static GRM_CalcChildTargetPos_t s_fn_CalcChildTargetPos = nullptr;
-
-// FUN_1400f6ef0: BuildStructure_impl_6ef0 -- validate work assignment
-typedef uint64_t (*GRM_ValidateWorkAssign_t)(uintptr_t self, void* citizenIBP,
-    int targetCell, uint32_t srcCell, void* param5);
-static GRM_ValidateWorkAssign_t s_fn_ValidateWorkAssign = nullptr;
-
-// FUN_1400bf790: Pathfinding_FindPath
-typedef void (*GRM_PathfindingFindPath_t)(void* outResult, void* citizenPtr,
-    int pathType, void* mapGridPtr, float* targetPos, void* destEntityPtr,
-    float* srcPos, int64_t materialType, int amount,
-    int packedSlotInfo, int param11, char param12, uint32_t param13, int param14);
-static GRM_PathfindingFindPath_t s_fn_PathfindingFindPath = nullptr;
-
-// CitizenAI_impl_1a30: RegisterWork
-typedef void (*GRM_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
-static GRM_RegisterWork_t s_fn_RegisterWork = nullptr;
-
-
-// Vtable pointers for dtor chain
+//   0x1400296b0 simple-BST serialize (CitizenAI_impl_96b0)  WorkBST_BST_Serialize_296b0
+//               (0x140025630, used earlier, is MID-FUNCTION inside TradeUI_impl_55a0;
+//                GatherRawMaterials_Shutdown@0x1400ec62a CALLs 0x1400296b0)
+//   0x140025520 tree remove by key                          WorkBST_BSTFindRemove_25520
+//   0x14001a6e0 tree remove node (CitizenAI_impl_a6e0)      WorkBST_BSTRemove_a6e0
+//               (0x140024f30, used earlier, is MID-FUNCTION inside Toolbar_vslot14;
+//                GatherRawMaterials_Update@0x1400ebd24 CALLs 0x14001a6e0)
+//   0x1400c5400 state machine release                       WorkBase_TaskListCleanup_c5400
+//   0x1400f7100 Work::CanStartWork                          WorkBase_ValidateTask_f7100
+//   0x140002ed0 Entity_FindComponent_Position               WorkBase_FindComponent_2ed0
+//   0x14000d6c0 FindComponent (BuildComponent)              Dialog_FindComponent_d6c0
+//   0x140002e10 FindComponent_WorkplaceExt                  AttendanceComponent_GetJobHostComponent
+//   0x14008d590 FindStorageForResource                      Pf_PickBestDropTarget_8d590
+//   0x140006270 Entity_FindComponent_Storage                WorkBase_FindComponent_6270
+//   0x14012cf10 StorageComponent_QueryCount                 CitizenComp_StorageComponent_QueryCount
+//   0x140116540 GetRemainingCapacity                        WorkLeaf_FreeStorageCapacity_116540
+//   0x140115e60 CitizenAI_State_LongTermPlan                CitizenAI_State_LongTermPlan
+//   0x140122be0 CalcBestTargetPos                           WorkImpl_WalkablePos_122be0
+//   0x140122b00 CalcChildTargetPos                          WorkImpl_WalkablePosRecursive_122b00
+//   0x1400f6ef0 BuildStructure_impl_6ef0 validate           WorkImpl_BuildStructureStep_6ef0
+//   0x1400bf790 Pathfinding_FindPath                        WorkAct_GatherRawMatCtor_bf790
+//   0x140021a30 RegisterWork (CitizenAI_impl_1a30)          WorkBST_RegisterWork_1a30
+//   0x140014c30 tree node cleanup                           WorkBase_TreeNodeFree_14c30
+//   MemAlloc / MemFree                                      System::MemoryAllocator::MemAlloc / MemFree
+// B3R_RULES R4: the old code resolved MemAlloc/MemFree by export name and fell back to
+// import slots 0x1401527e8 / 0x1401527f0 under the WRONG names (they are the
+// Particle::_rng data import and Vector3::Lerp). The export was always found, so the
+// fallback never ran; it is deleted, never registered.
 //
 // The Work BASE vtable is 0x140161a80, byte-verified in retail: GatherRawMaterials_Ctor
 // disassembles to `0x1400ec8bd: LEA RAX,[0x140161a80]` followed by MOV [RBX],RAX.
-// This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
-// address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
-// "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-
-static bool s_resolved = false;
+// (0x1401612e0, used earlier, is an INTERIOR address of FireWork's vtable.)
 
 // Gated Execute-decision trace (BANISHED_BUILD_TRACE), to pinpoint where a construction
 // gather work bails before enqueuing a real town->site haul. Diagnostic only.
 #include <cstdlib>
 #include <cstring>
 #include <new>
-
-// ============================================================
-// Resolution -- called once during hook installation
-// ============================================================
-bool GatherRawMaterials_ResolveFuncs() {
-    if (s_resolved) return true;
-
-    // Direct exe function addresses
-    s_fn_TreeSerialize = reinterpret_cast<GRM_TreeSerialize_t>(
-        // Level-1 caller-bug fix: 0x140025630 is MID-FUNCTION (inside TradeUI_impl_55a0
-        // 0x1400255a0). The real simple-BST serialize is 0x1400296b0 — confirmed by
-        // xref: GatherRawMaterials_Shutdown@0x1400ec62a CALLs 0x1400296b0 (already registered),
-        // the same BST-serialize ForesterWork_Shutdown uses.
-        ResolveAddr(Module::Exe, 0x1400296b0));
-    s_fn_TreeRemoveByKey = reinterpret_cast<GRM_TreeRemoveByKey_t>(
-        ResolveAddr(Module::Exe, 0x140025520));
-    s_fn_TreeRemoveNode = reinterpret_cast<GRM_TreeRemoveNode_t>(
-        // Level-1 caller-bug fix: 0x140024f30 is MID-FUNCTION (inside Toolbar_vslot14
-        // 0x140024f00). The real BST single-node remove is 0x14001a6e0 — confirmed by
-        // xref: GatherRawMaterials_Update@0x1400ebd24 CALLs 0x14001a6e0 (already registered).
-        ResolveAddr(Module::Exe, 0x14001a6e0));
-    s_fn_StateMachineRelease = reinterpret_cast<GRM_StateMachineRelease_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_CanStartWork = reinterpret_cast<GRM_CanStartWork_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_FindComp_Position = reinterpret_cast<GRM_FindCompPosition_t>(
-        ResolveAddr(Module::Exe, 0x140002ed0));
-    s_fn_FindComp_Unk = reinterpret_cast<GRM_FindCompUnk_t>(
-        ResolveAddr(Module::Exe, 0x14000d6c0));
-    s_fn_FindComp_WpExt = reinterpret_cast<GRM_FindCompWpExt_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_FindStorageForResource = reinterpret_cast<GRM_FindStorageForResource_t>(
-        ResolveAddr(Module::Exe, 0x14008d590));
-    s_fn_FindComp_Storage = reinterpret_cast<GRM_FindCompStorage_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_StorageQueryCount = reinterpret_cast<GRM_StorageQueryCount_t>(
-        ResolveAddr(Module::Exe, 0x14012cf10));
-    s_fn_GetRemainingCapacity = reinterpret_cast<GRM_GetRemainingCapacity_t>(
-        ResolveAddr(Module::Exe, 0x140116540));
-    s_fn_LongTermPlan = reinterpret_cast<GRM_LongTermPlan_t>(
-        ResolveAddr(Module::Exe, 0x140115e60));
-    s_fn_CalcBestTargetPos = reinterpret_cast<GRM_CalcBestTargetPos_t>(
-        ResolveAddr(Module::Exe, 0x140122be0));
-    s_fn_CalcChildTargetPos = reinterpret_cast<GRM_CalcChildTargetPos_t>(
-        ResolveAddr(Module::Exe, 0x140122b00));
-    s_fn_ValidateWorkAssign = reinterpret_cast<GRM_ValidateWorkAssign_t>(
-        ResolveAddr(Module::Exe, 0x1400f6ef0));
-    s_fn_PathfindingFindPath = reinterpret_cast<GRM_PathfindingFindPath_t>(
-        ResolveAddr(Module::Exe, 0x1400bf790));
-    s_fn_RegisterWork = reinterpret_cast<GRM_RegisterWork_t>(
-        ResolveAddr(Module::Exe, 0x140021a30));
-    s_fn_TreeNodeCleanup = reinterpret_cast<GRM_TreeNodeCleanup_t>(
-        ResolveAddr(Module::Exe, 0x140014c30));
-
-    // Vtable pointers for dtor chain
-
-    // MemAlloc/MemFree — resolve via the canonical Runtime exports (static size/align &
-    // ptr forms). The exe IAT dispatch slots (0x1401527e8/0x1401527f0) are UNREGISTERED in
-    // the standalone exe AND mislabelled (they index the _rng/Lerp imports, not
-    // MemoryAllocator) — see ForesterWork's identical fix. Without this s_fn_MemAlloc stays
-    // NULL and GatherRawMaterials::Validate crashes (EXEC of 0) at its removal-array grow
-    // when a citizen's Idle-state work-tree walk validates the posted gather work.
-    // ResolveExport reads the Runtime DLL exports directly, which is correct for the standalone exe.
-    s_fn_MemAlloc = reinterpret_cast<GRM_MemAlloc_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));     // static (size,align)
-    if (!s_fn_MemAlloc) {
-        uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x1401527e8);
-        if (iatMemAlloc) s_fn_MemAlloc = *reinterpret_cast<GRM_MemAlloc_t*>(iatMemAlloc);
-    }
-    s_fn_MemFree = reinterpret_cast<GRM_MemFree_t>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));        // static (ptr)
-    if (!s_fn_MemFree) {
-        uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x1401527f0);
-        if (iatMemFree) s_fn_MemFree = *reinterpret_cast<GRM_MemFree_t*>(iatMemFree);
-    }
-
-    // ENDGAME B.3.9 D5: 0x1401c7040 (BuildDescription), 0x1401c7cb8
-    // (RawMaterialDescription) and 0x1401c7938 (InteractDescription -- the healing
-    // fallback here used to read MapDescription::TypeId(), a pre-existing bug this
-    // batch also fixes) are registered type-id cells; each class's own TypeId() is
-    // always available, no separate resolve/heal to gate on.
-
-    bool ok = s_fn_TreeSerialize &&
-              s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
-              s_fn_StateMachineRelease && s_fn_CanStartWork &&
-              s_fn_FindComp_Position && s_fn_FindComp_Unk &&
-              s_fn_FindComp_WpExt && s_fn_FindStorageForResource &&
-              s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
-              s_fn_GetRemainingCapacity && s_fn_LongTermPlan &&
-              s_fn_CalcBestTargetPos && s_fn_CalcChildTargetPos &&
-              s_fn_ValidateWorkAssign && s_fn_PathfindingFindPath &&
-              s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
-              s_fn_TreeNodeCleanup &&
-              fn_IsDerivedFrom &&
-              g_pGameWorldSingleton;
-
-#ifdef _DEBUG
-    printf("[GatherRawMaterials] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_TreeSerialize) printf("  MISSING: s_fn_TreeSerialize\n");
-        if (!s_fn_TreeRemoveByKey) printf("  MISSING: s_fn_TreeRemoveByKey\n");
-        if (!s_fn_TreeRemoveNode) printf("  MISSING: s_fn_TreeRemoveNode\n");
-        if (!s_fn_StateMachineRelease) printf("  MISSING: s_fn_StateMachineRelease\n");
-        if (!s_fn_CanStartWork) printf("  MISSING: s_fn_CanStartWork\n");
-        if (!s_fn_FindComp_Position) printf("  MISSING: s_fn_FindComp_Position\n");
-        if (!s_fn_FindComp_Unk) printf("  MISSING: s_fn_FindComp_Unk\n");
-        if (!s_fn_FindComp_WpExt) printf("  MISSING: s_fn_FindComp_WpExt\n");
-        if (!s_fn_FindStorageForResource) printf("  MISSING: s_fn_FindStorageForResource\n");
-        if (!s_fn_FindComp_Storage) printf("  MISSING: s_fn_FindComp_Storage\n");
-        if (!s_fn_StorageQueryCount) printf("  MISSING: s_fn_StorageQueryCount\n");
-        if (!s_fn_GetRemainingCapacity) printf("  MISSING: s_fn_GetRemainingCapacity\n");
-        if (!s_fn_LongTermPlan) printf("  MISSING: s_fn_LongTermPlan\n");
-        if (!s_fn_CalcBestTargetPos) printf("  MISSING: s_fn_CalcBestTargetPos\n");
-        if (!s_fn_CalcChildTargetPos) printf("  MISSING: s_fn_CalcChildTargetPos\n");
-        if (!s_fn_ValidateWorkAssign) printf("  MISSING: s_fn_ValidateWorkAssign\n");
-        if (!s_fn_PathfindingFindPath) printf("  MISSING: s_fn_PathfindingFindPath\n");
-        if (!s_fn_RegisterWork) printf("  MISSING: s_fn_RegisterWork\n");
-        if (!s_fn_MemAlloc) printf("  MISSING: s_fn_MemAlloc\n");
-        if (!s_fn_MemFree) printf("  MISSING: s_fn_MemFree\n");
-        if (!s_fn_TreeNodeCleanup) printf("  MISSING: s_fn_TreeNodeCleanup\n");
-    }
-#endif
-
-    s_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Helper: Find RawMaterialComponent by type ID in entity's component list.
@@ -290,7 +90,7 @@ static void* FindRawMaterialInList(uintptr_t entity, uint32_t typeId) {
         // slot 2 Type() (the old no-argument typedef never passed `this`)
         if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             void* comp = *(void**)(arr + (uintptr_t)i * 8);
-            if (fn_IsDerivedFrom(comp, typeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, typeId)) {
                 return comp;
             }
             return nullptr;
@@ -381,7 +181,7 @@ void GatherRawMaterials::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(field_60, reinterpret_cast<int*>(field_58), nullptr);   // B.3.4 bridge
 
     // --- Serialize tree at +0x68 ---
-    s_fn_TreeSerialize((void*)(selfAddr + 0x68), serializerBuf);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(selfAddr + 0x68), serializerBuf);
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
@@ -402,28 +202,25 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
-    // Ensure the exe-helper function pointers are resolved. The factory path calls
-    // ResolveFuncs at construction, but the construction gather work is built via
-    // GatherRawMaterials_Ctor_Impl (state-1 spawner), which does not — leaving every
-    // s_fn_* NULL and the first `call *s_fn_FindComp_Position` faulting at RIP=0.
-    GatherRawMaterials_ResolveFuncs();
-
     // --- Find PositionComponent on work entity (self+0x10) ---
     uintptr_t posCompIBP = 0;
-    s_fn_FindComp_Position(selfQ[2], &posCompIBP);
+    WorkBase_FindComponent_2ed0(selfQ[2], &posCompIBP);
 
     // --- Find description component on work entity ---
     uintptr_t descCompIBP = 0;
-    s_fn_FindComp_Unk(selfQ[2], &descCompIBP);
+    Dialog_FindComponent_d6c0(reinterpret_cast<void*>(selfQ[2]), &descCompIBP);
 
     // Get GatherDescription from desc component +0x18
     void* descBase = *(void**)(descCompIBP + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descBase, BuildDescription::TypeId());
+    bool isDerived = Object::IsDerivedFromNullSafe(descBase, BuildDescription::TypeId());
     void* gatherDesc = isDerived ? descBase : nullptr;
 
     // --- Check workplace enable flag via WpExt component ---
     uintptr_t descComp = descCompIBP;
-    void* wpExtIBP = s_fn_FindComp_WpExt(*(uintptr_t*)(descComp + 0x10), (void*)&param3);
+    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
+    // so the returned pointer is the out buffer itself.
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(*(uintptr_t*)(descComp + 0x10)), (void*)&param3);
+    void* wpExtIBP = (void*)&param3;
     if (*(char*)(*(uintptr_t*)wpExtIBP + 0x50) == '\0') {
         return 1;  // Workplace disabled
     }
@@ -484,8 +281,8 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
             float searchPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             uintptr_t excludeIBP = 0;  // Original: local null-initialized IBP (NOT &self->field_10)
 
-            s_fn_FindStorageForResource(worldEntityList, &foundEntity, citizenCell,
-                *(uint64_t*)(slotOffset + matDescBase), 1, '\0', searchPos,
+            Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(worldEntityList), reinterpret_cast<int64_t*>(&foundEntity), citizenCell,
+                *(uint64_t*)(slotOffset + matDescBase), 1, '\0', reinterpret_cast<uint32_t*>(searchPos),
                 (void*)&excludeIBP);
 
             if (foundEntity == 0) {
@@ -500,28 +297,28 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                 // Check citizen's carrying capacity
                 uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
                 uintptr_t citizenStorageIBP = 0;
-                s_fn_FindComp_Storage(*(uintptr_t*)(citizenEnt + 0x10), &citizenStorageIBP);
+                WorkBase_FindComponent_6270(*(uintptr_t*)(citizenEnt + 0x10), &citizenStorageIBP);
 
                 int capacity = *(int*)(citizenStorageIBP + 0x38);
-                int currentStored = s_fn_StorageQueryCount((void*)citizenStorageIBP);
+                int currentStored = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>((void*)citizenStorageIBP));
 
 
                 int carryWeight = *(int*)((uintptr_t)rawMatComp + 0x48);
                 if (capacity - currentStored < carryWeight * remaining) {
                     // Not enough carry capacity -- recalculate
-                    int remCapacity = s_fn_GetRemainingCapacity(*(uintptr_t*)entityIBP);
+                    int remCapacity = WorkLeaf_FreeStorageCapacity_116540(*(uintptr_t*)entityIBP);
                     remaining = remCapacity / carryWeight;
                 }
 
                 if (remaining == 0) {
                     // Can't carry anything -- replan
-                    s_fn_LongTermPlan(*(void**)entityIBP);
+                    CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)entityIBP));
                     return 2;
                 }
 
                 // --- Find storage on the found entity and match material slot ---
                 uintptr_t storageCompIBP2 = 0;
-                void* retIBP = s_fn_FindComp_Storage((uintptr_t)foundEntity, &storageCompIBP2);
+                void* retIBP = WorkBase_FindComponent_6270((uintptr_t)foundEntity, &storageCompIBP2);
 
                 uintptr_t storageComp = *(uintptr_t*)retIBP;
                 int storageSlotCount = *(int*)(storageComp + 0x30);
@@ -556,9 +353,9 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                 // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell -- the
                 // registered cell's own class, not the legacy healing fallback which used
                 // to read MapDescription::TypeId()).
-                bool isDerivedPos = fn_IsDerivedFrom(posDescBase, InteractDescription::TypeId());
+                bool isDerivedPos = Object::IsDerivedFromNullSafe(posDescBase, InteractDescription::TypeId());
                 void* posDesc = isDerivedPos ? posDescBase : nullptr;
-                uint8_t found = posDesc ? s_fn_CalcBestTargetPos(posCompIBP,
+                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(posCompIBP,
                     (uintptr_t)posDesc + 0x38, searchPos, targetPos, &bestDist) : 0;
 
                 void* posComp2 = (void*)posCompIBP;
@@ -567,7 +364,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                     int childCount = 0;
                     do {
                         uintptr_t* childPtr = (uintptr_t*)(*(uintptr_t*)((uintptr_t)posComp2 + 0x28) + childOffset);
-                        uint8_t childFound = s_fn_CalcChildTargetPos(*childPtr, 1,
+                        uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(*childPtr, 1,
                             searchPos, targetPos, &bestDist);
                         childCount++;
                         found |= childFound;
@@ -597,7 +394,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
 
                 // --- Validate work assignment ---
                 uintptr_t citizenRef = *(uintptr_t*)entityIBP;
-                uint64_t validated = s_fn_ValidateWorkAssign(selfAddr, &citizenRef,
+                uint64_t validated = WorkImpl_BuildStructureStep_6ef0(selfAddr, &citizenRef,
                     targetCell, citizenCell, (void*)param3);
 
                 if ((char)validated == '\0') {
@@ -611,13 +408,13 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                 int* mapGridPtr = (int*)selfQ[2];  // Reread from self
                 void* citizenPtr = *(void**)entityIBP;
 
-                s_fn_PathfindingFindPath(
+                WorkAct_GatherRawMatCtor_bf790(
                     pathBuf,            // stack buffer (original: local_58[3])
                     &citizenPtr,        // citizenPtr
                     (int)selfQ[4],      // pathType (priority/workplaceId)
-                    &mapGridPtr,        // mapGridPtr
+                    reinterpret_cast<uint64_t*>(&mapGridPtr),        // mapGridPtr
                     targetPos,          // targetPos
-                    &destEntity,        // destEntityPtr
+                    reinterpret_cast<void**>(&destEntity),        // destEntityPtr
                     searchPos,          // srcPos
                     (int64_t)*(uint64_t*)(slotOffset + matDescBase),  // materialType
                     remaining,          // amount
@@ -641,7 +438,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                     *(uint32_t*)(citizenFinal + 0x88) |= 0x20000;
                 }
 
-                s_fn_RegisterWork((void*)(selfAddr + 0x68), workEntIBP, entityIBP);
+                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x68)), workEntIBP, entityIBP);
 
                 // Increment build count for this slot
                 int* buildCountPtr = (int*)(selfQ[0xb] + (int64_t)slotIdx * 4);
@@ -672,7 +469,7 @@ int GatherRawMaterials::OnComplete(void* param2, void* /*param3*/, int arg3) {
     uintptr_t selfAddr = (uintptr_t)this;
 
     // Remove entity from tree at +0x68
-    s_fn_TreeRemoveByKey((void*)(selfAddr + 0x68), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x68)), param2);
 
     // Extract slot index (low byte) and amount (high 24 bits, shifted right by 8)
     uint32_t slotIdx = param4 & 0xFF;
@@ -703,7 +500,7 @@ int GatherRawMaterials::OnCancel(void* param2, void* /*param3*/, int arg3) {
     uintptr_t selfAddr = (uintptr_t)this;
 
     // Remove entity from tree at +0x68
-    s_fn_TreeRemoveByKey((void*)(selfAddr + 0x68), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x68)), param2);
 
     // Extract slot index and amount
     uintptr_t* selfQ = (uintptr_t*)this;
@@ -752,7 +549,7 @@ int GatherRawMaterials::Cleanup() {
 
         // Release citizen's state machine via +0x278 -> +0x48
         uintptr_t citizenAI = *(uintptr_t*)(citizenEntity + 0x278);
-        s_fn_StateMachineRelease((void*)(citizenAI + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(citizenAI + 0x48));
     }
 }
 
@@ -787,7 +584,7 @@ int GatherRawMaterials::Validate() {
             uintptr_t taskIBP[1];
             taskIBP[0] = *(uintptr_t*)node;
 
-            char valid = s_fn_CanStartWork((void*)this, nullptr, taskIBP, nullptr);
+            char valid = WorkBase_ValidateTask_f7100((void*)this, nullptr, taskIBP, nullptr);
 
             if (valid == '\0') {
                 // Invalid -- add to removal list
@@ -799,7 +596,7 @@ int GatherRawMaterials::Validate() {
                             newCap = newCount * 3;
                         }
                         invalidCapacity = newCap;
-                        void* newArray = s_fn_MemAlloc((int64_t)(int)newCap << 3, 8);
+                        void* newArray = System::MemoryAllocator::MemAlloc((int64_t)(int)newCap << 3, 8);
 
                         // Copy old entries
                         int copyStart = (invalidArray == newArray) ? (int)invalidCount : 0;
@@ -814,7 +611,7 @@ int GatherRawMaterials::Validate() {
                         }
 
                         if (invalidArray != newArray) {
-                            fn_MemFreeStatic(invalidArray);
+                            System::MemoryAllocator::MemFree(invalidArray);
                         }
                         invalidArray = newArray;
                     } else {
@@ -866,7 +663,7 @@ int GatherRawMaterials::Validate() {
                 } else {
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node
-                        s_fn_TreeRemoveNode((void*)(selfAddr + 0x68), (void*)treeNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(selfAddr + 0x68), (void*)treeNode);
                         break;
                     }
                     treeNode = *(uintptr_t*)(treeNode + 0x18);
@@ -886,7 +683,7 @@ int GatherRawMaterials::Validate() {
         }
     }
 
-    fn_MemFreeStatic(invalidArray);
+    System::MemoryAllocator::MemFree(invalidArray);
     return (invalidCount == 0) ? 1 : 0;
 }
 
@@ -918,11 +715,11 @@ GatherRawMaterials::~GatherRawMaterials() {
     void* bstRoot = *(void**)(selfAddr + 0x68);
     if (bstRoot != nullptr) {
         // Clean up left subtree
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x10));
+        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x10));
         // Clean up right subtree
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x18));
         // Free root node
-        fn_MemFreeStatic(bstRoot);
+        System::MemoryAllocator::MemFree(bstRoot);
     }
 
     // Zero out BST root and count
@@ -930,12 +727,12 @@ GatherRawMaterials::~GatherRawMaterials() {
     *(uint32_t*)(selfAddr + 0x70) = 0;
 
     // Free second int array at +0x58
-    fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
+    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x58));
     *(void**)(selfAddr + 0x58) = nullptr;
     *(uint64_t*)(selfAddr + 0x60) = 0;
 
     // Free first int array at +0x48
-    fn_MemFreeStatic(*(void**)(selfAddr + 0x48));
+    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x48));
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint64_t*)(selfAddr + 0x50) = 0;
 
@@ -950,12 +747,10 @@ int GatherRawMaterials::GetPriority() {
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The stamps are the compiler's. GatherRawMaterials_ResolveFuncs
-// wires the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The stamps are the compiler's.
 GatherRawMaterials::GatherRawMaterials()
     : Work(), field_48(nullptr), field_50(0), field_54(0), field_58(nullptr),
       field_60(0), field_64(0), field_68(nullptr), field_70(0) {
-    GatherRawMaterials_ResolveFuncs();
 }
 
 // ============================================================
@@ -1006,21 +801,8 @@ extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
     return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(citizenIBP, nullptr);   // B.3.8 bridge
 }
 
-// Execute-readiness gate for the force harness. GatherRawMaterials_ResolveFuncs() also
-// requires the SERIALIZE-only fns (Work_Serialize / Serializer_* / SerializeInt /
-// SerializeIntBulk / TreeSerialize) and the dtor-only parent vtable — none of which
-// Execute or its pushed action chain touch. (The dispatch slot for SerializeIntBulk was
-// recorded here as 0x1401528c0, which is CreateElement; it is 0x140151278.) So we
-// resolve everything, then gate on only the Execute-critical subset (mirrors
-// ForesterWork_ExecuteReady). Serialize never runs during standalone gameplay.
+// Execute-readiness gate for the force harness. B3R: every helper Execute and its pushed
+// action chain use is called by name, so only the game world is left to test.
 extern "C" bool GatherRawMaterials_DepsReady() {
-    GatherRawMaterials_ResolveFuncs();   // populate all resolvable fns
-    return s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
-           s_fn_StateMachineRelease && s_fn_CanStartWork &&
-           s_fn_FindComp_Position && s_fn_FindComp_Unk && s_fn_FindComp_WpExt &&
-           s_fn_FindStorageForResource && s_fn_FindComp_Storage &&
-           s_fn_StorageQueryCount && s_fn_GetRemainingCapacity && s_fn_LongTermPlan &&
-           s_fn_CalcBestTargetPos && s_fn_CalcChildTargetPos && s_fn_ValidateWorkAssign &&
-           s_fn_PathfindingFindPath && s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
-           s_fn_TreeNodeCleanup && fn_IsDerivedFrom && g_pGameWorldSingleton;
+    return g_pGameWorldSingleton != nullptr;
 }

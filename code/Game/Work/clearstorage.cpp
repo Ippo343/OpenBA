@@ -12,7 +12,10 @@
 #include "Work/ClearStorage.h"
 #include "Work/clearstorage_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdio>
@@ -22,43 +25,8 @@
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
 #include "Component/StorageComponent.h"         // ENDGAME B.3.9 D5
 
-// ============================================================
-// Local function pointers (resolved once on first use)
-// ============================================================
-
-// BST find-and-remove by key (CitizenAI_impl_5520 at 0x140025520)
-typedef void (*fn_BSTFindRemove_t)(void* bstRoot, void* key);
-static fn_BSTFindRemove_t s_fn_BSTFindRemove = nullptr;
-
-// FUN_1400c5400 — cancel all work on action list
-typedef void (*fn_TaskCancel_t)(void* actionList);
-static fn_TaskCancel_t s_fn_TaskCancel = nullptr;
-
-// FUN_140014c30 — recursive BST node free
-typedef void (*fn_TreeNodeCleanup_t)(void* tree, void* branch);
-static fn_TreeNodeCleanup_t s_fn_TreeNodeCleanup = nullptr;
-
-static bool s_initialized = false;
-
-void ClearStorage_InitFuncs() {
-    if (s_initialized) return;
-    s_initialized = true;
-
-    s_fn_BSTFindRemove = reinterpret_cast<fn_BSTFindRemove_t>(
-        ResolveAddr(Module::Exe, 0x140025520));
-
-    s_fn_TaskCancel = reinterpret_cast<fn_TaskCancel_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-
-    s_fn_TreeNodeCleanup = reinterpret_cast<fn_TreeNodeCleanup_t>(
-        ResolveAddr(Module::Exe, 0x140014c30));
-
-#ifdef _DEBUG
-    printf("[ClearStorage_InitFuncs] BSTFindRemove=%p TaskCancel=%p TreeCleanup=%p\n",
-           (void*)s_fn_BSTFindRemove,
-           (void*)s_fn_TaskCancel, (void*)s_fn_TreeNodeCleanup);
-#endif
-}
+// Sub-functions, called by name (B3R): 0x140025520 WorkBST_BSTFindRemove_25520,
+// 0x1400c5400 WorkBase_TaskListCleanup_c5400, 0x140014c30 WorkBase_TreeNodeFree_14c30.
 
 // ============================================================
 // Helper: Clamp int to [0, max-1]
@@ -161,7 +129,7 @@ int ClearStorage::Execute(void* citizenAI, void* time) {
                 if (typeId == RawMaterialDescription::TypeId()) {
                     // Verify via IsDerivedFrom
                     comp = *(void**)(*(uintptr_t*)(itemEntity + 0x28) + (uintptr_t)j * 8);
-                    if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
+                    if (Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
                         rawMatDesc = comp;
                     }
                     break;
@@ -182,7 +150,7 @@ int ClearStorage::Execute(void* citizenAI, void* time) {
                 if (typeId == StorageComponent::TypeId()) {
                     compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
                     void* compVal = *(void**)compIBP;
-                    if (fn_IsDerivedFrom(compVal, StorageComponent::TypeId())) {
+                    if (Object::IsDerivedFromNullSafe(compVal, StorageComponent::TypeId())) {
                         destStorage = compVal;
                     }
                     goto found_dest_storage;
@@ -226,7 +194,7 @@ found_dest_storage:
 
         if (availCount == 0) {
             // No capacity available, transition to long-term plan
-            fn_CitizenAI_LongTermPlan(*(void**)citizenAI);
+            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenAI));
             return 2;
         }
 
@@ -241,9 +209,9 @@ found_dest_storage:
         uint32_t resourceTypeId = *(uint32_t*)(wk + 0x28);
         void* destEntity = nullptr;
 
-        fn_FindStorageDestination(worldArray, &destEntity, resourceTypeId,
-                                  (void*)itemEntity, availCount, 1,
-                                  searchPos, &entityIBP);
+        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(worldArray), reinterpret_cast<int64_t*>(&destEntity), resourceTypeId,
+                                  reinterpret_cast<uint64_t>((void*)itemEntity), availCount, 1,
+                                  reinterpret_cast<uint32_t*>(searchPos), &entityIBP);
 
         if (destEntity == nullptr) {
             continue;
@@ -252,7 +220,7 @@ found_dest_storage:
         // Check if path is possible
         uintptr_t wkPtr = (uintptr_t)this;
         uint32_t workTypeId = *(uint32_t*)(wkPtr + 0x28);
-        if (!fn_Map_CanPathTo(gridDataPtr, 0xe1f, srcCell, workTypeId)) {
+        if (!WorkBase_ValidateCell_a00f0(gridDataPtr, 0xe1f, srcCell, workTypeId)) {
             return 1;
         }
 
@@ -267,8 +235,8 @@ found_dest_storage:
                 return 1;
             }
             dbgBranch = 0;
-            fn_Entity_GetPosition((void*)*(uintptr_t*)&positionIBP,
-                                  &destPos, 0, 0, nullptr);
+            Pf_EntityResolvePos_2e20((void*)*(uintptr_t*)&positionIBP,
+                                  reinterpret_cast<float*>(&destPos), 0, 0, nullptr);
             destCell = WorldToCell(destPos[0], destPos[1], gridSize);
         } else {
             // Use search position
@@ -276,7 +244,7 @@ found_dest_storage:
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
             void* unkComp = *(void**)&unknownCompIBP;
-            int slotIdx = fn_Storage_FindSlot(unkComp, destCell, (float*)&destPos, workTypeId);
+            int slotIdx = Pf_FindBestAdjacentCell_d5d0(reinterpret_cast<int64_t>(unkComp), destCell, (float*)&destPos, workTypeId);
             dbgSlot = slotIdx;
             if (slotIdx < 0) {
                 return 1;
@@ -286,7 +254,7 @@ found_dest_storage:
         // Validate the work assignment
         void* citizenVal = *(void**)citizenAI;
 
-        if (!fn_Work_ValidateAssignment(this, citizenAI, destCell, srcCell, time)) {
+        if (!WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), citizenAI, destCell, srcCell, time)) {
             return 0;
         }
 
@@ -298,7 +266,7 @@ found_dest_storage:
         uint32_t pathFlags = (availCount << 8) | 0;  // flags from local_res20[0]
 
         uint32_t pathResult = 0;
-        fn_Pathfinding_FindPath(&pathResult, &citizenVal, pathType, &destEntityCopy,
+        WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, pathType, reinterpret_cast<uint64_t*>(&destEntityCopy),
                                 searchPos, &workEntity, (float*)&destPos,
                                 (int64_t)itemEntity, availCount, pathFlags, 0, 1, 0, 0);
 
@@ -319,7 +287,7 @@ found_dest_storage:
         }
 
         // Register work with citizen AI
-        fn_CitizenAI_RegisterWork((void*)(wkBase + 0x58), &entityRefOut, citizenAI);
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(wkBase + 0x58)), &entityRefOut, citizenAI);
         return 2;
     }
 
@@ -363,7 +331,7 @@ int ClearStorage::Validate() {
         uint64_t taskIBP = taskKey;
 
         // Check if task is still valid
-        bool canStart = fn_Work_CanStartWork(this, nullptr, &taskIBP, nullptr);
+        bool canStart = WorkBase_ValidateTask_f7100(this, nullptr, &taskIBP, nullptr);
 
         if (!canStart) {
             // Need to add this node to remove list
@@ -375,8 +343,7 @@ int ClearStorage::Validate() {
                     newCap = newCount * 3;
                 }
                 removeCapacity = newCap;
-                void** newList = (void**)fn_MemAlloc(g_pMemAllocSingleton,
-                    (uint64_t)newCap * 8, 8);
+                void** newList = (void**)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8);
 
                 // Copy existing entries
                 int copyStart = 0;
@@ -393,7 +360,7 @@ int ClearStorage::Validate() {
                 }
 
                 if (removeList != newList && removeList != nullptr) {
-                    fn_MemFreeStatic(removeList);
+                    System::MemoryAllocator::MemFree(removeList);
                 }
                 removeList = newList;
             } else {
@@ -445,7 +412,7 @@ phase2:
                 } else {
                     if (key <= nodeKey) {
                         // Found it, remove
-                        fn_BST_Remove(bstRoot, (void*)searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRoot), (void*)searchNode);
                         break;
                     }
                     searchNode = *(uintptr_t*)(searchNode + 0x18);
@@ -455,27 +422,26 @@ phase2:
     }
 
     // Free remove list
-    fn_MemFreeStatic(removeList);
+    System::MemoryAllocator::MemFree(removeList);
 
     return removeCount == 0 ? 1 : 0;
 }
 
 // 0x1400e73b0. The stamps (ClearStorage, then Work) and `~Internal` are the compiler's.
 ClearStorage::~ClearStorage() {
-    ClearStorage_InitFuncs();
 
     // Free BST at +0x58 (citizen assignment tree)
     void* bstRoot = _field58;
     if (bstRoot != nullptr) {
-        s_fn_TreeNodeCleanup(&_field58, *(void**)((uintptr_t)bstRoot + 0x10));
-        s_fn_TreeNodeCleanup(&_field58, *(void**)((uintptr_t)bstRoot + 0x18));
-        fn_MemFreeStatic(bstRoot);
+        WorkBase_TreeNodeFree_14c30(&_field58, *(void**)((uintptr_t)bstRoot + 0x10));
+        WorkBase_TreeNodeFree_14c30(&_field58, *(void**)((uintptr_t)bstRoot + 0x18));
+        System::MemoryAllocator::MemFree(bstRoot);
     }
     _field58 = nullptr;
     _field60 = 0;
 
     // Free auxiliary data at +0x48
-    fn_MemFreeStatic(_field48);
+    System::MemoryAllocator::MemFree(_field48);
     _field48 = nullptr;
     _field50 = nullptr;
 }
@@ -487,9 +453,8 @@ ClearStorage::~ClearStorage() {
 // then returns false (0). This removes a specific citizen's
 // entry from the work tracking tree.
 int ClearStorage::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    ClearStorage_InitFuncs();
 
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x58), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x58)), param2);
     return 0;
 }
 
@@ -505,9 +470,8 @@ int ClearStorage::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // spins on the leftmost node until the count drops, and Validate hands the stale
 // citizen pointer to Object::IsA, which CALLs through it. Ported 2026-09-05.
 int ClearStorage::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    ClearStorage_InitFuncs();
 
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x58), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x58)), param2);
     return 0;
 }
 
@@ -531,7 +495,6 @@ int ClearStorage::GetPriority() {
 // the pending work action via TaskCancel on its action list (+0x48).
 // Repeats until the BST is empty (count at self+0x60 drops to 0).
 int ClearStorage::Cleanup() {
-    ClearStorage_InitFuncs();
 
     while (true) {
         void* node = _field58;
@@ -555,7 +518,7 @@ int ClearStorage::Cleanup() {
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
         // Navigate to state machine component (+0x278) and cancel its action list (+0x48)
-        s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
     return 0;
 }
@@ -615,18 +578,15 @@ void ClearStorage::Persist(void* stream) {
 
 // ============================================================
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The stamps are the compiler's. ClearStorage_InitFuncs wires
-// the file's helper pointers for the members (the old factory did the same).
+// the leaf fields zeroed. The stamps are the compiler's.
 // ============================================================
 ClearStorage::ClearStorage()
     : Work(), _field48(nullptr), _field50(nullptr), _field58(nullptr), _field60(0) {
-    ClearStorage_InitFuncs();
 }
 
 ClearStorage::ClearStorage(void* pEntityIBP)
     : Work(pEntityIBP), _field48(nullptr), _field50(nullptr), _field58(nullptr),
       _field60(0), _pad64{} {
-    ClearStorage_InitFuncs();
 }
 
 // ============================================================

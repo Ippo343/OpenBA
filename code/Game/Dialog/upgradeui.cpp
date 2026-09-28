@@ -9,7 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"   // B3R: RemovalCalc_StateMachine_dfa0
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -33,13 +33,9 @@ namespace upgradeui_sa {
 // (shares its initialiser exref 0x1401514f8 with TypeId_ButtonElement) ->
 // UI::ButtonElement::TypeId(), TypeId_ImageElement -> UI::ImageElement::TypeId(),
 // TypeId_ToolbarDescription_FC -> ToolbarDescription::TypeId(). The class statics
-// always answer, so the lazy-fill retires.
-void EnsureGlobals() {
-}
-
-bool Ready() {
-    return fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
-}
+// always answer, so the lazy-fill retires. B3R: the empty EnsureGlobals and the
+// always-true Ready() over the IsDerivedFrom / InternalBasePtr doors went with their
+// calls.
 
 // Serialize is only safe when the bound config is an UpgradeUIConfig with a
 // non-null target template at +0x20 (the stub config zero-fills it until the
@@ -47,7 +43,7 @@ bool Ready() {
 bool ConfigOk(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* cfg = *reinterpret_cast<void**>(s + 0x10);
-    if (!cfg || !fn_IsDerivedFrom(cfg, UpgradeUIConfig::TypeId())) return false;
+    if (!cfg || !::Object::IsDerivedFromNullSafe(cfg, UpgradeUIConfig::TypeId())) return false;
     return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cfg) + 0x20) != nullptr;
 }
 
@@ -65,8 +61,6 @@ bool ConfigOk(void* self) {
 // Original: 0x140086d90
 // [4] 0x140086d90
 void UpgradeUI::OnCreated() {
-    upgradeui_sa::EnsureGlobals();
-    if (!upgradeui_sa::Ready()) return;
     if (!upgradeui_sa::ConfigOk(this)) {
         return;
     }
@@ -77,14 +71,14 @@ void UpgradeUI::OnCreated() {
 
     // Check if config is an UpgradeUIConfig (its +0x20 holds the upgrade
     // target ComponentEntity template)
-    bool isUpgrade = fn_IsDerivedFrom(desc, UpgradeUIConfig::TypeId());
+    bool isUpgrade = ::Object::IsDerivedFromNullSafe(desc, UpgradeUIConfig::TypeId());
     void* upgradeDesc = isUpgrade ? desc : nullptr;
 
     // CheckPtr on the InternalBasePtr at +0x20 before reading
     void* elem = *(void**)(s + 0x20);
 
     // Check if element is a ButtonElement (exref 0x1401514f8)
-    bool isButton = fn_IsDerivedFrom(elem, UI::ButtonElement::TypeId());
+    bool isButton = ::Object::IsDerivedFromNullSafe(elem, UI::ButtonElement::TypeId());
     void* checkedElem = isButton ? elem : nullptr;
 
     // Properly construct InternalBasePtr at +0x30 (button reference)
@@ -102,7 +96,7 @@ void UpgradeUI::OnCreated() {
 
     // Check if child is an ImageElement type
     void* childElem = *(void**)childBuf;
-    bool isImage = fn_IsDerivedFrom(childElem, UI::ImageElement::TypeId());
+    bool isImage = ::Object::IsDerivedFromNullSafe(childElem, UI::ImageElement::TypeId());
     void* checkedImage = isImage ? childElem : nullptr;
 
     // Construct an IBP for the image element
@@ -126,7 +120,7 @@ void UpgradeUI::OnCreated() {
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
             if (typeId == ToolbarDescription::TypeId()) {
-                void* checked = fn_IsDerivedFrom(comp, ToolbarDescription::TypeId())
+                void* checked = ::Object::IsDerivedFromNullSafe(comp, ToolbarDescription::TypeId())
                     ? comp : nullptr;
                 buildReqComp = checked;
                 break;
@@ -164,8 +158,7 @@ void UpgradeUI::OnCreated() {
 void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventId,
                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     void* p2 = element;
-    upgradeui_sa::EnsureGlobals();
-    if (!p2 || !upgradeui_sa::Ready()) return;
+    if (!p2) return;
     uintptr_t s = (uintptr_t)this;
 
     // Only handle button clicks (msg 0x12) with ID 33000
@@ -190,7 +183,7 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
         return;
 
     // Check if data source is a ComponentEntity
-    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId()))
+    if (!::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId()))
         return;
 
     // Find DestroyComponent on the entity
@@ -210,7 +203,7 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
         return;
 
     // Check if config is an UpgradeUIConfig
-    if (!fn_IsDerivedFrom(desc, UpgradeUIConfig::TypeId()))
+    if (!::Object::IsDerivedFromNullSafe(desc, UpgradeUIConfig::TypeId()))
         return;
 
     // Set the upgrade target on DestroyComponent
@@ -219,17 +212,14 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
 
     // Start the upgrade: pump the BuildState state machine. 0x14011dfa0 is the
     // generic driver ("StartUpgrade" was a misnomer); the disasm-verified port
-    // is RemovalCalc_StateMachine_dfa0 (keystone_a_removalcalcpath.cpp),
-    // reached through the address registry.
-    typedef void (*fn_SMDriver_t)(void* destroyComp);
-    fn_SMDriver_t smDriver =
-        reinterpret_cast<fn_SMDriver_t>(ResolveAddr(Module::Exe, 0x14011dfa0));
+    // is RemovalCalc_StateMachine_dfa0 (keystone_a_removalcalcpath.cpp), called
+    // by name (B3R).
     std::fprintf(stderr, "[UpgradeUI] OnRemove: target=%p written to "
                  "destroyComp=%p +0x60, pumping SM (driver=%p)\n",
                  *(void**)((uintptr_t)desc + 0x20), destroyComp,
-                 (void*)smDriver);
+                 (void*)&RemovalCalc_StateMachine_dfa0);
     std::fflush(stderr);
-    if (smDriver) smDriver(destroyComp);
+    RemovalCalc_StateMachine_dfa0(reinterpret_cast<int64_t>(destroyComp));   // 0x14011dfa0
 }
 
 // ============================================================
@@ -248,8 +238,6 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void UpgradeUI::OnUpdate(const System::Time& /*time*/) {
-    upgradeui_sa::EnsureGlobals();
-    if (!upgradeui_sa::Ready()) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) UpgradeUI::OnCreated();
 }

@@ -33,6 +33,8 @@
 #include <cstddef>
 #include "Component/ResidenceComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Game/exe_constants.h"   // B3R: kRdata_*
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -71,21 +73,13 @@ static uint64_t FindElemAsBasePtr(void* parentElem, const char* name) {
 
 namespace residenceui_sa {
 
-// Standalone-local fallback for an exe-.rdata global that resolves NULL in standalone.
-static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier fallback
-
 // ENDGAME B.3.9 CG2: TypeId_ComponentEntity / TypeId_ResidenceComponent no longer
 // need healing here — ComponentEntity::TypeId() / ResidenceComponent::TypeId() (the
 // class statics) always answer, so the s_ceTid/s_resTid lazy-fill retires.
-void EnsureGlobals() {
-    // g_pAgeMultiplier (0x140172198) is zero-fill in standalone; point it at the same
-    // 1.0 fallback citizenui.cpp uses so resident ages match the citizen dialog.
-    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
-}
-
+// B3R: the age multiplier is the .rdata constant kRdata_140172198 (5.0f); the
+// never-taken 1.0f fallback over g_pAgeMultiplier (EnsureGlobals) is gone.
 bool Ready() {
-    return g_pAgeMultiplier
-        && g_pGameWorldSingleton && *g_pGameWorldSingleton;
+    return g_pGameWorldSingleton && *g_pGameWorldSingleton;
 }
 
 
@@ -120,7 +114,6 @@ static bool DataSourceAlive(void* self) {
 
 // [4] 0x1400b5850
 void ResidenceUI::OnCreated() {
-    residenceui_sa::EnsureGlobals();
     if (!residenceui_sa::Ready()) return;
     uintptr_t s = (uintptr_t)this;
     void* dialogElem = *(void**)(s + 0x20);
@@ -231,13 +224,12 @@ void ResidenceUI::OnCreated() {
 
 // [7] 0x1400b51f0
 void ResidenceUI::OnUpdateLayout() {
-    residenceui_sa::EnsureGlobals();
     if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source +0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -252,7 +244,7 @@ void ResidenceUI::OnUpdateLayout() {
 #ifdef _DEBUG
 #endif
 
-    float ageMul = *g_pAgeMultiplier;  // 5.0f
+    float ageMul = kRdata_140172198;  // 5.0f
     int totalResidents = 0;
     int rowIdx = 0;
 
@@ -484,7 +476,7 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
 
     // Get entity from data source +0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -570,7 +562,7 @@ ResidenceUI::~ResidenceUI() {
     // Free the cached per-row element array at +0x30 (mirrors the exe ScalarDtor).
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* rows = *reinterpret_cast<void**>(s + 0x30);
-    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
+    if (rows) System::MemoryAllocator::MemFree(rows);
     *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
 }
@@ -579,7 +571,6 @@ ResidenceUI::~ResidenceUI() {
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void ResidenceUI::OnUpdate(const System::Time& /*time*/) {
-    residenceui_sa::EnsureGlobals();
     if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     if (*reinterpret_cast<int*>(s + 0x38) == 0) {

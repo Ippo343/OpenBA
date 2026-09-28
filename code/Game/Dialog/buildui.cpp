@@ -36,6 +36,7 @@
 #include "Component/ClearAreaComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/exe_bodies.h"   // B3R: WorkPlaceComponent_SetAccepting
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -166,7 +167,7 @@ void BuildUI::OnCreated() {
 
     // Get entity from data source +0x28, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -199,7 +200,7 @@ void BuildUI::OnCreated() {
     int resourceCount = 0;
     if (posComp != 0) {
         void* desc = *(void**)(posComp + 0x18);
-        bool isResource = fn_IsDerivedFrom(desc, BuildDescription::TypeId());
+        bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
         if (isResource) {
             resourceComp = desc;
         }
@@ -268,7 +269,7 @@ void BuildUI::OnCreated() {
                 // Get TypeId via vtable[2] and compare with RawMaterialDescription
                 int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (typeId == (int)RawMaterialDescription::TypeId()) {
-                    if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
+                    if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
                         resType = comp;
                     }
                     break;
@@ -383,7 +384,7 @@ void BuildUI::OnUpdateLayout() {
 
     // Get entity, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -397,7 +398,7 @@ void BuildUI::OnUpdateLayout() {
     void* resourceComp = nullptr;
     if (posComp != 0) {
         void* desc = *(void**)(posComp + 0x18);
-        bool isResource = fn_IsDerivedFrom(desc, BuildDescription::TypeId());
+        bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
         if (isResource) {
             resourceComp = desc;
         }
@@ -531,7 +532,7 @@ void BuildUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int3
         void* entity = (void*)*(uint64_t*)(s + 0x28);
         uint32_t entityTypeId = ComponentEntity::TypeId();
         void* checkedEntity = nullptr;
-        if (fn_IsDerivedFrom(entity, entityTypeId)) {
+        if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
             checkedEntity = entity;
         }
 
@@ -552,18 +553,17 @@ void BuildUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int3
         uint64_t workplaceComp = 0;
         fn_FindComponent_WorkPlace((void*)entityBasePtr, &workplaceComp);
 
-        // Read enabled state byte at comp+0x50, toggle it. Both guards matter: the
-        // building need not have a WorkPlaceComponent at all, and fn_WorkplaceComponent_
-        // Toggle is an EXE address (0x14012fc00) that resolves NULL whenever it is not in
-        // the address registry — calling it blind crashed on EXEC of 0 (live 2026-07-25).
-        if (workplaceComp == 0 || !fn_WorkplaceComponent_Toggle) {
+        // Read enabled state byte at comp+0x50, toggle it. The building need not have a
+        // WorkPlaceComponent at all. The toggle is 0x14012fc00
+        // WorkPlaceComponent_SetAccepting, called by name (B3R).
+        if (workplaceComp == 0) {
             std::fprintf(stderr, "[BuildUI] Slot9 pause click ignored: workplaceComp=%p "
                          "toggleFn=%p\n", (void*)workplaceComp,
-                         (void*)fn_WorkplaceComponent_Toggle);
+                         (void*)&WorkPlaceComponent_SetAccepting);
             std::fflush(stderr);
             return;
         }
         char currentState = *(char*)(workplaceComp + 0x50);
-        fn_WorkplaceComponent_Toggle((void*)workplaceComp, currentState == 0);
+        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(workplaceComp), currentState == 0);
     }
 }

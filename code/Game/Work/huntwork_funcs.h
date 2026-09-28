@@ -6,4 +6,3 @@
 #include "Work/HuntWork.h"
 #include <cstdint>
 
-bool HuntWork_ResolveFuncs();

@@ -73,7 +73,7 @@ void ResourceLimitUI_Slot4(ResourceLimitUI* self) {
     // ENDGAME B.3.9 CG2: TypeId_ResourceLimitType binds cell 0x1401c5520, whose
     // retail class is ResourceLimitUIConfig (Table 1 NAME LIE).
     void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = fn_IsDerivedFrom(dataSrc, ResourceLimitUIConfig::TypeId());
+    bool isType = ::Object::IsDerivedFromNullSafe(dataSrc, ResourceLimitUIConfig::TypeId());
     void* typedSrc = isType ? dataSrc : nullptr;
 
     // Find "editLimit" spinner element
@@ -100,7 +100,7 @@ void ResourceLimitUI_Slot4(ResourceLimitUI* self) {
 void ResourceLimitUI_Slot7(ResourceLimitUI* self) {
     // Get data source
     void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = fn_IsDerivedFrom(dataSrc, ResourceLimitUIConfig::TypeId());
+    bool isType = ::Object::IsDerivedFromNullSafe(dataSrc, ResourceLimitUIConfig::TypeId());
     void* typedSrc = isType ? dataSrc : nullptr;
 
     void* spinner = (void*)self->data30;
@@ -141,7 +141,7 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 
     // Get data source
     void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = fn_IsDerivedFrom(dataSrc, ResourceLimitUIConfig::TypeId());
+    bool isType = ::Object::IsDerivedFromNullSafe(dataSrc, ResourceLimitUIConfig::TypeId());
     void* typedSrc = isType ? dataSrc : nullptr;
 
     // Write spinner value to global limit

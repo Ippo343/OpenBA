@@ -126,7 +126,7 @@ void ImmigrationUI::OnUpdateLayout() {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
 
@@ -233,7 +233,7 @@ void ImmigrationUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
 

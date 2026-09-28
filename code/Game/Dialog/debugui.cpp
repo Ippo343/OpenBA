@@ -25,7 +25,6 @@
 #include "graphics/Scene.h"
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -47,6 +46,12 @@
 #include "Game/Disease.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Component/PopulationDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
+#include "Component/exe_bodies.h"             // B3R: the bodies called by name
+#include "Action/exe_bodies.h"                // B3R: Pf_RecursiveChildSum_123070, Pf_EntityResolvePos_2e20
+#include "Entity/componententity_funcs.h"     // B3R: ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Component/firecomponent_funcs.h"    // B3R: FireComponent_Ignite_610
+#include "Component/diseasecomponent_funcs.h" // B3R: DiseaseComp_Infect
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -142,16 +147,16 @@ static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
 
     // Convert slider (0-359) to game time in ticks
     int64_t timeTicks;
-    fn_Time_Ctor_Float(&timeTicks, (sliderVal / 360.0f) * 3600.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeTicks), (sliderVal / 360.0f) * 3600.0f);
 
     // Set game world time
     *(int64_t*)(*(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x128) + 8) = timeTicks;
 
     // Reset weather time to 0
     int64_t zeroTick;
-    fn_Time_Ctor_Float(&zeroTick, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTick), 0.0f);
     void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
-    if (fn_Weather_ResetTime) fn_Weather_ResetTime(weatherListPtr, &zeroTick);
+    Weather_ResetTime_Reimpl(weatherListPtr, &zeroTick);   // 0x1400944e0
 
     // Update lighting sliders for the new month
     int monthIdx = (int)(sliderVal / 30.0f);  // 30 days/month
@@ -208,24 +213,9 @@ static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
 static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // The show path allocates and constructs an engine DrawGeometry (and,
-    // optionally, an AudioObjectGroup) via original-exe helpers that are not
-    // yet reimplemented. In standalone mode ResolveAddr returns 0 for those
-    // unregistered exe addresses, so fn_DrawGeometry_Ctor/Init are null and a
-    // selection would call through a null pointer (crash). Bail out until the
-    // draw-geometry chain is ported. This is safe: geometry can only exist if
-    // the ctor ran, so the hide path below would be a no-op anyway.
-    if (fn_DrawGeometry_Ctor == nullptr || fn_DrawGeometry_Init == nullptr) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            fprintf(stderr,
-                "[DebugUI::OnDrawComboChanged] draw-geometry helpers not "
-                "reimplemented (Ctor=%p Init=%p); draw combo is inert\n",
-                (void*)fn_DrawGeometry_Ctor, (void*)fn_DrawGeometry_Init);
-        }
-        return;
-    }
+    // The DrawGeometry ctor / init are 0x1400d3f10 WeatherParticle_GeoCtor and
+    // 0x1400d3f80 WeatherParticle_Config, called by name (B3R; the old
+    // "not reimplemented" bail-out never ran: both are registered).
 
     // Get selected combo index
     int selectedIdx = *(int*)(*(uintptr_t*)(s + 0x108) + 0x118);
@@ -243,23 +233,24 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
     uintptr_t descArray = *(uintptr_t*)(innerData + 0x28);  // array of 0x10-stride descriptors
 
     void** geometryArray = (void**)(drawMgr[10]);  // R14+0x50 = plVar1[10] (offset 0x50)
-    void** audioArray = (void**)(drawMgr[0xC]);    // R14+0x60 = plVar1[0xC] (offset 0x60)
+    // R14+0x60 = plVar1[0xC] (offset 0x60) is the audio object array; only the
+    // PORT GAP audio branch below reads it in retail.
 
     for (int i = 0; i < drawCount; i++) {
         if (selectedDrawIdx == i) {
             // Selected entry — create and show geometry if not already created
             if (geometryArray[i] == nullptr) {
                 // Allocate and construct DrawGeometry (0xf0 bytes)
-                void* geomMem = fn_MemAlloc(g_pMemAllocSingleton, 0xf0, 8);
+                void* geomMem = System::MemoryAllocator::MemAlloc(0xf0, 8);
                 void* geometry = nullptr;
                 if (geomMem) {
-                    geometry = fn_DrawGeometry_Ctor(geomMem);
+                    geometry = WeatherParticle_GeoCtor(geomMem);   // 0x1400d3f10
                 }
                 geometryArray[i] = geometry;
 
                 // Initialize with descriptor data
                 uintptr_t descPtr = *(uintptr_t*)(descArray + (uintptr_t)i * 0x10);
-                fn_DrawGeometry_Init(geometryArray[i], (void*)descPtr);
+                WeatherParticle_Config(geometryArray[i], (void*)descPtr);   // 0x1400d3f80
 
                 // Add to graphics scene
                 void* graphicsScene = *(void**)(world + 0x60);
@@ -272,91 +263,19 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 
                 // Check if this entry has an audio descriptor
                 uintptr_t audioDescPtr = *(uintptr_t*)(descArray + (uintptr_t)i * 0x10 + 8);
-                // The audio branch needs fn_Entity_FindAudioComponent (exe
-                // 0x140002280), which is not yet reimplemented in standalone (the
-                // weather port deliberately skipped ambient audio). Guard it so a
-                // descriptor carrying an audio template degrades to "geometry only"
-                // instead of calling through a null pointer.
-                bool audioReady = fn_AudioObjectGroup_Ctor && fn_AudioScene_RegisterObject &&
-                                  fn_Entity_FindAudioComponent;
-                if (audioDescPtr != 0 && !audioReady) {
+                // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail
+                // calls it here. Retail's audio branch for an entry with an audio
+                // descriptor (0x48-byte group built from the descriptor, registered
+                // with the manager at world+0xE8 under the descriptor's +0x20 sound type,
+                // then FindAudioComponent(group) -> move every emitter to the origin and
+                // mute the first) waited on the finder, so today an entry carrying an
+                // audio template shows its geometry only. This is that null arm.
+                if (audioDescPtr != 0) {
                     static bool warnedAudio = false;
                     if (!warnedAudio) {
                         warnedAudio = true;
                         fprintf(stderr, "[DebugUI::OnDrawComboChanged] audio helpers "
                             "not reimplemented; showing geometry without ambient audio\n");
-                    }
-                }
-                if (audioDescPtr != 0 && audioReady) {
-                    // Allocate and construct AudioObjectGroup (0x48 bytes)
-                    void* audioMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-                    void* audioObj = nullptr;
-                    if (audioMem) {
-                        audioObj = fn_AudioObjectGroup_Ctor(audioMem, (void*)audioDescPtr);
-                    }
-
-                    // Store via InternalBasePtr
-                    uint8_t audioBasePtrBuf[8];
-                    new (audioBasePtrBuf) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(audioObj));   // B.3.3 bridge
-                    audioArray[i] = *(void**)audioBasePtrBuf;
-
-                    // Register with audio manager
-                    // Sound type from audio descriptor +0x20
-                    int soundType = *(int*)(audioDescPtr + 0x20);
-                    uint8_t audioRef[8];
-                    *(void**)audioRef = audioArray[i];
-                    void* audioMgr = *(void**)(world + 0xE8);
-                    fn_AudioScene_RegisterObject(audioMgr, audioRef, soundType);
-
-                    // Find audio component on the audio object
-                    uint8_t audioCompBuf[8];
-                    fn_Entity_FindAudioComponent((void*)audioArray[i], audioCompBuf);
-
-                    // Check if position differs from zero — if so, move all emitters
-                    Math::Vector3 zeroPos;   // ??0Vector3@Math@@QEAA@XZ 0x180015070
-                    uintptr_t audioComp = *(uintptr_t*)audioCompBuf;
-
-                    // ??8Vector3@Math@@QEBA_NAEBV01@@Z  retail 0x1800150a0
-                    bool posEqual = zeroPos == *reinterpret_cast<const Math::Vector3*>(audioComp + 0x28);
-                    if (!posEqual) {
-                        int emitterCount = *(int*)(audioComp + 0x40);
-                        uintptr_t emitterArray = *(uintptr_t*)(audioComp + 0x38);
-
-                        for (int e = 0; e < emitterCount; e++) {
-                            uint32_t emitterId = *(uint32_t*)(emitterArray + (uintptr_t)e * 0x10);
-                            if (emitterId != 0) {
-                                void* audioScene = *(void**)(world + 0x78);
-                                reinterpret_cast<Audio::Scene*>(audioScene)->MoveEmitter(
-                                    emitterId,
-                                    *reinterpret_cast<const Vector3*>(audioComp + 0x28),  // old position
-                                    zeroPos);                   // new position (zero)   // B.3.7 bridge
-                            }
-                        }
-
-                        // Update stored position to zero
-                        *(float*)(audioComp + 0x28) = 0.0f;
-                        *(float*)(audioComp + 0x2C) = 0.0f;
-                        *(float*)(audioComp + 0x30) = 0.0f;
-                    }
-
-                    // Handle first emitter volume — mute it if needed
-                    audioComp = *(uintptr_t*)audioCompBuf;
-                    uint32_t* firstEmitter = *(uint32_t**)(audioComp + 0x38);
-                    if (firstEmitter[0] == 0) {
-                        // No emitter ID — just zero the volume field
-                        firstEmitter[1] = 0;
-                    } else {
-                        // Check if volume is non-zero
-                        float currentVolume = *(float*)&firstEmitter[1];
-                        if (currentVolume != 0.0f) {
-                            firstEmitter[1] = 0;
-                            void* audioScene = *(void**)(world + 0x78);
-                            reinterpret_cast<Audio::Scene*>(audioScene)->SetEmitterVolume(
-                                firstEmitter[0],
-                                *reinterpret_cast<const Vector3*>(audioComp + 0x28),
-                                0.0f);   // B.3.7 bridge
-                        }
                     }
                 }
             }
@@ -392,7 +311,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
         efactoryRaw->FindNext(ComponentDescription::TypeId(), nullptr));  // B.3.3 bridge
     while (entity) {
         // IsDerivedFrom check against ComponentDescription
-        bool isBuild = fn_IsDerivedFrom(entity, ComponentDescription::TypeId());
+        bool isBuild = ::Object::IsDerivedFromNullSafe(entity, ComponentDescription::TypeId());
         void* buildEntity = isBuild ? entity : nullptr;
 
         // Search entity's components for RawMaterialDescription
@@ -407,12 +326,15 @@ static void Game_DestroyAllRawMaterials_Impl() {
             if (typeId == RawMaterialDescription::TypeId()) {
                 // Re-read component pointer from array and confirm with IsDerivedFrom
                 void* rawComp = compArray[i];
-                bool isRawMat = fn_IsDerivedFrom(rawComp, RawMaterialDescription::TypeId());
+                bool isRawMat = ::Object::IsDerivedFromNullSafe(rawComp, RawMaterialDescription::TypeId());
                 if (isRawMat && rawComp != nullptr) {
                     // Destroy the entity (re-read entityList from global each time)
                     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
                     void* entityList = *(void**)(game + 0xF0);
-                    fn_Game_DestroyEntity(entityList, buildEntity);
+                    // The door was named fn_Game_DestroyEntity; it is bound to
+                    // 0x140091e60 RawMaterialComponent_RegisterRawMaterial (B3R: the
+                    // binding decides, INVENTORY_E §5.8).
+                    RawMaterialComponent_RegisterRawMaterial(entityList, buildEntity);
                 }
                 break;
             }
@@ -445,13 +367,15 @@ static void Game_SpawnItemsInStorage_Impl() {
 
         for (int j = 0; j < 5; j++) {
             int currentCount = *(int*)((uintptr_t)storage + 0x38);
-            int capacity = fn_StorageComponent_GetCapacity(storage);
+            // 0x140128570 PastureComponent_ComputeCapacity (door misnamed
+            // fn_StorageComponent_GetCapacity; the int the door read is the low dword).
+            int capacity = static_cast<int>(PastureComponent_ComputeCapacity(reinterpret_cast<uintptr_t>(storage)));
             if (capacity <= currentCount) break;
 
             // Spawn one item
             uint8_t retBuf[8] = {0};
             new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            fn_StorageComponent_SpawnItem(storage, retBuf);
+            Pasture_SpawnLivestock(storage, retBuf);   // 0x140128670 (door misnamed fn_StorageComponent_SpawnItem)
         }
     }
 }
@@ -499,7 +423,7 @@ static void Game_SpawnCitizens_Impl() {
                                 // Re-read and CheckPtr on the array slot
                                 pComp = (void**)(compArrayBase + cOffset * 8);
                                 comp = *pComp;
-                                bool isRes = fn_IsDerivedFrom(comp, InteractComponent::TypeId());
+                                bool isRes = ::Object::IsDerivedFromNullSafe(comp, InteractComponent::TypeId());
                                 residenceComp = isRes ? comp : nullptr;
                                 goto found_residence;
                             }
@@ -523,7 +447,7 @@ found_residence:
 
                             // Get ResidenceDescription from component+0x18
                             void* desc = *(void**)(resComp + 0x18);
-                            bool isResDesc = fn_IsDerivedFrom(desc, InteractDescription::TypeId());
+                            bool isResDesc = ::Object::IsDerivedFromNullSafe(desc, InteractDescription::TypeId());
                             void* resDesc = isResDesc ? desc : nullptr;
 
                             // Read capacity value from desc+0x30 (maxOccupants)
@@ -538,7 +462,9 @@ found_residence:
                                 uintptr_t sOffset = 0;
                                 do {
                                     void** pChild = (void**)(childArrayBase + sOffset);
-                                    int occResult = fn_ResidenceComponent_GetOccupantCount(*pChild, 0);
+                                    // 0x140123070 Pf_RecursiveChildSum_123070 (door misnamed
+                                    // fn_ResidenceComponent_GetOccupantCount)
+                                    int occResult = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(*pChild), 0);
                                     capacityAccum += occResult;
                                     si++;
                                     sOffset += 8;
@@ -550,7 +476,9 @@ found_residence:
 
                             // Get spawn point for this slot
                             uint8_t spawnPos[16] = {0};
-                            fn_ResidenceComponent_GetSpawnPoint(resCompIBP, spawnPos, 0, spawnedHere, nullptr);
+                            // 0x140122e20 Pf_EntityResolvePos_2e20 (door misnamed
+                            // fn_ResidenceComponent_GetSpawnPoint)
+                            Pf_EntityResolvePos_2e20(resCompIBP, reinterpret_cast<float*>(spawnPos), 0, spawnedHere, nullptr);
 
                             // Check if we've reached the global limit of 4
                             if (spawnedTotal >= 4) {
@@ -582,15 +510,16 @@ found_residence:
                             if (extTemplate == nullptr) {
                                 entityDesc = nullptr;
                             } else {
-                                bool isBuildDesc = fn_IsDerivedFrom(extTemplate, ComponentDescription::TypeId());
+                                bool isBuildDesc = ::Object::IsDerivedFromNullSafe(extTemplate, ComponentDescription::TypeId());
                                 entityDesc = isBuildDesc ? extTemplate : nullptr;
                             }
 
                             // Allocate and create entity (0x48 bytes)
-                            void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+                            void* memBlock = System::MemoryAllocator::MemAlloc(0x48, 8);
                             void* newEntity = nullptr;
                             if (memBlock != nullptr) {
-                                newEntity = fn_EntityFactory_CreateEntity(memBlock, entityDesc);
+                                newEntity = ComponentEntity_CtorFromDescription(
+                                    reinterpret_cast<ComponentEntity*>(memBlock), entityDesc);   // 0x1400c3720
                             }
 
                             // Wrap new entity in InternalBasePtr
@@ -613,7 +542,7 @@ found_residence:
                                     if (typeId == CitizenComponent::TypeId()) {
                                         pComp = (void**)(compArrayBase + cOffset * 8);
                                         comp = *pComp;
-                                        bool isAI = fn_IsDerivedFrom(comp, CitizenComponent::TypeId());
+                                        bool isAI = ::Object::IsDerivedFromNullSafe(comp, CitizenComponent::TypeId());
                                         aiComp = isAI ? comp : nullptr;
                                         goto found_ai;
                                     }
@@ -633,7 +562,7 @@ found_ai:
 
                             // Get CitizenDescription (DAT_1401c7190) from AI component
                             void* citDescRaw = *(void**)((uintptr_t)citizenAI + 0x18);
-                            bool isCitDesc = fn_IsDerivedFrom(citDescRaw, CitizenDescription::TypeId());
+                            bool isCitDesc = ::Object::IsDerivedFromNullSafe(citDescRaw, CitizenDescription::TypeId());
                             void* citDesc = isCitDesc ? citDescRaw : nullptr;
 
                             // Get profession list from game (re-read global)
@@ -651,17 +580,18 @@ found_ai:
                             float maxAge = *(float*)((uintptr_t)citDesc + 0x54);
                             float age = randAge * (maxAge - minAge) + minAge;
 
-                            fn_CitizenComponent_Setup(citizenAI, spawnPos,
+                            CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(citizenAI), spawnPos,
                                                       genderFlag, '\0',
-                                                      age, '\x01', &parentIBP, profList);
+                                                      age, '\x01', reinterpret_cast<int64_t*>(&parentIBP),
+                                                      reinterpret_cast<int64_t>(profList));   // 0x140117080
 
                             // Register entity with entity manager
                             // Use newEntityIBP (the InternalBasePtr value) as the entity ref
                             void* entityRef = newEntityIBP;
                             game = (uintptr_t)*g_pGameWorldSingleton;
                             void* entityMgr = *(void**)(game + 0xE8);
-                            fn_EntityList_RegisterEntity(entityMgr, &entityRef,
-                                                         *(int*)((uintptr_t)entityDesc + 0x20));
+                            EntityList_RegisterEntity_Impl(entityMgr, &entityRef,
+                                                         *(int*)((uintptr_t)entityDesc + 0x20));   // 0x1400c48a0
 
                             // Restore spawnedTotal
                             spawnedTotal = savedSpawnedTotal;
@@ -705,7 +635,7 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
     if (!externalList) return;
     void* diseaseEntry = *(void**)(*(uintptr_t*)((uintptr_t)externalList + 0x20) +
                                    (int64_t)diseaseIdx * 8);
-    bool isDisease = fn_IsDerivedFrom(diseaseEntry, Disease::TypeId());
+    bool isDisease = ::Object::IsDerivedFromNullSafe(diseaseEntry, Disease::TypeId());
     void* diseaseDesc = isDisease ? diseaseEntry : nullptr;
     if (!diseaseDesc) return;
 
@@ -714,7 +644,7 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
     if (!building) return;
 
     // Apply disease to building
-    fn_DisasterComponent_Infect(building, diseaseDesc);
+    CitizenComp_Infect(building, diseaseDesc);   // 0x140116b90 (door named fn_DisasterComponent_Infect)
 }
 
 // ============================================================
@@ -740,7 +670,7 @@ static void Game_StartRandomFire_Impl() {
 
     // Ignite
     void* fireComp = *(void**)fireCompBuf;
-    fn_FireComponent_Ignite(fireComp);
+    FireComponent_Ignite_610(fireComp);   // 0x140049610
 }
 
 // ============================================================
@@ -760,7 +690,7 @@ static void Game_SpawnTornado_Impl() {
     // Cast to entity description (must be derived from ComponentDescription type)
     void* entityDesc = nullptr;
     if (extTemplate) {
-        bool isEntityDesc = fn_IsDerivedFrom(extTemplate, ComponentDescription::TypeId());
+        bool isEntityDesc = ::Object::IsDerivedFromNullSafe(extTemplate, ComponentDescription::TypeId());
         if (isEntityDesc) {
             entityDesc = extTemplate;
         }
@@ -770,9 +700,10 @@ static void Game_SpawnTornado_Impl() {
 
     // Allocate and create entity (0x48 bytes)
     void* newEntity = nullptr;
-    void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* memBlock = System::MemoryAllocator::MemAlloc(0x48, 8);
     if (memBlock) {
-        newEntity = fn_EntityFactory_CreateEntity(memBlock, entityDesc);
+        newEntity = ComponentEntity_CtorFromDescription(
+            reinterpret_cast<ComponentEntity*>(memBlock), entityDesc);   // 0x1400c3720
     }
 
     // Register entity with entity manager
@@ -780,8 +711,8 @@ static void Game_SpawnTornado_Impl() {
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
     void* entityRef = *(void**)entityBuf;
     void* entityMgr = *(void**)(game + 0xE8);
-    fn_EntityList_RegisterEntity(entityMgr, &entityRef,
-                                  *(int*)((uintptr_t)entityDesc + 0x20));
+    EntityList_RegisterEntity_Impl(entityMgr, &entityRef,
+                                  *(int*)((uintptr_t)entityDesc + 0x20));   // 0x1400c48a0
 }
 
 // ============================================================
@@ -805,7 +736,7 @@ static void Game_InfectRandomCitizen_Impl() {
     if (!citizen) return;
 
     // Infect citizen's disease component
-    fn_DiseaseComponent_Infect(citizen);
+    DiseaseComp_Infect(reinterpret_cast<DiseaseComponent*>(citizen));   // 0x1400483a0
 }
 
 // ENDGAME B.3.9: every global the old debugui_sa::EnsureGlobals() healed now has a
@@ -936,7 +867,7 @@ void DebugUI::OnUpdateLayout() {
         ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(sliderDay)->Child(0));  // B.3.6 bridge
         void* childRaw = *(void**)childBuf;
         // IsDerivedFrom check + IBP wrap (matches original)
-        bool isText = childRaw && fn_IsDerivedFrom(childRaw, UI::Element::TypeId());
+        bool isText = childRaw && ::Object::IsDerivedFromNullSafe(childRaw, UI::Element::TypeId());
         void* textChild = isText ? childRaw : nullptr;
         uint8_t textIBP[8];
         new (textIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textChild));   // B.3.3 bridge
@@ -1169,7 +1100,7 @@ static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
 #endif
     // Original uses UI::Element's own id (exe slot 0x140151660), NOT
     // TypeId_ButtonElement which excludes sliders/images/numbers.
-    if (!rawElem || !fn_IsDerivedFrom(rawElem, UI::Element::TypeId())) {
+    if (!rawElem || !::Object::IsDerivedFromNullSafe(rawElem, UI::Element::TypeId())) {
         rawElem = nullptr;
     }
     uint8_t basePtrBuf[8];
@@ -1246,7 +1177,7 @@ void DebugUI::OnCreated() {
             // list yields an empty combo instead of crashing.
             void* gameWorld_dc = *g_pGameWorldSingleton;
             void* externalList = gameWorld_dc ? *(void**)((uintptr_t)gameWorld_dc + 0xa8) : nullptr;
-            int resourceCount = (externalList && fn_ExternalList_GetResourceCount)
+            int resourceCount = externalList
                                     ? reinterpret_cast<const ::Object::ExternalList*>(
                                           externalList)->GetResourceCount()  // B.3.3 bridge
                                     : 0;
@@ -1260,7 +1191,7 @@ void DebugUI::OnCreated() {
                 // entry, so the row index stays a direct index into the list, which is
                 // exactly how DebugUI::TriggerDisasterOnBuilding (0x14005ff30) reads
                 // the selection back.
-                bool isDisease = fn_IsDerivedFrom(resource, Disease::TypeId());
+                bool isDisease = ::Object::IsDerivedFromNullSafe(resource, Disease::TypeId());
                 void* disease = isDisease ? resource : nullptr;
                 if (!disease) continue;
 
@@ -1341,7 +1272,7 @@ void DebugUI::OnCreated() {
                 void* entry = *(void**)((uintptr_t)i * 8 +
                     *(uintptr_t*)(drawableList + 0xC0));
                 void* inner = *(void**)((uintptr_t)entry + 0x18);
-                bool isDrawable = fn_IsDerivedFrom(inner, PopulationDescription::TypeId());
+                bool isDrawable = ::Object::IsDerivedFromNullSafe(inner, PopulationDescription::TypeId());
                 void* drawableDesc = isDrawable ? inner : nullptr;
 
                 uint8_t spriteBuf[16];

@@ -25,6 +25,8 @@
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "ui/Element.h"
+#include "object/TypeInfo.h"
+#include "Tutorial/exe_bodies.h"   // 0x1400e1870 FindUIElementByPath_Impl
 #include <cstdint>
 #include <new>
 
@@ -81,9 +83,7 @@ void TutorialGoalButton::Destruct() { this->~TutorialGoalButton(); }
 bool TutorialGoalButton::IsComplete(void* /*time*/, void* /*instance*/) {
     // Find UI element by elementPath (+0x20)
     uintptr_t elementIBP = 0;
-    if (fn_FindUIElementByPath) {
-        fn_FindUIElementByPath(&elementIBP, static_cast<void*>(&elementPath), nullptr);
-    }
+    FindUIElementByPath_Impl(&elementIBP, static_cast<void*>(&elementPath), nullptr);   // 0x1400e1870
 
     if (elementIBP == 0) {
         return false;
@@ -91,19 +91,13 @@ bool TutorialGoalButton::IsComplete(void* /*time*/, void* /*instance*/) {
 
     // Check if element IsDerivedFrom UI::Element
     uintptr_t element = elementIBP;
-    if (!fn_IsDerivedFrom) {
-        return false;
-    }
-
-    bool isDerived = fn_IsDerivedFrom((void*)element, UI::Element::TypeId());
+    bool isDerived = Object::IsDerivedFromNullSafe((void*)element, UI::Element::TypeId());
     void* validElement = isDerived ? (void*)element : nullptr;
 
     // Wrap in another InternalBasePtr
     uintptr_t wrappedIBP = 0;
-    if (fn_InternalBasePtr_Ctor) {
-        new (&wrappedIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(validElement));   // B.3.3 bridge
-    }
+    new (&wrappedIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(validElement));   // B.3.3 bridge
 
     if (wrappedIBP == 0) {
         return false;

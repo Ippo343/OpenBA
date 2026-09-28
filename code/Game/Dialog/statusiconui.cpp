@@ -151,7 +151,7 @@ void StatusIconUI::OnUpdateLayout() {
         StatusIconUI::OnCreated();
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr
@@ -183,7 +183,7 @@ void StatusIconUI::OnUpdateLayout() {
     void* config = *(void**)((uintptr_t)this + 0x10);
     if (config != nullptr) {
         bool isCfg = s_tidStatusIconUIConfig &&
-                     fn_IsDerivedFrom(config, s_tidStatusIconUIConfig);
+                     ::Object::IsDerivedFromNullSafe(config, s_tidStatusIconUIConfig);
         void* cfgPtr = isCfg ? config : nullptr;
 
         // Retail reads *(char*)(cfg+0x20) — the `_showOnMainPage` BOOL — and enters the
@@ -204,7 +204,7 @@ void StatusIconUI::OnUpdateLayout() {
             void* entityUI = nullptr;
             if (ctrlResult != 0) {
                 void* ctrlPtr = (void*)ctrlResult;
-                if (s_tidEntityUI && fn_IsDerivedFrom(ctrlPtr, s_tidEntityUI))
+                if (s_tidEntityUI && ::Object::IsDerivedFromNullSafe(ctrlPtr, s_tidEntityUI))
                     entityUI = ctrlPtr;
             }
 
@@ -293,7 +293,7 @@ void StatusIconUI::OnUpdateLayout() {
 // no shared-global dependency. Entity component array at entity+0x30 (ptr) / +0x38 (count),
 // each slot an InternalBasePtr. Returns null if the entity carries no StatusIconComponent.
 static void* StatusIconUI_FindStatusIconComp(void* entity) {
-    if (!entity || !fn_IsDerivedFrom) return nullptr;
+    if (!entity) return nullptr;
     uint32_t want = StatusIconComponent::TypeId();
     if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
     uintptr_t e = (uintptr_t)entity;
@@ -305,7 +305,7 @@ static void* StatusIconUI_FindStatusIconComp(void* entity) {
         if (!comp) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (tid == want)
-            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+            return ::Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
     }
     return nullptr;
 }

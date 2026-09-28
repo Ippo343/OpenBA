@@ -4,8 +4,7 @@
 // line-segment (+0x50) arrays that PathTool::Draw renders — i.e. it computes the
 // worker home<->workplace routes shown by the "Paths" report tool.
 //
-// Ported functions (registered so pathtool.cpp's ResolveAddr(Exe, 0x1400dd710)
-// resolves to us in the standalone build):
+// Ported functions (pathtool.cpp calls PathTool_helper_d710 by name):
 //   0x1400dd710  PathTool_helper_d710            SetSelectedEntity dispatcher
 //   0x1400dd250  thunk_helper_d250               clear old selection highlight
 //   0x1400dd0f0  PathTool_helper_d0f0            set new selection highlight
@@ -33,7 +32,6 @@
 #include "Player/PathTool.h"
 #include "Component/HighlightComponent.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -44,54 +42,31 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "application/Application.h"   // ENDGAME B.3.7 callers (K2)
 #include "Player/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Component/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 
 namespace {
 
-// ---- registered exe sub-callees (all resolve to our reimpls in standalone) ----
-typedef void     (*fn_HighlightRefresh_t)(int64_t comp);                              // 0x14004c4a0
-typedef void*    (*fn_FindComp_t)(int64_t entity, void* retIBP);                      // 0x140002e10 / 0x140008090
-typedef uint32_t (*fn_AnchorCell_t)(void* ibp, float* p2);                            // 0x140087fb0
-typedef void*    (*fn_AStar_t)(void* map, void* out2ints, uint64_t mask, uint32_t src, uint32_t dst); // 0x14009cfb0
-typedef void     (*fn_ListFree_t)(void* listHdr, int flag);                          // 0x1400021d0
-typedef void     (*fn_AvlErase_t)(void** root, void* node);                          // 0x140014c30
-typedef void     (*fn_AvlRotate_t)(int64_t* root, int64_t node);                     // 0x140014c70 / 0x140014da0
-typedef void*    (*fn_ResolvePos_t)(int64_t ent, void* outVec3, int a, int b, float* p5); // 0x140122e20
-
-static fn_HighlightRefresh_t s_c4a0   = nullptr;
-static fn_FindComp_t         s_2e10   = nullptr;   // WorkPlace-ish finder
-static fn_FindComp_t         s_8090   = nullptr;   // RESIDENCE finder (Ghidra mislabels
-                                                   // 0x140008090 "FindComponent_Storage"; the
-                                                   // disasm tail-calls 0x140006270 with the
-                                                   // ResidenceComponent type id).
-static fn_AnchorCell_t       s_7fb0   = nullptr;
-static fn_AStar_t            s_9cfb0  = nullptr;
-static fn_ListFree_t         s_21d0   = nullptr;
-static fn_AvlErase_t         s_14c30  = nullptr;
-static fn_AvlRotate_t        s_14c70  = nullptr;
-static fn_AvlRotate_t        s_14da0  = nullptr;
-static fn_ResolvePos_t       s_122e20 = nullptr;
-
-static const uint32_t* s_pTid_Highlight = nullptr;  // DAT_1401c4410 = HighlightComponent type-id
-static bool s_init = false;
-
-static void EnsureFns() {
-    if (s_init) return;
-    s_c4a0   = reinterpret_cast<fn_HighlightRefresh_t>(ResolveAddr(Module::Exe, 0x14004c4a0));
-    s_2e10   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_8090   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140008090));
-    s_7fb0   = reinterpret_cast<fn_AnchorCell_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_9cfb0  = reinterpret_cast<fn_AStar_t>(ResolveAddr(Module::Exe, 0x14009cfb0));
-    s_21d0   = reinterpret_cast<fn_ListFree_t>(ResolveAddr(Module::Exe, 0x1400021d0));
-    s_14c30  = reinterpret_cast<fn_AvlErase_t>(ResolveAddr(Module::Exe, 0x140014c30));
-    s_14c70  = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x140014c70));
-    s_14da0  = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x140014da0));
-    s_122e20 = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    // DAT_1401c4410 (HighlightComponent type-id) is raw exe .rdata -> NULL in standalone.
-    static uint32_t s_tidHi = 0;
-    if (s_tidHi == 0) s_tidHi = HighlightComponent::TypeId();
-    s_pTid_Highlight = &s_tidHi;
-    s_init = true;
-}
+// ---- exe sub-callees, called by name ----
+//   0x14004c4a0 HighlightRepaint_Impl (Player/exe_bodies.h) -- highlight refresh
+//   0x140002e10 AttendanceComponent_GetJobHostComponent -- the workplace-ish finder
+//   0x140008090 CitizenComp_Entity_FindComponent_Storage -- the RESIDENCE finder
+//               (Ghidra mislabels 0x140008090 "FindComponent_Storage"; the disasm
+//               tail-calls 0x140006270 with the ResidenceComponent type id)
+//   0x140004740 InteractComponent_FindWorkplaceComponent -- the related-entity list
+//               holder (Component/exe_bodies.h)
+//   0x140087fb0 Pf_EntityAnchorCell_7fb0, 0x14009cfb0 ActMv_PathfinderQuery_9cfb0,
+//   0x140014c70 Pf_AvlRotateL_14c70, 0x140014da0 Pf_AvlRotateR_14da0,
+//   0x140122e20 Pf_EntityResolvePos_2e20 (Action/exe_bodies.h)
+//   0x1400021d0 Reimpl_Array_Resize_Stride04 (Game/exe_bodies.h) -- resize to 0
+//               frees the slot's cell list
+//   0x140014c30 WorkBase_TreeNodeFree_14c30, 0x140002ed0 WorkBase_FindComponent_2ed0
+//               (Work/exe_bodies.h)
+// DAT_1401c4410 (HighlightComponent type-id) is read as HighlightComponent::TypeId().
 
 static inline uint32_t GetTypeId(void* obj) {
     if (!obj) return 0;
@@ -107,7 +82,7 @@ static inline short  NodeHeight(void* n) { return *(short*)((uintptr_t)n + 0x22)
 
 // Allocate + init a fresh 0x28-byte AVL node with the given 8-byte key and parent.
 static void* AvlNodeAlloc(uint64_t key, void* parent) {
-    void* n = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+    void* n = System::MemoryAllocator::MemAlloc(0x28, 8);
     if (!n) return nullptr;
     uintptr_t p = (uintptr_t)n;
     *(uint64_t*)(p + 0x00) = key;
@@ -134,8 +109,8 @@ static void AvlRebalanceUp(void** root, void* node) {
         *(short*)((uintptr_t)node + 0x20) = bal;
         if (bal > 1 && right) {
             short rbal = NodeBal(right);
-            if (rbal < 1 && rbal < 0) { if (s_14da0) s_14da0((int64_t*)root, (int64_t)right); }
-            if (s_14c70) s_14c70((int64_t*)root, (int64_t)node);
+            if (rbal < 1 && rbal < 0) { Pf_AvlRotateR_14da0((int64_t*)root, (int64_t)right); }
+            Pf_AvlRotateL_14c70((int64_t*)root, (int64_t)node);
         }
         // Second check re-reads balance from memory (a prior rotation may have changed it).
         short bal2 = NodeBal(node);
@@ -143,8 +118,8 @@ static void AvlRebalanceUp(void** root, void* node) {
             left = NodeLeft(node);
             if (left) {
                 short lbal = NodeBal(left);
-                if (lbal > -1 && lbal > 0) { if (s_14c70) s_14c70((int64_t*)root, (int64_t)left); }
-                if (s_14da0) s_14da0((int64_t*)root, (int64_t)node);
+                if (lbal > -1 && lbal > 0) { Pf_AvlRotateL_14c70((int64_t*)root, (int64_t)left); }
+                Pf_AvlRotateR_14da0((int64_t*)root, (int64_t)node);
             }
         }
         node = parent;
@@ -292,20 +267,19 @@ static void U64ArrayPush(SegArray* a, uint64_t val)  { a->SetSizeFill(a->_size +
 // param_1 = entity (+0x30 component ptr array, +0x38 count); writes IBP into param_2.
 // ============================================================
 static void* PathSel_FindHighlight_7080(int64_t param_1, void* param_2) {
-    EnsureFns();
     void* found = nullptr;
     int count = *(int*)(param_1 + 0x38);
     int64_t* arr = *(int64_t**)(param_1 + 0x30);
-    uint32_t want = s_pTid_Highlight ? *s_pTid_Highlight : 0;
+    uint32_t want = HighlightComponent::TypeId();
     for (int i = 0; i < count; i++) {
         void* comp = (void*)arr[i];
         if (GetTypeId(comp) == want && want != 0) {
             void* c = (void*)arr[i];
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, want)) found = c;
+            if (Object::IsDerivedFromNullSafe(c, want)) found = c;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+    new (param_2) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return param_2;
 }
@@ -315,7 +289,6 @@ static void* PathSel_FindHighlight_7080(int64_t param_1, void* param_2) {
 // param_2 is an IBP whose inner (+0) is a CitizenAI; +0x238 = its workplace entity.
 // ============================================================
 static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
-    EnsureFns();
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
     int64_t workplace = *(int64_t*)(*(int64_t*)param_2 + 0x238);
     uint64_t posIBP = 0;
@@ -333,9 +306,9 @@ static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
     // at the map centre instead of the workplace door -- and because the centre is
     // the same cell for every workplace, N workers collapsed into N identical
     // src/dst pairs (the "duplicate routes" report).
-    fn_Entity_FindComponent_Position((uintptr_t)workplace, &posIBP);
+    WorkBase_FindComponent_2ed0((uintptr_t)workplace, &posIBP);   // 0x140002ed0
     float vec[3] = {0, 0, 0};
-    if (s_122e20) s_122e20(*(int64_t*)&posIBP, vec, 0, 0, nullptr);
+    Pf_EntityResolvePos_2e20(*(void**)&posIBP, vec, 0, 0, nullptr);
     int w = *mapGrid;
     int col = (int)(vec[0] + (float)(w >> 1));   // local_18 = x
     int row = (int)((float)(w >> 1) + vec[1]);   // local_14 = y
@@ -351,7 +324,6 @@ static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
 // param_1 = array header {ptr@0, count@+8, cap@+0xc}; param_2 = new count; param_3 = src elem.
 // ============================================================
 static void PathSel_RoutePush_6ba0(int64_t* param_1, int param_2, uint64_t* param_3) {
-    EnsureFns();
     // B.3.2 bridge: the +0x30 route header is still raw bytes in the PathTool struct.
     reinterpret_cast<RouteArray*>(param_1)->SetSizeFill(param_2, param_3);
 }
@@ -361,18 +333,12 @@ static void PathSel_RoutePush_6ba0(int64_t* param_1, int param_2, uint64_t* para
 // entities and refresh (c4a0). self+0x28 = selectedEntity IBP.
 // ============================================================
 // FUN_140004740 finds a component holding a related-entity list (+0x48 array, +0x50 count).
-static fn_FindComp_t s_4740 = nullptr;
-static void EnsureFind4740() {
-    if (!s_4740) s_4740 = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
-}
 
 static void PathSel_ClearHighlight_d250(int64_t param_1) {
-    EnsureFns();
-    EnsureFind4740();
     void* self = (void*)(param_1 + 0x28);
     if (*(int64_t*)(param_1 + 0x28) == 0) return;
     uint64_t listIBP = 0;
-    if (s_4740) s_4740(*(int64_t*)self, &listIBP);
+    InteractComponent_FindWorkplaceComponent(*(uintptr_t*)self, &listIBP);
     if (listIBP != 0) {
         int n = *(int*)(listIBP + 0x50);
         for (int i = 0; i < n; i++) {
@@ -382,7 +348,7 @@ static void PathSel_ClearHighlight_d250(int64_t param_1) {
             if (hi != 0) {
                 if (*(char*)(hi + 0x11c) != '\0') {
                     *(char*)(hi + 0x11c) = 0;
-                    if (s_c4a0) s_c4a0((int64_t)hi);
+                    HighlightRepaint_Impl((void*)hi);
                 }
             }
         }
@@ -392,7 +358,7 @@ static void PathSel_ClearHighlight_d250(int64_t param_1) {
     if (hi2 != 0) {
         if (*(char*)(hi2 + 0x11c) != '\0') {
             *(char*)(hi2 + 0x11c) = 0;
-            if (s_c4a0) s_c4a0((int64_t)hi2);
+            HighlightRepaint_Impl((void*)hi2);
         }
     }
 }
@@ -402,13 +368,11 @@ static void PathSel_ClearHighlight_d250(int64_t param_1) {
 // clearing (d250), then sets. Same shape as d250 with flag value 1.
 // ============================================================
 static void PathSel_SetHighlight_d0f0(int64_t param_1) {
-    EnsureFns();
     PathSel_ClearHighlight_d250(param_1);
     if (*(int64_t*)(param_1 + 0x28) == 0) return;
-    EnsureFind4740();
     void* self = (void*)(param_1 + 0x28);
     uint64_t listIBP = 0;
-    if (s_4740) s_4740(*(int64_t*)self, &listIBP);
+    InteractComponent_FindWorkplaceComponent(*(uintptr_t*)self, &listIBP);
     if (listIBP != 0) {
         int n = *(int*)(listIBP + 0x50);
         for (int i = 0; i < n; i++) {
@@ -418,7 +382,7 @@ static void PathSel_SetHighlight_d0f0(int64_t param_1) {
             if (hi != 0) {
                 if (*(char*)(hi + 0x11c) != '\x01') {
                     *(char*)(hi + 0x11c) = 1;
-                    if (s_c4a0) s_c4a0((int64_t)hi);
+                    HighlightRepaint_Impl((void*)hi);
                 }
             }
         }
@@ -428,7 +392,7 @@ static void PathSel_SetHighlight_d0f0(int64_t param_1) {
     if (hi2 != 0) {
         if (*(char*)(hi2 + 0x11c) != '\x01') {
             *(char*)(hi2 + 0x11c) = 1;
-            if (s_c4a0) s_c4a0((int64_t)hi2);
+            HighlightRepaint_Impl((void*)hi2);
         }
     }
 }
@@ -439,13 +403,12 @@ static void PathSel_SetHighlight_d0f0(int64_t param_1) {
 // path cells (point tree) and segments (segment tree) into +0x40 / +0x50.
 // ============================================================
 static void PathSel_BuildRoutes_d770(int64_t param_1) {
-    EnsureFns();
 
     uint64_t local_res20 = 0;   // FUN_140002e10 result (workplace-ish component)
-    if (s_2e10) s_2e10(*(int64_t*)(param_1 + 0x28), &local_res20);
+    AttendanceComponent_GetJobHostComponent(*(void**)(param_1 + 0x28), &local_res20);
     uint64_t local_res18 = 0;   // ResidenceComponent (8090) - its +0x50/+0x58 is the
                                 // occupant list: outer groups (0x10 stride) of citizens.
-    if (s_8090) s_8090(*(int64_t*)(param_1 + 0x28), &local_res18);
+    CitizenComp_Entity_FindComponent_Storage(*(int64_t*)(param_1 + 0x28), &local_res18);
     uint64_t local_2098 = 0;    // CitizenAI component
     fn_FindComponent_Citizen(*(void**)(param_1 + 0x28), &local_2098);
 
@@ -469,7 +432,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
                 citizenHandled = true;
                 uint64_t housing = 0;
                 { uint64_t tmp = local_2098; housing = *(uint64_t*)(tmp + 0x248); }
-                int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
+                int anchorCell = Pf_EntityAnchorCell_7fb0(&housing, nullptr);
                 uint64_t selIBP = local_2098;   // retail uses a COPY here (local_2080),
                                                 // not the live CitizenAI IBP slot.
                 int wpCell = PathSel_WorkplaceCell_e5d0(local_2098, &selIBP);
@@ -499,7 +462,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
                         if (*(int64_t*)(ent + 0x248) != 0) {
                             uint64_t housing = 0;
                             { uint64_t tmp = ent; housing = *(uint64_t*)(tmp + 0x248); }
-                            int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
+                            int anchorCell = Pf_EntityAnchorCell_7fb0(&housing, nullptr);
                             uint64_t entIBP = ent;
                             int wpCell = PathSel_WorkplaceCell_e5d0(ent, &entIBP);
                             *(int32_t*)(entryBuf + 0x00) = wpCell;
@@ -519,7 +482,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
                 if (*(int64_t*)(ent + 0x248) != 0) {
                     uint64_t housing = 0;
                     { uint64_t tmp = ent; housing = *(uint64_t*)(tmp + 0x248); }
-                    int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
+                    int anchorCell = Pf_EntityAnchorCell_7fb0(&housing, nullptr);
                     uint64_t entIBP = ent;
                     int wpCell = PathSel_WorkplaceCell_e5d0(ent, &entIBP);
                     *(int32_t*)(entryBuf + 0x00) = wpCell;
@@ -545,7 +508,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
 
         // Async A* query: returns {idx@+0, queryId@+4}. Spin on the map's result table.
         uint64_t qr = 0;
-        if (s_9cfb0) s_9cfb0(map, &qr, 0xe1f, srcCell, dstCell);
+        ActMv_PathfinderQuery_9cfb0(map, &qr, 0xe1f, srcCell, dstCell);
         int qIdx = (int)qr;
         int qId  = (int)(qr >> 32);
         if (qId == 0 || qIdx < 0) {
@@ -579,7 +542,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
             *(int32_t*)(routeBase + off + 0xc + (int64_t)c * 4) = *(int32_t*)(cellsPtr + (int64_t)c * 4);
         *(int32_t*)(slot + 4) = 0;      // clear queryId
         *(char*)(slot + 0) = 0;         // clear ready flag
-        if (s_21d0) s_21d0((void*)(slot + 8), 0);   // free the slot's cell list
+        Reimpl_Array_Resize_Stride04((void*)(slot + 8), 0);   // free the slot's cell list
         *(int32_t*)(routeBase + off + 8) = cellCount;  // routeEntry.pathCount
 
 
@@ -609,12 +572,12 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
 
     // --- Free the AVL trees (14c30 recursively frees a subtree). ---
     if (segTree) {
-        if (s_14c30) { s_14c30(&segTree, NodeLeft(segTree)); s_14c30(&segTree, NodeRight(segTree)); }
-        fn_MemFreeStatic(segTree);
+        WorkBase_TreeNodeFree_14c30(&segTree, NodeLeft(segTree)); WorkBase_TreeNodeFree_14c30(&segTree, NodeRight(segTree));
+        System::MemoryAllocator::MemFree(segTree);
     }
     if (pointTree) {
-        if (s_14c30) { s_14c30(&pointTree, NodeLeft(pointTree)); s_14c30(&pointTree, NodeRight(pointTree)); }
-        fn_MemFreeStatic(pointTree);
+        WorkBase_TreeNodeFree_14c30(&pointTree, NodeLeft(pointTree)); WorkBase_TreeNodeFree_14c30(&pointTree, NodeRight(pointTree));
+        System::MemoryAllocator::MemFree(pointTree);
     }
 }
 
@@ -622,7 +585,6 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
 // 0x1400dd710 — SetSelectedEntity dispatcher (the registered entry point).
 // ============================================================
 extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2) {
-    EnsureFns();
     if (*(int64_t*)(param_1 + 0x28) != (int64_t)*param_2) {
         PathSel_ClearHighlight_d250(param_1);
         *(uint64_t*)(param_1 + 0x28) = *param_2;
@@ -631,7 +593,6 @@ extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2) {
     }
 }
 
-#include "address_registry.h"
 // ============================================================
 // PathTool::Shutdown — slot 5 (+0x28), 0x1400de930: a bare JMP to 0x1400dd250.
 // ============================================================
@@ -648,6 +609,8 @@ void PathTool::Shutdown() {
     PathSel_ClearHighlight_d250(reinterpret_cast<int64_t>(this));
 }
 
+// Empty: the 0x1400dd710 row's one reader (pathtool.cpp) calls PathTool_helper_d710
+// by name, so the row was DEAD and is gone. The call in AddressRegistryInit is the
+// coordinator's to remove.
 extern "C" void RegisterPathToolSetSelected() {
-    RegisterExeAddr(0x1400dd710, reinterpret_cast<uintptr_t>(&PathTool_helper_d710));
 }

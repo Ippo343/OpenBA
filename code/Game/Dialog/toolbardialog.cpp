@@ -69,6 +69,8 @@
 #include "ui/CheckElement.h"               // UI::CheckElement::TypeId() (ENDGAME B.3.9 TR)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Dialog/exe_bodies.h"
+#include "Player/exe_bodies.h"   // B3R: PlayerTrade_EntityUI_66b0
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
 #ifdef _DEBUG
@@ -211,7 +213,7 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
                 // vtable[2] (offset 0x10) = GetTypeId, returns uint32_t
                 uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
                 if (subType == targetType) {
-                    bool isDerived = fn_IsDerivedFrom(subItem, targetType);
+                    bool isDerived = ::Object::IsDerivedFromNullSafe(subItem, targetType);
                     if (isDerived) matchedComponent = subItem;
                     break;
                 }
@@ -471,7 +473,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     void* newObj = ::Object::Factory::_singleton->CreateObject(
         factoryTypeId);   // B.3.3 bridge
     // IsDerivedFrom check for ToolController type
-    bool isToolCtrl = fn_IsDerivedFrom(newObj, Tool::TypeId());   // cell 0x1401c6eb8 (ENDGAME B.3.9 RF)
+    bool isToolCtrl = ::Object::IsDerivedFromNullSafe(newObj, Tool::TypeId());   // cell 0x1401c6eb8 (ENDGAME B.3.9 RF)
     void* toolController = isToolCtrl ? newObj : nullptr;
 
 
@@ -497,7 +499,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             // Create the ToolSetting object
             void* settingObj = ::Object::Factory::_singleton->CreateObject(
                 settingFactoryId);   // B.3.3 bridge
-            bool isToolSetting = fn_IsDerivedFrom(settingObj, ToolSetting::TypeId());   // cell 0x1401c6ef0
+            bool isToolSetting = ::Object::IsDerivedFromNullSafe(settingObj, ToolSetting::TypeId());   // cell 0x1401c6ef0
             void* toolSetting = isToolSetting ? settingObj : nullptr;
 
             uint64_t settingRef = 0;
@@ -562,7 +564,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
 
     // Step 1: Check if a dialog with this controller type is already open
     void* existingDialog = nullptr;
-    fn_FindDialogByControllerType(gameSubsys, &existingDialog, param);
+    ToolbarUtility_FindDialogByControllerType_0270(gameSubsys, &existingDialog, param);   // 0x140100270
 
     if (existingDialog != nullptr) {
         // Dialog is already open — close it
@@ -601,7 +603,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
         uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
 
         if (subType == UIDescription::TypeId()) {
-            bool isDerived = fn_IsDerivedFrom(subItem, UIDescription::TypeId());
+            bool isDerived = ::Object::IsDerivedFromNullSafe(subItem, UIDescription::TypeId());
             if (isDerived) {
                 uiDescItem = subItem;
             }
@@ -615,7 +617,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     }
 
     // Step 3: Create a new DialogInstance from the UIDescription's resource
-    void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+    void* newBuf = System::MemoryAllocator::MemAlloc(0xB8, 8);
     void* dialogInst = nullptr;
 
     if (newBuf != nullptr) {
@@ -673,7 +675,8 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
         *(uint64_t*)&insertBuf[16] = 0;             // flags=0
 
         void* retNode = nullptr;
-        fn_BST_Insert_0x14(bstRoot, &retNode, insertBuf);
+        ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(bstRoot), &retNode,
+                                      reinterpret_cast<uint64_t*>(insertBuf));   // 0x140014890
         bstNode = (uintptr_t*)retNode;
     }
 
@@ -880,17 +883,12 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     }
 
     // Step 2: Clear current tool group by calling ShowGroup(gameSubsys, 0)
-    if (fn_Toolbar_ShowGroup)
-        fn_Toolbar_ShowGroup(gameSubsys, 0);
-    else
-        Toolbar_ShowGroup_Impl(gameSubsys, 0);
+    Toolbar_ShowGroup_Impl(gameSubsys, 0);   // 0x140102b60 (the door was bound to it)
 
     // Step 3: Recompute camera view transform
     // Time::Time(0.0f) — constructs a zero time value (unused, but matches original)
     uint8_t timeVal[16];
-    if (fn_Time_Ctor_Float) {
-        fn_Time_Ctor_Float(timeVal, 0.0f);
-    }
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 0.0f);
 
     // Get camera system at gameWorld+0xE0
     void* cameraSys = *(void**)((uintptr_t)gameWorld + 0xE0);
@@ -898,8 +896,8 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     // CameraSys_ComputeViewTransform: computes look-at transform from camera params
     // Returns a compact Transform (7 floats = 0x1C bytes) written to outBuf and cameraSys[0..6]
     Math::Transform viewTransform;
-    if (fn_CameraSys_ComputeViewTransform) {
-        void* result = fn_CameraSys_ComputeViewTransform(cameraSys, &viewTransform);
+    {
+        void* result = Reimpl_FUN_1400983f0(cameraSys, &viewTransform);   // 0x1400983f0
 
         // Convert compact Transform to Transform3 (48 bytes) and set on camera
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
@@ -926,7 +924,7 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     }
 
     // Step 6: Allocate PauseDialog (0xC8 bytes)
-    void* pauseDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
+    void* pauseDialog = System::MemoryAllocator::MemAlloc(0xC8, 8);
     void* finalDialog = nullptr;
 
     uintptr_t gameWorldPtr = (uintptr_t)gameWorld;
@@ -979,7 +977,7 @@ static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, ui
             newCap = newCount * 3;
         }
         *pCapacity = newCap;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)newCap * 8, 8);
+        void* newData = System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
         *pData = newData;
     }
 
@@ -996,7 +994,7 @@ static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, ui
     }
 
     if (oldData != *pData && oldData != nullptr) {
-        fn_MemFreeStatic(oldData);
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -1014,7 +1012,7 @@ static void DynArray4_Push(void** pData, int32_t* pCount, int32_t* pCapacity, in
             newCap = newCount * 3;
         }
         *pCapacity = newCap;
-        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)newCap * 4, 4);
+        void* newData = System::MemoryAllocator::MemAlloc((int64_t)newCap * 4, 4);
         *pData = newData;
     }
 
@@ -1030,7 +1028,7 @@ static void DynArray4_Push(void** pData, int32_t* pCount, int32_t* pCapacity, in
     }
 
     if (oldData != *pData && oldData != nullptr) {
-        fn_MemFreeStatic(oldData);
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -1117,7 +1115,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
         etbFactory->FindNext(toolbarTypeId, nullptr));                  // B.3.3 bridge
     while (ext != nullptr) {
         // IsDerivedFrom check
-        bool isDerived = fn_IsDerivedFrom(ext, toolbarTypeId);
+        bool isDerived = ::Object::IsDerivedFromNullSafe(ext, toolbarTypeId);
         void* toolbarItem = isDerived ? ext : nullptr;
 
         // Check: item must have name (byte at +0x45 != 0) and group must match
@@ -1263,7 +1261,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
         if (templateIndex != 0) {
             // Cast element to ButtonElement via IsDerivedFrom
             void* elemForCast = newElement;
-            bool isButton = fn_IsDerivedFrom(elemForCast, UI::ButtonElement::TypeId());
+            bool isButton = ::Object::IsDerivedFromNullSafe(elemForCast, UI::ButtonElement::TypeId());
             void* buttonElem = isButton ? elemForCast : nullptr;
 
             uint64_t buttonRef;
@@ -1282,7 +1280,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                         // Virtual call to GetTypeId (vtable[2], offset 0x10)
                         uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
                         if (subType == ToolbarDescription::TypeId()) {
-                            bool derived = fn_IsDerivedFrom(subItem, ToolbarDescription::TypeId());
+                            bool derived = ::Object::IsDerivedFromNullSafe(subItem, ToolbarDescription::TypeId());
                             if (derived) {
                                 buildReqComp = subItem;
                             }
@@ -1362,7 +1360,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                 void* childElem = *(void**)childBuf;
 
                 // Cast to ImageElement
-                bool isImage = fn_IsDerivedFrom(childElem, UI::ImageElement::TypeId());
+                bool isImage = ::Object::IsDerivedFromNullSafe(childElem, UI::ImageElement::TypeId());
                 void* imageElem = isImage ? childElem : nullptr;
 
                 uint64_t imageRef;
@@ -1436,8 +1434,8 @@ found_speed:
     *(int32_t*)(*(uintptr_t*)(gameWorldAddr + 0x120) + 0x34) = speedArr[speedIndex];
 
     // --- Cleanup ---
-    fn_MemFreeStatic(shortcutIds);
-    fn_MemFreeStatic(itemList);
+    System::MemoryAllocator::MemFree(shortcutIds);
+    System::MemoryAllocator::MemFree(itemList);
 }
 
 // The door at 0x1400b9910 (address_registry.cpp; fn_ToolbarDialog_Ctor in
@@ -1494,7 +1492,7 @@ void ToolbarDialog::OnUpdateLayout() {
                 if (!elem) continue;
 
                 // IsDerivedFrom check, then cast
-                bool isDerived = fn_IsDerivedFrom(elem, UI::CheckElement::TypeId());
+                bool isDerived = ::Object::IsDerivedFromNullSafe(elem, UI::CheckElement::TypeId());
                 void* typedElem = isDerived ? elem : nullptr;
 
                 // InternalBasePtr::Ctor to create a local ref
@@ -1560,7 +1558,7 @@ void ToolbarDialog::OnUpdateLayout() {
             void* childElem = *(void**)childBuf;
 
             // IsDerivedFrom check for TextElement type (exref at 0x140151508)
-            bool isDerived = fn_IsDerivedFrom(childElem, UI::TextElement::TypeId());
+            bool isDerived = ::Object::IsDerivedFromNullSafe(childElem, UI::TextElement::TypeId());
             void* textElem = isDerived ? childElem : nullptr;
 
             // Build local InternalPtr
@@ -1614,7 +1612,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
         // CheckPtr resolves lazy/weak InternalBasePtr before dereference
         // IsDerivedFrom check on the element
         void* elemObj = *(void**)element;
-        bool isDerived = fn_IsDerivedFrom(elemObj, UI::CheckElement::TypeId());
+        bool isDerived = ::Object::IsDerivedFromNullSafe(elemObj, UI::CheckElement::TypeId());
         void* typedElem = isDerived ? elemObj : nullptr;
 
         int64_t localElemRef;
@@ -1645,7 +1643,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             } else {
                 // Open new sub-toolbar
                 // Allocate new ToolbarDialog (0x108 bytes)
-                void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
+                void* newDialog = System::MemoryAllocator::MemAlloc(0x108, 8);
                 void* childDialog = nullptr;
                 if (newDialog) {
                     // Construct child ToolbarDialog (recursive), parented to this one.
@@ -1709,11 +1707,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
                 groupId = *(void**)(item + 0x58);
             }
             // Must call ORIGINAL exe function — 15+ other callers share PlayerController state
-            if (fn_Toolbar_ShowGroup) {
-                fn_Toolbar_ShowGroup((void*)gameSys, (int64_t)groupId);
-            } else {
-                Toolbar_ShowGroup_Impl((void*)gameSys, (int64_t)groupId);
-            }
+            Toolbar_ShowGroup_Impl((void*)gameSys, (int64_t)groupId);   // 0x140102b60
             break;
         }
         case 2: {
@@ -1776,7 +1770,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             // Our port had dropped that CheckPtr, so the read could see an
             // unresolved lazy/weak handle instead of the parent dialog.
             void* parentDialog = *(void**)(s + 0x28);
-            bool isDerivedParent = fn_IsDerivedFrom(parentDialog, ToolbarDialog::TypeId());
+            bool isDerivedParent = ::Object::IsDerivedFromNullSafe(parentDialog, ToolbarDialog::TypeId());
             void* typedParent = isDerivedParent ? parentDialog : nullptr;
             // No null guard: retail's FUN_1400b9730 derefs param_1+0xe8 unguarded, so
             // this cast is expected to always succeed. It used to fail because the
@@ -1819,7 +1813,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
         void* elemObj = *(void**)element;
         void* castResult = nullptr;
         // FUN_140010e70: IsDerivedFrom check + cast
-        bool isDerived = fn_IsDerivedFrom(elemObj, UI::CheckElement::TypeId());
+        bool isDerived = ::Object::IsDerivedFromNullSafe(elemObj, UI::CheckElement::TypeId());
         if (isDerived) castResult = elemObj;
 
         int64_t localElemRef;
@@ -1867,10 +1861,10 @@ ToolbarDialog::ToolbarDialog() {
 // The ~ToolbarDialog body [0] 0x140021760 calls: the three arrays, then ~DialogInstance.
 ToolbarDialog::~ToolbarDialog() {
     uintptr_t s = (uintptr_t)this;
-    if (fn_MemFreeStatic) {
-        fn_MemFreeStatic(*(void**)(s + 0xF8)); *(uint64_t*)(s + 0xF8) = 0; *(uint64_t*)(s + 0x100) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xD0)); *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xC0)); *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
+    {
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xF8)); *(uint64_t*)(s + 0xF8) = 0; *(uint64_t*)(s + 0x100) = 0;
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xD0)); *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xC0)); *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
     }
 }
 
@@ -1944,7 +1938,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
         uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
         void* panelController = nullptr;
         if (controllerRaw != 0 && tidEntityUI) {
-            if (fn_IsDerivedFrom((void*)controllerRaw, tidEntityUI)) {
+            if (::Object::IsDerivedFromNullSafe((void*)controllerRaw, tidEntityUI)) {
                 panelController = (void*)controllerRaw;
             }
         }
@@ -1962,9 +1956,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
                 ctrl = (uintptr_t)ctrlRef;
                 *(uint8_t*)(*(uintptr_t*)(ctrl + 0x38) + 0xd8) = 1;
 
-                if (fn_EntityPanel_SyncTracking) {
-                    fn_EntityPanel_SyncTracking((void*)ctrl);
-                }
+                PlayerTrade_EntityUI_66b0(static_cast<int64_t>(ctrl));   // 0x1400666b0
             }
         }
     }
@@ -2022,7 +2014,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
             0.0f
         };
         float pos1[3];
-        fn_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);   // 0x14009f3e0
 
         // Origin corner of footprint
         int idx2 = gridSize * (int)posY + (int)posX;
@@ -2032,7 +2024,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
             0.0f
         };
         float pos2[3];
-        fn_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);   // 0x14009f3e0
 
         // Midpoint of origin and far corner = footprint center
         targetPos[0] = (pos1[0] + pos2[0]) * 0.5f;
@@ -2049,15 +2041,15 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
     *(float*)(cameraSys + 0x24) = targetPos[2];
 
     // Zero-duration time for instant snap (matches original)
-    if (fn_Time_Ctor_Float) {
+    {
         uint64_t timeVal;
-        fn_Time_Ctor_Float(&timeVal, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), 0.0f);
     }
 
     // Compute camera view transform and apply
-    if (fn_CameraSys_ComputeViewTransform) {
+    {
         Math::Transform viewTransform;   // 0x1C bytes = compact Math::Transform
-        void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, &viewTransform);
+        void* result = Reimpl_FUN_1400983f0((void*)cameraSys, &viewTransform);   // 0x1400983f0
 
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
         Math::Transform3 transform3 =
@@ -2079,7 +2071,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
     void* editTool = nullptr;
 
     if (currentTool) {
-        if (fn_IsDerivedFrom(currentTool, EditTool::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId())) {
             editTool = currentTool;
         }
     }
@@ -2096,7 +2088,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
         void* newTool = *(void**)(tc + 0x28);
         editTool = nullptr;
         if (newTool) {
-            if (fn_IsDerivedFrom(newTool, EditTool::TypeId())) {
+            if (::Object::IsDerivedFromNullSafe(newTool, EditTool::TypeId())) {
                 editTool = newTool;
             }
         }
@@ -2108,6 +2100,6 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
     // Select the entity in the EditTool
     if (editToolRef != 0) {
         void* entityRefCopy = *(void**)entityPtr;
-        fn_EditTool_SelectEntity((void*)(uintptr_t)editToolRef, &entityRefCopy);
+        EditTool_SelectEntity_Impl((void*)(uintptr_t)editToolRef, &entityRefCopy);   // 0x1400fd3b0
     }
 }

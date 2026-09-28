@@ -31,6 +31,7 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/TrackerComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // ProductionUI struct layout:
@@ -86,11 +87,11 @@ bool ProductionUI_TypeIdsReady() {
 
 static void* CastLabel(void* elem) {
     if (!elem) return nullptr;
-    return fn_IsDerivedFrom(elem, ProductionUI_LabelElementTypeId()) ? elem : nullptr;
+    return ::Object::IsDerivedFromNullSafe(elem, ProductionUI_LabelElementTypeId()) ? elem : nullptr;
 }
 static void* CastNumber(void* elem) {
     if (!elem) return nullptr;
-    return fn_IsDerivedFrom(elem, ProductionUI_NumberElementTypeId()) ? elem : nullptr;
+    return ::Object::IsDerivedFromNullSafe(elem, ProductionUI_NumberElementTypeId()) ? elem : nullptr;
 }
 
 // ---- ProductionUI: PROMOTED to the real reimpl (production-statistics content) -
@@ -270,7 +271,7 @@ void ProductionUI::OnCreated() {
 static void UpdateProductionList(uintptr_t self, int listIndex) {
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(self + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     uint64_t entityBP = 0;
@@ -299,7 +300,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     if (gameItemCount != *(int*)(tracker + 0x48)) {
         // Call tracker rebuild: FUN_14000d9d0 moves data from +0x38 to +0x28
         fn_TrackerComponent_Rebuild((void*)(tracker + 0x38), (void*)(tracker + 0x28));
-        fn_MemFreeStatic(*(void**)(tracker + 0x28));
+        System::MemoryAllocator::MemFree(*(void**)(tracker + 0x28));
         *(uint64_t*)(tracker + 0x28) = 0;
         *(uint64_t*)(tracker + 0x30) = 0;
         *(int*)(tracker + 0x48) = gameItemCount;
@@ -345,7 +346,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
             // Call GetTypeId virtual (vtable+0x10)
             int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
             if (typeId == (int)RawMaterialDescription::TypeId()) {
-                if (fn_IsDerivedFrom(subEntry, RawMaterialDescription::TypeId())) {
+                if (::Object::IsDerivedFromNullSafe(subEntry, RawMaterialDescription::TypeId())) {
                     resourceDesc = subEntry;
                 }
                 break;

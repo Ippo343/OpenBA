@@ -41,7 +41,9 @@
 
 #include "engine_funcs.h"
 #include "system/String.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
+#include "Dialog/exe_bodies.h"   // 0x140014890 / 0x140100270
 #include "Object/factory_registration.h"
 #include "Tutorial/TutorialSetupRestrictPlayer.h"
 #include "Tutorial/TutorialHighlightDialog.h"
@@ -71,18 +73,6 @@ extern "C" void TutWave_LoadNextScenario(void* self);
 
 namespace {
 
-
-// One-shot "this leg of the tutorial is not ported" notice. Distinct from a
-// null-check that papers over a faithful crash: these are functions we KNOW we
-// have not written, and the alternative is EXEC-of-0.
-void DarkOnce(const char* what) {
-    static const char* s_seen[8] = {};
-    static int n = 0;
-    for (int i = 0; i < n; ++i) if (s_seen[i] == what) return;
-    if (n < 8) s_seen[n++] = what;
-    fprintf(stderr, "[Tutorial] NOT PORTED: %s — this leg of the tutorial stops here\n", what);
-    fflush(stderr);
-}
 
 inline uintptr_t GameWorld() {
     return g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
@@ -158,7 +148,7 @@ extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
 // Existing node: payload byte at +0x10 = 1, dword +0x08 = value, dword +0x0C =
 // 0x20. Absent: build that same 0x18-byte record on the stack and hand it to
 // the shared BST inserter at 0x140014890 (already registered by
-// standalone/reg_toolbar_utility.cpp as fn_BST_Insert_0x14).
+// standalone/reg_toolbar_utility.cpp; ToolbarUtility_BstInsert_4890).
 // ===========================================================================
 extern "C" void TutWave_TutorialTreeInsert(void* treeOwner, uint64_t tutorialId,
                                            void* /*param3*/, uint32_t value) {
@@ -179,8 +169,6 @@ extern "C" void TutWave_TutorialTreeInsert(void* treeOwner, uint64_t tutorialId,
         return;
     }
 
-    if (!fn_BST_Insert_0x14) { DarkOnce("BST insert 0x140014890 unresolved"); return; }
-
     struct { uint64_t key; uint32_t value; uint32_t flags; uint8_t on; uint8_t _pad[7]; } rec;
     rec.key   = tutorialId;
     rec.value = value;
@@ -189,7 +177,7 @@ extern "C" void TutWave_TutorialTreeInsert(void* treeOwner, uint64_t tutorialId,
     for (int i = 0; i < 7; ++i) rec._pad[i] = 0;
 
     void* out[4] = {};
-    fn_BST_Insert_0x14(root, out, reinterpret_cast<uint64_t*>(&rec));
+    ToolbarUtility_BstInsert_4890(root, out, reinterpret_cast<uint64_t*>(&rec));   // 0x140014890
 }
 
 // ===========================================================================
@@ -301,13 +289,13 @@ extern "C" void* TutWave_FindHighlightDialog(void* self, void* outIBP) {
     }
 
     UI::UserInterface* ui = UserInterface();
-    if (!ui || !fn_IsA) return outIBP;
+    if (!ui) return outIBP;
     uint32_t tid = HighlightTypeId();
     if (!tid) return outIBP;   // type not registered yet — a safe no-match
 
     // Same list, same order as retail's GetFirstDialog walk (see above).
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        if (fn_IsA(it.node->element, tid)) {
+        if (reinterpret_cast<const Object::Base*>(it.node->element)->IsA(tid)) {   // B.3.x bridge
             *reinterpret_cast<uint64_t*>(outIBP) =
                 reinterpret_cast<uint64_t>(it.node->element);
             return outIBP;
@@ -388,8 +376,6 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
 
     ResolveExternalByName_Impl(reinterpret_cast<void*>(s + 0x58));
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
-
     uint64_t targetElem = 0;     // -> ctor arg that lands at +0xE8 (branch A)
     uint64_t parentIBP  = 0;     // -> ctor R9 parent
     uint64_t elemIBP    = 0;     // -> ctor arg that lands at +0xE0 (branch B)
@@ -423,15 +409,14 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
     }
 
     if (!branchA) {
-        // Branch B needs FindUIElementByPath (exe 0x1400E1870) — LANE 1's.
-        if (!fn_FindUIElementByPath) { DarkOnce("FindUIElementByPath 0x1400E1870 (lane 1)"); return; }
-        fn_FindUIElementByPath(&elemIBP, reinterpret_cast<void*>(s + 0x40), &parentIBP);
+        // Branch B: FindUIElementByPath (exe 0x1400E1870).
+        FindUIElementByPath_Impl(&elemIBP, reinterpret_cast<void*>(s + 0x40), &parentIBP);
         if (elemIBP == 0) return;
     }
 
     // MemAlloc(0xF0) + TutorialHighlightDialog::TutorialHighlightDialog
     // (0x1400E01D0) — the real class now (ENDGAME B.3.8).
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(TutorialHighlightDialog), 8);
+    void* mem = System::MemoryAllocator::MemAlloc(sizeof(TutorialHighlightDialog), 8);
     void* dlg = nullptr;
     if (mem) {
         int32_t valD8 = *reinterpret_cast<int32_t*>(s + 0x48);
@@ -472,13 +457,12 @@ extern "C" void TutWave_ShowListedElements(void* self) {
 
     int count = *reinterpret_cast<int32_t*>(s + 0x28);
     if (count <= 0) return;
-    if (!fn_FindUIElementByPath) { DarkOnce("FindUIElementByPath 0x1400E1870 (lane 1)"); return; }
 
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(s + 0x20);
     if (!arr) return;
     for (int i = 0; i < count; ++i) {
         uint64_t elem = 0;
-        fn_FindUIElementByPath(&elem, reinterpret_cast<void*>(arr + static_cast<uintptr_t>(i) * 8), nullptr);
+        FindUIElementByPath_Impl(&elem, reinterpret_cast<void*>(arr + static_cast<uintptr_t>(i) * 8), nullptr);
         if (elem != 0) {
             uint64_t copy = elem;
             TutWave_SetElementFlagsRecursive(self, &copy, '\x01');
@@ -567,8 +551,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     void* table = nullptr;
     {
         table = *reinterpret_cast<void**>(ui + 0x48);
-        if (table &&
-            fn_InternalBasePtr_Ctor) {
+        if (table) {
             int n = reinterpret_cast<UI::Element*>(table)->ChildCount();  // B.3.6 bridge
             reinterpret_cast<UI::Element*>(table)->RemoveChildren();  // B.3.6 bridge
             for (int i = 0; i < n; ++i) {
@@ -620,7 +603,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
 //       for each setup: vtable slot 10 (+0x50)(setup)
 //       ++stepIndex
 //       if more steps: RefreshStepUI(self)
-//       else:          <tutorial complete>  (NOT PORTED — see DarkOnce below)
+//       else:          <tutorial complete>  (TutWave_LoadNextScenario below)
 // ===========================================================================
 extern "C" { int g_TutUndoDepth = 0; int g_TutUndoIndex = -1; }
 
@@ -643,9 +626,9 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
     }
 
     if (*reinterpret_cast<uint64_t*>(s + 0x18) == 0) {
-        if (!fn_FindDialogByControllerType) { DarkOnce("FindDialogByControllerType 0x140100270"); return; }
         uint64_t dlg = 0;
-        fn_FindDialogByControllerType(self, &dlg, *reinterpret_cast<uint64_t*>(tutorial + 0x20));
+        ToolbarUtility_FindDialogByControllerType_0270(self, &dlg,
+                                                       *reinterpret_cast<uint64_t*>(tutorial + 0x20));   // 0x140100270
         *reinterpret_cast<uint64_t*>(s + 0x18) = dlg;
         if (dlg == 0) {
             static bool once = false;
@@ -674,7 +657,7 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             ::new (&ctrl) Object::InternalPtr<UI::DialogController>(
                 reinterpret_cast<UI::DialogInstance*>(dlg)->GetController(uiTid));  // B.3.6 bridge
             ctrlRaw = reinterpret_cast<void*>(ctrl);
-            if (ctrl && fn_IsDerivedFrom && uiTid && fn_IsDerivedFrom(reinterpret_cast<void*>(ctrl), uiTid)) {
+            if (ctrl && uiTid && Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(ctrl), uiTid)) {
                 controller = reinterpret_cast<void*>(ctrl);
             }
         }
@@ -712,9 +695,8 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
             if (!obj) continue;
             uint64_t selfIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
+            new (&selfIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            else selfIBP = reinterpret_cast<uint64_t>(self);
             // slot 8; B.3.8 bridge
             bool ok = reinterpret_cast<TutorialGoal*>(obj)->IsComplete(param2, &selfIBP);
             if (ok) ++passed;
