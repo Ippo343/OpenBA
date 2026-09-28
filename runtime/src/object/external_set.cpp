@@ -837,9 +837,8 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
             External* ext = Elem(hit)->external;
             if (ext) {
                 // vtable slot 0, scalar deleting destructor, flag 1.
-                using Dtor = void* (*)(External*, unsigned);
-                Dtor d = reinterpret_cast<Dtor>((*reinterpret_cast<void***>(ext))[0]);
-                d(ext, 1);               // 0x1800be465
+                // B3X W0: by name on the object's own hierarchy root.
+                reinterpret_cast<::Object::External*>(ext)->DeletingDtor(1);   // 0x1800be465 (B.3.x bridge)
             }
             rtresset::Erase(set, hit);   // 0x1800be46e
         }

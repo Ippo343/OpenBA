@@ -138,8 +138,13 @@ using RtSystem::String;
 //       -> (ReaderWriter* this, int flags)
 // ---------------------------------------------------------------------------
 using EncFactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-using RwScalarFn   = void (*)(ReaderWriter*, void*, const char*);
-using RwDtorFn     = void (*)(ReaderWriter*, int);
+
+// B3X W0: the ReaderWriter is called by name (SerializeInt +0xa0,
+// SerializeUInt +0x98, DeletingDtor slot 0). `VSlot` stays for the IO::Encoding
+// factory slot alone -- that table has no destructor slot and does not flip.
+inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
+    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
 
 inline void* VSlot(void* obj, int byteOffset) {
     void** vt = *reinterpret_cast<void***>(obj);
@@ -229,8 +234,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     int32_t count = static_cast<int32_t>(
         reinterpret_cast<rtresset::Set*>(
             reinterpret_cast<uint8_t*>(self) + 0x10)->count);
-    reinterpret_cast<RwScalarFn>(VSlot(rw, rt::io::rw_vtbl::kScalarInt))(
-        rw, &count, nullptr);
+    Rw(rw)->SerializeInt(count, nullptr);        // +0xa0
 
     if (stream->direction == rt::io::kDirectionReading) {
         // ====================================================================
@@ -244,8 +248,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
 
         for (int32_t i = 0; i < count; ++i) {    // 1800bcbef JLE / 1800bcdbf JL
             uint32_t id = 0;                     // [RBP+0x48]
-            reinterpret_cast<RwScalarFn>(VSlot(rw, rt::io::rw_vtbl::kScalarUInt))(
-                rw, &id, nullptr);               // 1800bcc1e, +0x98
+            Rw(rw)->SerializeUInt(id, nullptr);  // 1800bcc1e, +0x98
 
             // 1800bcc2c — reads the path into `scratch`, replacing whatever it
             // held. `RBX` is reloaded from the slot AFTER this call, which is
@@ -381,8 +384,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                     }                                        // 1800bce54
                     ++g_c.entries;
 
-                    reinterpret_cast<RwScalarFn>(
-                        VSlot(rw, rt::io::rw_vtbl::kScalarUInt))(rw, &id, nullptr);
+                    Rw(rw)->SerializeUInt(id, nullptr);      // +0x98
                     path.AsString().Serialize(&ser);         // 1800bce99
                 }                                            // 1800bce9f
 
@@ -413,7 +415,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     // ---- destroy the codec the factory allocated ----------------------------
     // 1800bcf17. Skipping it leaks 0x30 bytes per call.
     if (rw)
-        reinterpret_cast<RwDtorFn>(VSlot(rw, rt::io::rw_vtbl::kDtor))(rw, 1);
+        Rw(rw)->DeletingDtor(1);                 // slot 0, flags 1
 
     // ---- report, HERE, inside the subject's live window ---------------------
     // Not only from the exit summary. This body runs at most twice per session

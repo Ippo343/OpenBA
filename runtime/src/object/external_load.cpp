@@ -129,18 +129,13 @@ constexpr uint32_t kCompiledMagic = 0x5412a91fu;
 
 // ---- doors ----------------------------------------------------------------
 // All names except the four addresses called out below.
-using StreamOpenFn  = bool  (*)(void* self, const Filename* path);   // FileStream vtbl +0x38
-using CompOpenFn    = bool  (*)(RtIo::CompressedStream* self, RtIo::Stream* src, int flag);
+using CompOpenFn   = bool  (*)(RtIo::CompressedStream* self, RtIo::Stream* src, int flag);
 using VoidSelfFn    = void  (*)(void* self);
 using CloseFileFn   = void  (*)(RtIO::FileSystem*, RtIO::FileInfo*);
 using IsDerivedFn   = bool  (*)(const void* self, uint32_t typeId);
 using StrSerFn      = void  (*)(String* self, Serializer* ser);
 using SerFactoryFn  = void* (*)(void* encoding, Serializer* ser, int flag);
-using SerU32Fn      = void  (*)(void* impl, uint32_t* value, const char* name);
-using SerI32Fn      = void  (*)(void* impl, int32_t*  value, const char* name);
 using FactoryFn     = void* (*)();
-using GetVersionFn  = int32_t (*)(void* self);
-using DeleteFn      = void* (*)(void* self, int flags);
 
 // `Collection::Array<ExternalArrayElement>::SetSize`, 0x18002c6a0. NOT exported
 // in either build, so this is a genuine ADDRESS door and the only one this file
@@ -184,21 +179,19 @@ void CloseIfOpen(RtIO::FileInfo* fi) {
         "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fi);
 }
 
-// A slot of an object's own vtable, by BYTE offset, so a call site reads the
-// same way the disassembly does (`CALL qword ptr [RAX+0x38]`).
-void* VSlot(const void* obj, size_t byteOffset) {
-    void** vtbl = *reinterpret_cast<void** const*>(obj);
-    return vtbl[byteOffset / sizeof(void*)];
-}
-
 // The two Serializer-implementation entry points this body drives, named once.
-// +0xa0 takes a uint32 and +0x98 an int32; both take a third argument retail
-// always passes as zero.
+// B3X W0: called by name, FOLLOWING THE RETAIL OFFSET, not these helpers' old
+// names. `SerU32` calls +0xa0, which is `SerializeInt`; `SerI32` calls +0x98,
+// which is `SerializeUInt` (Serializer.h:504-505). The helper names were
+// swapped against their slots; the offsets are retail's and are what stays.
+// Both pass the third argument (the name) as zero, as retail does.
 void SerU32(void* impl, uint32_t* v) {
-    reinterpret_cast<SerU32Fn>(VSlot(impl, 0xa0))(impl, v, nullptr);
+    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeInt(     // +0xa0 (B.3.x bridge)
+        *reinterpret_cast<int32_t*>(v), nullptr);
 }
 void SerI32(void* impl, int32_t* v) {
-    reinterpret_cast<SerI32Fn>(VSlot(impl, 0x98))(impl, v, nullptr);
+    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeUInt(    // +0x98 (B.3.x bridge)
+        *reinterpret_cast<uint32_t*>(v), nullptr);
 }
 
 }  // namespace
@@ -278,7 +271,10 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     // branch of this hierarchy the same slot is `Close`; a port that assumed
     // one shape for both would call the wrong virtual here and it would not
     // crash (runtime/types/io/FileStream.h states the trap in full).
-    if (!reinterpret_cast<StreamOpenFn>(VSlot(&cfs.file, 0x38))(&cfs.file, path)) {
+    // B3X W0: `IO::FileStream::Open`, slot 7, by name on the embedded
+    // BinaryFileStream (+0x68) the real constructor above built.
+    if (!static_cast<::IO::FileStream&>(cfsObj->_file).Open(
+            *reinterpret_cast<const ::System::Filename*>(path))) {   // B.3.x bridge
         ++g_lc.openFileFailed;
     } else if (!RT_EXPORT_ONCE(CompOpenFn,
                    "?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
@@ -363,8 +359,8 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // ---- 1800bc767..1800bc78a -----------------------------------
                 uint32_t version;
                 SerU32(ser.impl, &version);
-                const int32_t objVersion =
-                    reinterpret_cast<GetVersionFn>(VSlot(obj, 0x18))(obj);
+                const int32_t objVersion =          // slot 3 +0x18 (B.3.x bridge)
+                    reinterpret_cast<::Object::External*>(obj)->GetFileVersion();
                 if (static_cast<int32_t>(version) != objVersion) {
                     ++g_lc.badVersion;
                     bad = true;
@@ -402,8 +398,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // The object reads (or writes) ITSELF, through the same slot
                 // ExternalFactory::Add and External::SaveText drive.
                 ++g_lc.serialized;
-                using SerializeFn = bool (*)(External*, void*);
-                reinterpret_cast<SerializeFn>(VSlot(obj, 0x28))(obj, &cfs);
+                reinterpret_cast<::Object::External*>(obj)->Serialize(&cfs);   // slot 5 +0x28 (B.3.x bridge)
             }
         }
 
@@ -412,7 +407,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
         // Both the good and the bad exits run it; they differ only in where
         // they go next, which is what decides the return value.
         if (ser.impl != nullptr) {
-            reinterpret_cast<DeleteFn>(VSlot(ser.impl, 0))(ser.impl, 1);
+            reinterpret_cast<::IO::ReaderWriter*>(ser.impl)->DeletingDtor(1);   // slot 0 (B.3.x bridge)
         } else {
             ++g_lc.nullSerializer;
         }
