@@ -15,7 +15,7 @@
 //   int count (local copy of +0x30)
 //   [if loading: resize array @+0x28 to count via FUN_140001bb0 = Array<ptr>::SetSize]
 //   ExternalRefArray(count) @ *(+0x28)  (FUN_1400049c0 / fn_ExternalRefArray_Serialize)
-//   ExternalPtr @ +0x38  (FUN_140002340 / fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x38  (FUN_140002340 / Reimpl_ExternalPtr_Serialize_StringTable)
 //   bool  @ +0x40   bool @ +0x41   bool @ +0x42   bool @ +0x43
 // GetVersion (vtable +0x18, 0x140119bc0): mov eax,1; ret -> version 1.
 // Dtor (vtable +0x00, 0x140032ca0): MemFree(array @+0x28) + External::~External + free.
@@ -40,6 +40,7 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x140032b70 / createInPlace 0x140032be0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -67,7 +68,6 @@ CreateRemovalDescription::~CreateRemovalDescription() {
 
 // [5] 0x140119ac0: stream order as retail.
 bool CreateRemovalDescription::Serialize(void* stream) {
-    if (!fn_ExternalRefArray_Serialize || !fn_ExternalPtr_BuildSerialize) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_b20, nullptr);
     int count = _refCount;
@@ -78,8 +78,8 @@ bool CreateRemovalDescription::Serialize(void* stream) {
         // Element is the 8-byte ExternalPtr slot the ExternalRefArray serializer walks below.
         GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(&_refs)).SetSize(count);
     }
-    fn_ExternalRefArray_Serialize(&ser, count, _refs, nullptr);   // ExtPtr[count] (0x1400049c0)
-    fn_ExternalPtr_BuildSerialize(&_ref38, &ser);
+    Reimpl_ExternalPtrArray_Serialize(&ser, count, reinterpret_cast<long long>(_refs), nullptr);   // ExtPtr[count] (0x1400049c0)
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref38, &ser);
     ser.Serialize(_b40, nullptr);
     ser.Serialize(_b41, nullptr);
     ser.Serialize(_b42, nullptr);

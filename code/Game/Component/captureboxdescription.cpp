@@ -33,6 +33,7 @@
 #include "ui/Sprite.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // 0x140079230: ElementDescription() is `??0ElementDescription@UI@@`; the
 // 0x14015d4a0 stamp is the compiler's; +0x68 = 0, +0x70 = String() (null).
@@ -49,13 +50,10 @@ int32_t CaptureBoxDescription::GetFileVersion() const {
 // hand-built slot was a `void` function, so its AL was whatever the Serializer
 // dtor left there.)
 bool CaptureBoxDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize) {
-        return true;
-    }
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    fn_ExternalPtr_Serialize(&_spriteSheet, serializer);   // ExternalPtr +0x68
+    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, serializer);   // ExternalPtr +0x68
     _spriteName.Serialize(serializer);                     // String      +0x70
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return true;

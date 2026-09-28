@@ -38,6 +38,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 namespace {
 // {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
@@ -82,7 +83,6 @@ DecalDescription::~DecalDescription() {
 
 // [5] 0x14011b980: stream order as retail.
 bool DecalDescription::Serialize(void* stream) {
-    if (!fn_Array_Serialize_External_GraphicsMesh) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_sizeA, nullptr);   // sizeA
     
@@ -94,7 +94,7 @@ bool DecalDescription::Serialize(void* stream) {
         uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(&_refs, refCount, 8));
         for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
     }
-    fn_Array_Serialize_External_GraphicsMesh(&ser, refCount, _refs);
+    Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, _refs);
     
     ser.Serialize(_sizeB, nullptr);   // sizeB
     

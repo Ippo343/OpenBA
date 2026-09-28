@@ -14,7 +14,7 @@
 //   int          @ +0x4c = 0
 //   int/enum     @ +0x50 = 0xb (11)
 // Serialize (vtable +0x28, 0x1401190e0), stream order (verified disasm CALLs):
-//   ExternalPtr @ +0x20  (FUN_14000bf40 -> fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x20  (FUN_14000bf40 -> Reimpl_ExternalPtr_Serialize_StringTable)
 //   int count   @ +0x30 -> resize +0x28 outer array (stride 0x28), per outer element:
 //        inner int count @+0x08 -> resize inner array @+0x00 (stride 0x10):
 //             per inner element: ExternalPtr @+0x00 (FUN_140002340), int @+0x08
@@ -51,6 +51,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 namespace {
 // serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
@@ -97,9 +98,9 @@ ConsumeProduceDescription::~ConsumeProduceDescription() {
 
 // [5] 0x1401190e0: stream order as retail.
 bool ConsumeProduceDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
     ser.Serialize(_recipeCount, nullptr);
     int outerN = _recipeCount;
@@ -122,10 +123,10 @@ bool ConsumeProduceDescription::Serialize(void* stream) {
             }
             uint8_t* ie = *(uint8_t**)(e + 0x00);
             for (int j = 0; j < innerN && ie; ++j, ie += 0x10) {
-                fn_ExternalPtr_BuildSerialize(ie + 0x00, &ser); // ExternalPtr
+                Reimpl_ExternalPtr_Serialize_StringTable(ie + 0x00, &ser); // ExternalPtr
                 ser.Serialize(*reinterpret_cast<int*>(ie + 0x08), nullptr);
             }
-            fn_ExternalPtr_BuildSerialize(e + 0x10, &ser);      // ExternalPtr +0x10
+            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x10, &ser);      // ExternalPtr +0x10
             ser.Serialize(*reinterpret_cast<unsigned int*>(e + 0x18), nullptr);   // enum +0x18
             reinterpret_cast<System::String*>(e + 0x20)->Serialize(&ser);        // B.3.1 bridge: String +0x20
         }

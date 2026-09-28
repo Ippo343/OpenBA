@@ -37,6 +37,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x140032880 / createInPlace 0x1400328c0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -54,7 +55,6 @@ CreateBridgeDescription::CreateBridgeDescription()
 
 // [5] 0x1401195d0: stream order as retail.
 bool CreateBridgeDescription::Serialize(void* stream) {
-    if (!fn_ExternalRefArray_Serialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_u20, nullptr);
     ser.Serialize(_u28, nullptr);
@@ -62,7 +62,7 @@ bool CreateBridgeDescription::Serialize(void* stream) {
     ser.Serialize(_u24, nullptr);
     ser.Serialize(_u30, nullptr);
     ser.Serialize(_i34, nullptr);
-    fn_ExternalRefArray_Serialize(&ser, 5, _refs, nullptr);   // ExtPtr[5] +0x38 (0x1400049c0)
+    Reimpl_ExternalPtrArray_Serialize(&ser, 5, reinterpret_cast<long long>(_refs), nullptr);   // ExtPtr[5] +0x38 (0x1400049c0)
     return true;
 }
 

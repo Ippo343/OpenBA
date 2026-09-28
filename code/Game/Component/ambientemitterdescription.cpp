@@ -30,6 +30,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x140001510 / createInPlace 0x140001580):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -52,7 +53,6 @@ AmbientEmitterDescription::~AmbientEmitterDescription() {
 
 // [5] 0x1400431b0: stream order as retail.
 bool AmbientEmitterDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_emitterCount, nullptr);   // 1. count (+0x30)
     int count = _emitterCount;
@@ -77,15 +77,15 @@ bool AmbientEmitterDescription::Serialize(void* stream) {
     // So the resize runs only when direction == 0, and that is `loading`.
     // `IO::Serializer::GetDirection()` is those same two loads (Serializer.h:833).
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);
-    if (loading && fn_Array_Resize_Stride08) {
-        fn_Array_Resize_Stride08(&_emitters, count);
+    if (loading) {
+        Reimpl_Array_Resize_Stride08(&_emitters, count);
     }
     
     // 3. per-element ExternalPtr serialize (each slot is an External*)
     uint8_t* buf = static_cast<uint8_t*>(_emitters);
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            fn_ExternalPtr_Serialize2(buf + (size_t)i * 8, &ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(buf + (size_t)i * 8, &ser);
         }
     }
     ser.Serialize(_enabled, nullptr);
