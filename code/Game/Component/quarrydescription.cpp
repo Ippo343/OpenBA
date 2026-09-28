@@ -37,11 +37,10 @@ QuarryDescription::QuarryDescription()
 
 // [5] 0x140055320: stream order as retail.
 bool QuarryDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_maxDepth, nullptr);
     ser.Serialize(_minDepth, nullptr);
-    fn_ExternalPtr_BuildSerialize(&_product, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_product, &ser);
     return true;
 }
 

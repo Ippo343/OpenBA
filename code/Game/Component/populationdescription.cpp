@@ -50,7 +50,6 @@ PopulationDescription::PopulationDescription()
 
 // [5] 0x1400547e0: stream order as retail.
 bool PopulationDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_i28, nullptr);
     ser.Serialize(_i2c, nullptr);
@@ -61,7 +60,7 @@ bool PopulationDescription::Serialize(void* stream) {
     ser.Serialize(_i40, nullptr);
     ser.Serialize(_i44, nullptr);
     ser.Serialize(_b48, nullptr);
-    fn_ExternalPtr_BuildSerialize(&_ref50, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref50, &ser);
     _name.Serialize(&ser);
     return true;
 }

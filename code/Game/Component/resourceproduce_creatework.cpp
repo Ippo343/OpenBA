@@ -75,9 +75,8 @@ void* AllocWork(int size) {
 
 // The tail shared by all three: hand the raw object back as an InternalBasePtr.
 uintptr_t* WrapIBP(uintptr_t* out, void* obj) {
-    if (fn_InternalBasePtr_Ctor) new (out) ::Object::InternalBasePtr(
+    new (out) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
-    else *out = reinterpret_cast<uintptr_t>(obj);
     return out;
 }
 
@@ -356,7 +355,7 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* 
             if (!c) continue;
             const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
             if (tid == want) {
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, want)) cpDesc = c;
+                if (Object::IsDerivedFromNullSafe(c, want)) cpDesc = c;
                 break;
             }
         }

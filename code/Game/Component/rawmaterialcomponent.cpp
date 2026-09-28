@@ -26,99 +26,20 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"      // ActHunt_MarkEntityRemoval_c2ea0
+#include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050
+#include "Game/exe_constants.h"
+#include <cstring>
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// FUN_140018020 — serialize field30 (version >= 2)
-typedef void (*fn_SerializeField30_t)(void* fieldPtr, void* serializer);
-static fn_SerializeField30_t s_fn_SerializeField30 = nullptr;
-
-// FUN_140091e60 — register raw material with world manager
-typedef void (*fn_RegisterRawMaterial_t)(void* worldMgr, void* entityChain);
-static fn_RegisterRawMaterial_t s_fn_RegisterRawMaterial = nullptr;
-
-// FUN_1400c2ea0 — mark entity for collection
-typedef void (*fn_MarkForCollection_t)(void* entity);
-static fn_MarkForCollection_t s_fn_MarkForCollection = nullptr;
-
-// FUN_140003110 — add entity to world pending list
-
-// System::Time::Time(out, float) — construct Time from float
-typedef void* (*fn_Time_FromFloat_t)(void* outTime, float seconds);
-static fn_Time_FromFloat_t s_fn_Time_FromFloat = nullptr;
-
-// DAT_14017225c — threshold time constant (float)
-static float* s_pThresholdTime = nullptr;
-
-// DAT_1401c3dd8 — game state singleton
-static void** s_pGameState = nullptr;
-
-// FUN_140003050 — FindComponent (MaterialDescription type DWORD_1401c8070)
-typedef void* (*fn_FindComponent_MatDesc_t)(uintptr_t entity, void* retval);
-static fn_FindComponent_MatDesc_t s_fn_FindComponent_MatDesc = nullptr;
-
-// RawMaterialComponent_helper_9480 — determine pickup category from material flags
-typedef uint64_t (*fn_GetPickupCategory_t)(uintptr_t rawMatDesc);
-static fn_GetPickupCategory_t s_fn_GetPickupCategory = nullptr;
-
-// Use fn_MemAlloc + g_pMemAllocSingleton from engine_funcs.h
-
-
-// fn_InternalBasePtr_Ctor — already in engine_funcs.h
-// fn_IsDerivedFrom — already in engine_funcs.h
-
-// CitizenAI_impl_ec60 — register draw item with scene
-typedef void (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char param3, void* workRef);
-static fn_PostWork_t s_fn_PostWork = nullptr;
-
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-
-    uintptr_t slot;
-
-    s_fn_SerializeField30 = reinterpret_cast<fn_SerializeField30_t>(
-        ResolveAddr(Module::Exe, 0x140018020));
-
-    s_fn_RegisterRawMaterial = reinterpret_cast<fn_RegisterRawMaterial_t>(
-        ResolveAddr(Module::Exe, 0x140091e60));
-
-    s_fn_MarkForCollection = reinterpret_cast<fn_MarkForCollection_t>(
-        ResolveAddr(Module::Exe, 0x1400c2ea0));
-
-    slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) s_fn_Time_FromFloat = *reinterpret_cast<fn_Time_FromFloat_t*>(slot);
-
-    s_pThresholdTime = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x14017225c));
-
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    // FindComponent_MatDesc — FUN_140003050 (finds by type DWORD_1401c8070)
-    s_fn_FindComponent_MatDesc = reinterpret_cast<fn_FindComponent_MatDesc_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-
-    s_fn_GetPickupCategory = reinterpret_cast<fn_GetPickupCategory_t>(
-        ResolveAddr(Module::Exe, 0x140129480));
-
-    // fn_MemAlloc + g_pMemAllocSingleton resolved globally in engine_funcs
-
-    // CitizenAI_impl_ec60 = the citizen WORK-SCHEDULER POST (the same call the ClearArea
-    // controller uses to hand a job to a laborer), NOT a render/draw registration.
-    s_fn_PostWork = reinterpret_cast<fn_PostWork_t>(
-        ResolveAddr(Module::Exe, 0x14012ec60));  // CALL @14012929e in RawMaterialComponent::Draw
-
-    s_initialized = true;
-}
-
-
-
+// The exe helpers this file calls, by retail address:
+//   0x140018020 Reimpl_ExternalPtr_Serialize_StringTable (serialize field30, version >= 2)
+//   0x140091e60 RawMaterialComponent_RegisterRawMaterial (below)
+//   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0 (mark entity for collection)
+//   0x140003050 WorkBase_FindComponent_3050 (the owner's WorkComponent)
+//   0x140129480 RawMaterialComponent_GetPickupCategory (below)
+//   0x14012ec60 CitizenAI_WorkScheduler_Post (the work-scheduler POST, not a draw)
+//   .rdata 0x14017225c = 3600.0f, the pile expiry threshold; the GameWorld cell is
+//   g_pGameWorldSingleton.
 
 // ============================================================
 // RawMaterialComponent::Update (vtable slot [9], 0x140129130)
@@ -127,7 +48,6 @@ static void EnsureHelpers() {
 // marks entity for collection and adds to world pending list.
 
 void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime) {
-    EnsureHelpers();
 
     // Accumulate delta time into field38 (Time)
     int64_t* pAccumulator = (int64_t*)&self->field38;
@@ -135,15 +55,16 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
 
     // Construct threshold time from float constant
     int64_t thresholdTime[3]; // Time object on stack
-    if (!s_fn_Time_FromFloat || !s_pThresholdTime) return;
-    s_fn_Time_FromFloat(thresholdTime, *s_pThresholdTime);
+    float thresholdSeconds;
+    std::memcpy(&thresholdSeconds, &kRdata_14017225c, sizeof thresholdSeconds);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(thresholdTime), thresholdSeconds);
 
     // Check if accumulated time exceeds threshold
     if (thresholdTime[0] < *pAccumulator) {
         void* entity = *(void**)((uintptr_t)self + 0x10);
 
-        if (!s_pGameState || !*s_pGameState) return;
-        uintptr_t gameState = (uintptr_t)*s_pGameState;
+        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+        uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
         uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xe8);
 
         if (entity != nullptr) {
@@ -152,9 +73,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
             uint32_t entityFlags = *(uint32_t*)((uintptr_t)entity + 0x40);
             if (((entityFlags >> 10) & 1) == 0) {
 
-                if (s_fn_MarkForCollection) {
-                    s_fn_MarkForCollection(entity);
-                }
+                ActHunt_MarkEntityRemoval_c2ea0(entity);
 
                 // Add to world pending list
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
@@ -245,21 +164,6 @@ uint64_t RawMaterialComponent_GetPickupCategory(uintptr_t rawMatDesc) {
     return 1;
 }
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void RawMaterialComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[RawMaterialComponent] Funcs resolved: "
-           "RegisterRawMaterial=%p "
-           "GetPickupCategory=%p MemAlloc=%p PostWork=%p\n",
-           (void*)s_fn_RegisterRawMaterial,
-           (void*)s_fn_GetPickupCategory, (void*)fn_MemAlloc,
-           (void*)s_fn_PostWork);
-#endif
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — RawMaterialComponent as a REAL class (RawMaterialComponent.h).
 //
@@ -289,8 +193,6 @@ RawMaterialComponent::RawMaterialComponent()
 //   - field30 (version >= 2 only)
 
 void RawMaterialComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     alignas(8) uint8_t serializerBuf[24];
@@ -304,8 +206,8 @@ void RawMaterialComponent::Persist(void* stream) {
 
     // Version >= 2: serialize field30
     int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-    if (version >= 2 && s_fn_SerializeField30) {
-        s_fn_SerializeField30(&field30, serializerBuf);
+    if (version >= 2) {
+        Reimpl_ExternalPtr_Serialize_StringTable(&field30, serializerBuf);   // 0x140018020
     }
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();                                       // B.3.4 bridge
@@ -318,13 +220,11 @@ void RawMaterialComponent::Persist(void* stream) {
 // the entity with the world raw material manager.
 
 void RawMaterialComponent::Startup() {
-    EnsureHelpers();
-
     // Get building data via IsDerivedFrom check on _unk18
     void* baseObj = _description;
     void* buildingData = nullptr;
-    if (fn_IsDerivedFrom) {
-        bool isDerived = fn_IsDerivedFrom(baseObj, RawMaterialDescription::TypeId());
+    {
+        bool isDerived = Object::IsDerivedFromNullSafe(baseObj, RawMaterialDescription::TypeId());
         if (isDerived) {
             buildingData = baseObj;
         }
@@ -338,11 +238,11 @@ void RawMaterialComponent::Startup() {
     // CheckPtr on owner at +0x10
 
     // Get entity chain from owner+0x28, register with world manager
-    if (s_pGameState && *s_pGameState && s_fn_RegisterRawMaterial) {
-        uintptr_t gameState = (uintptr_t)*s_pGameState;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
         uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
         void* entityChain = *(void**)(*(uintptr_t*)(reinterpret_cast<uintptr_t>(this) + 0x10) + 0x28);
-        s_fn_RegisterRawMaterial((void*)worldMgr, entityChain);
+        RawMaterialComponent_RegisterRawMaterial((void*)worldMgr, entityChain);
     }
 }
 
@@ -368,8 +268,6 @@ void RawMaterialComponent::Startup() {
 //  10. CitizenAI_impl_ec60 (0x14012ec60) — POST the work to the scheduler
 
 void RawMaterialComponent::OnAdded() {
-    EnsureHelpers();
-
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     // CheckPtr on entity ref
@@ -378,26 +276,19 @@ void RawMaterialComponent::OnAdded() {
 
     // FindComponent_MatDesc on entity
     uintptr_t matDescBuf[2] = {0, 0};
-    if (s_fn_FindComponent_MatDesc) {
-        s_fn_FindComponent_MatDesc(entity, (void*)matDescBuf);
-    }
+    WorkBase_FindComponent_3050(entity, (void*)matDescBuf);   // 0x140003050
 
     // Get RawMaterialDescription via IsDerivedFrom
     void* baseObj = _description;
     void* rawMatDesc = nullptr;
-    if (fn_IsDerivedFrom) {
-        if (fn_IsDerivedFrom(baseObj, RawMaterialDescription::TypeId())) {
-            rawMatDesc = baseObj;
-        }
+    if (Object::IsDerivedFromNullSafe(baseObj, RawMaterialDescription::TypeId())) {
+        rawMatDesc = baseObj;
     }
 
     if (!rawMatDesc) return;
 
     // Get pickup category from material flags
-    uint64_t category = 1;
-    if (s_fn_GetPickupCategory) {
-        category = s_fn_GetPickupCategory((uintptr_t)rawMatDesc);
-    }
+    uint64_t category = RawMaterialComponent_GetPickupCategory((uintptr_t)rawMatDesc);
 
     // Allocate pickup draw item (0x60 bytes)
     void* pickupItem = nullptr;
@@ -422,18 +313,14 @@ void RawMaterialComponent::OnAdded() {
 
     // Wrap in InternalBasePtr
     uintptr_t itemRef[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) {
-        new (&itemRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(pickupItemResult));   // B.3.3 bridge
-    }
+    new (&itemRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(pickupItemResult));   // B.3.3 bridge
 
     // CheckPtr on the WorkComponent ref
 
     // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
     // hauls this pile away. This is the pile-pickup trigger.
-    if (s_fn_PostWork) {
-        s_fn_PostWork(matDescBuf[0], (uint32_t)category, '\x01', (void*)itemRef);
-    }
+    CitizenAI_WorkScheduler_Post(matDescBuf[0], (uint32_t)category, '\x01', (void*)itemRef);
 }
 
 // [9] 0x140129130. PORT GAP (retail 0x140129130) — B38 D9: the body is ported

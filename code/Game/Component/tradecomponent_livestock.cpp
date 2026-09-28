@@ -107,9 +107,8 @@ void Resolve() {
 
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
-    if (fn_InternalBasePtr_Ctor) new (&r) ::Object::InternalBasePtr(
+    new (&r) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
-    else r = reinterpret_cast<uint64_t>(obj);
     return r;
 }
 
@@ -224,7 +223,7 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
                 if (!cc) continue;
                 const uint32_t tid = reinterpret_cast<Object::Base*>(cc)->Type();   // B.3.8 bridge
                 if (tid != AnimalComponent::TypeId()) continue;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(cc, AnimalComponent::TypeId())) animal = cc;
+                if (Object::IsDerivedFromNullSafe(cc, AnimalComponent::TypeId())) animal = cc;
                 break;
             }
         }
