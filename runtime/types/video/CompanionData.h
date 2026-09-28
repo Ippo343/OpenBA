@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // std::has_virtual_destructor (B3X X1 pins)
 
 // ENDGAME B.3.5 block D1: the real `Video::ConstantBuffer`. The partial view
 // that used to sit in this file (head[0x38] + device + platformData) is gone —
@@ -740,6 +741,49 @@ RT_VIDEO_COMPANION_PINS(RenderStateData);
 RT_VIDEO_COMPANION_PINS(VideoProgramData);
 
 #undef RT_VIDEO_COMPANION_PINS
+
+// ENDGAME B3X (the normal-virtual cutover), B3X_RULES X1: the twelve `*Data`
+// classes are EXEMPT BY DECISION. Retail's slot 0 IS a deleting destructor, but
+// every live object wears dx11's hand table built in RETAIL slot order
+// (dx11_seam.cpp), so these stay on `DeletingDtor(unsigned)` and must never
+// gain a virtual destructor (GCC would spend two slots on it and shift every
+// slot the seam fills). They flip when dx11's types become real subclasses.
+static_assert(!std::has_virtual_destructor<DeviceData>::value,
+              "Video::DeviceData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<ContextData>::value,
+              "Video::ContextData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<ImageBufferData>::value,
+              "Video::ImageBufferData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<IndexBufferData>::value,
+              "Video::IndexBufferData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<VertexBufferData>::value,
+              "Video::VertexBufferData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<ConstantBufferData>::value,
+              "Video::ConstantBufferData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<RenderBufferData>::value,
+              "Video::RenderBufferData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<VertexLayoutData>::value,
+              "Video::VertexLayoutData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<VertexProgramData>::value,
+              "Video::VertexProgramData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<PixelProgramData>::value,
+              "Video::PixelProgramData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<RenderStateData>::value,
+              "Video::RenderStateData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(!std::has_virtual_destructor<VideoProgramData>::value,
+              "Video::VideoProgramData is exempt from the normal-virtual cutover -- the live "
+              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
 
 }  // namespace Video
 

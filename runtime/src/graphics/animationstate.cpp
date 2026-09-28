@@ -81,7 +81,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
-namespace rw_vtbl = rt::io::rw_vtbl;
 
 using RtGraphics::AnimInstanceRec;
 using RtGraphics::AnimStateRec;
@@ -153,16 +152,20 @@ double SecondsPerTick() {
 }
 
 // ---------------------------------------------------------------------------
-// ReaderWriter call shapes. Two, and only two, appear in this cluster.
+// ReaderWriter calls. Four members, and only four, appear in this cluster:
+// SerializeInt (+0xA0), SerializeFloat (+0x80), SerializeBool (+0x78) and
+// SerializeFloatArray (+0x28). B3X W0: by name on the real class; the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h. `name` is nullptr, as retail passes.
 // ---------------------------------------------------------------------------
-using ScalarFn = void (*)(ReaderWriter*, void*, const char*);
-using ArrayFn  = void (*)(ReaderWriter*, int, void*, const char*);
-
-void RwScalar(ReaderWriter* rw, int slot, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[slot / 8])(rw, p, nullptr);
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
 }
+void RwInt(ReaderWriter* rw, void* p)   { AsRw(rw)->SerializeInt(*static_cast<int32_t*>(p), nullptr); }
+void RwFloat(ReaderWriter* rw, void* p) { AsRw(rw)->SerializeFloat(*static_cast<float*>(p), nullptr); }
+void RwBool(ReaderWriter* rw, void* p)  { AsRw(rw)->SerializeBool(*static_cast<bool*>(p), nullptr); }
 void RwFloats(ReaderWriter* rw, int count, void* p) {
-    reinterpret_cast<ArrayFn>(rw->vtable[rw_vtbl::kArrayFloat / 8])(rw, count, p, nullptr);
+    AsRw(rw)->SerializeFloatArray(count, static_cast<float*>(p), nullptr);
 }
 
 // `stream->direction == 0` is IO::Stream::Direction::Reading. Every "if we are
@@ -278,7 +281,7 @@ extern "C" void RtGraphics_SerializeTransformArray(void* arrayv, Serializer* ser
     ReaderWriter* rw = ser->readerWriter;
 
     int32_t n = a->_size;
-    RwScalar(rw, rw_vtbl::kScalarInt, &n);
+    RwInt(rw, &n);
     if (IsReading(ser)) SetSizePose()(a, n);        // CALL 0x180059140
 
     uint8_t* p = a->_data;
@@ -313,7 +316,7 @@ extern "C" void RtGraphics_SerializeMeshNodes(Serializer* ser, int count, void* 
     for (int i = 0; i < count; ++i, p += 0x48) {
         // B.3.1 bridge: GraphicsMesh::Node::_name, untyped node storage.
         reinterpret_cast<System::String*>(p + 0x00)->Serialize(ser);
-        RwScalar(rw, rw_vtbl::kScalarInt, p + 0x08);
+        RwInt(rw, p + 0x08);
         RwFloats(rw, 4, p + 0x0c);
         RwFloats(rw, 3, p + 0x1c);
         RwFloats(rw, 4, p + 0x28);
@@ -332,8 +335,8 @@ extern "C" void RtGraphics_SerializeAnimLayers(Serializer* ser, int count, void*
     uint8_t* p = static_cast<uint8_t*>(basev);
     for (int i = 0; i < count; ++i, p += 0x38) {
         SerializeGroupPtr()(p + 0x00, ser);                  // ExternalPtr<AnimationGroup>
-        RwScalar(rw, rw_vtbl::kScalarInt,   p + 0x08);       // clip index
-        RwScalar(rw, rw_vtbl::kScalarFloat, p + 0x10);       // speed / weight
+        RwInt(rw, p + 0x08);       // clip index
+        RwFloat(rw, p + 0x10);       // speed / weight
         // ENDGAME B.3.5 block H1 — THE THREE HAND-INLINED int64 SLOT CALLS
         // B35_RULES section 11 listed as "receiver-side work". Block H1 owns the
         // receiver (`Graphics::AnimationState::Layer`), and
@@ -350,8 +353,8 @@ extern "C" void RtGraphics_SerializeAnimLayers(Serializer* ser, int count, void*
         sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x18), nullptr);      // time
         sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x20), nullptr);      // fade length
         sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x28), nullptr);      // fade remaining
-        RwScalar(rw, rw_vtbl::kScalarInt,   p + 0x0c);       // packed instance handle
-        RwScalar(rw, rw_vtbl::kScalarBool,  p + 0x30);       // restarted
+        RwInt(rw, p + 0x0c);       // packed instance handle
+        RwBool(rw, p + 0x30);       // restarted
     }
 }
 
@@ -366,14 +369,14 @@ extern "C" void RtGraphics_SerializeAnimStates(Serializer* ser, int count, void*
     uint8_t* p = static_cast<uint8_t*>(basev);
     for (int i = 0; i < count; ++i, p += 0x48) {
         int32_t n = *reinterpret_cast<const int32_t*>(p + 0x10);     // _layers._size
-        RwScalar(rw, rw_vtbl::kScalarInt, &n);
+        RwInt(rw, &n);
         if (IsReading(ser)) SetSizeLayers()(p + 0x08, n);            // CALL 0x18005c8a0
         RtGraphics_SerializeAnimLayers(ser, n, *reinterpret_cast<void* const*>(p + 0x08));
 
-        RwScalar(rw, rw_vtbl::kScalarBool, p + 0x00);
+        RwBool(rw, p + 0x00);
 
         n = *reinterpret_cast<const int32_t*>(p + 0x40);             // _nodes._size
-        RwScalar(rw, rw_vtbl::kScalarInt, &n);
+        RwInt(rw, &n);
         if (IsReading(ser)) SetSizeInterp()(p + 0x38, n);            // CALL 0x18005ac50
         RtGraphics_SerializeInterpTransforms(ser, n, *reinterpret_cast<void* const*>(p + 0x38));
 
@@ -391,16 +394,16 @@ extern "C" void RtGraphics_SerializeAnimInstances(Serializer* ser, int count, vo
     uint8_t* p = static_cast<uint8_t*>(basev);
     for (int i = 0; i < count; ++i, p += 0x30) {
         SerializeGroupPtr()(p + 0x00, ser);
-        RwScalar(rw, rw_vtbl::kScalarInt, p + 0x08);                 // clip index
-        RwScalar(rw, rw_vtbl::kScalarInt, p + 0x0c);                 // reference count
+        RwInt(rw, p + 0x08);                 // clip index
+        RwInt(rw, p + 0x0c);                 // reference count
 
         int32_t n = *reinterpret_cast<const int32_t*>(p + 0x28);     // _states._size
-        RwScalar(rw, rw_vtbl::kScalarInt, &n);
+        RwInt(rw, &n);
         if (IsReading(ser)) SetSizeStates()(p + 0x20, n);            // CALL 0x18005b1e0
         RtGraphics_SerializeAnimStates(ser, n, *reinterpret_cast<void* const*>(p + 0x20));
 
         n = *reinterpret_cast<const int32_t*>(p + 0x18);             // _nodes._size
-        RwScalar(rw, rw_vtbl::kScalarInt, &n);
+        RwInt(rw, &n);
         if (IsReading(ser)) SetSizeNodes()(p + 0x10, n);             // CALL 0x18005aa30
         RtGraphics_SerializeMeshNodes(ser, n, *reinterpret_cast<void* const*>(p + 0x10));
     }
@@ -512,7 +515,7 @@ extern "C" void RtGraphics_Animation_GetPoseAtTime(const void* selfv,
 // Their own `namespace Graphics { }` block, after this file's anonymous
 // namespace has closed, because a member definition has to appear in a namespace
 // ENCLOSING the class and `Graphics` / `RtGraphics` are siblings (B34_BRIEFS
-// section A.2). The anonymous namespace's helpers (`RwScalar`, `IsReading`,
+// section A.2). The anonymous namespace's helpers (`RwInt`, `IsReading`,
 // `SetSize*`, `RtAddr`, `AnimationManagerSingleton`, `SecondsPerTick`,
 // `QuaternionLerp`) are reachable unqualified: they are members of the global
 // namespace's unnamed namespace, in this same translation unit.
@@ -545,11 +548,8 @@ namespace Graphics {
 // (Ghidra prints "Could not recover jumptable" at 0x1800fe2c3); a call is the
 // same thing without the tail merge.
 //
-// THE RAW `rw_vtbl::k*` SLOT CALLS STAY (Serializer.h section 3.1's rule): the
-// int count and the bool go through the ReaderWriter's +0xA0 and +0x78 exactly
-// as before. Only the nine int64 sites B35_RULES section 11 names were
-// converted to member calls, and the three in this cluster are in
-// `RtGraphics_SerializeAnimLayers` above.
+// The int count and the bool go through the ReaderWriter's SerializeInt (+0xA0)
+// and SerializeBool (+0x78), by name since B3X W0.
 // ============================================================================
 void AnimationState::Serialize(IO::Serializer& s) {
     // The POD view of the same 16 bytes — Serializer.h asserts the two
@@ -558,10 +558,10 @@ void AnimationState::Serialize(IO::Serializer& s) {
     ReaderWriter* rw = ser->readerWriter;
 
     int32_t n = _layers._size;
-    RwScalar(rw, rw_vtbl::kScalarInt, &n);
+    RwInt(rw, &n);
     if (IsReading(ser)) SetSizeLayers()(&_layers, n);
     RtGraphics_SerializeAnimLayers(ser, n, _layers._data);
-    RwScalar(rw, rw_vtbl::kScalarBool, &_needsUniqueCopy);
+    RwBool(rw, &_needsUniqueCopy);
 }
 
 // ============================================================================

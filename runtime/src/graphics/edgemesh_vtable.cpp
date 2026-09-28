@@ -67,6 +67,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
+#include "../../types/io/Serializer.h"    // IO::ReaderWriter (B3X W0)
 #include "../collection/array_internal.h"
 
 // Same local declaration mesh.cpp, array.cpp and deleting_dtor.cpp carry, and
@@ -100,10 +101,6 @@ typedef const char* (*CStrThisFn)(const void*);
 typedef int32_t     (*I32ThisFn)(const void*);
 typedef int32_t     (*CompileFn)(void*, const void*);
 
-// Vtable slot 0 of Object::Base is the deleting destructor:
-//   flag 0 = destroy in place, flag 1 = destroy AND free.
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-
 // (ENDGAME B.3.9 GFX: `EdgeMeshCtor`, the ??0EdgeMesh name door Construct /
 // Reconstruct called, is gone with the door; both placement-new the class.)
 
@@ -122,7 +119,7 @@ using Slot0Fn = void* (*)(void* self, unsigned flag);
 // ---------------------------------------------------------------------------
 struct SerializeCtx {
     void* stream;    // +0x00  the IO::Stream& this slot was handed
-    void* encoding;  // +0x08  the Encoding the stream's factory produced
+    void* encoding;  // +0x08  the ReaderWriter the stream's Encoding factory produced
 };
 static_assert(sizeof(SerializeCtx) == 0x10, "the shipped context is two qwords");
 static_assert(offsetof(SerializeCtx, encoding) == 8, "encoding is the second qword");
@@ -134,14 +131,12 @@ static_assert(offsetof(SerializeCtx, encoding) == 8, "encoding is the second qwo
 constexpr size_t kStreamModeOffset    = 0x08;
 constexpr size_t kStreamFactoryOffset = 0x10;
 
-// Encoding vtable byte offsets, READ FROM RETAIL. The profile build's Encoding
-// table uses DIFFERENT offsets for the same operations
-// (reference_encoding_vtable_offsets_differ_between_builds.md), so these were
-// taken from `C:\GOG Games\Banished\Runtime-x64.dll` and from nowhere else. A
-// port written from the profile decompile would desync every stream while
-// looking correct.
-constexpr size_t kEncSerializeDword = 0xa0;   // CALL [RAX+0xa0], one 4-byte value
-constexpr size_t kEncSerializeArray = 0x28;   // CALL [RAX+0x28], (count, void*, 0)
+// The two ReaderWriter slots this body calls, READ FROM RETAIL: `CALL
+// [RAX+0xa0]` is `SerializeInt` (one 4-byte value) and `CALL [RAX+0x28]` is
+// `SerializeFloatArray` (count, float*, 0). The profile build's table uses
+// DIFFERENT offsets for the same operations
+// (reference_encoding_vtable_offsets_differ_between_builds.md). B3X W0: both
+// are by-name calls on `IO::ReaderWriter` now (Serializer.h:486-505).
 
 // The stream factory's vtable byte offsets — the two that produce an Encoding.
 //     CMP [ser+8],0 ; JNZ  -> CALL [RAX+0x20]     (index 4)
@@ -387,17 +382,13 @@ bool EdgeMesh::Serialize(void* stream) {
     extMat (&_edgeMaterial,     &ctx);
     extMat (&_skinEdgeMaterial, &ctx);
 
-    void** const evt = *reinterpret_cast<void***>(ctx.encoding);
-    using EncDwordFn = void (*)(void*, void*, int);
-    using EncArrayFn = void (*)(void*, int, void*, int);
-    EncDwordFn encDword = *reinterpret_cast<EncDwordFn*>(
-        reinterpret_cast<uint8_t*>(evt) + kEncSerializeDword);
-    EncArrayFn encArray = *reinterpret_cast<EncArrayFn*>(
-        reinterpret_cast<uint8_t*>(evt) + kEncSerializeArray);
+    // `ctx.encoding` is the ReaderWriter the factory made (see SerializeCtx).
+    IO::ReaderWriter* const rw =
+        static_cast<IO::ReaderWriter*>(ctx.encoding);   // B.3.x bridge
 
     {   // step 5 — the triangle lists, +0x148 data / +0x150 size
         int32_t n = _triangleLists._size;
-        encDword(ctx.encoding, &n, 0);
+        rw->SerializeInt(n, nullptr);
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
             // retail 0x1800136f0 — Array<GraphicsMesh::TriangleList>::SetSize(n).
             rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_triangleLists)->SetSize(n);
@@ -405,7 +396,7 @@ bool EdgeMesh::Serialize(void* stream) {
     }
     {   // step 6 — the edge lists, +0x158 data / +0x160 size
         int32_t n = _edgeLists._size;
-        encDword(ctx.encoding, &n, 0);
+        rw->SerializeInt(n, nullptr);
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
             // Same door, same spec: the edge-list array shares 0x1800136f0.
             rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_edgeLists)->SetSize(n);
@@ -442,14 +433,14 @@ bool EdgeMesh::Serialize(void* stream) {
     // literal 3 in EDX (`LEA EDX,[R9+0x3]` with R9 already zeroed), and the two
     // runs are +0x168 and +0x174, not one run of six: the Box is {min, max} and
     // the encoding is told so.
-    encArray(ctx.encoding, 3, &_aabb.min, 0);
-    encArray(ctx.encoding, 3, &_aabb.max, 0);
+    rw->SerializeFloatArray(3, reinterpret_cast<float*>(&_aabb.min), nullptr);
+    rw->SerializeFloatArray(3, reinterpret_cast<float*>(&_aabb.max), nullptr);
 
-    // step 9 — `if (enc) enc->vt[0](enc, 1)`. Flag 1 is destroy AND free; the
-    // Encoding the factory made in step 2 is owned by this frame.
+    // step 9 — `if (rw) rw->vt[0](rw, 1)`. Flag 1 is destroy AND free; the
+    // ReaderWriter the factory made in step 2 is owned by this frame. By name
+    // since B3X W0 (the ReaderWriter's own root, `IO::ReaderWriter`).
     if (ctx.encoding) {
-        void** const vt = *reinterpret_cast<void***>(ctx.encoding);
-        reinterpret_cast<Slot0Fn>(vt[0])(ctx.encoding, 1);
+        static_cast<IO::ReaderWriter*>(ctx.encoding)->DeletingDtor(1);   // B.3.x bridge
     }
 
     return true;   // MOV AL,1 — no failure path exists in the shipped body.

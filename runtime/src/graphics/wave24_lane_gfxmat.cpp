@@ -176,6 +176,7 @@
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Mesh.h"              // ENDGAME B.3.5 block G
 #include "../../types/graphics/AnimationManager.h"  // ENDGAME B.3.5 block G
+#include "../../types/io/Serializer.h"             // IO::ReaderWriter (B3X W0)
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -272,60 +273,12 @@ uint64_t g_oracleRuns       = 0;   // the effectiveness counter (instrument rule
 // zero qwords are the compiler's base chain, the MaterialInstance stamp is the
 // compiler's, and the field stores are the ctor's body (Material.h).
 
-// ---------------------------------------------------------------------------
-// THE IN-BODY DIFFERENTIAL ORACLE for the three slot bodies.
-//
-// Two scratch arenas, both stamped with the SAME synthetic vptr whose slot 0 is
-// `OracleSlot0` — so when Reconstruct or Destruct tail-calls slot 0 it reaches
-// a recorder instead of a real destructor and neither arm can touch anything
-// outside this function. Both arms then get compared on two SEPARATE screens:
-//
-//   (A) the (this-is-arena, flag) tuple recorded at slot 0, in order
-//   (B) the 0x58 payload bytes +0x08..+0x5f
-//
-// and the vptr at +0x00 is scored separately, by the diff oracle, so a promotion
-// of `??_7MaterialInstance@` shows up as its own line naming identity movement
-// rather than poisoning the byte screen.
-// ---------------------------------------------------------------------------
-struct OracleRecord {
-    void* self;
-    int   flag;
-    int   count;
-};
-OracleRecord g_oracleRec[2];
-int          g_oracleArm = 0;      // 0 = theirs, 1 = ours
-
-void* OracleSlot0(void* self, int flag) {
-    OracleRecord& r = g_oracleRec[g_oracleArm];
-    r.self = self;
-    r.flag = flag;
-    r.count += 1;
-    return self;
-}
-
-// A synthetic vtable big enough that nothing this file calls runs off the end.
-// Only slot 0 is ever reached by these three bodies; the rest abort loudly if
-// something unexpected dispatches, rather than reading whatever follows.
-void* OracleAbort(void*, int) {
-    std::fprintf(stderr, "[GFXMAT] oracle: unexpected vtable dispatch\n");
-    std::fflush(stderr);
-    return nullptr;
-}
-void* g_oracleVTable[16] = {
-    (void*)&OracleSlot0,  (void*)&OracleAbort, (void*)&OracleAbort, (void*)&OracleAbort,
-    (void*)&OracleAbort,  (void*)&OracleAbort, (void*)&OracleAbort, (void*)&OracleAbort,
-    (void*)&OracleAbort,  (void*)&OracleAbort, (void*)&OracleAbort, (void*)&OracleAbort,
-    (void*)&OracleAbort,  (void*)&OracleAbort, (void*)&OracleAbort, (void*)&OracleAbort,
-};
-
-// Fill an arena with a recognisable non-zero pattern first, so a body that
-// FAILS to write a field is caught. An all-zero start would make "wrote zero"
-// and "wrote nothing" indistinguishable, which is
-// reference_oracle_must_not_compare_unwritten_bytes.md read the other way up.
-void PrepareArena(uint8_t* arena) {
-    for (size_t i = 0; i < 0x60; ++i) arena[i] = static_cast<uint8_t>(0xA5 + i);
-    *reinterpret_cast<void**>(arena) = static_cast<void*>(g_oracleVTable);
-}
+// (B3X W0: the in-body differential oracle for the three slot bodies -- two
+// arenas stamped with a 16-slot synthetic vptr whose slot 0 recorded the
+// (self, flag) tuple -- is DELETED. Its only entry, `PrepareArena`, had no
+// caller anywhere once ENDGAME B.3.9 GFX retired the slot doors it compared,
+// and a table built by index would have mis-aimed after the normal-virtual
+// cutover. The replay for these bodies lives in tools/gfxmat24_probe/.)
 
 }  // namespace
 
@@ -430,17 +383,19 @@ struct RtIoSerializer {       // ONLY the two fields these bodies read.
 static_assert(offsetof(RtIoSerializer, encoding) == 0x08, "IO::Serializer encoding @ +0x08");
 
 using MakeEncodingFn = void* (*)(void* factory, RtIoSerializer* ser, int zero);
-using EncodeIntFn    = void  (*)(void* enc, void* value, int zero);
-using EncodeFloatsFn = void  (*)(void* enc, int count, void* values, int zero);
-using EncDtorFn      = void  (*)(void* enc, int flag);
 
-// The Encoding vtable, RETAIL offsets, confirmed at three call sites (top of
-// file). A profile-build port would use +0xb8 for kEncSerializeInt.
-constexpr size_t kEncScalarDtor     = 0x00;
+// The Encoding factory slots, RETAIL offsets (IO::Encoding is exempt from the
+// normal-virtual cutover: its slot 0 is not a destructor, B3X_RULES X1).
 constexpr size_t kEncMakeRead       = 0x18;
 constexpr size_t kEncMakeWrite      = 0x20;
-constexpr size_t kEncSerializeFloats= 0x28;
-constexpr size_t kEncSerializeInt   = 0xa0;
+
+// What the factory returns is the IO::ReaderWriter (the lane called it the
+// "encoding"). Its three slots these bodies use -- [0] DeletingDtor, +0x28
+// SerializeFloatArray, +0xa0 SerializeInt; a profile-build port would use +0xb8
+// for the int -- are by-name calls on the real class since B3X W0.
+IO::ReaderWriter* AsRw(void* enc) {
+    return static_cast<IO::ReaderWriter*>(enc);   // B.3.x bridge
+}
 
 void** VTableOf(void* obj) { return *reinterpret_cast<void***>(obj); }
 void*  VSlot(void* obj, size_t byteOffset) {
@@ -548,11 +503,18 @@ bool MaterialInstance::Serialize(void* streamv) {
     // Control 2 is THE documented retail-vs-profile Encoding offset trap turned
     // into a negative control: a port written from the profile decompile would
     // read the int encoder at +0xb8 and this is what that costs.
-    const size_t encInt = RT_GFXMAT_CORRUPT(2) ? 0xb8 : kEncSerializeInt;
+    // The control's +0xb8 is `SerializeUChar`, handed the same `&n` the raw
+    // call passed.
+    auto serializeCount = [&enc](int32_t& v) {
+        if (RT_GFXMAT_CORRUPT(2))
+            AsRw(enc)->SerializeUChar(*reinterpret_cast<unsigned char*>(&v), nullptr);
+        else
+            AsRw(enc)->SerializeInt(v, nullptr);
+    };
 
     // --- textures, stride 0x10 --------------------------------------------
     int32_t n = _textures._size;
-    reinterpret_cast<EncodeIntFn>(VSlot(enc, encInt))(enc, &n, 0);
+    serializeCount(n);
     if (localStream->mode == 0)
         RtAddr<ArraySetSizeFn>(RT_GFXMAT_CORRUPT(1) ? 0x1800616c0ull : 0x180061880ull)(
             &_textures, n);
@@ -574,7 +536,7 @@ bool MaterialInstance::Serialize(void* streamv) {
 
     // --- constants, stride 0x18 -------------------------------------------
     n = _constants._size;
-    reinterpret_cast<EncodeIntFn>(VSlot(enc, encInt))(enc, &n, 0);
+    serializeCount(n);
     if (localStream->mode == 0)
         RtAddr<ArraySetSizeFn>(RT_GFXMAT_CORRUPT(1) ? 0x180061880ull : 0x1800616c0ull)(
             &_constants, n);
@@ -582,8 +544,8 @@ bool MaterialInstance::Serialize(void* streamv) {
         uint8_t* p = reinterpret_cast<uint8_t*>(_constants._data);
         for (int32_t i = n; i > 0; --i) {
             RtAddr<SerStringFn>(0x1800c9930ull)(p, &ser);
-            reinterpret_cast<EncodeFloatsFn>(VSlot(enc, kEncSerializeFloats))(
-                enc, RT_GFXMAT_CORRUPT(5) ? 3 : 4, p + 8, 0);
+            AsRw(enc)->SerializeFloatArray(
+                RT_GFXMAT_CORRUPT(5) ? 3 : 4, reinterpret_cast<float*>(p + 8), nullptr);
             p += sizeof(RtGraphics::MaterialConstant);       // static_asserted 0x18
             ++g_matSerConstants;
         }
@@ -609,7 +571,7 @@ bool MaterialInstance::Serialize(void* streamv) {
         this->MaterialInstance::BuildParameters();
     }
 
-    if (enc) reinterpret_cast<EncDtorFn>(VSlot(enc, kEncScalarDtor))(enc, 1);
+    if (enc) AsRw(enc)->DeletingDtor(1);
 
     // Attendance and an effectiveness count. NOT a comparison — see the header
     // block: the replay for this body lives in tools/gfxmat24_probe/.
@@ -663,7 +625,7 @@ void MeshInstance::Serialize(IO::Serializer& serializer) {
 
     int32_t n = _materials._size;                                 // +0xd0
     void* enc = ser->encoding;
-    reinterpret_cast<EncodeIntFn>(VSlot(enc, kEncSerializeInt))(enc, &n, 0);
+    AsRw(enc)->SerializeInt(n, nullptr);
 
     // `ser->stream->mode`, one deref deeper than MaterialInstance::Serialize's —
     // the disassembly is `MOV RAX,[RDI] ; CMP dword [RAX+8],0`, and a decompile
@@ -731,14 +693,14 @@ void AnimationManager::Serialize(IO::Serializer& s) {
     void* enc = MakeEncoding(&localSer);
 
     int32_t n = _instances._size;                           // +0x08
-    reinterpret_cast<EncodeIntFn>(VSlot(enc, kEncSerializeInt))(enc, &n, 0);
+    AsRw(enc)->SerializeInt(n, nullptr);
 
     if (localStream->mode == 0)
         RtAddr<ArraySetSizeFn>(0x18005c3d0ull)(&_instances, n);  // +0x00 == this
 
     RtAddr<AnimSerElemFn>(0x18005c660ull)(&localSer, n, _instances._data);
 
-    if (enc) reinterpret_cast<EncDtorFn>(VSlot(enc, kEncScalarDtor))(enc, 1);
+    if (enc) AsRw(enc)->DeletingDtor(1);
 }
 
 }  // namespace Graphics
