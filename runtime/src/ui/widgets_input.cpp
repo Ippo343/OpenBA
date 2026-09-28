@@ -907,11 +907,6 @@ void ProgressElement::SetProgressTextParameter(int32_t index, const System::Stri
 // bodies, so none is kept.
 // ============================================================================
 
-// Wave 9 lane B3 -- a REAL DEPENDENCY row (WAVE9_LANE_V.md 1b); name only.
-static void NumberEditElement_SetValue(void* self, int32_t value) {
-    reinterpret_cast<UI::NumberEditElement*>(self)->UI::NumberEditElement::SetValue(value);   // B.3.6 bridge
-}
-
 int32_t RtUi_SpinnerElement_GetMaxValue(const void* self) {
     return reinterpret_cast<const UI::SpinnerElement*>(self)->UI::SpinnerElement::GetMaxValue();   // B.3.6 bridge
 }
