@@ -128,6 +128,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
+#include "../../types/system/Compression.h"
+#include "../../types/system/MemoryAllocator.h"
 
 namespace RtIo {
 
@@ -138,12 +140,6 @@ namespace {
 
 constexpr int32_t kWin = kCompressedStreamWindowSize;   // 0x8000
 
-typedef bool (*SetWindowFn)(CompressedStream*, int32_t);
-typedef void (*CompressWindowFn)(CompressedStream*, int32_t);
-typedef int32_t (*GetAvailFn)(CompressedStream*);
-typedef bool (*DecompressFromSourceFn)(CompressedStream*, int32_t);
-typedef bool (*ReadFn)(CompressedStream*, int32_t, void*);
-typedef int (*DecompressFn)(const void*, uint32_t, void*, uint32_t);
 
 inline Window* Windows(CompressedStream* s) {
     return static_cast<Window*>(s->windowData);
@@ -156,9 +152,6 @@ inline Header* Headers(CompressedStream* s) {
 // signature change: the other bodies in this file are not part of this block's
 // conversion (section D keeps this file's edits to the one vtable slot it owns).
 inline Window* Windows(IO::CompressedStream* s) { return static_cast<Window*>(s->_windowData); }
-
-typedef void* (*MemAllocFn)(uint64_t, int32_t);
-typedef void  (*MemFreeFn)(void*);
 
 // `Collection::Array<T>::SetSize(size + 1)` as MSVC inlined it twice into
 // SetWindow's grow path (headers at 1800a9bb0, blocks at 1800a9cb1): 8-byte
@@ -175,8 +168,7 @@ inline void GrowByOne(void*& data, int32_t& size, int32_t& cap,
     size = n;
     if (cap < n) {                                      // 1800a9bd4 / 1800a9cd5
         cap = (old != 0) ? n * 3 : n;
-        data = RT_EXPORT_ONCE(MemAllocFn,
-            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+        data = ::System::MemoryAllocator::MemAlloc(
                 static_cast<uint64_t>(cap) * elem, align);
     }
     if (data != nullptr) {
@@ -189,8 +181,7 @@ inline void GrowByOne(void*& data, int32_t& size, int32_t& cap,
         }
     }
     if (oldData != data && oldData != nullptr)
-        RT_EXPORT_ONCE(MemFreeFn,
-            "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(oldData);
+        ::System::MemoryAllocator::MemFree(oldData);
 }
 
 // The source stream, used by DecompressFromSource. Retail calls `[RAX+0x18]`
@@ -248,8 +239,7 @@ extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* se
     // `direction` is 0 and CompressWindow is never reached — which is why this
     // lane does not port it.
     if (w[best].start >= 0 && self->base.direction == 1) {   // 1800a9a1d / 1800a9a24
-        RT_EXPORT_ONCE(CompressWindowFn, "?CompressWindow@CompressedStream@IO@@AEAAXH@Z")(
-            self, best);                                     // 1800a9a2f
+        RtIo_CompressedStream_CompressWindow(self, best);                                     // 1800a9a2f
     }
 
     w[best].start    = -1;                              // 1800a9a38
@@ -293,10 +283,9 @@ extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* sel
     if (h->compressedSize != 0) {                       // 1800a9723  TEST DX,DX
         SourceStream(src)->Read(
             h->compressedSize, scratch);                // 1800a9730  CALL [RAX+0x18]
-        // Rung 1's port, reached through the port-aware door — this is the call
-        // that finally gives Compression::Decompress real package bytes.
-        RT_EXPORT_ONCE(DecompressFn,
-            "?Decompress@Compression@System@@SAHPEBXIPEAXI@Z")(
+        // Rung 1's port -- this is the call that finally gives
+        // Compression::Decompress real package bytes.
+        ::System::Compression::Decompress(
                 scratch, h->compressedSize, w->buffer,
                 static_cast<uint32_t>(kWin));           // 1800a9746
     } else {
@@ -399,8 +388,7 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
     aw->end   = aw->start + h->uncompressedSize;        // 1800a9e71/79
 
     if (h->compressedSize != 0) {                       // 1800a9e83  TEST AX,AX
-        RT_EXPORT_ONCE(DecompressFn,
-            "?Decompress@Compression@System@@SAHPEBXIPEAXI@Z")(
+        ::System::Compression::Decompress(
                 blocks[b], h->compressedSize, aw->buffer,
                 static_cast<uint32_t>(kWin));           // 1800a9e9d
     } else {
