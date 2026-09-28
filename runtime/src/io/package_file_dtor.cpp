@@ -199,11 +199,9 @@
 #include "../../types/system/String.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/PackageFile.h"     // ENDGAME B.3.9 IO: the member dtor
+#include "../../types/io/Modification.h"    // the two Array dtor bodies
 #include "../system/string.h"
 #include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_PkgEntry, AsArray
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 using RtSystem::String;
 
@@ -213,17 +211,7 @@ namespace {
 // not sorted — see §2(i).
 constexpr uint32_t kStringOffsets[5] = { 0x60, 0x58, 0x50, 0x48, 0x40 };
 
-typedef void* (*MemberDtorFn)(void* self);
-
 inline uint8_t* Bytes(void* p) { return reinterpret_cast<uint8_t*>(p); }
-
-// The three member destructors still reached by ADDRESS (registered ports:
-// ~FileInfo 0x18000c180, ~Array<uint8> 0x1800112a0, ~Array<int32>
-// 0x1800111a0). Resolved at each call -- no function-local cache (B9-10); a
-// package is destroyed a handful of times per boot.
-inline MemberDtorFn MemberDtor(uintptr_t addr) {
-    return reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, addr));
-}
 
 }  // namespace
 
@@ -238,7 +226,7 @@ inline MemberDtorFn MemberDtor(uintptr_t addr) {
 IO::PackageFile::~PackageFile() {
     uint8_t* p = Bytes(this);
 
-    MemberDtor(0x18000c180)(p + 0xC0);      // 0x1800b456c  ~FileInfo
+    RtIO::RtIo_FileInfo_Dtor(reinterpret_cast<RtIO::FileInfo*>(p + 0xC0));  // 0x1800b456c  ~FileInfo 0x18000c180
 
     // retail 0x1800269a0 — `~Array<IO::PackageFile::Entry>` at +0xB0.
     // array_destroy.cpp's kD_Str_10 / array.cpp's kSpec_PkgEntry: stride 0x10,
@@ -247,8 +235,8 @@ IO::PackageFile::~PackageFile() {
     // Array banner), so this stays the hand-derived spec, reached with `AsArray`.
     rtcoll::AsArray<&rtcoll::kSpec_PkgEntry>(p + 0xB0)->~Array();
 
-    MemberDtor(0x1800112a0)(p + 0x98);      // 0x1800b4586  ~Array<uint8>
-    MemberDtor(0x1800111a0)(p + 0x80);      // 0x1800b4593  ~Array<int32>
+    RtIO::RtColl_ArrayU8Dtor_1800112a0(p + 0x98);   // 0x1800b4586  ~Array<uint8> 0x1800112a0
+    RtIO::RtColl_ArrayI32Dtor_1800111a0(p + 0x80);  // 0x1800b4593  ~Array<int32> 0x1800111a0
 
     // 0x1800b4599..0x1800b4658 — five copies of the release idiom, descending.
     for (int i = 0; i < 5; ++i) {

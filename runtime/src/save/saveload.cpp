@@ -153,7 +153,6 @@ using RtSaveDetail::AdjustDelimsFn;
 using RtSaveDetail::SaveLoadVoidFn;
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;
-using RtSaveDetail::RtDataExport;
 using RtSaveDetail::SaveLoadSingletonSlot;
 using RtSaveDetail::FileSystemSingleton;
 using RtSaveDetail::ModificationSingleton;
@@ -350,10 +349,6 @@ void RtSaveDetail::ArrayModInfoDtor(Collection::Array<Save::SaveLoad::ModInfo>* 
     arr->_size = 0;
     arr->_capacity = 0;
 }
-// The registered address door (0x1800331f0): `(Array*)` in RCX.
-static void ArrayModInfo_Dtor(Collection::Array<Save::SaveLoad::ModInfo>* arr) {
-    RtSaveDetail::ArrayModInfoDtor(arr);
-}
 
 // ============================================================================
 // Save::SaveLoad::SaveInfo::~SaveInfo()   FUN_1800c3f40 (unexported)
@@ -417,10 +412,6 @@ void RtSaveDetail::ArraySaveInfoDtor(Save::SaveLoad::SaveInfoArray* arr) {
     arr->_size = 0;
     arr->_capacity = 0;
 }
-// The registered address door (0x1800329c0).
-static void ArraySaveInfo_Dtor(Save::SaveLoad::SaveInfoArray* arr) {
-    RtSaveDetail::ArraySaveInfoDtor(arr);
-}
 
 // The ??1SaveLoad DOOR keeps its body (the class declares no destructor: see
 // SaveLoad.h's banner — nothing destroys a SaveLoad in C++).
@@ -458,11 +449,7 @@ void RtSave_SaveLoad_Dtor(SaveLoad* self) {
 //
 // Oracle: FULL DIFF — a single load, no side effects.
 // ============================================================================
-// ENDGAME B.3.7 B2: the body is the inline member (SaveLoad.h); the
-// registered door delegates.
-Operation RtSave_SaveLoad_GetOperation(const SaveLoad* self) {
-    return self->Save::SaveLoad::GetOperation();
-}
+// ENDGAME B.3.7 B2: the body is the inline member (SaveLoad.h).
 
 // ============================================================================
 // Save::SaveLoad::GetSaveCount() const  retail 0x1800c3b80   ordinal 2885
@@ -471,9 +458,6 @@ Operation RtSave_SaveLoad_GetOperation(const SaveLoad* self) {
 // `return *(int*)(this + 0x58)` — the _size half of the Array<SaveInfo> at
 // +0x50. Oracle: FULL DIFF.
 // ============================================================================
-int RtSave_SaveLoad_GetSaveCount(const SaveLoad* self) {
-    return self->Save::SaveLoad::GetSaveCount();
-}
 
 // ============================================================================
 // Save::SaveLoad::GetSaveInfo(int) const  retail 0x1800c3b60  ordinal 2889
@@ -488,9 +472,6 @@ int RtSave_SaveLoad_GetSaveCount(const SaveLoad* self) {
 //
 // Oracle: FULL DIFF on the returned pointer.
 // ============================================================================
-const SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
-    return &self->Save::SaveLoad::GetSaveInfo(index);
-}
 
 // ============================================================================
 // Save::SaveLoad::GetAutoSaveName() const  retail 0x1800c1440   ordinal 2457
@@ -528,13 +509,6 @@ System::String Save::SaveLoad::GetAutoSaveName() const {
     System::String result;
     result.Set("Auto");
     return result;
-}
-
-// The registered door keeps retail's `(this, ret)` shape (B5-12): the member's
-// prvalue is placement-constructed straight into the caller's slot.
-String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
-    new (RtSystem::Sys(ret)) System::String(self->Save::SaveLoad::GetAutoSaveName());
-    return ret;
 }
 
 // Save::SaveLoad::GenerateSaveName() const  retail 0x1800c1250  ordinal 2401
@@ -576,16 +550,16 @@ String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
 // identity oracle can rely on.
 // ============================================================================
 namespace {
-using FormatFn = void* (*)(void* retval, const char* fmt, ...);
-
 // The inlined "String::Format into a scratch, then refcount-adopt into *ret"
 // idiom (0x1800c1290..0x1800c1310). NOT `String::operator=`: retail's very
 // first instruction blindly zeroes `*ret` without releasing whatever was
 // there (see the banner above), so the release/adopt pair below only ever
 // runs against a slot this function itself already populated.
 void GenerateSaveName_FormatCandidateInto(const char** ret, int index) {
+    // ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730), by name: the
+    // by-value String lands in `tmp` born at refcount 1, as the door did.
     const char* tmp = nullptr;
-    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(&tmp, "Save%i", index);
+    RtSaveDetail::AdoptReturned(&tmp, System::String::Format("Save%i", index));
 
     if (*ret != tmp) {
         ReleaseStringSlot(ret);
@@ -616,14 +590,6 @@ System::String Save::SaveLoad::GenerateSaveName() const {
     return result;
 }
 
-// The registered door keeps retail's `(this, ret)` shape (B5-12). Placement-
-// constructing into `ret` does not read what was there — retail's
-// unconditional zero, not a release.
-const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char** ret) {
-    new (ret) System::String(self->Save::SaveLoad::GenerateSaveName());
-    return ret;
-}
-
 // ============================================================================
 // Save::SaveLoad::GetSaveState()        retail 0x1800c3b50   ordinal 2891
 // ?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ
@@ -633,9 +599,6 @@ const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char**
 // this returns whatever the allocator left there. Faithful.
 // Oracle: FULL DIFF.
 // ============================================================================
-SavedState* RtSave_SaveLoad_GetSaveState(SaveLoad* self) {
-    return self->Save::SaveLoad::GetSaveState();
-}
 
 // ============================================================================
 // Save::SaveLoad::SetOperation(Operation, int)  retail 0x1800c3c50  ordinal 3934
@@ -654,10 +617,6 @@ void Save::SaveLoad::SetOperation(Operation op, int index) {
     _elapsed           = zero;
 }
 
-void RtSave_SaveLoad_SetOperation(SaveLoad* self, Operation op, int index) {
-    self->Save::SaveLoad::SetOperation(op, index);
-}
-
 // ============================================================================
 // Save::SaveLoad::SetMinOperationTime(const Time&)  retail 0x1800c3c40  ord 3920
 // ?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
@@ -667,10 +626,6 @@ void RtSave_SaveLoad_SetOperation(SaveLoad* self, Operation op, int index) {
 // ============================================================================
 void Save::SaveLoad::SetMinOperationTime(const System::Time& time) {
     _minOperationTime = time._ticks;
-}
-
-void RtSave_SaveLoad_SetMinOperationTime(SaveLoad* self, const int64_t* time) {
-    self->Save::SaveLoad::SetMinOperationTime(*reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -691,9 +646,6 @@ void RtSave_SaveLoad_SetMinOperationTime(SaveLoad* self, const int64_t* time) {
 //
 // Oracle: SCRATCH-COPY DIFF.
 // ============================================================================
-void RtSave_SaveLoad_SetSaveSprite(SaveLoad* self, const RtSave::Sprite* sprite) {
-    self->Save::SaveLoad::SetSaveSprite(sprite);   // the Sprite's hidden pointer, as is
-}
 
 // ============================================================================
 // Save::SaveLoad::SetSaveName(const String&, int)  retail 0x1800c3bb0  ord 3953
@@ -732,10 +684,6 @@ void Save::SaveLoad::SetSaveName(const System::String& name, int mode) {
             *reinterpret_cast<int*>(name._data - 4) += 1;
     }
     _saveNameMode = mode;
-}
-
-void RtSave_SaveLoad_SetSaveName(SaveLoad* self, const String* name, int mode) {
-    self->Save::SaveLoad::SetSaveName(*RtSystem::Sys(name), mode);
 }
 
 // ============================================================================
@@ -807,14 +755,8 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     // an AddRef/Release pair that retail never spends.
     {
     System::String   joined;
-    System::Filename dataDir;
-    RT_EXPORT_ONCE(GetDataDirectoryFn,
-                     "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
-        FileSystemSingleton(),
-        // TRANSITIONAL CAST, the class->POD direction: the door's typedef is
-        // the C entry point's ABI shape and IO::FileSystem is not converted
-        // yet. Same eight bytes; the callee placement-constructs into it.
-        reinterpret_cast<String*>(&dataDir));
+    System::Filename dataDir(                                   // 0x180007bd0
+        static_cast<const ::IO::FileSystem*>(FileSystemSingleton())->GetDataDirectory());
 
     // The `??HSystem@@YA?AVString@0@AEBV10@0@Z` door IS System::operator+
     // (0x1800c9440). `mod->path` is a raw `const char*` member of the
@@ -853,10 +795,6 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     }
 
     return ours;
-}
-
-int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) {
-    return self->Save::SaveLoad::CheckMod(saveIndex, modIndex);
 }
 
 // ============================================================================
@@ -908,10 +846,6 @@ void Save::SaveLoad::Update(const System::Time& delta) {
     case kOpDelete:       UpdateDelete();       break;
     default:              break;
     }
-}
-
-void RtSave_SaveLoad_Update(SaveLoad* self, const int64_t* delta) {
-    self->Save::SaveLoad::Update(*reinterpret_cast<const System::Time*>(delta));   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -992,10 +926,6 @@ void Save::SavedState::Store(IO::MemoryStream& stream) {
     std::memcpy(_data, src, _size);
 }
 
-void RtSave_SavedState_Store(SavedState* self, MemoryStream* stream) {
-    self->Save::SavedState::Store(*reinterpret_cast<IO::MemoryStream*>(stream));   // B.3.7 bridge
-}
-
 // ============================================================================
 // Save::SavedState::Retrieve(IO::MemoryStream&)  retail 0x1800c0e50  ord 3586
 // ?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z
@@ -1019,10 +949,6 @@ void Save::SavedState::Retrieve(IO::MemoryStream& stream) {
     // ENDGAME B.3.9 IO (W2, foreign site): ?Open@MemoryStream is the member.
     stream.Open(static_cast<int>(_size));
     std::memcpy(stream._data, _data, _size);
-}
-
-void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
-    self->Save::SavedState::Retrieve(*reinterpret_cast<IO::MemoryStream*>(stream));   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -1121,15 +1047,10 @@ Save::SaveLoad* Save::SaveLoad::Get() {
     return slot ? *slot : nullptr;
 }
 
-SaveLoad* RtSave_SaveLoad_Get() {
-    return Save::SaveLoad::Get();
-}
-
 int RtSaveLoadRegister() {
     int n = 0;
     RegisterRuntimeExport("??0SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Ctor); ++n;
     RegisterRuntimeExport("??0SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Ctor); ++n;
-    RegisterRuntimeExport("??1SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Dtor); ++n;
     // WAVE 9 LANE SYS2. `QEAA`, the NON-VIRTUAL spelling -- SaveLoad has no
     // vtable (the header proves it: the ctor writes an int at +0x00 and the
     // DLL exports no ??_7SaveLoad@Save@@6B@), so `UEAA` here would be a
@@ -1147,46 +1068,7 @@ int RtSaveLoadRegister() {
     // reaches our transcription and not a null. A faithful port that calls DLL
     // internals by address grows the cutover surface; owning the internals
     // instead is the version of that which shrinks it.
-    RegisterRuntimeAddr(0x1800329c0, (void*)&ArraySaveInfo_Dtor);
     RegisterRuntimeAddr(0x1800c3f40, (void*)&SaveInfo_Dtor);
-    RegisterRuntimeAddr(0x1800331f0, (void*)&ArrayModInfo_Dtor);
-    RegisterRuntimeExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z", (void*)&RtSave_SaveLoad_CheckMod); ++n;
-    // Wave 8 lane E: engine_funcs.cpp's ResolveExport call for CheckMod was a
-    // phantom-name typo (QEAAHHI, not this real QEBAHHH) that had been dead
-    // since it was written; fixed at its source there. Registering by
-    // address too closes the WAVE7.md §3 failure mode where a phantom-name
-    // fix, once corrected, is still the ONLY door — a second port reached by
-    // address stays correct even if the name is mistyped again.
-    RegisterRuntimeAddr(0x1800c1090, (void*)&RtSave_SaveLoad_CheckMod);
-    RegisterRuntimeExport("?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GenerateSaveName); ++n;
-    RegisterRuntimeAddr(0x1800c1250, (void*)&RtSave_SaveLoad_GenerateSaveName);
-    RegisterRuntimeExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ", (void*)&RtSave_SaveLoad_GetOperation); ++n;
-    // WAVE 23 LANE TAIL. Both doors; the banner above records why neither
-    // breaks ProbeSaveLoadSingleton's oracle.
-    RegisterRuntimeExport("?Get@SaveLoad@Save@@SAPEAV12@XZ", (void*)&RtSave_SaveLoad_Get); ++n;
-    RegisterRuntimeAddr(0x180030d40, (void*)&RtSave_SaveLoad_Get);
-    RegisterRuntimeAddr(0x1800c3c80, (void*)&RtSave_SaveLoad_GetOperation);
-    // Wave 14 lane AUTONAME. Registered both ways from the start (not a
-    // retrofit): saveload_update.cpp's UpdateSave/UpdateList already call
-    // this by NAME through RT_EXPORT_ONCE (:1159, :1753), so the address door
-    // closes the same silent-reversion class those two call sites would
-    // otherwise be exposed to if the export name were ever mistyped again.
-    RegisterRuntimeExport("?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GetAutoSaveName); ++n;
-    RegisterRuntimeAddr(0x1800c1440, (void*)&RtSave_SaveLoad_GetAutoSaveName);
-    RegisterRuntimeExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ", (void*)&RtSave_SaveLoad_GetSaveCount); ++n;
-    RegisterRuntimeExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z", (void*)&RtSave_SaveLoad_GetSaveInfo); ++n;
-    RegisterRuntimeExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ", (void*)&RtSave_SaveLoad_GetSaveState); ++n;
-    RegisterRuntimeAddr(0x1800c3b50, (void*)&RtSave_SaveLoad_GetSaveState);
-    RegisterRuntimeExport("?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z", (void*)&RtSave_SavedState_Retrieve); ++n;
-    RegisterRuntimeExport("?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z", (void*)&RtSave_SaveLoad_SetMinOperationTime); ++n;
-    RegisterRuntimeExport("?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z", (void*)&RtSave_SaveLoad_SetOperation); ++n;
-    RegisterRuntimeExport("?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z", (void*)&RtSave_SaveLoad_SetSaveName); ++n;
-    // Wave 8 lane E: same phantom-name fix as CheckMod above, applied to
-    // engine_funcs.cpp's SetSaveName resolve; registered by address too.
-    RegisterRuntimeAddr(0x1800c3bb0, (void*)&RtSave_SaveLoad_SetSaveName);
-    RegisterRuntimeExport("?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z", (void*)&RtSave_SaveLoad_SetSaveSprite); ++n;
-    RegisterRuntimeExport("?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z", (void*)&RtSave_SavedState_Store); ++n;
-    RegisterRuntimeExport("?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z", (void*)&RtSave_SaveLoad_Update); ++n;
     return n;
 }
 

@@ -184,6 +184,11 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"   // RtString_ReleaseInline, RtSystem::String
 #include "../system/pod_bridge.h"
+#include "../collection/avl_trees.h"          // rtavl::StringMapInsert
+#include "../../types/collection/Collection.h"   // rtsetclear::Clear
+#include "../../types/system/Configuration.h"    // RtSystem_ConfigMap_Find
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/system/WideString.h"
 
 using RtIo::Persistence;
 using RtIo::Registry;
@@ -191,14 +196,6 @@ using RtIo::SettingsMapNode;
 using RtSystem::String;
 using RtSystem::StringRefCount;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
-
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — same reasoning persistence.cpp gives (that header drags in <windows.h> and
-// the runtime tree must stay platform-neutral outside a `_win` file). This one
-// IS a `_win` file, but the declaration must stay byte-identical to resolve.h's
-// so the linker keeps checking the two against each other.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -221,33 +218,13 @@ static_assert(kSam == 0xF003F, "retail passes 0xF003F as samDesired");
 // ---------------------------------------------------------------------------
 // Dependencies
 // ---------------------------------------------------------------------------
-// Every one of these goes through the PORT-AWARE door (RT_EXPORT_ONCE by name,
-// or ResolveAddr for the two unnamed internals), NOT through the raw DLL door.
-// This wave's whole point is that the DLL will not be there, so a dependency
-// that insists on the shipped body is a null call at cutover
-// (reference_converting_a_door_is_not_satisfying_it.md).
-//
-// ON reference_resolveaddr_consults_port_registry_first.md: `ResolveAddr(
-// Module::Runtime, …)` checks OUR registry before the DLL, so an address
-// another lane has registered silently becomes ours. Both addresses below were
-// grepped across the tree before use:
-//   0x18002a090  Map_Insert — NOT registered by any lane. Reaches the DLL.
-//   0x18000f7d0  Map_Clear  — PORTED 2026-09-08 by Wave 9 lane SAVE2
-//                (runtime/src/collection/set_clear.cpp), registered BY ADDRESS,
-//                so ResolveAddr now hands back OUR body. This line used to read
-//                "NOT registered by any lane. Reaches the DLL." Nothing about
-//                this call site changes; what changes is which body answers.
-// The near miss worth naming: 0x18002ace0 (Map_Find, Map_Insert's sibling) IS
-// registered, by `runtime/src/system/configuration.cpp:310`. This file does not
-// use it. A future lane that adds a Map_Find call here must know that.
-
-typedef void  (*MapClearFn)(void* self);
-typedef void* (*MapInsertFn)(void* map, void** outNode, const String* key, const String* value);
-typedef Registry* (*RegistryCtorFn)(Registry* self, const char* subKey);
-typedef void  (*StringSetFn)(String* self, const char* src);
-typedef void  (*WideSetFn)(String* self, const wchar_t* src);
-typedef void* (*WideAsUtf8Fn)(const String* self, String* ret);
-typedef void  (*ReadSettingsFn)(Persistence* self);
+// B3R RT-IO: every dependency below is called BY NAME (they were RT_EXPORT_ONCE
+// / ResolveAddr / RtResolveCached doors):
+//   0x18000f7d0  Map_Clear   -> rtsetclear::Clear (collection/set_clear.cpp)
+//   0x18002a090  Map_Insert  -> rtavl::StringMapInsert (collection/avl_trees.cpp)
+//   0x18002ace0  Map_Find    -> RtSystem_ConfigMap_Find (system/configuration.cpp)
+//   System::WideString ctor / Set / AsUTF8, System::String::Set / Format,
+//   IO::Registry's ctor, System::MemoryAllocator::MemAlloc / MemFree.
 
 // System::WideString is one pointer with String's exact allocation header —
 // every release of one in ReadSettings is `DEC [p-4] / SUB p,8 / MemFree`, byte
@@ -255,17 +232,6 @@ typedef void  (*ReadSettingsFn)(Persistence* self);
 // this way and this file follows rather than inventing a second spelling.
 using WideStringHandle = String;
 
-// NEITHER of these is null-checked, deliberately. With the DLL present
-// `ResolveAddr` hands back a real address and the check would be dead; with the
-// DLL absent it hands back 0 and the check would turn "no port for Map_Clear /
-// Map_Insert yet" into SILENCE — ReadSettings would return having loaded no
-// settings at all, and the first symptom would be a wrong default somewhere
-// else entirely. Left unguarded so it dies as EXEC-of-0 with the VEH handler
-// naming this frame, which is the loud failure WAVE9.md asks for and the same
-// reasoning rt_port.h gives for RT_DATA_SLOT. (Contrast the guard in
-// persistence_startup.cpp: that one is over a DATA SLOT whose absence is a real
-// standalone-vs-retail difference, not over a call whose absence is a defect.)
-//
 // ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`
 // members, deliberately, and for the SAME reason persistence.cpp's
 // CallMapFind/CallMapInsert are not: `Persistence` (+0x00/+0x08/+0x0C) IS a
@@ -280,15 +246,13 @@ using WideStringHandle = String;
 // needed: `Collection::Set<SettingsMapNode, AVLCompare, DefaultAllocator,
 // System::String>::Clear()` here and `::Insert(element)` for MapInsert below.
 void MapClear(void* self) {
-    static MapClearFn fn = reinterpret_cast<MapClearFn>(
-        ResolveAddr(Module::Runtime, 0x18000f7d0));
-    fn(self);
+    rtsetclear::Clear(static_cast<rtsetavl::Set*>(self));            // 0x18000f7d0
 }
 
 void MapInsert(void* map, void** outNode, const String* key, const String* value) {
-    static MapInsertFn fn = reinterpret_cast<MapInsertFn>(
-        ResolveAddr(Module::Runtime, 0x18002a090));
-    fn(map, outNode, key, value);
+    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  B.3.x bridge
+                           reinterpret_cast<rtsetavl::Node**>(outNode),
+                           &key->data, &value->data);
 }
 
 // Convert one NUL-terminated UTF-16 buffer to a System::String, exactly the
@@ -297,22 +261,19 @@ void MapInsert(void* map, void** outNode, const String* key, const String* value
 void AssignFromWide(String* dst, const wchar_t* src) {
     WideStringHandle w;
     w.data = nullptr;                                   // MOV [RBP+0x1010],R12
-    RT_EXPORT_ONCE(WideSetFn, "?Set@WideString@System@@QEAAXPEB_W@Z")(&w, src);
+    reinterpret_cast<System::WideString*>(&w)->Set(src);          // B.3.x bridge
 
-    // AsUTF8 returns System::String BY VALUE, so the hidden return slot is the
-    // SECOND argument and it is CONSTRUCTED, not assigned — retail does not
-    // pre-zero the temporary. It is zeroed here anyway so that a null return
-    // from the resolver cannot leave an indeterminate pointer to release; that
-    // is a difference from retail's stack, not from retail's behaviour.
+    // AsUTF8 returns System::String BY VALUE into the hidden return slot
+    // `utf8`, CONSTRUCTED, not assigned.
     String utf8;
     utf8.data = nullptr;
-    RT_EXPORT_ONCE(WideAsUtf8Fn,
-                   "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ")(&w, &utf8);
+    ::new (&Sys(utf8)) System::String(                                // B.3.x bridge
+        reinterpret_cast<const System::WideString*>(&w)->AsUTF8());
 
     // MOV RDX,[RAX] — retail reads the char* back out of the returned String
     // and hands THAT to String::Set, which copies the bytes. It does not adopt
     // the temporary's buffer.
-    RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(dst, utf8.data);
+    Sys(*dst).Set(utf8.data);
 
     RtSystem::RtString_ReleaseInline(&utf8);
     RtSystem::RtString_ReleaseInline(&w);
@@ -378,31 +339,6 @@ uint64_t DigestMap(const void* root, uint32_t* countOut, const char** firstKeyOu
 
 }  // namespace
 
-// ============================================================================
-// ??0Registry@IO@@QEAA@PEBD@Z                              retail 0x1800b9500
-// ----------------------------------------------------------------------------
-// ENDGAME B.3.4 PACKAGE+FS commit 1 — the body is now
-// `IO::Registry::Registry(const char*)` (below). The door keeps its name, its
-// by-name AND by-address registration, and DELEGATES.
-//
-// It delegates by PLACEMENT-NEW rather than by a member call, because a
-// constructor is not callable on an already-live object: the door's contract is
-// "turn these 0x18 uninitialised bytes into a Registry", which is exactly what
-// placement-new into the caller's storage is. Nothing is allocated and nothing
-// moves — `IO::Registry` is layout-identical to the `RtIo::Registry` POD the
-// door's signature names (both `static_assert`ed in runtime/types/io/Registry.h)
-// — so the object the caller sees is byte-for-byte the one retail's ctor built.
-//
-// No qualified `IO::Registry::` call and no recursion hazard here: B34_BRIEFS
-// §A.1's rule is about POLYMORPHIC receivers whose live instances wear a MINTED
-// table resolving back to these doors. `IO::Registry` has no vtable at all
-// (Registry.h's banner), so there is nothing to dispatch through.
-// ============================================================================
-extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
-    ::new (static_cast<void*>(self)) IO::Registry(subKey);
-    return self;   // 0x1800b9747: MOV RAX,RDI
-}
-
 namespace IO {
 
 // ---------------------------------------------------------------------------
@@ -428,25 +364,10 @@ Registry::Registry(const char* subKey) {
     _enumGroupIndex = 0;
 
     // 0x1800b954b: String::Format(&tmp, "Software\\%s\\%s", company, product),
-    // then String::operator= inlined at 0x1800b9553. Format is real varargs, so
-    // RT_EXPORT_ONCE's non-variadic `Fn` will not hold it — the same exception
-    // persistence.cpp makes. It still goes through RtResolveCached rather than a
-    // bare `static FormatFn = ResolveExport(...)`, so it keeps that macro's
-    // never-cache-a-null contract: a resolve that misses is named and retried
-    // instead of being frozen by whichever caller happened to run first
-    // (rt_port.h, "Resolve-and-cache that NEVER caches a null"). Unguarded, for
-    // the reason given above MapClear.
-    using FormatFn = String* (*)(String* ret, const char* fmt, ...);
-    static void* formatSlot = nullptr;
-    FormatFn format = reinterpret_cast<FormatFn>(
-        RtResolveCached("?Format@String@System@@SA?AV12@PEBDZZ", &formatSlot));
-    // Format is reached by NAME through the resolve door (already ported --
-    // see the banner), so it still fills a raw hidden-return-slot. The value
-    // lands in a POD and is then stolen into the class.
-    String tmpPod{nullptr};
-    format(&tmpPod, RtIo::kRegistryPathFormat,
+    // then String::operator= inlined at 0x1800b9553. B3R RT-IO: Format by name
+    // (System::String::Format, retail 0x1800c9730).
+    System::String tmp = System::String::Format(RtIo::kRegistryPathFormat,
            RtIo::kRegistryCompanyName, RtIo::kRegistryProductName);
-    System::String tmp(std::move(Sys(tmpPod)));
     // The leading equality test is retail's self-assignment guard (see
     // persistence_startup.cpp's banner for why it must not be tidied away) --
     // this IS `String::operator=` (retail 0x1800c9810). `_path` is still the
@@ -477,11 +398,9 @@ Registry::Registry(const char* subKey) {
     // 0x1800b969d onward.
     DWORD disposition = 0;
 
-    using WideCtorFromStringFn = WideStringHandle* (*)(WideStringHandle* self, const String* src);
     WideStringHandle wpath;
     wpath.data = nullptr;
-    RT_EXPORT_ONCE(WideCtorFromStringFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")
-        (&wpath, &_path);
+    ::new (static_cast<void*>(&wpath)) System::WideString(Sys(_path));   // B.3.x bridge
 
     HKEY* phKey = reinterpret_cast<HKEY*>(&_key);
     const wchar_t* w = reinterpret_cast<const wchar_t*>(wpath.data);
@@ -500,18 +419,6 @@ Registry::Registry(const char* subKey) {
 
 // ============================================================================
 // ?ReadSettings@Persistence@IO@@QEAAXXZ                    retail 0x1800b84b0
-// ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 6: the body is now
-// `IO::Persistence::ReadSettings()`, below. The door keeps its name, its
-// `extern "C"` linkage and both registration lines, and delegates. No qualified
-// `IO::` call is needed: `IO::Persistence` has no vtable of its own -- the vptr
-// at +0x10 is the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
-    reinterpret_cast<IO::Persistence*>(self)->ReadSettings();
-}
-
-// ============================================================================
 // `IO::Persistence::ReadSettings` -- the member body
 // ============================================================================
 // Defined in `namespace IO` because a member of `IO::X` must appear in a
@@ -777,16 +684,10 @@ namespace {
 // derived generally and the same one Map_Clear pins for left/right.
 constexpr size_t kNodeParent = 0x10;
 
-// 0x18002ace0. PORTED, by runtime/src/system/configuration.cpp:310
-// (`RtSystem_ConfigMap_Find`, registered BY ADDRESS), so this must go through
-// `ResolveAddr` and not by name -- there is no export name at that RVA at all
-// (checked with pefile). Reaching it by any other door would walk past our own
-// port into the DLL, which is what tools/port_bypass_audit.py exists to catch.
+// 0x18002ace0 -- `RtSystem_ConfigMap_Find` (runtime/src/system/configuration.cpp),
+// by name (B3R RT-IO). There is no export name at that RVA at all.
 void* MapFind(const void* map, const String* key) {
-    using Fn = void* (*)(const void*, const String*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002ace0));
-    return fn(map, key);
+    return RtSystem_ConfigMap_Find(const_cast<void*>(map), key);
 }
 
 // The allocator boundary for phase 2's array. Retail open-codes
@@ -796,12 +697,10 @@ void* MapFind(const void* map, const String* key) {
 // A composition identity, not a substitution; `runtime/src/collection/array.cpp`
 // makes the same argument for the same pair.
 void* MemAllocRaw(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    return RT_EXPORT_ONCE(Fn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(bytes, align);
+    return ::System::MemoryAllocator::MemAlloc(bytes, align);
 }
 void MemFreeRaw(void* p) {
-    using Fn = void (*)(void*);
-    RT_EXPORT_ONCE(Fn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    ::System::MemoryAllocator::MemFree(p);
 }
 
 // ---- the two mutating calls -----------------------------------------------
@@ -929,29 +828,22 @@ void ArrayDestroy(WideArray* a) {                       // 0x1800b9027-0x1800b90
 // Ctor/Set/ReleaseInline shape it already had; nothing in this function
 // changed.
 void WriteSettingsBody(const Persistence* self) {
-    RegistryCtorFn regCtor = RT_EXPORT_ONCE(RegistryCtorFn,
-                                            "??0Registry@IO@@QEAA@PEBD@Z");
-    using WideCtorFromStringFn =
-        WideStringHandle* (*)(WideStringHandle* self, const String* src);
-    using WideSetFn2 = void (*)(WideStringHandle* self, const wchar_t* src);
 
     // ---- phase 1 -----------------------------------------------------------
     {
         Registry reg;
-        regCtor(&reg, nullptr);                                 // 0x1800b8912
+        ::new (static_cast<void*>(&reg)) IO::Registry(nullptr); // 0x1800b8912  B.3.x bridge
 
         void* node = Leftmost(self->settingsMapRoot);           // 0x1800b8918
         while (node != nullptr) {
             const SettingsMapNode* n = static_cast<const SettingsMapNode*>(node);
 
             WideStringHandle wValue; wValue.data = nullptr;
-            RT_EXPORT_ONCE(WideCtorFromStringFn,
-                           "??0WideString@System@@QEAA@AEBVString@1@@Z")
-                (&wValue, &n->value);                           // 0x1800b894b
+            ::new (static_cast<void*>(&wValue))                // 0x1800b894b  B.3.x bridge
+                System::WideString(Sys(n->value));
             WideStringHandle wName;  wName.data = nullptr;
-            RT_EXPORT_ONCE(WideCtorFromStringFn,
-                           "??0WideString@System@@QEAA@AEBVString@1@@Z")
-                (&wName, &n->key);                              // 0x1800b895d
+            ::new (static_cast<void*>(&wName))                 // 0x1800b895d  B.3.x bridge
+                System::WideString(Sys(n->key));
 
             if (reg.key != nullptr) {                           // 0x1800b896e
                 const wchar_t* data =
@@ -979,7 +871,7 @@ void WriteSettingsBody(const Persistence* self) {
     {
         WideArray stale;
         Registry reg;
-        regCtor(&reg, nullptr);                                 // 0x1800b8b70
+        ::new (static_cast<void*>(&reg)) IO::Registry(nullptr); // 0x1800b8b70  B.3.x bridge
 
         // Deliberately uninitialised, exactly as retail leaves it: the only
         // path that reads it is one RegEnumValueW has just filled.
@@ -1003,8 +895,8 @@ void WriteSettingsBody(const Persistence* self) {
 
             ++g_wsStaleFound;
             WideStringHandle w; w.data = nullptr;               // 0x1800b8ce3
-            RT_EXPORT_ONCE(WideSetFn2, "?Set@WideString@System@@QEAAXPEB_W@Z")
-                (&w, nameBuf);                                  // 0x1800b8cf5
+            reinterpret_cast<System::WideString*>(&w)->Set(   // 0x1800b8cf5  B.3.x bridge
+                nameBuf);
             ArrayAppend(&stale, &w);
             RtSystem::RtString_ReleaseInline(&w);               // 0x1800b8efe
         }
@@ -1048,13 +940,7 @@ void Persistence::WriteSettings() const {
 // ============================================================================
 int RtIoPersistenceRegistryRegister() {
     int n = 0;
-    RegisterRuntimeExport("?ReadSettings@Persistence@IO@@QEAAXXZ",
-                          (void*)&RtIo_Persistence_ReadSettings); ++n;
-    RegisterRuntimeAddr(0x1800b84b0, (void*)&RtIo_Persistence_ReadSettings);
 
-    RegisterRuntimeExport("??0Registry@IO@@QEAA@PEBD@Z",
-                          (void*)&RtIo_Registry_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800b9500, (void*)&RtIo_Registry_Ctor);
 
     // WAVE 9 LANE SAVE2. `QEBA` -- the CONST spelling -- verified against the
     // shipped export table by RVA before this line was written; `QEAA` here

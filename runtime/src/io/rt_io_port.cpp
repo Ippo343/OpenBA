@@ -40,7 +40,6 @@
 #include "../../types/io/Modification.h"
 #include "../../types/io/Persistence.h"
 
-extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // Wave 19 lane PERSIST: the save-ENUMERATION and request-ISSUE half of
@@ -49,16 +48,7 @@ extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // the old DLL-era switch, because that one gates the SETTINGS half (Get/Set/
 // GetSavePath) which is on the boot path; these seven are on the save/load
 // menu path and must be removable without taking the settings with them.
-extern int RtIoPersistenceSavesRegister();  // persistence_saves{,_win}.cpp (lane PERSIST)
-// Wave 24 lane INTERNAL8: the four UNEXPORTED bodies of the worker Wave 19
-// left as address doors — the three enqueue helpers and the worker destructor.
-// OWN switch, deliberately NOT folded into the old DLL-era switch: these four
-// are reached by ADDRESS from Wave 19's already-ported Begin* bodies, so with
-// this switch off those callers fall straight back through ResolveAddr into
-// the shipped DLL and the A/B is exactly this lane's four bodies and nothing
-// else. The dtor in particular joins a real thread, and "the shutdown hangs"
-// has to be separable from "the save menu is wrong".
-extern int RtIoPersistenceWorkerRegister(); // persistence_worker_win.cpp (Wave 24 INTERNAL8)
+extern int RtIoPersistenceSavesRegister();  // persistence_saves.cpp (lane PERSIST)
 // Wave 9 lane ENG, iteration 2. Its own switch, not folded into
 // the old DLL-era switch: this one is on the process's single boot path
 // (Engine::Startup step 3), so the integrator must be able to A/B it without
@@ -74,11 +64,6 @@ extern int RtIoPersistenceStartupRegister(); // persistence_startup.cpp (lane EN
 // in this tree that reads the player's real Windows registry, so the integrator
 // must be able to take it out on its own. WriteSettings is NOT in it.
 extern int RtIoPersistenceRegistryRegister(); // persistence_registry_win.cpp (lane BOOT2)
-// Wave 9 lane FS: FileSystem::SetupDirectories + GetRootDirectory, the row
-// immediately behind FileSystem::Startup. the old DLL-era switch also gates the
-// lane's System half (WideString and the three System leaves) in
-// rt_system_port.cpp — one variable removes the whole lane.
-extern int RtIoSetupDirectoriesRegister();   // filesystem_setupdirs_win.cpp (lane FS)
 // Wave 9 lane PKG: FileSystem::LoadPackages + ClosePackages + GetPackDirectory
 // + PackageFile::GetFileName — the row immediately behind lane FS's
 // SetupDirectories, and the LAST call in FileSystem::Startup. Own switch, own
@@ -95,21 +80,6 @@ extern int RtIoFileSystemPackagesRegister(); // filesystem_packages.cpp (lane PK
 // removed them together with lane PKG would confound two very different
 // blast radii.
 extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FIND)
-// Wave 9 lane PKG2: IO::PackageFile — the constructor lane PKG's LoadPackages
-// dies on (attempt 14), plus the class's twenty leaf accessors. Own switch for
-// the same reason as the rows above, and one more that is specific to this
-// file: the constructor is the ONLY row on the boot path, and the other twenty
-// are exercised only by a probe. If the boot regresses, the old DLL-era switch
-// removes both halves; if the probe is the problem, it is already gated on the
-// diff harness and a normal run does not run it.
-extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
-// Wave 9 lane PKG2 rung 2: the IO::CompressedStream READ path (Read, SetWindow,
-// GetAvailableWindow, DecompressFromSource) — the stack ?ReadPackfile@ stands
-// on, and the thing that gives rung 1's Compression::Decompress its first real
-// caller. Own switch: it is on the package-mount path AND on the save/load path
-// (a CompressedMemoryStream is how saves are written), so the integrator must be
-// able to take exactly it out without disturbing Wave 4's stream ports.
-extern int RtIoCompressedStreamReadRegister(); // compressed_stream_read.cpp (lane PKG2)
 // Wave 9 lane PKG2 rung 3: FileSystem::OpenFile / ReadFile / PlatformOpenFile
 // + PackageFile::GetFileInfo. Own switch: OpenFile is how EVERY resource in the
 // game is reached once packages are mounted, so it has the widest blast radius
@@ -120,21 +90,10 @@ extern int RtIoFileSystemOpenFileRegister();  // filesystem_openfile_win.cpp (la
 // switch because it sits UNDER CompressedStream::Open -- every stream read in
 // the packfile header path goes through it, so the integrator must be able to
 // remove exactly it if a boot regresses.
-// Wave 9 lane PKG2 rung 4b-iii: CompressedStream::Release and ~CompressedStream.
-// LANE W'S ROWS. ~CompressedStream is a LIVE blocker today, not just at
-// cutover: lane W's ported ~CompressedMemoryStream tail-jumps into it.
-extern int RtIoCompressedStreamReleaseRegister();  // compressed_stream_release.cpp
 // Wave 9 lane PKG2 rung 4b-iii: the last two bodies between ReadPackfile and a
 // mounted package. Own switch -- Open is what decides whether a packfile header
 // is well-formed, so a boot regression must be attributable to exactly it.
 extern int RtIoCompressedStreamOpenRegister();     // compressed_stream_open.cpp
-// Wave 9 lane PKG3: ?ReadPackfile@PackageFile@IO@@ itself -- the .pkg parser,
-// and the last body between LoadPackages and a mounted package. Its own switch
-// because it is all-or-nothing (a 660-instruction transcription that cannot be
-// half-registered), so if a boot regresses the integrator must be able to take
-// exactly it out and leave lane PKG2's five rungs of callees standing.
-extern int RtIoPackageFileReadRegister();          // package_file_read_win.cpp
-namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 
 // Wave 9 lane MOD: the IO::Modification mods-menu cluster (GetCount,
 // GetModification, Enable, Swap, SaveList) plus the unexported Mod-entry
@@ -192,7 +151,6 @@ extern int RtIoBaseVtablesRegister();       // iobase_vtables.cpp (lane IOBASE)
 // reaching six unported IO exports through RT_EXPORT_ONCE doors, which resolve
 // to the shipped DLL today and to NULL at cutover. These two files are those
 // six plus the three-body closure between them and Win32.
-extern int RtIoFileStreamRegister();            // file_stream.cpp               (lane FILE)
 extern int RtIoFileSystemCreateFileRegister();  // filesystem_createfile_win.cpp (lane FILE)
 // Wave 19 lane CSTREAM: the IO::CompressedStream WRITE path -- the twelve
 // bodies compressed_stream_read.cpp explicitly listed as owed (?Commit,
@@ -212,84 +170,31 @@ extern int RtIoFileSystemCreateFileRegister();  // filesystem_createfile_win.cpp
 // compressed_stream_read.cpp. That remains a named cutover blocker.
 extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cpp
 
-// Wave 19 lane FILE, POST-REPORT TRANCHE. The nine bodies behind the eight
-// vtable slots of BOTH ??_7FileStream@ and ??_7BinaryFileStream@ (their slots
-// 1..7 are byte-identical, so nine functions cover sixteen trap slots). Own
-// switch because it is the only part of this lane that changes what a
-// DISPATCHED vtable slot does, as opposed to what a called export does.
-
-// Wave 20 lane SAVETEXT. Five of the eight unported slots of
-// ??_7TextFileStream@IO@@6B@ (Read, SetCurrentPos, GetCurrentPos, GetSize,
-// Create). Its OWN switch, separate from the old DLL-era switch, because
-// TextFileStream's slots and FileStream's slots are reachable by different
-// callers -- text I/O is stripped from the shipped DLL (both TEXT serializer
-// factories at 0x1801559d0+0x18/+0x20 are XOR EAX,EAX;RET), so these five have
-// no gameplay route and a run that moves FileStream's slots must not be read as
-// having moved these.
-extern int RtIoTextFileStreamSlotsRegister();   // text_file_stream_win.cpp
-
 void RtIoPortInit() {
     // ENDGAME B.3.9 IO (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
 
     int n = 0;
-    n += RtIoSerializerRegister();
     n += RtIoPersistenceRegister();
     n += RtIoPersistenceSavesRegister();
-    n += RtIoPersistenceWorkerRegister();
     n += RtIoFileSystemRegister();
     n += RtIoFileSystemStartupRegister();
     n += RtIoPersistenceStartupRegister();
     n += RtIoPersistenceRegistryRegister();
-    n += RtIoSetupDirectoriesRegister();
     n += RtIoFileSystemPackagesRegister();
     n += RtIoFileSystemFindRegister();
-    n += RtIoPackageFileRegister();
-    n += RtIoCompressedStreamReadRegister();
     n += RtIoFileSystemOpenFileRegister();
-    n += RtIoCompressedStreamReleaseRegister();
     n += RtIoCompressedStreamOpenRegister();
-    n += RtIoPackageFileReadRegister();
     n += RtIO::RtIoModificationRegister();
     n += RtIoCompressedStreamWriteRegister();
 
     n += RtIoBaseVtablesRegister();
-    n += RtIoFileStreamRegister();
     n += RtIoFileSystemCreateFileRegister();
-    n += RtIoTextFileStreamSlotsRegister();
-
-    // BATCH 8b. Registers unconditionally (DIRECTION.md §2: a port registers,
-    // it does not get a flag).
-    extern int RtIoModificationSortRegisterC();   // modification_sort.cpp
-    n += RtIoModificationSortRegisterC();
 
     // ---- BATCH 5 (2026-09-12) ---------------------------------------------
-    // Registered UNCONDITIONALLY (DIRECTION.md §2 — a port registers
-    // unconditionally, and no new the old DLL-era switch* flag is minted for one):
-    //
-    //   filesystem_timestamp_win.cpp    ?GetFileTimeStamp@FileSystem@  0x1800ae270
-    //   persistence_savelist_job.cpp    worker command 4 (unexported)  0x1800b6290
     //   modification_setupfilesystem.cpp ?SetupFileSystem@Modification@ 0x1800aebb0
-    //
-    // 0x1800b6290 pays one of the five address doors
-    // persistence_worker_win.cpp's `Run` opened and declared; BATCH 8b's
-    // 0x1800b65b0 below pays a second, leaving LOAD and DELETE outstanding.
-    extern int RtIoFileSystemTimeStampRegister();
-    extern int RtIoPersistenceSaveListRegister();
     extern int RtIoModificationSetupFileSystemRegister();
-    n += RtIoFileSystemTimeStampRegister();
-    n += RtIoPersistenceSaveListRegister();
     n += RtIoModificationSetupFileSystemRegister();
-
-    // ---- BATCH 8b (2026-09-12), also unconditional -------------------------
-    //   persistence_saveinfo_job.cpp    worker command 3 (unexported)  0x1800b65b0
-    //   text_codec.cpp                  the five text-codec internals
-    //                                   0x1800c9d60 / 0x1800c9fc0 / 0x1800c9b60 /
-    //                                   0x1800ca260 / 0x180029bb0 (all unexported)
-    extern int RtIoPersistenceSaveInfoRegister();
-    extern int RtIoTextCodecRegister();
-    n += RtIoPersistenceSaveInfoRegister();
-    n += RtIoTextCodecRegister();
     n += RtIoCompressedStreamWriteRegister();
 
     // VTABLE BATCH 9's compressedcopyfilestream.cpp (IO::CompressedCopyFileStream

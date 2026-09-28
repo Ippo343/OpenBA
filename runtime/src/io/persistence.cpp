@@ -26,22 +26,13 @@
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"   // RtSystem::String, RtString_ReleaseInline (Wave 2, lane String)
 #include "../system/pod_bridge.h"
+#include "../collection/avl_trees.h"          // rtavl::StringMapInsert
+#include "../../types/system/Configuration.h"  // RtSystem_ConfigMap_Find
 
 using RtSystem::String;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 using RtIo::Persistence;
 using RtIo::SettingsMapNode;
-
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// -----------------------------------------------------------------------------
-// Same reasoning rt_port.h itself gives for declaring RegisterRuntimeExport /
-// the raw export door locally: resolve.h drags in <windows.h>, and PLAN.md §4.1
-// requires runtime/src/ to stay platform-neutral until a file is explicitly a
-// `_win` twin. This declaration must stay byte-identical to resolve.h's; the
-// two are checked against each other by the linker.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -67,34 +58,22 @@ namespace {
 // `Collection::Set<SettingsMapNode, AVLCompare, DefaultAllocator,
 // System::String>::Insert(element)` (Key = the leading String, not the
 // 16-byte pair) once `SettingsMapNode`'s two fields are `System::String`.
-using MapFindFn   = void* (*)(void* self, void* key);
-using MapInsertFn = void* (*)(void* map, void* outNode, void* key, void* value);
-
-void* CallMapFind(void* self, void* key) {
-    static MapFindFn fn = reinterpret_cast<MapFindFn>(
-        ResolveAddr(Module::Runtime, 0x18002ace0));   // Map_Find, retail
-    return fn(self, key);
+//
+// B3R RT-IO: both are called BY NAME now. The comments that stood here said the
+// two by-address resolves "asked the DLL"; they did not -- ResolveAddr consults
+// the port registry first, and these addresses have always answered with our
+// own bodies: 0x18002ace0 is RtSystem_ConfigMap_Find
+// (runtime/src/system/configuration.cpp), 0x18002a090 is rtavl::StringMapInsert
+// (runtime/src/collection/avl_trees.cpp).
+void* CallMapFind(void* self, const System::String* key) {
+    return RtSystem_ConfigMap_Find(                                   // Map_Find, retail 0x18002ace0
+        self, reinterpret_cast<const RtSystem::String*>(key));        // B.3.x bridge
 }
-void* CallMapInsert(void* map, void** outNode, void* key, void* value) {
-    static MapInsertFn fn = reinterpret_cast<MapInsertFn>(
-        ResolveAddr(Module::Runtime, 0x18002a090));   // Map_Insert, retail
-    return fn(map, outNode, key, value);
-}
-
-// ---- System::String::Format(retval, fmt, ...) ------------------------------
-// ?Format@String@System@@SA?AV12@PEBDZZ  retail 0x1800c9730. Real varargs, so
-// (like engine_funcs.cpp's own fn_String_Format) it is resolved as a plain
-// typedef rather than through the raw DLL door's non-variadic Fn constraint.
-// Resolved via ResolveAddr, not ResolveExport: Format is already ported by
-// Wave 2 (lane String, runtime/src/system/string.cpp) and registering THAT
-// port would mean this file's normal (non-diff) path silently depends on
-// another lane's port being enabled — harmless in practice since the two are
-// meant to agree, but this lane's job is to be correct standing alone against
-// the DLL, so it always asks the DLL for its own dependency.
-using FormatFn = void* (*)(void* retval, const char* fmt, ...);
-FormatFn StringFormat() {
-    static FormatFn fn = reinterpret_cast<FormatFn>(ResolveAddr(Module::Runtime, 0x1800c9730));
-    return fn;
+void* CallMapInsert(void* map, void** outNode, System::String* key, System::String* value) {
+    return rtavl::StringMapInsert(                                    // Map_Insert, retail 0x18002a090
+        static_cast<rtsetavl::Set*>(map),                             // B.3.x bridge
+        reinterpret_cast<rtsetavl::Node**>(outNode),
+        &key->_data, &value->_data);
 }
 
 // Retail's key encoding: bare concatenation, no separator. "Game" + "StatusIconEnable"
@@ -102,15 +81,12 @@ FormatFn StringFormat() {
 // own memory note (project_debugmenu_combos_and_statusicon_setting.md) found
 // on disk. Confirmed at all four Get/Set retail sites (0x1800b81e0 + 0x22,
 // 0x1800b8290 + 0x22, 0x1800b80c0 + 0x30, 0x1800b8380 + 0x38): every one calls
-// `String::Format((String*)&local, "%s%s", section, key)`.
-// StringFormat() is resolved through ResolveAddr against the DLL's own export
-// (not our ported System::String::Format -- see the comment above), so it
-// still fills a raw hidden-return-slot. The value lands in a POD and is then
-// stolen into the class: a pure pointer steal, no AddRef, `out` left null.
+// `String::Format((String*)&local, "%s%s", section, key)` --
+// ?Format@String@System@@SA?AV12@PEBDZZ, retail 0x1800c9730, which is
+// System::String::Format (B3R RT-IO: called by name; the by-address resolve
+// that stood here also answered with it, never "the DLL's own export").
 System::String MakeSettingsKey(const char* section, const char* key) {
-    String out{};
-    StringFormat()(&out, "%s%s", section, key);
-    return System::String(std::move(Sys(out)));
+    return System::String::Format("%s%s", section, key);
 }
 
 // Retail's Get(bool&) (0x1800b8290) is an inlined strcmp against the literal
@@ -162,15 +138,6 @@ void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, 
     reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
 }
 
-// The return is BY VALUE, so `retval` IS retail's hidden return slot; the
-// member's by-value result is CONSTRUCTED into it -- one AddRef, exactly as the
-// String copy ctor at 0x180006cb0 does.
-void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
-    new (static_cast<System::String*>(retval)) System::String(
-        reinterpret_cast<const IO::Persistence*>(self)->GetSavePath());
-    return retval;
-}
-
 // ============================================================================
 // `IO::Persistence`'s member bodies for this file
 // ============================================================================
@@ -178,7 +145,7 @@ void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
 // namespace ENCLOSING the class (B34_BRIEFS section A.2). The file-local
 // helpers live in this translation unit's GLOBAL anonymous namespace, so they
 // are reached as `::MakeSettingsKey` / `::CallMapFind` / `::CallMapInsert` /
-// `::StringFormat` / `::RetailValueIsTrue` -- spelled with the `::` on purpose,
+// `::RetailValueIsTrue` -- spelled with the `::` on purpose,
 // so a future reader cannot mistake them for members.
 //
 // NOTHING ELSE CHANGED: same callees in the same order, the same asymmetric
@@ -243,12 +210,7 @@ bool Persistence::Get(const char* section, const char* key, bool& outRef) const 
 // ============================================================================
 void Persistence::Set(const char* section, const char* key, int value) {
 
-    // StringFormat() is the DLL's own export (see the comment on it above),
-    // so it still fills a raw hidden-return-slot; the value is stolen into
-    // the class the same way MakeSettingsKey's does.
-    RtSystem::String valStrPod{};
-    ::StringFormat()(&valStrPod, "%i", value);
-    System::String valStr(std::move(::Sys(valStrPod)));
+    System::String valStr = System::String::Format("%i", value);
     System::String keyStr = ::MakeSettingsKey(section, key);
 
     void* outNode = nullptr;
@@ -276,9 +238,7 @@ void Persistence::Set(const char* section, const char* key, int value) {
 // ============================================================================
 void Persistence::Set(const char* section, const char* key, bool value) {
 
-    RtSystem::String valStrPod{};
-    ::StringFormat()(&valStrPod, "%s", value ? "true" : "false");
-    System::String valStr(std::move(::Sys(valStrPod)));
+    System::String valStr = System::String::Format("%s", value ? "true" : "false");
     System::String keyStr = ::MakeSettingsKey(section, key);
 
     void* outNode = nullptr;
@@ -327,8 +287,6 @@ int RtIoPersistenceRegister() {
                           (void*)&RtIo_Persistence_SetInt); ++n;
     RegisterRuntimeExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z",
                           (void*)&RtIo_Persistence_SetBool); ++n;
-    RegisterRuntimeExport("?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ",
-                          (void*)&RtIo_Persistence_GetSavePath); ++n;
 
     // Address fallbacks too (WAVE3_LANE_A.md §6's lesson: engine_funcs.cpp
     // falls back to ResolveAddr(Module::Runtime, ...) on a failed name
@@ -338,7 +296,6 @@ int RtIoPersistenceRegister() {
     RegisterRuntimeAddr(0x1800b8290, (void*)&RtIo_Persistence_GetBool);
     RegisterRuntimeAddr(0x1800b80c0, (void*)&RtIo_Persistence_SetInt);
     RegisterRuntimeAddr(0x1800b8380, (void*)&RtIo_Persistence_SetBool);
-    RegisterRuntimeAddr(0x180007ad0, (void*)&RtIo_Persistence_GetSavePath);
 
     // CORRECTED 2026-09-08 (Wave 9 lanes BOOT2 and SAVE2). This line used to
     // read "(ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)".

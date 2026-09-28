@@ -127,70 +127,23 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
+#include "../../types/system/String.h"
+#include "../../types/collection/Collection.h"
 
 using rt::io::Stream;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
-// must stay platform-neutral. Byte-identical to resolve.h's declaration; the
-// same pair appears in runtime/src/ui/elementdescription_serialize.cpp:139 and
-// runtime/src/achievement/goal_serialize.cpp.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
-// ---- ?Serialize@String@System@@ -------------------------------------------
-// SYMBOL:      ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z, 0x1800c9930
-// CONDITION:   unported. ResolveAddr is registry-first, so this reaches the DLL
-//              today and reaches our body the day someone ports it.
-// CONSEQUENCE: at cutover, with no DLL, this resolves NULL and the first .pkg
-//              record faults here. It is the SAME door goal_serialize.cpp and
-//              elementdescription_serialize.cpp already hold open, so this file
-//              adds no new obligation — but it does not discharge one either.
-using StringSerializeFn = void (*)(void*, Serializer*);
-StringSerializeFn StringSerialize() {
-    static StringSerializeFn f = reinterpret_cast<StringSerializeFn>(
-        ResolveAddr(Module::Runtime, 0x1800c9930));
-    return f;
-}
-
-// ---- the array-of-String serializer --------------------------------------
-// SYMBOL:      UNEXPORTED, known only by address 0x180029bb0. Checked against
-//              the export directory rather than assumed — `AEAA` means PRIVATE
-//              and this DLL exports its private members, so "unexported" is a
-//              claim that has to be made, not inherited
-//              (reference_aeaa_is_private_not_unexported.md).
-//              Shape, from its own disassembly:
-//                  (Serializer* ser, int32_t count, char** strings)
-//              RCX = &ser (it reads ser->stream at +0x00 for the direction and
-//              ser->readerWriter at +0x08 for the codec), EDX = count,
-//              R8 = the Array's data pointer. `TEST EDX,EDX / JLE ret` at
-//              0x180029bb0, so count <= 0 is a no-op and needs no guard here.
-// CONDITION:   PORTED, BATCH 8b — runtime/src/io/text_codec.cpp. ResolveAddr is
-//              registry-first, so this helper reaches OUR body and the call
-//              site is unchanged.
-// CONSEQUENCE: none outstanding. (It previously read: "at cutover, with no DLL,
-//              ResolveAddr returns NULL and the two string-array records fault
-//              ... ADDRESSEE: whichever Wave 28 lane owns IO's remaining address
-//              doors". That was accurate until this address was registered.)
-using StringArraySerializeFn = void (*)(Serializer*, int32_t, void*);
-StringArraySerializeFn StringArraySerialize() {
-    static StringArraySerializeFn f = reinterpret_cast<StringArraySerializeFn>(
-        ResolveAddr(Module::Runtime, 0x180029bb0));
-    return f;
-}
-
-// Lane Q's unexported `Array<T>::SetSize` instantiations, both PORTED and
-// registered by address in runtime/src/collection/array.cpp. The address door is
-// the only door they have; it resolves to our body, not the DLL's.
-using ArraySetSizeFn = void (*)(void*, int32_t);
-void ArraySetSize(uintptr_t addr, void* arr, int32_t n) {
-    reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, addr))(arr, n);
-}
+// B3R RT-IO: the three by-address doors that stood here are direct calls now:
+//   ?Serialize@String@System@@ 0x1800c9930   -> System::String::Serialize
+//   the array-of-String walker  0x180029bb0  -> RtIo_SerializeStringArray
+//     (text_codec.cpp). Its 4th parameter is not an argument: retail spills
+//     R9 to its home slot at 0x180029bbb and only ever WRITES that slot again
+//     (0x180029d00) before reading it, so the value passed is never read.
+//   Array<T>::SetSize 0x180029a80 / 0x180029510 -> rtcoll::RtColl_ArraySetSize_*
 
 // ---- prologue / epilogue, from 0x1800b60ca and 0x1800b626e ---------------
 // Identical to goal_serialize.cpp's and elementdescription_serialize.cpp's,
@@ -291,11 +244,11 @@ bool PackageFile::Serialize(void* streamv) {
     rt::io::Serializer ser;
     rt::io::ReaderWriter* const rw = MakeCodec(stream, &ser);
 
-    StringSerialize()(&_name,        &ser);   // 1800b60ea
-    StringSerialize()(&_author,      &ser);   // 1800b60ff
-    StringSerialize()(&_description, &ser);   // 1800b610c
-    StringSerialize()(&_string58,    &ser);   // 1800b6119
-    StringSerialize()(&_string60,    &ser);   // 1800b6126
+    reinterpret_cast<::System::String*>(&_name)->Serialize(&ser);  // 1800b60ea  B.3.x bridge
+    reinterpret_cast<::System::String*>(&_author)->Serialize(&ser);  // 1800b60ff  B.3.x bridge
+    reinterpret_cast<::System::String*>(&_description)->Serialize(&ser);  // 1800b610c  B.3.x bridge
+    reinterpret_cast<::System::String*>(&_string58)->Serialize(&ser);  // 1800b6119  B.3.x bridge
+    reinterpret_cast<::System::String*>(&_string60)->Serialize(&ser);  // 1800b6126  B.3.x bridge
 
     RecInt(rw, &_userVersion);                // 1800b6139
     RecInt(rw, &_priority);                   // 1800b614d
@@ -307,15 +260,15 @@ bool PackageFile::Serialize(void* streamv) {
         int32_t n = _stringArray20Count;                          // 1800b6153
         RecInt(rw, &n);                                           // 1800b6167
         if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6171
-            ArraySetSize(0x180029a80, &_stringArray20, n);         // 1800b617e
-        StringArraySerialize()(&ser, n, _stringArray20);           // 1800b618e
+            rtcoll::RtColl_ArraySetSize_180029a80(&_stringArray20, n);  // 1800b617e
+        RtIo_SerializeStringArray(&ser, n, _stringArray20, nullptr);  // 1800b618e
     }
     {
         int32_t m = _stringArray30Count;                          // 1800b6193
         RecInt(rw, &m);                                           // 1800b61a7
         if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b61b1
-            ArraySetSize(0x180029a80, &_stringArray30, m);         // 1800b61be
-        StringArraySerialize()(&ser, m, _stringArray30);           // 1800b61ce
+            rtcoll::RtColl_ArraySetSize_180029a80(&_stringArray30, m);  // 1800b61be
+        RtIo_SerializeStringArray(&ser, m, _stringArray30, nullptr);  // 1800b61ce
     }
 
     RecBool(rw, &_overridable);               // 1800b61e4
@@ -326,7 +279,7 @@ bool PackageFile::Serialize(void* streamv) {
         int32_t k = _iconCount;                                   // 1800b620f
         RecInt(rw, &k);                                           // 1800b6226
         if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6230
-            ArraySetSize(0x180029510, &_iconData, k);              // 1800b6240
+            rtcoll::RtColl_ArraySetSize_180029510(&_iconData, k);       // 1800b6240
         RecArrayUInt(rw, k, _iconData);                            // 1800b6259
     }
 

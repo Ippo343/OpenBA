@@ -34,6 +34,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include <new>
 
 #include <windows.h>
 
@@ -43,24 +44,15 @@
 #include "../../types/io/FileSystem.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/system/WideString.h"
 
 using RtIo::Persistence;
 using RtIo::FileStream;
 using RtIO::FileInfo;
 using RtSystem::SysFile;   // the transitional POD->class bridge (pod_bridge.h)
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-// ---- allocator boundary -----------------------------------------------------
-void MemFreeAt(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);
-}
 
 // ---- System::WideString, the inlined idiom -----------------------------------
 //
@@ -73,28 +65,19 @@ void MemFreeAt(void* p) {
 // call sites below are now `System::Filename`, whose ctor/dtor are that pair).
 struct WideStr { wchar_t* data; };
 
-// `??0WideString@System@@QEAA@AEBVString@1@@Z` RETURNS BY VALUE: RCX is the
-// hidden return slot, RDX the String. Getting that typedef wrong is a wild
-// write that still returns the right answer
-// (reference_hidden_retslot_wild_write.md) — the same warning
-// runtime/src/io/filesystem_createfile_win.cpp:129 carries, and the same
-// typedef.
-using WideCtorFn = WideStr* (*)(WideStr* ret, const System::String* s);
+// `??0WideString@System@@QEAA@AEBVString@1@@Z` is constructed straight into
+// the WideStr slot (B3R RT-IO: by name, it was a door).
 inline void WideRelease(WideStr* w) {
     if (!w->data) return;
     int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;
     --*rc;
     if (*rc == 0) {
         w->data = reinterpret_cast<wchar_t*>(reinterpret_cast<uint8_t*>(w->data) - 8);
-        MemFreeAt(w->data);
+        ::System::MemoryAllocator::MemFree(w->data);   // 0x1800c7ad0
     } else {
         w->data = nullptr;
     }
 }
-
-// ---- the exported engine functions both bodies call -------------------------
-using ReadFileFn    = bool (*)(void*, FileInfo*, int, void*);
-using CloseFileFn   = void (*)(void*, FileInfo*);
 
 void* FileSystemSingleton() {
     return ::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
@@ -129,8 +112,7 @@ extern "C" void RtIo_PersistenceWorker_Delete(void* worker) {
     System::Filename f(SysFile(p->pendingFilename));
 
     WideStr w;
-    RT_EXPORT_ONCE(WideCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
-        &w, &f.AsString());
+    ::new (static_cast<void*>(&w)) System::WideString(f.AsString());   // B.3.x bridge
 
     const BOOL ok = DeleteFileW(w.data);
 
@@ -229,9 +211,8 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
                     failed = true;
                     break;
                 }
-                if (!RT_EXPORT_ONCE(ReadFileFn,
-                        "?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z")(
-                            fs, &st->file, size, dst)) {
+                if (!reinterpret_cast<::IO::FileSystem*>(fs)                // B.3.x bridge
+                        ->ReadFile(st->file, size, dst)) {
                     failed = true;
                     break;
                 }
@@ -241,8 +222,7 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
             p->status = 2;
         } else {
             if (st->file.handle != -1)
-                RT_EXPORT_ONCE(CloseFileFn,
-                    "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, &st->file);
+                reinterpret_cast<::IO::FileSystem*>(fs)->CloseFile(st->file);   // B.3.x bridge
             p->status = 1;
         }
     } else {
@@ -255,7 +235,5 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
 
 int RtClosure2bIoRegister() {
     int n = 0;
-    RegisterRuntimeAddr(0x1800b6aa0, (void*)&RtIo_PersistenceWorker_Load);   ++n;
-    RegisterRuntimeAddr(0x1800b69c0, (void*)&RtIo_PersistenceWorker_Delete); ++n;
     return n;
 }

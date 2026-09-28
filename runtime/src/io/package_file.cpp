@@ -316,18 +316,6 @@ constexpr size_t kPackageFileSize = 0xF0;
 // stores are `IO::PackageFile`'s real constructor (PackageFile.h), in the same
 // order, and the vptrs are the compiler's.
 
-// ---- oracle typedefs ------------------------------------------------------
-typedef void*    (*CtorFn)(void*);
-typedef void*    (*ConstructFn)(void*);
-typedef uint32_t (*U32ThisFn)(const void*);
-typedef int32_t  (*I32ThisFn)(const void*);
-typedef bool     (*BoolThisFn)(const void*);
-typedef const char* (*CStrThisFn)(const void*);
-typedef uint32_t (*U32ThisIntFn)(const void*, int);
-typedef String*  (*StrGetterFn)(const void*, String*);
-typedef uint32_t (*U32VoidFn)();
-typedef int32_t  (*I32ThisFilenameFn)(void*, const void*);
-
 // ENDGAME B.3.1 step 2: the shared "null the slot, AddRef if non-null" body the
 // three String getters used to hand-roll is exactly `System::String`'s copy
 // ctor (0x180006cb0, `Adopt` in string.cpp) -- null-then-AddRef, no freeing
@@ -347,111 +335,50 @@ typedef int32_t  (*I32ThisFilenameFn)(void*, const void*);
 // FACTREST replay, Construct, Reconstruct -- build the class directly now) and
 // the ?Construct@ slot door are gone.
 // ============================================================================
-// The reflection triple. All three read the exported BaseTypeInfo at
-// 0x1801f9ac8 — ?Type@ and ?TypeId@ are the SAME two instructions at two
-// addresses (the virtual and the static spelling), which is why they share a
-// body here and are still registered separately.
-// ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 3: every body below is now a member of the
-// real `IO::PackageFile` (runtime/types/io/PackageFile.h); these doors keep
-// their names and both registrations and delegate.
+// ENDGAME B.3.4 PACKAGE+FS commit 3: every body below is a member of the real
+// `IO::PackageFile` (runtime/types/io/PackageFile.h). The remaining doors
+// delegate with a QUALIFIED `IO::PackageFile::` call, written so a reader never
+// has to check which members are virtual.
 //
-// *** THE QUALIFIED `IO::PackageFile::` IS LOAD-BEARING ON THE EIGHT VIRTUAL
-// *** SLOTS AND IS NOT DECORATION. *** A live PackageFile in this build wears
-// the MINTED `??_7PackageFile@IO@@6B@`, whose nine rows resolve back to THESE
-// VERY DOORS. A plain virtual call in a door would dispatch through that minted
-// table straight back into itself -- infinite recursion, not delegation. The
-// qualification suppresses virtual dispatch (B34_BRIEFS section A.1, and
-// serialize_family.cpp / encoding.cpp established the pattern in blocks 1-2).
-// The non-virtual members below do not need it and carry it anyway, so that a
-// reader never has to check which is which.
-extern "C" uint32_t RtIo_PackageFile_TypeId() {
-    return IO::PackageFile::TypeId();
-}
-
-// ============================================================================
 // ENDGAME B.3.9 IO: the seven slot doors (Type, TypeName, GetFileVersion,
 // Compile, Serialize, Reconstruct, Destruct) and Construct's are gone with the
-// minted ??_7PackageFile row, their only reader. ?TypeId@ is a static, not a
-// slot, and keeps its door.
-// ============================================================================
-// The three String getters. `self->name/author/description` are RtSystem::String
-// MEMBERS of the not-yet-converted PackageFileView, reached through the one
-// transitional bridge (pod_bridge.h); `ret` is the raw hidden return slot, so
-// the copy ctor is constructed into it -- see the note above.
-// ============================================================================
-// The three getters return `System::String` BY VALUE, so retail's ABI puts the
-// hidden return slot in RDX and the door's `ret` IS that slot. The member's
-// by-value return fills it through the same ABI, so the door constructs the
-// member's result into it -- one AddRef and one release, exactly as before.
-extern "C" String* RtIo_PackageFile_GetName(const PackageFileView* self, String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetName());
-    return ret;
-}
-
-extern "C" String* RtIo_PackageFile_GetAuthor(const PackageFileView* self, String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetAuthor());
-    return ret;
-}
-
-extern "C" String* RtIo_PackageFile_GetDescription(const PackageFileView* self, String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetDescription());
-    return ret;
-}
+// minted ??_7PackageFile row, their only reader. B3R RT-IO: the ?TypeId@ door
+// and the three String-getter doors (GetName / GetAuthor / GetDescription)
+// went with their last registrations; the members stand.
 
 // ============================================================================
 // The scalar field reads. Each is one MOV; the offset IS the function.
 // ============================================================================
-// Each door delegates to the like-named member. The third macro argument used
-// to be the POD FIELD; it is the MEMBER NAME now, because the offset is spelled
-// once, in the member body, and nowhere else.
-#define RT_PKG2_SCALAR_GETTER(FN, SITE, MEMBER, TYPE, ORACLE_FN, MANGLED)      \
+// Each door delegates to the like-named member. The second macro argument is
+// the MEMBER NAME, because the offset is spelled once, in the member body, and
+// nowhere else. (B3R RT-IO: the three discarded arguments -- label, oracle
+// typedef, mangled name -- are gone.)
+#define RT_PKG2_SCALAR_GETTER(FN, MEMBER, TYPE)                                 \
     extern "C" TYPE FN(const PackageFileView* self) {                          \
         return static_cast<TYPE>(                                              \
             reinterpret_cast<const IO::PackageFile*>(self)                     \
                 ->IO::PackageFile::MEMBER());                                  \
     }
 
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetVersion, "IO::PackageFile::GetVersion",
-                      GetVersion, int32_t, I32ThisFn,
-                      "?GetVersion@PackageFile@IO@@QEBAHXZ")            // +0x68
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetUserVersion, "IO::PackageFile::GetUserVersion",
-                      GetUserVersion, int32_t, I32ThisFn,
-                      "?GetUserVersion@PackageFile@IO@@QEBAHXZ")        // +0x6C
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPlatform, "IO::PackageFile::GetPlatform",
-                      GetPlatform, int32_t, I32ThisFn,
-                      "?GetPlatform@PackageFile@IO@@QEBAHXZ")           // +0x74
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPriority, "IO::PackageFile::GetPriority",
-                      GetPriority, int32_t, I32ThisFn,
-                      "?GetPriority@PackageFile@IO@@QEBAHXZ")           // +0x70
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetFileCount, "IO::PackageFile::GetFileCount",
-                      GetFileCount, int32_t, I32ThisFn,
-                      "?GetFileCount@PackageFile@IO@@QEBAHXZ")          // +0xB8
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetCRC, "IO::PackageFile::GetCRC",
-                      GetCRC, uint32_t, U32ThisFn,
-                      "?GetCRC@PackageFile@IO@@QEBAIXZ")                // +0xA8
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconWidth, "IO::PackageFile::GetIconWidth",
-                      GetIconWidth, int32_t, I32ThisFn,
-                      "?GetIconWidth@PackageFile@IO@@QEBAHXZ")          // +0x78
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, "IO::PackageFile::GetIconHeight",
-                      GetIconHeight, int32_t, I32ThisFn,
-                      "?GetIconHeight@PackageFile@IO@@QEBAHXZ")         // +0x7C
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetVersion, GetVersion, int32_t)            // +0x68
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetUserVersion, GetUserVersion, int32_t)        // +0x6C
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPlatform, GetPlatform, int32_t)           // +0x74
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPriority, GetPriority, int32_t)           // +0x70
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetFileCount, GetFileCount, int32_t)          // +0xB8
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetCRC, GetCRC, uint32_t)                // +0xA8
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconWidth, GetIconWidth, int32_t)          // +0x78
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, GetIconHeight, int32_t)         // +0x7C
 
 #undef RT_PKG2_SCALAR_GETTER
 
 // 0x1800254f0 is `MOVZX EAX,byte ptr [RCX+0xac]` — a ZERO extension of the
 // byte, not a sign extension and not a dword read. The field is the same one
 // LoadPackages' index pass tests, so a wrong width here would change package
-// precedence, not just a returned bool.
-extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
-    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::CanOverride();
-}
+// precedence, not just a returned bool. (`IO::PackageFile::CanOverride`, below.)
 
 // ============================================================================
-// The two index-taking entry accessors.
+// The two index-taking entry accessors (`IO::PackageFile::GetFileSize` /
+// `GetFileOffset`, below).
 // ============================================================================
 //   1800254a0  MOV RAX,qword ptr [RCX+0xb0]
 //   1800254a7  MOVSXD R8,EDX          <- SIGN extension of the int index
@@ -464,139 +391,8 @@ extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
 // written as int64 here because that is what the instruction says. There is no
 // bounds check in either body, and none is added — the caller bounds it with
 // GetFileCount, and a guard here would skip work rather than restore it.
-extern "C" uint32_t RtIo_PackageFile_GetFileSize(const PackageFileView* self, int index) {
-    const uint32_t ours =
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileSize(index);
-    // the raw DLL door, not bare the raw DLL door: the sweep probe calls this once
-    // per FILE in every package — tens of thousands of times — and the raw DLL door
-    // is GetProcAddress under the loader lock on every call
-    // (reference_rtoriginal_is_getprocaddress.md). Both reach the shipped body;
-    // only one of them does it without a syscall per entry.
-    return ours;
-}
-
-extern "C" uint32_t RtIo_PackageFile_GetFileOffset(const PackageFileView* self, int index) {
-    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileOffset(index);
-}
-
 
 }  // namespace RtIO
-
-// ============================================================================
-// Registration
-// ============================================================================
-// EVERY row gets both doors. RegisterRuntimeExport is what our own callers
-// reach; RegisterRuntimeAddr is what a call BY ADDRESS reaches, and this tree
-// has both shapes (reference_bypassed_port_needs_a_source_checker.md — a port
-// reached by address silently uses the DLL, and no run reports it).
-//
-// Registering these ADDRESSES is safe on a DLL-present run in a way the
-// allocator's four were not: none of the 21 is patched, detoured or read as
-// shipped bytes by anything in this tree (grepped across runtime/, standalone/,
-// engine/, code/ and dx11/ for each address before adding it), so there is no
-// `ResolveAddr consults the port registry FIRST` hazard here
-// (reference_resolveaddr_consults_port_registry_first.md). That is why this
-// file registers unconditionally where runtime/src/system/allocator.cpp
-// registers only at cutover.
-int RtIoPackageFileRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    RegisterRuntimeExport("?TypeId@PackageFile@IO@@SAIXZ",
-                          (void*)&RtIo_PackageFile_TypeId); ++n;
-    RegisterRuntimeAddr(0x180025140, (void*)&RtIo_PackageFile_TypeId);
-
-    RegisterRuntimeExport("?GetName@PackageFile@IO@@QEBA?AVString@System@@XZ",
-                          (void*)&RtIo_PackageFile_GetName); ++n;
-    RegisterRuntimeAddr(0x180025310, (void*)&RtIo_PackageFile_GetName);
-
-    RegisterRuntimeExport("?GetAuthor@PackageFile@IO@@QEBA?AVString@System@@XZ",
-                          (void*)&RtIo_PackageFile_GetAuthor); ++n;
-    RegisterRuntimeAddr(0x180025350, (void*)&RtIo_PackageFile_GetAuthor);
-
-    RegisterRuntimeExport("?GetDescription@PackageFile@IO@@QEBA?AVString@System@@XZ",
-                          (void*)&RtIo_PackageFile_GetDescription); ++n;
-    RegisterRuntimeAddr(0x180025390, (void*)&RtIo_PackageFile_GetDescription);
-
-    RegisterRuntimeExport("?GetVersion@PackageFile@IO@@QEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetVersion); ++n;
-    RegisterRuntimeAddr(0x1800253d0, (void*)&RtIo_PackageFile_GetVersion);
-
-    RegisterRuntimeExport("?GetUserVersion@PackageFile@IO@@QEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetUserVersion); ++n;
-    RegisterRuntimeAddr(0x1800253e0, (void*)&RtIo_PackageFile_GetUserVersion);
-
-    RegisterRuntimeExport("?GetPlatform@PackageFile@IO@@QEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetPlatform); ++n;
-    RegisterRuntimeAddr(0x1800253f0, (void*)&RtIo_PackageFile_GetPlatform);
-
-    RegisterRuntimeExport("?GetFileCount@PackageFile@IO@@QEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetFileCount); ++n;
-    RegisterRuntimeAddr(0x180025440, (void*)&RtIo_PackageFile_GetFileCount);
-
-    RegisterRuntimeExport("?GetFileSize@PackageFile@IO@@QEBAIH@Z",
-                          (void*)&RtIo_PackageFile_GetFileSize); ++n;
-    RegisterRuntimeAddr(0x1800254a0, (void*)&RtIo_PackageFile_GetFileSize);
-
-    RegisterRuntimeExport("?GetFileOffset@PackageFile@IO@@QEBAIH@Z",
-                          (void*)&RtIo_PackageFile_GetFileOffset); ++n;
-    RegisterRuntimeAddr(0x1800254c0, (void*)&RtIo_PackageFile_GetFileOffset);
-
-    RegisterRuntimeExport("?GetPriority@PackageFile@IO@@QEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetPriority); ++n;
-    RegisterRuntimeAddr(0x1800254e0, (void*)&RtIo_PackageFile_GetPriority);
-
-    RegisterRuntimeExport("?CanOverride@PackageFile@IO@@QEBA_NXZ",
-                          (void*)&RtIo_PackageFile_CanOverride); ++n;
-    RegisterRuntimeAddr(0x1800254f0, (void*)&RtIo_PackageFile_CanOverride);
-
-    RegisterRuntimeExport("?GetCRC@PackageFile@IO@@QEBAIXZ",
-                          (void*)&RtIo_PackageFile_GetCRC); ++n;
-    RegisterRuntimeAddr(0x180025500, (void*)&RtIo_PackageFile_GetCRC);
-
-    RegisterRuntimeExport("?GetIconWidth@PackageFile@IO@@QEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetIconWidth); ++n;
-    RegisterRuntimeAddr(0x180025510, (void*)&RtIo_PackageFile_GetIconWidth);
-
-    RegisterRuntimeExport("?GetIconHeight@PackageFile@IO@@QEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetIconHeight); ++n;
-    RegisterRuntimeAddr(0x180025520, (void*)&RtIo_PackageFile_GetIconHeight);
-
-    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row (rt_factories_io.{cpp,inc}, deleted).
-    // The class's own `DEFINE_TYPE` record (io_type_records.cpp) carries
-    // both as its factory pointers.
-    RegisterRuntimeExport("?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ",
-                          (void*)&IO::PackageFile::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x180025240, (void*)&IO::PackageFile::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@PackageFile@IO@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&IO::PackageFile::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x1800252c0, (void*)&IO::PackageFile::CreateInPlaceObject);
-    // DELIBERATELY ABSENT — full reasons in §4.
-    //   ?ReadPackfile@PackageFile@IO@@…   0x1800b46b0  ord 3461  6,597 bytes  <- NEXT WALL
-    //   ??1PackageFile@IO@@UEAA@XZ        0x1800b4540  ord  639  (5 unported callees)
-    //   FUN_1800259d0 (deleting dtor, vtable slot 0) -- CLOSED Wave 25 VTIO
-    //   ?Reconstruct@ 0x1800252d0 / ?Destruct@ 0x180025300  (drive slot 0)
-    //       -- CLOSED, Wave 27 lane IOTEXT, registered above.
-    //   ?Serialize@   0x1800b60a0  (Encoding vtable, save path)
-    //   ?GetFileInfo@ 0x180025400 / ?GetIconData@ / ?GetPreviewData@
-    //   the ToolKit half: WritePackfile, ExtractPackFile, BuildPackageFile,
-    //   AreResourcesEqual, BuildFileSet, ClosePackFile, copy ctor, operator=
-
-    // A LANE-OWNED IDENTITY MARKER, and it exists because the obvious gate broke.
-    // This lane verifies "the exe that RAN is mine" by grepping the log rather
-    // than trusting an on-disk md5 (which tells you what is on disk when you
-    // look, not what ran). The first version of that gate matched
-    // `[RtPort] IO: 77 exports registered` -- and lane MOD then landed
-    // IO::Modification on the same RtIoPortInit, which moves the IO total and
-    // would have made the gate fire falsely on a perfectly good run.
-    //
-    // A shared TOTAL is the wrong thing to key an identity check on: it changes
-    // whenever any other lane lands in the same namespace. This line changes only
-    // when THIS file changes, so the gate keys on it instead.
-    printf("[RtPort]   IO::PackageFile (lane PKG2): %d exports registered\n", n);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile`'s member bodies

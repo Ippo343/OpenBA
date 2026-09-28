@@ -410,18 +410,6 @@ static const String* AsPodString(const System::String& s) {
     return reinterpret_cast<const String*>(&s);
 }
 
-// ---- Raw ABI typedefs for the originals ------------------------------------
-typedef bool (*fn_ExistsOne_t)(const void* fs, const Filename* path);
-typedef void (*fn_FindFiles_t)(const void* fs, const String* dir, const String* pattern,
-                               bool recursive, FilenameArray* out);
-
-const char* const kNameExistsInPackfile =
-    "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z";
-const char* const kNamePlatformExists =
-    "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z";
-const char* const kNameFindFiles =
-    "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z";
-
 // Case-insensitive ASCII compare, sign-preserving. Duplicated from
 // filesystem.cpp for the reason that file gives: runtime/src stays free of a
 // CRT `_stricmp` whose locale behaviour differs between toolchains (PLAN.md
@@ -521,10 +509,6 @@ static void AppendFilename(FilenameArray* out, const System::Filename* value) {
 // file is bound by B34_BRIEFS section D — nothing added, removed or reordered.
 bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) {
     return reinterpret_cast<const IO::FileSystem*>(fsVoid)->ExistsInPackfile(*path);
-}
-
-bool RtIo_FileSystem_PlatformExists(const void* fsVoid, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->PlatformExists(*path);
 }
 
 }  // namespace RtIO
@@ -732,12 +716,6 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
     // --- 0x1800adc13: ~dirAlias --------------------------------------------
 }
 
-void RtIo_FileSystem_FindFiles(const void* fs, const String* dir, const String* pattern,
-                               bool recursive, FilenameArray* out) {
-    reinterpret_cast<const IO::FileSystem*>(fs)->FindFiles(*dir, *pattern,
-                                                           recursive, out);
-}
-
 }  // namespace RtIO
 
 namespace IO {
@@ -774,23 +752,13 @@ int RtIoFileSystemFindRegister() {
         (void*)&RtIo_FileSystem_ExistsInPackfile); ++n;
     RegisterRuntimeAddr(0x1800ab180, (void*)&RtIo_FileSystem_ExistsInPackfile);
 
-    RegisterRuntimeExport(
-        "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_PlatformExists); ++n;
-    RegisterRuntimeAddr(0x1800adc70, (void*)&RtIo_FileSystem_PlatformExists);
 
-    RegisterRuntimeExport(
-        "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z",
-        (void*)&RtIo_FileSystem_FindFiles); ++n;
-    RegisterRuntimeAddr(0x1800ad7a0, (void*)&RtIo_FileSystem_FindFiles);
 
     // The two internals. RegisterRuntimeAddr ONLY — neither has a name in
     // either shipped build, so there is nothing to register under. Both were
     // grepped for an existing `RegisterRuntimeAddr(0x…` across runtime/,
     // standalone/, engine/ and code/ before being claimed here; neither was
     // registered by any lane. §6b bounds what the second one claims.
-    RegisterRuntimeAddr(0x180026880, (void*)&RtColl_ArraySetSizeFill_180026880);
-    RegisterRuntimeAddr(0x180009af0, (void*)&DestroyFilenameArray);
 
     printf("[RtPort]   IO::FileSystem find/exists: %d exports registered\n", n);
     return n;

@@ -52,8 +52,6 @@
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
-extern int RtIoFileSystemWinRegister();   // filesystem_win.cpp — GetSaveDirectory
-
 namespace RtIO {
 
 using RtSystem::String;
@@ -61,23 +59,6 @@ using RtSystem::Filename;
 using RtSystem::StringLength;
 using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 using RtSystem::SysFile;  //   "
-
-// ---- Raw ABI typedefs for the originals -----------------------------------
-typedef bool     (*fn_Exists_t)(const void* fs, const void* filename);
-typedef void*    (*fn_GetDirectory_t)(const void* fs, void* retval);
-typedef uint32_t (*fn_GetPackfileId_t)(const void* fs, const void* filename);
-typedef int      (*fn_ModFind_t)(const void* mod, const void* filename);
-
-const char* const kNameExists =
-    "?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z";
-const char* const kNameGetDataDirectory =
-    "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ";
-const char* const kNameGetSourceDirectory =
-    "?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ";
-const char* const kNameGetPackfileId =
-    "?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z";
-const char* const kNameModFind =
-    "?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z";
 
 // Case-insensitive ASCII compare, sign-preserving (needed by GetPackfileId's
 // tree descent, not just equality). Duplicated rather than shared from
@@ -115,14 +96,7 @@ static int StriCmpAscii(const char* a, const char* b) {
 // DIFF: full oracle. Read-only on both sides (PlatformExists stats a file,
 // no mutation).
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
-// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
-// both registrations and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->Exists(*path);
-}
+// The body is the member `IO::FileSystem::Exists`, at the bottom of this file.
 
 // ============================================================================
 // ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ  retail 0x180007bd0
@@ -172,16 +146,8 @@ Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
 //
 // DIFF: full oracle, same reasoning as GetDataDirectory.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
-// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
-// both registrations and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) {
-    new (ret) System::Filename(
-        reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetSourceDirectory());
-    return ret;
-}
+// The body is the member `IO::FileSystem::GetSourceDirectory`, at the bottom of
+// this file.
 
 // ============================================================================
 // ?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z    retail 0x1800ab050
@@ -204,14 +170,8 @@ Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) 
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
-// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
-// both registrations and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetPackfileId(*path);
-}
+// The body is the member `IO::FileSystem::GetPackfileId`, at the bottom of this
+// file.
 
 // ============================================================================
 // ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z   retail 0x1800aea10
@@ -225,14 +185,8 @@ uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path)
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 2: the body is now
-// `IO::Modification::Find(const RtSystem::Filename&)`, below. The door keeps
-// its name and both registrations and delegates. No qualified `IO::` call is
-// needed: `IO::Modification` has no vtable (Modification.h's banner), so
-// B34_BRIEFS §A.1's re-entry hazard cannot arise.
-int RtIo_Modification_Find(const void* modVoid, const Filename* path) {
-    return reinterpret_cast<const IO::Modification*>(modVoid)->Find(*path);
-}
+// The body is the member `IO::Modification::Find(const RtSystem::Filename&)`,
+// below.
 
 }  // namespace RtIO
 
@@ -267,36 +221,16 @@ namespace IO {
 bool FileSystem::Exists(const RtSystem::Filename& pathRef) const {
     const RtSystem::Filename* const path = &pathRef;
 
-    // RT_EXPORT_ONCE, not bare the raw DLL door and not the raw DLL door.
-    //
-    // The _ONCE half is the original reason and still holds: these two calls
-    // are on the NORMAL path, not inside a diff guard, and bare the raw DLL door is
-    // GetProcAddress -- an export-table binary search by string under the
-    // loader lock on EVERY call. Two of them in the body of a function the
-    // quicksave path calls per file is the Wave 2 perf-gate defect exactly
-    // (WAVE3_LANE_P.md): it cost 5.6 points of sim time from inside
-    // System::Time and was invisible to both profilers because it lands in
-    // ntdll self time.
-    //
-    // WAVE 9 LANE V2, 2026-09-07 changed only the DOOR. These two calls ARE
-    // Exists's logic, so they are a REAL DEPENDENCY, and the raw door resolves
-    // to NULL with Runtime-x64.dll absent. Note rawdoor_audit did NOT report
-    // these: its resolve-and-call regex is per-line and here the argument list
-    // opens on the following line. Found by a paren-matching re-scan, not by
-    // the checker.
-    //
-    // The diff line below stays on the raw DLL door deliberately -- it is the oracle,
-    // it must reach the SHIPPED body, and it only evaluates under the guard.
+    // B3R RT-IO: the two arms call ExistsInPackfile / PlatformExists as
+    // members (filesystem_find_win.cpp); they were RT_EXPORT_ONCE doors.
     bool ours;
     if (_existsInPackfileGate != 0 &&
-        RT_EXPORT_ONCE(RtIO::fn_Exists_t,
-            "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(this, path)) {
+        ExistsInPackfile(*path)) {
         ours = true;
     } else if (_platformExistsGate == 0) {
         ours = false;
     } else {
-        ours = RT_EXPORT_ONCE(RtIO::fn_Exists_t,
-            "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z")(this, path);
+        ours = PlatformExists(*path);
     }
 
     return ours;
@@ -440,24 +374,10 @@ int RtIoFileSystemRegister() {
     // agent's "all N ported" claim, so a registration it cannot see is worse
     // than no registration. It also keeps a human grep for the mangled name
     // landing on the registration site. The census now WARNS on this pattern.
-    RegisterRuntimeExport("?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_FileSystem_Exists); ++n;
     RegisterRuntimeExport("?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
                           (void*)&RtIo_FileSystem_GetDataDirectory); ++n;
-    RegisterRuntimeExport("?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
-                          (void*)&RtIo_FileSystem_GetSourceDirectory); ++n;
-    RegisterRuntimeExport("?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z",
-                          (void*)&RtIo_FileSystem_GetPackfileId); ++n;
-    RegisterRuntimeExport("?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z",
-                          (void*)&RtIo_Modification_Find); ++n;
 
-    RegisterRuntimeAddr(0x1800ab310, (void*)&RtIo_FileSystem_Exists);
     RegisterRuntimeAddr(0x180007bd0, (void*)&RtIo_FileSystem_GetDataDirectory);
-    RegisterRuntimeAddr(0x180007b90, (void*)&RtIo_FileSystem_GetSourceDirectory);
-    RegisterRuntimeAddr(0x1800ab050, (void*)&RtIo_FileSystem_GetPackfileId);
-    RegisterRuntimeAddr(0x1800aea10, (void*)&RtIo_Modification_Find);
-
-    n += RtIoFileSystemWinRegister();   // GetSaveDirectory, filesystem_win.cpp
 
     printf("[RtPort]   IO::FileSystem/Modification: %d exports registered\n", n);
     return n;

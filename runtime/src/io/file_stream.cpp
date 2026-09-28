@@ -156,14 +156,6 @@
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-// standalone/resolve.h:108. The RAW door: it answers from the loaded DLL and
-// never consults the port registry, which is what makes it usable as the
-// "theirs" side of a comparison. Declared here rather than by including
-// standalone/resolve.h, matching how ResolveAddr is already declared above.
-
 // Rung 4 of Wave 9 lane PKG2 (filesystem_openfile_win.cpp), already ported and
 // registered. Declared here rather than pulled in from a header because that
 // lane publishes none and this lane does not edit another lane's files.
@@ -528,34 +520,6 @@ void RtIoFileStreamCounters(unsigned long long* out) {
 bool IO::FileStream::Create(const System::Filename& path) {
     return RtIO::FileStreamCreateBody(reinterpret_cast<RtIO::FileStream*>(this),
                                       reinterpret_cast<const RtSystem::Filename*>(&path));
-}
-
-// ============================================================================
-// Registration — BY NAME *AND* BY ADDRESS for every row.
-//
-// `ResolveExport` falls through silently to the shipped body for an unported
-// symbol, and `ResolveAddr(Module::Runtime, …)` is registry-first; a caller
-// that reaches a body by ADDRESS is invisible to a name-only registration and
-// dies at cutover (`reference_count_the_doors_not_the_calls.md`).
-// ============================================================================
-int RtIoFileStreamRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    // ---- Wave 23 lane IOPORT ----
-    // RtIo_TextFileStream_Ctor above already CALLS this symbol through
-    // RT_EXPORT_ONCE, so registering it converts that existing call site from
-    // the DLL's body to ours with no edit at the call site.
-    RegisterRuntimeExport("?SetObject@TextFileStream@IO@@QEAAXAEBVString@System@@0H@Z",
-                          (void*)&RtIo_TextFileStream_SetObject); ++n;
-    RegisterRuntimeAddr(0x1800ba280, (void*)&RtIo_TextFileStream_SetObject);
-
-    // UNEXPORTED — address only, and that is the ONLY door it has.
-    RegisterRuntimeAddr(0x18000c180, (void*)&RtIo_FileInfo_Dtor);
-
-    printf("[RtPort]   IO::FileStream family (wave 19 lane FILE): "
-           "%d exports + 1 unexported address registered\n", n);
-    return n;
 }
 
 // ============================================================================

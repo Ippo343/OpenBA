@@ -93,12 +93,12 @@
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
+#include "../../types/system/WideString.h"
+#include "../../types/io/Modification.h"   // RtColl_ArrayFilenameDtor_1800098d0
+#include "../collection/avl_trees.h"      // rtavl::SubtreeFree
 
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // ENDGAME B.3.1 step 2: the two lane-String entry points this file
 // forward-declared here — `RtSystem_Filename_AdjustDelimiters` (0x1800c6970)
@@ -120,9 +120,8 @@ using RtSystem::SysFile;  //   "
 namespace {
 
 // ---- the two System::WideString entry points this file needs ---------------
-// Both are EXPORTED and both are ALREADY PORTED (runtime/src/system/
-// widestring.cpp), so they are reached through the proper name door, which the
-// registry answers first.
+// Both are EXPORTED and both are PORTED (runtime/src/system/widestring.cpp);
+// B3R RT-IO: both are called by name on System::WideString.
 //
 // `??0WideString@System@@QEAA@AEBVString@1@@Z` RETURNS BY VALUE — RCX is the
 // hidden return slot and RDX is the String. Getting that typedef wrong is a
@@ -133,14 +132,9 @@ namespace {
 // idiom on it is the same (refcount at -4, block at -8). Retail inlines that
 // idiom at all four sites below rather than calling ~WideString.
 struct WideStr { wchar_t* data; };
-// The door's typedef names the CLASS: it is a file-local typedef for a call
-// OUT, not an entry-point signature, and the callee's POD parameter is the same
-// eight bytes (ENDGAME B.3.1 step 2).
-typedef WideStr* (*WideCtorFn)(WideStr* ret, const System::String* s);
-
 WideStr* WideFromString(WideStr* ret, const System::String* s) {
-    return RT_EXPORT_ONCE(WideCtorFn,
-        "??0WideString@System@@QEAA@AEBVString@1@@Z")(ret, s);
+    ::new (static_cast<void*>(ret)) System::WideString(*s);   // B.3.x bridge
+    return ret;
 }
 
 // The inlined WideString release. Same asymmetry as the String one: the
@@ -178,13 +172,10 @@ void PodArrayDtor(PodArray* a) {
     a->size = 0; a->capacity = 0;                // 18000984f (one qword store)
 }
 
-// Collection::Array<Filename>::~Array, retail 0x1800098d0 — ALREADY PORTED and
-// registered by runtime/src/io/modification.cpp:911, so the address door
-// answers from our registry.
-typedef void (*ArrayFilenameDtorFn)(void*);
-
-// The unexported AVL subtree free at 0x180008340 — ALREADY PORTED and
-// registered by runtime/src/collection/avl_trees.cpp:1252.
+// Collection::Array<Filename>::~Array, retail 0x1800098d0, is
+// RtIO::RtColl_ArrayFilenameDtor_1800098d0 (modification.cpp); the unexported
+// AVL subtree free at 0x180008340 is rtavl::SubtreeFree (avl_trees.cpp). Both
+// are called by name (B3R RT-IO).
 //
 // ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`,
 // deliberately. `FileSystem::packfileIndexRoot`/`packfileIndexCount` (+0x40/
@@ -207,7 +198,6 @@ typedef void (*ArrayFilenameDtorFn)(void*);
 // `PackfileIndexElem`'s destructor implements the key-only String release
 // (`StringReleaseInline`), once that type exists and the other four files'
 // raw walks are converted alongside it.
-typedef void (*SubtreeFreeFn)(void* tree, void* node);
 
 }  // namespace
 
@@ -295,17 +285,10 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
 // unexported literal, and a transcription of it is a guess no static check
 // could catch. The bytes are quoted so a reader can see the door was verified.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
-// `IO::FileSystem::PlatformCreateFile`, at the bottom of this file. Same door
-// rules as CreatePath above; this one is `AEAA` (private) in retail and keeps
-// its own registration pair, which is why the member is public
-// (runtime/types/io/FileSystem.h says so at the declaration).
-bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
-                                        const Filename* path) {
-    return reinterpret_cast<IO::FileSystem*>(self)->PlatformCreateFile(*info, *path);
-}
+// The body is the member `IO::FileSystem::PlatformCreateFile`, at the bottom of
+// this file (`AEAA`, private, in retail).
 
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the remaining four doors of this file,
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the remaining doors of this file,
 // gathered here so every one of them is a single delegating line and the
 // retail bodies are all in the one `namespace IO` block below. Each keeps its
 // name, its signature — `CreateFileW` keeps the (self, hidden-return-slot,
@@ -315,10 +298,6 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
 FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
                                       const Filename* path) {
     return reinterpret_cast<IO::FileSystem*>(self)->CreateFileW(ret, *path);
-}
-
-void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
-    reinterpret_cast<IO::FileSystem*>(self)->PlatformCloseFile(*info);
 }
 
 void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
@@ -407,12 +386,11 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     wchar_t tempDir[MAX_PATH];
     ::GetTempPathW(MAX_PATH, tempDir);                       // 1800ade91/96
 
-    // The three-character prefix retail passes. Read out of the DLL's .rdata at
-    // 0x1801557e8 through the address door rather than spelled here: it is an
-    // unexported string literal, and a transcription of it would be a guess
-    // that no static check could catch.
-    const wchar_t* prefix = reinterpret_cast<const wchar_t*>(
-        ResolveAddr(Module::Runtime, 0x1801557e8));
+    // PORT GAP 0x1801557e8 (the three-character .rdata prefix retail passes to
+    // GetTempFileNameW): not ported; retail reads it here. Nothing registers
+    // that address, so the address door that stood here answered null and the
+    // call ran with a null prefix; that null arm is the code (B3R R4).
+    const wchar_t* prefix = nullptr;
     wchar_t tempFile[MAX_PATH];
     ::GetTempFileNameW(tempDir, prefix, 0, tempFile);        // 1800adea4..b2
 
@@ -433,18 +411,15 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     // in retail's order (the UTF-8 String first, then the WideString).
     {
         RtIO::WideStr w{};  w.data = nullptr;                // 1800adefc
-        using WideSetFn = void (*)(RtIO::WideStr*, const wchar_t*);
-        RT_EXPORT_ONCE(WideSetFn, "?Set@WideString@System@@QEAAXPEB_W@Z")(
-            &w, tempFile);                                   // 1800adf0f
+        reinterpret_cast<System::WideString*>(&w)->Set(      // B.3.x bridge
+            tempFile);                                       // 1800adf0f
 
         // AsUTF8's hidden return slot is still POD-shaped (System::WideString
         // is not a B.3.1 class), so the value lands in a POD and the move ctor
         // steals it: `utf8Pod` is left null, so ~utf8 is the one release.
         RtSystem::String utf8Pod{};  utf8Pod.data = nullptr; // 1800adf15
-        using AsUtf8Fn = RtSystem::String* (*)(const RtIO::WideStr*,
-                                               RtSystem::String*);
-        RT_EXPORT_ONCE(AsUtf8Fn, "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ")(
-            &w, &utf8Pod);                                   // 1800adf21
+        ::new (&RtIO::Sys(utf8Pod)) System::String(           // B.3.x bridge
+            reinterpret_cast<const System::WideString*>(&w)->AsUTF8());   // 1800adf21
         System::String utf8(std::move(RtIO::Sys(utf8Pod)));
 
         // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
@@ -655,19 +630,14 @@ FileSystem::~FileSystem() {
     // Step 1. The tree object is (root, count) at +0x40/+0x48; retail passes
     // its ADDRESS as `this` and the root as the node.
     void* tree = &_packfileIndexRoot;
-    static RtIO::SubtreeFreeFn subtreeFree = nullptr;
-    if (!subtreeFree) subtreeFree = reinterpret_cast<RtIO::SubtreeFreeFn>(
-        ResolveAddr(Module::Runtime, 0x180008340));
-    subtreeFree(tree, _packfileIndexRoot);            // 1800ac6ff
+    rtavl::SubtreeFree(tree,                          // 1800ac6ff
+        reinterpret_cast<rtsetavl::Node*>(_packfileIndexRoot));
 
     _packfileIndexRoot  = nullptr;                    // 1800ac706
     _packfileIndexCount = 0;                          // 1800ac709
 
     // Step 3 — Array<Filename>, ported by modification.cpp and registered.
-    static RtIO::ArrayFilenameDtorFn fnArrayDtor = nullptr;
-    if (!fnArrayDtor) fnArrayDtor = reinterpret_cast<RtIO::ArrayFilenameDtorFn>(
-        ResolveAddr(Module::Runtime, 0x1800098d0));
-    fnArrayDtor(&_userPackFilenames);                 // 1800ac710
+    RtIO::RtColl_ArrayFilenameDtor_1800098d0(&_userPackFilenames);   // 1800ac710
 
     // Step 4 — the POD array free, our own copy. See the note above.
     RtIO::PodArrayDtor(
@@ -695,10 +665,6 @@ int RtIoFileSystemCreateFileRegister() {
     using namespace RtIO;
     int n = 0;
 
-    RegisterRuntimeExport("?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_FileSystem_CreatePath); ++n;
-    RegisterRuntimeAddr(0x1800ae430, (void*)&RtIo_FileSystem_CreatePath);
-
     RegisterRuntimeExport("?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z",
                           (void*)&RtIo_FileSystem_CloseFile); ++n;
     RegisterRuntimeAddr(0x1800accc0, (void*)&RtIo_FileSystem_CloseFile);
@@ -706,22 +672,6 @@ int RtIoFileSystemCreateFileRegister() {
     RegisterRuntimeExport("??1FileSystem@IO@@QEAA@XZ",
                           (void*)&RtIo_FileSystem_Dtor); ++n;
     RegisterRuntimeAddr(0x1800ac6d0, (void*)&RtIo_FileSystem_Dtor);
-
-    // The three closure rows — not on the Wave 19 list, required by the
-    // screenshot path. See the header note.
-    RegisterRuntimeExport(
-        "?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_CreateFileW); ++n;
-    RegisterRuntimeAddr(0x1800acc50, (void*)&RtIo_FileSystem_CreateFileW);
-
-    RegisterRuntimeExport(
-        "?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_PlatformCreateFile); ++n;
-    RegisterRuntimeAddr(0x1800ade60, (void*)&RtIo_FileSystem_PlatformCreateFile);
-
-    RegisterRuntimeExport("?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z",
-                          (void*)&RtIo_FileSystem_PlatformCloseFile); ++n;
-    RegisterRuntimeAddr(0x1800ae020, (void*)&RtIo_FileSystem_PlatformCloseFile);
 
     printf("[RtPort]   IO::FileSystem create/close (wave 19 lane FILE): "
            "%d exports registered\n", n);

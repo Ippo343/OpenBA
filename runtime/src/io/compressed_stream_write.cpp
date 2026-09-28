@@ -157,12 +157,15 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"   // B.3.4 block 4: IO::CompressedFileStream
 #include "../../types/io/FileSystem.h"   //                 and RtIO::FileInfo
 #include "../../types/system/String.h"
+#include "../../types/system/Compression.h"
+#include "../../types/system/MemoryAllocator.h"
 
 namespace RtIo {
 
@@ -212,14 +215,9 @@ inline ::IO::Stream* AsStream(void* s) {
 // ?Create below (`MOV RBX,[0x1801fc718] / ADD RBX,0x640 / EnterCriticalSection
 // / Allocate(_singleton,8,4) / LeaveCriticalSection`) and calls the exported
 // MemAlloc directly in ?CompressWindow. Both spellings are the same function:
-// going through the one exported door rather than pinning 0x1801fc718 and the
-// +0x640 lock offset in yet another file is the call array.cpp:159,
-// avl_trees.cpp:154 and type_system.cpp:552 already made.
-typedef void* (*MemAllocFn)(uint64_t, int32_t);
-typedef void  (*MemFreeFn)(void*);
-typedef void* (*CompressionCtorFn)(void*);
-typedef int   (*CompressFn)(void*, const void*, uint32_t, void*, uint32_t);
-typedef void  (*CloseFileFn)(void*, void*);
+// System::MemoryAllocator::MemAlloc (B3R RT-IO: called by name; it was the
+// exported door) rather than pinning 0x1801fc718 and the +0x640 lock offset in
+// yet another file.
 
 }  // namespace
 
@@ -421,14 +419,13 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
     void** const  blocks = Blocks(self);                 // 1800a986a
 
     if (blocks[blk] != nullptr)                          // 1800a986e/75/78
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(
+        ::System::MemoryAllocator::MemFree(
             blocks[blk]);                                // 1800a987a
 
     h->uncompressedSize = static_cast<uint16_t>(w->end - w->start);   // 1800a987f..98
 
-    const int rc = RT_EXPORT_ONCE(CompressFn,
-        "?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z")(
-            self->compression, w->buffer, h->uncompressedSize,
+    const int rc = static_cast<::System::Compression*>(self->compression)   // B.3.x bridge
+        ->Compress(w->buffer, h->uncompressedSize,
             scratch, static_cast<uint32_t>(kWin));       // 1800a989d..a5
     h->compressedSize = static_cast<uint16_t>(rc);       // 1800a98aa
 
@@ -436,8 +433,7 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
         h->compressedSize = 0;                           // 1800a98b4/b6
 
     const uint32_t len = StoredLength(*h);               // 1800a98ba..c7
-    void* const dst = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(len, 4);   // 1800a98ce/d3
+    void* const dst = ::System::MemoryAllocator::MemAlloc(len, 4);   // 1800a98ce/d3
     blocks[blk] = dst;                                   // 1800a98d8
 
     std::memcpy(dst,
@@ -595,10 +591,9 @@ extern "C" bool RtIo_CompressedStream_Create(CompressedStream* self, Stream* src
     self->base.direction = 1;                            // 1800aa4d4
     self->source         = src;                          // 1800aa4db
 
-    void* const p = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(8, 4);   // 1800aa4df..517
+    void* const p = ::System::MemoryAllocator::MemAlloc(8, 4);   // 1800aa4df..517
     self->compression = (p != nullptr)                   // 1800aa522/25
-        ? RT_EXPORT_ONCE(CompressionCtorFn, "??0Compression@System@@QEAA@XZ")(p)  // 1800aa52a
+        ? static_cast<void*>(::new (p) ::System::Compression())            // 1800aa52a
         : nullptr;                                       // 1800aa531  XOR EAX,EAX
 
     RtIo_CompressedStream_SetWindowCount(self, windows); // 1800aa53c
@@ -808,8 +803,7 @@ void CompressedFileStream::Close() {
     RtIO::FileInfo* const fileInfo = &_file._file;       // 1800a94aa  (== this+0x88)
     if (fileInfo->handle != -1) {                        // 1800a94b1/b4
         void* const fs = ::IO::FileSystem::_singleton;             // 1800a94b6  // ENDGAME B.3.9 IO (D7): the class static.
-        RT_EXPORT_ONCE(RtIo::CloseFileFn,
-            "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fileInfo);  // 1800a94c2
+        static_cast<::IO::FileSystem*>(fs)->CloseFile(*fileInfo);           // 1800a94c2
         return;
     }
 }
@@ -854,13 +848,7 @@ int RtIoCompressedStreamWriteRegister() {
                           (void*)&RtIo_CompressedStream_Commit); ++n;
     RegisterRuntimeAddr(0x1800a9ee0, (void*)&RtIo_CompressedStream_Commit);
 
-    RegisterRuntimeExport("?CompressWindow@CompressedStream@IO@@AEAAXH@Z",
-                          (void*)&RtIo_CompressedStream_CompressWindow); ++n;
-    RegisterRuntimeAddr(0x1800a9810, (void*)&RtIo_CompressedStream_CompressWindow);
 
-    RegisterRuntimeExport("?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z",
-                          (void*)&RtIo_CompressedStream_Create); ++n;
-    RegisterRuntimeAddr(0x1800aa4b0, (void*)&RtIo_CompressedStream_Create);
 
     printf("[RtPort]   IO::CompressedStream write path (lane CSTREAM): %d exports registered\n", n);
 

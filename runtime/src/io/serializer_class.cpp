@@ -6,9 +6,9 @@
 // THIS FILE IS DELIBERATELY REGISTRY-FREE, and that is its whole reason to
 // exist as a separate translation unit.
 // ---------------------------------------------------------------------------
-// `runtime/src/io/serializer.cpp` holds the 22 registered `RtSerializer_*`
-// doors and `RtIoSerializerRegister()`, so it stands on `RegisterRuntimeExport`
-// and cannot link into `make unit`. Nothing in the 22 BODIES needs the
+// `runtime/src/io/serializer.cpp` holds the `RtSerializer_*` doors (it once
+// also held `RtIoSerializerRegister()`, which stood on `RegisterRuntimeExport`
+// and kept it out of `make unit`). Nothing in the 22 BODIES needs the
 // registry, though: the constructor reaches the factory through the stream's
 // Encoding VTABLE (a raw slot call), every Serialize member reaches its target
 // through the ReaderWriter's vtable, `GetEncoding` is two loads and the

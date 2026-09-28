@@ -210,9 +210,8 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../../src/system/string.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 // Lane String's port. Forward-declared rather than pulled in from a header for
 // the same reason filesystem_openfile_win.cpp does it: that lane publishes
@@ -255,14 +254,6 @@ using RtIo::Stream;
 
 namespace {
 
-const char* const kReadPackfile =
-    "?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z";   // ord 3461
-
-typedef bool (*ReadPackfileFn)(PackageFileView*, const Filename*);
-typedef void (*VoidThisFn)(void*);
-typedef void (*ArraySetSizeFn)(void*, int32_t);
-typedef void (*ArraySetSizeFillFn)(void*, int32_t, const void*);
-
 // ---- the frame's two overlapping stack buffers, §93 ------------------------
 // `[RBP+0x60] .. [RBP+0x18a0)` is 0x1840 bytes; the raw-read buffer starts
 // 0x800 into it. Sized and positioned exactly as retail's frame.
@@ -275,36 +266,10 @@ FileSystem** FileSystemSingletonCell() {
     return reinterpret_cast<FileSystem**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
-// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` / `?MemFree@`. Retail inlines
-// the three-step allocator sequence at 0x1800b4807 and 0x1800c7a50 IS those
-// three steps; reaching them by address puts lane E's port in the path, exactly
-// as compressed_stream_open.cpp does.
-void* MemAlloc(uint64_t bytes, int32_t align) {
-    using Fn = void* (*)(uint64_t, int32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
-}
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);
-}
-
-// Lane Q's two-argument and three-argument Array::SetSize instantiations, both
-// registered by lane PKG2's earlier rungs (runtime/src/collection/array.cpp).
-// Neither has an exported name, so the address door is the only one there is.
-void ArraySetSize(uintptr_t addr, void* arr, int32_t n) {
-    ArraySetSizeFn fn = reinterpret_cast<ArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, addr));
-    fn(arr, n);
-}
-void ArraySetSizeFill(uintptr_t addr, void* arr, int32_t n, const void* fill) {
-    ArraySetSizeFillFn fn = reinterpret_cast<ArraySetSizeFillFn>(
-        ResolveAddr(Module::Runtime, addr));
-    fn(arr, n, fill);
-}
+// B3R RT-IO: the per-file MemAlloc / MemFree (0x1800c7a50 / 0x1800c7ad0) and
+// Array SetSize / SetSizeFill (0x180029510, 0x180029630, 0x1800298f0) helpers
+// that stood here are direct calls: System::MemoryAllocator::MemAlloc /
+// MemFree and the rtcoll bodies by name.
 
 // A Stream virtual through the OBJECT's vtable, exactly as retail dispatches it
 // at 0x1800b603e (`MOV RAX,[RBP-0x58] ; CALL qword ptr [RAX+0x38]`). B3X W0:
@@ -486,53 +451,13 @@ bool TextEqual(const char* a, const char* b) {
 // ============================================================================
 // ENDGAME B.3.4 PACKAGE+FS commit 3: the body is now
 // `IO::PackageFile::ReadPackfile(const System::Filename&)`, at the bottom of
-// this file. The door keeps its name and both registrations and delegates.
-// Non-virtual (`QEAA`), so the qualification is for the reader, not dispatch.
+// this file. Non-virtual (`QEAA`).
 //
 // THIS IS ON THE PATH B34_BRIEFS section D BINDS. The move changed nothing but
 // field spellings: no lock, retry, loop bound, null check or reorder was added,
 // and nothing was removed.
-extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
-                                              const Filename* name) {
-    return reinterpret_cast<IO::PackageFile*>(self)
-               ->IO::PackageFile::ReadPackfile(*name);
-}
 
 }  // namespace RtIO
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH DOORS, as every row in this lane gets. The name was read out of
-// Runtime-x64.dll's own export directory with pefile (ordinal 3461,
-// 0x1800b46b0) rather than transcribed from a decompile — lane PKG2 nearly
-// shipped `SetWindowCount` with the private `AEAA` spelling when it is public
-// `QEAA`, and a name the DLL does not contain resolves NULL silently and
-// forever behind the ResolveAddr fallback.
-int RtIoPackageFileReadRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    // THE NAME IS SPELT OUT AS A LITERAL HERE, not as `kReadPackfile`, and that
-    // is not style. `tools/unsatisfied_export_scan.py` and
-    // `tools/runtime_census.py` match `RegisterRuntimeExport("` followed by a
-    // STRING; a named constant is invisible to both
-    // (reference_census_cannot_see_nonliteral_registrations.md, which cost six
-    // LANDED Wave 3 ports their visibility). The first version of this line used
-    // the constant and the scan duly reported ReadPackfile as still unsatisfied
-    // on a build where it was registered and running -- caught by the
-    // instrument, not by review, which is this wave's pattern.
-    RegisterRuntimeExport("?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_PackageFile_ReadPackfile); ++n;
-    RegisterRuntimeAddr(0x1800b46b0, (void*)&RtIo_PackageFile_ReadPackfile);
-
-    // A LANE-OWNED IDENTITY MARKER, for the same reason package_file.cpp has
-    // one: tools/pkg2_run.sh gates on a banner the RUN wrote, and a banner that
-    // keys on a shared total moves whenever any other lane lands in IO.
-    printf("[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): "
-                "%d exports registered\n", n);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile::ReadPackfile`'s member body
@@ -607,7 +532,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // ---- the compressed blob -----------------------------------------------
     int32_t blobLen = 0;
     RtIo_FileSystem_ReadFile(fs, fi, 4, &blobLen);             // 1800b47f9
-    void* const blob = MemAlloc(
+    void* const blob = ::System::MemoryAllocator::MemAlloc(
         static_cast<uint64_t>(static_cast<int64_t>(blobLen)), 4);   // 1800b47fe MOVSXD
     RtIo_FileSystem_ReadFile(fs, fi, blobLen, blob);           // 1800b4820
 
@@ -659,7 +584,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         // it just passed. Identical unless SetSize clamped; transcribed as
         // spelled.
         uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
-        ArraySetSize(0x180029510, iconArr,
+        rtcoll::RtColl_ArraySetSize_180029510(iconArr,
                      _iconHeight * _iconWidth);      // 1800b4d27/d37
         RtIo::RtIo_CompressedStream_Read(
             cs, ArrSize(this, 0x88) * 4, ArrData(this, 0x80)); // 1800b4d56  REAL CALL
@@ -669,7 +594,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
                 &_previewByteCount;   /* +0x90 -- see PackageFile.h */
             RtIo::RtIo_CompressedStream_Read(cs, 4, n90);      // 1800b4d6c  +0x90
             uint8_t* const flagArr = reinterpret_cast<uint8_t*>(this) + 0x98;
-            ArraySetSize(0x180029630, flagArr, *n90);          // 1800b4dea/df1
+            rtcoll::RtColl_ArraySetSize_180029630(flagArr, *n90);   // 1800b4dea/df1
             // NOTE the bound: retail reads `*n90` bytes, not the ARRAY's size.
             RtIo::RtIo_CompressedStream_Read(cs, *n90, ArrData(this, 0x98));  // 1800b4e09
         }
@@ -715,7 +640,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         _iconWidth  = 1;                                  // 1800b5b49
         _iconHeight = 1;                                  // 1800b5b4d
         uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
-        ArraySetSize(0x180029510, iconArr, 1);                 // 1800b5b5a
+        rtcoll::RtColl_ArraySetSize_180029510(iconArr, 1);     // 1800b5b5a
         *static_cast<uint32_t*>(ArrData(this, 0x80)) = 0xff000000u;   // 1800b5b66
         // falls into 0x1800b5b6c, which reloads formatVersion — still 0 here.
     }
@@ -787,7 +712,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
             entry.offset = static_cast<uint32_t>(entryOffset); // 1800b5fa4  §91
             entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91
 
-            ArraySetSizeFill(0x1800298f0, entriesArr,
+            rtcoll::RtColl_ArraySetSizeFill_1800298f0(entriesArr,
                              ArrSize(this, 0xb8) + 1, &entry); // 1800b5fb1..fbe
 
             RtString_ReleaseInline(&entry.name);               // 1800b5fc4..5fe9
@@ -802,10 +727,10 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // transcribed and the arm is COUNTED, so "provably dead" is measured on
     // every run rather than asserted once.
     if (cs->headerSize > 0 && cs->base.direction == 1) {       // 1800b6023/29
-        RT_EXPORT_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(cs);  // 1800b6035
+        RtIo::RtIo_CompressedStream_Commit(cs);                // 1800b6035
     }
     CallStreamClose(&cms.memoryStream);                        // 1800b603a  slot 7
-    MemFree(blob);                                             // 1800b6045
+    ::System::MemoryAllocator::MemFree(blob);                  // 1800b6045
     cmsObj->IO::CompressedMemoryStream::~CompressedMemoryStream();       // 1800b604f  ~CompressedMemoryStream
     const bool ours = true;                                    // 1800b6059  MOV AL,1
 

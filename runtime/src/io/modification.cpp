@@ -154,6 +154,7 @@
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2 — see below
+#include "../../types/system/MemoryAllocator.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
@@ -180,31 +181,13 @@ using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 // ---------------------------------------------------------------------------
 }  // namespace RtIO
 
-// Byte-identical to standalone/resolve.h's declarations; the linker checks the
-// two. Not included directly because resolve.h drags in <windows.h>, whose
-// <wingdi.h> declares a function called `Rectangle` and whose <windef.h>
-// #defines `near`/`far` away — see rt_port.h's banner and array.cpp:127.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace RtIO {
 
-// ENDGAME B.3.2 closing pass: both go through `rtcoll::DoorAlloc`/`DoorFree`
-// (runtime/src/collection/alloc_door.cpp) — the exe dispatch slots
-// 0x140152b60 / 0x140152b68, with these two addresses as the fallback. That is
-// the same allocator and the same lock, reached through the channel
-// `BANISHED_REDZONE` rewrites. It matters HERE in particular because the
-// `Set<Filename>` this file's cluster builds is now allocated by
-// `Collection::Set<System::Filename, …>` (modification_refresh.cpp), which frees
-// through that door: allocating one side of a tree through a different channel
-// is exactly the half-shimmed heap redzone_alloc.cpp reports phantom overflows
-// for.
-void* ModMemAlloc(uint64_t bytes, int align) {
-    return rtcoll::DoorAlloc()(bytes, align);
-}
-void ModMemFree(void* p) {
-    rtcoll::DoorFree()(p);      // the null test is inside ?MemFree@, as before
-}
+// B3R RT-IO: the per-file ModMemAlloc / ModMemFree wrappers (which went through
+// `rtcoll::DoorAlloc`/`DoorFree`, i.e. these same two statics) are gone; every
+// site calls System::MemoryAllocator::MemAlloc / MemFree, the allocator the
+// `Collection::Set<System::Filename, …>` of modification_refresh.cpp also uses,
+// and the one BANISHED_REDZONE's instrument seat sits on.
 
 static inline int32_t& RefCount(char* s) {
     return *reinterpret_cast<int32_t*>(s - 4);
@@ -222,7 +205,7 @@ void AssignShared(char** dst, char* src) {
     if (cur != nullptr) {
         if (--RefCount(cur) == 0) {
             *dst = cur - 8;
-            ModMemFree(*dst);
+            ::System::MemoryAllocator::MemFree(*dst);
         } else {
             *dst = nullptr;
         }
@@ -250,7 +233,7 @@ static void AdoptShared(char** dst, char* src) {
 // element cleanup in front. `[RDI+8]` is ONE eight-byte store covering size AND
 // capacity, so capacity IS reset here.
 static void* ArrayFreeBuffer(ModArray* a) {
-    ModMemFree(a->data);          // retail's `if (p)` lives inside 0x1800c7ad0
+    ::System::MemoryAllocator::MemFree(a->data);          // retail's `if (p)` lives inside 0x1800c7ad0
     a->data = nullptr;
     a->size = 0;
     a->capacity = 0;
@@ -303,7 +286,7 @@ static void ArrayAssignGrow(ModArray* dst, const ModArray* src,
         dst->capacity = dst->size;
         if (dst->size == oldSize + 1 && oldSize != 0)
             dst->capacity = dst->size + dst->size * 2;
-        dst->data = ModMemAlloc(
+        dst->data = ::System::MemoryAllocator::MemAlloc(
             static_cast<uint64_t>(static_cast<int64_t>(dst->capacity)) * stride, align);
     }
 }
@@ -372,7 +355,7 @@ void* RtColl_ArrayFilenameAssign_1800091f0(void* dstv, const void* srcv) {
 // ignored first argument at all.
 static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const Filename* key,
                               ModSetNode* parent) {
-    ModSetNode* n = static_cast<ModSetNode*>(ModMemAlloc(0x28, 8));
+    ModSetNode* n = static_cast<ModSetNode*>(::System::MemoryAllocator::MemAlloc(0x28, 8));
     if (n == nullptr) return nullptr;
     // CALL 0x1800067d0 — Filename copy ctor, into the freshly allocated node's
     // raw `key` bytes.
@@ -383,10 +366,6 @@ static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const Filename* key,
     n->w20 = 0;                                           // MOV dword [RDI+0x20],EAX
     n->w22 = 0;
     return n;
-}
-void* RtColl_SetNodeNew_180010570(void* set, const void* key, void* parent) {
-    return SetNodeNew(set, static_cast<const Filename*>(key),
-                      static_cast<ModSetNode*>(parent));
 }
 
 // The Set<Filename> instantiation whose node walk this file needs. Only
@@ -592,7 +571,7 @@ void RtIo_Mod_Dtor_180011460(void* selfv) {
         if (s == nullptr) continue;
         if (--RefCount(s) == 0) {
             *shared[i] = s - 8;
-            ModMemFree(*shared[i]);
+            ::System::MemoryAllocator::MemFree(*shared[i]);
         } else {
             *shared[i] = nullptr;
         }
@@ -631,16 +610,8 @@ void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
 // The five Modification entry points
 // ============================================================================
 
-using fn_GetCount_t = int (*)(const void*);
-using fn_GetMod_t   = const void* (*)(const void*, int);
-using fn_Enable_t   = void (*)(void*, int, bool);
-using fn_SaveList_t = void (*)(void*);
-
 // ?GetCount@Modification@IO@@QEBAHXZ   retail 0x18000da90
 //     MOV EAX,[RCX+0x10] ; RET
-int RtIo_Modification_GetCount(const void* selfv) {
-    return reinterpret_cast<const IO::Modification*>(selfv)->GetCount();
-}
 
 // ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z   retail 0x18000da80
 //     MOVSXD RAX,EDX ; SHL RAX,7 ; ADD RAX,[RCX+8] ; RET
@@ -650,9 +621,6 @@ int RtIo_Modification_GetCount(const void* selfv) {
 // (reference_ghidra_c_output_vs_disassembly.md), which would silently turn
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing.
-const void* RtIo_Modification_GetMod(const void* selfv, int index) {
-    return &reinterpret_cast<const IO::Modification*>(selfv)->GetModification(index);
-}
 
 // ?Enable@Modification@IO@@QEAAXH_N@Z   retail 0x1800aeab0
 //
@@ -663,9 +631,6 @@ const void* RtIo_Modification_GetMod(const void* selfv, int index) {
 // unconditionally — Enable(i, x) marks the list dirty even when x is what the
 // mod already held. Nothing in our tree depends on that, but a "no-op returns
 // early" tidy-up would be a real behaviour change to IsDirty.
-void RtIo_Modification_Enable(void* selfv, int index, bool value) {
-    reinterpret_cast<IO::Modification*>(selfv)->Enable(index, value);
-}
 
 // ?Swap@Modification@IO@@QEAAXHH@Z   retail 0x1800aeb20
 //
@@ -680,9 +645,6 @@ void RtIo_Modification_Enable(void* selfv, int index, bool value) {
 // touched, so Swap(i, i) is a complete no-op. `b` is sign-extended (MOVSXD
 // RBX,R8D) before the shift and `a` separately (MOVSXD RDI,EDX); both strides
 // are `<< 7`.
-void RtIo_Modification_Swap(void* selfv, int a, int b) {
-    reinterpret_cast<IO::Modification*>(selfv)->Swap(a, b);
-}
 
 // ?SaveList@Modification@IO@@QEAAXXZ   retail 0x1800b05f0
 //
@@ -737,39 +699,15 @@ int RtIoModificationRefreshRegister();   // modification_refresh.cpp (lane MOD, 
 int RtIoModificationRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?GetCount@Modification@IO@@QEBAHXZ",
-                          (void*)&RtIo_Modification_GetCount); ++n;
-    RegisterRuntimeExport("?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z",
-                          (void*)&RtIo_Modification_GetMod); ++n;
-    RegisterRuntimeExport("?Enable@Modification@IO@@QEAAXH_N@Z",
-                          (void*)&RtIo_Modification_Enable); ++n;
-    RegisterRuntimeExport("?Swap@Modification@IO@@QEAAXHH@Z",
-                          (void*)&RtIo_Modification_Swap); ++n;
     RegisterRuntimeExport("?SaveList@Modification@IO@@QEAAXXZ",
                           (void*)&RtIo_Modification_SaveList); ++n;
 
-    RegisterRuntimeAddr(0x18000da90, (void*)&RtIo_Modification_GetCount);
-    RegisterRuntimeAddr(0x18000da80, (void*)&RtIo_Modification_GetMod);
-    RegisterRuntimeAddr(0x1800aeab0, (void*)&RtIo_Modification_Enable);
-    RegisterRuntimeAddr(0x1800aeb20, (void*)&RtIo_Modification_Swap);
     RegisterRuntimeAddr(0x1800b05f0, (void*)&RtIo_Modification_SaveList);
 
     // The unexported internals. Address door only — there is no name to
     // register, in retail or in the profile build.
-    RegisterRuntimeAddr(0x1800101e0, (void*)&RtIo_Mod_CopyCtor_1800101e0);
-    RegisterRuntimeAddr(0x180026ef0, (void*)&RtIo_Mod_Assign_180026ef0);
-    RegisterRuntimeAddr(0x180011460, (void*)&RtIo_Mod_Dtor_180011460);
     RegisterRuntimeAddr(0x180010110, (void*)&RtColl_ArrayModAssign_180010110);
-    RegisterRuntimeAddr(0x180010b80, (void*)&RtColl_ArrayModDtor_180010b80);
-    RegisterRuntimeAddr(0x180011110, (void*)&RtColl_ArrayI32Assign_180011110);
-    RegisterRuntimeAddr(0x1800111a0, (void*)&RtColl_ArrayI32Dtor_1800111a0);
     RegisterRuntimeAddr(0x180011220, (void*)&RtColl_ArrayU8Assign_180011220);
-    RegisterRuntimeAddr(0x1800112a0, (void*)&RtColl_ArrayU8Dtor_1800112a0);
-    RegisterRuntimeAddr(0x1800091f0, (void*)&RtColl_ArrayFilenameAssign_1800091f0);
-    RegisterRuntimeAddr(0x1800098d0, (void*)&RtColl_ArrayFilenameDtor_1800098d0);
-    RegisterRuntimeAddr(0x1800104f0, (void*)&RtColl_SetCloneSubtree_1800104f0);
-    RegisterRuntimeAddr(0x180010470, (void*)&RtColl_SetDestroySubtree_180010470);
-    RegisterRuntimeAddr(0x180010570, (void*)&RtColl_SetNodeNew_180010570);
     // 0x180009c30 is NOT registered here any more -- it was registered by three
     // files at once (this one, collection/linkedlist.cpp, system/allocator.cpp)
     // and the registry's last binding won, so two bodies were dead code and
@@ -909,32 +847,19 @@ void Modification::SaveList() {
         return;
     }
 
-    using SetBoolFn = void (*)(void*, const char*, const char*, bool);
-    using SetIntFn  = void (*)(void*, const char*, const char*, int);
-    // File-local typedef for a call OUT through a resolve door (not a
-    // registered entry point this file owns), so it names the class that
-    // occupies the same eight bytes rather than the POD (B31_RULES.md /
-    // filesystem_setupdirs_win.cpp's exemplar treatment of local Fn typedefs).
-    using GetPathFilenameFn = System::Filename* (*)(const System::Filename*,
-                                                     System::Filename*, bool);
-
     void* p = ::IO::Persistence::_singleton;   // ENDGAME B.3.9 IO (D7): the class static
 
     for (int i = 0; i < _count; ++i) {
         RtIO::Mod* m = _mods + i;
         m->order = i;
 
-        // The hidden return slot of GetPathFilename. `tmp` holds null here, so
-        // the callee constructing into the slot overwrites nothing (the same
-        // idiom as ApplyPathOverride's `value` in filesystem_setupdirs_win.cpp).
-        // `m->file` is a `RtSystem::Filename` MEMBER of the not-yet-converted
-        // `Mod`, so it is reached through the transitional bridge.
+        // GetPathFilename's by-value return constructs `tmp` in place (the
+        // hidden return slot). `m->file` is a `RtSystem::Filename` MEMBER of the
+        // not-yet-converted `Mod`, so it is reached through a cast.
         char* ref;
         {
-            System::Filename tmp;
-            RT_EXPORT_ONCE(GetPathFilenameFn,
-                "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(
-                    &RtIO::Sys(m->file), &tmp, true);
+            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge
+                                     ->GetPathFilename(true));
 
             // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned
             // buffer, then release the temporary. `ref` outlives the scope
@@ -943,13 +868,15 @@ void Modification::SaveList() {
             if (ref != nullptr) ++RtIO::RefCount(ref);
         }  // ~tmp releases here, exactly where retail's release sat
 
-        RT_EXPORT_ONCE(SetBoolFn, "?Set@Persistence@IO@@QEAAXPEBD0_N@Z")(
-            p, "ModEnabled_", ref, m->enabled != 0);
-        RT_EXPORT_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z")(
-            p, "ModIndex_", ref, m->order);
+        // The door decides the overload: ?Set@..@QEAAXPEBD0_N@Z (bool), then
+        // ?Set@..@QEAAXPEBD0H@Z (int).
+        static_cast<::IO::Persistence*>(p)->Set(
+            "ModEnabled_", ref, static_cast<bool>(m->enabled != 0));
+        static_cast<::IO::Persistence*>(p)->Set(
+            "ModIndex_", ref, static_cast<int>(m->order));
 
         if (ref != nullptr) {
-            if (--RtIO::RefCount(ref) == 0) RtIO::ModMemFree(ref - 8);
+            if (--RtIO::RefCount(ref) == 0) ::System::MemoryAllocator::MemFree(ref - 8);
         }
     }
 
