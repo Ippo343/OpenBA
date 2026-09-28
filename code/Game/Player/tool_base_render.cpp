@@ -267,29 +267,30 @@ void SampleTile(int64_t hf, int col, int row, float* out) {
 //   indices {0,1,2,0,2,3} (base-offset by the pre-append vertex count) to `idx`.
 // ===========================================================================
 void EdgeSegment(const float* v0, const float* v1, IdxArray* idx, EdgeVtxArray* evtx) {
-    if (!fn_EdgeMesh_TriangleVertex_Ctor || !fn_EdgeMesh_EdgeVertex_Ctor) return;
+    // ??0TriangleVertex@EdgeMesh@Graphics@@ 0x1800a2f50 / ??0EdgeVertex@EdgeMesh@Graphics@@
+    // 0x1800a2df0, called by name (B3R Leftovers; the readiness guard went with the doors).
     int16_t baseIdx = (int16_t)evtx->_size;   // sVar2 = (short)param_5[1]
 
     uint8_t tvA[8], tvB[8], ev[16];
     // edge 1: EdgeVertex(tv(v0), tv(v1), +0x200)
-    fn_EdgeMesh_TriangleVertex_Ctor(tvA, v1);
-    fn_EdgeMesh_TriangleVertex_Ctor(tvB, v0);
-    fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, 0x200);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvA, v1);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvB, v0);
+    RtGraphics_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, 0x200);
     evtx->SetSizeFill(evtx->_size + 1, ev);
     // edge 2: same, -0x200
-    fn_EdgeMesh_TriangleVertex_Ctor(tvA, v1);
-    fn_EdgeMesh_TriangleVertex_Ctor(tvB, v0);
-    fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, -0x200);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvA, v1);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvB, v0);
+    RtGraphics_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, -0x200);
     evtx->SetSizeFill(evtx->_size + 1, ev);
     // edge 3: swapped endpoints, +0x200
-    fn_EdgeMesh_TriangleVertex_Ctor(tvA, v0);
-    fn_EdgeMesh_TriangleVertex_Ctor(tvB, v1);
-    fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, 0x200);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvA, v0);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvB, v1);
+    RtGraphics_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, 0x200);
     evtx->SetSizeFill(evtx->_size + 1, ev);
     // edge 4: swapped, -0x200
-    fn_EdgeMesh_TriangleVertex_Ctor(tvA, v0);
-    fn_EdgeMesh_TriangleVertex_Ctor(tvB, v1);
-    fn_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, -0x200);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvA, v0);
+    RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvB, v1);
+    RtGraphics_EdgeMesh_EdgeVertex_Ctor(ev, tvB, tvA, -0x200);
     evtx->SetSizeFill(evtx->_size + 1, ev);
 
     static const int16_t offs[6] = {0, 1, 2, 0, 2, 3};
@@ -399,7 +400,7 @@ void Impl_b930(int64_t self) {
                 float cv[3];
                 *reinterpret_cast<Math::Vector3*>(cv) = Math::Vector3(pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
                 uint8_t tvtx[8];
-                if (fn_EdgeMesh_TriangleVertex_Ctor) fn_EdgeMesh_TriangleVertex_Ctor(tvtx, cv);
+                RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvtx, cv);   // 0x1800a2f50
                 // 3. append the TriangleVertex
                 fillVtx.SetSizeFill(fillVtx._size + 1, tvtx);
                 // 4. extend bounding box by the corner
