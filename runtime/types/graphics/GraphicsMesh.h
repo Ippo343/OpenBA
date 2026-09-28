@@ -573,3 +573,16 @@ static_assert(offsetof(GraphicsMesh::DetailLevel::Buffer, _deviceData) == 0x08,
               "of the record)");
 
 }  // namespace Graphics
+
+// ==== B3R RT-VG: the graphics-mesh Collection::Array instantiations ====
+// Defined in runtime/src/collection/array_graphics_mesh.cpp (given external
+// linkage for their direct readers in runtime/src/graphics/).
+namespace rtcoll {
+void* Rt_ArrayDtor_180013fb0(void* a);  // 0x180013fb0 ~Array<TriangleList>
+void* Rt_ArrayDtor_180014160(void* a);  // 0x180014160 ~Array<Array<T>>
+void Rt_SetSize_18005d840(void* a, int n);  // 0x18005d840 Array<TriangleList>
+void Rt_SetSize_18005cda0(void* a, int n);  // 0x18005cda0 Array<Array<T>>
+void* Rt_TriangleListCtor_1800fefc0(void* p);  // 0x1800fefc0
+void* Rt_TriangleListCopyCtor_180013c50(void* d, const void* s);  // 0x180013c50
+}  // namespace rtcoll
+// ==== end B3R RT-VG ====

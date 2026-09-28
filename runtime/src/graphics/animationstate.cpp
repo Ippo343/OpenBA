@@ -74,9 +74,10 @@
 #include "../../types/system/Value.h"
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/io/Serializer.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_AnimationGroup
+#include "../../types/math/Math.h"               // Math::Quaternion::Lerp
+#include "../../types/system/MemoryAllocator.h"
+#include "../picking/scene_grid.h"               // rtpickgrid::TransformArrayAssign
 
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
@@ -91,48 +92,17 @@ namespace {
 
 using ArrayHdr = Collection::Array<uint8_t>;
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
 // ---------------------------------------------------------------------------
-// The neighbours these bodies call.
+// The neighbours these bodies call, by name (B3R). The Collection::Array<T>
+// instantiations have no name in either shipped build: rtcoll::Rt_SetSize_* /
+// Rt_ArrayAssign_* (array_graphics_anim.cpp, declared in AnimationState.h),
+// rtcoll::RtColl_ArraySetSize_180059140 (Array<Math::Transform>::SetSize),
+// rtpickgrid::TransformArrayAssign (0x18001b360, Array<Math::Transform>::
+// operator=). ExternalPtr<AnimationGroup>::Serialize is
+// RtObject_ExternalPtrSerialize_AnimationGroup (0x18005b840) and
+// Math::Quaternion::Lerp (0x18001d500) is the member.
 // ---------------------------------------------------------------------------
-
-// The four Collection::Array<T> instantiations, by address — they have no name
-// in either shipped build. Each goes through ResolveAddr so that our own port
-// in array_graphics_anim.cpp is what answers (ResolveAddr consults the port
-// registry first) and so tools/runtime_census.py sees the edge.
-using SetSizeFn   = void  (*)(void* a, int n);
-using ArrayAssign = void* (*)(void* dst, const void* src);
-
-SetSizeFn SetSizeNodes()   { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005aa30); return f; }
-SetSizeFn SetSizeStates()  { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005b1e0); return f; }
-SetSizeFn SetSizeLayers()  { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005c8a0); return f; }
-SetSizeFn SetSizeInterp()  { static SetSizeFn f = RtAddr<SetSizeFn>(0x18005ac50); return f; }
-SetSizeFn SetSizePose()    { static SetSizeFn f = RtAddr<SetSizeFn>(0x180059140); return f; }
-
-ArrayAssign AssignNodes()  { static ArrayAssign f = RtAddr<ArrayAssign>(0x180013960); return f; }
-ArrayAssign AssignStates() { static ArrayAssign f = RtAddr<ArrayAssign>(0x18005b130); return f; }
-ArrayAssign AssignLayers() { static ArrayAssign f = RtAddr<ArrayAssign>(0x18001b700); return f; }
-ArrayAssign AssignInterp() { static ArrayAssign f = RtAddr<ArrayAssign>(0x18001b810); return f; }
-// Array<Math::Transform>::operator=, retail 0x18001b360. NOT in this batch and
-// not ported: it is the only element operation of AnimationState's copy ctor
-// that has no other caller in the cluster, so it stays on the DLL until a batch
-// reaches it. Named here rather than left as a bare number.
-ArrayAssign AssignPose()   { static ArrayAssign f = RtAddr<ArrayAssign>(0x18001b360); return f; }
-
-// Object::ExternalPtr<Graphics::AnimationGroup>::Serialize, retail 0x18005b840
-// — already ported, in runtime/src/object/external_ptr_serialize.cpp. Reached
-// by address because that is where it is registered and it has no export name.
-using ExtPtrSerFn = void (*)(void* slot, Serializer* ser);
-ExtPtrSerFn SerializeGroupPtr() {
-    static ExtPtrSerFn f = RtAddr<ExtPtrSerFn>(0x18005b840);
-    return f;
-}
-
-// Math::Quaternion::Lerp — HIDDEN RETURN SLOT in RDX. See the banner.
-using QuatLerpFn = void* (*)(const void* from, void* ret, const void* to, const float* t);
-QuatLerpFn QuaternionLerp() { static QuatLerpFn f = RtAddr<QuatLerpFn>(0x18001d500); return f; }
+using rtpickgrid::TransformArrayAssign;
 
 // ?_singleton@AnimationManager@Graphics@@0PEAV12@EA — the slot at 0x1801fe7b0.
 // ONE deref of the slot gives the manager; the manager's +0x00 is the instance
@@ -219,7 +189,7 @@ extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
 
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;                    // _layers
     *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    AssignLayers()(d + 0x08, s + 0x08);                            // CALL 0x18001b700
+    rtcoll::Rt_ArrayAssign_18001b700(d + 0x08, s + 0x08);                            // CALL 0x18001b700
 
     *reinterpret_cast<uint32_t*>(d + 0x18) =                       // _rootOffset
         *reinterpret_cast<const uint32_t*>(s + 0x18);
@@ -230,11 +200,11 @@ extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
 
     *reinterpret_cast<uint64_t*>(d + 0x28) = 0;                    // _pose
     *reinterpret_cast<uint64_t*>(d + 0x30) = 0;
-    AssignPose()(d + 0x28, s + 0x28);                              // CALL 0x18001b360
+    TransformArrayAssign(d + 0x28, s + 0x28);                              // CALL 0x18001b360
 
     *reinterpret_cast<uint64_t*>(d + 0x38) = 0;                    // _nodes
     *reinterpret_cast<uint64_t*>(d + 0x40) = 0;
-    AssignInterp()(d + 0x38, s + 0x38);                            // CALL 0x18001b810
+    rtcoll::Rt_ArrayAssign_18001b810(d + 0x38, s + 0x38);                            // CALL 0x18001b810
     return d;
 }
 
@@ -254,11 +224,11 @@ extern "C" void* RtGraphics_AnimInstance_CopyCtor(void* dstv, const void* srcv) 
 
     *reinterpret_cast<uint64_t*>(d + 0x10) = 0;                    // _nodes
     *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    AssignNodes()(d + 0x10, s + 0x10);                             // CALL 0x180013960
+    rtcoll::Rt_ArrayAssign_180013960(d + 0x10, s + 0x10);                             // CALL 0x180013960
 
     *reinterpret_cast<uint64_t*>(d + 0x20) = 0;                    // _states
     *reinterpret_cast<uint64_t*>(d + 0x28) = 0;
-    AssignStates()(d + 0x20, s + 0x20);                            // CALL 0x18005b130
+    rtcoll::Rt_ArrayAssign_18005b130(d + 0x20, s + 0x20);                            // CALL 0x18005b130
     return d;
 }
 
@@ -282,7 +252,7 @@ extern "C" void RtGraphics_SerializeTransformArray(void* arrayv, Serializer* ser
 
     int32_t n = a->_size;
     RwInt(rw, &n);
-    if (IsReading(ser)) SetSizePose()(a, n);        // CALL 0x180059140
+    if (IsReading(ser)) rtcoll::RtColl_ArraySetSize_180059140(a, n);        // CALL 0x180059140
 
     uint8_t* p = a->_data;
     for (int32_t i = 0; i < n; ++i, p += 0x1c) {
@@ -334,7 +304,7 @@ extern "C" void RtGraphics_SerializeAnimLayers(Serializer* ser, int count, void*
     ReaderWriter* rw = ser->readerWriter;
     uint8_t* p = static_cast<uint8_t*>(basev);
     for (int i = 0; i < count; ++i, p += 0x38) {
-        SerializeGroupPtr()(p + 0x00, ser);                  // ExternalPtr<AnimationGroup>
+        RtObject_ExternalPtrSerialize_AnimationGroup(reinterpret_cast<RtObject::External**>(p + 0x00), ser);                  // ExternalPtr<AnimationGroup>
         RwInt(rw, p + 0x08);       // clip index
         RwFloat(rw, p + 0x10);       // speed / weight
         // ENDGAME B.3.5 block H1 — THE THREE HAND-INLINED int64 SLOT CALLS
@@ -370,14 +340,14 @@ extern "C" void RtGraphics_SerializeAnimStates(Serializer* ser, int count, void*
     for (int i = 0; i < count; ++i, p += 0x48) {
         int32_t n = *reinterpret_cast<const int32_t*>(p + 0x10);     // _layers._size
         RwInt(rw, &n);
-        if (IsReading(ser)) SetSizeLayers()(p + 0x08, n);            // CALL 0x18005c8a0
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005c8a0(p + 0x08, n);            // CALL 0x18005c8a0
         RtGraphics_SerializeAnimLayers(ser, n, *reinterpret_cast<void* const*>(p + 0x08));
 
         RwBool(rw, p + 0x00);
 
         n = *reinterpret_cast<const int32_t*>(p + 0x40);             // _nodes._size
         RwInt(rw, &n);
-        if (IsReading(ser)) SetSizeInterp()(p + 0x38, n);            // CALL 0x18005ac50
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005ac50(p + 0x38, n);            // CALL 0x18005ac50
         RtGraphics_SerializeInterpTransforms(ser, n, *reinterpret_cast<void* const*>(p + 0x38));
 
         RwFloats(rw, 3, p + 0x18);                                   // _rootOffset
@@ -393,18 +363,18 @@ extern "C" void RtGraphics_SerializeAnimInstances(Serializer* ser, int count, vo
     ReaderWriter* rw = ser->readerWriter;
     uint8_t* p = static_cast<uint8_t*>(basev);
     for (int i = 0; i < count; ++i, p += 0x30) {
-        SerializeGroupPtr()(p + 0x00, ser);
+        RtObject_ExternalPtrSerialize_AnimationGroup(reinterpret_cast<RtObject::External**>(p + 0x00), ser);
         RwInt(rw, p + 0x08);                 // clip index
         RwInt(rw, p + 0x0c);                 // reference count
 
         int32_t n = *reinterpret_cast<const int32_t*>(p + 0x28);     // _states._size
         RwInt(rw, &n);
-        if (IsReading(ser)) SetSizeStates()(p + 0x20, n);            // CALL 0x18005b1e0
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005b1e0(p + 0x20, n);            // CALL 0x18005b1e0
         RtGraphics_SerializeAnimStates(ser, n, *reinterpret_cast<void* const*>(p + 0x20));
 
         n = *reinterpret_cast<const int32_t*>(p + 0x18);             // _nodes._size
         RwInt(rw, &n);
-        if (IsReading(ser)) SetSizeNodes()(p + 0x10, n);             // CALL 0x18005aa30
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005aa30(p + 0x10, n);             // CALL 0x18005aa30
         RtGraphics_SerializeMeshNodes(ser, n, *reinterpret_cast<void* const*>(p + 0x10));
     }
 }
@@ -559,7 +529,7 @@ void AnimationState::Serialize(IO::Serializer& s) {
 
     int32_t n = _layers._size;
     RwInt(rw, &n);
-    if (IsReading(ser)) SetSizeLayers()(&_layers, n);
+    if (IsReading(ser)) rtcoll::Rt_SetSize_18005c8a0(&_layers, n);
     RtGraphics_SerializeAnimLayers(ser, n, _layers._data);
     RwBool(rw, &_needsUniqueCopy);
 }
@@ -598,15 +568,14 @@ void AnimationState::ResetAnimationState() {
 
         *reinterpret_cast<uint64_t*>(inst + 0x00) = 0;   // _group
         *reinterpret_cast<int32_t*>(inst + 0x08)  = -1;  // _animIndex
-        SetSizeNodes()(inst + 0x10, 0);                  // CALL 0x18005aa30
-        SetSizeStates()(inst + 0x20, 0);                 // CALL 0x18005b1e0
+        rtcoll::Rt_SetSize_18005aa30(inst + 0x10, 0);                  // CALL 0x18005aa30
+        rtcoll::Rt_SetSize_18005b1e0(inst + 0x20, 0);                 // CALL 0x18005b1e0
     }
 
     // The inlined ~Array. `MemFree` is null-guarded inside 0x1800c7ad0, which is
     // instruction for instruction what retail inlines here.
-    using MemFreeFn = void (*)(void*);
     if (_layers._data != nullptr)
-        RtAddr<MemFreeFn>(0x1800c7ad0)(_layers._data);
+        System::MemoryAllocator::MemFree(_layers._data);
     _layers._data     = nullptr;
     _layers._size     = 0;
     _layers._capacity = 0;
@@ -704,8 +673,13 @@ void Animation::GetPoseAtTime(const System::Time& timeRef, const System::Time& d
             const float by = *reinterpret_cast<const float*>(b + 0x14);
             const float bz = *reinterpret_cast<const float*>(b + 0x18);
 
+            // Math::Quaternion::Lerp (0x18001d500) by value; `q` is the slot.
             float q[4];
-            const float* r = static_cast<const float*>(QuaternionLerp()(a, q, b, &frac));
+            *reinterpret_cast<Math::Quaternion*>(q) =
+                reinterpret_cast<const Math::Quaternion*>(a)->Lerp(
+                    *reinterpret_cast<const Math::Quaternion*>(b),
+                    *reinterpret_cast<const Math::Scalar*>(&frac));
+            const float* r = q;
             reinterpret_cast<uint32_t*>(dst)[0] = reinterpret_cast<const uint32_t*>(r)[0];
             reinterpret_cast<uint32_t*>(dst)[1] = reinterpret_cast<const uint32_t*>(r)[1];
             reinterpret_cast<uint32_t*>(dst)[2] = reinterpret_cast<const uint32_t*>(r)[2];
@@ -764,31 +738,5 @@ int RtCollectionGraphicsAnimRegister();
 int RtGraphicsAnimationStateRegister() {
     int n = RtCollectionGraphicsAnimRegister();
 
-    RegisterRuntimeExport("??0Node@GraphicsMesh@Graphics@@QEAA@AEBU012@@Z",
-                          (void*)&RtGraphics_MeshNode_CopyCtor);                        ++n;
-    RegisterRuntimeAddr  (0x1800127f0ull, (void*)&RtGraphics_MeshNode_CopyCtor);
-    RegisterRuntimeAddr  (0x18005b660ull, (void*)&RtGraphics_AnimState_CopyCtor);       ++n;
-    RegisterRuntimeAddr  (0x18005b700ull, (void*)&RtGraphics_AnimInstance_CopyCtor);    ++n;
-
-    RegisterRuntimeAddr  (0x180059820ull, (void*)&RtGraphics_SerializeTransformArray);  ++n;
-    RegisterRuntimeAddr  (0x18005c230ull, (void*)&RtGraphics_SerializeInterpTransforms);++n;
-    RegisterRuntimeAddr  (0x18005c120ull, (void*)&RtGraphics_SerializeMeshNodes);       ++n;
-    RegisterRuntimeAddr  (0x18005cb40ull, (void*)&RtGraphics_SerializeAnimLayers);      ++n;
-    RegisterRuntimeAddr  (0x18005c2c0ull, (void*)&RtGraphics_SerializeAnimStates);      ++n;
-    RegisterRuntimeAddr  (0x18005c660ull, (void*)&RtGraphics_SerializeAnimInstances);   ++n;
-
-    RegisterRuntimeExport("?Serialize@AnimationState@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtGraphics_AnimationState_Serialize);                 ++n;
-    RegisterRuntimeAddr  (0x1800fe250ull, (void*)&RtGraphics_AnimationState_Serialize);
-    RegisterRuntimeExport("?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ",
-                          (void*)&RtGraphics_AnimationState_Reset);                     ++n;
-    RegisterRuntimeAddr  (0x1800fd930ull, (void*)&RtGraphics_AnimationState_Reset);
-    RegisterRuntimeExport("?GetPose@AnimationManager@Graphics@@QEBAXHPEAVTransform@Math@@H@Z",
-                          (void*)&RtGraphics_AnimationManager_GetPose);                 ++n;
-    RegisterRuntimeAddr  (0x1800fb8e0ull, (void*)&RtGraphics_AnimationManager_GetPose);
-    RegisterRuntimeExport(
-        "?GetPoseAtTime@Animation@Graphics@@QEBAXAEBVTime@System@@0PEAVTransform@Math@@H@Z",
-        (void*)&RtGraphics_Animation_GetPoseAtTime);                                    ++n;
-    RegisterRuntimeAddr  (0x1800faca0ull, (void*)&RtGraphics_Animation_GetPoseAtTime);
     return n;
 }

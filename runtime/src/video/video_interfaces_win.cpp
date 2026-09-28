@@ -295,13 +295,6 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
 // ============================================================================
 int RtVideoInterfacesRegister() {
     int n = 0;
-    RegisterRuntimeExport("?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z",  // 2542
-                          (void*)&RtVideo_Device_GetDLLForInterface); ++n;
-    RegisterRuntimeAddr(0x1800f7b20, (void*)&RtVideo_Device_GetDLLForInterface);
-
-    RegisterRuntimeExport("?InitializeInterfaces@Device@Video@@QEAAXXZ",                  // 3073
-                          (void*)&RtVideo_Device_InitializeInterfaces); ++n;
-    RegisterRuntimeAddr(0x1800f79f0, (void*)&RtVideo_Device_InitializeInterfaces);
 
     printf("[LaneEVM] rev=EVM-r1 interfaces registered=%d\n", n);
     return n;

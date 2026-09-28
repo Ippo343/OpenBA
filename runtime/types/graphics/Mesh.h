@@ -1028,3 +1028,11 @@ static_assert(sizeof(EdgeMesh::EdgeVertex)     == 16, "EdgeMesh::EdgeVertex is 1
 // ---- graphics/closure_batch2b.cpp
 extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int count, void* data);  // 0x180014850
 // ==== end B3R W0-P0c ====
+
+// ==== B3R RT-VG: the two EdgeMesh vertex constructors (graphics/mesh.cpp) ====
+// C++ linkage, global namespace; given external linkage for their exe-side reader.
+// ??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z
+void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3);  // 0x1800a2f50
+// ??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z
+void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags);  // 0x1800a2df0
+// ==== end B3R RT-VG ====

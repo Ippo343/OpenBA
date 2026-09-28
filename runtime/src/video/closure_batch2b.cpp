@@ -39,9 +39,6 @@
 // replace this file's two hand-inlined ReaderWriter slot offsets.
 #include "../../types/io/Serializer.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // ============================================================================
 // 0x180054080 — the SHARED blob half of an `Array<Array<uint8>>` serialize.
 //
@@ -173,9 +170,5 @@ extern "C" void RtVolume_Frustum_SelectBoxSupportVertices(const float* n,
 
 int RtClosure2bVideoRegister() {
     int n = 0;
-    RegisterRuntimeAddr(0x180054080,
-                        (void*)&RtVideo_SerializeBlobArray);    ++n;
-    RegisterRuntimeAddr(0x1800f8fb0,
-                        (void*)&RtVolume_Frustum_SelectBoxSupportVertices);   ++n;
     return n;
 }

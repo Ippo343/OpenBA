@@ -121,16 +121,9 @@
 #include "../../types/graphics/Camera.h"
 #include "../collection/array_destroy_internal.h"
 #include "../collection/array_internal.h"
-#include "wave9_lane_gfxd.h"
 
 using RtGraphics::Camera;
 using RtGraphics::Renderer;
-
-// Byte-identical to standalone/resolve.h's declaration; the linker checks the
-// two against each other. Not included, for the <wingdi.h> `Rectangle` reason
-// rt_port.h's banner gives.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace rtgfxd {
 
@@ -162,14 +155,10 @@ using rtcoll::ArraySpec;
 // converts). Rewriting the call below as `dst->drawableIds =
 // src->drawableIds;` would silently swap this deep, allocator-owning assign
 // for a shallow one — sharing `_data` between the two records and double-
-// freeing it. Left as the by-address call onto the SAME ported body
-// (registry-first, so this already reaches our `RtColl_I32ArrayAssign_
-// 18001cdf0`, not the DLL's).
+// freeing it. B3R: a call of that SAME ported body by name,
+// `rtcoll::RtColl_I32ArrayAssign_18001cdf0`.
 void RtArrayAssignI32(void* dst, const void* src) {
-    using Fn = void (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001cdf0));
-    fn(dst, src);
+    rtcoll::RtColl_I32ArrayAssign_18001cdf0(dst, src);
 }
 
 // ENDGAME B.3.2 step 2 (callers) — the `RtArrayDtorI32` forwarder that used to
@@ -651,38 +640,3 @@ void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuf
 // registered only 0x18001c7e0, the `~Array` that calls it. This lane registers
 // the callee, and does not re-prove what that probe proved.
 // ============================================================================
-
-int RtGraphicsWave9GfxdRegister() {
-    int exports = 0;
-
-    // ---- Graphics::Renderer, two of the four exports Draw calls ------------
-    RegisterRuntimeExport("?Reset@Renderer@Graphics@@QEAAXXZ",
-                          (void*)&rtgfxd::RtGraphics_Renderer_Reset); ++exports;
-    RegisterRuntimeAddr(0x180105110, (void*)&rtgfxd::RtGraphics_Renderer_Reset);
-
-    RegisterRuntimeExport("?AddScene@Renderer@Graphics@@QEAAXPEBVScene@2@PEBVRenderBuffer@Video@@AEBVCamera@2@HHHI@Z",
-                          (void*)&rtgfxd::RtGraphics_Renderer_AddScene); ++exports;
-    RegisterRuntimeAddr(0x180105700, (void*)&rtgfxd::RtGraphics_Renderer_AddScene);
-
-    // ---- Graphics::Camera, two MORE of its thirteen exports ---------------
-    // renderer.cpp says "all five of the class's exports". The export table says
-    // thirteen; these are the sixth and seventh. See the file banner.
-    RegisterRuntimeExport("??0Camera@Graphics@@QEAA@AEBV01@@Z",
-                          (void*)&rtgfxd::RtGraphics_Camera_CopyCtor); ++exports;
-    RegisterRuntimeAddr(0x180017a70, (void*)&rtgfxd::RtGraphics_Camera_CopyCtor);
-
-    RegisterRuntimeExport("??0Camera@Graphics@@QEAA@XZ",
-                          (void*)&rtgfxd::RtGraphics_Camera_DefaultCtor); ++exports;
-    RegisterRuntimeAddr(0x1800fe7f0, (void*)&rtgfxd::RtGraphics_Camera_DefaultCtor);
-
-    // ---- the seven unexported internals underneath them -------------------
-    RegisterRuntimeAddr(0x18001bdc0, (void*)&rtgfxd::SceneEntryAssign);
-    RegisterRuntimeAddr(0x180062860, (void*)&rtgfxd::SceneEntryInit);
-    RegisterRuntimeAddr(0x18001ce90, (void*)&rtgfxd::RtGfxd_SceneEntryDestroyRange);
-    RegisterRuntimeAddr(0x180062ae0, (void*)&rtgfxd::RtGfxd_SceneArraySetSize0);
-    RegisterRuntimeAddr(0x180062c40, (void*)&rtgfxd::RtGfxd_DrawableArraySetSize0);
-    RegisterRuntimeAddr(0x1800637b0, (void*)&rtgfxd::RtGfxd_SceneArraySetSizeFill);
-    RegisterRuntimeAddr(0x1800626a0, (void*)&rtgfxd::RtGfxd_DrawGroupClearPasses);
-
-    return exports;
-}

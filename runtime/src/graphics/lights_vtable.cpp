@@ -66,8 +66,7 @@
 #include "../../types/video/Device.h"       // Video::RenderBuffer
 #include "../../types/video/ImageBuffer.h"  // Video::ImageBuffer (B3X W0: slot 0 by name)
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 
 namespace {
 
@@ -134,9 +133,8 @@ constexpr uint32_t kBits_one    = 0x3f800000u;
 float AsFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
 
 // ---------------------------------------------------------------------------
-// Named dependencies. All are exported; RT_EXPORT_ONCE so a ported one is ours.
+// Named dependencies, called by name (B3R).
 // ---------------------------------------------------------------------------
-using VoidThisFn = void (*)(void*);
 
 // `?CreateTargets@SpotLight@Graphics@@AEAAXXZ` 0x180106050 — **PORTED**
 // (runtime/src/graphics/batchc_gfx_leaves.cpp, BATCH C 2026-09-12), reached BY
@@ -157,7 +155,7 @@ void RenderBufferPlatformDestruct(void* p) {
     reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge
 }
 void RenderBufferOperatorDelete(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(p);
+    Video::RenderBuffer::operator delete(p);       // 0x18001f360
 }
 
 // `?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z`
@@ -224,12 +222,12 @@ void* TransformAsTransform3(const void* self, void* ret) {
 }
 
 // `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
-// 0x1800fe960 — PORTED (renderer.cpp). FOUR arguments; the bool is `MOV R9B,1`.
-using CameraFrustumCtorFn = void* (*)(void*, const void*, const void*, bool);
+// 0x1800fe960 — PORTED (renderer.cpp's door RtGraphics_Camera_Ctor, by name).
+// FOUR arguments; the bool is `MOV R9B,1`.
 void CameraFromFrustum(void* cam, const void* frustum, const void* xform, bool flag) {
-    RT_EXPORT_ONCE(CameraFrustumCtorFn,
-        "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z")
-        (cam, frustum, xform, flag);
+    RtGraphics_Camera_Ctor(static_cast<RtGraphics::Camera*>(cam),        // B.3.x bridge
+                           static_cast<const ::Frustum*>(frustum),
+                           static_cast<const Math::Transform3*>(xform), flag);
 }
 
 // The four Renderer / Scene entry points SpotLight::AddDrawItems drives. All
@@ -265,14 +263,10 @@ void SceneAddCulledDrawItems(const void* scene, void* renderer) {
 }
 
 // The two unexported Collection::Array<T>::SetSize instantiations
-// AmbientLight::AddDrawItems drives. Both are ADDRESS doors (no export name in
-// either shipped build) and both are already ported.
+// AmbientLight::AddDrawItems drives (no export name in either shipped build),
+// both ported and called by body name:
 //   0x180023830  Array<int>::SetSize(n, const int&)          array.cpp kSpec_Fill4
 //   0x180063a80  Array<{Light*,int}>::SetSize(n, const T&)   (stride 0x10)
-void SetSizeWithFill(uintptr_t va, void* arr, int32_t n, const void* fill) {
-    using Fn = void (*)(void*, int32_t, const void*);
-    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, va))(arr, n, fill);
-}
 
 // ---------------------------------------------------------------------------
 // The two Video singletons the dimension logic reads. Both are pointers TO the
@@ -542,14 +536,14 @@ void AmbientLight::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     uint8_t* const lights = groups + static_cast<int64_t>(groupIndex) * 0x110 + 0x100;
 
     int32_t fill = lightId;                        // MOV [RSP+0x40],EAX
-    SetSizeWithFill(0x180023830ull, lights,
+    rtcoll::RtColl_ArraySetSizeFill_180023830(lights,
                     *reinterpret_cast<const int32_t*>(lights + 8) + 1, &fill);
 
     struct { void* light; int32_t tag; int32_t _pad; } pair;
     pair.light = self;                             // MOV [RSP+0x20],RBX
     pair.tag   = *reinterpret_cast<const int32_t*>(r + 0x38);
     pair._pad  = 0;
-    SetSizeWithFill(0x180063a80ull, r + 0x20, lightId + 1, &pair);
+    rtcoll::RtColl_ArraySetSizeFill_180063a80(r + 0x20, lightId + 1, &pair);
 }
 
 // ============================================================================
@@ -975,27 +969,3 @@ void SunLight::DrawShadowMap(Video::Context& context, Renderer& rendererRef,
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// Registration — name AND address for every body.
-// ============================================================================
-int RtGraphicsLightsVtableRegister() {
-    int n = 0;
-
-    // ---- Graphics::AmbientLight / Graphics::SpotLight ----------------------
-    // ENDGAME B.3.9 block GFX: nothing. The ??0 / ??1 doors and the five slot
-    // doors of each class are gone: their only readers were the minted
-    // `??_7AmbientLight@` / `??_7SpotLight@` tables and their RT_DELDTOR rows,
-    // all retired (tools/rt_mint_retired/gfx.txt). The bodies are the members.
-
-    // ---- Graphics::SunLight -------------------------------------------------
-    RegisterRuntimeExport("?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",
-                          (void*)&RtGraphics_SunLight_DrawShadowMap); ++n;
-    RegisterRuntimeAddr(0x180106bc0ull, (void*)&RtGraphics_SunLight_DrawShadowMap);
-
-    RegisterRuntimeExport("?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z",
-                          (void*)&RtGraphics_SunLight_Draw); ++n;
-    RegisterRuntimeAddr(0x1801067b0ull, (void*)&RtGraphics_SunLight_Draw);
-
-    return n;
-}

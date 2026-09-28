@@ -147,7 +147,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
-#include "../../../standalone/resolve.h"
+#include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
@@ -184,8 +184,11 @@ extern "C" void RtGraphics_SerializeTransformArray(void* arrayv, Serializer* ser
 
 namespace {
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
+// B.3.x bridge: `str` is a System::String field; the member is
+// ?Serialize@String@System@@ 0x1800c9930.
+inline void StrSer(void* str, Serializer* ser) {
+    static_cast<System::String*>(str)->Serialize(ser);
+}
 
 // B3X W0: the ReaderWriter members this file uses, by name on the real class
 // (the `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
@@ -242,7 +245,6 @@ namespace {
 using AnimationClip  = ::Graphics::Animation;
 using AnimationGroup = ::Graphics::AnimationGroup;
 
-
 // ENDGAME B.3.9 block GFX: batch 7's `ConstructBody` (the Base / External /
 // AnimationGroup stamps out of the MINT plus the field stores) is gone. The
 // stores are the real `AnimationGroup()` (AnimationGroup.h) and the stamps the
@@ -264,14 +266,11 @@ extern "C" void RtObject_ExternalPtrSerialize_AnimationEvent(void** self, Serial
 extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int count, void* datav) {
     if (count <= 0) return;
     AnimationClip* c = static_cast<AnimationClip*>(datav);
-    using SetSizeFn = void (*)(void* arr, int32_t n);
-    using StrSerFn  = void (*)(void* str, Serializer* ser);
     for (int i = 0; i < count; ++i, ++c) {
         ReaderWriter* rw = ser->readerWriter;
-        StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
-        strSer(&c->_name, ser);
-        strSer(&c->_meshName, ser);
-        strSer(&c->_sourceName, ser);
+        StrSer(&c->_name, ser);
+        StrSer(&c->_meshName, ser);
+        StrSer(&c->_sourceName, ser);
 
         rw = ser->readerWriter;
         RwInt(rw, &c->_startFrame);
@@ -293,9 +292,7 @@ extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int co
         rw = ser->readerWriter;
         RwInt(rw, &n);
         if (IsReading(ser->stream)) {
-            static SetSizeFn setSize = nullptr;
-            if (!setSize) setSize = RtAddr<SetSizeFn>(0x180059930ull);
-            setSize(&c->_events, n);
+            rtcoll::RtColl_ArraySetSize_180059930(&c->_events, n);   // 0x180059930
         }
         uint8_t* e = c->_events._data;
         for (int32_t k = 0; k < n; ++k, e += 0x10) {
@@ -409,8 +406,7 @@ bool AnimationGroup::Serialize(void* streamv) {
     int32_t n = _clips._size;
     RwInt(rw, &n);
     if (IsReading(stream)) {
-        using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x180059e70ull)(&_clips, n);
+        rtcoll::RtColl_ArraySetSize_180059e70(&_clips, n);
     }
     RtGraphics_AnimationGroup_SerializeClips(&ser, n, _clips._data);
 
@@ -419,16 +415,13 @@ bool AnimationGroup::Serialize(void* streamv) {
     rw = ser.readerWriter;
     RwInt(rw, &n);
     if (IsReading(stream)) {
-        using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x18005a220ull)(&_tags, n);
+        rtcoll::RtColl_ArraySetSize_18005a220(&_tags, n);
     }
     {
-        using StrSerFn = void (*)(void* str, Serializer* ser);
-        StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
         uint8_t* p = _tags._data;
         for (int32_t i = 0; i < n; ++i, p += 0x18) {
-            strSer(p + 0x00, &ser);
-            strSer(p + 0x08, &ser);
+            StrSer(p + 0x00, &ser);
+            StrSer(p + 0x08, &ser);
             rw = ser.readerWriter;
             RwFloat(rw, p + 0x10);
         }
@@ -450,8 +443,7 @@ bool AnimationGroup::Serialize(void* streamv) {
     rw = ser.readerWriter;
     RwInt(rw, &n);
     if (IsReading(stream)) {
-        using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x18005a410ull)(&_blendTimes, n);
+        rtcoll::RtColl_ArraySetSize_18005a410(&_blendTimes, n);
     }
     rw = ser.readerWriter;
     RwFloats(rw, n, _blendTimes._data);
@@ -464,8 +456,8 @@ bool AnimationGroup::Serialize(void* streamv) {
 // from the retired `RtGraphics_AnimationGroup_Dtor` door
 // (deleting_dtor_leaves.cpp, ENDGAME B.3.9 block GFX). The entry restamp is the
 // compiler's, and so is the tail into ~External. The three Arrays go in
-// retail's order, each through its own ~Array<T> instantiation BY ADDRESS
-// (registry-first, the ported bodies in runtime/src/collection/):
+// retail's order, each through its own ~Array<T> instantiation (the ported
+// bodies in runtime/src/collection/, by name):
 //   0x18001c3b0(+0x48)  ~Array<float>                         (J1)
 //   0x18001c2d0(+0x38)  ~Array<{String,String,float}>         (J2, two Strings each)
 //   0x18001c1e0(+0x20)  ~Array<Graphics::Animation>           (each clip's ~Animation)
@@ -473,10 +465,9 @@ bool AnimationGroup::Serialize(void* streamv) {
 // the three members that runs after this body sees an empty header: no
 // element destroy and MemFree(null) -- a no-op.
 AnimationGroup::~AnimationGroup() {
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x18001c3b0ull)(&_blendTimes);
-    RtAddr<ArrayDtorFn>(0x18001c2d0ull)(&_tags);
-    RtAddr<ArrayDtorFn>(0x18001c1e0ull)(&_clips);
+    rtcoll::RtColl_ArrayDtor_18001c3b0(&_blendTimes);
+    rtcoll::RtColl_ArrayDtorElem_18001c2d0(&_tags);
+    rtcoll::RtColl_ArrayDtorAnim_18001c1e0(&_clips);
 }
 
 // ?TypeId@AnimationGroup@Graphics@@SAIXZ 0x180016300 -- the static twin of
@@ -517,7 +508,6 @@ namespace {
 // fields that keep a position name are the ones no reader has identified. See
 // that header's banner for the two-witness argument.
 using ParticleSystem = ::Graphics::ParticleSystem;
-
 
 }  // namespace
 
@@ -820,16 +810,14 @@ bool ParticleSystem::Serialize(void* streamv) {
     // than re-opening address doors onto 0x1801fc718+0x640 / 0x18014b390 /
     // 0x1800c6e60 / 0x18014b388 that array.cpp already owns.
     if (IsReading(stream) && _active != 0) {
-        using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x180021220ull)(&_pool, _recordCount);        // 1800a507a
+        rtcoll::RtColl_ArraySetSize_180021220(&_pool, _recordCount);    // 1800a507a
         uint8_t** poolArr = reinterpret_cast<uint8_t**>(_pool._data);   // 1800a50f1
-        SetSizeFn innerSetSize = RtAddr<SetSizeFn>(0x180020e90ull);
         for (int32_t i = 0; i < _recordCount; ++i) {                    // 1800a5103
             uint8_t* rec = static_cast<uint8_t*>(rtcoll::MemAlloc(0x18, 8));
             if (rec) {                                                  // 1800a50d4
                 std::memset(rec, 0, 0x10);                              // 1800a50d8/db
                 std::memcpy(rec + 0x10, &_f48, 4);                      // 1800a50df/e2
-                innerSetSize(rec, _subCount);                           // 1800a50eb
+                rtcoll::RtColl_ArraySetSize_180020e90(rec, _subCount);  // 1800a50eb
             }
             // Retail stores RDI unconditionally, so a failed allocation parks a
             // null in the slot rather than skipping the index.
@@ -842,27 +830,3 @@ bool ParticleSystem::Serialize(void* streamv) {
 }
 
 }  // namespace Graphics
-
-int RtGraphicsBatch7AnimGroupParticleSystemRegister() {
-    int n = 0;
-    // AnimationGroup: the factory pair (B39_RULES D2), the class's own statics,
-    // by name AND address; the minted `?_typeInfo@AnimationGroup` record
-    // resolves them. The slot doors are retired (above).
-    RegisterRuntimeExport("?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&::Graphics::AnimationGroup::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x180016400ull, (void*)&::Graphics::AnimationGroup::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&::Graphics::AnimationGroup::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x1800164d0ull, (void*)&::Graphics::AnimationGroup::CreateInPlaceObject);
-    RegisterRuntimeAddr  (0x18005a040ull, (void*)&RtGraphics_AnimationGroup_SerializeClips); ++n;
-
-    // ParticleSystem: the factory pair (B39_RULES D2), the class's own statics,
-    // by name AND address. Its ctor / slot doors are retired (above).
-    RegisterRuntimeExport("?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&::Graphics::ParticleSystem::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x1800204d0ull, (void*)&::Graphics::ParticleSystem::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&::Graphics::ParticleSystem::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180020550ull, (void*)&::Graphics::ParticleSystem::CreateInPlaceObject);
-    return n;
-}

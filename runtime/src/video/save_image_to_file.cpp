@@ -126,15 +126,6 @@ extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t 
 
 namespace {
 
-// ---- the doors, all by NAME ------------------------------------------------
-using CreatePathFn       = bool  (*)(void* fileSystem, const void* filename);
-using CloseFileFn        = void  (*)(void* fileSystem, void* fileInfo);
-
-// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-void* FileSystemSingleton() {
-    return ::IO::FileSystem::_singleton;
-}
-
 // ---------------------------------------------------------------------------
 // 0x180053da0 — Collection::Array<uint8>::SetSize(newSize, const uint8& fill)
 //
@@ -273,9 +264,9 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     //
     // NOTE THE ARGUMENT: CreatePath is given `path`, the function's ORIGINAL
     // argument, not the `.bmp` target built above (0x1800f29e6 `MOV RDX,R14`).
-    void* fs = FileSystemSingleton();
-    RT_EXPORT_ONCE(CreatePathFn, "?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(
-        fs, path);   // IO::FileSystem is another batch's; still a name lookup
+    ::IO::FileSystem* fs = ::IO::FileSystem::_singleton;
+    // B.3.x bridge: the member takes the RtSystem view of the same Filename.
+    fs->CreatePath(*reinterpret_cast<const RtSystem::Filename*>(path));   // 0x1800ae430
 
     // The stream is a stack object retail constructs, uses and destroys in
     // place. Raw storage plus retail's own constructor, the technique
@@ -351,9 +342,8 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
         int32_t* const fileHandle =
             reinterpret_cast<int32_t*>(stream + offsetof(RtIo::FileStream, file));
         if (*fileHandle != -1) {
-            RT_EXPORT_ONCE(CloseFileFn,
-                           "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(
-                fs, fileHandle);
+            // 0x1800accc0; B.3.x bridge: the FileInfo starts at the handle field.
+            fs->CloseFile(*reinterpret_cast<RtIO::FileInfo*>(fileHandle));
         }
         ok = true;   // 0x1800f2b23 `MOV DIL,1`, after the close, unconditionally
 
@@ -411,10 +401,6 @@ extern "C" bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
 // Registration — BY NAME AND BY ADDRESS
 // ============================================================================
 int RtVideoSaveImageRegister() {
-    RegisterRuntimeExport(
-        "?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z",
-        (void*)&Video_ImageBuffer_SaveImageToFile);
-    RegisterRuntimeAddr(0x1800f2840, (void*)&Video_ImageBuffer_SaveImageToFile);
     printf("[RtPort] Video::ImageBuffer::SaveImageToFile (Wave 18 lane VRES): "
            "1 export registered\n");
     return 1;

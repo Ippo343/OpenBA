@@ -54,6 +54,8 @@
 #include "../../types/video/Device.h"       // ENDGAME B.3.5: Video::RenderBuffer
 #include "../../types/video/ImageBuffer.h"   // ENDGAME B.3.5: Video::ImageBuffer
 #include "../collection/array_internal.h"
+#include "../../types/graphics/Camera.h"   // rtgfxd::RtGraphics_Camera_CopyCtor
+#include "../../types/graphics/Scene.h"    // rtgfxd::RtGfxd_SceneArraySetSizeFill
 
 // ENDGAME B.3.5 block C — the three real classes. The `RtGraphics::*` PODs are
 // no longer used by this file at all; `FrameCopyImageBuffer.h`'s stays for
@@ -62,13 +64,6 @@
 using Graphics::FrameCopyImageBuffer;
 using Graphics::GeneratedImageBuffer;
 using Graphics::ReflectionImageBuffer;
-
-// Declared here rather than pulled in from standalone/resolve.h: that header
-// drags in <windows.h>, and PLAN §4.1 requires runtime/src/ to stay
-// platform-neutral. Must sit at FILE scope and stay byte-identical to
-// resolve.h's declaration; the linker checks.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -83,13 +78,9 @@ namespace {
 // :936-992). By address we would read the DLL's copy while the rest of the tree
 // reads the minted one — the split-brain shape mainloop_video.cpp:303 warns of.
 
-
 // ---------------------------------------------------------------------------
-// The named dependencies. RT_EXPORT_ONCE, not the raw DLL door: these calls
-// ARE the work, so they must reach our ports where ports exist.
+// The named dependencies, called by name (B3R).
 // ---------------------------------------------------------------------------
-using VoidThisFn = void  (*)(void*);
-using NewFn      = void* (*)(uint64_t);
 using SerializeFn = bool (*)(void*, void*);
 
 // `??0ImageBuffer@Video@@QEAA@XZ` 0x1800f2580 — PORTED (video/buffers.cpp).
@@ -113,14 +104,14 @@ void ImageBufferCtor(void* p) {
 // their bodies are in `runtime/src/video/buffers.cpp`, which is block D2's file,
 // so the door is still what decides which body runs.
 void* ImageBufferOperatorNew(uint64_t n) {
-    return RT_EXPORT_ONCE(NewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(n);
+    return Video::ImageBuffer::operator new(n);    // 0x18001e910
 }
 void* RenderBufferOperatorNew(uint64_t n) {
-    return RT_EXPORT_ONCE(NewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(n);
+    return Video::RenderBuffer::operator new(n);   // 0x18001f2e0
 }
 // ENDGAME B.3.5 caller batch: `PlatformConstruct`, `PlatformDestruct` and
 // `Create` are DEFINED members of the real `Video::RenderBuffer`, so all three
-// by-name doors become member calls. The `??3` operator delete stays a door.
+// by-name doors become member calls, and so does the `??3` operator delete (B3R).
 void RenderBufferPlatformConstruct(void* p) {
     reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
 }
@@ -128,7 +119,7 @@ void RenderBufferPlatformDestruct(void* p) {
     reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
 }
 void RenderBufferOperatorDelete(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(p);
+    Video::RenderBuffer::operator delete(p);       // 0x18001f360
 }
 bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
     return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
@@ -157,7 +148,6 @@ bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
 // `EmitFloatArray` is `ser.Serialize(4, &_planeX, nullptr)`, the non-virtual
 // forwarder that reaches +0x28.
 // ---------------------------------------------------------------------------
-
 
 }  // namespace
 
@@ -593,24 +583,19 @@ bool ReflectionImageBuffer::Serialize(void* stream) {
 // ============================================================================
 namespace {
 
-// `??0Camera@Graphics@@QEAA@AEBV01@@Z` 0x180017a70 — PORTED (renderer.cpp
-// registers the name). Reached by NAME; the address door would work too, but
-// the name is the one renderer.cpp guarantees.
+// `??0Camera@Graphics@@QEAA@AEBV01@@Z` 0x180017a70 — its ported body,
+// rtgfxd::RtGraphics_Camera_CopyCtor (wave9_lane_gfxd.cpp), by name.
 void CameraCopyCtor(void* dst, const void* src) {
-    using Fn = void* (*)(void*, const void*);
-    RT_EXPORT_ONCE(Fn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(dst, src);
+    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<RtGraphics::Camera*>(dst),
+                                       static_cast<const RtGraphics::Camera*>(src));
 }
 
 // `Collection::Array<T>::SetSize(n, const T&)` 0x1800637b0 and
 // `Collection::Array<T>::~Array` 0x18001c750 — both UNEXPORTED template
-// instantiations (checked against the shipped export directory), so both are
-// address doors. `ResolveAddr(Module::Runtime, ...)` is registry-first, and
-// both are already ported, so these land on our bodies.
+// instantiations (checked against the shipped export directory); both are
+// ported and the first is called by its body name.
 void GroupArraySetSize(void* arrayHdr, int n, const void* fill) {
-    using Fn = void (*)(void*, int, const void*);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800637b0));
-    f(arrayHdr, n, fill);
+    rtgfxd::RtGfxd_SceneArraySetSizeFill(arrayHdr, n, fill);
 }
 // ENDGAME B.3.2 step 2 (callers) — `ArrayDtor`'s ResolveAddr forwarder is
 // GONE. 0x18001c750 is array.cpp's `J1_ENTRY`, `ArrayDtorSited(a) { a->
@@ -709,50 +694,3 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
 // `??_7ReflectionImageBuffer@Graphics@@6B@` (retired). Every live reflection
 // image wears the compiler's table.
 // ############################################################################
-
-// ============================================================================
-// Registration — BY NAME and BY ADDRESS for every body.
-//
-// A body PORTED but never REGISTERED is indistinguishable from an ABSENT one,
-// and the mint fills a slot by NAME for RT_MINT_NAMED rows and by ADDRESS
-// otherwise, so each row gets whichever door its slot uses and the other one
-// too. Each mangled name is its own STRING LITERAL on one line so
-// tools/runtime_census.py can see it — it cannot follow a named constant.
-//
-// The three slot-0 deleting destructors of these classes are NOT here: they are
-// table rows in runtime/src/object/deleting_dtor.cpp, where the whole family
-// lives as one body.
-// ============================================================================
-int RtGraphicsImageBufferDerivedRegister() {
-    int n = 0;
-
-    // ---- Graphics::GeneratedImageBuffer / FrameCopyImageBuffer -------------
-    // ENDGAME B.3.9 block GFX: the ctor / dtor / slot doors are retired (see the
-    // banner above the Reflection section). The factory pairs (B39_RULES D2) are
-    // the classes' own statics, by name AND address; the minted `?_typeInfo@`
-    // records resolve them.
-    RegisterRuntimeExport("?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::GeneratedImageBuffer::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18001edf0ull, (void*)&Graphics::GeneratedImageBuffer::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::GeneratedImageBuffer::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18001ee00ull, (void*)&Graphics::GeneratedImageBuffer::CreateInPlaceObject);
-    RegisterRuntimeExport("?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::FrameCopyImageBuffer::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18001f0a0ull, (void*)&Graphics::FrameCopyImageBuffer::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::FrameCopyImageBuffer::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18001f120ull, (void*)&Graphics::FrameCopyImageBuffer::CreateInPlaceObject);
-
-    // ---- Graphics::ReflectionImageBuffer -----------------------------------
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ReflectionImageBuffer` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::ReflectionImageBuffer::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x1800222c0ull, (void*)&Graphics::ReflectionImageBuffer::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::ReflectionImageBuffer::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x180022370ull, (void*)&Graphics::ReflectionImageBuffer::CreateInPlaceObject);
-
-    return n;
-}

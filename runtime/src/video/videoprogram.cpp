@@ -65,7 +65,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-#include "../../../standalone/resolve.h"
+
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../../types/video/VideoProgram.h"
@@ -86,11 +86,6 @@ void* ActiveDeviceDataPtr() {
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
 }
 constexpr size_t kDeviceDataCreateVideoProgramData = 0x90;   // DeviceData vtable slot 18
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
 
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
@@ -204,11 +199,16 @@ bool VideoProgram::Serialize(void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<ExtPtrSerFn>(0x180055090ull)(&_vertexLayout,  &ser);   // ExternalPtr<VertexLayout>
-    RtAddr<ExtPtrSerFn>(0x1800542a0ull)(&_vertexProgram, &ser);   // ExternalPtr<VertexProgram>
-    RtAddr<ExtPtrSerFn>(0x180055380ull)(&_pixelProgram,  &ser);   // ExternalPtr<PixelProgram>
-    RtAddr<ExtPtrSerFn>(0x180055670ull)(&_renderState,   &ser);   // ExternalPtr<RenderState>
+    // The four ExternalPtr serializers (0x180055090 / 0x1800542a0 / 0x180055380 /
+    // 0x180055670). B.3.x bridge: each ExternalPtr<T> field is one External*.
+    RtObject_ExternalPtrSerialize_VertexLayout(
+        reinterpret_cast<RtObject::External**>(&_vertexLayout), &ser);
+    RtObject_ExternalPtrSerialize_VertexProgram(
+        reinterpret_cast<RtObject::External**>(&_vertexProgram), &ser);
+    RtObject_ExternalPtrSerialize_PixelProgram(
+        reinterpret_cast<RtObject::External**>(&_pixelProgram), &ser);
+    RtObject_ExternalPtrSerialize_RenderState(
+        reinterpret_cast<RtObject::External**>(&_renderState), &ser);
 
     if ((_vertexLayout.Get() || _vertexProgram.Get() || _pixelProgram.Get() || _renderState.Get())
         && stream->direction == 0) {
@@ -221,16 +221,3 @@ bool VideoProgram::Serialize(void* streamv) {
 }
 
 }  // namespace Video
-
-// ENDGAME B.3.9 VID: the factory pair, by retail NAME and VA (B39_RULES D2); the
-// minted ?_typeInfo@VideoProgram record resolves its factory pointers by name.
-int RtVideoProgramRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::VideoProgram::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004ed40ull, (void*)&Video::VideoProgram::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::VideoProgram::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004edc0ull, (void*)&Video::VideoProgram::CreateInPlaceObject);
-    return n;
-}

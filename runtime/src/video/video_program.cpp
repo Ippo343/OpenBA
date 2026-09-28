@@ -161,11 +161,6 @@ inline void Apply(RtVideo::Context* ctx, void** slot, void* value, uint32_t bit)
 // The registered door. Kept inside the anonymous namespace: nothing outside this
 // file needs the symbol -- the registry takes its ADDRESS, not its name.
 // ----------------------------------------------------------------------------
-void Video_VideoProgram_SetupShaders(const void* selfv, void* ctxv) {
-    reinterpret_cast<const Video::VideoProgram*>(selfv)
-        ->Video::VideoProgram::SetupShaders(ctxv);                  // B.3.5 bridge
-}
-
 }  // namespace
 
 // ============================================================================
@@ -198,15 +193,3 @@ void VideoProgram::SetupShaders(void* ctxv) const {
 }
 
 }  // namespace Video
-
-// ----------------------------------------------------------------------------
-// Registration. The mangled name is spelled as a LITERAL at the
-// RegisterRuntimeExport call site, which is what tools/runtime_census.py
-// matches — a named constant here would make a live port invisible to the
-// census (reference_census_cannot_see_nonliteral_registrations.md).
-// ----------------------------------------------------------------------------
-int RtVideoVideoProgramRegister() {
-    RegisterRuntimeExport("?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z",
-                          reinterpret_cast<void*>(&Video_VideoProgram_SetupShaders));
-    return 1;
-}
