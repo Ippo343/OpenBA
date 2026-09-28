@@ -632,7 +632,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
 // Bridge detection: queries nearby entities for bridges. If a bridge
 // is found facing the same direction, sets the road flag (+0x474).
 // ============================================================
-void MoveTo::Enter() {
+void MoveTo::Enter(void*, void*) {
     MoveTo_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 

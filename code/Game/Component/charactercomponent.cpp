@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Action/Action.h"     // B.3.x W0: Action::Enter by name
 
 // ============================================================
 // Resolved helpers
@@ -73,10 +74,11 @@ void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t del
     int64_t node = *reinterpret_cast<int64_t*>(ptrRef);
     while (node != 0) {
         if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x18) != '\0') {
-            int64_t* obj = *reinterpret_cast<int64_t**>(ptrRef);
-            int64_t vt = *obj;
-            typedef void (*slot30_t)(int64_t*, void*, int64_t);
-            (*reinterpret_cast<slot30_t*>(vt + 0x30))(obj, arrayBase, deltaTime);
+            // Action slot 6 (the list is the action stack's node chain: +0x18 status,
+            // +0x10 next). `deltaTime` is the Time* CharacterComponent::Update received
+            // (0x1401094a8 `MOV R8,RDX`), passed through as retail's R8.
+            reinterpret_cast<Action*>(*reinterpret_cast<int64_t**>(ptrRef))
+                ->Enter(arrayBase, reinterpret_cast<void*>(deltaTime));   // B.3.x bridge (slot 6)
         }
         node = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x10);
         *reinterpret_cast<int64_t*>(ptrRef) = node;

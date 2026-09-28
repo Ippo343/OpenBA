@@ -26,7 +26,7 @@ public:
     void Persist(void* stream) override;                       // [3] 0x1400c8260
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c8250
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c8240
-    void Enter() override;                                     // [6] 0x1400c7de0
+    void Enter(void* actionStack, void* time) override;        // [6] 0x1400c7de0
     bool GetTarget(void* param) override;                      // [9] 0x1400c7d60
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
