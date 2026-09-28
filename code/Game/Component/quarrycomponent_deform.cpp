@@ -41,6 +41,7 @@
 #include "Component/ConsumeProduceDescription.h"
 #include "Component/QuarryDescription.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "perf_terrain.h"
 #include "resolve.h"
@@ -183,8 +184,8 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
     const Math::Transform xform(*reinterpret_cast<const Math::Transform*>(
         reinterpret_cast<uintptr_t>(model) + 0x148));   // B.3.1 bridge
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    const uintptr_t gameWorld   = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    const uintptr_t gameWorld   = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const uintptr_t terrainGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0x110);
     if (!terrainGrid) { QuarryBail("ApplyDepth", "gameWorld+0x110 terrain grid null"); return; }
 
@@ -292,8 +293,8 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
     QuarryDecalResume(decal);
 
     // ---- footprint -> terrain type 5 --------------------------------------------
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    const uintptr_t gameWorld   = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    const uintptr_t gameWorld   = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const uintptr_t terrainGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0x110);
     int* tileGrid = *reinterpret_cast<int**>(gameWorld + 0xF8);
     if (!terrainGrid || !tileGrid) { QuarryBail("Slot15", "gameWorld terrain/tile grid null"); return; }

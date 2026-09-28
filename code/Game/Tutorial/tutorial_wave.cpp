@@ -40,6 +40,7 @@
 // 0x1400E2700 where the decompiler mis-renders the stack arguments.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
@@ -75,7 +76,7 @@ namespace {
 
 
 inline uintptr_t GameWorld() {
-    return g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    return GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
 }
 inline UI::UserInterface* UserInterface() {
     uintptr_t gw = GameWorld();

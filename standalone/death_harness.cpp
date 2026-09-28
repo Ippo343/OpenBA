@@ -22,6 +22,7 @@
 // each teardown, and with BANISHED_OBJAUDIT=1 to watch the object tally.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Component/exe_bodies.h"
 #include "Game/exe_constants.h"
@@ -99,8 +100,8 @@ void Init() {
 
 // The town citizen list: array at townMgr+0xa0, count at +0xa8.
 bool TownList(int64_t** outList, int* outCount, int64_t* outTownMgr) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return false;
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int64_t townMgr = *reinterpret_cast<int64_t*>(gw + 0xf0);
     if (!townMgr) return false;
     *outTownMgr = townMgr;

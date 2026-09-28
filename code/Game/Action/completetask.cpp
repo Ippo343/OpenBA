@@ -10,6 +10,7 @@
 
 #include "CompleteTask.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActCt_* task helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
@@ -89,8 +90,8 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
     (void)actionStack;
     // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
     // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
-        !*(void**)((uint8_t*)*g_pGameWorldSingleton + 0x118)) return 0;
+    if (GameUpdateLoop::_singleton == nullptr ||
+        !*(void**)((uint8_t*)GameUpdateLoop::_singleton + 0x118)) return 0;
 
     // Lazy-resolve task index from work entity
     if (this->taskIndex == 0x7FFFFFFF) {
@@ -111,7 +112,7 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
     if (taskIdx >= 0) {
         void* entityRef28 = this->targetEntity;
         void* entityRef20 = this->workEntity;
-        void* gameState = *g_pGameWorldSingleton;
+        void* gameState = GameUpdateLoop::_singleton;
         void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
 
         bool completed = ActCt_TryCompleteTask_8760(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8760
@@ -127,8 +128,8 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
 // Resolves task index, calls task reassignment.
 // ============================================================
 void CompleteTask::CheckEntity() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
-        !*(void**)((uint8_t*)*g_pGameWorldSingleton + 0x118)) return;   // inert task mgr -> no-op
+    if (GameUpdateLoop::_singleton == nullptr ||
+        !*(void**)((uint8_t*)GameUpdateLoop::_singleton + 0x118)) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
     if (this->taskIndex == 0x7FFFFFFF) {
         uint8_t* workEnt = static_cast<uint8_t*>(workEntity);
@@ -137,7 +138,7 @@ void CompleteTask::CheckEntity() {
 
     void* entityRef28 = this->targetEntity;
     void* entityRef20 = this->workEntity;
-    void* gameState = *g_pGameWorldSingleton;
+    void* gameState = GameUpdateLoop::_singleton;
     void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
 
     ActCt_TaskReassign_8800(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8800

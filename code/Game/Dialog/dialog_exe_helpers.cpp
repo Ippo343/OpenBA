@@ -17,6 +17,7 @@
 #include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "dialog_exe_helpers.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -98,8 +99,8 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     if (reinterpret_cast<const UI::UserInterface*>(ui)->PausesGame()) { AsBail("UI PausesGame", 1); return; }  // B.3.6 bridge
 
     // Not while GameWorld flag bit 10 is set.
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) { AsBail("no gameWorld", 0); return; }
-    uint32_t gwFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd0);
+    if (GameUpdateLoop::_singleton == nullptr) { AsBail("no gameWorld", 0); return; }
+    uint32_t gwFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd0);
     if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (long)gwFlags); return; }
 
     // Only when no operation is already in progress (Operation::None == 0).

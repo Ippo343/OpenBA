@@ -24,6 +24,7 @@
 #include "Player/FencedTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Player/exe_bodies.h"
 #include "Game/exe_bodies.h"
@@ -50,7 +51,7 @@
 void FencedTool::Shutdown() {
     // Remove scene object if added
     if ((int)sceneObjectId >= 0) {
-        void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
+        void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
         if (scene) {
             reinterpret_cast<Graphics::Scene*>(scene)
                 ->RemoveObject(sceneObjectId);   // B.3.5 bridge
@@ -147,7 +148,7 @@ char FencedTool::OnKey(char key) {
 char FencedTool::OnCancel() {
     // Remove scene object if added
     if ((int)sceneObjectId >= 0) {
-        void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
+        void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
         if (scene) {
             reinterpret_cast<Graphics::Scene*>(scene)
                 ->RemoveObject(sceneObjectId);   // B.3.5 bridge
@@ -195,7 +196,7 @@ void FencedTool::Update(void* /*param2*/, char param3) {
         if (valid) {
             // Add mesh to scene if not already added
             if ((int)sceneObjectId < 0) {
-                void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
+                void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
                 if (scene && meshInstance) {
                     sceneObjectId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
                         ->AddObject(reinterpret_cast<Graphics::Geometry*>(meshInstance));   // B.3.5 bridge
@@ -248,7 +249,7 @@ void FencedTool::Update(void* /*param2*/, char param3) {
 
     // Remove mesh from scene if present
     if ((int32_t)sceneObjectId >= 0) {
-        void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
+        void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
         if (scene) {
             reinterpret_cast<Graphics::Scene*>(scene)
                 ->RemoveObject((uint32_t)sceneObjectId);   // B.3.5 bridge
@@ -276,7 +277,7 @@ static constexpr float HEIGHT_TOLERANCE = 100.0f;
 int FencedTool::CalcCost(int startCell, int endCell,
                          uint32_t* outWidth, int* outHeight, int* outDepth,
                          int* outFenceSegments) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     int* mapGrid = *(int**)(gameWorld + 0xf8);
     int mapWidth = *mapGrid;
@@ -485,7 +486,7 @@ struct TileArray {
 // Original: 0x1400dc440
 void FencedTool::Draw(void* context, char param3) {
     uintptr_t dialog = (uintptr_t)dialogPtr;
-    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int mapWidth = *mapGrid;
 
     // ---- Phase 1: Edit mode (existing placed area) ----

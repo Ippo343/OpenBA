@@ -18,6 +18,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "Action/PickupRawMaterial.h"   // ENDGAME B.3.8 CB3
@@ -378,8 +379,8 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
 
     // --- path-mask byte from the pile's map cell: cells(+0x80) + cellIdx*0x30, byte +0x29 ---
     uint8_t cellFlag = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gw   = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t gw   = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
         uintptr_t grid = *reinterpret_cast<uintptr_t*>(gw + 0xf8);
         uintptr_t cells = *reinterpret_cast<uintptr_t*>(grid + 0x80);
         cellFlag = *reinterpret_cast<uint8_t*>(cells + 0x29 +

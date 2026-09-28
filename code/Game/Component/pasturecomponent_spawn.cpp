@@ -45,6 +45,7 @@
 #include "Component/LivestockComponent.h"
 #include "Component/AnimalComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
@@ -82,8 +83,8 @@ inline uint64_t MakeIBP(void* obj) {
     return r;
 }
 inline uintptr_t World() {
-    return (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-             ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    return (GameUpdateLoop::_singleton != nullptr)
+             ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
 }
 inline uintptr_t GameState() {
     uintptr_t w = World();

@@ -23,6 +23,7 @@
 // name inside Volume.h's own static_asserts (Geometry.h includes Volume.h).
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
@@ -223,7 +224,7 @@ void Game_WeatherDtor(void* self) {
     uint8_t* b = reinterpret_cast<uint8_t*>(self);
     int count = *reinterpret_cast<int*>(b + 0x58);
     void** arr = *reinterpret_cast<void***>(b + 0x50);
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     void* scene = gw ? reinterpret_cast<GameUpdateLoop*>(gw)->m_graphicsScene : nullptr;   // B.3.8 bridge
     if (arr && count > 0) {
         for (int i = 0; i < count; ++i) {

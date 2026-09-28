@@ -20,6 +20,7 @@
 #include "scene_watch.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 #include "Component/ModelDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
@@ -119,7 +120,7 @@ static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t mode
 // pass -1 to keep the original random pick over the group count.
 extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
     if (!modelComp) return -1;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
+    if (GameUpdateLoop::_singleton == nullptr) return -1;
     uintptr_t s = (uintptr_t)modelComp;
 
     void* desc = GetMultiObjDescription(s);
@@ -134,7 +135,7 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
     if (forceIdx >= 0) {
         variantIdx = (int16_t)((uint32_t)forceIdx % count);   // clamp into range
     } else {
-        void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+        void* randomPtr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
         if (!randomPtr) return -1;
         variantIdx = (int16_t)reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
     }
@@ -271,8 +272,8 @@ void ModelComponent::Startup() {
 
     // If description +0x38 (byte flag) is set, randomize the variant index
     if (*(uint8_t*)(d + 0x38) != 0) {
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+        if (GameUpdateLoop::_singleton != nullptr) {
+            void* randomPtr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
             uint32_t range = *(uint32_t*)(d + 0x28);
             uint32_t randVal = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
             *(int16_t*)(s + 0x164) = (int16_t)randVal;
@@ -330,8 +331,8 @@ void ModelComponent::OnAdded() {
         }
 
         // Add to scene
-        if (g_pGameWorldSingleton) {
-            void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+        if (GameUpdateLoop::_singleton) {
+            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
             if (scene) {
                 uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
                     ->AddObject(reinterpret_cast<Graphics::Geometry*>(s + 0x28));   // B.3.5 bridge
@@ -362,8 +363,8 @@ void ModelComponent::OnRemove() {
 
     if (modelVariant >= 0 && modelId >= 0) {
         // Remove from scene
-        if (g_pGameWorldSingleton) {
-            void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+        if (GameUpdateLoop::_singleton) {
+            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
             if (scene) {
                 reinterpret_cast<Graphics::Scene*>(scene)
                     ->RemoveObject((uint32_t)modelId);   // B.3.5 bridge

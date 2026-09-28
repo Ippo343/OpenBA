@@ -16,6 +16,7 @@
 #include "graphics/Camera.h"
 #include <new>
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "volume/Volume.h"
@@ -48,7 +49,7 @@
 // (runtime/types/volume/Volume.h), the retslot passed explicitly as the door did.
 
 static inline uintptr_t GameWorld() {
-    return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
+    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 }
 
 // CharacterComponent_impl_f3e0 (0x14009f3e0) = grid->world conversion:
@@ -209,7 +210,7 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     }
     void* display = ::Video::Device::_singleton;        // Video::Device instance
     uintptr_t camHolder = reinterpret_cast<uintptr_t>(
-        g_pGameWorldSingleton ? *reinterpret_cast<void**>(GameWorld() + 0xe0) : nullptr);
+        GameUpdateLoop::_singleton ? *reinterpret_cast<void**>(GameWorld() + 0xe0) : nullptr);
     if (!keyMap || !display || !camHolder) return 0;
 
     short mouseX = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge

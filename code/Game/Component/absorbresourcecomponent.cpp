@@ -8,6 +8,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Game/serialize_externals.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -81,7 +82,7 @@ extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*tim
     const int64_t x0 = *reinterpret_cast<int16_t*>(map + 0x28);
     const int64_t yEnd = static_cast<int>(y0) + *reinterpret_cast<int16_t*>(map + 0x2e);
     const int64_t xEnd = static_cast<int>(x0) + *reinterpret_cast<int16_t*>(map + 0x2c);
-    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const int* grid = *reinterpret_cast<int* const*>(gameWorld + 0xf8);
 
     for (int64_t y = y0; y < yEnd; ++y) {
@@ -112,7 +113,7 @@ extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*tim
                                   *reinterpret_cast<int*>(rmIBP + 0x28));
 
             const int64_t entityList = *reinterpret_cast<int64_t*>(
-                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xe8);
+                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xe8);
             if (((*reinterpret_cast<uint32_t*>(cellEntity + 0x40) >> 10) & 1) != 0) continue;
             ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(cellEntity));
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).

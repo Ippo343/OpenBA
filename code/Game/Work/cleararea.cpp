@@ -20,6 +20,7 @@
 #include "Work/ClearArea.h"
 #include "Work/cleararea_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
@@ -275,7 +276,7 @@ int ClearArea::Cleanup() {
 //   gameWorld->field_b0->field_30
 // Uses hidden return pointer ABI (member function returning non-trivial).
 void* ClearArea::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
     return retbuf;
@@ -377,7 +378,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
     tileArray._pad = 0;
 
     // Get WorldGrid from game singleton
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* worldGrid = *(void**)((uintptr_t)gameWorld + 0xF8);
 
     // Get citizen entity and read the tile-query filter flag.
@@ -752,7 +753,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
                 int resourceTypeId = *(int*)(storageIBP + 0x28);
 
                 // Get gather system from game singleton
-                void* gameWorld2 = *g_pGameWorldSingleton;
+                void* gameWorld2 = GameUpdateLoop::_singleton;
                 void* gatherSys = *(void**)((uintptr_t)gameWorld2 + 0x118);
 
                 // Create citizen IBP for gather work

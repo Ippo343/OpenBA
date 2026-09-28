@@ -11,6 +11,7 @@
 
 #include "Component/workcomponent_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/WorkDescription.h"   // ENDGAME B.3.9 TR
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -71,9 +72,9 @@ void WorkComponent_Draw(WorkComponent* self) {
 // code and its four siblings is a defect waiting for the next reader.
 bool WorkComponent_CheckWorkSlot(void* selfP) {
     uintptr_t self = (uintptr_t)selfP;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
+    if (GameUpdateLoop::_singleton == nullptr) return false;
     int key = *(int*)(self + 0x28);
-    int* node = *(int**)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x118) + 0x30);
+    int* node = *(int**)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0x118) + 0x30);
     while (node != nullptr) {
         if (*node <= key) {
             if (key <= *node) {
@@ -98,11 +99,11 @@ bool WorkComponent_CheckWorkSlot(void* selfP) {
 void WorkComponent_RegisterWorkSlot(void* selfP) {
     uintptr_t self = (uintptr_t)selfP;
     if (!WorkComponent_CheckWorkSlot(selfP)) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     int key = *(int*)(self + 0x28);
     int64_t valueIbp[1] = {0};
-    int* node = *(int**)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x118) + 0x30);
+    int* node = *(int**)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0x118) + 0x30);
     bool found = false;
     while (node != nullptr) {
         if (key < *node) {
@@ -121,7 +122,7 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
 
     *(uint32_t*)(self + 0x2c) = *(uint32_t*)(valueIbp[0] + 0x24);
 
-    ActCt_TaskCleanup_8e30(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118), key);   // 0x1400f8e30
+    ActCt_TaskCleanup_8e30(*(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x118), key);   // 0x1400f8e30
 
     int64_t compIbp[1] = {0};
     WorkBase_FindComponent_2f90(*(uintptr_t*)(self + 0x10), compIbp);   // 0x140002f90

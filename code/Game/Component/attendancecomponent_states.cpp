@@ -34,6 +34,7 @@
 #include "Work/LocationWork.h"   // B.3.8 CB1a (Vtable)
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -69,9 +70,9 @@ using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 // base and +0x68 the element count. Both state 2's enter (append) and the component's
 // vtable slot 7 (erase) operate on it, and helper_3db0 below walks it.
 static uintptr_t AC_TownObject() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
     return *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
 }
 
 // ── AttendanceDescription_helper_3db0 (0x140043db0) — "is every building of my kind

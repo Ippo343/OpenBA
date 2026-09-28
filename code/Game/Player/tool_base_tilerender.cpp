@@ -39,6 +39,7 @@
 #include "video/Context.h"
 #include "graphics/Material.h"   // ENDGAME B.3.5 batch K1 — same include-order reason
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -87,7 +88,7 @@ static inline float C_hScale()  { return 0.00390625f;  }  // DAT_1401720bc (0x3b
 // Game/exe_bodies.h).
 
 static uintptr_t GameWorld() {
-    return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
+    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 }
 
 } // namespace

@@ -10,6 +10,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include "system/String.h"
 #include "Component/coll_bridge.h"
@@ -123,7 +124,7 @@ namespace productionui_sa {
     bool Ready() {
         // ENDGAME B.3.9 CG2: TypeId_ComponentEntity, TypeId_RawMaterialDescription,
         // TypeId_TrackerComponent -> the class statics, which always answer.
-        bool ok = g_pGameWorldSingleton;
+        bool ok = GameUpdateLoop::_singleton;
         static bool s_logged = false;
         if (!s_logged) {
             s_logged = true;
@@ -296,7 +297,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     }
 
     // Check if game world item count changed; rebuild tracker if so
-    int gameItemCount = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0x128);
+    int gameItemCount = **(int**)((uintptr_t)GameUpdateLoop::_singleton + 0x128);
     if (gameItemCount != *(int*)(tracker + 0x48)) {
         // Call tracker rebuild: FUN_14000d9d0 moves data from +0x38 to +0x28
         fn_TrackerComponent_Rebuild((void*)(tracker + 0x38), (void*)(tracker + 0x28));

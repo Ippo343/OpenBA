@@ -15,6 +15,7 @@
 #include "address_registry.h"
 #include "engine_funcs.h"
 #include "Game/game.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton (cell 0x1401c3dd8)
 #include "../runtime/src/io/serializer.h"  // RtSerializer_* reimpl forwarders (env-gated)
 #include <cstdio>
 #include <cstdint>
@@ -1146,7 +1147,6 @@ static void RegisterDispatchSlots() {
 // written during Game_Ctor / engine boot. We reserve our own static storage
 // here and register its address; engine_funcs.cpp dereferences these slots.
 static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
-static void* g_storage_GameWorldSingleton = nullptr;    // 0x1401c3dd8
 static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
 
 // (The hand-built `Video::ImageBuffer` table registered at 0x14015c8c0 — slots
@@ -1156,7 +1156,7 @@ static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
     RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
-    RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&g_storage_GameWorldSingleton));
+    RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&GameUpdateLoop::_singleton));   // B3R STORAGE
     RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_storage_GameSettingsPtr));
 
     // ENDGAME B.3.9 EXA: the four loop vtable rows (MenuDialogLoopT 0x14015ed00,

@@ -82,6 +82,7 @@
 #include "graphics/Mesh.h"
 #include "Component/Component.h"   // B.3.x W0: Component slots by name
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -118,7 +119,7 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 
 // citizen ModelComponent transform (+0x68 of CharacterComponent at citizen+0x278).

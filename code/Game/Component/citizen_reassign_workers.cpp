@@ -72,6 +72,7 @@
 // called — the std:: containers subsume them.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -148,8 +149,8 @@ struct CostCmp {
 //            entity's position). Returns the summed path distance (0 when none
 //            qualify / unreachable). param_1 is dead (retail keeps it for ABI).
 extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2, void** param_3) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int* pathData = *reinterpret_cast<int**>(gw + 0xf8);
     uintptr_t reg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
     if (!pathData || !reg) return 0;
@@ -209,13 +210,13 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
 // FUN_1400d62a0 (0x1400d62a0) — town residence re-balancer
 // ===========================================================================
 extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     EnsureResolved();
     if (!s_tidResidence) {
         return;
     }
 
-    uintptr_t gw       = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gw       = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t townMgr  = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
     if (!townMgr) return;
     int       resCount = *reinterpret_cast<int*>(townMgr + 0x28);

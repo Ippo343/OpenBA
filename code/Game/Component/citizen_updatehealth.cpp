@@ -38,6 +38,7 @@
 // 0x14017214c=1.0f, DAT_140172174=2.0f, DAT_140172280=-1.0f (inlined bit-exact).
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/WorkPlaceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Game/Disease.h"                 // B.3.9 EXA: Disease::TypeId()
@@ -90,7 +91,7 @@ static void EnsureInit() {
 }
 
 static inline void* GameWorld() {
-    return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    return GameUpdateLoop::_singleton;
 }
 // 0x1401721b8 = 12.0f, stored as its bit pattern (exe_constants.h).
 static inline float MonthsPerYear() {

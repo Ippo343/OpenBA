@@ -12,6 +12,7 @@
 #include "Entity/citizenbehavior_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_constants.h"   // kRdata_*
 #include "Game/force_work.h"   // ForceWork::Readable — CollectStats stale-entry guard
@@ -252,7 +253,7 @@ void CitizenBehavior_ShuffleSchools(CitizenBehaviorRaw* self) {
 
     // Get global Random from GameUpdateLoop
     void* random = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xD8);
     if (!random) return;
 
     uint64_t* schoolArray = *reinterpret_cast<uint64_t**>(self->data + 0x20);
@@ -299,7 +300,7 @@ void CitizenBehavior_ShuffleEntities(CitizenBehaviorRaw* self, uint64_t profId) 
             if (count < 2) return;
 
             void* random = *reinterpret_cast<void**>(
-                reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
+                reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xD8);
             if (!random) return;
 
             uint64_t* entities = reinterpret_cast<uint64_t*>(node[1]); // array at +0x08
@@ -369,7 +370,7 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
 
     // Get map grid pointer: *(int**)(g_pGameWorldSingleton + 0xf8)
     int* mapGrid = *reinterpret_cast<int**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
 
     // Pairs array: each entry is {int32 cellA, int32 cellB} = 8 bytes
     int32_t* pairs = reinterpret_cast<int32_t*>(pg->m_pairs);
@@ -502,7 +503,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     int dbgEntities = 0, dbgEntRegionOk = 0, dbgPairsAdded = 0;
 
     // Get key pointers from the game world singleton
-    uint8_t* world = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* world = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int* mapGrid = *reinterpret_cast<int**>(world + 0xf8);
     uint8_t* citizenBehavior = *reinterpret_cast<uint8_t**>(world + 0xf0);
     uint8_t* buildingList = *reinterpret_cast<uint8_t**>(world + 0xb0);
@@ -1099,7 +1100,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTime) {
     float notifyInterval = 120.0f; // DAT_140172210 = 120.0f seconds
     void* notifMgr = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x138);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x138);
 
     // Part 1: Check profession resource thresholds (21 entries)
     for (int i = 0; i < 21; i++) {
@@ -1470,7 +1471,7 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
     // --- Deep reimplementation ---
 
     // Get the map grid pointer from GameWorld+0xF8
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     int* mapGrid = *(int**)(gameWorld + 0xF8);
 
     // Get the "idle profession" ID from GameWorld+0xB0 -> +0x30
@@ -1703,7 +1704,7 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
     // profId is the profession type ID to assign to the found citizen.
 
     // Get the map grid pointer from GameWorld+0xF8
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     int* mapGrid = *(int**)(gameWorld + 0xF8);
 
     // Get the "idle profession" ID from GameWorld+0xB0 -> +0x30
@@ -1814,7 +1815,7 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
     // --- Deep reimplementation ---
 
     // Get the "idle profession" ID from GameWorld+0xB0 -> +0x30
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     int64_t idleProfId = *(int64_t*)(*(uintptr_t*)(gameWorld + 0xB0) + 0x30);
 
     // Shuffle schools to randomize assignment order

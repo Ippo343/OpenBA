@@ -41,6 +41,7 @@
 #include "Object/factory_registration.h"
 #include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -76,8 +77,8 @@
 namespace {
 
 inline uintptr_t GameWorld() {
-    return (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-         ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    return (GameUpdateLoop::_singleton != nullptr)
+         ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
 }
 
 inline int64_t MakeTime(float seconds) {

@@ -23,6 +23,7 @@
 #include "Dialog/ui_panels.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -83,8 +84,8 @@ bool Ready() {
 // object (gw+0x130). The citizen roster (+0xa0/+0xa8) may legitimately be
 // count 0 (handled by the impl).
 bool TownReady() {
-    if (!(g_pGameWorldSingleton && *g_pGameWorldSingleton)) return false;
-    uintptr_t gw = *(uintptr_t*)g_pGameWorldSingleton;
+    if (!(GameUpdateLoop::_singleton != nullptr)) return false;
+    uintptr_t gw = ((uintptr_t)GameUpdateLoop::_singleton);
     uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);
     if (!townMgr) return false;
     if (*(uintptr_t*)(townMgr + 0x170) == 0) return false;  // resource stock
@@ -113,8 +114,8 @@ static void DiagOnce(void* self) {
     static bool s_done = false;
     if (s_done) return;
     s_done = true;
-    uintptr_t gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                 ? *(uintptr_t*)g_pGameWorldSingleton : 0;
+    uintptr_t gw = (GameUpdateLoop::_singleton != nullptr)
+                 ? ((uintptr_t)GameUpdateLoop::_singleton) : 0;
     uintptr_t townMgr = gw ? *(uintptr_t*)(gw + 0xf0) : 0;
     fprintf(stderr, "[StatusBarUI] SA first OnUpdate: self=%p bound=%d built=%d ready=%d "
             "town=%d citizens=%d stock=%p\n",
@@ -132,8 +133,8 @@ static void DiagStockOnce(void) {
     static int s_calls = 0;
     if (s_calls < 0 || ++s_calls != 10) return;
     s_calls = -1;
-    uintptr_t gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                 ? *(uintptr_t*)g_pGameWorldSingleton : 0;
+    uintptr_t gw = (GameUpdateLoop::_singleton != nullptr)
+                 ? ((uintptr_t)GameUpdateLoop::_singleton) : 0;
     uintptr_t townMgr = gw ? *(uintptr_t*)(gw + 0xf0) : 0;
     uintptr_t stock = townMgr ? *(uintptr_t*)(townMgr + 0x170) : 0;
     if (!stock) return;
@@ -266,7 +267,7 @@ void StatusBarUI::OnOpened() {
     }
 
     // --- Set initial title text from map name ---
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
     if (this->labelTitleParam)
         reinterpret_cast<UI::TextElement*>(this->labelTitleParam)->SetParameter(0, mapName);  // B.3.6 bridge
@@ -287,7 +288,7 @@ void StatusBarUI::OnUpdateLayout() {
     if (!statusbarui_sa::Built(this)) StatusBarUI::OnOpened();
     if (!statusbarui_sa::Built(this)) return;
     uintptr_t s = (uintptr_t)this;
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
 
     // Get population list from game world (+0xF0)
     uintptr_t popList = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
@@ -573,7 +574,7 @@ found_happiness:
 // Bitmask: 1 << iconIndex tested against HappinessComponent status bits (+0xF0).
 // ============================================================
 static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex) {
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
 
     // Check game state flag: bit 10 of flags at game+0xD0 = locked/paused

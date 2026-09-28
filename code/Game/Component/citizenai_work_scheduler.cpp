@@ -29,6 +29,7 @@
 // Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/Work.h"   // B.3.8 CB1a (Work::GetTarget)
 #include "resolve.h"
 #include <cstdint>
@@ -496,8 +497,8 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
     else
         prioFlag = '\x01';
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int* sched = *reinterpret_cast<int**>(gw + 0x118);
     if (!sched) return;
 

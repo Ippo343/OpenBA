@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
@@ -45,7 +46,7 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
     int count = *(int*)(cem + 0x50);
     if (count <= 0) return 0;
 
-    uintptr_t entityStore = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xF8);
+    uintptr_t entityStore = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xF8);
     uintptr_t* graveIdxArray = *(uintptr_t**)(cem + 0x48);
     int burials = 0;
 

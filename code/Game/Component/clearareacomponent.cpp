@@ -13,6 +13,7 @@
 #include "Component/clearareacomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -50,7 +51,7 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
     }
 
     uintptr_t sAddr = reinterpret_cast<uintptr_t>(self);
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0;
     uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
 

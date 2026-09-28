@@ -21,6 +21,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"   // g_pGameWorldSingleton (DAT_1401c3dd8)
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -53,9 +54,9 @@ void Init() {
 extern "C" void FoodStockCensus_Tick(int frame) {
     Init();
     if (!s_period || (frame % s_period) != 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const uintptr_t tracker = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
     if (!tracker) return;
     const uintptr_t table = *reinterpret_cast<uintptr_t*>(tracker + 0x170);

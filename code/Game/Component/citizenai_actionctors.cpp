@@ -67,6 +67,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
 #include "Action/PerformWork.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
@@ -256,7 +257,7 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
 
     // work mask bit from the cell flags byte
     uint8_t bit = *reinterpret_cast<uint8_t*>(
-        *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8) + 0x80)
+        *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8) + 0x80)
         + 0x29 + static_cast<int64_t>(param_4) * 0x30);
 
     int64_t target = *param_2;

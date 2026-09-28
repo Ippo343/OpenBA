@@ -23,6 +23,7 @@
 #include "Object/factory_registration.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include <cstring>
@@ -63,7 +64,7 @@ void GoalDialog::OnOpened() {
     }
 
     // Get GoalList from game world singleton at +0x150
-    uintptr_t goalListObj = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x150);
+    uintptr_t goalListObj = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x150);
 
     if (goalListObj != 0) {
         // GoalList is at goalListObj+0x10
@@ -231,7 +232,7 @@ void GoalDialog::OnUpdateLayout() {
     uintptr_t s = (uintptr_t)this;
 
     // Get GoalList from game world singleton at +0x150
-    void* world = *g_pGameWorldSingleton;
+    void* world = GameUpdateLoop::_singleton;
     uintptr_t goalListObj = *(uintptr_t*)((uintptr_t)world + 0x150);
 
     int count = *(int*)(s + 0xC0);

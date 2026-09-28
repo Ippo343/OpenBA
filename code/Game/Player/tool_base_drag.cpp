@@ -11,6 +11,7 @@
 // exe helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"
 #include "system/Value.h"
 #include "object/TypeInfo.h"
@@ -79,7 +80,7 @@ void DragTool_CloseToolDialog_ff980(uint64_t* param_1) {
     uint64_t local = *param_1;
     if (local != 0) {
         void* ui = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x98);
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
         reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&local));
         new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -112,7 +113,7 @@ void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
         RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
 
         void* scene = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
         uint64_t soundId = *reinterpret_cast<uint64_t*>(
             reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x80);
         reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
@@ -144,7 +145,7 @@ void DragTool_PlayPlaceSound_1000f0(uint64_t /*unused*/) {
     uint64_t timeBuf[4] = {0};
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
     void* scene = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x88);
     reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
@@ -166,7 +167,7 @@ void DragTool_PlayErrorSound_100140(uint64_t /*unused*/) {
     uint64_t timeBuf[4] = {0};
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
     void* scene = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x90);
     reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
@@ -205,7 +206,7 @@ void DragPlacementTool_ClearPathEntities_1018d0(void* self, int minCol, int minR
                                                 int maxCol, int maxRow, int64_t entityTemplate) {
     if (entityTemplate == 0) return;
 
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     // piVar1 = *(int**)(gameWorld + 0xf8): map grid; *piVar1 = gridSize;
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
     int gridSize = *mapGrid;

@@ -18,6 +18,7 @@
 #include "graphics/Geometry.h"
 #include "graphics/Mesh.h"      // ENDGAME B.3.5 batch K1: reaches Volume.h, so BEFORE resolve.h
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_3050, WorkAcc_FindComponent_*
 #include "Component/exe_bodies.h"         // FloorComponent_FindResData, ModelComponentNotify_Reimpl
 #include "Player/exe_bodies.h"            // RemovalCalc_helper_8d50
@@ -176,7 +177,7 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
     }
 
     int64_t desc = *reinterpret_cast<int64_t*>(s + 0x38);
-    void* rng = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+    void* rng = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
     float rf = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     float timeScale = kRdata_140172234;   // 0x140172234
     uint8_t timeObj[8] = {0};
@@ -294,7 +295,7 @@ void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
 // ============================================================
 uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     uintptr_t s = static_cast<uintptr_t>(self);
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     void* desc = *reinterpret_cast<void**>(s + 0x18);
     int* mapGrid = *reinterpret_cast<int**>(gameWorld + 0xf8);
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
@@ -358,7 +359,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // natural resource, so counting it (and its harvest flag) says whether something is
     // actively clearing the field's own crops and whether it produces anything.
     uintptr_t s = static_cast<uintptr_t>(self);
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int64_t parent = *reinterpret_cast<int64_t*>(s + 0x10);
     int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
 

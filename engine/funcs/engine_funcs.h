@@ -227,10 +227,8 @@ extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
 // Game Singletons (Phase A3 — exe global pointers)
 // ============================================================
 
-// Game/World singleton — accessed by ~20 UI methods
-// Sub-fields: +0xB0 ProfessionList, +0xF0 CitizenList, +0xF8 WorldGrid,
-//             +0x100 ResourceTypeMap, +0x110 RadiusDisplayManager
-extern void** g_pGameWorldSingleton;  // DAT_1401c3dd8
+// DAT_1401c3dd8, the game world: GameUpdateLoop::_singleton
+// (code/Game/Game/GameUpdateLoop.h; B3R STORAGE).
 
 // Input::KeyMap singleton — used by HotKeyToolTipUI
 extern void** g_pKeyMapSingleton;     // DAT_1401c3de8 (container/manager object, NOT the KeyMap)
@@ -990,11 +988,6 @@ typedef void (*fn_InventorySort_Desc_t)(void* items, int count, void* scratch1, 
 extern fn_InventorySort_Desc_t fn_InventorySort_Desc;  // FUN_140015500
 
 // fn_GoToEntity — now inline as Toolbar_CenterOnEntity_Impl (FUN_140103040)
-
-// Game singleton pointer: DAT_1401c3dd8 in exe .data section
-// Used by TownHallUI::OnCreate (+0xf0->+0x150->+8 = game time tick)
-// and OnRemove (+0xb0->+0x28 = profession count)
-extern void** g_pGameSingleton;  // 0x1401c3dd8
 
 // ============================================================
 // SpriteCaptureUI support functions

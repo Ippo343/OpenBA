@@ -16,6 +16,7 @@
 #include "Work/Pickup.h"
 #include "Work/pickup_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
@@ -199,7 +200,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     if (status != 0) return 1;
 
     // g_pGameWorldSingleton is STORAGE (B3R): its pointer test stays.
-    if (!g_pGameWorldSingleton) {
+    if (!GameUpdateLoop::_singleton) {
         return 1;
     }
 
@@ -219,7 +220,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
         reinterpret_cast<uintptr_t>(rawMatIBP) + 0x18);
     void* desc = Object::IsDerivedFromNullSafe(descRaw, tidRawMatDesc) ? descRaw : nullptr;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     void* townMgr = *reinterpret_cast<void**>(gw + 0xf0);
     int*  grid    = *reinterpret_cast<int**>(gw + 0xf8);
 
@@ -635,7 +636,7 @@ int Pickup::Validate() {
 // This is a global target, not per-instance.
 // ============================================================
 void* Pickup::GetTarget(void* outPtr) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)outPtr = *(uintptr_t*)(entityList + 0x30);
     return outPtr;

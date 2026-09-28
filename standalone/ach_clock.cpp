@@ -37,6 +37,7 @@
 //   BANISHED_ACH_YEAR_MAX=<n>     stop boosting at n years (default 250)
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -88,10 +89,10 @@ extern "C" void AchClock_Tick(int frameNum) {
         }
     }
     if (s_yearBoost <= 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     void* dateObj = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x128);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0x128);
     if (!dateObj) return;
 
     uint32_t* year = reinterpret_cast<uint32_t*>(dateObj);

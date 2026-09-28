@@ -48,6 +48,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/coll_bridge.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -130,7 +131,7 @@ void CharacterComponent::Persist(void* stream) {
         {
             int64_t selfIbp = 0;
             new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+            void* gw = GameUpdateLoop::_singleton;
             float* charMgr = gw ? reinterpret_cast<float*>(
                 *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x88)) : nullptr;
             if (charMgr) {

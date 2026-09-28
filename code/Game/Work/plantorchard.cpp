@@ -19,6 +19,7 @@
 #include "Work/PlantOrchard.h"
 #include "Work/plantorchard_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
@@ -115,7 +116,7 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
     }
 
     // Step 4: Get map and citizen position
-    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
 
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
     uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);

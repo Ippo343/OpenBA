@@ -11,6 +11,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/dialog_exe_helpers.h"   // B3R: Dialog_FindComponent_d6c0
 #include "Work/exe_bodies.h"             // B3R: WorkBase_FindComponent_2ed0
 #include "Action/exe_bodies.h"           // B3R: Pf_RecursiveChildSum_123070
@@ -127,7 +128,7 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
     uint64_t workplaceEntityInner = *(uint64_t*)(workplaceRef + 0x10);
 
     // Center camera on workplace entity
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* subsys = *(void**)((uintptr_t)gameWorld + 0x120);
     uint64_t parentRef = *(uint64_t*)(s + 0x18);
     Toolbar_CenterOnEntity_Impl(subsys, &parentRef, &workplaceEntityInner);
@@ -345,7 +346,7 @@ void PopulateCounts(void* self) {
     // the town" figure. Pure field reads over the citizen list (no exe helpers).
     if (elem38) {
         int assigned = 0;
-        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* gw = GameUpdateLoop::_singleton;
         void* citizenList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xf0) : nullptr;
         if (citizenList) {
             int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(citizenList) + 0xa8);
@@ -592,7 +593,7 @@ void WorkPlaceUI::OnUpdateLayout() {
     if (*(uint8_t*)((uintptr_t)jobType + 0x20) == 0) {
         // Check for laborer profession
         void* professionId = *(void**)((uintptr_t)wpComp + 0x48);
-        void* profList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0);
+        void* profList = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xb0);
         void* laborerProf = *(void**)((uintptr_t)profList + 0x38);
 
         if (professionId == laborerProf) {
@@ -649,8 +650,8 @@ showUpDown:
     }
 
     // Iterate citizens to count workers assigned to this workplace
-    void* citizenList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
-    void* profList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0);
+    void* citizenList = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf0);
+    void* profList = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xb0);
     void* laborerProf = *(void**)((uintptr_t)profList + 0x30);  // laborer entry
 
     int workplaceWorkerCount = 0;
@@ -917,7 +918,7 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
     uint64_t profId = *reinterpret_cast<uint64_t*>(static_cast<uintptr_t>(wpc) + 0x48);
     if (!profId) return;
 
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     void* citizenList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xf0) : nullptr;
     if (!citizenList) return;
 

@@ -67,7 +67,6 @@ fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath = nullptr;
 // ============================================================
 // Game Singletons (Phase A3)
 // ============================================================
-void** g_pGameWorldSingleton = nullptr;
 void** g_pKeyMapSingleton = nullptr;
 void** g_pInputConfigSingletonExref = nullptr;
 
@@ -243,7 +242,6 @@ fn_SavedState_Ctor_t fn_SavedState_Ctor = nullptr;
 // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
 // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
 // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
-void** g_pGameSingleton = nullptr;
 // GroupRating helpers
 fn_GroupRating_Init_t fn_GroupRating_Init = nullptr;
 fn_GroupRating_Update_t fn_GroupRating_Update = nullptr;
@@ -666,8 +664,6 @@ bool EngineFuncsInit() {
     // ================================================================
     // Phase A3: Game Singletons
     // ================================================================
-    g_pGameWorldSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
     g_pKeyMapSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3de8));
     g_pInputConfigSingletonExref = reinterpret_cast<void**>(
@@ -1018,8 +1014,6 @@ bool EngineFuncsInit() {
     // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionButton — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
-    g_pGameSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
 
     // --- GroupRating helpers ---
     fn_GroupRating_Init = reinterpret_cast<fn_GroupRating_Init_t>(
@@ -1210,8 +1204,6 @@ bool EngineFuncsInit() {
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
     printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
     printf("[EngineFuncs] Phase A3 — Singletons:\n");
-    printf("  GameWorld                 = %p -> %p\n", (void*)g_pGameWorldSingleton,
-           g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
     printf("  KeyMap (container)        = %p -> %p\n", (void*)g_pKeyMapSingleton,
            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
     printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pInputConfigSingletonExref,

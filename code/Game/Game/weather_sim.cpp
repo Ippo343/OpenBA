@@ -54,6 +54,7 @@
 // `Volume::Rectangle`'s class name in Volume.h's own static_asserts.
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
@@ -203,7 +204,7 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
 
     // --- Game clock (seconds) — reads the sim clock at gameWorld+0x128 -> Time+8,
     //     exactly like the original helper_3810 / FUN_140093420. ---
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     void* timeObj = reinterpret_cast<GameUpdateLoop*>(gw)->m_dayCounter;   // B.3.8 bridge
     if (!timeObj) return;

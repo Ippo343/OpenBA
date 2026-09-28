@@ -7,6 +7,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -405,7 +406,7 @@ void EntityUI::OnClosed() {
     uint64_t entityKey = *(uint64_t*)(s + 0x30);
 
     // Get BST root: g_pGameWorldSingleton -> +0x120 -> +0x60
-    void* worldSingleton = *g_pGameWorldSingleton;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     void* subObj = *(void**)((uintptr_t)worldSingleton + 0x120);
     void* bstRoot = (void*)((uintptr_t)subObj + 0x60);
 
@@ -590,7 +591,7 @@ void EntityUI_Slot8(EntityUI* self) {
         return;
 
     // Get current tool from player controller (IBP at +0x28, needs CheckPtr)
-    void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
+    void* playerController = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
     void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
 
     // Check if current tool is EditTool
@@ -640,7 +641,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     if (id != 0x65 && id != 100) return;
     // pin (id 100) needs the ToolUI type-id to fetch the sibling controller; center
     // (id 0x65) tolerates null component type-ids (finders just return "not found").
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     // Gate the entity read like every other EntityUI slot (4/6/7): this body reads
     // the cached datasource copy (s+0x30) for center (0x65) and toggles tracking on
     // it for pin (100). On a just-demolished building's still-open panel that +0x30
@@ -652,7 +653,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     if (msg != 0x12) return;
 
     uintptr_t s = (uintptr_t)this;
-    void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
+    void* playerController = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
 
     if (id == 1) {
         // Close entity panel — set edit mode to 0
@@ -674,7 +675,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         // 0 as retail does); the camera smoothly slides to it. No re-select / no snap
         // (that is what distinguishes this from Toolbar_CenterOnEntity, which also
         // reopens the target dialog).
-        uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+        uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
         void* entityPtr = *(void**)(s + 0x30);
 
         float focus[2] = {0.0f, 0.0f};
@@ -770,7 +771,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         // If unpinned, remove entity from tracking set
         if (*(char*)(*(uintptr_t*)(s + 0x38) + 0xd8) == 0) {
             uint64_t entityKey = *(uint64_t*)(s + 0x30);
-            uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
+            uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
             EntityTrackingSet_Remove_Impl(
                 (void*)(worldObj + 0x50),
                 &entityKey);

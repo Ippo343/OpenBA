@@ -10,6 +10,7 @@
 
 #include "CreateNaturalResource.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"            // ActCNR_* helpers
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0
 #include "Game/exe_bodies.h"              // Reimpl_ExternalPtr_Serialize_StringTable
@@ -83,7 +84,7 @@ void CreateNaturalResource::Persist(void* stream) {
 int  CreateNaturalResource::AbstractImpl(void* actionStack) {
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t mapGrid = *(uintptr_t*)(gameWorld + 0xf8);
 
     const int32_t cellIndex = this->cellIndex;

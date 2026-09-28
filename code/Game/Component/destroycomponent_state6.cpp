@@ -68,6 +68,7 @@
 #include "Component/DecalComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -431,9 +432,9 @@ extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
     // Building has storage -> cancel everything the town was doing with it, then
     // empty the storage outright (the goods burn; state 4's haul-away never runs).
     if (FindOn(entitySlot, &WorkBase_FindComponent_6270) != nullptr) {
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        if (GameUpdateLoop::_singleton != nullptr) {
             uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
             void* entityCopy = *reinterpret_cast<void**>(entitySlot);
             if (townMgr) TownMgr_AbortCitizenActionsFor_89e30(
                 reinterpret_cast<void*>(townMgr), &entityCopy);
@@ -498,9 +499,9 @@ extern "C" char Destroy_State6Update_d400(void* data, void* /*sm*/) {
     if (*reinterpret_cast<int64_t*>(comp + 0x48) > 0)
         Destroy_RubbleStep_d5d0(data);
 
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         void* rng = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
         if (rng && reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) Destroy_RubbleStep_d5d0(data);   // B.3.4b bridge
     }
     return 1;

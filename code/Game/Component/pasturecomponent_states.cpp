@@ -39,6 +39,7 @@
 #include "Component/RawMaterialComponent.h"
 #include "Component/AutoPickupComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Object/factory_registration.h"
 #include "resolve.h"
@@ -108,8 +109,8 @@ inline uint64_t MakeIBP(void* obj) {
     return r;
 }
 inline uintptr_t World() {
-    return (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-             ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    return (GameUpdateLoop::_singleton != nullptr)
+             ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
 }
 inline uintptr_t GameState() {
     uintptr_t w = World();

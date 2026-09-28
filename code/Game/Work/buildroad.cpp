@@ -11,6 +11,7 @@
 #include "Work/BuildRoad.h"
 #include "buildroad_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
@@ -211,7 +212,7 @@ int BuildRoad::Validate() {
 // NOT HOOKED — RIP-relative prologue (bug class 2).
 // ============================================================
 void* BuildRoad::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t roadMgr = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(roadMgr + 0x38);
     return retbuf;
@@ -297,7 +298,7 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         return 1;
     }
 
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     int* mapGrid = *(int**)(gameWorld + 0xf8);
 
     uintptr_t posData = GetPositionData(entityIBP);

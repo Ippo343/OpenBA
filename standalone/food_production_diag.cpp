@@ -19,6 +19,7 @@
 // HARNESS ONLY: reads published fields, writes nothing. Default off.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
@@ -129,7 +130,7 @@ void DumpStorage(int frame, uintptr_t arr, int n) {
 }
 
 void DumpAll(int frame) {
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         std::fprintf(stderr, "[FoodDiag] frame=%d: gameWorld null\n", frame);
         return;
@@ -197,8 +198,8 @@ void DumpAll(int frame) {
             if (std::strcmp(rows[r].name, "HerbalistComponent") == 0 ||
                 std::strcmp(rows[r].name, "HuntComponent") == 0) {
                 int resInRange = -1;
-                void* gwp = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                          ? *g_pGameWorldSingleton : nullptr;
+                void* gwp = (GameUpdateLoop::_singleton != nullptr)
+                          ? GameUpdateLoop::_singleton : nullptr;
                 uint8_t* mapObj = gwp ? *reinterpret_cast<uint8_t**>(
                     reinterpret_cast<uintptr_t>(gwp) + 0xf8) : nullptr;
                 uint8_t* grid = mapObj ? *reinterpret_cast<uint8_t**>(mapObj + 0x80) : nullptr;

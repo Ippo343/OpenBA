@@ -31,6 +31,7 @@
 // predicate is ProfessionPriorityOf below), not registered.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include "system/String.h"
@@ -151,8 +152,8 @@ static int ProfessionKeyOfEntity(uint64_t handle) {
 // GameWorld+0x118 is a red-black tree keyed on profession id; node key at node[0],
 // left node+0x18, right node+0x20, value ptr node+0x8, priority at value+0x24.
 static int LookupProfessionPriority(int key) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
-    uint8_t* world = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    uint8_t* world = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int64_t tree = *reinterpret_cast<int64_t*>(world + 0x118);
     if (!tree) return 0;
     int* node = *reinterpret_cast<int**>(tree + 0x30);   // root
@@ -193,7 +194,7 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
                                      char isElder, float age, char forceEmploy,
                                      int64_t* parentIBP, int64_t spawnKey) {
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-    void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* world = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     void* rng = world ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(world) + 0xd8) : nullptr;
 
     // 1-3. reset path/target, set gender mesh variant, place at spawn transform

@@ -66,6 +66,7 @@
 // Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -102,9 +103,9 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
 
     int64_t entity = *reinterpret_cast<int64_t*>(c + 0x10);
     if (entity == 0) return 1;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    if (GameUpdateLoop::_singleton == nullptr) return 1;
 
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
     if (entityList == 0) return 1;
 

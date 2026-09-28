@@ -22,6 +22,7 @@
 #include "Player/dragtool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // RoadTool_sub_ce00 (0x14009ce00), called by name
 #include "Player/exe_bodies.h"
 #include "object/TypeInfo.h"
@@ -209,7 +210,7 @@ int RoadTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     // deref first — this read was using the slot's own address as the world base, so
     // mapGrid came back null and the terrainArray read below faulted on 0x80. RoadTool::Draw
     // (below) already had this right.
-    int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
 
     if (descEntity && *(char*)(descEntity + 0x80) != '\0') {
         int gridSize = *mapGrid;
@@ -310,7 +311,7 @@ static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
 void RoadTool::Draw(void* context, char param3) {
     ResolveRoadToolFuncs();
 
-    int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
     uintptr_t descEntity = (uintptr_t)dialogPtr;
     int pathBuf[2048]; // large stack buffer for pathfinding output
 

@@ -55,6 +55,7 @@
 //   param_8 = exclude-entity IBP.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"            // WorkBase_* (a00f0, 8830, 2ed0)
 #include "Game/exe_bodies.h"            // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"         // kRdata_140172114
@@ -198,7 +199,7 @@ uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3)
 // passed unchanged into the recursive 12d5d0 in 8d590 — preserved here as the `param_4` ctx.
 int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param_3, int64_t param_4) {
     int64_t* self = (int64_t*)(param_1 + 0x10);
-    int* piVar3 = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* piVar3 = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int64_t local_70 = 0;
     // Two CONTIGUOUS Vector3 stack slots (the decompiler split each into 3 named floats,
     // but the engine writers fill all 3 via one base pointer — must be contiguous):
@@ -352,7 +353,7 @@ int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32
                                      uint32_t* param_7, void* param_8) {
     int64_t local_58[3];
     local_58[1] = (int64_t)0xfffffffffffffffe;
-    int* local_60 = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* local_60 = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int iVar21 = 0x7fffffff;
     *param_2 = 0;
     uint64_t local_98 = 0;

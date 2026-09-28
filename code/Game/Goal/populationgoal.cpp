@@ -12,6 +12,7 @@
 
 #include "Goal/PopulationGoal.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -62,8 +63,8 @@ void PopulationGoal::Destruct() { this->~PopulationGoal(); }
 //       return *(int*)(*(int64_t*)(g_pGameWorldSingleton+0xF0) + 0xA8) >= targetPop;
 //   return false;
 Achievement::Goal::GoalState PopulationGoal::CheckGoalState() const {
-    if (g_pGameWorldSingleton == nullptr) return static_cast<GoalState>(0);
-    void* gameWorld = *g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return static_cast<GoalState>(0);
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (gameWorld == nullptr) return static_cast<GoalState>(0);
 
     // Check IsRunning — Engine::UpdateLoop::IsRunning (import slot 0x140152850),

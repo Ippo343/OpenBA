@@ -19,6 +19,7 @@
 #include "graphics/Scene.h"
 #include "Component/HighlightComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4a closing: the stream-scope ctor/dtor pair
 #include <new>
@@ -61,8 +62,8 @@ void HighlightComponent::OnRemove() {
     if (*reinterpret_cast<void**>(s + 0x28) == nullptr) return;
     int32_t sceneId = *reinterpret_cast<int32_t*>(s + 0x120);
     if (sceneId < 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x60);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x60);
     if (!scene) return;
     reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(static_cast<uint32_t>(sceneId));   // B.3.5 bridge
     *reinterpret_cast<int32_t*>(s + 0x120) = -1;

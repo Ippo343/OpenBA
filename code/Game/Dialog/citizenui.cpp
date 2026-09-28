@@ -25,6 +25,7 @@
 #include "Dialog/FollowDialog.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -432,7 +433,7 @@ void CitizenUI::OnUpdateLayout() {
             // *(uintptr_t*)*g_pGameWorldSingleton double-deref read GameWorld field 0 and
             // then +0xB0 off THAT -> garbage profListBase, blanking the Student/worker Job
             // text. Byte-faithful correction (the original has the same latent bug).
-            uintptr_t gwBase = (uintptr_t)*g_pGameWorldSingleton;
+            uintptr_t gwBase = (uintptr_t)GameUpdateLoop::_singleton;
             uintptr_t profListBase = okPtr(gwBase) ? *(uintptr_t*)(gwBase + 0xB0) : 0;
 
             bool isChild = aiDesc && (*(float*)(ai + 0x3c) < *(float*)(aiDesc + 0x44));
@@ -529,7 +530,7 @@ void CitizenUI::OnUpdateLayout() {
         int homeTile = *(int*)(ai + 0x30);
         if (homeTile >= 0) {
             // Look up entity at home tile via world grid
-            void* worldGrid = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118);
+            void* worldGrid = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x118);
             uint64_t foundRef = 0;
             WorldGrid_FindEntity_Impl(worldGrid, &foundRef, homeTile);
             homeRef = foundRef;
@@ -615,7 +616,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
             dialogRef = *(uint64_t*)(s + 0x18);
         }
 
-        void* gameSubsys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x120);
+        void* gameSubsys = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x120);
         Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
     }
     else if (param4 == 0x226) {
@@ -635,7 +636,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 
         uint64_t targetRef = homeEntity;
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
-        void* gameSubsys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x120);
+        void* gameSubsys = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x120);
         Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
     }
     else if (param4 == 0x228) {

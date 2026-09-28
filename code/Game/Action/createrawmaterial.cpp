@@ -22,6 +22,7 @@
 
 #include "CreateRawMaterial.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"            // Pf_FindPlacementCell_bd40, ActRm_* helpers
 #include "Work/exe_bodies.h"              // WorkAcc_FindComponent_22520, WorkBase_FindComponent_3050
 #include "Game/exe_bodies.h"              // Reimpl_ExternalPtr_Serialize_StringTable
@@ -189,7 +190,7 @@ void CreateRawMaterial::Persist(void* stream) {
 int  CreateRawMaterial::AbstractImpl(void* actionStack) {
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     // Get description entity at +0x20
     uintptr_t descEntity = *(uintptr_t*)(s + 0x20);

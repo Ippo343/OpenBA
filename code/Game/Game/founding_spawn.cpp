@@ -66,6 +66,7 @@
 //      SetCitizenSpawnTransform already applied. The field is read raw from the .rsc.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
@@ -190,8 +191,8 @@ extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
 }
 
 static void* FoundingSpawn_Rng() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
-    return reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_random;   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return GameUpdateLoop::_singleton->m_random;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,8 +322,8 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
 
     // 6. the Laborer profession key (ProfessionList at gw+0xb0, +0x30)
     int64_t laborerProf = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        int64_t profList = reinterpret_cast<int64_t>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_professionList);   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton != nullptr) {
+        int64_t profList = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_professionList);
         if (profList) laborerProf = *reinterpret_cast<int64_t*>(profList + 0x30);
     }
 

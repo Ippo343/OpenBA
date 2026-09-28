@@ -24,6 +24,7 @@
 #include "Component/MultiObjectComponent.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -193,8 +194,8 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
     int32_t iconId = *(int32_t*)(s + 0x100);
     if (iconId < 0 && savedFieldF0 != 0) {
         // Add geometry to scene
-        if (g_pGameWorldSingleton) {
-            void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+        if (GameUpdateLoop::_singleton) {
+            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
             if (scene) {
                 uint32_t newId = reinterpret_cast<Graphics::Scene*>(scene)
                     ->AddObject(reinterpret_cast<Graphics::Geometry*>(s + 0x28));   // B.3.5 bridge
@@ -334,8 +335,8 @@ static inline bool SI_Initialised(uintptr_t c) {
 // this teardown-time removal is the safety net that must always run.
 void StatusIconComponent::OnRemove() {
     uintptr_t c = (uintptr_t)this;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
     int32_t sceneId = *(int32_t*)(c + 0x100);
     // [STANDALONE GUARD D4] a component that never ran StartupInit still has the inert
     // zero-fill, so sceneId 0 means "never registered" rather than scene object 0 —
@@ -426,8 +427,8 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const ch
 // standalone, so the occupancy driver below calls this port instead.
 void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     uintptr_t c = (uintptr_t)selfC;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
     void* scene = *(void**)(gw + 0x60);
 
     // [STANDALONE GUARD D4] see SI_Initialised: with no StartupInit the geometry has no
@@ -591,8 +592,8 @@ void StatusIconComponent::Tick(void* /*time*/) {
     }
 
     void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
-    if (!settings || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    if (!settings || GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
     void* scene = *(void**)(gw + 0x60);
     uint8_t iconVisible = reinterpret_cast<uint8_t*>(settings)[0xc];
 

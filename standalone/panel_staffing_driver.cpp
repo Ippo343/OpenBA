@@ -40,6 +40,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"
 #include "options.h"
@@ -202,7 +203,7 @@ extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum) {
     if (s_interval <= 0 || !entityUI) return;
     if (frameNum < kFirstFrame || ((frameNum - kFirstFrame) % s_interval) != 0) return;
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     const uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!el) return;

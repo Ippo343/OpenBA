@@ -55,6 +55,7 @@
 #include "Dialog/MessageDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -652,7 +653,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
     // Check dirty flag — first byte of Modification singleton
     if (*(uint8_t*)modSingleton != 0) {
-        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorld = GameUpdateLoop::_singleton;
 
         // Load reload dialog resource based on context (menu vs in-game)
         System::Filename filenameBuf(gameWorld == nullptr ? "Dialog/Reload.rsc:menu"

@@ -13,6 +13,7 @@
 #include "Component/ambientemittercomponent_funcs.h"
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
@@ -122,9 +123,9 @@ extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     int count = *(int*)(s + 0x40);
     if (count <= 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
-    void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x78);
+    void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x78);
     if (!scene) return;
 
     void* building = GetBuildingData(self);   // AmbientEmitterDescription (may be null)

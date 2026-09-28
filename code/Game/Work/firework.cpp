@@ -24,6 +24,7 @@
 #include "Work/FireWork.h"
 #include "Work/firework_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"   // B3R: the Work bodies called by name
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -97,7 +98,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     }
 
     // Get map data
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t mapData = *(uintptr_t*)(gameWorld + 0xf0);
     int* mapGrid = *(int**)(gameWorld + 0xf8);
 
@@ -480,7 +481,7 @@ int FireWork::Cleanup() {
 // non-trivial InternalBasePtr): RCX=this, RDX=retbuf.
 // ============================================================
 void* FireWork::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
     return retbuf;

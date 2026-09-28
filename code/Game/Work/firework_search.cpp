@@ -53,6 +53,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // B3R: the Pf_* helpers called by name
 #include "Game/exe_constants.h"  // B3R: kRdata_140172114
 #include <cstdint>
@@ -185,7 +186,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
 
     // WorldGrid pointer at GameWorld(+0xf8). piVar1[0] = grid width W.
     int* piVar1 = *reinterpret_cast<int**>(
-        reinterpret_cast<int64_t>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<int64_t>(GameUpdateLoop::_singleton) + 0xf8);
 
     uint64_t local_88 = 0;          // found-target IBP (0 = none)
     int W      = *piVar1;
@@ -328,7 +329,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
 
     uint32_t count = static_cast<uint32_t>(Pf_RecursiveChildSum_123070(static_cast<int64_t>(chosenIBP), 0));
     void* rng = *reinterpret_cast<void**>(
-        reinterpret_cast<int64_t>(*g_pGameWorldSingleton) + 0xd8);
+        reinterpret_cast<int64_t>(GameUpdateLoop::_singleton) + 0xd8);
     uint32_t randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
 
     float resolved[3] = {0.0f, 0.0f, 0.0f};

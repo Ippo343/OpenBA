@@ -66,6 +66,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"      // B3R: ActRm_StorageSubtract_d150, _StorageAdd_d000, _GetResourceCategory_88f90
 #include "Component/exe_bodies.h"   // B3R: TradeComponent_SpawnPurchasedLivestock
 #include <cstdint>
@@ -187,7 +188,7 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     uintptr_t d = reinterpret_cast<uintptr_t>(desc);
 
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-                            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+                            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     if (!townMgr) return;
 
     float weight = *reinterpret_cast<float*>(d + 0x68);
@@ -230,7 +231,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
 
     TradeDescription_ExtendMerchantStay(reinterpret_cast<void*>(tradePtr[0]));
 
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t townMgr   = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf0);
 
     // OUTCOME counters. A click that commits nothing and a click that commits a full

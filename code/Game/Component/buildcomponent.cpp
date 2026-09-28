@@ -23,6 +23,7 @@
 #include "Component/ModelComponent.h"
 #include "Component/PickingComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -157,7 +158,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
     LatchDrawTypeIds();
     int64_t* self = (int64_t*)selfP;
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     // NOTE: the instant-build gate that used to sit here has MOVED to
     // BuildComponent_OnAddedVSlot, because that is where retail keeps it. 0x140108d40 is
     // only a 4-instruction thunk:
@@ -502,8 +503,8 @@ void BuildComponent::Persist(void* stream) {
 // door at 0x140108d40, buildcomponent.cpp's own s_fn_Draw_Original), so it stays a
 // free function.
 void BuildComponent::OnAdded() {
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
         if (*(uint8_t*)(gw + 0xd0) & 1) return;   // instant build -> OnAdded does nothing
     }
     BuildComponent_DrawReimpl(this);
@@ -516,14 +517,14 @@ void BuildComponent::OnAdded() {
 void BuildComponent::OnRemove() {
     // 0x140017550 is BuildComponent_FindInQueue (this file) and 0x1401c3dd8 is
     // g_pGameWorldSingleton: called directly, no first-call cache (B.3.8, B6-5).
-    if (!g_pGameWorldSingleton)
+    if (!GameUpdateLoop::_singleton)
         return;
 
     // Create InternalBasePtr on stack — original passes this (component ptr)
     uint8_t ptrBuf[8];
     new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
 
-    void* gameState = *g_pGameWorldSingleton;
+    void* gameState = GameUpdateLoop::_singleton;
     void* worldData = *(void**)((uintptr_t)gameState + 0xF0);
 
     // Find in removal queue

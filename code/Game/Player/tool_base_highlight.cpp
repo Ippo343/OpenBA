@@ -24,6 +24,7 @@
 // Port is 1:1 with the Ghidra decompile + disasm-verified — do NOT "improve".
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"
@@ -360,7 +361,7 @@ extern "C" int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
     int64_t target = *reinterpret_cast<int64_t*>(param_1 + 0x20);
     if (target == 0) return -1;
 
-    int64_t gameWorld = reinterpret_cast<int64_t>(*g_pGameWorldSingleton);
+    int64_t gameWorld = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton);
     int mapSize = **reinterpret_cast<int**>(gameWorld + 0xf8);
 
     // gw+0x110 holds a POINTER to the tile-highlight renderer, not the renderer

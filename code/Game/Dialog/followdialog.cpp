@@ -20,6 +20,7 @@
 #include "Dialog/FollowDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include <cstring>
@@ -116,7 +117,7 @@ void FollowDialog::OnOpened() {
     }
 
     // Set follow-active flag: *(gameWorld+0x120)+0x38 = 1
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* subsys = gameWorld ? *(void**)((uintptr_t)gameWorld + 0x120) : nullptr;
     if (subsys) *(uint8_t*)((uintptr_t)subsys + 0x38) = 1;
 }
@@ -153,7 +154,7 @@ void FollowDialog::OnUpdateLayout() {
         uintptr_t profEntry = 0;
         if (isChild || hasWorkplace) {
             // ProfessionList at gameWorld+0xB0 -> +0x40 (child) or +0x48 (worker)
-            uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0);
+            uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)GameUpdateLoop::_singleton + 0xB0);
             if (FD_OkPtr(profListBase)) {
                 if (*(uintptr_t*)(ai + 0x208) == 0) {
                     profEntry = *(uintptr_t*)(profListBase + 0x40);  // child profession
@@ -198,7 +199,7 @@ void FollowDialog::OnUpdateLayout() {
         int homeTile = *(int*)(ai + 0x30);
         if (homeTile >= 0) {
             // Look up entity at home tile in world grid at gameWorld+0x118
-            void* worldGrid = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118);
+            void* worldGrid = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x118);
             uint64_t foundRef = 0;
             WorldGrid_FindEntity_Impl(worldGrid, &foundRef, homeTile);
             homeRef = foundRef;
@@ -240,7 +241,7 @@ void FollowDialog::OnUpdateLayout() {
 // Original: 0x140069320 (19 bytes).
 
 void FollowDialog::OnClosed() {
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* subsys = *(void**)((uintptr_t)gameWorld + 0x120);
     *(uint8_t*)((uintptr_t)subsys + 0x38) = 0;
 }
@@ -323,7 +324,7 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
         uint32_t posZ = *(uint32_t*)(compData + 0x15C);
 
         // Write position to camera subsystem: gameWorld->+0xE0 -> {+0x1C, +0x20, +0x24}
-        void* world = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* world = GameUpdateLoop::_singleton;
         uintptr_t cameraSys = world ? *(uintptr_t*)((uintptr_t)world + 0xE0) : 0;
         if (cameraSys) {
             *(uint32_t*)(cameraSys + 0x1C) = posX;

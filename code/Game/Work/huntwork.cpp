@@ -16,6 +16,7 @@
 #include "Work/HuntWork.h"
 #include "Work/huntwork_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
@@ -145,7 +146,7 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
     // Step 4: Check animal population via resource tracker
     // -------------------------------------------------------
     int materialIdx = *(int*)((uintptr_t)herdComp + 0x24);
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
     uintptr_t resourceTable = *(uintptr_t*)(resourceTracker + 0x170);
     uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;

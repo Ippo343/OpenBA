@@ -21,6 +21,7 @@
 #include "Component/MapComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -55,7 +56,7 @@
 // Faithful 1:1 port of the Ghidra decompile (same quirky shift-and-overwrite compaction).
 // ============================================================
 void WellComp_RemoveCellEntry_889e0(int64_t manager, int x, int y, int value) {
-    void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* world = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!world) return;
     int width = *reinterpret_cast<int*>(*reinterpret_cast<int**>(
                     reinterpret_cast<uint8_t*>(world) + 0xf8)) >> 3;
@@ -162,7 +163,7 @@ void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
 void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
     // This helper is shared: CitizenList_PostLoad_8f580 (0x14008f580) calls it for
     // every residence cell on a LOAD, long before any well reaches its state-2 enter.
-    void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* world = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!world) return;
     const int mapW = *reinterpret_cast<int*>(*reinterpret_cast<int**>(
                          reinterpret_cast<uint8_t*>(world) + 0xf8));
@@ -280,10 +281,10 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
 // Enter walk continues past this node.
 // ============================================================
 extern "C" char WellComponent_EnterBuilt(void* comp, void* /*sm*/) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
     uint8_t ibp[24] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-    void* gw = *g_pGameWorldSingleton;
+    void* gw = GameUpdateLoop::_singleton;
     int64_t townMgr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(gw) + 0xf0);
     if (!townMgr) return 0;
     WellComp_RegisterEntity_91cb0(townMgr, ibp);
@@ -380,8 +381,8 @@ void WellComponent::OnRemove() {
 
     // *(GameWorld + 0xF0) is the TownManager itself -- not a "water source array".
     // 0x140091ba0 takes the manager and indexes its own +0xe0/+0xe8 pair.
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        void* gameWorld = *g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        void* gameWorld = GameUpdateLoop::_singleton;
         void* townMgr = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
         WellComp_UnregisterEntity_91ba0(reinterpret_cast<int64_t>(townMgr), basePtr);   // 0x140091ba0

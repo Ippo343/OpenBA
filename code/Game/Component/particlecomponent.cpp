@@ -25,6 +25,7 @@
 #include "Component/coll_bridge.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "system/String.h"
 #include "math/Math.h"
@@ -202,9 +203,9 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
     if (model && elem[0x13] == 0) {
         // Building/entity model transform (+0x148)
         memcpy(tf, (uint8_t*)model + 0x148, 7 * sizeof(float));
-    } else if (mapc && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    } else if (mapc && GameUpdateLoop::_singleton != nullptr) {
         // Centre cell of the entity's map footprint → terrain-height world pos
-        void* mapDims = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+        void* mapDims = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
         int W = mapDims ? *(int*)mapDims : 0;
         if (W > 0) {
             uintptr_t m = (uintptr_t)mapc;
@@ -301,8 +302,8 @@ extern "C" void ParticleComponent_StopEmitter(ParticleComponent* self, int index
     if (!geoArr) return;
     PCGeoEntry* ge = &geoArr[index];
     if (ge->sceneId >= 0) {
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+        if (GameUpdateLoop::_singleton != nullptr) {
+            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
             if (scene)
                 reinterpret_cast<Graphics::Scene*>(scene)
                     ->RemoveObject((uint32_t)ge->sceneId);   // B.3.5 bridge
@@ -335,8 +336,8 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
     if (!geoArr) return;
     PCGeoEntry* ge = &geoArr[index];
 
-    void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                  ? *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60) : nullptr;
+    void* scene = (GameUpdateLoop::_singleton != nullptr)
+                  ? *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60) : nullptr;
     if (ge->sceneId >= 0 && scene)
         reinterpret_cast<Graphics::Scene*>(scene)
             ->RemoveObject((uint32_t)ge->sceneId);   // B.3.5 bridge
@@ -692,8 +693,8 @@ void ParticleComponent::OnRemove() {
         // Remove scene object if valid
         uint32_t objId = *(uint32_t*)(geoEntry + 8);
         if ((int)objId >= 0) {
-            if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+            if (GameUpdateLoop::_singleton != nullptr) {
+                void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
                 reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(objId);   // B.3.5 bridge
             }
             *(uint32_t*)(geoEntry + 8) = 0xFFFFFFFF;

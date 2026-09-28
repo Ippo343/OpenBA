@@ -32,6 +32,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // Pf_SetTileRoadFlag_9f2f0, ActHunt_*_c3470 / _c2ea0
 #include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
 #include "Component/coll_bridge.h"
@@ -157,7 +158,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         int64_t lVar2 = *reinterpret_cast<int64_t*>(lVar14 + 8);
                         if (*param_2 != lVar2) {
                             int64_t lVar3 = *reinterpret_cast<int64_t*>(
-                                reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xe8);
+                                reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xe8);
                             int64_t local_68 = lVar2;
                             if (lVar2 != 0) {
                                 if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) >> 10 & 1) == 0) {
@@ -361,14 +362,14 @@ void MapComponent_sub_41b0(int64_t param_1) {
 
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
     int* piVar2 = *reinterpret_cast<int**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
     void* pvVar5 = bVar3 ? obj : nullptr;
 
     if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(pvVar5) + 0x32) != '\0') {
         MapTerrainClear_Reimpl(*reinterpret_cast<void**>(   // 0x1400a4d30
-                                   reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x148),
+                                   reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0x148),
                                static_cast<int>(*reinterpret_cast<uint32_t*>(reinterpret_cast<int64_t>(pvVar5) + 0x34)),
                                (int)*reinterpret_cast<short*>(param_1 + 0x28),
                                (int)*reinterpret_cast<short*>(param_1 + 0x2a),
@@ -409,7 +410,7 @@ void CreateNaturalResource_impl_4750(int64_t param_1) {
 
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
     int* piVar2 = *reinterpret_cast<int**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
     int64_t local_res8 = *reinterpret_cast<int64_t*>(param_1 + 0x10);

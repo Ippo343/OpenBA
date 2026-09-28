@@ -12,6 +12,7 @@
 #include "Component/multiobjectcomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
@@ -37,11 +38,11 @@ void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
     int count = *(int*)((uintptr_t)self + 0x50);
     void** array = *(void***)((uintptr_t)self + 0x48);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     for (int i = 0; i < count; i++) {
         void* entityPtr = array[i];
-        void* gameWorld = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xE8);
+        void* gameWorld = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xE8);
 
         if (entityPtr != nullptr) {
 

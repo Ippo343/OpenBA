@@ -20,6 +20,7 @@
 #include "ui/SpriteContext.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include "math/Math.h"
@@ -45,7 +46,7 @@
 // Vector3::Dot — slots 0x1401512c0, 0x140151298 — are direct Math:: class calls.)
 extern "C" void FrustumOutline_ProjectCorners(float* out) {
     if (!out) return;
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     uint8_t* cam = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(gw) + 0xe0);
     if (!cam) return;
@@ -157,7 +158,7 @@ void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) cons
     uint32_t color = ((((v >> 8) & 0xffff0000u) * a32 ^ v) & 0xffffffu)
                      ^ (((v >> 8) & 0xff0000u) * a32);
 
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
 
     float pts[4 * 3] = {0};

@@ -15,6 +15,7 @@
 
 #include "Tutorial/TutorialGoalGameSpeed.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -34,8 +35,8 @@ TutorialGoalGameSpeed::TutorialGoalGameSpeed() : targetSpeed(1), _pad24{} {}
 // Original: MOV RAX,[g_pGameWorldSingleton]; MOV ECX,[RCX+0x20];
 //           MOV RDX,[RAX+0x120]; CMP [RDX+0x34],ECX; SETZ AL; RET
 bool TutorialGoalGameSpeed::IsComplete(void* /*time*/, void* /*instance*/) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return false;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
 
     // game+0x120 = time/speed controller
     uintptr_t timeCtrl = *(uintptr_t*)(game + 0x120);

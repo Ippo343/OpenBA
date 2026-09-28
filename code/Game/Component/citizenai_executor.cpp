@@ -49,6 +49,7 @@
 #include "Component/PickingDescription.h"   // B.3.8 CB1a (TypeId)
 #include <new>
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "perf_terrain.h"
 #include "resolve.h"
@@ -359,7 +360,7 @@ static int RegisterCitizenPickMesh(uint8_t* self) {
     std::memcpy(xform, reinterpret_cast<void*>(model + 0x148), sizeof(xform));
 
     void* scene = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x70);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x70);
     void* owner = *reinterpret_cast<void**>(pickComp + 0x30);   // entity IBP value
     uint32_t id = reinterpret_cast<Picking::Scene*>(scene)->AddMesh(   // B.3.7 bridge
         Object::ExternalPtr<Picking::PickingMesh>(reinterpret_cast<Picking::PickingMesh*>(meshHandle)),
@@ -463,7 +464,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         fx = pos[0]; fy = pos[1];
     }
 
-    int* gameWorld = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int* gameWorld = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     bool blockedHandled = false;
     if (rootOnly == 0) {
         int dim = *gameWorld;
@@ -614,7 +615,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         }
         if (-1 < static_cast<int>(pickId)) {
             void* pickScene = *reinterpret_cast<void**>(
-                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x70);
+                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x70);
             // [PerfX PICK_CULL -- NON-RETAIL] an off-screen citizen cannot be clicked, so
             // its pick-scene transform is deferred; PerfX replays it if the sim pauses.
             if (!PerfX::PickCullSkip(reinterpret_cast<void*>(model), pickScene, pickId,
@@ -625,7 +626,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         }
     }
 
-    CharMgr_sub_8660(*reinterpret_cast<float**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x88),
+    CharMgr_sub_8660(*reinterpret_cast<float**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x88),
                      *reinterpret_cast<int*>(self + 0x40));   // 0x140018660
 }
 

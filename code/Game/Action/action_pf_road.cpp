@@ -29,6 +29,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_2ed0, WorkBase_ValidateCell_a00f0, WorkBase_CalcDistance_8830
 #include "Component/exe_bodies.h"     // FloorComponent_FindResData
 #include "Game/exe_bodies.h"          // Reimpl_TradeWork_helper_e270, Reimpl_Struct60B_Resize, Reimpl_MapGetTerrainPos
@@ -92,7 +93,7 @@ static_assert(std::is_trivially_default_constructible<PfRawElem14>::value,
 // The .rdata float constants that are stored as bit patterns.
 inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
-static inline uintptr_t GameWorld() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t GameWorld() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 
 static inline float f172264()  { return RdataF(kRdata_140172264); }   // 0x140172264
 // DAT_1401720bc = heightmap int16 -> world-height scale = 0x3b800000 = 1/256.

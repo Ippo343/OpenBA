@@ -14,6 +14,7 @@
 #include "Component/cemeterycomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include "resolve.h"
 #include <atomic>
@@ -170,10 +171,10 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
 // AL so the state machine's Enter walk continues past this node.
 extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
     CemeteryComponent* self = reinterpret_cast<CemeteryComponent*>(compV);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (GameUpdateLoop::_singleton == nullptr)
         return 0;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xF0);
     if (!townMgr) return 0;
 
@@ -352,9 +353,9 @@ void CemeteryComponent::Persist(void* stream) {
 // [6] 0x140047200 — build the grave-plot grid from the footprint.
 void CemeteryComponent::OnAdded() {
     CEM_TRACE("enter comp=%p owner=%p", (void*)this, _entity);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton == nullptr) {
         CEM_TRACE("BAIL deps: gs=%p",
-                  (void*)(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr));
+                  (void*)(GameUpdateLoop::_singleton));
         return;
     }
 
@@ -372,7 +373,7 @@ void CemeteryComponent::OnAdded() {
     const int rot = *reinterpret_cast<int*>(map + 0x30);
 
     const uintptr_t world = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF8);
     if (!world) { CEM_TRACE("BAIL no world"); return; }
     const int mapWidth = *reinterpret_cast<int*>(world);
 
@@ -437,8 +438,8 @@ void CemeteryComponent::OnRemove() {
     uint8_t ptrBuf[8];
     new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(_entity));   // B.3.3 bridge
 
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        void* gameState = *g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        void* gameState = GameUpdateLoop::_singleton;
         void* subObj = *(void**)((uintptr_t)gameState + 0xF0);
         void* cemeteryListBase = (void*)((uintptr_t)subObj + 0x40);
         CemeteryListErase_Reimpl(cemeteryListBase, ptrBuf);   // 0x140002cc0

@@ -13,6 +13,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <cstdio>
 #include "system/String.h"
 #include <cstdint>
@@ -45,7 +46,7 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
 // Path: world->+0xF0->+0x170[resourceIndex * 0x20 + 8]
 static int GetResourceLimit(void* dataSrc) {
     int resourceIndex = *(int*)((uintptr_t)dataSrc + 0x20);
-    void* worldSingleton = *g_pGameWorldSingleton;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
     uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
     return *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8);
@@ -54,7 +55,7 @@ static int GetResourceLimit(void* dataSrc) {
 // Helper: Write the resource limit value to the global array.
 static void SetResourceLimit(void* dataSrc, int value) {
     int resourceIndex = *(int*)((uintptr_t)dataSrc + 0x20);
-    void* worldSingleton = *g_pGameWorldSingleton;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
     uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
     *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8) = value;
@@ -166,8 +167,8 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 // self+0x10 (so IsDerivedFrom is never called on a NULL datasource).
 
 static int GetResourceLimitByIdx(int resourceIndex) {
-    if (!g_pGameWorldSingleton) return 0;
-    void* worldSingleton = *g_pGameWorldSingleton;
+    if (!GameUpdateLoop::_singleton) return 0;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     if (!worldSingleton) return 0;
     void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
     if (!subObj) return 0;
@@ -177,8 +178,8 @@ static int GetResourceLimitByIdx(int resourceIndex) {
 }
 
 static void SetResourceLimitByIdx(int resourceIndex, int value) {
-    if (!g_pGameWorldSingleton) return;
-    void* worldSingleton = *g_pGameWorldSingleton;
+    if (!GameUpdateLoop::_singleton) return;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     if (!worldSingleton) return;
     void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
     if (!subObj) return;

@@ -50,6 +50,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"     // ::Object::GetTypeIdByName
 #include "Component/orchardcomponent_funcs.h" // extern OrchardComponent_GetGrowth (do not modify that file)
 #include "options.h"
@@ -173,7 +174,7 @@ void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
 }
 
 void DumpOrchards(int frameNum) {
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         fprintf(stderr, "[OrchardDiag] frame=%d: gameWorld singleton null — cannot scan\n", frameNum);
         return;

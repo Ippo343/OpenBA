@@ -27,6 +27,7 @@
 // Default builds stay byte-unchanged.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
@@ -40,9 +41,9 @@ constexpr int kMaxLevels = 10;   // cap (4^10 -> ~350K cells per array); maps ar
 } // namespace
 
 extern "C" void CharManager_Seed() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     if (reinterpret_cast<GameUpdateLoop*>(gw)->m_characterGrid != nullptr) return;   // already seeded   // B.3.8 bridge
 
     void* mapV = reinterpret_cast<GameUpdateLoop*>(gw)->m_game;   // B.3.8 bridge

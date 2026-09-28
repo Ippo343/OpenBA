@@ -39,6 +39,7 @@
 
 #include "Action/RemoveAnimal.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_6270, WorkBase_TaskListCleanup_c5400
 #include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Game/exe_constants.h"           // kRdata_*
@@ -79,7 +80,7 @@ static void* MemAlloc(int64_t size, int64_t align) {
 // entity list (c48a0). Finally subtract `amount` from the source storage (12d150).
 // ============================================================
 void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_3) {
-    void* gworld = *g_pGameWorldSingleton;
+    void* gworld = GameUpdateLoop::_singleton;
     if (param_3 == 0) return;
 
     int64_t local_res20 = 0;
@@ -173,7 +174,7 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
         }
     }
     if (*reinterpret_cast<char*>(param_1 + 0x20) != '\0') {
-        void* gworld = *g_pGameWorldSingleton;
+        void* gworld = GameUpdateLoop::_singleton;
         int* piVar2 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gworld) + 0xf8);
         void** pplVar3 = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(gworld) + 0xf0);
         float local_50[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};

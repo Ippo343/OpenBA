@@ -50,6 +50,7 @@
 // call until 0x14009e8c0 is ported (other callers may still build it).
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -300,8 +301,8 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
         // PORT GAP 0x14009e8c0 RegionSystem build: not ported; retail calls it here
         // (0x14009f2a6, RCX = this grid). The null arm is: nothing.
 
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* gameWorld = *g_pGameWorldSingleton;
+        if (GameUpdateLoop::_singleton != nullptr) {
+            void* gameWorld = GameUpdateLoop::_singleton;
             void* worldGeometry = *reinterpret_cast<void**>(
                 reinterpret_cast<uint8_t*>(gameWorld) + 0x110);
             Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(worldGeometry),

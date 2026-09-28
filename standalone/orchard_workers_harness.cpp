@@ -33,6 +33,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "options.h"
 #include <cstdint>
@@ -83,7 +84,7 @@ bool AlreadySeated(void* comp) {
 }
 
 void Fire(int frameNum) {
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         fprintf(stderr, "[OrchardWorkers] frame=%d: gameWorld singleton null — cannot run\n", frameNum);
         return;

@@ -22,6 +22,7 @@
 #include "Work/HarvestOrchard.h"
 #include "Work/harvestorchard_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
@@ -137,7 +138,7 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
 
     // Check capacity
     int materialIdx = *(int*)((uintptr_t)orchardDesc + 0x20);
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
     uintptr_t resourceTable = *(uintptr_t*)(resourceTracker + 0x170);
     uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;

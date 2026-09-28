@@ -36,6 +36,7 @@
 #include "Component/ResidenceDescription.h"
 #include "Component/RawMaterialDescription.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -85,8 +86,8 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
     }
 
     // 5. Burn branch.
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return 1;
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t wsim = *reinterpret_cast<uintptr_t*>(gw + 0x130);   // weather sim ptr
     if (!wsim) return 1;
     float worldTemp = *reinterpret_cast<float*>(wsim + 0x18);

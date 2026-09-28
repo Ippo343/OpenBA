@@ -58,6 +58,7 @@
 // reachable only when the WorkComponent still holds a work id (+0x28 >= 0).
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -181,8 +182,8 @@ extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
 extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
     // [STANDALONE GUARD] Retail is called only from a live state machine with a real world
     // singleton; ours can be driven from a harness before the world exists.
-    if (!wpc || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (!wpc || GameUpdateLoop::_singleton == nullptr) return;
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 
     // 1. Release every seated worker (ee60). This is the piece whose absence left the
     //    roster half-torn-down: +0x60 non-zero over a clobbered +0x58.

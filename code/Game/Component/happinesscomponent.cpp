@@ -15,6 +15,7 @@
 #include "Component/happinesscomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"   // WorkBase_FindComponent_6270
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -126,7 +127,7 @@ void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, shor
 
 void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
     uintptr_t self = (uintptr_t)selfP;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     void* descObj = *(void**)(self + 0x18);
     void* desc = ::Object::IsDerivedFromNullSafe(descObj, HappinessDescription::TypeId())
@@ -171,7 +172,7 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
     int y = ((int)*(int16_t*)(mapComp + 0x2e) >> 1) + (int)*(int16_t*)(mapComp + 0x2a);
     int resourceId = targetComp ? *(int*)((uintptr_t)targetComp + 0x28) : 0;
 
-    FishingComponent_BrushTile(*(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8), state, x, y,
+    FishingComponent_BrushTile(*(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8), state, x, y,
                                resourceId, param2);   // 0x14009f990
 }
 
@@ -280,9 +281,9 @@ extern "C" void HappinessComponent_Register(void* selfV) {
     new (basePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
         if (townMgr) {
             const int count = *reinterpret_cast<int*>(townMgr + 0x58);
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
@@ -314,9 +315,9 @@ extern "C" void HappinessComponent_Unregister(void* selfV) {
     new (basePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
         if (townMgr)
             CemeteryListErase_Reimpl(reinterpret_cast<void*>(townMgr + 0x50), basePtr);
     }
@@ -448,10 +449,10 @@ void HappinessComponent::OnRemove() {
     if (happinessFlag == 0) return;
     uint8_t basePtr[24];
     new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         void* happinessArray = reinterpret_cast<void*>(
             *reinterpret_cast<uintptr_t*>(
-                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0) + 0x50);
+                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0) + 0x50);
         CemeteryListErase_Reimpl(happinessArray, basePtr);   // 0x140002cc0
     }
     FishingComponent_NotifyTile(this, -1);                    // 0x14004a300 (entity index)

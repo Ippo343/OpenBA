@@ -23,6 +23,7 @@
 #include "graphics/Mesh.h"
 #include "Component/storagedisplaycomponent_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -306,8 +307,8 @@ void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
 
 void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction,
                                             uintptr_t materialType) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
 
     if (index >= *(int*)(self + 0x30)) return;
     void* scene = *(void**)(gw + 0x60);
@@ -457,8 +458,8 @@ void StorageDisplayComponent::OnAdded() {
 #endif
 
     // Get map info from game state
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
     int* mapInfo = *(int**)(gameState + 0xf8);
     if (!mapInfo) return;
 
@@ -531,10 +532,10 @@ void StorageDisplayComponent::OnRemove() {
     int count = *(int*)(selfAddr + 0x30);
     uintptr_t arrayBase = *(uintptr_t*)(selfAddr + 0x28);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     // Get the graphics scene from game state
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
     void* scene = *(void**)(gameState + 0x60);
 
     for (int i = 0; i < count; i++) {

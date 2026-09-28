@@ -12,6 +12,7 @@
 #include "Action/exe_bodies.h"
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"   // kRdata_140172114
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -46,7 +47,7 @@
 // `void** g_pGameWorldSingleton` and dereferenced once to obtain the instance.
 // ============================================================
 static inline uintptr_t GameWorld() {
-    return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
+    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 }
 
 // ============================================================

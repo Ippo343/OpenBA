@@ -9,6 +9,7 @@
 // Each body is a literal port of the decompiled exe helper — no "improvements".
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "Game/exe_bodies.h"
 #include <cstdint>
@@ -64,7 +65,7 @@ void* PlayerEdit_EntityAtCell_a0280(uintptr_t entityList, void* retIBP, int cell
 
 float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int p4, int p5) {
     // The original ignores its param_1 and reads g_pGameWorldSingleton directly.
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
 
     const float halfCell = 0.5f;                 // DAT_140172114 (XMM7)
@@ -139,7 +140,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
 
     int startCell = *reinterpret_cast<int*>(self + 0x2c);
     int endCell   = *reinterpret_cast<int*>(self + 0x30);
-    int* mapGrid  = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid  = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     int width     = *mapGrid;
 
     *param_2 = static_cast<uint32_t>(startCell % width);
@@ -227,8 +228,8 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
 
     // World-space anchor: average of the two corner cells' terrain positions, with
     // the mean height from the rect-average helper (0x140101730).
-    mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
-    float avgHeight = PlayerEdit_AvgTerrainHeight_101730(*g_pGameWorldSingleton,
+    mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+    float avgHeight = PlayerEdit_AvgTerrainHeight_101730(GameUpdateLoop::_singleton,
                                        static_cast<int>(*param_2), static_cast<int>(*param_3),
                                        static_cast<int>(*param_4), static_cast<int>(*param_5));
 

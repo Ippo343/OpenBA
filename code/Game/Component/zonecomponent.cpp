@@ -16,6 +16,7 @@
 #include "Component/zonecomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -162,8 +163,8 @@ void ZoneComponent::Persist(void* stream) {
     int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         void* entityPtr = _entity;
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* zoneMap = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+        if (GameUpdateLoop::_singleton != nullptr) {
+            void* zoneMap = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
             ZoneComponent_ZoneMapAdd(zoneMap, &entityPtr);   // 0x140088e20
         }
     }
@@ -205,10 +206,10 @@ void ZoneComponent::OnAdded() {
         return;
     }
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton == nullptr) {
         return;
     }
-    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 
     int64_t entityRef = *ownerSlot;
     ZoneComponent_sub_d360(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
@@ -253,8 +254,8 @@ void ZoneComponent::OnRemove() {
     void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
     if (!desc) return;
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 
     int64_t entityRef = 0;
     new (&entityRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge

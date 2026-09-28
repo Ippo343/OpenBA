@@ -64,6 +64,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "ui/Dialog.h"   // UI::Dialog::TypeId() (ENDGAME B.3.9 TR)
 #include "Dialog/MainMenuDialog.h"   // B3R: MainMenuDialog_ReturnToMenu
 #include "save/SaveLoad.h"          // B3R: Save::SavedState
@@ -313,7 +314,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
 extern "C" void ModDialog_CloseAndReload(void* self) {
     if (!self) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
 
     if (gameWorld == nullptr) {
         MainMenuDialog_ReturnToMenu(*reinterpret_cast<MainMenuDialog**>(s + 0xD0));   // 0x1400b4790

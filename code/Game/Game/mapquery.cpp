@@ -31,6 +31,7 @@
 // picking-refine branch disassembly-verified at 0x14009f4c6..0x14009f582 (2026-08-29).
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
@@ -148,8 +149,8 @@ static constexpr float kRayMaxDist = 100.0f;   // DAT_140172208
 // param_1 would read a bogus dim and a bogus cell-array pointer. So resolve the canonical
 // grid from the singleton and only refine when param_1 agrees (or is null).
 static int* CanonicalMapGrid(void* game) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
-    int* canonical = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    int* canonical = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
     if (!canonical) return nullptr;
     if (game && game != (void*)canonical) {
         static bool warned = false;
@@ -171,8 +172,8 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
     const float inZ = inXY2[1];
 
     void* worldGeom = nullptr;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        worldGeom = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_worldGeometry;   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton != nullptr)
+        worldGeom = GameUpdateLoop::_singleton->m_worldGeometry;
 
     const float height = MapQuery_SampleHeight(worldGeom, inX, inZ);
 

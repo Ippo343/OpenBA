@@ -9,6 +9,7 @@
 
 #include "Tutorial/TutorialSetupDialog.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -161,13 +162,13 @@ void TutorialSetupDialog::Begin() {
             bool derived = Object::IsDerivedFromNullSafe(basePtr, ComponentDescription::TypeId());
             void* entityForFollow = derived ? basePtr : nullptr;
             uint64_t retval[2] = {0, 0};
-            uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+            uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
             void* playerController = *reinterpret_cast<void**>(gameSingleton + 0x120);
             Toolbar_Utility_Reg(playerController, retval, reinterpret_cast<uint64_t>(entityForFollow));   // 0x140101a80
         } else {
             // Original: SetEditMode only if IsA(ComponentEntity), but CloseDialog always
             bool isEntity = reinterpret_cast<const Object::Base*>(basePtr)->IsA(ComponentEntity::TypeId());   // B.3.x bridge
-            uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+            uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
             if (isEntity) {
                 void* playerController = *reinterpret_cast<void**>(gameSingleton + 0x120);
                 Toolbar_ShowGroup_Impl(playerController, 0);   // 0x140102b60 (the door was named SetEditMode)
@@ -200,7 +201,7 @@ void TutorialSetupDialog::End() {
     uint64_t instance = 0;
     TutWave_FindHighlightDialog(this, &instance);   // 0x1400e24f0
     if (instance != 0) {
-        uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+        uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
         void* ui = *reinterpret_cast<void**>(gameSingleton + 0x98);
         uint64_t instPtr = instance;
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge

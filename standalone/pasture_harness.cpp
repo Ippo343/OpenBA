@@ -11,6 +11,7 @@
 // address only resolves when reg_pasture_live.cpp registered it).
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Component/PastureComponent.h"
 #include "Component/exe_bodies.h"   // Pasture_FillAllPastures (0x140060290)
@@ -38,9 +39,9 @@ static void PastureTendHarness_Tick(int frameNum) {
     }
     if (s_interval < 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     if (!gs) return;
     int n = *reinterpret_cast<int*>(gs + 0x98);
     uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
@@ -88,9 +89,9 @@ static void PastureProduceHarness_Tick(int frameNum) {
         }
     }
     if (s_interval < 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     if (!gs) return;
     int n = *reinterpret_cast<int*>(gs + 0x98);
     uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);

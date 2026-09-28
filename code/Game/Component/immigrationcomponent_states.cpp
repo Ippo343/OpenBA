@@ -68,6 +68,7 @@
 #include "Component/ImmigrationDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // Pf_*, ActCNR_NR_SetVariant_1253d0
 #include "Component/exe_bodies.h"         // CitizenComp_DeferredInit_117080
@@ -122,7 +123,7 @@ uint32_t TidCitDesc()   { static uint32_t t = 0; if (!t) t = CitizenDescription:
 uint32_t TidInteractDesc() { static uint32_t t = 0; if (!t) t = InteractDescription::TypeId(); return t; }
 
 // ---------------------------------------------------------------- small accessors
-inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
+inline uint8_t* GW() { return (GameUpdateLoop::_singleton != nullptr) ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr; }
 inline uint8_t* TownMgr(uint8_t* gw) { return *reinterpret_cast<uint8_t**>(gw + 0xf0); }
 inline void*    Rng(uint8_t* gw)     { return *reinterpret_cast<void**>(gw + 0xd8); }
 inline int*     Grid(uint8_t* gw)    { return *reinterpret_cast<int**>(gw + 0xf8); }

@@ -40,6 +40,7 @@
 #include "Entity/entitylist_funcs.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
@@ -1248,7 +1249,7 @@ post_simulation:
     // popping in and out" report). Same place as the integrity check: before Clean,
     // after every component has had its per-frame say.
     SceneWatch_Census(m_graphicsScene);
-    if (g_pGameWorldSingleton) CitizenVitals_Tick(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton) CitizenVitals_Tick(GameUpdateLoop::_singleton);
 
     // Step 15: Graphics::Scene::Clean
     TRACE("[GameUpdateLoop::Update] calling Graphics::Scene::Clean...\n");
@@ -1390,7 +1391,7 @@ void GameUpdateLoop::Draw(float alpha) {
         // null — to render the terrain top-down into the minimap pixel arrays.
         if (*(int64_t*)(imageCapture + 8) == 0) {
             // Remove and re-add global objects for terrain update
-            void* gameWorld = *g_pGameWorldSingleton;
+            void* gameWorld = GameUpdateLoop::_singleton;
             void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
 
             Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
@@ -1984,7 +1985,7 @@ void GameUpdateLoop::Shutdown() {
     // Clear game flags (remove 0x100 bit)
     TRACE("[GameUpdateLoop::Shutdown] clearing game flags...\n");
     {
-        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorld = GameUpdateLoop::_singleton;
         uint32_t* flags = &static_cast<GameUpdateLoop*>(gameWorld)->m_gameFlags;   // B.3.8 bridge
         *flags = *flags & 0xFFFFFEFF;
     }
@@ -2057,7 +2058,7 @@ void GameUpdateLoop::Shutdown() {
     // Remove global scene objects
     TRACE("[GameUpdateLoop::Shutdown] removing global scene objects...\n");
     {
-        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorld = GameUpdateLoop::_singleton;
         void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
         Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
         gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
@@ -2252,7 +2253,7 @@ void GameUpdateLoop::Shutdown() {
 // this avoids taking a dependency on dispatch slot 0x140152940, which nothing else
 // in the tree registers.
 static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0.0f;
     uintptr_t playerCtrl = reinterpret_cast<uintptr_t>(
         static_cast<GameUpdateLoop*>(gw)->m_playerController);   // B.3.8 bridge
@@ -2359,8 +2360,13 @@ GameUpdateLoop::~GameUpdateLoop() {
     TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p)\n", (void*)this);
 
     // Step 2: Clear game world singleton
-    *g_pGameWorldSingleton = nullptr;
+    _singleton = nullptr;
 }
+
+// The exe cell 0x1401c3dd8 (B3R STORAGE; was the file-static
+// g_storage_GameWorldSingleton of standalone/address_registry.cpp, read through
+// g_pGameWorldSingleton / g_pGameSingleton).
+GameUpdateLoop* GameUpdateLoop::_singleton = nullptr;
 
 
 // ============================================================

@@ -53,6 +53,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
@@ -83,7 +84,7 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 
 // citizen ModelComponent transform (+0x68 of CharacterComponent at citizen+0x278).

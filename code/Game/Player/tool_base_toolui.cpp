@@ -11,6 +11,7 @@
 // helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "system/MemoryAllocator.h"
@@ -86,7 +87,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     if (*slot != 0) {
         uint64_t local = *slot;
         void* ui = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x98);
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
             reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&local));
         new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -94,7 +95,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     }
 
     void* ui = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x98);
 
     // (2) Load "Dialog/CreateBar.rsc" and type-check it against the External type.
     void* resource = nullptr;

@@ -14,6 +14,7 @@
 
 #include "game.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/StorageComponent.h"   // ENDGAME B.3.9 TR
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 TR
@@ -49,7 +50,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
     if (!::Object::ExternalFactory::_singleton) return;   // ENDGAME B.3.9 SS2 (merged)
 
     void* factory = ::Object::ExternalFactory::_singleton;
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
 

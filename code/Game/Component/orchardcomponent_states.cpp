@@ -66,6 +66,7 @@
 #include "Component/OrchardDescription.h"
 #include "Component/OrchardComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/exe_bodies.h"   // the Component leaves named below
 #include "Component/orchardcomponent_funcs.h"   // OrchardComponent_GetGrowth
@@ -244,9 +245,9 @@ extern "C" char Orchard_State9Enter(void* selfV, void* /*sm*/) {
     OrchardComponent_ResizeRefArray(reinterpret_cast<void*>(s + 0x50), rows * cols);
 
     int mapStride = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         int* stridePtr = *reinterpret_cast<int**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
         if (stridePtr) mapStride = *stridePtr;
     }
 
@@ -368,18 +369,18 @@ namespace {
 // Note the Time lives at calendar+8 and the YEAR is the int at calendar+0 (see the
 // event-4 handler, which stamps it into the component's +0x4c).
 int OrchardCurrentMonth() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
     uintptr_t cal = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x128);
     if (!cal) return 0;
     const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(cal + 8))->AsSeconds();   // B.3.4b bridge
     return static_cast<int>(secs / kSecondsPerYear * kMonthsPerYear);
 }
 
 int OrchardCurrentYear() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
     uintptr_t cal = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x128);
     return cal ? *reinterpret_cast<int32_t*>(cal) : 0;
 }
 
@@ -513,7 +514,7 @@ static char Orchard_TryHarvest(void* selfV, void* sm) {
     if (*reinterpret_cast<char*>(s + 0x48) == 0) return 0;
     if (OrchardCurrentYear() == *reinterpret_cast<int32_t*>(s + 0x4c)) return 0;
 
-    uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    uintptr_t gw = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
     uintptr_t weather = gw ? *reinterpret_cast<uintptr_t*>(gw + 0x130) : 0;
     if (weather && *reinterpret_cast<float*>(weather + 0x18) >= kWeatherThreshold) {
         const unsigned m = static_cast<unsigned>(OrchardCurrentMonth() - 7);
@@ -726,9 +727,9 @@ extern "C" char Orchard_State11Enter(void* selfV, void* /*sm*/) {
     uintptr_t posIBP = 0;
     FloorComponent_FindResData(*reinterpret_cast<void**>(s + 0x10), &posIBP);   // 0x140004680
     void* grid = nullptr;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+    if (GameUpdateLoop::_singleton != nullptr)
         grid = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     {   // The single line that says "the harvest actually started".
         static int s_n = 0;
         if (s_n++ < 4) {

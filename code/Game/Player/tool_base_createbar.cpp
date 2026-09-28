@@ -41,6 +41,7 @@
 //     read as 0 in standalone — filled lazily via ResolveAddr-then-GetTypeIdByName.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -417,7 +418,7 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     } else {
         // Drag rectangle: project start/end cells to world corners.
         int mapW = *reinterpret_cast<int*>(
-            *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8));
+            *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8));
         if (mapW != 0) {
             cornerCount = PlayerScreenRect_BuildCorners_ec70(
                 static_cast<uint64_t>(static_cast<uint32_t>(param_9 % mapW)),  // p1 (unused by ec70)

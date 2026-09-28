@@ -56,6 +56,7 @@
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "math/Math.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
@@ -131,8 +132,8 @@ inline T& At(uintptr_t base, ptrdiff_t off) {
 }
 
 inline uintptr_t GameWorld() {
-    return (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-               ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton)
+    return (GameUpdateLoop::_singleton != nullptr)
+               ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton)
                : 0;
 }
 

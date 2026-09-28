@@ -18,6 +18,7 @@
 #include "graphics/Material.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -226,7 +227,7 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
     // so the camera move depends only on the click position and map grid size.
 
     // Get game world and camera data
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     uintptr_t gw = (uintptr_t)gameWorld;
 
     // Camera controller is at gameWorld+0xE0
@@ -273,7 +274,7 @@ void MapUI::OnCreated() {
     static bool s_logged = false;
     if (!s_logged && Opt().mapTrace) {
         s_logged = true;
-        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* gw = GameUpdateLoop::_singleton;
         [[maybe_unused]] void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
         printf("[MapUI::Slot4] dispatched self=%p mat_tid=%u img_tid=%u "
                "terrBuf=%p ovrBuf=%p\n", (void*)this,
@@ -283,7 +284,7 @@ void MapUI::OnCreated() {
         fflush(stdout);
     }
     uintptr_t s = (uintptr_t)this;
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* mapComponent = *(void**)((uintptr_t)gameWorld + 0x148);
 
     // Setup terrain map image (no blend, element "imageMap")

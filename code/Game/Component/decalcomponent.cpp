@@ -17,6 +17,7 @@
 #include "Component/DecalDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -261,7 +262,7 @@ void DecalComponent::Persist(void* stream) {
 void DecalComponent::Startup() { DecalComponent_SetDrawFlag(this, true); }
 // [6] 0x14011b560 — Draw: build + submit the terrain decal.
 void DecalComponent::OnAdded() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton == nullptr) {
         return;
     }
     uintptr_t selfA = reinterpret_cast<uintptr_t>(this);
@@ -338,7 +339,7 @@ void DecalComponent::OnAdded() {
         }
     }
 
-    uintptr_t gs = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gs = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t decalSys = *reinterpret_cast<uintptr_t*>(gs + 0x110);
     if (!decalSys) {
         return;
@@ -374,8 +375,8 @@ void DecalComponent::OnAdded() {
 void DecalComponent::OnRemove() {
     if (decalId >= 0) {
         // Remove decal from terrain decal subsystem
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* terrainDecalSys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x110);
+        if (GameUpdateLoop::_singleton != nullptr) {
+            void* terrainDecalSys = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x110);
             if (terrainDecalSys)
                 DecalComponent_TerrainDecalRemove(terrainDecalSys, decalId);
         }

@@ -24,6 +24,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Action/exe_bodies.h"   // B3R: ActCNR_FindComponent_3f60, Pf_IsDstReachable_f810
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
@@ -43,7 +44,7 @@
 
 // GameWorld object = *g_pGameWorldSingleton (the Ghidra symbol g_pGameWorldSingleton is the
 // already-dereferenced object; in this codebase g_pGameWorldSingleton is the pointer slot).
-static inline uintptr_t WalkGameWorld() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t WalkGameWorld() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 
 // Clamp helper mirroring the inline (x<0 -> 0; x>=w -> w-1) the decompiler emits everywhere.
 static inline int WalkClampCell(int v, int w) {

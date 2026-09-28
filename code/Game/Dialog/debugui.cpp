@@ -25,6 +25,7 @@
 #include "graphics/Scene.h"
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -77,7 +78,7 @@ static void DebugUI_SetDayLighting_Impl(DebugUI* self, int month) {
     uintptr_t s = (uintptr_t)self;
     // weatherTable = **(gameWorld+0x130) == envRes (null if Environment.rsc
     // failed to load; guard so the reads below don't hit a wild low address).
-    void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
+    void** weatherListPtr = *(void***)((uintptr_t)(GameUpdateLoop::_singleton) + 0x130);
     uintptr_t weatherTable = weatherListPtr ? *(uintptr_t*)weatherListPtr : 0;
     if (!weatherTable) return;
     uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
@@ -104,7 +105,7 @@ static void DebugUI_SetDayLighting_Impl(DebugUI* self, int month) {
 // Inverse of SetDayLighting: slider → weather table.
 static void DebugUI_WriteLightingColors_Impl(DebugUI* self, int month) {
     uintptr_t s = (uintptr_t)self;
-    void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
+    void** weatherListPtr = *(void***)((uintptr_t)(GameUpdateLoop::_singleton) + 0x130);
     // weatherTable == *(weatherSim+0) == envRes (Environment.rsc keyframe table).
     // Null if Environment.rsc failed to load; without this guard the per-month
     // writes below would target (0 + month*0x20) — a wild low-address store.
@@ -150,12 +151,12 @@ static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeTicks), (sliderVal / 360.0f) * 3600.0f);
 
     // Set game world time
-    *(int64_t*)(*(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x128) + 8) = timeTicks;
+    *(int64_t*)(*(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x128) + 8) = timeTicks;
 
     // Reset weather time to 0
     int64_t zeroTick;
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTick), 0.0f);
-    void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
+    void** weatherListPtr = *(void***)((uintptr_t)(GameUpdateLoop::_singleton) + 0x130);
     Weather_ResetTime_Reimpl(weatherListPtr, &zeroTick);   // 0x1400944e0
 
     // Update lighting sliders for the new month
@@ -225,7 +226,7 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
     int selectedDrawIdx = (int)(intptr_t)itemData;
 
     // Get draw manager from game world
-    uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t world = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t* drawMgr = *(uintptr_t**)(world + 0x130);  // R14 = plVar1
 
     uintptr_t innerData = *(uintptr_t*)drawMgr;  // *plVar1
@@ -329,7 +330,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
                 bool isRawMat = ::Object::IsDerivedFromNullSafe(rawComp, RawMaterialDescription::TypeId());
                 if (isRawMat && rawComp != nullptr) {
                     // Destroy the entity (re-read entityList from global each time)
-                    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+                    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
                     void* entityList = *(void**)(game + 0xF0);
                     // The door was named fn_Game_DestroyEntity; it is bound to
                     // 0x140091e60 RawMaterialComponent_RegisterRawMaterial (B3R: the
@@ -352,7 +353,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
 // For each storage, spawns up to 5 items if current count < capacity.
 // ============================================================
 static void Game_SpawnItemsInStorage_Impl() {
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
 
     int storageCount = *(int*)(entityListBase + 0x98);
@@ -387,7 +388,7 @@ static void Game_SpawnItemsInStorage_Impl() {
 // spawning multiple citizens per building until full or 4 total.
 // ============================================================
 static void Game_SpawnCitizens_Impl() {
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
     void* randomPtr = *(void**)(game + 0xD8);
     uintptr_t* entityListPtr = *(uintptr_t**)(game + 0xF0);
     int buildingCount = (int)entityListPtr[1]; // building count at entityList+0x08
@@ -566,7 +567,7 @@ found_ai:
                             void* citDesc = isCitDesc ? citDescRaw : nullptr;
 
                             // Get profession list from game (re-read global)
-                            game = (uintptr_t)*g_pGameWorldSingleton;
+                            game = (uintptr_t)GameUpdateLoop::_singleton;
                             void* profList = *(void**)(*(uintptr_t*)(game + 0xB0) + 0x30);
 
                             // Create null parent InternalBasePtr
@@ -588,7 +589,7 @@ found_ai:
                             // Register entity with entity manager
                             // Use newEntityIBP (the InternalBasePtr value) as the entity ref
                             void* entityRef = newEntityIBP;
-                            game = (uintptr_t)*g_pGameWorldSingleton;
+                            game = (uintptr_t)GameUpdateLoop::_singleton;
                             void* entityMgr = *(void**)(game + 0xE8);
                             EntityList_RegisterEntity_Impl(entityMgr, &entityRef,
                                                          *(int*)((uintptr_t)entityDesc + 0x20));   // 0x1400c48a0
@@ -618,7 +619,7 @@ found_ai:
 // ============================================================
 static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
 
     // Pick random building from the building list
@@ -652,7 +653,7 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
 // Picks a random building, finds its FireComponent, ignites it.
 // ============================================================
 static void Game_StartRandomFire_Impl() {
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
     uint32_t buildingCount = *(uint32_t*)(entityListBase + 0x28);
 
@@ -678,7 +679,7 @@ static void Game_StartRandomFire_Impl() {
 // Loads Template/Tornado.rsc, creates entity, registers it.
 // ============================================================
 static void Game_SpawnTornado_Impl() {
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
 
     // Load tornado template
     System::Filename filenameBuf("Template/Tornado.rsc");
@@ -720,7 +721,7 @@ static void Game_SpawnTornado_Impl() {
 // Picks a random citizen from the citizen list, infects them.
 // ============================================================
 static void Game_InfectRandomCitizen_Impl() {
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
 
     uint32_t citizenCount = *(uint32_t*)(entityListBase + 0xF8);
@@ -941,7 +942,7 @@ void DebugUI::OnUpdateLayout() {
 //
 // Original: 0x140060BC0
 void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
-    void* game = *g_pGameWorldSingleton;
+    void* game = GameUpdateLoop::_singleton;
 
     // ---- Combo change (0x14) ----
     if (param3 == 0x14) {
@@ -1045,7 +1046,7 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
 //
 // Original: 0x14005FCC0
 void DebugUI_ToggleDebugFlag(void* ibpPtr, uint32_t flag) {
-    void* game = *g_pGameWorldSingleton;
+    void* game = GameUpdateLoop::_singleton;
     uint32_t* debugFlags = (uint32_t*)((uintptr_t)game + 0xD0);
 
     // CheckPtr resolves the InternalBasePtr (lazy/weak pointer resolution)
@@ -1175,7 +1176,7 @@ void DebugUI::OnCreated() {
             // STANDALONE: this list can be null/unpopulated, and
             // GetResourceCount(null) faults reading null+0x28. Guard so a missing
             // list yields an empty combo instead of crashing.
-            void* gameWorld_dc = *g_pGameWorldSingleton;
+            void* gameWorld_dc = GameUpdateLoop::_singleton;
             void* externalList = gameWorld_dc ? *(void**)((uintptr_t)gameWorld_dc + 0xa8) : nullptr;
             int resourceCount = externalList
                                     ? reinterpret_cast<const ::Object::ExternalList*>(
@@ -1221,7 +1222,7 @@ void DebugUI::OnCreated() {
     // ==========================================================
     // 5. Cheat checkboxes (IDs 0x14B..0x153) with initial state
     // ==========================================================
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     uint32_t cheatFlags = *(uint32_t*)((uintptr_t)gameWorld + 0xD0);
 
     void* elem;

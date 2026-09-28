@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include "engine_funcs.h"   // the globals the moved inline bodies still read
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 class MainMenuDialog;  // code/Game/Dialog/MainMenuDialog.h
@@ -260,7 +261,7 @@ inline uint32_t fn_GetCurrentProductIndex(void* component) {
         float* weights = *(float**)(c + 0x58);
         float totalWeight = 0.0f;
         for (int i = 0; i < count; i++) totalWeight += weights[i];
-        void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+        void* randomPtr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
         // B.3.4b bridge: ?RandFloat@Random@System@@QEAAMXZ (0x1800c7d40).
         float randVal = reinterpret_cast<System::Random*>(randomPtr)->RandFloat();
         float accum = 0.0f;

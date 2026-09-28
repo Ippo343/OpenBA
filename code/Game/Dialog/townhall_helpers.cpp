@@ -23,6 +23,7 @@
 // localized name; see the per-function notes below).
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"
 #include "Component/coll_bridge.h"
@@ -437,8 +438,8 @@ void DemoteToLaborer(uintptr_t citizen, uintptr_t laborerKey) {
 
 extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) {
     uintptr_t townMgr = (uintptr_t)citizenList;
-    if (!townMgr || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    if (!townMgr || GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t profList = *(uintptr_t*)(gw + 0xb0);
     if (!profList) return;
     uintptr_t laborer = *(uintptr_t*)(profList + 0x30);

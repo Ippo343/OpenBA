@@ -28,6 +28,7 @@
 #include "Player/roadtool_funcs.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // RoadTool_sub_ce00 (0x14009ce00), called by name
 #include "Player/exe_bodies.h"
 #include "Action/exe_bodies.h"
@@ -213,8 +214,8 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
 
     // Post to the work scheduler at gameWorld+0x118. code 0x2000 = the road category;
     // retail passes fromExisting='\0' and prio=-1 (the prio is dead on this path).
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        void* sched = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x118);
+    if (GameUpdateLoop::_singleton != nullptr) {
+        void* sched = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x118);
         if (sched) CitizenAI_WorkScheduler_Insert(static_cast<int*>(sched), &workIbp, 0x2000, '\0', -1);
     }
 
@@ -242,8 +243,8 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     uint32_t sc = startCell, ec = endCell;
     if ((int)ec < (int)sc) { sc = endCell; ec = startCell; }
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
-    uintptr_t gameWorld = (uintptr_t)(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return false;
+    uintptr_t gameWorld = (uintptr_t)(GameUpdateLoop::_singleton);
     uint32_t* mapGrid = *(uint32_t**)(gameWorld + 0xf8);
     if (!mapGrid) return false;
     int64_t terrainBase = *(int64_t*)((uintptr_t)mapGrid + 0x80);

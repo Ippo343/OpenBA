@@ -35,6 +35,7 @@
 // fn_SetupBuildActions corresponds to the exe helper at c0690.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"   // B3R: the action ctor bodies called by name
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
@@ -119,7 +120,7 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
     // uVar2 = Random::Rand(*(gw+0xd8), 2) — tool/anim variant (0 or 1).
     uint32_t uVar2 = 0;
     {
-        uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+        uintptr_t gw = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
         void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
         if (rng) uVar2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(2));   // B.3.4b bridge
     }

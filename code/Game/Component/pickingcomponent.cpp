@@ -13,6 +13,7 @@
 #include "Component/ModelComponent.h"
 #include "Component/MapComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -69,7 +70,7 @@ static void* PC_FindModelComponent(void* entity) {
 
 void PickingComponent_RegisterMesh(void* pc) {
     if (!pc) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     uint8_t* p = (uint8_t*)pc;
 
@@ -129,7 +130,7 @@ void PickingComponent_RegisterMesh(void* pc) {
     void* mesh = *(void**)((uint8_t*)row + (int)modelVariant * 8);
     if (!mesh) return;
 
-    void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
+    void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x70);
     if (!scene) return;
 
     // Picking::Scene::AddMesh (Runtime 0x1801252e0): the ExternalPtr is a bare
@@ -268,8 +269,8 @@ void PickingComponent::OnAdded() { PickingComponent_RegisterMesh(this); }
 
 void PickingComponent::OnRemove() {
     if ((int)pickingId >= 0) {
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* pickingScene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
+        if (GameUpdateLoop::_singleton != nullptr) {
+            void* pickingScene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x70);
             // Picking::Scene::RemoveMesh (import slot 0x140152438, Runtime 0x180125290).
             reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh((uint32_t)pickingId);   // B.3.7 bridge
         }

@@ -11,6 +11,7 @@
 
 #include "Component/MarketLocationComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -47,10 +48,10 @@ using MarketLocationCtrlDispatch = ::ControllerLive::Dispatcher<MarketLocationCt
 // — then `XOR AL,AL` (0: the Tick's enter walk continues past this node). The slot-7
 // removal hook (0x14004ef60) and the state-3 enter below are the matching erase.
 static char MarketLoc_State2Enter(void* data, void* /*sm*/) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
     uint64_t entityPtr = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(data) + 0x10);
     const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     // B.3.2 bridge: 0x140003110 is Collection::Array<void*>::SetSize(n, fill).
     const int count = *reinterpret_cast<int*>(townMgr + 0x18);
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x10))
@@ -153,14 +154,14 @@ void MarketLocationComponent::Persist(void* stream) {
 //   CALL FUN_140002cc0           ; erase-by-value
 
 void MarketLocationComponent::OnRemove() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (GameUpdateLoop::_singleton == nullptr)
         return;
 
     // Build an InternalBasePtr on the stack with the owner entity
     uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
 
     // Get the world manager from game state
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Erase the owner entity from the market-location list at worldMgr + 0x10

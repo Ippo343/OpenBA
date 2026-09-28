@@ -45,6 +45,7 @@
 // the resulting "gate=SURPLUS_SHED" from marketwork.cpp.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
@@ -157,9 +158,9 @@ static int InMarketVolumeForMask(int64_t sc, uint32_t mask, uint32_t tidRawMat) 
 }
 
 static inline void* TownMgr() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
     return *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf0);
 }
 
 // ============================================================
@@ -188,7 +189,7 @@ static void DoOverstock(int frameNum) {
     int64_t marketEntity = 0;
     void* marketComp = nullptr;
     {
-        const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+        const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
         const uintptr_t el = *reinterpret_cast<uintptr_t*>(gw + 0xe8);
         const uintptr_t arr = el ? *reinterpret_cast<uintptr_t*>(el + 0x08) : 0;
         const int entCount = el ? *reinterpret_cast<int*>(el + 0x10) : 0;

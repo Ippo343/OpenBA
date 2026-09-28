@@ -23,6 +23,7 @@
 //   0x140053ca0  pasture/migration target picker (collect+random-pick cells)    [loop]
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
@@ -560,7 +561,7 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
             local_88 = local_88 + 1;
         } while (local_88 < iVar2);
         if (uVar16 != 0) {
-            uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+            uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
             void* randomObj = *reinterpret_cast<void**>(game + 0xd8);
             uint32_t uVar4r = reinterpret_cast<System::Random*>(randomObj)->Rand(static_cast<uint32_t>(uVar16));   // B.3.4b bridge
             int picked = *reinterpret_cast<int*>((int64_t)pvVar5 + (int64_t)(int)uVar4r * 4);

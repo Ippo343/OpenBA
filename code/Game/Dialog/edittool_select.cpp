@@ -39,6 +39,7 @@
 //   DAT_1401c7fc8   = UIComponent  (writer: UIComponent_RegisterType, used by db60)
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"   // B3R: HighlightClear_Impl, HighlightSelect_Impl
 #include "Component/UIComponent.h"     // ENDGAME B.3.9 CB: 0x1401c7fc8 cell class
 #include "Component/UIDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7f90 cell class
@@ -123,7 +124,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     //    a no-dialog entity returns early below and leaves the current outline intact.)
 
     // 3. UserInterface = *(gameWorld + 0x98).
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
         reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
 

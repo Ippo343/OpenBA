@@ -19,6 +19,7 @@
 
 #include "Tutorial/TutorialSetupCamera.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -66,9 +67,9 @@ void TutorialSetupCamera::Destruct() { this->~TutorialSetupCamera(); }
 // absX = chunkRow * cellSize + cellX; absY = chunkCol * cellSize + cellY,
 // written to the camera object (GameWorld+0x120) +0xa8 / +0xac, flag +0xa4.
 void TutorialSetupCamera::Begin() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     // Get map cell size from WorldGrid (+0xF8 is pointer to grid, first int is cell size)
     void** gridPtr = *reinterpret_cast<void***>(gameWorld + 0xF8);

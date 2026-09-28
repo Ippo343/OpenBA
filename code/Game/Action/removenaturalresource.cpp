@@ -28,6 +28,7 @@
 
 #include "RemoveNaturalResource.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActCNR_*, ActHunt_* helpers
 #include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -125,7 +126,7 @@ int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
 
     // Check if the resource has an owner and it's not the town owner
     uintptr_t ownerRef = *(uintptr_t*)((uintptr_t)natResDesc + 0x78);
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t mapPtr = *(uintptr_t*)(gameWorld + 0xb0);
     uintptr_t townOwner = *(uintptr_t*)(mapPtr + 0x30);
 

@@ -32,6 +32,7 @@
 // is kept here too so a later include change cannot break it silently.
 #include "video/Device.h"       // Video::Device, Video::Configuration
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "ui/UserInterface.h"
@@ -905,7 +906,7 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     *(float*)((uintptr_t)userInterface + 0xDC) = (float)gs[0] / 100.0f;
 
     // Notify game world of settings change (virtual call at vtable+0x18)
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (gameWorld) {
         // System::Time::Time(0.0f)
         uint8_t timeVal[8] = {};

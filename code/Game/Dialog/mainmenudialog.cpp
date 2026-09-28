@@ -29,6 +29,7 @@
 #include "Dialog/GoalDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/ScenarioDialog.h"      // B3R: ScenarioDialog_Ctor
 #include "system/Configuration.h"      // B3R: System::Configuration, RtSystem_Configuration_CurrentBuildId
 #include "save/SaveLoad.h"             // B3R: RtSave_SaveLoad_Dtor
@@ -611,7 +612,7 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
     // --- If game is active: pause audio and conditionally hide buttons ---
     uint64_t gameWorld = *(uint64_t*)(s + 0xB8);
     if (gameWorld != 0) {
-        void* world = *g_pGameWorldSingleton;
+        void* world = GameUpdateLoop::_singleton;
         void* audioScene = *(void**)((uintptr_t)world + 0x78);
 
         reinterpret_cast<Audio::Scene*>(audioScene)->Pause(4, true);   // B.3.7 bridge
@@ -659,7 +660,7 @@ void MainMenuDialog_Slot5(MainMenuDialog* self) {
     if (*(uint64_t*)(s + 0xB8) == 0)
         return;
 
-    void* world = *g_pGameWorldSingleton;
+    void* world = GameUpdateLoop::_singleton;
     void* audioScene = *(void**)((uintptr_t)world + 0x78);
 
     reinterpret_cast<Audio::Scene*>(audioScene)->Pause(4, false);   // B.3.7 bridge
@@ -951,7 +952,7 @@ void StandaloneOpenMapParams(void* self) {
 
 // Harness entry — open the map dialog headlessly (UI from gameWorld+0x98).
 extern "C" void MapParamsDialog_HarnessOpen() {
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) { printf("[OpenMap] gameWorld null\n"); return; }
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x98);
     printf("[OpenMap] harness open: ui=%p\n", ui);

@@ -30,6 +30,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "Component/BuildComponent.h"
 #include "Component/StateMachineComponent.h"
@@ -74,7 +75,7 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
     Init();
     if (s_interval <= 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     const uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(gw) + 0xe8);

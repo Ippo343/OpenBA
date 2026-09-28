@@ -35,6 +35,7 @@
 
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/BuildComponent.h"   // caller batch CB6: TypeId()
 #include "resolve.h"
@@ -112,7 +113,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     if (!ForceConstructEnvOn()) return false;
     void* site = g_pConstructionDemoEntity;
     if (!site || !citizen) return false;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
+    if (GameUpdateLoop::_singleton == nullptr) return false;
     if (!System::MemoryAllocator::_singleton) return false;
 
     // Bind to the FIRST force-worked citizen only (single, observable subject).

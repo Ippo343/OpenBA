@@ -33,6 +33,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <windows.h>
 #include <cstdio>
 #include "resolve.h"
@@ -69,8 +70,8 @@ namespace {
 // The live Audio::Scene lives at gameWorld+0x78 (disasm: MOV RAX,[0x1401c3dd8];
 // MOV RDI,[RAX+0x78]). Null in standalone unless the audio scene was built.
 inline void* AudioScene() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
-    return *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x78);
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0x78);
 }
 
 inline RosterRec* Roster(int64_t storageComp, int slotIndex) {

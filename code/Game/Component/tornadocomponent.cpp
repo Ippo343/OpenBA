@@ -48,6 +48,7 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -151,7 +152,7 @@ bool TraceOn() {
     } while (0)
 
 void* GameWorld() {
-    return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    return GameUpdateLoop::_singleton;
 }
 
 // The TornadoDescription behind this component. Retail:
@@ -641,7 +642,7 @@ extern "C" void Tornado_AudioMoveEmitters_42960(void* audioComp, void* newPos) {
     if (*reinterpret_cast<const Math::Vector3*>(np) == *reinterpret_cast<const Math::Vector3*>(cached))   // B.3.1 bridge
         return;
 
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     const int count = *reinterpret_cast<int*>(a + 0x40);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(a + 0x38);
     for (int i = 0; i < count; i++) {

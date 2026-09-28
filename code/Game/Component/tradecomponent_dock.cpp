@@ -60,6 +60,7 @@
 // any of these four addresses.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "Component/ControllerComponent.h"
@@ -124,9 +125,9 @@ void* TradeDesc(uintptr_t comp) {
 }
 
 uintptr_t TownMgr() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
     return *reinterpret_cast<uintptr_t*>(
-               reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+               reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
 }
 
 // Find the first object in a description's child array (base +0x28, count +0x30,
@@ -336,7 +337,7 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
     *reinterpret_cast<int32_t*>(comp + 0x2c) = -1;
 
     void* rng = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
     const uintptr_t desc = reinterpret_cast<uintptr_t>(TradeDesc(comp));
 
     // Roll which merchant arrived, and remember it: everything below indexes on it, and

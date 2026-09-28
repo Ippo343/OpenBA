@@ -50,6 +50,7 @@
 #include "Component/MultiObjectComponent.h"
 #include "Component/PickingComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
@@ -259,7 +260,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
     const uint32_t maskBody = *reinterpret_cast<uint32_t*>(desc + 0x20);
     const int      radius   = *reinterpret_cast<int*>(desc + 0x34);
 
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return 0;
     uint32_t* mapGrid = *reinterpret_cast<uint32_t**>(
                             reinterpret_cast<uintptr_t>(gameWorld) + 0xf8);

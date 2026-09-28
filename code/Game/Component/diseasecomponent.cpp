@@ -79,6 +79,7 @@
 #include "Component/diseasecomponent_funcs.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
@@ -142,7 +143,7 @@ static inline float SecsPerYear()   { return BitsF(kRdata_14017225c); }   // 360
 static inline float OneF()          { return kRdata_14017214c; }          // 1.0f (g_fUVScale)
 
 static inline void* GameWorld() {
-    return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    return GameUpdateLoop::_singleton;
 }
 static inline int64_t TimeFromSeconds(float secs) {
     int64_t t = 0;                              // Time ctor writes 8 BYTES

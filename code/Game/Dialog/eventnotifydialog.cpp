@@ -28,6 +28,7 @@
 #include "Dialog/EventPopupDialog.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -350,7 +351,7 @@ void EventNotifyDialog::OnOpened() {
     }
 
     // Copy event log counter: this+0xC4 = *(*(world+0x138) + 0x20)
-    void* world = *g_pGameWorldSingleton;
+    void* world = GameUpdateLoop::_singleton;
     uintptr_t eventLog = *(uintptr_t*)((uintptr_t)world + 0x138);
     *(uint32_t*)(s + 0xC4) = *(uint32_t*)(eventLog + 0x20);
 }
@@ -378,7 +379,7 @@ void EventNotifyDialog::OnOpened() {
 void EventNotifyDialog::OnUpdate(const System::Time& time) {
     uintptr_t s = (uintptr_t)this;
 
-    uintptr_t eventLogPtr = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+    uintptr_t eventLogPtr = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
     int64_t* tickParam = (int64_t*)&time;   // System::Time is one int64 tick count
 
     // Phase 1: Decrement timers on active notifications, remove expired ones
@@ -554,7 +555,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
         if (hasNewEvents) {
             uint8_t zeroTime[8];
             RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
-            void* audioScene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x78);
+            void* audioScene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x78);
             uint64_t soundEffect = *(uint64_t*)(*(uintptr_t*)g_pKeyMapSingleton + 0x98);
             reinterpret_cast<Audio::Scene*>(audioScene)->PlayEffect(
                 reinterpret_cast<Audio::SoundEffect*>(soundEffect), static_cast<Audio::Scene::SoundType>(1),
@@ -659,7 +660,7 @@ void EventNotifyDialog::OnUpdateLayout() {
     // -------------------------------------------------------
     // Step 4: Show ribbonNotify element
     // -------------------------------------------------------
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     uintptr_t eventLogPtr = *(uintptr_t*)((uintptr_t)gameWorld + 0x138);
     if (!eventLogPtr) return;  // event log not initialized yet (e.g. during loading)
@@ -844,7 +845,7 @@ void EventNotifyDialog::OnUpdateLayout() {
 // Constant: DAT_140172114 = 0.5f (tile center offset).
 // Original: 0x1400685a0.
 static void EventNotifyDialog_NavigateToEvent(EventNotifyDialog* self, int index) {
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
 
     // Step 1+2: get event log entry index from active event array
     uintptr_t activeEvents = *(uintptr_t*)((uintptr_t)self + 0xD8);

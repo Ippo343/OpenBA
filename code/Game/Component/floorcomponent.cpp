@@ -22,6 +22,7 @@
 #include "Component/FloorDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"          // GetTypeIdByName
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -151,7 +152,7 @@ void FloorComponent_SubF390(void* selfV) {
         reinterpret_cast<Component*>(selfV)->OnRemove();   // B.3.x bridge (slot 7)
     }
 
-    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int* mapInfo = *reinterpret_cast<int**>(world + 0xF8);
 
     int64_t resIBP = 0;
@@ -346,7 +347,7 @@ void FloorComponent::OnAdded() {
 void FloorComponent::OnRemove() {
     if (floorId >= 0) {
         // Get scene from game state
-        int* pScene = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xF8);
+        int* pScene = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xF8);
 
         // Check owner pointer
 

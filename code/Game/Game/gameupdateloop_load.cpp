@@ -890,8 +890,9 @@ void GameUpdateLoop::Load() {
             m_climateConfig, m_terrainConfig, m_savedState);
     fflush(stderr);
 
-    // g_pGameWorldSingleton = this loop (read by AddGlobalObject / Audio::Pause at the tail).
-    if (g_pGameWorldSingleton) *g_pGameWorldSingleton = loopVoid;
+    // GameUpdateLoop::_singleton = this loop (0x140096b35; read by AddGlobalObject /
+    // Audio::Pause at the tail).
+    _singleton = this;
 
     // Steps 1-4: resource Finds (Diseases/Profession/Material/Help). Only step 3
     // (UI material) is still DEFERRED (left null; consumers guarded).

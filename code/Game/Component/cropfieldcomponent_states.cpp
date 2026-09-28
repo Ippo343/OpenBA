@@ -68,6 +68,7 @@
 #include "Work/TendArea.h"
 #include <new>
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -316,9 +317,9 @@ static char CropField_Event3Plant(void* self, void* sm) {
 static char CropField_State2PerFrame(void* self, void* sm, void* /*time*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    if (GameUpdateLoop::_singleton == nullptr) return 1;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const uintptr_t seasonMgr = *reinterpret_cast<uintptr_t*>(gw + 0x128);
     const uintptr_t weather   = *reinterpret_cast<uintptr_t*>(gw + 0x130);
     if (!seasonMgr || !weather) return 1;
@@ -354,8 +355,8 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
 
     CropFieldComponent_ResizeEntityList(reinterpret_cast<void*>(comp + 0x58), w * h);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return 1;
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
     if (!mapGrid) return 1;
     const int mapW = *mapGrid;
@@ -498,9 +499,9 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
 
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
     if (*reinterpret_cast<char*>(comp + 0x49) == 0) return 1;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    if (GameUpdateLoop::_singleton == nullptr) return 1;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const uintptr_t weather   = *reinterpret_cast<uintptr_t*>(gw + 0x130);
     const uintptr_t seasonMgr = *reinterpret_cast<uintptr_t*>(gw + 0x128);
     if (!weather || !seasonMgr) return 1;

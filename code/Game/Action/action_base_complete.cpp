@@ -31,6 +31,7 @@
 #include "graphics/Scene.h"
 #include "system/Value.h"       // System::Time, for Geometry::Update's argument
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"      // WorkCellBST_Remove_ca60, WorkBST_BSTRemove_a6e0
 #include "Game/exe_constants.h"  // kRdata_14017214c
 #include "Component/ModelDescription.h"         // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
@@ -337,8 +338,8 @@ void ActCt_HideTool_1176e0(void* entityV) {
     reinterpret_cast<Graphics::Geometry*>(model + 0x28)
         ->Detach(reinterpret_cast<Graphics::Geometry*>(e + 0xb8));   // B.3.5 bridge
 
-    if (g_pGameWorldSingleton) {
-        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x60);
+    if (GameUpdateLoop::_singleton) {
+        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x60);
         reinterpret_cast<Graphics::Scene*>(scene)
             ->RemoveObject(*reinterpret_cast<uint32_t*>(e + 0x1dc));   // B.3.5 bridge
     }
@@ -501,8 +502,8 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     }
 
     // add to scene + record object id
-    if (g_pGameWorldSingleton) {
-        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x60);
+    if (GameUpdateLoop::_singleton) {
+        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x60);
         uint32_t objId = reinterpret_cast<Graphics::Scene*>(scene)
             ->AddObject(reinterpret_cast<Graphics::Geometry*>(e + 0xb8));   // B.3.5 bridge
         *reinterpret_cast<int*>(e + 0x1d8) = toolId;

@@ -13,6 +13,7 @@
 #include "Component/healercomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -60,13 +61,13 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0
 // component inert nothing ever entered state 2, so the healer array at townMgr+0x70
 // stayed empty for the life of the save and the sick had nowhere to be sent.
 extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
 
     uint8_t ibp[24] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
 
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
     if (!townMgr) return 0;
 
     const int count = *reinterpret_cast<int*>(townMgr + 0x78);
@@ -164,9 +165,9 @@ void HealerComponent::Persist(void* stream) {
 void HealerComponent::OnRemove() {
     uint8_t basePtr[24] = {};
     new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
         if (townMgr)
             CemeteryListErase_Reimpl(reinterpret_cast<void*>(townMgr + 0x70), basePtr);
     }

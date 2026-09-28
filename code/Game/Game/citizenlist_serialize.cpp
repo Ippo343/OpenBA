@@ -98,6 +98,7 @@
 // exercises them, verify against Ghidra before trusting the result.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include <cstdio>
@@ -757,7 +758,7 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
 
     if (*reinterpret_cast<int32_t*>(base + 0x148) >= 1) return;   // already populated
 
-    int* mapGrid = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
+    int* mapGrid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
     int side = *mapGrid >> 3;
     ResizeStride0x10(base + 0x140, side * side);
     std::fprintf(stderr, "[CitPostLoad] mapGrid=%p mapWidth=%d side=%d cells=%d "

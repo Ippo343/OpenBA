@@ -6,6 +6,7 @@
 
 #include "force_work.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Component/MapComponent.h"   // caller batch CB6: TypeId()
 #include <cstdio>
@@ -112,11 +113,11 @@ void* FindComp(void* entity, uint32_t tid) {
 }
 
 int WorkAreaCenterCell(void* area) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
+    if (GameUpdateLoop::_singleton == nullptr) return -1;
     const uint32_t tidMap = MapComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
     void* mc = FindComp(area, tidMap);
     if (!mc || !Readable(mc, 0x30)) return -1;
-    uintptr_t game = reinterpret_cast<uintptr_t>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
+    uintptr_t game = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
     if (!game) return -1;
     int dim = *reinterpret_cast<int*>(game);
     if (dim <= 0) return -1;

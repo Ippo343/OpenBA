@@ -59,6 +59,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/StorageLocationDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/StorageLocationComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
@@ -107,7 +108,7 @@ static inline uint32_t CompTypeId(void* comp) {
 }
 
 // gameWorld base (g_pGameWorldSingleton is void** → *g_pGameWorldSingleton = the object).
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 
 // Scan an entity's comp-list1 (entity+0x30 array, entity+0x38 count) for a component whose

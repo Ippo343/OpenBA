@@ -75,6 +75,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -102,7 +103,7 @@ namespace {
 // --- registered exe sub-callees: called by name (Component/Action/Work exe_bodies.h) ---
 
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 
 // A plausible heap node pointer: non-null, not the -1 "invalid IBP" sentinel, and canonical
 // user-space (>= 64K, < 2^47). Used to fence the AVL rebalance walk (Helper_e360) against a

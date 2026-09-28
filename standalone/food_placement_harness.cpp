@@ -34,6 +34,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"   // Object::Base::TypeName (B3X W0)
@@ -173,7 +174,7 @@ void ProbeClass(const FoodClass& fc) {
         std::fprintf(stderr, "[FoodPlace] %-19s TYPE ID UNRESOLVED\n", fc.component);
         return;
     }
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!el) return;

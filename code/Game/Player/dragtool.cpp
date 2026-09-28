@@ -16,6 +16,7 @@
 #include "Player/dragtool.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "Player/exe_bodies.h"
 #include <cstdint>
@@ -77,7 +78,7 @@ static inline void* GetKeyMap() {
 // Helper: get UserInterface from GameWorld singleton
 // ============================================================
 static inline void* GetUserInterface() {
-    return *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x98);
+    return *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x98);
 }
 
 // ============================================================

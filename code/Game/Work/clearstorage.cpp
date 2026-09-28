@@ -12,6 +12,7 @@
 #include "Work/ClearStorage.h"
 #include "Work/clearstorage_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
@@ -76,7 +77,7 @@ int ClearStorage::Execute(void* citizenAI, void* time) {
     fn_FindComponent_Storage(entity, &storageIBP);
 
     // Get game world grid data
-    uintptr_t gameWorld = *(uintptr_t*)g_pGameWorldSingleton;
+    uintptr_t gameWorld = ((uintptr_t)GameUpdateLoop::_singleton);
     int* gridDataPtr = *(int**)(gameWorld + 0xf8);
     void* worldArray = *(void**)(gameWorld + 0xf0);
 
@@ -530,7 +531,7 @@ int ClearStorage::Cleanup() {
 // Uses hidden return pointer ABI (member function returning non-trivial).
 // Path: g_pGameWorldSingleton -> +0xb0 -> +0x30
 void* ClearStorage::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
     return retbuf;

@@ -21,6 +21,7 @@
 // g_pGameWorldSingleton + X  ==  (uintptr_t)*g_pGameWorldSingleton + X.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include "Work/exe_bodies.h"       // WorkBST_BSTRemove_a6e0
 #include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
@@ -175,7 +176,7 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
 
     fVar4 = RdataF(kRdata_140172230);   // 0x140172230
     fVar3 = kRdata_140172114;           // 0x140172114
-    lVar2 = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110);
+    lVar2 = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x110);
     for (; param_3 <= param_5; param_3 = param_3 + 1) {
         if (param_2 <= param_4) {
             iVar6 = param_2;
@@ -199,7 +200,7 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
         }
     }
     Pf_RoadMeshRebuild_f370(   // 0x1400af370
-        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110), param_1);
+        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x110), param_1);
 }
 
 // ============================================================
@@ -250,5 +251,5 @@ void Pf_FinalizeRoadTile_9c640(uint* param_1, int param_2, uint8_t param_3, uint
     } while (true);
 LAB_14009c6d2:
     Pf_RoadMeshRebuild_f370(   // 0x1400af370
-        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110), param_1);
+        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x110), param_1);
 }

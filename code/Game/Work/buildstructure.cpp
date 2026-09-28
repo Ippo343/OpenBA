@@ -23,6 +23,7 @@
 #include "Work/BuildStructure.h"
 #include "Work/buildstructure_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"          // B3R: the Pf_* bodies called by name
 #include "Component/exe_bodies.h"       // B3R: AttendanceComponent_GetJobHostComponent
@@ -321,7 +322,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
     }
 
     // --- Phase 5: Get map grid and building center cell ---
-    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
 
     uintptr_t citizenEntity = *(uintptr_t*)citizenPtr;
 
@@ -546,7 +547,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
 // Reads: gameWorld+0xB0 -> +0x38 (build target entity IBP)
 // Uses hidden return pointer ABI: RCX=self, RDX=retBuf
 void* BuildStructure::GetTarget(void* retBuf) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t buildMgr = *(uintptr_t*)(gameWorld + 0xB0);
     *(uint64_t*)retBuf = *(uint64_t*)(buildMgr + 0x38);
     return retBuf;
@@ -859,5 +860,5 @@ extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
 // Execute-readiness gate for the force harness (no retail address). B3R: BuildStructure's
 // helpers are called by name, so the only thing left to test is the game world (STORAGE).
 extern "C" bool BuildStructure_DepsReady() {
-    return g_pGameWorldSingleton && *g_pGameWorldSingleton;
+    return GameUpdateLoop::_singleton != nullptr;
 }

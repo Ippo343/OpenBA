@@ -30,6 +30,7 @@
 
 #include "HuntAnimal.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActHunt_*, Pf_* helpers
 #include "Work/exe_bodies.h"     // WorkGrid_FindCell_9ccf0, WorkBase_ValidateCell_a00f0
 #include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
@@ -190,7 +191,7 @@ void HuntAnimal::Enter(void*, void*) {
     searchPos[2] = *(float*)((uint8_t*)posHolder + 0x160);
 
     // Spatial query: find nearby entity
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     void* gridPtr = *(void**)(gameWorld + 0x88);
     void* queryResult = nullptr;
 

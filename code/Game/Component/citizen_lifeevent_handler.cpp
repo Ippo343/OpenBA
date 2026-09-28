@@ -40,6 +40,7 @@
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Geometry.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include "math/Math.h"
@@ -103,7 +104,7 @@ extern "C" void Citizen_FamilyRingOrFlag_3a70(void* citizenV, uint32_t flags) {
 // 0xffffffff when every cell already holds a tombstone.
 extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
     uint8_t* self = reinterpret_cast<uint8_t*>(cemCompV);
-    uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
+    uint8_t* world = GameUpdateLoop::_singleton ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr;
     if (!world) return 0xffffffffu;
     int count = *reinterpret_cast<int*>(self + 0x50);
     if (count <= 0) return 0xffffffffu;
@@ -135,7 +136,7 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
 extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, uint32_t citizenCell) {
     uint8_t* listMgr = reinterpret_cast<uint8_t*>(listMgrV);
     *out = nullptr;
-    uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
+    uint8_t* world = GameUpdateLoop::_singleton ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr;
     if (!world || !listMgr) return out;
     int* map = *reinterpret_cast<int**>(world + 0xf8);
     int best = 0x7fffffff;
@@ -196,7 +197,7 @@ extern "C" void** ComponentEntity_FindTombstoneComp_4800(void* entityV, void** o
 // +0x168 yaw) from Transform::FromYawPitchOffset at terrain height.
 extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg) {
     uint8_t* self = reinterpret_cast<uint8_t*>(tombCompV);
-    uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
+    uint8_t* world = GameUpdateLoop::_singleton ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr;
     if (!world || !self) return;
     int* map = *reinterpret_cast<int**>(world + 0xf8);
     int size = *map;
@@ -237,7 +238,7 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
 extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
                                              uint64_t /*citizenCell*/, void* worldArg) {
     uint8_t* cem = reinterpret_cast<uint8_t*>(cemCompV);
-    uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
+    uint8_t* world = GameUpdateLoop::_singleton ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr;
     if (!world || !cem) return;
     int64_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -290,7 +291,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
 // bit-8 state at +0xd0 (loading/shutdown) — retail early-outs with AL=0 there.
 extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType, const char* strParam) {
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    uint8_t* world = g_pGameWorldSingleton ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
+    uint8_t* world = GameUpdateLoop::_singleton ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr;
     if (!world) return 0;   // [STANDALONE GUARD]
     if ((*reinterpret_cast<uint32_t*>(world + 0xd0) >> 8 & 1) != 0) return 0;
 

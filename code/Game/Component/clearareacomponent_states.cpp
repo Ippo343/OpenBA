@@ -38,6 +38,7 @@
 // Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/Component.h"   // B.3.x W0: Component::OnEvent by name
 #include "Work/Work.h"   // B.3.8 CB1a (Vtable)
 #include "Work/ClearArea.h"   // B.3.8 CB1a (Vtable)
@@ -178,7 +179,7 @@ static bool Grid_NoTargetResource(int* grid, int x1, int y1, int w, int h, uint6
 //   else                                  done = groundOK && Grid_NoTargetResource(descRef)
 // ============================================================
 static bool ClearArea_IsDone(void* comp) {
-    if (!comp || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return true;
+    if (!comp || GameUpdateLoop::_singleton == nullptr) return true;
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
     void* descObj = *reinterpret_cast<void**>(c + 0x18);
     // desc must be a ClearAreaDescription; if not, treat flags as zero (defensive).
@@ -200,7 +201,7 @@ static bool ClearArea_IsDone(void* comp) {
     int w  = *reinterpret_cast<int16_t*>(bc + 0x2c);
     int h  = *reinterpret_cast<int16_t*>(bc + 0x2e);
 
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     if (!grid) return false;
 
     bool groundOK = (flag1 == 0) || Grid_GroundClear(grid, x1, y1, w, h);
@@ -219,7 +220,7 @@ static bool ClearArea_IsDone(void* comp) {
 // Stored into comp+0x48 (clearState) by helper_7960 as progress bookkeeping.
 // ============================================================
 static int ClearArea_CountRemaining(void* comp) {
-    if (!comp || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (!comp || GameUpdateLoop::_singleton == nullptr) return 0;
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
     uint64_t buildComp = 0;
     fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
@@ -229,7 +230,7 @@ static int ClearArea_CountRemaining(void* comp) {
     int y1 = *reinterpret_cast<int16_t*>(bc + 0x2a);
     int w  = *reinterpret_cast<int16_t*>(bc + 0x2c);
     int h  = *reinterpret_cast<int16_t*>(bc + 0x2e);
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     if (!grid) return 0;
     int width = *grid;
     uintptr_t tiles = GridTiles(grid);
@@ -333,9 +334,9 @@ static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
 //   data = the ClearAreaComponent (node+0x18); sm = the state machine.
 // ============================================================
 extern "C" char ClearArea_State0Enter(void* data, void* sm) {
-    if (!data || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    if (!data || GameUpdateLoop::_singleton == nullptr) return 1;
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
 
     void* descObj = *reinterpret_cast<void**>(c + 0x18);
     bool descIsCA = descObj && ::Object::IsDerivedFromNullSafe(descObj, ClearAreaDescription::TypeId());
@@ -473,11 +474,11 @@ void ClearArea_Finalize8270(void* comp) {
     if (flag2c == 0) return;
 
     // desc+0x2c set: terrain regrow over the footprint, then broadcast event 5.
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         uint64_t bc = 0;
         fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &bc);
         if (bc) {
-            void* map = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+            void* map = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
             uintptr_t b = static_cast<uintptr_t>(bc);
             int x1 = *reinterpret_cast<int16_t*>(b + 0x28);
             int y1 = *reinterpret_cast<int16_t*>(b + 0x2a);

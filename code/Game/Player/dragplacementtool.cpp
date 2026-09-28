@@ -27,6 +27,7 @@
 #include "Component/CreateDragDescription.h"
 #include "Component/MapDescription.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"
 #include "Game/exe_constants.h"
 #include "Entity/componententity_funcs.h"
@@ -127,7 +128,7 @@ static inline float HeightTolerance() {
 int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
                                 int* outCostA, int* outCostB, int* outLength) {
     // Get map grid size pointer
-    int* mapPtr = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    int* mapPtr = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
     int gridSize = *mapPtr;
 
     // Convert cell indices to (col, row) grid coordinates
@@ -204,7 +205,7 @@ int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
         //   +0x9c: int existingEndCell
         uintptr_t dlg = (uintptr_t)dialogPtr;
         if (dlg && *(char*)(dlg + 0x80) != '\0') {
-            int existGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+            int existGridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
             int existStartCol = *(int*)(dlg + 0x98) % existGridSize;
             int existStartRow = *(int*)(dlg + 0x98) / existGridSize;
             int existEndCol = *(int*)(dlg + 0x9c) % existGridSize;
@@ -279,7 +280,7 @@ using TileArray = Collection::Array<TileRecord>;
 //
 // Original: 0x1400fbe40
 void DragPlacementTool::Draw(void* context, char param3) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     // --- Section 1: Existing placement overlay (yellow tiles) ---
     uintptr_t dialogCtrl = (uintptr_t)dialogPtr;
@@ -474,7 +475,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     }
 
     // Get map grid size
-    int gridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    int gridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
 
     // Convert cell indices to grid coords
     int startRow = startCell / gridSize;
@@ -497,7 +498,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     // Check constraints from dialog (+0x10)
     uintptr_t dlg = (uintptr_t)dialogPtr;
     if (*(char*)(dlg + 0x80) != '\0') {
-        int cGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+        int cGridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
         int cStartCol = *(int*)(dlg + 0x98) % cGridSize;
         int cStartRow = *(int*)(dlg + 0x98) / cGridSize;
         int cEndCol = *(int*)(dlg + 0x9c) % cGridSize;
@@ -554,7 +555,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     *(int32_t*)(buildComp + 0x30) = rotation;
 
     // Register entity with entity list
-    void* entityList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xe8);
+    void* entityList = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xe8);
     int categoryId = *(int*)((uintptr_t)descriptionPtr + 0x20);
 
     EntityList_RegisterEntity_Impl(entityList, &entityIBP, categoryId);

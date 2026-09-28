@@ -29,6 +29,7 @@
 
 #include "ConsumeRawMaterial.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActRm_* helpers
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -199,7 +200,7 @@ int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
         ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storageComp), matEntry[0], requestedCount);   // 0x14012d150
 
         // Update global resource tracker
-        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
         uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
         int64_t consumedCount = matEntry[1];
 

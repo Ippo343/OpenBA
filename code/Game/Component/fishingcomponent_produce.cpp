@@ -13,6 +13,7 @@
 // that guard is retail's, not ours.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -79,11 +80,11 @@ void StampCoverage(uintptr_t comp, short delta) {
     const int r = RadiusOf(comp);
     int cx = 0, cy = 0;
     if (r < 0 || !TileCentre(comp, &cx, &cy) ||
-        !g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+        GameUpdateLoop::_singleton == nullptr) {
         return;
     }
     int* mgr = *reinterpret_cast<int**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     if (!mgr) return;
     FishingComponent_BrushTile(mgr, kFishingCoverageState, cx, cy, r, delta);
 }
@@ -123,11 +124,11 @@ char FishingComponent::ProduceTick(void* /*time*/) {
     const int r = RadiusOf(comp);
     int cx = 0, cy = 0;
     if (r < 0 || !TileCentre(comp, &cx, &cy) ||
-        !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+        GameUpdateLoop::_singleton == nullptr)
         return 0;
 
     int* mgr = *reinterpret_cast<int**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     if (!mgr) return 0;
     const int width = *mgr;
     const uintptr_t grid = *reinterpret_cast<uintptr_t*>(

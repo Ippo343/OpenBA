@@ -17,6 +17,7 @@
 #include "Work/Pickup.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -64,8 +65,8 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
     if (thresholdTime[0] < *pAccumulator) {
         void* entity = *(void**)((uintptr_t)self + 0x10);
 
-        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-        uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+        if (GameUpdateLoop::_singleton == nullptr) return;
+        uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
         uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xe8);
 
         if (entity != nullptr) {
@@ -238,8 +239,8 @@ void RawMaterialComponent::Startup() {
     // CheckPtr on owner at +0x10
 
     // Get entity chain from owner+0x28, register with world manager
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
         uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
         void* entityChain = *(void**)(*(uintptr_t*)(reinterpret_cast<uintptr_t>(this) + 0x10) + 0x28);
         RawMaterialComponent_RegisterRawMaterial((void*)worldMgr, entityChain);

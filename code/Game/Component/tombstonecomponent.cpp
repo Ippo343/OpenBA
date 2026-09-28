@@ -14,6 +14,7 @@
 #include "Component/TombstoneDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -49,10 +50,10 @@ void TombstoneComponent_Serialize(TombstoneComponent* self) {
         if (isDerived) buildingData = baseObj;
     }
 
-    if (!buildingData || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!buildingData || GameUpdateLoop::_singleton == nullptr) return;
 
     // Random float in [0, 1)
-    void* rng = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xD8);
+    void* rng = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xD8);
     float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
 
     // Compute lifetime: (randVal * max + min) * tickMultiplier
@@ -128,10 +129,10 @@ void TombstoneComponent::Startup() {
 
     void* buildingData = _description;  // +0x18 = the TombstoneDescription
     if (!buildingData) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     // Random float in [0,1) from the world RNG (world+0xD8).
-    void* rng = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xD8);
+    void* rng = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xD8);
     float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
 
     // lifetime seconds = (rand * maxTime + minTime) * secondsPerTickMul  (DAT_140172234).
@@ -168,8 +169,8 @@ void TombstoneComponent::Update(void* timeV) {
 
     if (*pTimer < 1) {
         void* entityPtr = _entity;
-        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-        void* gameWorld = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xE8);
+        if (GameUpdateLoop::_singleton == nullptr) return;
+        void* gameWorld = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xE8);
 
         if (entityPtr != nullptr) {
 

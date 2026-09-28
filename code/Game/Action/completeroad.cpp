@@ -10,6 +10,7 @@
 
 #include "CompleteRoad.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // Pf_FinalizeRoadTile_9c640
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
@@ -55,7 +56,7 @@ void CompleteRoad::Persist(void* stream) {
 int CompleteRoad::AbstractImpl(void* actionStack) {                     // [4] 0x1400c5850
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    void* gameState = *g_pGameWorldSingleton;
+    void* gameState = GameUpdateLoop::_singleton;
     void* terrain = *(void**)((uint8_t*)gameState + 0xf8);
 
     Pf_FinalizeRoadTile_9c640(static_cast<unsigned int*>(terrain),   // 0x14009c640

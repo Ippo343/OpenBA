@@ -67,6 +67,7 @@
 // destroycomponent.cpp.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/ClearStorage.h"   // B.3.8 CB1a (Vtable)
 #include "Work/Work.h"           // B.3.x W0: Work::GetPriority by name
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
@@ -194,8 +195,8 @@ extern "C" char Destroy_StorageEmpty_da80(int64_t comp) {
 // ============================================================
 static char Destroy_ReclaimPending_ea20(int64_t yard) {
     if (!yard) return 0;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int64_t mgr = *reinterpret_cast<int64_t*>(gw + 0x118);
     if (!mgr) return 0;
     int key = *reinterpret_cast<int*>(yard + 0x28);
@@ -290,8 +291,8 @@ static void* FindRawMatDescInTemplate(int64_t tmpl) {
 // ============================================================
 static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
                                           int width, int depth) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
     if (!entity) return;
 
@@ -440,8 +441,8 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
 // bit keeps sibling controllers from double-pushing the same entity).
 static void Destroy_MarkAndPushRemoval(int64_t entity) {
     if (!entity) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     int64_t entityList = *reinterpret_cast<int64_t*>(gw + 0xe8);
     if (!entityList) return;
     if (((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0) return;
@@ -623,8 +624,8 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
                     *reinterpret_cast<int16_t*>(fp + 0x2c),
                     *reinterpret_cast<int16_t*>(fp + 0x2e));
         }
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+        if (GameUpdateLoop::_singleton != nullptr) {
+            uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
             int64_t tradeMgr = *reinterpret_cast<int64_t*>(gw + 0x120);
             int64_t entityIBP = entity;
             if (tradeMgr) NomadComp_FUN_140103480(tradeMgr, &entityIBP);
@@ -713,8 +714,8 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     }
 
     // 3) Trade notify + mark the old entity for removal.
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
         int64_t tradeMgr = *reinterpret_cast<int64_t*>(gw + 0x120);
         int64_t entityIBP = entity;
         if (tradeMgr) NomadComp_FUN_140103480(tradeMgr, &entityIBP);
@@ -741,7 +742,7 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
 
             // >>> CREATE THE NEW BUILDING at the old footprint <<<
             if (::System::MemoryAllocator::_singleton &&
-                g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+                GameUpdateLoop::_singleton != nullptr) {
                 void* mem = ::System::MemoryAllocator::MemAlloc(0x48, 8);
                 void* newEntity = mem ? ComponentEntity_CtorFromDescription(
                     static_cast<ComponentEntity*>(mem), *reinterpret_cast<void**>(comp + 0x60)) : nullptr;
@@ -767,7 +768,7 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                         ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(npq), orient, 0);
                     }
 
-                    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+                    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
                     void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
                     int category = *reinterpret_cast<int*>(
                         *reinterpret_cast<uintptr_t*>(comp + 0x60) + 0x20);

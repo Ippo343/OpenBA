@@ -33,6 +33,7 @@
 #include "Action/PerformWork.h"
 #include "Action/SendComponentMessage.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Work/exe_bodies.h"          // WorkBase_TaskListCleanup_c5400, WorkBase_FindComponent_6270
@@ -211,7 +212,7 @@ MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination
         *reinterpret_cast<float*>(s + 0x478) = speed;
     } else {
         void* random = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
         float r = random ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         *reinterpret_cast<float*>(s + 0x478) =
             r * RdataF(kRdata_1401720e4) + kRdata_14017214c;   // 0x1401720e4 / 0x14017214c

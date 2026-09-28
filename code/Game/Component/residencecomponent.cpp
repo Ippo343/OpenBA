@@ -16,6 +16,7 @@
 #include "Component/ResidenceDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -50,14 +51,14 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
     // Call init helper
     ResidenceComponent_ResidenceInit(self);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (GameUpdateLoop::_singleton == nullptr)
         return;
 
     // Build an InternalBasePtr on the stack with the owner entity
     uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
 
     // Get the world manager from game state
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Register entity at worldMgr+0x20 (residence entity list)

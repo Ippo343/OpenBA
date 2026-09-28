@@ -15,6 +15,7 @@
 #include "Component/coll_bridge.h"
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"
 #include <cstdint>
@@ -111,7 +112,7 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
 // System::String::operator= and 0x140152af0 System::String::~String.
 void TradeComponent_Setup(void* selfP) {
     uintptr_t self = (uintptr_t)selfP;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     void* descObj = *(void**)(self + 0x18);
     void* desc = (Object::IsDerivedFromNullSafe(descObj, TradeDescription::TypeId())) ? descObj : nullptr;
@@ -121,7 +122,7 @@ void TradeComponent_Setup(void* selfP) {
 
     // Fill each name slot with a random merchant name
     int nameCount = *(int*)(self + 0x38);
-    void* random = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+    void* random = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
     for (int i = 0; i < nameCount; i++) {
         uint32_t r = reinterpret_cast<System::Random*>(random)->Rand(2u);   // B.3.4b bridge
         uint8_t strBuf[8] = {0};
@@ -408,12 +409,12 @@ void* TradeComponent::CreateInPlaceObject(void* storage) {
 //   CALL FUN_14005c220           ; trade setup
 
 void TradeComponent::OnAdded() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (GameUpdateLoop::_singleton == nullptr)
         return;
 
     uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
 
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Add to trade pending list at worldMgr+0x30
@@ -440,12 +441,12 @@ void TradeComponent::OnAdded() {
 //   CALL FUN_140002cc0           ; register entity
 
 void TradeComponent::OnRemove() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (GameUpdateLoop::_singleton == nullptr)
         return;
 
     uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
 
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Register entity at worldMgr+0x30 (trade entity list)

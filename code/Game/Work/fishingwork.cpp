@@ -20,6 +20,7 @@
 #include "Work/FishingWork.h"
 #include "Work/fishingwork_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
@@ -129,7 +130,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
     int64_t* selfQ = (int64_t*)this;  // for 8-byte indexed access matching Ghidra
 
     // Get game world
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     // CheckPtr on building entity IBP (at self+0x10)
     uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);

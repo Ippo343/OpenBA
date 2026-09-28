@@ -18,6 +18,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_constants.h"   // kRdata_*
 #include "statvaluedispatch.h"
@@ -47,7 +48,7 @@
 // reads world+0xNN, so we form (uintptr_t)*g_pGameWorldSingleton + 0xNN.
 // (Mirrors engine_funcs.h usage of (uintptr_t)*g_pGameWorldSingleton + 0xd8.)
 // ============================================================
-static inline uintptr_t World() { return (uintptr_t)*g_pGameWorldSingleton; }
+static inline uintptr_t World() { return (uintptr_t)GameUpdateLoop::_singleton; }
 
 // Read a uint32 field at world+off.
 static inline uint32_t WorldU32(uintptr_t off) {

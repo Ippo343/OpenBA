@@ -26,6 +26,7 @@
 // wave; a wrong port is silent corruption). See reg_player_path.cpp.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "system/MemoryAllocator.h"
@@ -299,7 +300,7 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
 
     // Ghidra's 'g_pGameWorldSingleton' is the GameWorld base pointer; our extern
     // is void** holding the slot, so deref once: *g_pGameWorldSingleton.
-    int* local_78 = *reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* local_78 = *reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
 
     // Scan self+0x38 entity's component list for the crop-desc type id.
     void* matched = nullptr;  // pvVar9

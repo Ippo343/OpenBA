@@ -28,6 +28,7 @@
 #include "resolve.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / GetTypeNameById
 #include <cstdint>
 #include <cstdio>
@@ -402,7 +403,7 @@ void OpenCsv() {
 
 void EmitRow(void* gul, int frame) {
     OpenCsv();
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     const long long now = QpcNow();
     const double wall = QpcMs(now - s_runT0) / 1000.0;
     const double windowS = QpcMs(now - (s_lastRow ? s_lastRow : s_runT0)) / 1000.0;
@@ -500,7 +501,7 @@ extern "C" void StressHarness_UpdateEnd(void* gul, int frameNum) {
         if (spd > 0) s_simIters += spd;
     }
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (gw != s_world) {
         s_world = gw; s_worldSeenAt = frameNum; ++s_worldNo;
         s_runT0 = now; s_lastRow = 0; s_staffPasses = 0;

@@ -50,6 +50,7 @@
 // the controller's shared teardown. Nothing else in the build calls it.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -384,7 +385,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     const float zeroPitch = 0.0f;
     Math::Vector3 dockForward = Math::Vector3::FromYawPitch(*destYaw, zeroPitch);
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     int* terrain   = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
     uintptr_t wgeo = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0x110);

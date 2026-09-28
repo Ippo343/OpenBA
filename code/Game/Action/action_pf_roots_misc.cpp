@@ -17,6 +17,7 @@
 //                queue-push, 0c2ea0 mark-removal; see loop-exit note below)
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos
 #include "math/Math.h"
@@ -445,7 +446,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
             do {
                 int64_t* selfMember = *reinterpret_cast<int64_t**>(self + 0x38);
                 int64_t local_res8 = *reinterpret_cast<int64_t*>(*selfMember + 0x10);
-                int64_t lVar2 = *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0xe8);
+                int64_t lVar2 = *reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0xe8);
                 if (local_res8 != 0) {
                     if ((*reinterpret_cast<uint32_t*>(local_res8 + 0x40) >> 10 & 1) == 0) {
                         ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(local_res8));   // 0x1400c2ea0
@@ -463,7 +464,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
     bool bVar3 = ::Object::IsDerivedFromNullSafe(pvVar11, HerdDescription::TypeId());
     void* pvVar6 = bVar3 ? pvVar11 : nullptr;
     int local_res10 = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pvVar6) + 0x38);
-    int worldW = **reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int worldW = **reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int local_res18 = *reinterpret_cast<int*>(self + 0x4c) % worldW - (local_res10 >> 1);
     int local_res20 = *reinterpret_cast<int*>(self + 0x4c) / worldW - (local_res10 >> 1);
     if (local_res18 < 1) local_res18 = 1;

@@ -18,6 +18,7 @@
 
 #include "Work/ConsumeProduce.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
@@ -266,7 +267,7 @@ static int FinalizeAction(ConsumeProduce* self, void* entityIBP, void* actionIBP
 // Main production work logic. Returns 1 (retry) or 2 (action pushed).
 // ============================================================
 int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     int* mapGrid = *(int**)(gameWorld + 0xf8);
     void** worldEntityList = *(void***)(gameWorld + 0xf0);
 

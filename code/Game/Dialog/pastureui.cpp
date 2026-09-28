@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -343,7 +344,7 @@ void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(currentItem);  // B.3.6 bridge
         int resourceIndex = (int)(intptr_t)itemData;
 
-        void* world = *g_pGameWorldSingleton;
+        void* world = GameUpdateLoop::_singleton;
         uintptr_t entityList = *(uintptr_t*)((uintptr_t)world + 0xf0);
         uintptr_t resourceArray = *(uintptr_t*)(entityList + 0x120);
         int64_t resourceType = *(int64_t*)(resourceArray + (int64_t)resourceIndex * 8);

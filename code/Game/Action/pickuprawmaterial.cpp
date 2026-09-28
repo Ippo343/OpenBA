@@ -27,6 +27,7 @@
 
 #include "PickupRawMaterial.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActRm_*, ActHunt_* helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
@@ -132,7 +133,7 @@ int  PickupRawMaterial::AbstractImpl(void* actionStack) {
 
     // Get source entity again, check if it should be flagged for removal
     void* entityRef = _field28;
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t worldList = *(uintptr_t*)(gameWorld + 0xe8);
 
     if (entityRef != nullptr) {

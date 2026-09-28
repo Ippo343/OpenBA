@@ -20,6 +20,7 @@
 #include "Component/growthcomponent_funcs.h"
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // ActHunt_*, ActCNR_* helpers
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
@@ -135,7 +136,7 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
 // Random on world singleton (+0xd8); world resource manager (+0xf8); world flags (+0xd0).
 
 static uintptr_t WorldSingleton() {
-    return g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    return GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
 }
 
 // Reimpl of FUN_140118950 (GrowthComponent flag modify: comp+0x20 = (f|or)&~andNot; notify)
@@ -442,7 +443,7 @@ void GrowthComponent::Update(void* time) {
     if (*reinterpret_cast<char*>(config + 0x2C) != '\0') {
         // Get current temperature from world singleton
         // world->weather(+0x130)->temp(+0x18)
-        uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+        uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
         uintptr_t weatherPtr = *reinterpret_cast<uintptr_t*>(world + 0x130);
         float currentTemp = *reinterpret_cast<float*>(weatherPtr + 0x18);
 
@@ -471,7 +472,7 @@ void GrowthComponent::Update(void* time) {
     }
 
     // Get resource manager from world
-    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t resourceMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
 
     // Compute time delta in seconds
@@ -530,7 +531,7 @@ void GrowthComponent::Update(void* time) {
             if ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) == 0) {
                 // Check world flag (bit 10 of world+0xD0)
                 if ((*reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xD0) >> 10 & 1) == 0) {
+                    reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xD0) >> 10 & 1) == 0) {
                     // Clamp growth to 1.0
                     float harvestAmount = (newGrowth <= fOne) ? newGrowth : fOne;
 

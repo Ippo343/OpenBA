@@ -65,6 +65,7 @@
 // provably equivalent — the classic parent-pointer in-order successor algorithm), not a logic change.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Object/factory_registration.h"
@@ -675,8 +676,8 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
         // WorkComponent (TypeId_WorkComponent), look its workId up in the world work-slot
         // tree (*g_pGameWorldSingleton+0x118)+0x30 == self+0x30's OWN tree), and if present,
         // erase the matching id from localFoundRoot (it's still alive). ---
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            uint8_t* gameWorld = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+        if (GameUpdateLoop::_singleton != nullptr) {
+            uint8_t* gameWorld = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
             void* entityListObj = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_entityList;   // B.3.8 bridge
             int32_t entityCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entityListObj) + 0x10);
             void* entityArrayBase = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(entityListObj) + 0x08);

@@ -60,6 +60,7 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "ui/Dialogs.h"
 #include "system/String.h"
@@ -970,7 +971,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(minTime));  // B.3.7 bridge
 
     // If game world is active, ask user to confirm leaving the current game
-    if (*g_pGameWorldSingleton != nullptr) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         int result = SaveLoad_ShowConfirmDialog(self, "Dialog/SaveLoad.rsc:confirmLoad");
         if (result != 2) return;
     }
@@ -981,7 +982,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     int modCount = *(int*)((uintptr_t)saveInfo + 0x50);
     printf("[SaveLoadDialog::DoLoad] selectedIdx=%d saveInfo=%p save-mod-count=%d gameWorld=%p\n",
            selectedIdx, saveInfo, modCount,
-           g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
+           GameUpdateLoop::_singleton);
     fflush(stdout);
     // The list CheckMod matches the save against is IO::Modification::_singleton.
     // Printed alongside so a non-zero CheckMod can be READ rather than guessed at.
