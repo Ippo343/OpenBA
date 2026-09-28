@@ -134,7 +134,6 @@ namespace {
 using MemAllocFn          = void* (*)(size_t, int);
 using MemFreeFn           = void  (*)(void*);
 using PlatformFn          = void  (*)(void*);
-using DeletingDtorFn      = void  (*)(void*, int);
 
 MemAllocFn MemAlloc() {
     return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
@@ -188,16 +187,13 @@ bool DeviceSupportsColourShadowTarget() {
 // = (ImageType, Usage, Format, unsigned, int, int, FilterMode, AddressMode x3,
 //    Array*), which is exactly the four register slots plus the eight stack
 // slots [RSP+0x20]..[RSP+0x58] the two call sites fill.
-using ImageCreateFn = bool (*)(void*, int, int, int, unsigned, int, int,
-                               int, int, int, int, void*);
-
+// B3X W0 audit: by name on the real class (it was a raw `+0x48` read).
 bool ImageBufferCreate(void* ib, int imageType, int usage, int format,
                        unsigned flags, int w, int h,
                        int filter, int addrU, int addrV, int addrW, void* data) {
-    ImageCreateFn slot = *reinterpret_cast<ImageCreateFn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(ib)) + 0x48);
-    return slot(ib, imageType, usage, format, flags, w, h,
-                filter, addrU, addrV, addrW, data);
+    return reinterpret_cast<Video::ImageBuffer*>(ib)->Create(               // B.3.x bridge
+        imageType, usage, format, flags, w, h, filter, addrU, addrV, addrW,
+        static_cast<Video::ImageBuffer::LevelArray*>(data));
 }
 
 // `operator new` / `operator delete`, transcribed — see the header block.
@@ -266,11 +262,11 @@ void DeleteRenderBuffer(void* rb) {
 
 // `if (ib) (*ib->vtable[0])(ib, 1)` — the scalar deleting destructor
 // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md: slot 0 is ??_E, not ??_G).
+// B3X W0 audit: by name, through the object's own class (Object::Base root).
 void DeleteImageBuffer(void* ib) {
     if (ib == nullptr)
         return;
-    DeletingDtorFn slot0 = *reinterpret_cast<DeletingDtorFn*>(*reinterpret_cast<void**>(ib));
-    slot0(ib, 1);
+    reinterpret_cast<Video::ImageBuffer*>(ib)->DeletingDtor(1);   // B.3.x bridge
 }
 
 // The two float constants the ctor's bounds block uses, LIFTED AS RAW BITS and
