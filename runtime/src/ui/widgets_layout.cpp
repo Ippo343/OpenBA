@@ -227,7 +227,7 @@ static void TabElement_UpdateContainers_Body(void* self, RtSink& out) {
             // (never a literal index); the call itself is by name.
             const void* const slot =
                 Object::SlotAddressOf(child, &UI::Element::ComputeLayout);
-            if (out.Call("Element::vtbl+0x28 (resize container)",   // label kept: oracle text
+            if (out.Call("Element::ComputeLayout (resize container)",
                          slot, a1, a2, a3, a4)) {
                 reinterpret_cast<UI::Element*>(child)->ComputeLayout(a1, a2, a3, a4);
             }
