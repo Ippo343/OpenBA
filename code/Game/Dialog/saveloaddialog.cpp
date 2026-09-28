@@ -74,6 +74,8 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 #include "Dialog/exe_bodies.h"
 #include "Game/exe_constants.h"   // B3R: kRdata_*
+#include "system/Configuration.h"   // B3R: System::Configuration::GetVersionString
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
 // ============================================================
@@ -160,7 +162,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
     }
 
     // Free the entry array and reset
-    fn_MemFreeStatic(*(void**)(s + 0x110));
+    System::MemoryAllocator::MemFree(*(void**)(s + 0x110));
     *(void**)(s + 0x110) = nullptr;
     *(uint64_t*)(s + 0x118) = 0;  // count + capacity = 0
 
@@ -237,7 +239,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         } else {
             // --- Build sprite from raw image data ---
             // Allocate MaterialInstance (0x60 bytes)
-            void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+            void* matInst = System::MemoryAllocator::MemAlloc(0x60, 8);
             void* matInstFinal = nullptr;
             if (matInst) {
                 ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
@@ -254,7 +256,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             void* matResource = nullptr;
             if (matExternal) {
                 // IsDerivedFrom check for Material type
-                if (fn_IsDerivedFrom(matExternal, UI::TextElement::TypeId())) {
+                if (::Object::IsDerivedFromNullSafe(matExternal, UI::TextElement::TypeId())) {
                     matResource = matExternal;
                 }
             }
@@ -279,7 +281,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                 ->BuildParameters();   // B.3.5 bridge
 
             // Allocate SpriteSheet (0x58 bytes)
-            void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+            void* sheet = System::MemoryAllocator::MemAlloc(0x58, 8);
             void* sheetFinal = nullptr;
             if (sheet) {
                 ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
@@ -346,8 +348,10 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         if (*(int*)((uintptr_t)saveInfo + 0x40) >= 0) {
             if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
                 // Valid save: show formatted date string
-                System::String dateStr;
-                fn_DateTime_AsString((void*)((uintptr_t)saveInfo + 0x30), &dateStr);
+                // ?AsString@DateTime@System@@ returns by value; its door placement-
+                // constructed the result over this (empty) local (B3R).
+                System::String dateStr =
+                    reinterpret_cast<const System::DateTime*>((uintptr_t)saveInfo + 0x30)->AsString();   // B.3.x bridge
                 reinterpret_cast<UI::TextElement*>((void*)entry[1])->SetParameter(0, dateStr);  // B.3.6 bridge
             } else {
                 // Corrupt save: show "Corrupt" text from string table
@@ -472,7 +476,7 @@ void SaveLoadDialog::OnOpened() {
 
     // --- Set minimum operation time (0.75f seconds) ---
     uint8_t timeVal[8];
-    fn_Time_Ctor_Float(timeVal, 0.75f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 0.75f);
     ::Save::SaveLoad::_singleton->SetMinOperationTime(*reinterpret_cast<const System::Time*>(timeVal));  // B.3.7 bridge
 
     // --- Start operation: 1 (list/scan), param = -2 or -3 based on mode ---
@@ -751,7 +755,7 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
         // --- Step 1: the inner GameUpdateLoop (0x160 bytes), ctor 0x140098060 ---
         // Retail: (savedState = GetSaveState(), &InternalBasePtr(0), -1, name,
         // 0, 0, p8 = 1, 0, 0, 0). p8 = 1 writes +0xD0 = 0.
-        void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+        void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
             void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
@@ -765,11 +769,11 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
 
         // --- Step 2: the GameLoadDialogLoopT (0xb60 bytes) — the subclass ctor
         // retail inlines here ---
-        void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
+        void* dlLoop = System::MemoryAllocator::MemAlloc(0xb60, 4);
         Engine::UpdateLoop* pDlLoop = nullptr;
         if (dlLoop) {
             uint64_t delayTime = 0;
-            fn_Time_Ctor_Float(&delayTime, 1.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), 1.0f);
             System::String dialogNameStr;
             GetLoadingSoundString(&dialogNameStr);
             pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
@@ -777,11 +781,11 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
         }
 
         // --- Step 3: the outer GameLoaderLoop (0x48 bytes) ---
-        void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+        void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
         void* pOuterLoop = nullptr;
         if (outerLoop) {
             uint64_t zeroTime = 0;
-            fn_Time_Ctor_Float(&zeroTime, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
             pOuterLoop = ::new (outerLoop) GameLoaderLoop(
                 pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
         }
@@ -858,12 +862,12 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     // IsDerivedFrom check — ensure it's a valid External (matches original _typeInfo_exref)
     void* checkedRes = nullptr;
     if (externalRes) {
-        bool isExternal = fn_IsDerivedFrom(externalRes, UI::Dialog::TypeId());
+        bool isExternal = ::Object::IsDerivedFromNullSafe(externalRes, UI::Dialog::TypeId());
         if (isExternal) checkedRes = externalRes;
     }
 
     // Allocate 0xC0 bytes for a DialogInstance shell
-    void* dlg = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+    void* dlg = System::MemoryAllocator::MemAlloc(0xC0, 8);
     if (dlg) {
         // MessageDialog's real ctor (0x14006d300: DialogInstance(ui, externalRes, null
         // parent, 0, 0, 0), its own table, +0xb8 untouched) - the bytes the tree's
@@ -915,7 +919,7 @@ static void SaveLoadDialog_DoSave(SaveLoadDialog* self) {
 
     // Set minimum operation time (1.5f seconds — DAT_140172160)
     uint8_t minTime[8] = {};
-    fn_Time_Ctor_Float(minTime, 1.5f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(minTime), 1.5f);
     reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(minTime));  // B.3.7 bridge
 
     // Check if the selected save slot already contains data
@@ -962,7 +966,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
     // Set minimum operation time (1.5f seconds)
     uint8_t minTime[8] = {};
-    fn_Time_Ctor_Float(minTime, 1.5f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(minTime), 1.5f);
     reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(minTime));  // B.3.7 bridge
 
     // If game world is active, ask user to confirm leaving the current game
@@ -1041,13 +1045,13 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         void* checkedWarn = nullptr;
         if (warnExt) {
-            if (fn_IsDerivedFrom(warnExt, UI::Dialog::TypeId())) {
+            if (::Object::IsDerivedFromNullSafe(warnExt, UI::Dialog::TypeId())) {
                 checkedWarn = warnExt;
             }
         }
 
         // Allocate and construct the warning DialogInstance shell
-        void* warnDlg = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+        void* warnDlg = System::MemoryAllocator::MemAlloc(0xC0, 8);
         if (warnDlg) {
             // MessageDialog's real ctor (B38 B8-5; see SaveLoad_ShowConfirmDialog).
             ::new (warnDlg) MessageDialog(reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10)),
@@ -1066,7 +1070,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         // Check IsDerivedFrom TextElement
         void* rawElem = *(void**)&textElemPtr;
-        bool isText = fn_IsDerivedFrom(rawElem, UI::TextElement::TypeId());
+        bool isText = ::Object::IsDerivedFromNullSafe(rawElem, UI::TextElement::TypeId());
         void* textElem = isText ? rawElem : nullptr;
 
         uint64_t textPtr = 0;
@@ -1083,8 +1087,9 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         void* modEntry = (void*)((uintptr_t)*(void**)((uintptr_t)saveInfo3 + 0x48) + (uintptr_t)i * 0x20);
         uint32_t isBeta   = *(uint32_t*)((uintptr_t)modEntry + 0x14);
         uint32_t modVer   = *(uint32_t*)((uintptr_t)modEntry + 0x18);
-        System::String verStrBuf;
-        fn_Configuration_GetVersionString(&verStrBuf, isBeta, (bool)(isBeta != 0));
+        // ?GetVersionString@Configuration@System@@ is a by-value static; its door
+        // placement-constructed the result over this (empty) local (B3R).
+        System::String verStrBuf = System::Configuration::GetVersionString(isBeta, (bool)(isBeta != 0));
         System::String fmtBuf = System::String::Format("%i (%s)", (unsigned)modVer, verStrBuf._data);
         reinterpret_cast<UI::TextElement*>((void*)textPtr)->SetParameter(2, fmtBuf);  // B.3.6 bridge
 

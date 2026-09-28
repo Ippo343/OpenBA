@@ -46,7 +46,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     void* elem = *(void**)foundBuf;
 
     void* editElem = nullptr;
-    if (elem && fn_IsDerivedFrom(elem, UI::EditElement::TypeId()))
+    if (elem && ::Object::IsDerivedFromNullSafe(elem, UI::EditElement::TypeId()))
         editElem = elem;
 
     uint64_t tempIBP = 0;
@@ -66,7 +66,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     // 0x1401514f8) with TypeId_ButtonElement -> UI::ButtonElement::TypeId()
     // (Table 3 name lie: this is not a distinct "help button" element class).
     void* buttonElem = nullptr;
-    if (elem && fn_IsDerivedFrom(elem, UI::ButtonElement::TypeId()))
+    if (elem && ::Object::IsDerivedFromNullSafe(elem, UI::ButtonElement::TypeId()))
         buttonElem = elem;
 
     tempIBP = 0;
@@ -83,7 +83,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     elem = *(void**)foundBuf;
 
     void* captureBoxElem = nullptr;
-    if (elem && fn_IsDerivedFrom(elem, CaptureBoxElement::TypeId()))
+    if (elem && ::Object::IsDerivedFromNullSafe(elem, CaptureBoxElement::TypeId()))
         captureBoxElem = elem;
 
     tempIBP = 0;

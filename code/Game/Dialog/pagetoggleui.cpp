@@ -117,7 +117,7 @@ void PageToggleUI::OnCreated() {
     void* elemPtr = (void*)foundElem;
     void* checked = nullptr;
     if (elemPtr) {
-        bool derived = fn_IsDerivedFrom(elemPtr, checkboxTypeId);
+        bool derived = ::Object::IsDerivedFromNullSafe(elemPtr, checkboxTypeId);
         if (derived) checked = elemPtr;
     }
     uint64_t basePtr = 0;
