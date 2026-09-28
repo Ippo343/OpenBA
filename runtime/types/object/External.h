@@ -599,6 +599,13 @@ class ExternalFactory;
 // Object::External — one loaded resource file. 0x20 bytes.
 // ============================================================
 class External : public Base {
+    // ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A (0x1801f9b38): slot 1
+    // TypeName 0x1800066c0 `MOV RAX,[0x1801f9b40]`, slot 2 Type 0x1800066d0
+    // `MOV EAX,[0x1801f9b38]`, TypeId 0x180029350 and the factory pair
+    // 0x18002c980 / 0x18002c990 (both `XOR EAX,EAX; RET` -- abstract).
+    // DEFINE_TYPE is in external_class.cpp (ENDGAME B.3.9 OBJ, D6 W3).
+    DECLARE_TYPE(External)
+
 public:
     // `?A W4CompileResult@External@Object@@` — returned BY VALUE, but a `W4`
     // enum is four bytes, so it comes back in EAX with NO hidden return slot
@@ -615,8 +622,7 @@ public:
 
     // ---- the eight slots, in measured order ----
     Base*       DeletingDtor(unsigned flags) override;          // [0] 0x180006640
-    const char* TypeName() const override;                      // [1] 0x1800066c0
-    uint32_t    Type() const override;                          // [2] 0x1800066d0
+    // [1] TypeName 0x1800066c0 / [2] Type 0x1800066d0: DECLARE_TYPE.
     virtual int32_t       GetFileVersion() const = 0;           // [3] pure
     virtual CompileResult Compile(const System::Filename& path);// [4] 0x1800066e0
     virtual bool          Serialize(void* stream) = 0;          // [5] pure
@@ -638,10 +644,6 @@ public:
     //   SAME type, so both arguments are `System::Filename const&`. Returns
     //   `_N` (bool) in AL — no hidden return slot.
     bool SaveText(const System::Filename& path, const System::Filename& name);
-
-    // The static companion retail's reflection block emits. NOT `DECLARE_TYPE`
-    // — see the banner on ExternalTypeInfoRecord() below.
-    static uint32_t TypeId();
 
 protected:
     // ??1External@Object@@UEAA@XZ  retail 0x1800bc950. NON-VIRTUAL; reached by
@@ -1042,43 +1044,10 @@ static_assert(offsetof(ExternalFactory, _loadEnabled)          == 0x41, "_loadEn
 static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simpleLoad @ +0x42");
 
 // ############################################################################
-// WHY THERE IS NO `DECLARE_TYPE(External)` / `DEFINE_TYPE(...)` HERE.
-//
-// `External`, `ExternalList` and `CompiledExternal` DO each have a retail
-// reflection block — `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` @
-// 0x1801f9b38, `…@ExternalList@…` @ 0x1801f9be0, `…@CompiledExternal@…` @
-// 0x1801f9b00 — so B33_RULES §9 step 5 would have the macro emit them. It
-// CANNOT, in this step, and the reason is a file-set boundary rather than a
-// design one:
-//
-//   * unlike the 305 `REGISTER_TYPE` sites in code/Game/, these three records
-//     are not built by our code at all. They come out of the MINT
-//     (standalone/rt_data_mint*.inc), `standalone/cutover_manifest.inc:65`
-//     carries the CompiledExternal one as `CUTOVER_REQUIRED`, and
-//     `MintStorage()` splices the minted nodes into
-//     `BaseTypeInfo::_firstTypeInfo`;
-//   * roughly twenty live sites read them BY NAME through `RT_DATA_SLOT`
-//     (runtime/src/engine/mainloop_video.cpp:343,
-//     runtime/src/engine/updateloop_loadresources.cpp:126,
-//     runtime/src/io/modification_setupfilesystem.cpp:403,
-//     runtime/src/object/{external_list,external_load,external_ptr_serialize,
-//     object_typeinfo_accessors}.cpp, code/Game/Game/gameupdateloop_load.cpp);
-//   * a `DEFINE_TYPE` would therefore construct a SECOND `BaseTypeInfo` for the
-//     same name and head-insert it into the same chain. `Factory::Startup`
-//     CRCs the name, so both records claim the same typeId and the second
-//     insert hits the equal-key arm — the "split brain" hazard
-//     standalone/rt_data_mint.cpp's own banner names, and exactly the shape
-//     runtime/src/object/external.cpp:659-670 refuses for these two symbols.
-//
-// Retiring the mint rows in favour of the macro means editing
-// standalone/rt_data_mint.cpp and re-running tools/rt_mint_gen.py, both outside
-// this agent's file set, and it is the same move step 3 made for
-// `_firstTypeInfo` (redirect, don't duplicate). Until then the three classes
-// read the ONE existing record through the existing door, which is what the C
-// bodies already do, and `Type()` / `TypeName()` / `TypeId()` answer from it
-// byte for byte. Handing this to step 6/7 rather than guessing at it is the
-// "faithful partial beats a complete-looking conversion" rule.
+// ENDGAME B.3.9 OBJ (B39_RULES D6 W3): `External`, `ExternalList` and
+// `CompiledExternal` carry retail's reflection block through DECLARE_TYPE /
+// DEFINE_TYPE (external_class.cpp); their minted `?_typeInfo@` records are
+// retired, so each name has exactly one record in `_firstTypeInfo`.
 // ############################################################################
-const BaseTypeInfo* ExternalTypeInfoRecord();          // ?_typeInfo@External@Object@@
 
 }  // namespace Object

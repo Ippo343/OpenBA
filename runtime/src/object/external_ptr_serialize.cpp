@@ -617,8 +617,13 @@ extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
     }
 
 // 0x18002f170 — Object::External (note the `@2@` back-reference in the export)
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
-                   "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A")
+// ENDGAME B.3.9 OBJ (D6 W3): the class record, not a by-name read of the
+// retired minted one (the macro's by-name door stays for the other rows).
+extern "C" void RtObject_ExternalPtrArraySerialize_External(Serializer* ser, int count,
+                                                            External** elems) {
+    RtObject_ExternalPtrArray_Serialize(ser, count, elems,
+                                        &::Object::External::GetTypeInfo());
+}
 // 0x180005220 — Achievement::Goal
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Goal,
                    "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")

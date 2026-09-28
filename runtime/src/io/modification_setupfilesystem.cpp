@@ -439,8 +439,8 @@ void Modification::SetupFileSystem() {
     // is followed rather than the DLL's node being pinned; this is the same
     // address (0x1801f9b38) `?Type@External@Object@@UEBAIXZ` is two
     // instructions of.
-    const uint32_t kExternalTypeId = *RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
+    // ENDGAME B.3.9 OBJ: the class record (the minted one is retired).
+    const uint32_t kExternalTypeId = ::Object::External::TypeId();
 
     static void* findNextCache        = nullptr;
     static void* getPathCache         = nullptr;

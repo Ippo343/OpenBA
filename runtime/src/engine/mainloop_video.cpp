@@ -344,7 +344,7 @@ uint32_t TypeIdFrameCopyImageBuffer() {
     return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A");
 }
 uint32_t TypeIdExternal() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
+    return ::Object::External::TypeId();   // ENDGAME B.3.9 OBJ: the class record
 }
 
 // The four singletons — all four class statics now (ENDGAME B.3.9 SS1,

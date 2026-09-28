@@ -560,8 +560,15 @@ int RtObjectExternalRegister() {
 
     int n = 0;
 
-    // ENDGAME B.3.9 OBJ (B39_RULES D2): CompiledExternal's factory pair is the
-    // class's own statics (external_class.cpp), not a FACTREST row.
+    // ENDGAME B.3.9 OBJ (B39_RULES D2): External's and CompiledExternal's
+    // factory pairs are the classes' own statics (external_class.cpp), not
+    // FACTREST rows.
+    RegisterRuntimeExport("?CreateNewObject@External@Object@@SAPEAVBase@2@XZ",
+                          (void*)&::Object::External::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x18002c980, (void*)&::Object::External::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z",
+                          (void*)&::Object::External::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x18002c990, (void*)&::Object::External::CreateInPlaceObject);
     RegisterRuntimeExport("?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ",
                           (void*)&::Object::CompiledExternal::CreateNewObject); ++n;
     RegisterRuntimeAddr(0x18000b6c0, (void*)&::Object::CompiledExternal::CreateNewObject);

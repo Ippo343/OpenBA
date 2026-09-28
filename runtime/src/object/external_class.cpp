@@ -30,7 +30,6 @@
 // ??0 / ??1 External doors are retired.
 // ============================================================================
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -43,79 +42,6 @@
 #endif
 
 namespace Object {
-
-// ============================================================================
-// The reflection-record seam
-// ============================================================================
-//
-// External.h's closing banner is the full argument for why these three are
-// DOORS and not `DECLARE_TYPE`/`DEFINE_TYPE`: the records are minted, not built
-// by our code, `standalone/cutover_manifest.inc` carries one of them as
-// `CUTOVER_REQUIRED`, ~20 live sites already read them by name, and a
-// `DEFINE_TYPE` would head-insert a SECOND record for the same name into
-// `BaseTypeInfo::_firstTypeInfo`. Retiring the mint rows in favour of the macro
-// means editing standalone/rt_data_mint.cpp and re-running
-// tools/rt_mint_gen.py, both outside this step's file set.
-//
-// So `Type()` / `TypeName()` / `TypeId()` below answer out of the ONE existing
-// record, through the SAME named door runtime/src/object/external_list.cpp:75
-// and runtime/src/engine/mainloop_video.cpp:343 already use, and they are
-// byte-for-byte retail's `MOV EAX,dword[0x1801f9b38]` /
-// `MOV RAX,qword[0x1801f9b40]` (the second address is the first plus 8, i.e.
-// `BaseTypeInfo::name`, which is exactly what the record's +0x08 is).
-// ============================================================================
-
-#if defined(BANISHED_UNIT_TEST)
-// The unit build has no port registry and no mint. The test supplies the three
-// records; they start null and the test sets them before it calls anything that
-// reads one. This is a TEST seam, not a guard on a faithful path — the real
-// build's door below is unguarded, as retail's rip-relative load is.
-const BaseTypeInfo* g_unitExternalTypeInfo         = nullptr;
-
-const BaseTypeInfo* ExternalTypeInfoRecord()         { return g_unitExternalTypeInfo; }
-#else
-// ############################################################################
-// ENDGAME B.3.9 OBJ — THE RUNTIME `TypeId()` ACCESSOR PATTERN (B39_RULES D6
-// step 1), the one every Object class with a MINTED record uses until the W3
-// fold gives it a `DEFINE_TYPE`:
-//
-//   * one NAMESPACE-SCOPE `std::atomic<const BaseTypeInfo*>` per record — no
-//     function-local static, no `RT_DATA_SLOT` lambda cache (B9-10 / B6-5);
-//   * filled by the FIRST reader through `ResolveExport(<the record's exact
-//     mangled name>)`, which never caches a miss: a null answer is returned
-//     and NOT stored, so a read before the mint registers the record (none
-//     exists — B39_RULES D6 "Timing") is not frozen. It cannot be filled at
-//     port init: the mint, which registers the record, runs after every
-//     *PortInit. The store is idempotent (every thread resolves the same
-//     pointer), so the loader thread and the main thread may race it freely;
-//   * read as the real `BaseTypeInfo` (`->typeId`, `->name`), never by
-//     memcpy off raw bytes;
-//   * `X::TypeId()` returns `->typeId`; slot 2 `Type()` returns `TypeId()`;
-//     slot 1 `TypeName()` returns `->name` (content-only, never compared by
-//     pointer). At the W3 fold the accessor body becomes `_typeInfo` and the
-//     slot disappears with the minted row; no caller changes.
-// ############################################################################
-namespace {
-
-std::atomic<const BaseTypeInfo*> g_externalTypeInfo{nullptr};          // 0x1801f9b38
-
-const BaseTypeInfo* MintedRecord(std::atomic<const BaseTypeInfo*>& slot,
-                                 const char* mangled) {
-    const BaseTypeInfo* ti = slot.load(std::memory_order_acquire);
-    if (ti == nullptr) {
-        ti = static_cast<const BaseTypeInfo*>(ResolveExport(mangled));
-        if (ti != nullptr) slot.store(ti, std::memory_order_release);
-    }
-    return ti;
-}
-
-}  // namespace
-
-const BaseTypeInfo* ExternalTypeInfoRecord() {
-    return MintedRecord(g_externalTypeInfo,
-                        "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
-}
-#endif
 
 // ============================================================================
 // Object::External
@@ -205,21 +131,21 @@ Base* External::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// slot 1 — ?TypeName@External@Object@@UEBAPEBDXZ  0x1800066c0
-//           `MOV RAX,qword ptr [0x1801f9b40]; RET`, and 0x1801f9b40 is
-//           `?_typeInfo@External@Object@@` + 0x08, i.e. `BaseTypeInfo::name`.
-//           CONTENT-only: never compared by pointer (B33_RULES §2.4).
-const char* External::TypeName() const { return ExternalTypeInfoRecord()->name; }
+// ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A — 0x1801f9b38. ENDGAME
+// B.3.9 OBJ (B39_RULES D6 W3): name "External", parent literal "Base" EXACTLY
+// as the retail record carries it, no extension. Slot 1 TypeName (0x1800066c0,
+// `MOV RAX,[0x1801f9b40]`, the record's name, content-only), slot 2 Type
+// (0x1800066d0, `MOV EAX,[0x1801f9b38]`, 0xFFFFFFFF until Factory::Startup)
+// and TypeId (0x180029350) are DECLARE_TYPE's over it. The minted record is
+// retired in the same commit.
+DEFINE_TYPE(Object::External, "Base", nullptr)
 
-// slot 2 — ?Type@External@Object@@UEBAIXZ  0x1800066d0
-//           `MOV EAX,dword ptr [0x1801f9b38]; RET` — the record's +0x00, which
-//           is 0xFFFFFFFF until `Factory::Startup` (B33_RULES §2.5; NOT
-//           self-initialising, the pre-Startup ordering traps depend on it).
-uint32_t External::Type() const { return ExternalTypeInfoRecord()->typeId; }
-
-// The static companion retail's reflection block emits as
-// `?TypeId@X@Ns@@SAIXZ`. Same record, same sentinel rule.
-uint32_t External::TypeId() { return ExternalTypeInfoRecord()->typeId; }
+// ?CreateNewObject@External@Object@@SAPEAVBase@2@XZ          0x18002c980
+// ?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z  0x18002c990
+// Both `XOR EAX,EAX; RET` (the FACTREST row had no steps): the class is
+// abstract. Registered by name and VA from external.cpp (B39_RULES D2).
+Base* External::CreateNewObject()          { return nullptr; }
+Base* External::CreateInPlaceObject(void*) { return nullptr; }
 
 // slot 4 — ?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z
 //          retail 0x1800066e0, whose whole body is `MOV EAX,0x1; RET`.

@@ -26,20 +26,6 @@ extern "C" void* RtFactNew_Object_ExtensionCompiler()          { return RtFactor
 extern "C" void* RtFactIP_Object_ExtensionCompiler(void* p)    { return RtFactoryInPlace(kClsObject_ExtensionCompiler, p); }
 
 // --------------------------------------------------------------------------
-// Object::External
-//   ?CreateNewObject@External@Object@@SAPEAVBase@2@XZ  0x18002c980
-//   ?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z  0x18002c990
-// --------------------------------------------------------------------------
-static uint64_t kCountObject_External[3];
-static const RtFactoryClass kClsObject_External = {
-    "Object::External", 0x0, 0,
-    nullptr, nullptr,
-    0x18002c980ull, 0x18002c990ull, kCountObject_External,
-};
-extern "C" void* RtFactNew_Object_External()          { return RtFactoryNew(kClsObject_External); }
-extern "C" void* RtFactIP_Object_External(void* p)    { return RtFactoryInPlace(kClsObject_External, p); }
-
-// --------------------------------------------------------------------------
 // Object::ExternalCompiler
 //   ?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ  0x18002c0e0
 //   ?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z  0x18002c0f0
@@ -57,8 +43,6 @@ extern "C" void* RtFactIP_Object_ExternalCompiler(void* p)    { return RtFactory
 static const RtFactoryReg kRegs[] = {
     { "?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c260ull, (void*)&RtFactNew_Object_ExtensionCompiler,
       "?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c270ull, (void*)&RtFactIP_Object_ExtensionCompiler, &kClsObject_ExtensionCompiler },
-    { "?CreateNewObject@External@Object@@SAPEAVBase@2@XZ", 0x18002c980ull, (void*)&RtFactNew_Object_External,
-      "?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c990ull, (void*)&RtFactIP_Object_External, &kClsObject_External },
     { "?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c0e0ull, (void*)&RtFactNew_Object_ExternalCompiler,
       "?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c0f0ull, (void*)&RtFactIP_Object_ExternalCompiler, &kClsObject_ExternalCompiler },
 };
