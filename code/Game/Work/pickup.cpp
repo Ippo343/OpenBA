@@ -17,7 +17,12 @@
 #include "Work/pickup_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_bodies.h"        // B3R: 0x14009f3e0
+#include "Game/exe_constants.h"     // B3R: kRdata_*
+#include "system/MemoryAllocator.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <algorithm>
 #include <cstdint>
@@ -30,85 +35,9 @@
 
 
 // ============================================================
-// Local function pointers (resolved once by Pickup_ResolveFuncs)
+// Sub-functions, called by name (B3R): 0x140018020 Reimpl_ExternalPtr_Serialize_StringTable,
+// 0x1400f7100 WorkBase_ValidateTask_f7100, 0x1400c5400 WorkBase_TaskListCleanup_c5400.
 // ============================================================
-
-// All typedefs prefixed with PiW_ to avoid conflicts
-
-// Work::Serialize
-typedef void  (*PiW_Work_Serialize_t)(void* self, void* stream);
-// FUN_140018020 -- array/list serialization helper
-typedef void  (*PiW_ArraySerialize_t)(void* arr, void* serializer);
-// FUN_1400f7100 -- validate work entity
-typedef bool  (*PiW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
-// FUN_1400c5400 -- cancel all work items
-typedef void  (*PiW_CancelAllWork_t)(void* actionStack);
-// Object::Internal::~Internal (dtor tail call)
-typedef void  (*PiW_Internal_Dtor_t)(void* self);
-// fn_MemFreeStatic
-typedef void  (*PiW_MemFreeStatic_t)(void* ptr);
-// Slot4/CreateWork -- original function (called through for complex logic)
-
-static PiW_ArraySerialize_t            s_fn_ArraySerialize = nullptr;
-static PiW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
-static PiW_CancelAllWork_t             s_fn_CancelAllWork = nullptr;
-static PiW_MemFreeStatic_t             s_fn_MemFreeStatic = nullptr;
-
-// Type index constant at DAT_1401c6be8 (for Slot1)
-
-// Vtable pointers for dtor chain
-
-static bool s_pickup_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once during hook installation
-// ============================================================
-bool Pickup_ResolveFuncs() {
-    if (s_pickup_funcs_resolved) return true;
-    // PERF (2026-09-05): one dependency stays unresolved in standalone, so `ok` below is
-    // false and this table was re-resolved on EVERY Pickup tick (1% of the bucket phase).
-    // Resolve once; the result (false) is what every caller already saw.
-    static bool s_attempted = false;
-    if (s_attempted) return false;
-    s_attempted = true;
-
-    // Direct exe function addresses
-    s_fn_ArraySerialize = reinterpret_cast<PiW_ArraySerialize_t>(
-        ResolveAddr(Module::Exe, 0x140018020));
-    s_fn_ValidateEntity = reinterpret_cast<PiW_ValidateEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_CancelAllWork = reinterpret_cast<PiW_CancelAllWork_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-
-    // fn_MemFreeStatic from engine_funcs
-    s_fn_MemFreeStatic = reinterpret_cast<PiW_MemFreeStatic_t>(fn_MemFreeStatic);
-
-    // Type index constant at DAT_1401c6be8 (for Slot1)
-
-    // Vtable pointers for dtor
-
-    // Verify critical pointers
-    bool ok = s_fn_ArraySerialize &&
-              s_fn_ValidateEntity && s_fn_CancelAllWork &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && g_pGameWorldSingleton;
-
-    s_pickup_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[Pickup] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_ArraySerialize) printf("  MISSING: ArraySerialize\n");
-        if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
-        if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
-        if (!fn_InternalBasePtr_Ctor) printf("  MISSING: InternalBasePtr_Ctor\n");
-        if (!fn_IsDerivedFrom) printf("  MISSING: IsDerivedFrom\n");
-        if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
-    }
-#endif
-
-    return ok;
-}
 
 
 // ============================================================
@@ -119,7 +48,6 @@ bool Pickup_ResolveFuncs() {
 //   + if version > 0: ArraySerialize(candidateList at +0x58)
 // ============================================================
 void Pickup::Persist(void* stream) {
-    Pickup_ResolveFuncs();   // lazy-resolve — factory-bypassed Pickups (see Slot9 note)
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
@@ -137,7 +65,7 @@ void Pickup::Persist(void* stream) {
     if (citizenIBP != nullptr) {
         // DAT_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, not the legacy
         // variable name "s_typeId_Pickup" -- this is not Pickup's own cell).
-        if (!fn_IsDerivedFrom(citizenIBP, CitizenComponent::TypeId())) {
+        if (!Object::IsDerivedFromNullSafe(citizenIBP, CitizenComponent::TypeId())) {
             citizenIBP = nullptr;
         }
     }
@@ -145,7 +73,7 @@ void Pickup::Persist(void* stream) {
     // Version >= 1: serialize candidate list at +0x58
     int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        s_fn_ArraySerialize(&candidateList, serializerBuf);
+        Reimpl_ExternalPtr_Serialize_StringTable(&candidateList, serializerBuf);
     }
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
@@ -220,101 +148,19 @@ static void Pickup_SortByDistance(PickupCandidate* buf, int count) {
               });
 }
 
-// ---- sub-callees used only by the Execute port (PiX_ prefix) ----
-typedef void     (*PiX_FindRawMat_t)(int64_t entity, void* outIBP);                  // 0x1400223c0
-typedef void*    (*PiX_FindStorage_t)(int64_t inner, void* outIBP);                  // 0x140006270
-typedef uint32_t (*PiX_QueryCount_t)(void* storage);                                 // 0x14012cf10
-typedef uint64_t (*PiX_LongTermPlan_t)(int64_t citizen);                             // 0x140115e60
-typedef char     (*PiX_WantsResource_t)(void* townMgr, int64_t desc, int amount);    // 0x14008d3c0
-typedef int      (*PiX_FindCell_t)(int* grid, int from, int to, uint32_t mask);      // 0x14009ccf0
-typedef uint64_t (*PiX_ValidateCell_t)(int* grid, int mask, uint64_t a, uint32_t b); // 0x1400a00f0
-typedef char     (*PiX_CheckAssign_t)(void* self, void* ibp, uint32_t a,
-                                      uint32_t b, void* time);                       // 0x1400f6ef0
-typedef void*    (*PiX_FindStoreForRes_t)(void* townMgr, void* out, uint32_t access,
-                                          uint64_t resType, int amount, char useCanAdd,
-                                          float* outPos, void* citizenIBP);          // 0x14008d590
-typedef int      (*PiX_CalcDistance_t)(int* grid, uint32_t a, uint32_t b);           // 0x140008830
-typedef char     (*PiX_CanAdd_t)(void* storage, int64_t entity, int qty);            // 0x14012cd80
-typedef void*    (*PiX_FindComp_t)(int64_t entity, void* outIBP);                    // 0x140003050
-typedef void     (*PiX_GridToWorld_t)(int* grid, float* outPos, const float* in,
-                                      char flag, void* p5);                          // 0x14009f3e0
-typedef void     (*PiX_PerformWork_t)(void* citizenIBP, uint32_t typeId, void* entityIBP,
-                                      float* pos, int cell, char first);             // 0x1400c0ad0
-typedef void*    (*PiX_MemAlloc_t)(uint64_t size, uint32_t align);                   // slot 0x140152b60
-typedef void     (*PiX_MemFree_t)(void* p);                                          // slot 0x140152b68
+// ---- sub-callees of the Execute port, called by name (B3R) ----
+//   0x1400223c0 ActRm_FindComponent_223c0      0x140006270 WorkBase_FindComponent_6270
+//   0x14012cf10 StorageComponent_QueryCount    0x140115e60 CitizenAI_State_LongTermPlan
+//   0x14008d3c0 PickupGate_TownWants_8d3c0     0x14009ccf0 WorkGrid_FindCell_9ccf0
+//   0x1400a00f0 WorkBase_ValidateCell_a00f0    0x1400f6ef0 WorkImpl_BuildStructureStep_6ef0
+//   0x14008d590 Pf_PickBestDropTarget_8d590    0x140008830 WorkBase_CalcDistance_8830
+//   0x14012cd80 Pf_StorageCanAccept_cd80       0x140003050 WorkBase_FindComponent_3050
+//   0x14009f3e0 Reimpl_MapGetTerrainPos        0x1400c0ad0 WorkAct_PerformWorkCtor9_c0ad0
+//   slots 0x140152b60 / 0x140152b68: System::MemoryAllocator::MemAlloc / MemFree
 
-static PiX_FindRawMat_t      s_x_findRawMat   = nullptr;
-static PiX_FindStorage_t     s_x_findStorage  = nullptr;
-static PiX_QueryCount_t      s_x_queryCount   = nullptr;
-static PiX_LongTermPlan_t    s_x_longTermPlan = nullptr;
-static PiX_WantsResource_t   s_x_wantsRes     = nullptr;
-static PiX_FindCell_t        s_x_findCell     = nullptr;
-static PiX_ValidateCell_t    s_x_validateCell = nullptr;
-static PiX_CheckAssign_t     s_x_checkAssign  = nullptr;
-static PiX_FindStoreForRes_t s_x_findStoreRes = nullptr;
-static PiX_CalcDistance_t    s_x_calcDist     = nullptr;
-static PiX_CanAdd_t          s_x_canAdd       = nullptr;
-static PiX_FindComp_t        s_x_findComp     = nullptr;
-static PiX_GridToWorld_t     s_x_gridToWorld  = nullptr;
-static PiX_PerformWork_t     s_x_performWork  = nullptr;
-static PiX_MemAlloc_t        s_x_memAlloc     = nullptr;
-static PiX_MemFree_t         s_x_memFree      = nullptr;
-
-// Type-id globals. Raw .rdata resolves to NULL in standalone (see
-// reference_standalone_rdata_null_fallback), so each falls back to the runtime
-// name lookup. Verified in the disassembly of 0x1400f2f00:
-//   0x1401c7cb8 -> RawMaterialDescription (MOV EDX,[0x1401c7cb8] @0x1400f2f75)
-//   0x1401c6be0 -> Pickup (MOV EDX,[0x1401c6be0] @0x1400f34cd/@0x1400f37f3).
-//     This is TypeInfo_Pickup, i.e. what Pickup::GetTypeId (0x14002bfa0) returns.
-//     NOTE: it is NOT the file-level s_typeId_Pickup, which reads 0x1401c7158 --
-//     that global is the *CitizenComponent* type id, used by Pickup::Serialize to
-//     validate the citizen at +0x50. The name there is misleading; do not reuse it.
-static bool s_x_resolved = false;
-
-static void Pickup_ResolveExecFuncs() {
-    if (s_x_resolved) return;
-    s_x_resolved = true;
-
-    auto code = [](uintptr_t a) -> void* {
-        return reinterpret_cast<void*>(ResolveAddr(Module::Exe, a));
-    };
-    // Dispatch slots hold the Runtime fn-ptr; deref the slot.
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-
-    s_x_findRawMat   = reinterpret_cast<PiX_FindRawMat_t>(code(0x1400223c0));
-    s_x_findStorage  = reinterpret_cast<PiX_FindStorage_t>(code(0x140006270));
-    s_x_queryCount   = reinterpret_cast<PiX_QueryCount_t>(code(0x14012cf10));
-    s_x_longTermPlan = reinterpret_cast<PiX_LongTermPlan_t>(code(0x140115e60));
-    s_x_wantsRes     = reinterpret_cast<PiX_WantsResource_t>(code(0x14008d3c0));
-    s_x_findCell     = reinterpret_cast<PiX_FindCell_t>(code(0x14009ccf0));
-    s_x_validateCell = reinterpret_cast<PiX_ValidateCell_t>(code(0x1400a00f0));
-    s_x_checkAssign  = reinterpret_cast<PiX_CheckAssign_t>(code(0x1400f6ef0));
-    s_x_findStoreRes = reinterpret_cast<PiX_FindStoreForRes_t>(code(0x14008d590));
-    s_x_calcDist     = reinterpret_cast<PiX_CalcDistance_t>(code(0x140008830));
-    s_x_canAdd       = reinterpret_cast<PiX_CanAdd_t>(code(0x14012cd80));
-    s_x_findComp     = reinterpret_cast<PiX_FindComp_t>(code(0x140003050));
-    s_x_gridToWorld  = reinterpret_cast<PiX_GridToWorld_t>(code(0x14009f3e0));
-    s_x_performWork  = reinterpret_cast<PiX_PerformWork_t>(code(0x1400c0ad0));
-
-    s_x_memAlloc = reinterpret_cast<PiX_MemAlloc_t>(slot(0x140152b60));
-    if (!s_x_memAlloc) s_x_memAlloc = reinterpret_cast<PiX_MemAlloc_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_x_memFree = reinterpret_cast<PiX_MemFree_t>(slot(0x140152b68));
-    if (!s_x_memFree) s_x_memFree = reinterpret_cast<PiX_MemFree_t>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-
-}
-
-// DAT_140172114 = 0x3f000000 = 0.5f. Raw .rdata -> NULL in standalone; real-value
-// fallback (bit pattern confirmed via Ghidra read_memory, and independently
-// documented in code/Game/Action/action_pf_geom.cpp).
+// DAT_140172114 = 0x3f000000 = 0.5f.
 static float Pickup_CellCenterHalf() {
-    static const float* p = reinterpret_cast<const float*>(
-        ResolveAddr(Module::Exe, 0x140172114));
-    return p ? *p : 0.5f;
+    return kRdata_140172114;
 }
 
 // Inlined Array<PickupCandidate>::Add. Mirrors the exe growth idiom byte-for-byte
@@ -331,17 +177,15 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
     if (newCount > capacity) {
         capacity = newCount;
         if (oldCount != 0) capacity = newCount * 3;
-        buf = s_x_memAlloc
-            ? reinterpret_cast<PickupCandidate*>(
-                  s_x_memAlloc(static_cast<uint64_t>(capacity) * 0x20, 8))
-            : nullptr;
+        buf = reinterpret_cast<PickupCandidate*>(
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(capacity) * 0x20, 8));
     }
     if (!buf) { buf = oldBuf; count = oldCount; return; }  // alloc failed -> no-op
 
     for (int i = (oldBuf == buf) ? oldCount : 0; i < newCount; ++i) {
         buf[i] = (i < oldCount && oldBuf) ? oldBuf[i] : v;
     }
-    if (oldBuf != buf && oldBuf && s_x_memFree) s_x_memFree(oldBuf);
+    if (oldBuf != buf && oldBuf) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
@@ -354,18 +198,8 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     // 0x1400f2f37: CMP [RCX+0x48],0 -> anything but "unassigned" means no work.
     if (status != 0) return 1;
 
-    Pickup_ResolveExecFuncs();
-
-    // The whole body is inert without these three, and half-executing would leave
-    // a Pickup marked claimed with no action behind it (silent corruption, strictly
-    // worse than doing nothing -- cf. code/Game/Work/work_leaf_gather.cpp). Bail as
-    // "no work available" instead.
-    if (!s_x_wantsRes || !s_x_performWork || !s_x_findRawMat || !s_x_findStorage ||
-        !s_x_queryCount || !s_x_findCell || !s_x_validateCell || !s_x_checkAssign ||
-        !s_x_findStoreRes || !s_x_calcDist || !s_x_canAdd || !s_x_findComp ||
-        !s_x_gridToWorld || !s_x_memAlloc || !s_x_memFree ||
-        !fn_InternalBasePtr_Ctor ||
-        !fn_IsDerivedFrom || !g_pGameWorldSingleton) {
+    // g_pGameWorldSingleton is STORAGE (B3R): its pointer test stays.
+    if (!g_pGameWorldSingleton) {
         return 1;
     }
 
@@ -380,10 +214,10 @@ int Pickup::Execute(void* citizenIBP, void* time) {
 
     // --- pile's RawMaterialComponent + its RawMaterialDescription ---------------
     void* rawMatIBP = nullptr;
-    s_x_findRawMat(*reinterpret_cast<int64_t*>(targetIBP), &rawMatIBP);
+    ActRm_FindComponent_223c0(*reinterpret_cast<int64_t*>(targetIBP), &rawMatIBP);
     void* descRaw = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(rawMatIBP) + 0x18);
-    void* desc = fn_IsDerivedFrom(descRaw, tidRawMatDesc) ? descRaw : nullptr;
+    void* desc = Object::IsDerivedFromNullSafe(descRaw, tidRawMatDesc) ? descRaw : nullptr;
 
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     void* townMgr = *reinterpret_cast<void**>(gw + 0xf0);
@@ -392,9 +226,9 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     // --- citizen's free carry capacity -----------------------------------------
     uintptr_t citizen = *reinterpret_cast<uintptr_t*>(citizenIBP);
     void* storageIBP = nullptr;
-    s_x_findStorage(*reinterpret_cast<int64_t*>(citizen + 0x10), &storageIBP);
+    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(citizen + 0x10), &storageIBP);
     int cap = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(storageIBP) + 0x38);
-    int freeCap = cap - static_cast<int>(s_x_queryCount(storageIBP));
+    int freeCap = cap - static_cast<int>(CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storageIBP)));
 
     // desc+0x48 = per-unit size, rawMat+0x28 = amount in the pile. (The original
     // dereferences desc unguarded here; kept faithful -- desc is non-null whenever
@@ -402,7 +236,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     const int needed = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x48) *
                        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
     if (freeCap < needed) {
-        s_x_longTermPlan(*reinterpret_cast<int64_t*>(citizenIBP));
+        CitizenAI_State_LongTermPlan(*reinterpret_cast<int64_t*>(citizenIBP));
         return 2;  // citizen is full -> re-plan
     }
 
@@ -436,40 +270,40 @@ int Pickup::Execute(void* citizenIBP, void* time) {
 
     // --- gate: does the town still want this resource? --------------------------
     int amount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
-    if (!s_x_wantsRes(townMgr,
+    if (!static_cast<char>(PickupGate_TownWants_8d3c0(reinterpret_cast<int64_t>(townMgr),
                       *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x28),
-                      amount))
+                      amount)))   // the door read AL
         return 1;
 
-    const int selfAccess = s_x_findCell(grid, selfCell, citizenCell, 0xe07);
+    const int selfAccess = WorkGrid_FindCell_9ccf0(grid, selfCell, citizenCell, 0xe07);
     if (selfAccess < 0) return 1;
-    if (!s_x_validateCell(grid, 0xe1f, static_cast<uint64_t>(static_cast<uint32_t>(selfAccess)),
+    if (!WorkBase_ValidateCell_a00f0(grid, 0xe1f, static_cast<uint64_t>(static_cast<uint32_t>(selfAccess)),
                           static_cast<uint32_t>(citizenCell)))
         return 1;
 
     void* assignIBP = *reinterpret_cast<void**>(citizenIBP);
-    if (!s_x_checkAssign(this, &assignIBP, static_cast<uint32_t>(selfAccess),
-                         static_cast<uint32_t>(citizenCell), time))
+    if (!static_cast<char>(WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &assignIBP, static_cast<uint32_t>(selfAccess),
+                         static_cast<uint32_t>(citizenCell), time)))   // the door read AL
         return 0;
 
     // --- is there anywhere to drop it off? --------------------------------------
     void* dropIBP = nullptr;
     void* storeOut = nullptr;
     amount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
-    s_x_findStoreRes(townMgr, &storeOut, static_cast<uint32_t>(selfAccess),
+    Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(townMgr), reinterpret_cast<int64_t*>(&storeOut), static_cast<uint32_t>(selfAccess),
                      *reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x28),
-                     amount, 1, &scratch.x, &dropIBP);
+                     amount, 1, reinterpret_cast<uint32_t*>(&scratch.x), &dropIBP);
     if (storeOut == nullptr) return 1;
 
     // Storage we will haul into -- used to test each candidate for acceptance.
     void* dstStorageIBP = nullptr;
-    s_x_findStorage(reinterpret_cast<int64_t>(storeOut), &dstStorageIBP);
+    WorkBase_FindComponent_6270(reinterpret_cast<int64_t>(storeOut), &dstStorageIBP);
 
     // --- seed the candidate array with this Pickup's own target -----------------
     PickupCandidate cand;
     cand.cell       = selfCell;
     cand.accessCell = selfAccess;
-    cand.distance   = s_x_calcDist(grid, static_cast<uint32_t>(citizenCell),
+    cand.distance   = WorkBase_CalcDistance_8830(grid, static_cast<uint32_t>(citizenCell),
                                    static_cast<uint32_t>(selfCell));
     cand.typeId     = *reinterpret_cast<int32_t*>(S + 0x20);
     cand.entity     = *reinterpret_cast<void**>(targetIBP);
@@ -478,12 +312,12 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     int count = 1;
     int capacity = 1;
     PickupCandidate* buf =
-        reinterpret_cast<PickupCandidate*>(s_x_memAlloc(0x20, 8));
+        reinterpret_cast<PickupCandidate*>(System::MemoryAllocator::MemAlloc(0x20, 8));
     if (!buf) return 1;
     buf[0] = cand;
     // 0x1400f32cd: the exe frees the *previous* (null) buffer here -- a literal
     // MemFree(0) no-op. Mirrored for fidelity.
-    s_x_memFree(nullptr);
+    System::MemoryAllocator::MemFree(nullptr);
 
     // --- sweep the 11x11 neighbourhood around the pile --------------------------
     const uintptr_t bstRoot = gw + 0x118;  // work/task registry; BST at +0x30
@@ -513,22 +347,22 @@ int Pickup::Execute(void* citizenIBP, void* time) {
             if (occIBP == nullptr) continue;
 
             void* nRawMatIBP = nullptr;
-            s_x_findRawMat(reinterpret_cast<int64_t>(occIBP), &nRawMatIBP);
+            ActRm_FindComponent_223c0(reinterpret_cast<int64_t>(occIBP), &nRawMatIBP);
             if (nRawMatIBP == nullptr) continue;
 
             int64_t nDesc = *reinterpret_cast<int64_t*>(
                 reinterpret_cast<uintptr_t>(occIBP) + 0x28);
-            if (!s_x_canAdd(dstStorageIBP, nDesc, 1)) continue;
+            if (!static_cast<char>(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(dstStorageIBP), nDesc, 1))) continue;   // the door read AL
 
-            const int nAccess = s_x_findCell(grid, nCell, citizenCell, 0xe07);
+            const int nAccess = WorkGrid_FindCell_9ccf0(grid, nCell, citizenCell, 0xe07);
             if (nAccess < 0) continue;
-            if (!s_x_validateCell(grid, 0xe1f,
+            if (!WorkBase_ValidateCell_a00f0(grid, 0xe1f,
                                   static_cast<uint64_t>(static_cast<uint32_t>(nAccess)),
                                   static_cast<uint32_t>(citizenCell)))
                 continue;
 
             void* compOut = nullptr;
-            void* compIBP = s_x_findComp(reinterpret_cast<int64_t>(occIBP), &compOut);
+            void* compIBP = WorkBase_FindComponent_3050(reinterpret_cast<int64_t>(occIBP), &compOut);
             const int nTypeId = *reinterpret_cast<int*>(
                 *reinterpret_cast<uintptr_t*>(compIBP) + 0x28);
 
@@ -553,7 +387,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
             }
 
             void* pickupRaw = workIBP;
-            void* pickupWork = fn_IsDerivedFrom(pickupRaw, tidPickup) ? pickupRaw : nullptr;
+            void* pickupWork = Object::IsDerivedFromNullSafe(pickupRaw, tidPickup) ? pickupRaw : nullptr;
             void* pickupIBP = nullptr;
             new (&pickupIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(pickupWork));   // B.3.3 bridge
@@ -566,7 +400,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
             PickupCandidate n;
             n.cell       = nCell;
             n.accessCell = nAccess;
-            n.distance   = s_x_calcDist(grid, static_cast<uint32_t>(citizenCell),
+            n.distance   = WorkBase_CalcDistance_8830(grid, static_cast<uint32_t>(citizenCell),
                                         static_cast<uint32_t>(nCell));
             n.typeId     = nTypeId;
             n.entity     = occIBP;
@@ -588,7 +422,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
 
         void* dRaw = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(p->rawMat) + 0x18);
-        void* d = fn_IsDerivedFrom(dRaw, tidRawMatDesc) ? dRaw : nullptr;
+        void* d = Object::IsDerivedFromNullSafe(dRaw, tidRawMatDesc) ? dRaw : nullptr;
 
         const int need = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(d) + 0x48) *
                          *reinterpret_cast<int*>(
@@ -605,11 +439,11 @@ int Pickup::Execute(void* citizenIBP, void* time) {
                    0.0f);
 
         float worldPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        s_x_gridToWorld(grid, worldPos, &scratch.x, 0, nullptr);
+        Reimpl_MapGetTerrainPos(grid, worldPos, &scratch.x, 0, nullptr);
 
         void* entIBP = p->entity;
         void* citIBP = *reinterpret_cast<void**>(citizenIBP);
-        s_x_performWork(&citIBP, static_cast<uint32_t>(p->typeId), &entIBP,
+        WorkAct_PerformWorkCtor9_c0ad0(&citIBP, static_cast<uint32_t>(p->typeId), &entIBP,
                         worldPos, p->cell, first);
         first = 0;
 
@@ -634,7 +468,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
         }
 
         void* wRaw = wIBP;
-        void* wPickup = fn_IsDerivedFrom(wRaw, tidPickup) ? wRaw : nullptr;
+        void* wPickup = Object::IsDerivedFromNullSafe(wRaw, tidPickup) ? wRaw : nullptr;
         void* claimed = nullptr;
         new (&claimed) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(wPickup));   // B.3.3 bridge
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(claimed) + 0x48) = 1;
@@ -663,7 +497,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
 
     // first still set => nothing was dispatched => 0; else 2.
     if (first == 0) result = 2;
-    s_x_memFree(buf);
+    System::MemoryAllocator::MemFree(buf);
     return result;
 }
 
@@ -694,7 +528,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
         // Citizen changed workplace -- cancel old work and re-target
         uintptr_t oldCitizen = (uintptr_t)citizenIBP;
 
-        s_fn_CancelAllWork((void*)(*(uintptr_t*)(oldCitizen + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(oldCitizen + 0x278) + 0x48));
 
         // Re-run Slot4 with the new citizen
         uintptr_t newCitizenRef = *(uintptr_t*)entityIBP;
@@ -755,11 +589,10 @@ int Pickup::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
 // If status == 1 (assigned), cancels the citizen's active work.
 // ============================================================
 int Pickup::Cleanup() {
-    Pickup_ResolveFuncs();   // lazy-resolve — factory-bypassed Pickups (see Slot9 note)
     if (status == 1) {
         uintptr_t citizenEntity = (uintptr_t)citizenIBP;
 
-        s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
     return 0;
 }
@@ -772,14 +605,6 @@ int Pickup::Cleanup() {
 // Returns true if valid (or no citizen assigned).
 // ============================================================
 int Pickup::Validate() {
-    // 🔑 LAZY-RESOLVE — REQUIRED on every entry point that touches an s_fn_* pointer.
-    // Pickup_ResolveFuncs() is otherwise only called from Pickup_Factory/CreateInPlace, but
-    // the Pickup works that matter here NEVER go through the factory: RawMaterialComponent::
-    // Draw (0x1401291d0) MemAllocs 0x60, runs Work_Ctor25 and stamps the vtable by hand. So
-    // s_fn_ValidateEntity stayed null and this slot called address 0 (crash: "EXEC of 0",
-    // misreported as VCALL-of-0 because RCX happened to be the Pickup). Same pattern as
-    // removenaturalresource.cpp's "lazy-resolve (exe-ctor-built action)".
-    Pickup_ResolveFuncs();
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t citizenRef = (uintptr_t)citizenIBP;
 
@@ -789,7 +614,7 @@ int Pickup::Validate() {
 
     // Validate entity via FUN_1400f7100
     uintptr_t entityIBP[1] = { citizenRef };
-    bool valid = s_fn_ValidateEntity(selfAddr, nullptr, entityIBP, nullptr);
+    bool valid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, entityIBP, nullptr);
 
     if (!valid) {
         // Entity no longer valid -- reset
@@ -837,16 +662,13 @@ int Pickup::GetPriority() {
 
 
 // ~Pickup is defaulted: the Pickup then Work stamps and `~Internal` are the compiler's
-// chain — all retail's 0x14002c010 does before the free. (The old body's lazy
-// Pickup_ResolveFuncs() fed only its MemFree pointer, which the free no longer uses.)
+// chain — all retail's 0x14002c010 does before the free.
 
 
 
 // Ctor 0x1400f3c00: `??0Internal`, the Work base fields, the leaf fields zeroed (the
-// two stamps are the compiler's). Pickup_ResolveFuncs wires the file's helper pointers
-// (the old factory did the same).
+// two stamps are the compiler's).
 Pickup::Pickup() : Work(), status(0), citizenIBP(nullptr), candidateList(nullptr) {
-    Pickup_ResolveFuncs();
 }
 
 // ============================================================
