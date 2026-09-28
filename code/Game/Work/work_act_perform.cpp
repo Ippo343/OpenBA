@@ -60,8 +60,10 @@ typedef void*  (*WAP_fn_CompleteTask_t)(void* self, uint32_t workId, void* entit
 typedef void*  (*WAP_fn_ShowTool_t)(void* self, void* entityInnerPtr, int toolType);
 //   CompleteRoad_Action_CopyCtor (0x1400c59d0): RCX=self, EDX=p2(int), R8D=p3(int), R9B=p4(byte).
 typedef void*  (*WAP_fn_CompleteRoad_t)(void* self, int p2, int p3, uint8_t p4);
-//   ConsumeRawMaterial_Action_CopyCtor (0x1400c63b0): RCX=self, RDX=&entityInner, R8=p3(int64), R9B(byte).
-typedef void*  (*WAP_fn_ConsumeRawMaterial_t)(void* self, void* entityInnerPtr, int64_t p3, uint8_t p4);
+//   ConsumeRawMaterial_Action_CopyCtor (0x1400c63b0): RCX=self, RDX=&entityInner, R8=p3(int64),
+//   R9=p4 (not set by the caller; the body ignores it), [RSP+0x20]=p5(byte) — retail
+//   0x1400c01f8 `MOV byte ptr [RSP+0x20],0x0`: FIVE arguments, the byte is the fifth.
+typedef void*  (*WAP_fn_ConsumeRawMaterial_t)(void* self, void* entityInnerPtr, int64_t p3, uint64_t p4, uint8_t p5);
 //   PickupStoredRawMaterial_Action_CopyCtor (0x1400ca520):
 //     RCX=self, RDX=&entityInner, R8=&srcInner, R9=p4(int64), [stack]=p5(int)=-1, [stack]=p6(byte)=1.
 typedef void*  (*WAP_fn_PickupStored_t)(void* self, void* entityInnerPtr, void* srcInnerPtr, int64_t p4, int p5, uint8_t p6);
@@ -466,8 +468,9 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         void* crm = nullptr;
         if (obj) {
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // 0x1400c01ed
-            // 0x1400c01f8: byte[RSP+0x20]=0 (p4) ; R8=[RBP+0x6f]=param_8 (p3) ; RDX=&entityInner
-            if (s_wap_ConsumeRaw) crm = s_wap_ConsumeRaw(obj, &entityInner, consumeArg8, 0); // 0x1400c63b0
+            // 0x1400c01f8: byte[RSP+0x20]=0 (p5, the FIFTH argument) ; R8=[RBP+0x6f]=param_8 (p3) ;
+            // RDX=&entityInner ; R9 not written (p4, unused by the body).
+            if (s_wap_ConsumeRaw) crm = s_wap_ConsumeRaw(obj, &entityInner, consumeArg8, 0, 0); // 0x1400c63b0
         }
         WAP_IbpCtor(&ibpA, crm);
         WAP_Append(list, &ibpA);
