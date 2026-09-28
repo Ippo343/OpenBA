@@ -31,6 +31,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // AchievementDialog::Slot4 (vtable +0x20) — Setup/populate achievement table
