@@ -31,6 +31,9 @@
 
 #include "Component/coll_bridge.h"
 #include "Component/RawMaterialComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7c80 cell class
+#include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"
 
 using AbsorbResourceCtrlDispatch = ::ControllerLive::Dispatcher<AbsorbResourceCtrlTag>;
 
@@ -58,29 +61,21 @@ using AbsorbResourceCtrlDispatch = ::ControllerLive::Dispatcher<AbsorbResourceCt
 // helper_ec70_sub_5950). The map/storage finds and the grid, storage and removal
 // derefs are UNGUARDED in retail and stay so: retail relies on every entity
 // carrying this component also carrying a MapComponent and a StorageComponent.
-// The helpers are resolved per call (no first-use cache: this runs from the main
-// thread's SM tick, the controller is built on the loader thread, B38 D7).
-typedef void*    (*fn_AbsorbFindComp_t)(int64_t entity, void* outIBP);          // 0x140004680 / 0x140006270
-typedef uint32_t (*fn_AbsorbStorageCanAdd_t)(void* storage, void* item, int qty); // 0x14012cd80
-typedef void     (*fn_AbsorbStorageAdd_t)(void* storage, void* item, int qty);    // 0x14012d000
-typedef void     (*fn_AbsorbMarkRemoval_t)(int64_t entity);                     // 0x1400c2ea0
-
+// The helpers are called directly: FloorComponent_FindResData 0x140004680 (the
+// MapComponent find), WorkBase_FindComponent_6270 0x140006270 (StorageComponent),
+// Pf_StorageCanAccept_cd80 0x14012cd80, ActRm_StorageAdd_d000 0x14012d000,
+// ActHunt_MarkEntityRemoval_c2ea0 0x1400c2ea0.
 extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*time*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
-    const auto findMap = reinterpret_cast<fn_AbsorbFindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-    const auto findStorage = reinterpret_cast<fn_AbsorbFindComp_t>(ResolveAddr(Module::Exe, 0x140006270));
-    const auto canAdd = reinterpret_cast<fn_AbsorbStorageCanAdd_t>(ResolveAddr(Module::Exe, 0x14012cd80));
-    const auto add = reinterpret_cast<fn_AbsorbStorageAdd_t>(ResolveAddr(Module::Exe, 0x14012d000));
-    const auto markRemoval = reinterpret_cast<fn_AbsorbMarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
     // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7c80 is RawMaterialComponent's registered
     // type-id cell (INVENTORY_C Table 1), read here BY CELL, not by the old local's name.
     const uint32_t tidRawMaterial = RawMaterialComponent::TypeId();
 
     const int64_t entity = *reinterpret_cast<int64_t*>(comp + 0x10);
     uintptr_t map = 0;
-    findMap(entity, &map);
+    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &map);
     void* storage = nullptr;
-    findStorage(entity, &storage);
+    WorkBase_FindComponent_6270(static_cast<uintptr_t>(entity), &storage);
 
     const int64_t y0 = *reinterpret_cast<int16_t*>(map + 0x2a);
     const int64_t x0 = *reinterpret_cast<int16_t*>(map + 0x28);
@@ -111,13 +106,15 @@ extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*tim
 
             void* item = *reinterpret_cast<void**>(cellEntity + 0x28);
             const int quantity = *reinterpret_cast<int*>(rmIBP + 0x28);
-            if (!(canAdd(storage, item, quantity) & 0xff)) continue;
-            add(storage, item, *reinterpret_cast<int*>(rmIBP + 0x28));
+            if (!(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(storage),
+                                           reinterpret_cast<int64_t>(item), quantity) & 0xff)) continue;
+            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage), reinterpret_cast<int64_t>(item),
+                                  *reinterpret_cast<int*>(rmIBP + 0x28));
 
             const int64_t entityList = *reinterpret_cast<int64_t*>(
                 reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xe8);
             if (((*reinterpret_cast<uint32_t*>(cellEntity + 0x40) >> 10) & 1) != 0) continue;
-            markRemoval(cellEntity);
+            ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(cellEntity));
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
                 .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &cellEntity);

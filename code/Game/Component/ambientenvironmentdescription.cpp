@@ -26,12 +26,8 @@
 // GetVersion (vtable +0x18, 0x140043a70): mov eax,2; ret -> version 2.
 // Dtor (vtable +0x00, 0x140002100): External::~External + free.
 //
-// NOTE: exe helpers FUN_1400019a0 (single ambient ExternalPtr serialize) and
-// FUN_140002540 (0x28-stride array resize) are NOT in engine_funcs.h and resolve via
-// ResolveAddr(Module::Exe,..) — null in standalone until those addrs are registered
-// (REPORTED to orchestrator). If unavailable, the array loop is skipped (the scalar
-// count + trailing floats still serialize, but a non-empty entry array would desync —
-// blocked on those two helpers being registered).
+// The exe helpers FUN_1400019a0 (single ambient ExternalPtr serialize) and
+// FUN_140002540 (0x28-stride array resize) are called directly (B.3R).
 //
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 //
@@ -49,11 +45,7 @@
 #include <cstdint>
 #include <new>
 #include "Component/exe_bodies.h"
-
-// exe helper FUN_140002540 — resize 0x28-byte-element array {ptr@arr+0, count@arr+8, cap@arr+0xc}.
-typedef void (*fn_AmbientArrayResize_t)(void* arrayBase, int newCount);
-// exe helper FUN_1400019a0 — serialize a single ambient ExternalPtr field.
-typedef void (*fn_AmbientExternalPtr_Serialize_t)(void* field, void* serializer);
+#include "Game/exe_bodies.h"
 
 // ============================================================
 // Reimpl of FUN_140002540 (grow/shrink the 0x28-byte-element entry array)
@@ -132,31 +124,23 @@ AmbientEnvironmentDescription::~AmbientEnvironmentDescription() {
 
 // [5] 0x140043950: stream order as retail.
 bool AmbientEnvironmentDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    // B6-5: the two exe helpers are resolved per call (was a non-atomic first-call
-    // cache; descriptions load on the loader thread).
-    fn_AmbientArrayResize_t resizeFn =
-        reinterpret_cast<fn_AmbientArrayResize_t>(ResolveAddr(Module::Exe, 0x140002540));
-    fn_AmbientExternalPtr_Serialize_t extPtrFn =
-        reinterpret_cast<fn_AmbientExternalPtr_Serialize_t>(ResolveAddr(Module::Exe, 0x1400019a0));
-    
+
     int count = _entryCount;
     ser.Serialize(count, nullptr);   // int count +0x28
-    
-    // On load: resize the 0x28-byte-element array at +0x20.
+
+    // On load: resize the 0x28-byte-element array at +0x20 (0x140002540).
     if (static_cast<int>(ser.GetDirection()) == 0) {
-        if (resizeFn) resizeFn(&_entries, count);
+        AmbientArrayResize_Reimpl(&_entries, count);
     }
-    
-    // Per-element loop (requires the exe helper; skipped if unavailable in standalone).
-    if (count > 0 && extPtrFn) {
+
+    if (count > 0) {
         uint8_t* elem = static_cast<uint8_t*>(_entries);
         for (int i = 0; i < count; ++i, elem += 0x28) {
             ser.Serialize(*reinterpret_cast<unsigned int*>(elem + 0x00), nullptr);   // enum
-            fn_ExternalPtr_BuildSerialize(elem + 0x08, &ser);  // ExternalPtr
-            extPtrFn(elem + 0x10, &ser);                       // ExternalPtr
-            extPtrFn(elem + 0x18, &ser);                       // ExternalPtr
+            Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x08, &ser);  // ExternalPtr, 0x140002340
+            AmbientExternalPtrSerialize_Reimpl(elem + 0x10, &ser);        // ExternalPtr, 0x1400019a0
+            AmbientExternalPtrSerialize_Reimpl(elem + 0x18, &ser);        // ExternalPtr, 0x1400019a0
             ser.Serialize(*reinterpret_cast<int*>(elem + 0x20), nullptr);            // int
         }
     }

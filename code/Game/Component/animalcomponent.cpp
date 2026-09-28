@@ -21,7 +21,7 @@
 //
 // AnimalComponent_SetBounds (0x140105e20) is NOT re-ported here: it already has a
 // faithful port as PastureComponent_AnimalSetBounds (pasturecomponent.cpp) and is
-// registered by reg_component_gap_D.cpp:71, so we call it through ResolveAddr.
+// registered by reg_component_gap_D.cpp:71; we call that body directly.
 //
 // ---- Struct fields (size 0x58, ctor 0x140106fc0) --------------------------
 //   +0x10 Entity IBP (owner)          +0x18 AnimalDescription (Object::Base)
@@ -64,11 +64,14 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
 
 // ============================================================
-// .rdata float constants (exact retail bit patterns, verified by reading
-// Application-x64.exe .rdata through Ghidra). Each is also looked up via
-// ResolveAddr so a registered override wins; the literal is the fallback.
+// .rdata float constants (exact retail bit patterns, exe_constants.h).
 // ============================================================
 namespace {
 
@@ -86,86 +89,33 @@ inline float BitsToFloat(uint32_t bits) {
 // 0x140172110 = 0x3ECCCCCD = 0.4     — wander destination jitter radius.
 // 0x140172114 = 0x3F000000 = 0.5     — cell-centre bias.
 // 0x140172280 = 0xBF800000 = -1.0    — MoveTo "use the mover's own speed".
-const float* s_pfAgeRate    = nullptr;  // 0x1401720b0
-const float* s_pfHoursToSec = nullptr;  // 0x14017225c
-const float* s_pfScaleBase  = nullptr;  // 0x14017210c
-const float* s_pfScaleGain  = nullptr;  // 0x140172120
-const float* s_pfOne        = nullptr;  // 0x14017214c
-const float* s_pfJitter     = nullptr;  // 0x140172110
-const float* s_pfHalfCell   = nullptr;  // 0x140172114
-const float* s_pfMoveSpeed  = nullptr;  // 0x140172280
+inline float AgeRate()    { return BitsToFloat(kRdata_1401720b0); }
+inline float HoursToSec() { return BitsToFloat(kRdata_14017225c); }
+inline float ScaleBase()  { return BitsToFloat(kRdata_14017210c); }
+inline float ScaleGain()  { return BitsToFloat(kRdata_140172120); }
+inline float ScaleMax()   { return kRdata_14017214c; }
+inline float Jitter()     { return kRdata_140172110; }
+inline float HalfCell()   { return kRdata_140172114; }
+inline float MoveSpeed()  { return kRdata_140172280; }
 
-inline float AgeRate()    { return s_pfAgeRate    ? *s_pfAgeRate    : BitsToFloat(0x3991A2B4); }
-inline float HoursToSec() { return s_pfHoursToSec ? *s_pfHoursToSec : 3600.0f; }
-inline float ScaleBase()  { return s_pfScaleBase  ? *s_pfScaleBase  : BitsToFloat(0x3EA8F5C3); }
-inline float ScaleGain()  { return s_pfScaleGain  ? *s_pfScaleGain  : BitsToFloat(0x3F2B851E); }
-inline float ScaleMax()   { return s_pfOne        ? *s_pfOne        : 1.0f; }
-inline float Jitter()     { return s_pfJitter     ? *s_pfJitter     : BitsToFloat(0x3ECCCCCD); }
-inline float HalfCell()   { return s_pfHalfCell   ? *s_pfHalfCell   : 0.5f; }
-inline float MoveSpeed()  { return s_pfMoveSpeed  ? *s_pfMoveSpeed  : -1.0f; }
-
-// --- registered exe sub-callees -------------------------------------------
-typedef void* (*fn_FindCharacter_t)(int64_t entity, void* outIBP);          // 0x1400012d0
-typedef void* (*fn_FindModel_t)(int64_t entity, void* outIBP);              // 0x140003f60
-typedef void  (*fn_MarkForRemoval_t)(void* entity);                         // 0x1400c2ea0
+// --- exe sub-callees, called directly -------------------------------------
+//   0x1400012d0 ActMv_FindComponentFamily_12d0 (CharacterComponent)
+//   0x140003f60 ActCNR_FindComponent_3f60      (ModelComponent)
+//   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
+//   0x140118950 GrowthComponent_ModifyFlags
+//   0x140105e20 PastureComponent_AnimalSetBounds
+//   0x1401250f0 ActMvDep_AnimHelper_50f0       (set animation)
+//   0x1400c5400 WorkBase_TaskListCleanup_c5400 (action stack clear)
+//   0x1400c54e0 Pf_ActStackPush_54e0
+//   0x1400c9170 Pf_MoveToCtor_9170
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
 // the exe (ENDGAME B.3.2 step 2); ActHunt_DynArraySetCount_3110 confirmed the
 // 3-arg fill form matches SetSizeCore exactly, so the call site below now goes
 // through GameColl::AsArray<GameColl::Ptr8>(...).SetSizeFill(n, &entity).
-typedef void  (*fn_ModifyFlags_t)(void* comp, uint32_t orMask,
-                                  uint32_t andNotMask);                     // 0x140118950
-typedef void  (*fn_SetBounds_t)(void* self, short* x, short* y,
-                                short* w, short* h, int size);              // 0x140105e20
-typedef void  (*fn_SetAnimation_t)(uintptr_t model, uint32_t animId,
-                                   float a, float b, float c);              // 0x1401250f0
-typedef void  (*fn_ActStackClear_t)(int64_t* stackAt48);                    // 0x1400c5400
-typedef void  (*fn_ActStackPush_t)(int64_t* stackAt48, void* srcIBP);       // 0x1400c54e0
-typedef void* (*fn_MoveToCtor_t)(void* mem, void* moverIBP, uint32_t pathType,
-                                 int a4, float* dest, int a6, int a7,
-                                 float speed);                              // 0x1400c9170
-
-fn_FindCharacter_t     s_fnFindCharacter  = nullptr;
-fn_FindModel_t         s_fnFindModel      = nullptr;
-fn_MarkForRemoval_t    s_fnMarkForRemoval = nullptr;
-fn_ModifyFlags_t       s_fnModifyFlags    = nullptr;
-fn_SetBounds_t         s_fnSetBounds      = nullptr;
-fn_SetAnimation_t      s_fnSetAnimation   = nullptr;
-fn_ActStackClear_t     s_fnActStackClear  = nullptr;
-fn_ActStackPush_t      s_fnActStackPush   = nullptr;
-fn_MoveToCtor_t        s_fnMoveToCtor     = nullptr;
-
-
-bool s_helpersResolved = false;
 
 } // namespace
 
 namespace {
-
-void EnsureHelpers() {
-    if (s_helpersResolved) return;
-    s_helpersResolved = true;
-
-
-    s_fnFindCharacter  = reinterpret_cast<fn_FindCharacter_t >(ResolveAddr(Module::Exe, 0x1400012d0));
-    s_fnFindModel      = reinterpret_cast<fn_FindModel_t     >(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fnMarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_fnModifyFlags    = reinterpret_cast<fn_ModifyFlags_t   >(ResolveAddr(Module::Exe, 0x140118950));
-    s_fnSetBounds      = reinterpret_cast<fn_SetBounds_t     >(ResolveAddr(Module::Exe, 0x140105e20));
-    s_fnSetAnimation   = reinterpret_cast<fn_SetAnimation_t  >(ResolveAddr(Module::Exe, 0x1401250f0));
-    s_fnActStackClear  = reinterpret_cast<fn_ActStackClear_t >(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fnActStackPush   = reinterpret_cast<fn_ActStackPush_t  >(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_fnMoveToCtor     = reinterpret_cast<fn_MoveToCtor_t    >(ResolveAddr(Module::Exe, 0x1400c9170));
-
-
-    s_pfAgeRate    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720b0));
-    s_pfHoursToSec = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017225c));
-    s_pfScaleBase  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017210c));
-    s_pfScaleGain  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172120));
-    s_pfOne        = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pfJitter     = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172110));
-    s_pfHalfCell   = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_pfMoveSpeed  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
-}
 
 // --- small accessors -------------------------------------------------------
 inline uint8_t* Raw(void* p) { return reinterpret_cast<uint8_t*>(p); }
@@ -251,8 +201,6 @@ constexpr int kTraceCap = 24;
 // A candidate qualifies when terrain == 0x02 AND the cell has no occupant.
 // ============================================================
 int AnimalComponent_FindHabitat(AnimalComponent* self) {
-    EnsureHelpers();
-
     int* grid = MapGrid();
     if (!self || !grid) return 0;
 
@@ -317,7 +265,6 @@ int AnimalComponent_FindHabitat(AnimalComponent* self) {
 // The scalar is broadcast into a Vector4 and stored at MeshInstance+0x134.
 // ============================================================
 void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
-    EnsureHelpers();
     if (!self) return;
 
     void* desc = AnimalDesc(self);
@@ -330,10 +277,10 @@ void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
     if (scale > ScaleMax()) scale = ScaleMax();
 
     int64_t entity = At<int64_t>(self, 0x10);
-    if (!entity || !s_fnFindCharacter) return;
+    if (!entity) return;
 
     int64_t character = 0;
-    s_fnFindCharacter(entity, &character);
+    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
     if (!character) return;
 
     int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
@@ -360,16 +307,15 @@ void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
 // Reproduced as-is (the second pass is a no-op on an already-unit 2D vector).
 // ============================================================
 void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, float seconds) {
-    EnsureHelpers();
     if (!self) return;
 
     int64_t entity = At<int64_t>(self, 0x10);
-    if (!entity || !s_fnFindCharacter || !s_fnFindModel) return;
+    if (!entity) return;
 
     int64_t character = 0;
-    s_fnFindCharacter(entity, &character);
+    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
     int64_t model = 0;
-    s_fnFindModel(entity, &model);
+    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(entity), &model);
 
     if (!character) return;
 
@@ -379,9 +325,9 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
         charDesc = charDescRaw;
     }
 
-    if (s_fnSetAnimation && model && charDesc) {
-        s_fnSetAnimation(static_cast<uintptr_t>(model), animId, 0.0f,
-                         At<float>(charDesc, 0x2c), ScaleMax());
+    if (model && charDesc) {
+        ActMvDep_AnimHelper_50f0(static_cast<uintptr_t>(model), animId, 0.0f,
+                                 At<float>(charDesc, 0x2c), ScaleMax());
     }
 
     // System::Time::Time writes EIGHT bytes — the destination must be int64-sized.
@@ -445,19 +391,6 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 // Update with a zero delta (retail calls vtable+0x48, i.e. slot 9).
 // ============================================================
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void AnimalComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[AnimalComponent] find=%p moveTo=%p setBounds=%p\n",
-           reinterpret_cast<void*>(s_fnFindCharacter),
-           reinterpret_cast<void*>(s_fnMoveToCtor),
-           reinterpret_cast<void*>(s_fnSetBounds));
-#endif
-}
-
 // ============================================================================
 // ENDGAME B.3.8 CIT — AnimalComponent as a REAL class (AnimalComponent.h).
 //
@@ -480,8 +413,6 @@ AnimalComponent::AnimalComponent()
 }
 
 void AnimalComponent::Startup() {
-    EnsureHelpers();
-
     void* desc = AnimalDesc(this);
     void* rng  = Rng();
     if (!desc || !rng) {
@@ -496,16 +427,14 @@ void AnimalComponent::Startup() {
     At<float>(this, 0x48) = tol * At<float>(desc, 0x2c) + At<float>(desc, 0x28);
 }
 void AnimalComponent::OnAdded() {
-    EnsureHelpers();
-
     const uint32_t flags = At<uint32_t>(this, 0x20);
     if (((flags >> 0x16) & 1) == 0) return;
 
     int64_t entity = At<int64_t>(this, 0x10);
-    if (!entity || !s_fnFindCharacter) return;
+    if (!entity) return;
 
     int64_t character = 0;
-    s_fnFindCharacter(entity, &character);
+    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
     if (!character) return;
 
     const int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
@@ -522,8 +451,8 @@ void AnimalComponent::OnAdded() {
     At<int>(this, 0x28) = dim * y + x;
 
     void* desc = AnimalDesc(this);
-    if (s_fnSetBounds && desc) {
-        s_fnSetBounds(this,
+    if (desc) {
+        PastureComponent_AnimalSetBounds(this,
                       reinterpret_cast<short*>(Raw(this) + 0x38),
                       reinterpret_cast<short*>(Raw(this) + 0x3a),
                       reinterpret_cast<short*>(Raw(this) + 0x3c),
@@ -542,7 +471,6 @@ void AnimalComponent::OnAdded() {
 // bucket tick 0x1400c42af).
 void AnimalComponent::Update(void* time) {
     int64_t* deltaTime = static_cast<int64_t*>(time);
-    EnsureHelpers();
     if (!deltaTime) return;
 
     // ---- 1. aging + death ------------------------------------------------
@@ -560,7 +488,7 @@ void AnimalComponent::Update(void* time) {
 
         if ((At<uint32_t>(static_cast<uintptr_t>(entity), 0x40) >> 10) & 1) return;
 
-        if (s_fnMarkForRemoval) s_fnMarkForRemoval(reinterpret_cast<void*>(entity));
+        ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entity));
         if (corpseOwner) {
             // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
             // Collection::Array<void*>::SetSize(n, fill).
@@ -615,7 +543,7 @@ void AnimalComponent::Update(void* time) {
                 if (remaining > 0) {
                     rearm = false;
                 } else {
-                    if (s_fnModifyFlags) s_fnModifyFlags(this, 0x200000, 0);
+                    GrowthComponent_ModifyFlags(this, 0x200000, 0);
                     seconds = 0.0f;
                 }
             }
@@ -637,10 +565,10 @@ void AnimalComponent::Update(void* time) {
 
     // ---- 4. busy / timer gates -------------------------------------------
     int64_t entity = At<int64_t>(this, 0x10);
-    if (!entity || !s_fnFindCharacter) return;
+    if (!entity) return;
 
     int64_t character = 0;
-    s_fnFindCharacter(entity, &character);
+    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
     if (!character) {
         if (s_traceMissing++ < kTraceCap) {
             fprintf(stderr, "[AnimalUpd] no CharacterComponent on entity=%p — pathing skipped\n",
@@ -687,14 +615,12 @@ void AnimalComponent::Update(void* time) {
 
             if ((cells && CellTerrain(cells, cell) != 0x02) || blocked) {
                 At<int>(this, 0x28) = AnimalComponent_FindHabitat(this);
-                if (s_fnSetBounds) {
-                    s_fnSetBounds(this,
-                                  reinterpret_cast<short*>(Raw(this) + 0x38),
-                                  reinterpret_cast<short*>(Raw(this) + 0x3a),
-                                  reinterpret_cast<short*>(Raw(this) + 0x3c),
-                                  reinterpret_cast<short*>(Raw(this) + 0x3e),
-                                  At<int>(desc, 0x20));
-                }
+                PastureComponent_AnimalSetBounds(this,
+                              reinterpret_cast<short*>(Raw(this) + 0x38),
+                              reinterpret_cast<short*>(Raw(this) + 0x3a),
+                              reinterpret_cast<short*>(Raw(this) + 0x3c),
+                              reinterpret_cast<short*>(Raw(this) + 0x3e),
+                              At<int>(desc, 0x20));
             }
         }
 
@@ -741,7 +667,7 @@ void AnimalComponent::Update(void* time) {
 
         if (repath) {
             uint8_t discard[8] = {0};
-            if (s_fnFindModel) s_fnFindModel(At<int64_t>(this, 0x10), discard);
+            ActCNR_FindComponent_3f60(static_cast<uintptr_t>(At<int64_t>(this, 0x10)), discard);
 
             const float jitter   = Jitter();
             const float halfCell = HalfCell();
@@ -770,7 +696,7 @@ void AnimalComponent::Update(void* time) {
                                  0.0f};
 
                 float world[3] = {0.0f, 0.0f, 0.0f};
-                if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(g, world, tile, '\0', nullptr);
+                Reimpl_MapGetTerrainPos(g, world, tile, '\0', nullptr);   // 0x14009f3e0
                 dest[0] = world[0];
                 dest[1] = world[1];
                 dest[2] = world[2];
@@ -782,14 +708,12 @@ void AnimalComponent::Update(void* time) {
 
                 if (misses > 10) {
                     At<int>(this, 0x28) = AnimalComponent_FindHabitat(this);
-                    if (s_fnSetBounds) {
-                        s_fnSetBounds(this,
-                                      reinterpret_cast<short*>(Raw(this) + 0x38),
-                                      reinterpret_cast<short*>(Raw(this) + 0x3a),
-                                      reinterpret_cast<short*>(Raw(this) + 0x3c),
-                                      reinterpret_cast<short*>(Raw(this) + 0x3e),
-                                      At<int>(desc, 0x20));
-                    }
+                    PastureComponent_AnimalSetBounds(this,
+                                  reinterpret_cast<short*>(Raw(this) + 0x38),
+                                  reinterpret_cast<short*>(Raw(this) + 0x3a),
+                                  reinterpret_cast<short*>(Raw(this) + 0x3c),
+                                  reinterpret_cast<short*>(Raw(this) + 0x3e),
+                                  At<int>(desc, 0x20));
                     misses = 0;
                 }
                 ++misses;
@@ -818,25 +742,25 @@ void AnimalComponent::Update(void* time) {
 
             if (accept) {
                 int64_t* stack = reinterpret_cast<int64_t*>(character + 0x48);
-                if (s_fnActStackClear) s_fnActStackClear(stack);
+                WorkBase_TaskListCleanup_c5400(stack);
 
                 void* action = nullptr;
                 void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
                                 ? fn_MemAlloc(g_pMemAllocSingleton, 0x480, 8)
                                 : nullptr;
-                if (mem && s_fnMoveToCtor) {
+                if (mem) {
                     int64_t moverIBP = character;
-                    action = s_fnMoveToCtor(mem, &moverIBP, 0 /*Normal*/, 1,
-                                            dest, 0xf9f, 1, MoveSpeed());
+                    action = Pf_MoveToCtor_9170(mem, &moverIBP, 0 /*Normal*/, 1,
+                                                dest, 0xf9f, 1, MoveSpeed());
                 }
-                // If the alloc or the ctor is unavailable, `action` stays null and
-                // we push a null IBP — the same degradation retail takes when
-                // MemAlloc fails (0x140106a8e: MOV RAX,RDI with RDI == 0).
+                // If the alloc fails, `action` stays null and we push a null IBP —
+                // the same degradation retail takes when MemAlloc fails
+                // (0x140106a8e: MOV RAX,RDI with RDI == 0).
 
                 int64_t actionIBP = 0;
                 new (&actionIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge
-                if (s_fnActStackPush) s_fnActStackPush(stack, &actionIBP);
+                Pf_ActStackPush_54e0(stack, &actionIBP);
                 At<int64_t>(this, 0x30) = 0;
 
                 if (s_traceMoveTo++ < kTraceCap) {
