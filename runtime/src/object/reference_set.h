@@ -142,10 +142,3 @@ Node** Insert     (Set* set, Node** out, const uint32_t* key,
                    const RtSystem::Filename* value);                      // 0x18002cb90
 
 }  // namespace rtrefset
-
-// The probe. ARMED by RtObjectReferenceSetRegister, RUN on the first real call
-// into `Insert` — it ALLOCATES, and a probe that allocates cannot run from a
-// *PortInit (WAVE9.md lane PKG2: the allocator singleton is constructed but not
-// started there, and the first allocation faults at null+0x640).
-
-int RtObjectReferenceSetRegister();

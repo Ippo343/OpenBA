@@ -244,13 +244,13 @@ float RtUtility_PerlinNoise_Generate(const PerlinNoise* self, float x, float y) 
 // ============================================================================
 int RtUtilityRegister() {
     int n = 0;
+    // B3R W2-RT: the two address rows (0x1801089b0, 0x180108c70) had no
+    // reader and went; the names stay while engine_funcs.cpp reads them.
     RegisterRuntimeExport("?Generate@PerlinNoise@Utility@@QEBAMMM@Z",
                           (void*)&RtUtility_PerlinNoise_Generate); ++n;
-    RegisterRuntimeAddr(0x1801089b0, (void*)&RtUtility_PerlinNoise_Generate);
     // Wave 9 lane GFX — see the banner on the ctor above.
     RegisterRuntimeExport("??0PerlinNoise@Utility@@QEAA@MMHH@Z",
                           (void*)&RtUtility_PerlinNoise_Ctor); ++n;
-    RegisterRuntimeAddr(0x180108c70, (void*)&RtUtility_PerlinNoise_Ctor);
     // BATCH 8: SmoothNoise (above) has had a body since Wave 8 lane E but was
     // deliberately left unregistered as "out of this lane's scope" — it is
     // `private`/AEBA with no census row of its own, reached only by a direct

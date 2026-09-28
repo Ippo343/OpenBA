@@ -1258,10 +1258,12 @@ int RegisterAllocatorExports(void* allocateEntry) {
                           reinterpret_cast<void*>(&MemoryAllocator::MemAlloc));
     RegisterRuntimeExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z",
                           reinterpret_cast<void*>(&MemoryAllocator::MemFree));
-    RegisterRuntimeExport("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z", allocateEntry);
     // B3R RT-Core: the six Platform* rows, the member thunks' rows and
-    // ?Startup@/?Shutdown@ had no reader and are gone.
-    return 3;
+    // ?Startup@/?Shutdown@ had no reader and are gone. B3R W2-RT: so is
+    // ?Allocate@ (its composed entry keeps its ADDRESS row, 0x1800c6e60, which
+    // engine_funcs.cpp reads).
+    (void)allocateEntry;
+    return 2;
 }
 
 // ============================================================================
@@ -1395,11 +1397,12 @@ void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
 namespace {
 
 int RegisterAllocatorAddresses(void* allocateEntry) {
-    RegisterRuntimeAddr(0x1800c7a50, reinterpret_cast<void*>(&MemoryAllocator::MemAlloc));
-    RegisterRuntimeAddr(0x1800c7ad0, reinterpret_cast<void*>(&MemoryAllocator::MemFree));
+    // B3R W2-RT: 0x1800c7a50 / 0x1800c7ad0 (the two statics) had no reader
+    // left -- every reader calls MemoryAllocator::MemAlloc / MemFree by name --
+    // and went. 0x1800c6e60 stays while engine_funcs.cpp's fn_MemAlloc reads it.
     RegisterRuntimeAddr(0x1800c6e60, allocateEntry);
     // 0x180009c30 is not registered at all any more (B3R RT-Core): every
     // reader calls rtalloc::FreeLockedIgnoringSelf by name.
-    return 3;
+    return 1;
 }
 }  // namespace
