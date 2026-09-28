@@ -14,7 +14,8 @@ two storage rows. Every class's vtable is the COMPILER's. That is what makes END
    killed for low memory with the game process at 6.6 GB. It found one real fault: the -O2 exe corrupted the heap
    (lifetime dead-store elimination deleted a ported destructor's field-nulling stores). `-fno-lifetime-dse` is
    now MANDATORY in the Makefile and `gate.sh` runs a `newgame_perf` route on the optimised exe — keep both.
-   Open for the user with the device-lost decision: in that run the terrain texture slid with the camera.
+   In that run the terrain texture slid with the camera (user's report) — filed with the deferred device-lost
+   bugs (§2 item 5).
 2. `code/Game/Dialog/spritecaptureui.cpp:200` reads retail `.rdata` 0x14015d424 as a raw `const char*` (`".rsc"`):
    in our exe that address is our own image. One-line fix (`".rsc"`), its own titled behaviour commit.
 3. The four `DEFINE_EXE_VTABLE` lines left (GameUpdateLoop, MenuDialogLoopT, GameLoadDialogLoopT, StatGoal) each
@@ -48,7 +49,9 @@ The old list (`git show ab1e0846:docs/runtime_port/endgame_b/NEXT_SESSION.md` §
 3. `ExternalPtr` exe door sites — **open** (D10's 125; 185 code lines in `code/` name `ExternalPtr<` /
    `ExternalPtrHandle`, 62 the alias).
 4. The small list — **open**, not re-measured (`scene_watch.cpp` still reads 0x180100f20 as an identity token).
-5. **Device-lost / loader race — the USER's decision** (`DEVICE_LOST_LOADER_RACE.md`) plus the three pre-existing
+5. **Device-lost / loader race — DEFERRED by the user (2026-09-27): a known bug, worked on AFTER all endgame
+   work is finished. Do not fix, guard or investigate it during the endgame; `devlost.sh` stays a crash check on
+   Video / Graphics / dx11 merges only.** Background: (`DEVICE_LOST_LOADER_RACE.md`) plus the three pre-existing
    device-lost findings of `b39_session/GATE_TABLE.md` (front-end fault in `MainLoop::OnVideoError` on a null
    `SaveLoad::_singleton`; the world-build race; repeated real `DXGI_ERROR_DEVICE_REMOVED` recoveries in game).
 6. dx11 `*Data` seam (84 slots, RULE B5-8) — **open** and it MATTERS to the next step (§3c); `appSingleton` data
