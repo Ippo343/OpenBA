@@ -130,8 +130,8 @@ static uint32_t TidDecalComp() {
 
 // Retail's `IsDerivedFrom(p, tid) ? p : nullptr` idiom.
 static void* AsType(void* obj, uint32_t typeId) {
-    if (!obj || !typeId || !fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
+    if (!obj || !typeId) return nullptr;
+    return ::Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;
 }
 
 
@@ -170,14 +170,13 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
             uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (t == typeId) {
                 void* o = *ibp;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
+                if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    else *reinterpret_cast<void**>(retIBP) = found;
     return retIBP;
 }
 
@@ -223,19 +222,19 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
             reinterpret_cast<Action*>(p)->CheckEntity();   // B.3.x bridge (slot 8, the file's "Abort")
             p = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(p) + 0x10);
         }
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(&items[i])->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(&items[i])->DeletePtr(
             );   // B.3.3 bridge
         void* nullIbp = nullptr;
-        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         items[i] = nullIbp;
     }
 
     *reinterpret_cast<int*>(st + 0x18) = -1;
     if (*reinterpret_cast<void**>(st + 0x10) != nullptr) {
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(st + 0x10))->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(st + 0x10))->DeletePtr(
             );   // B.3.3 bridge
         void* nullIbp = nullptr;
-        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<void**>(st + 0x10) = nullIbp;
     }
 

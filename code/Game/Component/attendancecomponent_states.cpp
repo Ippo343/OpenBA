@@ -127,8 +127,7 @@ extern "C" char AttendanceComponent_AllFull(void* selfP) {
         if (*reinterpret_cast<uintptr_t*>(entry + 0x18) != myDesc) continue;
 
         void* desc = *reinterpret_cast<void**>(entry + 0x18);
-        if (fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(desc, AttendanceDescription::TypeId()))
+        if (!::Object::IsDerivedFromNullSafe(desc, AttendanceDescription::TypeId()))
             desc = nullptr;
         const int capacity = *reinterpret_cast<int32_t*>(
             reinterpret_cast<uintptr_t>(desc) + 0x20);
@@ -183,7 +182,7 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
     const uintptr_t town = AC_TownObject();
     if (town) {
         uintptr_t selfIbp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
+        new (&selfIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(selfP));   // B.3.3 bridge
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         const int32_t newCount = *reinterpret_cast<int32_t*>(town + 0x68) + 1;
@@ -203,7 +202,7 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
         work = ::new (work) LocationWork(&entity);
     }
     uintptr_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+    new (&workIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     // 3. post it to the citizen work ledger

@@ -102,7 +102,7 @@ extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*tim
             for (int i = 0; i < compCount; ++i) {
                 ::Component* c = *reinterpret_cast<::Component**>(comps + static_cast<int64_t>(i) * 8);
                 if (c->Type() != tidRawMaterial) continue;
-                if (fn_IsDerivedFrom(c, tidRawMaterial)) rawMaterial = c;
+                if (::Object::IsDerivedFromNullSafe(c, tidRawMaterial)) rawMaterial = c;
                 break;
             }
             int64_t rmIBP = 0;

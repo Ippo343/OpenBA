@@ -56,7 +56,7 @@ bool IsRawMat(void* c) {
     if (!c) return false;
     const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
     if (tid != RawMaterialDescription::TypeId()) return false;
-    return !fn_IsDerivedFrom || fn_IsDerivedFrom(c, RawMaterialDescription::TypeId());
+    return ::Object::IsDerivedFromNullSafe(c, RawMaterialDescription::TypeId());
 }
 
 // The recipe table mixes two shapes and the first pass only handled one, which is why
@@ -78,7 +78,7 @@ void DescribeMaterial(uintptr_t matDesc, const char** outName, unsigned* outFlag
         if (!c) continue;
         const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
         if (tid != RawMaterialDescription::TypeId()) continue;
-        if (fn_IsDerivedFrom && !fn_IsDerivedFrom(c, RawMaterialDescription::TypeId())) continue;
+        if (!::Object::IsDerivedFromNullSafe(c, RawMaterialDescription::TypeId())) continue;
         ReadRawMat(c, outName, outFlags);
         return;
     }

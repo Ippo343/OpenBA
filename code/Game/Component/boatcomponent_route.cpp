@@ -132,8 +132,7 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     // empty (count 0 -> no name matched -> recurse).
     void* descRaw = *reinterpret_cast<void**>(comp + 0x18);
     void* desc = nullptr;
-    if (fn_IsDerivedFrom &&
-        fn_IsDerivedFrom(descRaw, InteractDescription::TypeId())) {
+    if (::Object::IsDerivedFromNullSafe(descRaw, InteractDescription::TypeId())) {
         desc = descRaw;
     }
 
@@ -177,13 +176,13 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
         if (!obj) continue;
         if (reinterpret_cast<Object::Base*>(obj)->Type() == wantedTid) {   // B.3.8 bridge (slot 2)
             void* cand = *reinterpret_cast<void**>(slot);
-            model = (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, wantedTid)) ? cand : nullptr;
+            model = (::Object::IsDerivedFromNullSafe(cand, wantedTid)) ? cand : nullptr;
             break;
         }
     }
 
     uint64_t modelIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) new (modelIBP) ::Object::InternalBasePtr(
+    new (modelIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(model));   // B.3.3 bridge
     const uintptr_t m = static_cast<uintptr_t>(modelIBP[0]);
     if (!m) return false;   // no ModelComponent: retail would fault on m+0x148
@@ -239,11 +238,11 @@ extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
         if (!obj) continue;
         if (reinterpret_cast<Object::Base*>(obj)->Type() == wanted) {   // B.3.8 bridge (slot 2)
             void* cand = *reinterpret_cast<void**>(slot);
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, wanted)) ? cand : nullptr;
+            found = (::Object::IsDerivedFromNullSafe(cand, wanted)) ? cand : nullptr;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }

@@ -79,7 +79,7 @@ static void* BCS1_FindRawMatDesc(uintptr_t matEntity, uint32_t tid) {
         if (!comp) continue;
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (t == tid) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) return comp;
+            if (::Object::IsDerivedFromNullSafe(comp, tid)) return comp;
             return nullptr;
         }
     }
@@ -271,7 +271,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     uintptr_t siteIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&siteIbp) ::Object::InternalBasePtr(
+    new (&siteIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
     if (townMgr && s_findInQueue) {
         int idx = s_findInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &siteIbp);
@@ -301,7 +301,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             work = GatherRawMaterials_Ctor_Impl(mem, &entIbp);
         }
         uintptr_t workIbp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+        new (&workIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
         // find the WorkComponent (0x1401c8070) the work posts under
@@ -320,8 +320,8 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         // configure the site StorageComponent accept-mask + capacity
         void* descObj = *reinterpret_cast<void**>(self + 0x18);
         uint32_t buildDescTid = BuildDescription::TypeId();
-        void* buildDesc = (descObj && fn_IsDerivedFrom && buildDescTid &&
-                           fn_IsDerivedFrom(descObj, buildDescTid)) ? descObj : nullptr;
+        void* buildDesc = (descObj && buildDescTid &&
+                           ::Object::IsDerivedFromNullSafe(descObj, buildDescTid)) ? descObj : nullptr;
 
         uintptr_t storageIbp = 0;
         if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(self + 0x10), &storageIbp);

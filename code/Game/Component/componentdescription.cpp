@@ -224,7 +224,7 @@ void ResolveExternalByName_Impl(void* nameString) {
     // registered, so the escape never ran).
     void* result = nullptr;
     if (found) {
-        if (fn_IsDerivedFrom(found, ComponentDescription::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
             result = found;
         }
     }

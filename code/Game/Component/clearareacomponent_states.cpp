@@ -154,7 +154,7 @@ static bool EntityHasNatResComp(void* entity) {
         if (!comp) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == tidNatResComp)
-            return fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tidNatResComp);
+            return ::Object::IsDerivedFromNullSafe(comp, tidNatResComp);
     }
     return false;
 }
@@ -285,7 +285,7 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
                 void* sub = *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8);
                 if (!sub) continue;
                 if (reinterpret_cast<Object::Base*>(sub)->Type() == tidNatResDesc) {   // B.3.8 bridge (slot 2)
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(sub, tidNatResDesc)) natRes = sub;
+                    if (::Object::IsDerivedFromNullSafe(sub, tidNatResDesc)) natRes = sub;
                     break;
                 }
             }
@@ -300,7 +300,7 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
                 void* rm = *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8);
                 if (!rm) continue;
                 if (reinterpret_cast<Object::Base*>(rm)->Type() == tidRawMatDesc) {   // B.3.8 bridge (slot 2)
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(rm, tidRawMatDesc)) {
+                    if (::Object::IsDerivedFromNullSafe(rm, tidRawMatDesc)) {
                         uint32_t f = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c);
                         uint32_t u;
                         if ((f >> 10) & 1)      u = 0x400;
@@ -348,8 +348,7 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
 
     void* descObj = *reinterpret_cast<void**>(c + 0x18);
-    bool descIsCA = descObj && fn_IsDerivedFrom &&
-                    fn_IsDerivedFrom(descObj, ClearAreaDescription::TypeId());
+    bool descIsCA = descObj && ::Object::IsDerivedFromNullSafe(descObj, ClearAreaDescription::TypeId());
     uint8_t* desc = descIsCA ? reinterpret_cast<uint8_t*>(descObj) : nullptr;
 
     // (1) Guarded instant sweep: only when global instant bit or _flag5(+0x2d) set.
@@ -400,7 +399,7 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     ClearArea_BuildWork(work, ownerEnt, descRef, f0, f1, f2);
 
     uint64_t workIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+    new (&workIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
     s_WorkSchedPost(static_cast<uintptr_t>(workCompIBP), kind, static_cast<char>(f3), &workIBP);
 
@@ -487,7 +486,7 @@ void ClearArea_Finalize8270(void* comp) {
     if (!comp) return;
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
     void* descObj = *reinterpret_cast<void**>(c + 0x18);
-    bool isCA = descObj && fn_IsDerivedFrom && fn_IsDerivedFrom(descObj, ClearAreaDescription::TypeId());
+    bool isCA = descObj && ::Object::IsDerivedFromNullSafe(descObj, ClearAreaDescription::TypeId());
     if (!isCA) return;
     uint8_t flag2c = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(descObj) + 0x2c);
     if (flag2c == 0) return;

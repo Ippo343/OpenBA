@@ -66,9 +66,9 @@ static void EnsureEmitterDescTid() {
 static void* GetBuildingData(void* self) {
     EnsureEmitterDescTid();
     void* obj = *(void**)((uintptr_t)self + 0x18);
-    if (!obj || !fn_IsDerivedFrom || !s_tidEmitterDesc)
+    if (!obj || !s_tidEmitterDesc)
         return nullptr;
-    return fn_IsDerivedFrom(obj, s_tidEmitterDesc) ? obj : nullptr;
+    return ::Object::IsDerivedFromNullSafe(obj, s_tidEmitterDesc) ? obj : nullptr;
 }
 
 // ============================================================

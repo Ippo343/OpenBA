@@ -191,7 +191,7 @@ static inline void* GameWorld() {
 }
 static inline int64_t TimeFromSeconds(float secs) {
     int64_t t = 0;                              // Time ctor writes 8 BYTES
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
+    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t), secs);
     return t;
 }
 
@@ -360,11 +360,11 @@ extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP) {
         if (comp) id = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (id == want) {
             void** ms = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-            if (*ms && fn_IsDerivedFrom && fn_IsDerivedFrom(*ms, want)) found = *ms;
+            if (*ms && ::Object::IsDerivedFromNullSafe(*ms, want)) found = *ms;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
@@ -922,7 +922,7 @@ void DiseaseComponent::OnAdded() {
     int64_t* reg = reinterpret_cast<int64_t*>(town + 0xF0);
 
     uint8_t ibp[16] = {0};
-    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+    new (ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
     int count = *reinterpret_cast<int32_t*>((uintptr_t)reg + 8);
     if (s_arrResizeFill) s_arrResizeFill(reg, count + 1, ibp);
@@ -940,7 +940,7 @@ void DiseaseComponent::OnRemove() {
         uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
         if (town) {
             uint8_t ibp[16] = {0};
-            if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+            new (ibp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             if (s_arrErase) s_arrErase(reinterpret_cast<int64_t*>(town + 0xF0), ibp);
         }

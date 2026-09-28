@@ -83,7 +83,7 @@ Object::InternalPtr<UI::Element>* CaptureBoxDescription::CreateInstance(
     void* elem = CaptureBoxElement::CreateNewObject();
 
     uint8_t ibp[16] = {};
-    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+    new (ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     // Non-virtual applier; QUALIFIED (the slot-8 override hides the base overload).
     UI::ElementDescription::CreateInstance(

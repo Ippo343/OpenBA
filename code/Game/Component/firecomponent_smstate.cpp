@@ -99,7 +99,7 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
     // Settle a half-finished transition before asking for a new state.
     if (static_cast<int8_t>(L[0x51]) < 0) {
         int64_t t0 = 0;
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t0, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t0), 0.0f);
         s_smTick(sm, t0, 0, 0);
     }
 
@@ -117,7 +117,7 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
 
     // The inlined tail == StateMachine::Tick(sm, Time(0), useAlt=0, doTransition=1).
     int64_t tZero = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&tZero, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&tZero), 0.0f);
     s_smTick(sm, tZero, 0, 1);
 }
 

@@ -198,7 +198,7 @@ void* FindInDescList(uintptr_t list, uint32_t tid) {
     const int n = *reinterpret_cast<int32_t*>(list + 0x30);
     void** items = *reinterpret_cast<void***>(list + 0x28);
     for (int i = 0; i < n && items; ++i)
-        if (items[i] && fn_IsDerivedFrom && fn_IsDerivedFrom(items[i], tid)) return items[i];
+        if (items[i] && ::Object::IsDerivedFromNullSafe(items[i], tid)) return items[i];
     return nullptr;
 }
 
@@ -283,9 +283,8 @@ void CF_PostWork(uintptr_t comp, void* work) {
         return;
     }
     uintptr_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+    new (&workIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-    else workIbp = reinterpret_cast<uintptr_t>(work);
     uintptr_t workCompIbp = 0;
     s_findWork(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
     if (!workCompIbp) {
@@ -434,10 +433,10 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
             if (!s) continue;
             *reinterpret_cast<int32_t*>(s + 0x00) = (row + oy) * mapW + col + ox;
             uintptr_t nullIbp = 0;
-            if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<uintptr_t*>(s + 0x10) = nullIbp;
             nullIbp = 0;
-            if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<uintptr_t*>(s + 0x08) = nullIbp;
             *reinterpret_cast<int32_t*>(s + 0x04) = 0;
         }

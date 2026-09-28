@@ -59,7 +59,7 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
     void* descObj = *reinterpret_cast<void**>(self + 0x18);
     uint32_t descTid = BC8630_BuildDescTypeId();
     void* desc = nullptr;
-    if (descObj && fn_IsDerivedFrom && descTid && fn_IsDerivedFrom(descObj, descTid))
+    if (descObj && descTid && ::Object::IsDerivedFromNullSafe(descObj, descTid))
         desc = descObj;
     // Original derefs desc unconditionally; if desc were null it would loop over
     // count at desc+0x28 (crash). Guard: no BuildDescription => no required

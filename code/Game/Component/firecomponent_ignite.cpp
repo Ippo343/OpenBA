@@ -118,7 +118,7 @@ inline uintptr_t GameWorld() {
 
 inline int64_t MakeTime(float seconds) {
     int64_t t = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, seconds);
+    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t), seconds);
     return t;
 }
 
@@ -410,7 +410,7 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     }
 
     uint64_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+    new (&workIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     if (s_postWork && workCompIbp) {

@@ -87,8 +87,8 @@ inline void* WorldScene() {
 // Get the AmbientEmitterDescription from a component's +0x18, or null.
 inline void* EmitterDesc(void* comp) {
     void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(comp) + 0x18);
-    if (!obj || !fn_IsDerivedFrom || !s_tidEmitterDesc) return nullptr;
-    return fn_IsDerivedFrom(obj, s_tidEmitterDesc) ? obj : nullptr;
+    if (!obj || !s_tidEmitterDesc) return nullptr;
+    return ::Object::IsDerivedFromNullSafe(obj, s_tidEmitterDesc) ? obj : nullptr;
 }
 
 // ---- sub_2c60: (re)play the effect for one emitter slot and add its emitter. ----
@@ -202,7 +202,7 @@ void* FindSiblingEmitter(void* self) {
         // component->GetTypeId() is vtable slot +0x10.
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == s_tidEmitterComp)
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, s_tidEmitterComp)) ? comp : nullptr;
+            return (::Object::IsDerivedFromNullSafe(comp, s_tidEmitterComp)) ? comp : nullptr;
     }
     return nullptr;
 }
@@ -311,7 +311,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     EnsureResolved();
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    if (!fn_IsDerivedFrom || !s_tidEnvDesc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!s_tidEnvDesc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
 
     uint8_t* self = reinterpret_cast<uint8_t*>(this);
     uint8_t* gw   = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -324,7 +324,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
 
     // Biome config description at self+0x18.
     void* descRaw = *reinterpret_cast<void**>(self + 0x18);
-    void* desc = fn_IsDerivedFrom(descRaw, s_tidEnvDesc) ? descRaw : nullptr;
+    void* desc = ::Object::IsDerivedFromNullSafe(descRaw, s_tidEnvDesc) ? descRaw : nullptr;
     if (!desc) return;
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
     uint8_t* table = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(desc) + 0x20);

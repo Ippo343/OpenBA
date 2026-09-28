@@ -210,8 +210,8 @@ inline void* Rng() {
 // Resolve self->_description as an AnimalDescription (the retail IsDerivedFrom guard).
 inline void* AnimalDesc(AnimalComponent* self) {
     void* raw = At<void*>(self, 0x18);
-    if (!raw || !fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(raw, AnimalDescription::TypeId()) ? raw : nullptr;
+    if (!raw) return nullptr;
+    return ::Object::IsDerivedFromNullSafe(raw, AnimalDescription::TypeId()) ? raw : nullptr;
 }
 
 inline int ClampCell(int v, int dim) {
@@ -375,8 +375,7 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 
     void* charDescRaw = At<void*>(static_cast<uintptr_t>(character), 0x18);
     void* charDesc = nullptr;
-    if (charDescRaw && fn_IsDerivedFrom &&
-        fn_IsDerivedFrom(charDescRaw, CharacterDescription::TypeId())) {
+    if (charDescRaw && ::Object::IsDerivedFromNullSafe(charDescRaw, CharacterDescription::TypeId())) {
         charDesc = charDescRaw;
     }
 
@@ -387,7 +386,7 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 
     // System::Time::Time writes EIGHT bytes — the destination must be int64-sized.
     int64_t timeVal = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeVal, seconds);
+    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&timeVal), seconds);
     At<int64_t>(self, 0x30) = timeVal;
 
     void* desc = AnimalDesc(self);
@@ -535,7 +534,7 @@ void AnimalComponent::OnAdded() {
     // Retail: System::Time::Time(&t, 0.0f) then (*vtable[9])(this, &t). Slot 9 is
     // this component's own Update.
     int64_t zeroTime = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&zeroTime, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&zeroTime), 0.0f);
     Update(&zeroTime);   // slot 9, virtual as retail
 }
 
@@ -628,7 +627,7 @@ void AnimalComponent::Update(void* time) {
 
         if (rearm) {
             int64_t timeVal = 0;
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeVal, seconds);
+            RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&timeVal), seconds);
             At<int64_t>(this, 0x50) = timeVal;
         }
     }
@@ -835,7 +834,7 @@ void AnimalComponent::Update(void* time) {
                 // MemAlloc fails (0x140106a8e: MOV RAX,RDI with RDI == 0).
 
                 int64_t actionIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&actionIBP) ::Object::InternalBasePtr(
+                new (&actionIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge
                 if (s_fnActStackPush) s_fnActStackPush(stack, &actionIBP);
                 At<int64_t>(this, 0x30) = 0;

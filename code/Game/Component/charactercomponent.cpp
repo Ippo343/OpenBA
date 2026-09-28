@@ -128,7 +128,7 @@ static void* CharComp_FindSiblingByTypeId(int64_t ownerEntity, uint32_t want) {
         if (!comp) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want)
-            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+            return ::Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
     }
     return nullptr;
 }
@@ -270,7 +270,7 @@ void CharacterComponent::Startup() {
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
         void* charMgr = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x88)
                            : nullptr;
-        if (model && charMgr && fn_InternalBasePtr_Ctor) {
+        if (model && charMgr) {
             // facing init: CharacterComponent+0x3c = ModelComponent+0x168.
             *reinterpret_cast<int32_t*>(p + 0x3c) = *reinterpret_cast<int32_t*>(model + 0x168);
             // wrap this as an InternalBasePtr, register with the manager -> char-index.

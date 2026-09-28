@@ -183,8 +183,8 @@ void FruitComponent::Update(void* time) {
     // resData = IsDerivedFrom(_description, FruitDescription) ? _description : 0
     void* baseObj = _description;
     void* resData = nullptr;
-    if (baseObj && fn_IsDerivedFrom) {
-        if (fn_IsDerivedFrom(baseObj, FruitDescription::TypeId()))
+    if (baseObj) {
+        if (::Object::IsDerivedFromNullSafe(baseObj, FruitDescription::TypeId()))
             resData = baseObj;
     }
     // [STANDALONE TRUST] The factory/type tree can be incomplete in standalone, so

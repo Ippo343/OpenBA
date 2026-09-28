@@ -137,7 +137,7 @@ static void BC8_StopWorker(uintptr_t bc) {
 static void* BC8_MeshModelDesc(uintptr_t meshElem) {
     void* d = *reinterpret_cast<void**>(meshElem + 0x18);
     uint32_t tid = ModelDescription::TypeId();
-    if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) return d;
+    if (d && tid && ::Object::IsDerivedFromNullSafe(d, tid)) return d;
     return nullptr;
 }
 // Frame count for a mesh element's current variant (modelDesc+0x20 group array, stride
@@ -200,7 +200,7 @@ static uintptr_t BC8_MeshElem(uintptr_t bc, int i) {
 static void* BC8_MatComp(uintptr_t bc) {
     void* d = *reinterpret_cast<void**>(bc + 0x18);
     uint32_t tid = BuildDescription::TypeId();
-    if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) return d;
+    if (d && tid && ::Object::IsDerivedFromNullSafe(d, tid)) return d;
     return nullptr;
 }
 static int BC8_Target(uintptr_t bc, void* matComp) {
@@ -325,7 +325,7 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             if (bsWork) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
                 uintptr_t bsIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&bsIBP) ::Object::InternalBasePtr(
+                new (&bsIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge
                 // find the site WorkComponent (c8070) the work posts under
                 uintptr_t workCompIBP = 0;
@@ -494,7 +494,7 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     uintptr_t selfIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
+    new (&selfIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
     if (townMgr && s_findInQueue) {
         int idx = s_findInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &selfIBP);
@@ -576,7 +576,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     {
         void* d = *reinterpret_cast<void**>(storage + 0x18);
         uint32_t tid = StorageDescription::TypeId();
-        if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) desc = d;
+        if (d && tid && ::Object::IsDerivedFromNullSafe(d, tid)) desc = d;
     }
     if (!desc) return;
     int mult = 1;
@@ -592,7 +592,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
                 void* c = *reinterpret_cast<void**>(carr + (int64_t)i * 8);
                 if (!c) continue;
                 uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-                if (t == tidMap) { if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidMap)) mapc = c; break; }
+                if (t == tidMap) { if (::Object::IsDerivedFromNullSafe(c, tidMap)) mapc = c; break; }
             }
         }
         if (mapc)

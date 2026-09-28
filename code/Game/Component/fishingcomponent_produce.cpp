@@ -62,7 +62,7 @@ int RadiusOf(uintptr_t comp) {
     for (int i = 0; i < n; ++i) {
         void* obj = items[i];
         if (!obj) continue;
-        if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, RadiusDescription::TypeId()))
+        if (::Object::IsDerivedFromNullSafe(obj, RadiusDescription::TypeId()))
             return *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(obj) + 0x28);
     }
     return -1;
@@ -155,8 +155,7 @@ char FishingComponent::ProduceTick(void* /*time*/) {
     // would read a null otherwise.
     void* descObj = *reinterpret_cast<void**>(comp + 0x18);
     uint32_t mask = 0;
-    if (descObj && fn_IsDerivedFrom &&
-        fn_IsDerivedFrom(descObj, FishingDescription::TypeId()))
+    if (descObj && ::Object::IsDerivedFromNullSafe(descObj, FishingDescription::TypeId()))
         mask = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(descObj) + 0x2c);
 
     int total = 0, matching = 0;

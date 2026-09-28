@@ -85,7 +85,7 @@ inline bool Loading(void* stream) {
 void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
     reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && fn_IsDerivedFrom && tid && *tid && !fn_IsDerivedFrom(obj, *tid))
+    if (obj && tid && *tid && !::Object::IsDerivedFromNullSafe(obj, *tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;
 }
 
@@ -124,11 +124,10 @@ void CharacterComponent::Persist(void* stream) {
 
     if (Loading(stream)) {
         void* owner = *reinterpret_cast<void**>(At(this, 0x18));
-        bool isDesc = owner && fn_IsDerivedFrom &&
-                     fn_IsDerivedFrom(owner, CharacterDescription::TypeId());
+        bool isDesc = owner && ::Object::IsDerivedFromNullSafe(owner, CharacterDescription::TypeId());
         *reinterpret_cast<void**>(At(this, 0x78)) = isDesc ? owner : nullptr;
 
-        if (fn_InternalBasePtr_Ctor) {
+        {
             int64_t selfIbp = 0;
             new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;

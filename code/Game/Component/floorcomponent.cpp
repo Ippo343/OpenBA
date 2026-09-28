@@ -167,11 +167,11 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (tid == wantTypeId) {
             void* c = *slot;
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantTypeId)) found = c;
+            if (::Object::IsDerivedFromNullSafe(c, wantTypeId)) found = c;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return outIBP;
 }
@@ -258,8 +258,7 @@ void FloorComponent_SubF390(void* selfV) {
 
     void* building = *reinterpret_cast<void**>(self + 3);
     const uint32_t descTid = FloorDescription::TypeId();
-    void* meshOwner = (descTid && fn_IsDerivedFrom &&
-                       fn_IsDerivedFrom(building, descTid)) ? building : nullptr;
+    void* meshOwner = (descTid && ::Object::IsDerivedFromNullSafe(building, descTid)) ? building : nullptr;
     void* mesh = meshOwner ? *reinterpret_cast<void**>((uintptr_t)meshOwner + 0x20) : nullptr;
     // desc+0x20 is the PickingMesh ExternalPtr (FishermansDockFloor.rsc = the dock's
     // "floor" sub-object). Without it there is nothing for the height ray to hit, and

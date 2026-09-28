@@ -227,7 +227,7 @@ void CemeteryComponent_InitFuncs() {
 extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
     CemeteryComponent* self = reinterpret_cast<CemeteryComponent*>(compV);
     CemeteryComponent_InitFuncs();
-    if (!fn_InternalBasePtr_Ctor || !s_g_pGameState || !*s_g_pGameState)
+    if (!s_g_pGameState || !*s_g_pGameState)
         return 0;
 
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*s_g_pGameState);
@@ -492,8 +492,7 @@ void CemeteryComponent::OnAdded() {
 // [7] 0x1400471c0.
 void CemeteryComponent::OnRemove() {
     uint8_t ptrBuf[8];
-    if (fn_InternalBasePtr_Ctor)
-        new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(_entity));   // B.3.3 bridge
+    new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(_entity));   // B.3.3 bridge
 
     if (s_g_pGameState && *s_g_pGameState && s_fn_ListAdd) {
         void* gameState = *s_g_pGameState;

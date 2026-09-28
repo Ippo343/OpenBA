@@ -89,8 +89,7 @@ void DestroyComponent::Persist(void* stream) {
 // into +0x60; dispatched at spawn by ComponentEntity_StartupComponents.
 void DestroyComponent::Startup() {
     void* desc = _description;
-    if (!fn_IsDerivedFrom) return;
-    if (fn_IsDerivedFrom(desc, DestroyDescription::TypeId()))
+    if (::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId()))
         field60 = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
 }
 

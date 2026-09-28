@@ -67,7 +67,7 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
             const char* nm = ::Object::GetTypeNameById(tid);
             const bool isHost = tid == WorkPlaceComponent::TypeId();
             fprintf(stderr, " %s(%u%s)", (nm && nm[0]) ? nm : "?", tid,
-                    isHost ? (fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(c), tid)
+                    isHost ? (::Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(c), tid)
                               ? ",HOST,derived" : ",HOST,NOT-derived") : "");
         }
         fprintf(stderr, "\n[AttendanceComponent::Update]   jobHost tid(1401c80e0)=%u finder=%p\n",
@@ -128,7 +128,7 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
     if (*slot == 0) return;
 
     int64_t selfIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
+    new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(workerP));   // B.3.3 bridge
     int64_t linked = *slot;
     if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
@@ -141,16 +141,16 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
         s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
 
     int64_t nullIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *slot = nullIbp;
 
     if (reroll != '\0') {
         int64_t exclIbp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&exclIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&exclIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         char found = s_fn_AC_TryEnrolInSchool ? s_fn_AC_TryEnrolInSchool(workerP, &exclIbp) : 0;
         if (found == '\0') {
             int64_t z = 0;
-            if (fn_InternalBasePtr_Ctor) new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *slot = z;
         }
     }
@@ -169,7 +169,7 @@ static void AttendanceComponent_ReleaseLinkSlot(void* workerP, int slotOff) {
     if (*slot == 0) return;
 
     int64_t selfIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
+    new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(workerP));   // B.3.3 bridge
     int64_t linked = *slot;
     if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
@@ -182,7 +182,7 @@ static void AttendanceComponent_ReleaseLinkSlot(void* workerP, int slotOff) {
         s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
 
     int64_t nullIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *slot = nullIbp;
 }
 
@@ -211,12 +211,12 @@ void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == tidJobHost) {
                 void* c = (void*)*slot;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidJobHost)) found = c;
+                if (::Object::IsDerivedFromNullSafe(c, tidJobHost)) found = c;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outPtr) ::Object::InternalBasePtr(
+    new (outPtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
@@ -232,7 +232,7 @@ void AttendanceComponent_ProcessQueue(void* selfP) {
     uintptr_t self = (uintptr_t)selfP;
     while (*(int*)(self + 0x30) > 0) {
         int64_t queuedIbp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&queuedIbp) ::Object::InternalBasePtr(
+        new (&queuedIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(selfP));   // B.3.3 bridge
         int64_t* slot = *(int64_t**)(self + 0x28);
         int64_t worker = *slot;
@@ -435,8 +435,7 @@ void AttendanceComponent::Persist(void* stream) {
     for (int32_t i = 0; i < count && q; ++i, ++q) {
         reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
         if (*q == 0) continue;
-        if (fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(reinterpret_cast<void*>(*q), CitizenComponent::TypeId()))
+        if (!::Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(*q), CitizenComponent::TypeId()))
             *q = 0;
     }
 
@@ -452,7 +451,7 @@ void AttendanceComponent::OnRemove() {
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     if (!town) return;
     int64_t selfIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
+    new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
     s_fn_AC_002cc0(reinterpret_cast<int64_t*>(town + 0x60), &selfIbp);
 }

@@ -154,10 +154,10 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         // Stale: reset entry to state 2 and null the two IBP slots.
         *(int*)(entry + 0x4) = 2;
         uint64_t nullIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(entry + 0x8) = nullIBP;
         nullIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *(uint64_t*)(entry + 0x10) = nullIBP;
     }
 }
@@ -223,14 +223,14 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
         // IBP #1 -> ComponentEntity
         reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 8) != nullptr &&
-            !fn_IsDerivedFrom(*(void**)(entry + 8), ComponentEntity::TypeId())) {
+            !::Object::IsDerivedFromNullSafe(*(void**)(entry + 8), ComponentEntity::TypeId())) {
             *(uint64_t*)(entry + 8) = 0;
         }
         // IBP #2 -> NaturalResourceComponent (0x1401c7b30; the old local name here
         // said "BuildStateComp", but INVENTORY_C Table 1 says NaturalResourceComponent)
         reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 0x10) != nullptr &&
-            !fn_IsDerivedFrom(*(void**)(entry + 0x10), NaturalResourceComponent::TypeId())) {
+            !::Object::IsDerivedFromNullSafe(*(void**)(entry + 0x10), NaturalResourceComponent::TypeId())) {
             *(uint64_t*)(entry + 0x10) = 0;
         }
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)(entry + 0x18), nullptr);   // B.3.4 bridge
@@ -524,7 +524,7 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
 
         void* desc = *reinterpret_cast<void**>(self + 0x18);
         const uint32_t tidCropDesc = CropFieldDescription::TypeId();
-        if (!(desc && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, tidCropDesc)))
+        if (!(desc && ::Object::IsDerivedFromNullSafe(desc, tidCropDesc)))
             return;
 
         const float rate = *reinterpret_cast<float*>(

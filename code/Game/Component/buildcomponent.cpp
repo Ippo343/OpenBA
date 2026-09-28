@@ -162,7 +162,7 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
         if (!comp) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == typeId) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, typeId)) return comp;
+            if (::Object::IsDerivedFromNullSafe(comp, typeId)) return comp;
             return nullptr;
         }
     }
@@ -196,8 +196,8 @@ void BuildComponent_DrawReimpl(void* selfP) {
     if (multiBuf != 0) {
         if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
         void* objBase = *(void**)(multiBuf + 0x18);
-        void* multi = (fn_IsDerivedFrom && s_tid_ModelDesc &&
-                       fn_IsDerivedFrom(objBase, s_tid_ModelDesc)) ? objBase : nullptr;
+        void* multi = (s_tid_ModelDesc &&
+                       ::Object::IsDerivedFromNullSafe(objBase, s_tid_ModelDesc)) ? objBase : nullptr;
         if (multi && *(int*)((uintptr_t)multi + 0x28) > 0) {
             int64_t b1 = 0;
             if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &b1);
@@ -220,14 +220,14 @@ void BuildComponent_DrawReimpl(void* selfP) {
             int64_t host = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
             void* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             int64_t ib1 = 0;
-            if (fn_InternalBasePtr_Ctor) new (&ib1) ::Object::InternalBasePtr(
+            new (&ib1) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &ib1);
 
             int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
             void* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             int64_t ib2 = 0;
-            if (fn_InternalBasePtr_Ctor) new (&ib2) ::Object::InternalBasePtr(
+            new (&ib2) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(storeComp));   // B.3.3 bridge
             GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &ib2);
         }
@@ -281,11 +281,11 @@ void BuildComponent_DrawReimpl(void* selfP) {
     *(int*)((uintptr_t)self + 0x4c) = 1;
     void* wp = BC_FindComponentByType(self[2], s_tid_MultiObj);
     int64_t wpIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
+    new (&wpIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
     if (wpIbp != 0) {
         void* wp2 = BC_FindComponentByType(self[2], s_tid_MultiObj);
-        if (fn_InternalBasePtr_Ctor) new (&wpIbp) ::Object::InternalBasePtr(
+        new (&wpIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wp2));   // B.3.3 bridge
         // Retail: bc+0x4c = WorkPlaceComponent+0x58 (the build-effort multiplier). In the
         // standalone exe the WorkPlaceComponent lifecycle is inert, so +0x58 stays 0 — which
@@ -326,13 +326,13 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == tidPicking) {
                 void* c = (void*)*slot;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidPicking))
+                if (::Object::IsDerivedFromNullSafe(c, tidPicking))
                     found = c;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retbuf) ::Object::InternalBasePtr(
+    new (retbuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retbuf;
 }
@@ -484,7 +484,7 @@ void BuildComponent::Persist(void* stream) {
             // Validate: if non-null but wrong type, clear
             void* val = *(void**)ibp;
             if (val != nullptr) {
-                bool valid = fn_IsDerivedFrom(val, ModelComponent::TypeId());   // ti 0x1401c7a50
+                bool valid = ::Object::IsDerivedFromNullSafe(val, ModelComponent::TypeId());   // ti 0x1401c7a50
                 if (!valid) {
                     *(uint64_t*)ibp = 0;
                 }
@@ -512,7 +512,7 @@ void BuildComponent::Persist(void* stream) {
             // Validate with PickingComponent type (DAT_1401c7c10)
             void* val = *(void**)ibp;
             if (val != nullptr) {
-                bool valid = fn_IsDerivedFrom(val, PickingComponent::TypeId());   // ti 0x1401c7c10
+                bool valid = ::Object::IsDerivedFromNullSafe(val, PickingComponent::TypeId());   // ti 0x1401c7c10
                 if (!valid) {
                     *(uint64_t*)ibp = 0;
                 }
@@ -547,7 +547,7 @@ void BuildComponent::OnAdded() {
 void BuildComponent::OnRemove() {
     // 0x140017550 is BuildComponent_FindInQueue (this file) and 0x1401c3dd8 is
     // g_pGameWorldSingleton: called directly, no first-call cache (B.3.8, B6-5).
-    if (!g_pGameWorldSingleton || !fn_InternalBasePtr_Ctor)
+    if (!g_pGameWorldSingleton)
         return;
 
     // Create InternalBasePtr on stack — original passes this (component ptr)

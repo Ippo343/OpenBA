@@ -252,8 +252,7 @@ static char Destroy_ReclaimPending_ea20(int64_t yard) {
 extern "C" char Destroy_TargetDiffers_e600(int64_t comp) {
     EnsureResolved();
     void* desc = *reinterpret_cast<void**>(comp + 0x18);
-    void* typed = (desc && fn_IsDerivedFrom &&
-                   fn_IsDerivedFrom(desc, DestroyDescription::TypeId())) ? desc : nullptr;
+    void* typed = (desc && ::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId())) ? desc : nullptr;
     int64_t target = *reinterpret_cast<int64_t*>(comp + 0x60);
     int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
     if (entity && target == *reinterpret_cast<int64_t*>(entity + 0x28)) return 0;
@@ -314,7 +313,7 @@ static void* FindRawMatDescInTemplate(int64_t tmpl) {
         void* c = *reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
         uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
         if (t == tid)
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+            return (::Object::IsDerivedFromNullSafe(c, tid)) ? c : nullptr;
     }
     return nullptr;
 }
@@ -445,9 +444,8 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
                                           ? s_copyCtor(mem, reinterpret_cast<void*>(tmpl)) : nullptr;
                     if (newEntity) {
                         int64_t entIBP = 0;
-                        if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+                        new (&entIBP) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
-                        else entIBP = reinterpret_cast<int64_t>(newEntity);
 
                         // RawMaterialComponent on the new entity → position + amount.
                         int64_t rmIBP = 0;
@@ -603,9 +601,8 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
             int64_t entityTmp = entity;
             ::new (mem) ClearStorage(&entityTmp);
             int64_t workIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+            new (&workIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-            else workIBP = reinterpret_cast<int64_t>(mem);
             s_ec60(yard, 1, 0, &workIBP);
         }
     }
@@ -666,9 +663,8 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
                 int64_t entityIBP = entity;
                 BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1);
                 int64_t workIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
+                new (&workIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-                else workIBP = reinterpret_cast<int64_t>(mem);
                 s_ec60(yard, 0x2001, 0, &workIBP);
             }
         }
@@ -809,9 +805,8 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                     mem, *reinterpret_cast<void**>(comp + 0x60)) : nullptr;
                 if (newEntity) {
                     int64_t hold = 0;
-                    if (fn_InternalBasePtr_Ctor) new (&hold) ::Object::InternalBasePtr(
+                    new (&hold) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
-                    else hold = reinterpret_cast<int64_t>(newEntity);
 
                     int64_t nfp = FindOn(reinterpret_cast<int64_t>(newEntity), s_find4680);
                     if (nfp) {
@@ -1036,8 +1031,7 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
         int16_t modelVariant = *reinterpret_cast<int16_t*>(model + 0x166);
         int16_t variantIdx   = *reinterpret_cast<int16_t*>(model + 0x164);
         void*   obj = *reinterpret_cast<void**>(model + 0x18);
-        void*   modelDesc = (fn_IsDerivedFrom &&
-                             fn_IsDerivedFrom(obj, ModelDescription::TypeId())) ? obj : nullptr;
+        void*   modelDesc = (::Object::IsDerivedFromNullSafe(obj, ModelDescription::TypeId())) ? obj : nullptr;
 
         if (modelVariant < 0) {
             next = 0;                       // no mesh chosen yet — back to the start
