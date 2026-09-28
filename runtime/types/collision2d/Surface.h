@@ -70,23 +70,23 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;               // [1] 0x180064a70
-    uint32_t          Type() const override;                   // [2] 0x180064a50
+    // [1] 0x180064a70 TypeName / [2] 0x180064a50 Type, the static TypeId
+    // 0x180064a60, `_TypeName` / `_ParentTypeName` and the factory pair
+    // 0x180064b60 / 0x180064c10 (surface.cpp): retail's macro (ENDGAME B.3.9
+    // TI-REST, B39_RULES D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/collision2d/collision2d_type_records.cpp.
+    DECLARE_TYPE(Surface)
+public:
     int32_t           GetFileVersion() const override;         // [3] 0x18010ca30
     bool              Serialize(void* stream) override;        // [5] 0x18010ca40
     Object::External* Reconstruct() override;                  // [6] 0x180064c70
     void              Destruct() override;                     // [7] 0x180064d40
     virtual Object::External* Construct();                     // [8] 0x180064ce0
 
-    // 0x180064a60 -- `MOV EAX,[_typeInfo]`: the id of the (still minted)
-    // `?_typeInfo@Surface@Collision2D@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
-
-    // Retail's factory pair (B39_RULES D2), defined in surface.cpp. The class
-    // has its own placement `operator new` in retail (0x180064af0, not ported):
-    // every placement construction spells `::new (p) Surface()`.
-    static Object::Base* CreateNewObject();                    // 0x180064b60
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180064c10
+    // Retail's factory pair (B39_RULES D2; declared by DECLARE_TYPE), defined
+    // in surface.cpp. The class has its own placement `operator new` in retail
+    // (0x180064af0, not ported): every placement construction spells
+    // `::new (p) Surface()`.
 
 protected:
     // ??1Surface@Collision2D@@UEAA@XZ 0x18010ca00: restamp, then ~External.

@@ -16,3 +16,7 @@
 # -- Audio --
 ?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Audio::SoundBuffer, "Object::CompiledExternal", nullptr); RT_DATA_SLOT accessor (vtbatch7_soundbuffer_soundeffect.cpp) and the by-name EXTPTR_THUNK read (external_ptr_serialize.cpp) converted
 ?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Audio::SoundEffect, "Object::External", nullptr); RT_DATA_SLOT accessor and the by-name EXTPTR_THUNK read converted
+
+# -- Collision2D --
+?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Collision2D::CollisionMesh, "Object::External", nullptr); RT_DATA_SLOT accessor in collisionmesh.cpp deleted
+?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Collision2D::Surface, "Object::External", nullptr); RT_DATA_SLOT accessors (surface.cpp, collisionmesh.cpp _surfaces serialize) and the EXTPTR_ARRAY_THUNK read converted

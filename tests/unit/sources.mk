@@ -307,3 +307,4 @@ UNIT_TREE_SRCS += runtime/src/picking/picking_type_records.cpp \
                   runtime/src/pathfinding/pathfinding_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/io/io_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/audio/audio_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/collision2d/collision2d_type_records.cpp

@@ -166,6 +166,7 @@
 #include "../../types/object/External.h"
 #include "../../types/audio/SoundBuffer.h"     // ENDGAME B.3.9 TI-REST: the thunks' records
 #include "../../types/audio/SoundEffect.h"
+#include "../../types/collision2d/Surface.h"
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -663,8 +664,7 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Font,
                    "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_SpriteSheet,
                    "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Surface,
-                   "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Surface, Collision2D::Surface)
 
 #undef EXTPTR_ARRAY_THUNK
 #undef EXTPTR_ARRAY_THUNK_OF

@@ -48,6 +48,8 @@
 #include "../../runtime/types/io/PackageFile.h"
 #include "../../runtime/types/audio/SoundBuffer.h"
 #include "../../runtime/types/audio/SoundEffect.h"
+#include "../../runtime/types/collision2d/CollisionMesh.h"
+#include "../../runtime/types/collision2d/Surface.h"
 
 // ===========================================================================
 // Factory-pair markers (see the banner).
@@ -61,6 +63,8 @@ TIR_FACTORY_MARKERS(Pathfinding::PointList)
 TIR_FACTORY_MARKERS(IO::PackageFile)
 TIR_FACTORY_MARKERS(Audio::SoundBuffer)
 TIR_FACTORY_MARKERS(Audio::SoundEffect)
+TIR_FACTORY_MARKERS(Collision2D::CollisionMesh)
+TIR_FACTORY_MARKERS(Collision2D::Surface)
 
 namespace {
 
@@ -90,6 +94,9 @@ std::vector<Expect> Rows() {
         // ---- Audio ----
         TIR_ROW(Audio::SoundBuffer,     "SoundBuffer", "CompiledExternal", 0x15B34526u),
         TIR_ROW(Audio::SoundEffect,     "SoundEffect", "External",         0x58171CB6u),
+        // ---- Collision2D ----
+        TIR_ROW(Collision2D::CollisionMesh, "CollisionMesh", "External",   0x99753590u),
+        TIR_ROW(Collision2D::Surface,       "Surface",       "External",   0x20B1860Cu),
     };
 }
 
