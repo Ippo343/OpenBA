@@ -425,9 +425,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
         // Stage 3: allocate + construct + destroy a MainLoop. (No Run yet —
         // that needs an UpdateLoop chain.)
         {
-            // The MemoryAllocator singleton was NULL when EngineFuncsInit cached
-            // g_pMemAllocSingleton (Engine ctor hadn't run yet). Read the class
-            // static fresh now.
+            // The MemoryAllocator singleton, set by the Engine ctor. (B3R STORAGE:
+            // every reader reads the class static live; the engine_funcs
+            // snapshot and the self-test's refresh of it are gone.)
             void* memAllocSingleton = System::MemoryAllocator::_singleton;
             printf("[GameMain] MemAllocSingleton (fresh) = %p\n", memAllocSingleton);
             (void)memAllocSingleton;   // B3R: its last reader was the MemAlloc door; the perf build strips the printf

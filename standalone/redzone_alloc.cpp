@@ -244,8 +244,8 @@ void ShimFree(void* ptr);
 // B3R W0-A0: these two are also what the allocator's instrument seat
 // (System::g_memoryAllocatorInstrument, MemoryAllocator.h) holds in shim mode,
 // so every System::MemoryAllocator::MemAlloc / MemFree caller is shimmed too.
-// `_singleton` is read LIVE (retail MemAlloc's own read), not the engine_funcs
-// g_pMemAllocSingleton snapshot, which is null until the startup self-test.
+// `_singleton` is read LIVE (retail MemAlloc's own read). (B3R STORAGE: the
+// engine_funcs g_pMemAllocSingleton snapshot is gone; every reader reads live.)
 void* ShimAllocStatic(uint64_t size, int alignment) {
     return ShimAlloc(System::MemoryAllocator::_singleton, size, alignment);
 }
@@ -411,8 +411,9 @@ int RedzoneAlloc_ValidateAll(const char* tag) {
 // (no concurrent Allocate mutating the free list). Enabled only under
 // BANISHED_REDZONE (so production runs are unaffected).
 extern "C" int RedzoneAlloc_CheckLinks(const char* tag) {
-    if (!g_enabled || !g_pMemAllocSingleton) return 0;
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
+    // One live read (B3R STORAGE): the Engine dtor nulls _singleton.
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);
+    if (!g_enabled || !alloc) return 0;
     if (IsBadReadPtr(alloc, 0x18)) return 0;
     uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
     int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
@@ -469,7 +470,7 @@ extern "C" int RedzoneAlloc_CheckLinks(const char* tag) {
 // Catches corruption of ANY block (live OR free, ours OR Runtime's) — unlike
 // the tail canaries which only cover our live blocks. Layout (from the Allocate
 // decompile at Runtime 0x1800c6e60):
-//   MemoryAllocator* this  = g_pMemAllocSingleton
+//   MemoryAllocator* this  = System::MemoryAllocator::_singleton
 //     +0x00  MemoryRange*  ranges            (array)
 //     +0x08  int           rangeCount
 //     +0x640 CRITICAL_SECTION                 (alloc/free lock)
@@ -645,13 +646,14 @@ static void DumpMainThreadStack() {
 }
 
 static int HeapCheckLocked(const char* tag, bool report) {
-    if (!g_enabled || !g_pMemAllocSingleton) return 0;
+    // One live read (B3R STORAGE): the Engine dtor nulls _singleton.
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);
+    if (!g_enabled || !alloc) return 0;
     // BANISHED_REDZONE_ABORT=0: after a report, keep quiet about THAT block (it stays
     // corrupt) but still report a different first-bad block (up to 8 reports).
     static int s_reports = 0;
     static uint8_t* s_lastReported = nullptr;
     if (g_reportedOnce && s_reports >= 8) return 0;
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
 
     // Serialize against concurrent alloc/free via the allocator's own lock.
     CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc + 0x640);
@@ -866,8 +868,8 @@ extern "C" void RedzoneAlloc_SetDumpSink(void (*sink)(const char*)) {
 // which is what names the writer — the debug registers cannot help while the
 // victim address is unknown until after it has been written.
 extern "C" void* RedzoneAlloc_FindCorruptBlockNative() {
-    if (!g_pMemAllocSingleton) return nullptr;
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    if (!alloc) return nullptr;
     if (IsBadReadPtr(alloc, 0x18)) return nullptr;
     uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
     int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
@@ -905,11 +907,11 @@ extern "C" void* RedzoneAlloc_FindCorruptBlockNative() {
 }
 
 extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
-    if (!g_pMemAllocSingleton) {
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    if (!alloc) {
         RZOut("[REDZONE-DUMP] no allocator singleton\n"); fflush(stdout);
         return;
     }
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
     if (IsBadReadPtr(alloc, 0x18)) { RZOut("[REDZONE-DUMP] singleton unreadable\n"); return; }
     uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
     int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
@@ -1115,12 +1117,12 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
 static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
     const int delayMs = (int)(intptr_t)param;
     Sleep((DWORD)delayMs);
-    if (!g_pMemAllocSingleton) {
-        printf("[REDZONE-SELFTEST] NO INJECTION — g_pMemAllocSingleton is null\n");
+    uint8_t* alloc    = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    if (!alloc) {
+        printf("[REDZONE-SELFTEST] NO INJECTION — System::MemoryAllocator::_singleton is null\n");
         fflush(stdout);
         return 0;
     }
-    uint8_t* alloc    = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
     uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
     int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) {
@@ -1171,7 +1173,7 @@ static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
 // very end of every stress run (lane REDZONE, 2026-09-08): the sim finishes,
 // the atexit handlers print their censuses, and then the CRT tears the process
 // down — unloading Runtime-x64.dll and destroying the engine allocator —
-// while this thread is still dereferencing g_pMemAllocSingleton and entering
+// while this thread is still dereferencing the allocator singleton and entering
 // a CRITICAL_SECTION inside memory that has just gone away.
 //
 // The stop is registered with atexit() from Install(). atexit runs LIFO and
@@ -1241,8 +1243,8 @@ extern "C" void RedzoneAlloc_PrintBacktrace(const char* tag) {
 
 extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
     uint8_t* bad = static_cast<uint8_t*>(badV);
-    if (!bad || !g_pMemAllocSingleton) return;
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    if (!bad || !alloc) return;
     uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
     int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return;

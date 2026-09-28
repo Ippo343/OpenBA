@@ -79,8 +79,7 @@ extern fn_MemAlloc_t fn_MemAlloc;
 typedef void (*fn_MemFree_t)(void* singleton, void* ptr);
 extern fn_MemFree_t fn_MemFree;
 
-// MemoryAllocator::_singleton
-extern void* g_pMemAllocSingleton;
+// MemoryAllocator::_singleton: read System::MemoryAllocator::_singleton live (B3R STORAGE).
 
 // ============================================================
 // Video::Device globals

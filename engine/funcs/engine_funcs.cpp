@@ -24,7 +24,6 @@ void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
 // MemoryAllocator
 fn_MemAlloc_t fn_MemAlloc = nullptr;
 fn_MemFree_t fn_MemFree = nullptr;
-void* g_pMemAllocSingleton = nullptr;
 
 // Video::Device Lock/Unlock
 
@@ -509,7 +508,7 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
 //   new capacity = newCount * 3
 // Otherwise capacity = newCount (exact fit or shrink).
 //
-// Memory: fn_MemAlloc(g_pMemAllocSingleton, size, alignment) / fn_MemFreeStatic(ptr)
+// Memory: System::MemoryAllocator::MemAlloc(size, alignment) / MemFree(ptr)
 
 // ModDialog thumbnail array push (was ResolveAddr(Module::Exe, 0x140012a60), FUN_140012a60).
 // {ptr,count:i32,cap:i32} header at +0x00/+0x08/+0x0C, 0x58-byte (11 qword) elements.
@@ -531,7 +530,7 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
 
     if (*pCap < newCount) {
         *pCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        *pData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*pCap * kStride, 8);
+        *pData = System::MemoryAllocator::MemAlloc((uint64_t)*pCap * kStride, 8);
     }
 
     int startIdx = (oldData == *pData) ? oldCount : 0;
@@ -544,7 +543,7 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
     }
 
     if (oldData != *pData) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -598,7 +597,6 @@ bool EngineFuncsInit() {
     // (ENDGAME B.3.5, b35-K2: zero callers tree-wide). See engine_funcs.h.
 
     // MemoryAllocator
-    g_pMemAllocSingleton = System::MemoryAllocator::_singleton;   // NULL here: the Engine ctor has not run
     fn_MemAlloc = reinterpret_cast<fn_MemAlloc_t>(
         ResolveAddr(Module::Runtime, 0x1800c6e60));
 
@@ -1179,7 +1177,6 @@ bool EngineFuncsInit() {
 #ifdef _DEBUG
     printf("[EngineFuncs] Functions:\n");
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
-    printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
     printf("[EngineFuncs] UI infrastructure:\n");
     printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
