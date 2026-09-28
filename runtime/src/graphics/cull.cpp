@@ -65,6 +65,7 @@
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Scene.h"
+#include "../../types/system/MemoryAllocator.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -136,26 +137,13 @@ struct GeomList {
 };
 static_assert(sizeof(GeomList) == 16, "Array<Geometry*> header is 16 bytes");
 
-using MemAllocFn = void* (*)(uint64_t bytes, int align);
-using MemFreeFn  = void  (*)(void* p);
-
-void* RtMemAlloc(uint64_t bytes, int align) {
-    return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(bytes, align);
-}
-void RtMemFree(void* p) {
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
-
-using MulT3Fn    = Frustum* (*)(const Frustum*, Frustum*, const Transform3*);
-using ContainsFn = unsigned int (*)(const Frustum*, const Box*, unsigned int);
-
+// The Volume::Frustum bodies (volume/frustum.cpp, declared in Volume.h), by name:
+// `??DFrustum@Volume@@` 0x1800f9310 and `?Contains@Frustum@Volume@@` 0x1800f8e80.
 Frustum* FrustumTimes(const Frustum* self, Frustum* ret, const Transform3* t) {
-    return RT_EXPORT_ONCE(MulT3Fn,
-        "??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z")(self, ret, t);
+    return RtVolume_Frustum_MulTransform3(self, ret, t);
 }
 unsigned int FrustumContains(const Frustum* self, const Box* box, unsigned int mask) {
-    return RT_EXPORT_ONCE(ContainsFn,
-        "?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z")(self, box, mask);
+    return RtVolume_Frustum_Contains(self, box, mask);
 }
 
 }  // namespace
@@ -185,7 +173,7 @@ void PushVisible(GeomList* list, Geometry* g) {
         // 32-bit LEA arithmetic, wrap included; same fold as SetSizeCore's.
         list->capacity = (oldSize != 0) ? static_cast<int32_t>(n * 3) : n;
         list->data = static_cast<Geometry**>(
-            RtMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(list->capacity)) * 8, 8));
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(list->capacity)) * 8, 8));
     }
     const int32_t start = (old == list->data) ? oldSize : 0;
     for (int32_t i = start; i < n; ++i) {
@@ -193,7 +181,7 @@ void PushVisible(GeomList* list, Geometry* g) {
         if (dst == nullptr) continue;          // retail tests the COMPUTED address
         *dst = (i < oldSize) ? old[i] : g;
     }
-    if (old != list->data && old != nullptr) RtMemFree(old);
+    if (old != list->data && old != nullptr) System::MemoryAllocator::MemFree(old);
 }
 
 // The node box, in world space, with the stack's per-axis biases applied.
@@ -501,17 +489,7 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
         geo->AddDrawItems(*self, *renderer);                     // VIRTUAL, slot 3
     }
 
-    if (list.data != nullptr) RtMemFree(list.data);
+    if (list.data != nullptr) System::MemoryAllocator::MemFree(list.data);
 }
 
 }  // namespace Graphics
-
-int RtGraphicsCullRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_Scene_AddCulledDrawItems); ++n;
-    RegisterRuntimeAddr(0x1801017a0ull, (void*)&RtGraphics_Scene_AddCulledDrawItems);
-    RegisterRuntimeAddr(0x18005f2f0ull, (void*)&RtGraphics_Scene_CullStackInit);        ++n;
-    RegisterRuntimeAddr(0x18005ead0ull, (void*)&RtGraphics_Scene_CullStackPushChildren); ++n;
-    return n;
-}

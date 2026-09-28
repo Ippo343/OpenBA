@@ -41,6 +41,8 @@
 #include "../../types/graphics/GeneratedImageBuffer.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Scene.h"
+#include "../../types/object/TypeInfo.h"          // Object::Base::IsDerivedFrom
+#include "../../types/system/MemoryAllocator.h"
 
 using RtGraphics::MaterialInstance;
 using RtGraphics::Renderer;
@@ -50,15 +52,11 @@ using RtGraphics::RendererDrawItem;
 namespace {
 
 // ---------------------------------------------------------------------------
-// Object::Base::IsDerivedFrom, reached PORT-FIRST.
-// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z, retail 0x1800c0390, ported in
-// runtime/src/object/type_system.cpp. Resolved through ResolveExport (which
-// consults the port registry) rather than ResolveAddr, and cached once.
+// Object::Base::IsDerivedFrom — ?IsDerivedFrom@Base@Object@@QEBA_NI@Z, retail
+// 0x1800c0390, the member (B3R). Unguarded on `obj`, as the door's body was.
 // ---------------------------------------------------------------------------
 bool CallIsDerivedFrom(const void* obj, uint32_t typeId) {
-    using Fn = bool (*)(const void*, uint32_t);
-    Fn fn = RT_EXPORT_ONCE(Fn, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
-    return fn ? fn(obj, typeId) : false;
+    return reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(typeId);   // B.3.x bridge
 }
 
 // ---------------------------------------------------------------------------
@@ -89,24 +87,6 @@ bool CallIsDerivedFrom(const void* obj, uint32_t typeId) {
 // ENDGAME B.3.9 TI-REST: the class's own `DEFINE_TYPE` record, read fresh
 // (the function-local cache over the minted record is gone, B9-10).
 uint32_t GeneratedImageBufferTypeId() { return Graphics::GeneratedImageBuffer::TypeId(); }
-
-// ---------------------------------------------------------------------------
-// MemAlloc / MemFree, the two halves of the Array helper below.
-//
-// RT_EXPORT_ONCE, not the raw DLL door: the raw DLL door IS GetProcAddress and it also
-// bypasses our own ported allocator (reference_rtoriginal_is_getprocaddress.md,
-// and allocator.cpp registers both of these names).
-// ---------------------------------------------------------------------------
-void* CallMemAlloc(uint64_t size, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    Fn fn = RT_EXPORT_ONCE(Fn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-    return fn ? fn(size, align) : nullptr;
-}
-void CallMemFree(void* p) {
-    using Fn = void (*)(void*);
-    Fn fn = RT_EXPORT_ONCE(Fn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-    if (fn) fn(p);
-}
 
 // ---------------------------------------------------------------------------
 // Collection::Array<RendererDrawItem>::Resize(int newCount, const T& fill)
@@ -155,7 +135,7 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
         if (newCount == oldCount + 1 && oldCount != 0)
             self->_capacity = newCount * 3;
         self->_data = static_cast<RendererDrawItem*>(
-            CallMemAlloc(static_cast<uint64_t>(self->_capacity) * 0x38u, 8));
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->_capacity) * 0x38u, 8));
     }
 
     int32_t i = (oldData == self->_data) ? oldCount : 0;
@@ -165,7 +145,7 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
     }
 
     if (oldData != self->_data && oldData != nullptr)
-        CallMemFree(oldData);
+        System::MemoryAllocator::MemFree(oldData);
 }
 
 }  // namespace
@@ -330,30 +310,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
             reinterpret_cast<const Graphics::Geometry*>(geometry),        // B.3.5 bridge
             reinterpret_cast<const Graphics::MaterialInstance*>(material),// B.3.5 bridge
             arg4, arg5, arg6, arg7, arg8, arg9, arg10);
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtGraphicsWave9GfxRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport(
-        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z",
-        (void*)&RtGraphics_InterpolatedStateTransform_Lerp); ++n;
-    RegisterRuntimeAddr(0x18001aff0, (void*)&RtGraphics_InterpolatedStateTransform_Lerp);
-
-    RegisterRuntimeExport(
-        "?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2@AEBVScene@2@AEBVCamera@2@H@Z",
-        (void*)&RtGraphics_MaterialInstance_RenderTextures); ++n;
-    RegisterRuntimeAddr(0x180102df0, (void*)&RtGraphics_MaterialInstance_RenderTextures);
-
-    RegisterRuntimeExport(
-        "?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z",
-        (void*)&RtGraphics_Renderer_AddDrawItem); ++n;
-    RegisterRuntimeAddr(0x1801057b0, (void*)&RtGraphics_Renderer_AddDrawItem);
-
-    return n;
 }
 
 // ############################################################################

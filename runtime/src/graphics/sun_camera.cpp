@@ -119,9 +119,6 @@ inline float AbsF(float v) {
     float r; std::memcpy(&r, &b, 4); return r;
 }
 
-using CameraCtorFn = Camera* (*)(Camera*, const Frustum*, const Transform3*, bool);
-using GetCornersFn = void (*)(const Frustum*, Vector3*);
-
 // ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now.
 void** SlotVideoDevice() { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
 void** SlotVideoConfig() { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }
@@ -188,8 +185,7 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     // corners[0..3] are the frustum's near corners; retail OVERWRITES
     // corners[4..7] with the extruded far points, so one 8-slot array does both.
     Vector3 corner[8];
-    RT_EXPORT_ONCE(GetCornersFn, "?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z")
-        (&viewFrustum, corner);
+    RtVolume_Frustum_GetCorners(&viewFrustum, corner);   // 0x1800f9850 (volume/frustum.cpp)
 
     // The shadow basis: look from the origin towards the sun direction vector.
     const Vector3    origin = { kZero, kZero, kZero };
@@ -370,9 +366,7 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     // place this member is not a straight move". The zero-fill is deliberate:
     // it makes `_pad_d5` deterministic instead of an indeterminate read.
     alignas(Camera) unsigned char slot[sizeof(Camera)] = {};
-    RT_EXPORT_ONCE(CameraCtorFn,
-        "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z")
-        (reinterpret_cast<RtGraphics::Camera*>(slot), &f, &xf, true);   // B.3.5 bridge
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(slot), &f, &xf, true);   // B.3.5 bridge, 0x1800fe960
     return *reinterpret_cast<const Camera*>(slot);
 }
 
@@ -396,12 +390,4 @@ extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* r
             ->::Graphics::SunLight::GetSunCamera(
                 *reinterpret_cast<::Graphics::Renderer*>(rendererv)));
     return ret;
-}
-
-int RtGraphicsSunCameraRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?GetSunCamera@SunLight@Graphics@@QEBA?AVCamera@2@AEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_SunLight_GetSunCamera); ++n;
-    RegisterRuntimeAddr(0x180107010ull, (void*)&RtGraphics_SunLight_GetSunCamera);
-    return n;
 }

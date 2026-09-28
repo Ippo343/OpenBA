@@ -83,21 +83,6 @@ using RtVideo::RefreshRate;
 using RtVideo::RenderBuffer;
 
 // ----------------------------------------------------------------------------
-// ResolveExport, forward-declared rather than pulled in from standalone/resolve.h
-//
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport /
-// the raw DLL door locally, and the same shape runtime/src/io/persistence.cpp
-// uses for ResolveAddr: resolve.h drags in <windows.h>, and PLAN §4.1 decision 1
-// requires runtime/src/ to stay platform-neutral outside a `_win` twin. This
-// declaration must stay byte-identical to resolve.h's; the two are checked
-// against each other by the linker.
-//
-// Note this is the REGISTRY-AWARE resolver, not the raw DLL door. That is
-// deliberate for IO::Persistence::Set below — see Video_Configuration_Save.
-// ----------------------------------------------------------------------------
-void* ResolveExport(const char* mangled_name);
-
-// ----------------------------------------------------------------------------
 // The two IO::Persistence readers, declared here rather than included.
 //
 // Wave 4 lane C's ports of ?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z (retail
@@ -114,25 +99,6 @@ extern bool RtIo_Persistence_GetInt (void* self, const char* section, const char
 extern bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out);
 
 namespace {
-
-// ---- Mangled names, spelled once ------------------------------------------
-// These are used by the raw DLL door inside diff guards. The REGISTRATION site at the
-// bottom of the file spells every name as a literal a second time, on purpose:
-// tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"` and
-// cannot see through a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-constexpr const char* kGetInterfaceCount        = "?GetInterfaceCount@Device@Video@@QEBAHXZ";
-constexpr const char* kGetInterface             = "?GetInterface@Device@Video@@QEBAAEBUGraphicsInterface@12@H@Z";
-constexpr const char* kGetMultisampleModeCount  = "?GetMultisampleModeCount@Device@Video@@QEBAHXZ";
-constexpr const char* kIsMultisampleSupported   = "?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z";
-constexpr const char* kValidateConfiguration    = "?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z";
-constexpr const char* kApplyChangedSettings     = "?ApplyChangedSettings@Device@Video@@QEAA_NXZ";
-constexpr const char* kRenderBufferCreate       = "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z";
-constexpr const char* kConfigurationSave        = "?Save@Configuration@Video@@QEAAXXZ";
-constexpr const char* kConfigurationStartup     = "?Startup@Configuration@Video@@QEAA_NXZ";
-// `?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z` used to be spelled
-// here for an `RT_EXPORT_ONCE` lookup. ENDGAME B.3.5 block D2 made that call a
-// direct member call (see ValidateConfiguration below), so the literal is gone.
 
 // ---- The three singletons these bodies read --------------------------------
 // Exported DATA symbols: the export address IS the pointer slot.
@@ -492,38 +458,10 @@ bool Video_RenderBuffer_Create(RenderBuffer* self,
 // WriteSettings, which are the registry pair. Save touches no registry key;
 // IO::Persistence::WriteSettings, called from elsewhere at shutdown, does.
 //
-// Set is reached through ResolveExport, NOT the raw DLL door, so these 18 calls go to
-// Wave 4's port when it is registered and to the DLL when it is not — which is
-// what retail's own body does relative to its class.
-//
-// ORACLE. Ours writes; then the harness reads all 18 keys back through the
-// DLL's Persistence::Get and requires each to equal the field it came from.
-// A readback alone would not catch a WRONG KEY NAME (we would read back the
-// same wrong key we wrote), so before ours runs the harness POISONS all 18
-// retail keys with a value that differs from the one about to be written. A
-// port that writes the wrong key, the wrong field, or nothing at all then
-// leaves a poisoned value behind and the predicate names the offending key
-// (reference_shadow_predicate_must_name_its_failing_term.md). The original is
-// run afterwards, which restores every key to the correct value whether ours
-// was right or not.
+// Set is IO::Persistence::Set, the member, called directly (the int and bool
+// overloads are picked by the field's type, as retail's two call targets are).
 // ============================================================================
 namespace {
-
-using PersistSetIntFn  = void (*)(void*, const char*, const char*, int);
-using PersistSetBoolFn = void (*)(void*, const char*, const char*, bool);
-using PersistGetIntFn  = bool (*)(const void*, const char*, const char*, int*);
-using PersistGetBoolFn = bool (*)(const void*, const char*, const char*, bool*);
-
-PersistSetIntFn  PersistSetInt() {
-    static auto fn = reinterpret_cast<PersistSetIntFn>(
-        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0H@Z"));
-    return fn;
-}
-PersistSetBoolFn PersistSetBool() {
-    static auto fn = reinterpret_cast<PersistSetBoolFn>(
-        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z"));
-    return fn;
-}
 
 constexpr const char* kSectionVideo = "Video";
 
@@ -570,10 +508,11 @@ void Video::Configuration::Save() {
 
     for (int i = 0; i < kSaveFieldCount; ++i) {
         const SaveField& f = kSaveFields[i];
+        IO::Persistence* store = reinterpret_cast<IO::Persistence*>(persistence);  // B.3.x bridge
         if (f.isBool)
-            PersistSetBool()(persistence, kSectionVideo, f.key, FieldBool(this, f.offset));
+            store->Set(kSectionVideo, f.key, FieldBool(this, f.offset));
         else
-            PersistSetInt()(persistence, kSectionVideo, f.key, FieldInt(this, f.offset));
+            store->Set(kSectionVideo, f.key, FieldInt(this, f.offset));
     }
 }
 
@@ -650,37 +589,4 @@ bool Video::Configuration::Startup() {
 
 bool Video_Configuration_Startup(Configuration* self) {
     return self->Video::Configuration::Startup();
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtVideoDeviceRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?GetInterfaceCount@Device@Video@@QEBAHXZ",
-                          (void*)&Video_Device_GetInterfaceCount); ++n;
-    RegisterRuntimeExport("?GetInterface@Device@Video@@QEBAAEBUGraphicsInterface@12@H@Z",
-                          (void*)&Video_Device_GetInterface); ++n;
-    RegisterRuntimeExport("?GetMultisampleModeCount@Device@Video@@QEBAHXZ",
-                          (void*)&Video_Device_GetMultisampleModeCount); ++n;
-    RegisterRuntimeExport("?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z",
-                          (void*)&Video_Device_IsMultisampleModeSupported); ++n;
-    RegisterRuntimeExport("?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z",
-                          (void*)&Video_Device_ValidateConfiguration); ++n;
-    RegisterRuntimeExport("?ApplyChangedSettings@Device@Video@@QEAA_NXZ",
-                          (void*)&Video_Device_ApplyChangedSettings); ++n;
-    RegisterRuntimeExport("?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z",
-                          (void*)&Video_RenderBuffer_Create); ++n;
-    RegisterRuntimeExport("?Save@Configuration@Video@@QEAAXXZ",
-                          (void*)&Video_Configuration_Save); ++n;
-
-    // Own kill switch, narrower than the file's RT_VIDDEVICE: this is
-    // the one function here that Engine::Startup calls on the BOOT path
-    // (engine_lifecycle.cpp:653), so it must be switchable without taking the
-    // other nine registrations down with it.
-    RegisterRuntimeExport("?Startup@Configuration@Video@@QEAA_NXZ",
-                          (void*)&Video_Configuration_Startup); ++n;
-
-    return n;
 }

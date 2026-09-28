@@ -71,7 +71,7 @@
 // `Enter(alloc+0x640); Allocate(alloc, n, align); Leave;` — byte-for-byte the
 // shape of `?MemAlloc@MemoryAllocator@System@@` (0x1800c7a50), with align 4 for
 // `operator new` and align 8 for the Context block. So both are expressed here
-// as MemAlloc, which is the registered door this file family already uses, and
+// as System::MemoryAllocator::MemAlloc, called directly, and
 // engine_lifecycle.cpp:1111 records the same equivalence and the same reason
 // for not registering 0x180011640 itself.
 //
@@ -91,6 +91,7 @@
 #include <initializer_list>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/video/Context.h"
 #include "../../types/engine/MainLoop.h"   // ENDGAME B.3.7: Engine::MainLoop::CreateVideoContext
@@ -149,9 +150,6 @@
 // CALLED as a door by direct near call instead of through a resolver.
 // ============================================================================
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 extern "C" void RtVideo_Context_Dtor(Video::Context* self);    // context_lifecycle.cpp
 // `??3Context@Video@@SAXPEAX@Z`'s ported body, also context_lifecycle.cpp. This
 // used to be an `RT_EXPORT_ONCE(…, "??3Context@Video@@SAXPEAX@Z")` indirect call
@@ -171,13 +169,6 @@ extern "C" void Video_Context_OperatorDelete(void* p);         // context_lifecy
 // the real constructor (`::new (p) Video::ImageBuffer()`).
 
 namespace {
-
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
 
 // ENDGAME B.3.5 block VC: `VoidThisFn`, `NewFn`, `RbCreateFn`, `CompanionMk`,
 // `BufSetSizeFn` and `ImgSlotFn` are all GONE. Every one of them typed either an
@@ -249,7 +240,7 @@ void InitConstantBuffer(Video::ConstantBuffer* buf, void* device) {
 // data, which is what retail's `(companion, bytes, 1, 0)` says.
 template <class Buf, class BufData>
 void MakeDynamicBuffer(void* self, size_t slot, int32_t bytes) {
-    void* p = MemAlloc(0x20, 4);                        // 0x180011640
+    void* p = System::MemoryAllocator::MemAlloc(0x20, 4);                        // 0x180011640
     if (p) {
         Field<int32_t>(p, 0x00) = 0;
         Field<uint8_t>(p, 0x04) = 0;
@@ -287,10 +278,10 @@ void MakeDynamicBuffer(void* self, size_t slot, int32_t bytes) {
 // triviality trait, so `Device.h`'s `is_trivially_copyable<Video::RenderBuffer>`
 // assert still holds and still proves it.
 void* Video::ImageBuffer::operator new(size_t size) {
-    return MemAlloc(size, 8);                           // MOV R8D,0x8
+    return System::MemoryAllocator::MemAlloc(size, 8);                           // MOV R8D,0x8
 }
 void* Video::RenderBuffer::operator new(size_t size) {
-    return MemAlloc(size, 8);                           // MOV R8D,0x8
+    return System::MemoryAllocator::MemAlloc(size, 8);                           // MOV R8D,0x8
 }
 
 extern "C" void* RtVideo_ImageBuffer_OperatorNew(uint64_t bytes) {
@@ -471,7 +462,7 @@ void Engine::MainLoop::CreateVideoContext() {
 
     // Retail inlines `Enter ; Allocate(alloc, 0x2168, 8) ; Leave`, which is
     // MemAlloc(0x2168, 8) — see the banner.
-    void* block = MemAlloc(sizeof(Video::Context), 8);
+    void* block = System::MemoryAllocator::MemAlloc(sizeof(Video::Context), 8);
     if (!block) {
         _context = nullptr;
         return;
@@ -490,13 +481,6 @@ extern "C" void RtEngine_MainLoop_CreateVideoContext(void* self) {
 // ============================================================================
 int RtVideoContextCtorRegister() {
     int n = 0;
-    RegisterRuntimeExport("??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z",
-                          (void*)&RtVideo_Context_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800f1820, (void*)&RtVideo_Context_Ctor);
-
-    RegisterRuntimeExport("?CreateVideoContext@MainLoop@Engine@@AEAAXXZ",
-                          (void*)&RtEngine_MainLoop_CreateVideoContext); ++n;
-    RegisterRuntimeAddr(0x1800dd500, (void*)&RtEngine_MainLoop_CreateVideoContext);
 
     RegisterRuntimeExport("??2ImageBuffer@Video@@SAPEAX_K@Z",
                           (void*)&RtVideo_ImageBuffer_OperatorNew); ++n;
@@ -506,10 +490,5 @@ int RtVideoContextCtorRegister() {
                           (void*)&RtVideo_RenderBuffer_OperatorNew); ++n;
     RegisterRuntimeAddr(0x18001f2e0, (void*)&RtVideo_RenderBuffer_OperatorNew);
 
-    // Unexported, so address-only.
-    RegisterRuntimeAddr(0x180053730, (void*)&RtVideo_Ctx_ZeroTransformPair);
-    RegisterRuntimeAddr(0x180053840, (void*)&RtVideo_Ctx_ZeroBoneMatrices);
-    RegisterRuntimeAddr(0x1800538b0, (void*)&RtVideo_Ctx_ZeroTransformMatrices);
-    RegisterRuntimeAddr(0x180053920, (void*)&RtVideo_Ctx_ZeroLightBlock);
     return n;
 }

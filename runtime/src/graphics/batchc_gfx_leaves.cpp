@@ -106,14 +106,9 @@
 #include "../../types/graphics/ParticleInstance.h"  // Graphics::ParticleInstance
 #include "../../types/video/Buffers.h"              // Video::{Index,Vertex}Buffer
 #include "../../types/video/Device.h"               // Video::RenderBuffer
-
-// standalone/resolve.h is deliberately NOT included: it drags in <windows.h>,
-// whose <wingdi.h> declares a function called `Rectangle` and whose <windef.h>
-// still #defines `near`/`far` away, both of which collide with engine type and
-// member names. Same local declaration shaderprogram.cpp and array.cpp carry,
-// for the same PLAN.md §4.1 reason; the linker checks the two spellings agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/collection/Collection.h"      // rtcoll:: the array instantiations
+#include "../../types/graphics/Particle.h"          // RtGraphics_Emitter_OperatorDelete
+#include "../picking/scene_grid.h"                  // rtpickgrid::TransformArrayAssign / ArrayDtorTransform
 
 namespace rtcoll { void MemFree(void* p); }   // runtime/src/collection/array.cpp
 
@@ -129,12 +124,6 @@ using RtGraphics::EdgeMesh;
 
 namespace {
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
-using VoidThisFn = void  (*)(void*);
-using PtrThisFn  = void* (*)(void*);
-
 // ---------------------------------------------------------------------------
 // Retail vtable constants. Resolved through the NAME (all five are exported
 // data symbols — checked by VA with pefile), so a minted/promoted row is used
@@ -144,10 +133,9 @@ using PtrThisFn  = void* (*)(void*);
 // gone with the ??1ParticleSystemInstance door that restamped them.)
 
 // ---------------------------------------------------------------------------
-// Named dependencies. RT_EXPORT_ONCE (port-registry first) for everything with
-// an export name; the three unexported template instantiations go through
-// ResolveAddr, which is also registry-first, with the address literal spelled
-// at the ResolveAddr call so tools/addr_door_audit.py can see the door.
+// Named dependencies, called by name (B3R): the class members, and the
+// unexported template instantiations under their body names (rtcoll::,
+// rtpickgrid::).
 // ---------------------------------------------------------------------------
 
 // (ENDGAME B.3.9 GFX: `GeometryDtor`, the ??1Geometry door call of the retired
@@ -155,7 +143,6 @@ using PtrThisFn  = void* (*)(void*);
 
 // (ENDGAME B.3.9 GFX: `ExternalDtor`, the ??1External door the retired ??1EdgeMesh
 // door tail-called, is gone; the real ~EdgeMesh chains ~External.)
-
 
 // Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
 // both PORTED (video/buffers.cpp) and registered by name and address.
@@ -172,12 +159,11 @@ void VertexBufferPlatformDestruct(void* p) {
 // Allocate(alloc, n, 8); Leave), which is instruction for instruction what
 // these two exported statics are; imagebuffer_derived.cpp reaches the identical
 // inlining the same way.
-using NewFn = void* (*)(uint64_t);
 void* ImageBufferOperatorNew(uint64_t n) {
-    return RT_EXPORT_ONCE(NewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(n);
+    return Video::ImageBuffer::operator new(n);    // 0x18001e910
 }
 void* RenderBufferOperatorNew(uint64_t n) {
-    return RT_EXPORT_ONCE(NewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(n);
+    return Video::RenderBuffer::operator new(n);   // 0x18001f2e0
 }
 void ImageBufferCtor(void* p) { ::new (p) Video::ImageBuffer(); }   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
 // ENDGAME B.3.5 caller batch: DEFINED members of the real `Video::RenderBuffer`
@@ -316,10 +302,10 @@ Graphics::ParticleSystemInstance::~ParticleSystemInstance() {
         if (owned != nullptr) {
             // 0x180021490: ~Array<T> for a trivially destructible T — frees
             // [0] and zeroes [0]/[8]. 0x180020600: the matching class
-            // operator delete. Both unexported template instantiations; both
-            // still the DLL's, reached registry-first by address.
-            RtAddr<PtrThisFn>(0x180021490ull)(owned);
-            RtAddr<VoidThisFn>(0x180020600ull)(owned);
+            // operator delete. Both unexported template instantiations,
+            // called by their body names.
+            rtcoll::RtColl_ArrayDtor_180021490(owned);
+            RtGraphics_Emitter_OperatorDelete(owned);
         }
     }
 }
@@ -364,11 +350,9 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
     uint8_t* const self = static_cast<uint8_t*>(selfv);
     const uint8_t* const src = static_cast<const uint8_t*>(srcv);
 
-    using ArrayAssignFn = void (*)(void*, const void*);
-
     *reinterpret_cast<uint64_t*>(self + 0x00) = 0;
     *reinterpret_cast<uint64_t*>(self + 0x08) = 0;
-    RtAddr<ArrayAssignFn>(0x18001b270ull)(self, src);
+    rtcoll::RtColl_ArrayAssign_18001b270(self, src);   // 0x18001b270
 
     // The three refcounted names, ASCENDING — the mirror of the destructor's
     // descending release. Each slot is zeroed first and only then overwritten,
@@ -401,7 +385,7 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
 
     *reinterpret_cast<uint64_t*>(self + 0x60) = 0;
     *reinterpret_cast<uint64_t*>(self + 0x68) = 0;
-    RtAddr<ArrayAssignFn>(0x18001b360ull)(self + 0x60, src + 0x60);
+    rtpickgrid::TransformArrayAssign(self + 0x60, src + 0x60);   // 0x18001b360
 
     return self;                                          // MOV RAX,RBX
 }
@@ -423,13 +407,13 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
 extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
     uint8_t* const self = static_cast<uint8_t*>(selfv);
 
-    RtAddr<PtrThisFn>(0x18001c100ull)(self + 0x60);
+    rtpickgrid::ArrayDtorTransform(self + 0x60);          // 0x18001c100
 
     ReleaseString(reinterpret_cast<void**>(self + 0x20), /*checkZeroAfterAdjust=*/false);
     ReleaseString(reinterpret_cast<void**>(self + 0x18), /*checkZeroAfterAdjust=*/false);
     ReleaseString(reinterpret_cast<void**>(self + 0x10), /*checkZeroAfterAdjust=*/false);
 
-    RtAddr<PtrThisFn>(0x18001c020ull)(self);              // JMP 0x18001c020
+    rtcoll::RtColl_ArrayDtor_18001c020(self);             // JMP 0x18001c020
 
 }
 
@@ -459,9 +443,9 @@ Graphics::EdgeMesh::~EdgeMesh() {
         reinterpret_cast<RtGraphics::EdgeMesh*>(this);                 // B.3.9 bridge (the POD view)
 
     // 0x180013e70 — Array<T>::~Array for the two list arrays. An unexported
-    // template instantiation, still the DLL's, reached registry-first.
-    RtAddr<PtrThisFn>(0x180013e70ull)(&self->_edgeLists);
-    RtAddr<PtrThisFn>(0x180013e70ull)(&self->_triangleLists);
+    // template instantiation, called by its body name.
+    rtcoll::RtColl_ArrayDtor_180013e70(&self->_edgeLists);
+    rtcoll::RtColl_ArrayDtor_180013e70(&self->_triangleLists);
 
     IndexBufferPlatformDestruct(&self->_extraIndices);
     VertexBufferPlatformDestruct(&self->_extraVerts);
@@ -555,8 +539,6 @@ static_assert(kLvlTail + 4 <= kLvlStride, "detail-level fields must fit the 0xb0
 static_assert(kLvlTriCount == kLvlTriData + 8,
               "the triangle Array's _size must follow its _data, Collection::Array shape");
 
-using SetSizeFn  = void (*)(void*, int32_t);
-using SerNFn     = void (*)(Serializer*, int32_t, void*);
 using BufSerFn   = void (*)(void*, Serializer*);
 
 // B3X W0: the ReaderWriter members, by name on the real class (the
@@ -711,13 +693,13 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
             int32_t n = level->_triangleLists._size;                  // +0xa0
             RwInt(rw, &n);
             if (IsReading(sub.stream))
-                RtAddr<SetSizeFn>(0x1800136f0ull)(&level->_triangleLists, n);  // +0x98
+                rtcoll::RtColl_ArraySetSize_1800136f0(&level->_triangleLists, n);  // +0x98
 
             void* triData = level->_triangleLists._data;
             if (arm == 0) {
                 // 0x180014850 SerializeTriangleListArray(ctx, count, data) —
                 // PORTED (closure_batch2b.cpp) and registered by address.
-                RtAddr<SerNFn>(0x180014850ull)(&sub, n, triData);
+                RtGraphics_EdgeMesh_SerializeTriangleListArray(&sub, n, triData);   // 0x180014850
             } else {
                 // The same six dwords per element, emitted inline by retail on
                 // this arm (0x1800a4b90..0x1800a4c0e, stride 0x18).
@@ -1059,13 +1041,7 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
 extern "C" int RtGraphicsBatchCLeavesRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z",
-                          (void*)&RtGraphics_MaterialInstance_GenerateTextures); ++n;
-    RegisterRuntimeAddr(0x180102eb0ull, (void*)&RtGraphics_MaterialInstance_GenerateTextures);
-
     // (ENDGAME B.3.9 GFX: the ??1ParticleSystemInstance door is retired.)
-
-
 
     RegisterRuntimeExport("??0Animation@Graphics@@QEAA@AEBV01@@Z",
                           (void*)&RtGraphics_Animation_CopyCtor); ++n;
@@ -1076,18 +1052,6 @@ extern "C" int RtGraphicsBatchCLeavesRegister() {
     RegisterRuntimeAddr(0x1800fb290ull, (void*)&RtGraphics_Animation_Dtor);
 
     // (ENDGAME B.3.9 GFX: the ??1EdgeMesh door is retired.)
-
-    RegisterRuntimeExport("?CreateTargets@SpotLight@Graphics@@AEAAXXZ",
-                          (void*)&RtGraphics_SpotLight_CreateTargets); ++n;
-    RegisterRuntimeAddr(0x180106050ull, (void*)&RtGraphics_SpotLight_CreateTargets);
-
-    RegisterRuntimeExport("?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtGraphics_GraphicsMesh_PlatformSerialize); ++n;
-    RegisterRuntimeAddr(0x1800a48e0ull, (void*)&RtGraphics_GraphicsMesh_PlatformSerialize);
-
-    RegisterRuntimeExport("?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z",
-                          (void*)&RtGraphics_Renderer_DrawItemList); ++n;
-    RegisterRuntimeAddr(0x180105240ull, (void*)&RtGraphics_Renderer_DrawItemList);
 
     return n;
 }

@@ -62,12 +62,6 @@
 #include "../collection/array_internal.h"
 #include "../system/string.h"
 
-// Byte-identical to standalone/resolve.h's declaration; the linker checks the
-// two against each other. Not included, for the <wingdi.h> `Rectangle` reason
-// wave21_lane_gfxbody.cpp:47 gives at length.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // System::Timer::_secondsPerTick (0x1801fe728). NOT a literal that can be
 // lifted: RVA 0x1fe728 lies BEYOND `.data`'s SizeOfRawData, i.e. in the
 // uninitialised tail, so there are no bytes in the file to read and a port that
@@ -508,9 +502,6 @@ extern "C" void RtGraphics_Animation_ApplyEvents(const void* self, const void* t
 // ----------------------------------------------------------------------------
 namespace {
 
-using CameraCopyCtorFn = Camera* (*)(Camera* dst, const Camera* src);   // ??0Camera@
-using CameraAssignFn   = Camera* (*)(Camera* dst, const Camera* src);   // ??4Camera@
-
 // The eh-vector ctor at 0x1800801e8 runs 0x180062950 over three 0x10-byte
 // elements, and 0x180062950 is five instructions:
 //     XOR EAX,EAX / MOV [RCX],RAX / MOV [RCX+8],RAX / MOV RAX,RCX / RET
@@ -762,45 +753,6 @@ extern "C" void* RtGraphics_Camera_Assign(void* self, const void* src) {
     return self;
 }
 
-// ============================================================================
-// REGISTRATION
-//
-// Every mangled name below is its own STRING LITERAL, never a named constant:
-// tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"` and cannot
-// see through a constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// NO RegisterRuntimeAddr IN THIS FILE. The one unexported helper this lane
-// reaches (0x1800638e0) is called THROUGH ResolveAddr rather than registered,
-// because registering it would claim a port that does not exist.
-// ============================================================================
-int RtGraphicsWave28GfxbodyRegister() {
-    int count = 0;
-
-    RegisterRuntimeExport("?GetConstantName@Material@Graphics@@QEBA?AVString@System@@HH@Z",
-                          (void*)&RtGraphics_Material_GetConstantName); ++count;
-    RegisterRuntimeExport("?GetTextureName@Material@Graphics@@QEBA?AVString@System@@HH@Z",
-                          (void*)&RtGraphics_Material_GetTextureName); ++count;
-    RegisterRuntimeExport("?FindConstant@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_FindConstant); ++count;
-    RegisterRuntimeExport("?FindTexture@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_FindTexture); ++count;
-    RegisterRuntimeExport("?ApplyEvents@Animation@Graphics@@QEBAXAEBVTransform@Math@@"
-                          "AEBVTime@System@@1@Z",
-                          (void*)&RtGraphics_Animation_ApplyEvents); ++count;
-    RegisterRuntimeExport("?BeginDrawGroup@Renderer@Graphics@@QEAAHPEBVRenderBuffer@Video@@"
-                          "AEBVCamera@2@1HI@Z",
-                          (void*)&RtGraphics_Renderer_BeginDrawGroup); ++count;
-    RegisterRuntimeExport("?UpdateRootOnly@AnimationState@Graphics@@AEAAXMAEAVVector3@Math@@@Z",
-                          (void*)&RtGraphics_AnimationState_UpdateRootOnly); ++count;
-    // Not one of the ten; see §6 -- porting BeginDrawGroup is what put this row
-    // into the `called` column, so this lane closes it rather than moving it.
-    RegisterRuntimeExport("??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z",
-                          (void*)&RtGraphics_Camera_Assign); ++count;
-
-    return count;
-}
-
 // One line beside the other wave summaries, so a run that entered none of these
 // says so rather than staying silent.
 void RtGraphicsWave28GfxbodySummary() {
@@ -824,7 +776,6 @@ void RtGraphicsWave28GfxbodySummary() {
 
 }  // namespace rtgfxbody28
 
-int  RtGraphicsWave28GfxbodyRegister() { return rtgfxbody28::RtGraphicsWave28GfxbodyRegister(); }
 void RtGraphicsWave28GfxbodySummary()  { rtgfxbody28::RtGraphicsWave28GfxbodySummary(); }
 
 // ############################################################################
@@ -1070,9 +1021,11 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
         uint8_t* const g = reinterpret_cast<uint8_t*>(r->drawGroups.GetData()) +
                            static_cast<int64_t>(idx) * 0x1f0;
         *reinterpret_cast<const void**>(g) = renderBuffer;
-        RT_EXPORT_ONCE(rtgfxbody28::CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
+        // ??4Camera@Graphics@@ (0x180017c40): the door body above, by name (it
+        // counts its calls for the [GFXBODY28] line).
+        rtgfxbody28::RtGraphics_Camera_Assign(
             reinterpret_cast<RtGraphics::Camera*>(g + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
-        RT_EXPORT_ONCE(rtgfxbody28::CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
+        rtgfxbody28::RtGraphics_Camera_Assign(
             reinterpret_cast<RtGraphics::Camera*>(g + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
         *reinterpret_cast<int32_t*>(g + 0x1b8)  = shader;
         *reinterpret_cast<uint32_t*>(g + 0x1bc) = passMask;
@@ -1083,9 +1036,10 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
     ++rtgfxbody28::g_beginGroupAppends;
     alignas(8) uint8_t temp[0x1f0];
     *reinterpret_cast<const void**>(temp) = renderBuffer;
-    RT_EXPORT_ONCE(rtgfxbody28::CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
+    // ??0Camera@Graphics@@QEAA@AEBV01@@Z (0x180017a70), the copy door, by name.
+    rtgfxd::RtGraphics_Camera_CopyCtor(
         reinterpret_cast<RtGraphics::Camera*>(temp + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
-    RT_EXPORT_ONCE(rtgfxbody28::CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
+    rtgfxd::RtGraphics_Camera_CopyCtor(
         reinterpret_cast<RtGraphics::Camera*>(temp + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
     *reinterpret_cast<int32_t*>(temp + 0x1b8)  = shader;
     *reinterpret_cast<uint32_t*>(temp + 0x1bc) = passMask;

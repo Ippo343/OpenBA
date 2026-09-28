@@ -101,16 +101,6 @@ using RtVideo::CompanionData;
 using RtVideo::ConstantBuffer;
 using RtVideo::DisplayMode;
 
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — byte-identical to the declaration in resolve.h and in
-// runtime/src/graphics/scene.cpp, for the reason rt_port.h gives: resolve.h
-// drags in <windows.h>, whose `Rectangle`, `near` and `far` collide with the
-// engine's own names.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // ============================================================================
 // The twelve companion-base constructors -- DOORS dx11 calls by its import
 // struct, so they stay (B39_RULES D1.4), each the class's real constructor.
@@ -315,30 +305,11 @@ void* Video_DisplayMode_Ctor(DisplayMode* self, int width, int height) {
 // instantiation for `Array<RefreshRate>`: free `_data` under the allocator's
 // critical section, then zero the {data,size,capacity} triple.
 //
-// *** THIS PORT CREATES ONE NEW LANE-D ROW: 0x180010760. *** It is the twelfth
-// member of the J1 family lane Q ported (runtime/src/collection/array.cpp's
-// J1_ENTRY list) — byte-identical shape to the eleven there, including
-// 0x18001c750 — but it is NOT one of the eleven and is NOT registered, so this
-// call reaches the shipped DLL. Called by ADDRESS, the same posture ClearAll,
-// KeyMap::RegisterInput and Audio::Scene::Serialize already take toward
-// Collection internals: what is needed from it is an entry point, not a body.
-// Adding it to lane Q's J1 list is a one-line change and the obvious follow-up,
-// but that file belongs to another lane this round and a registration race is
-// not worth one line.
-//
-// ORACLE: the diff oracle. A replay is not merely unhelpful here, it is a
-// DOUBLE FREE — ours frees `_data`, and retail's body run afterwards on a copy
-// of the pre-state would pass the same pointer to MemoryAllocator::Free again.
-// Run on the post-state it takes the null branch and only re-zeroes, which
-// compares nothing and reports green: the Audio::Scene::Pause early-out trap
-// (WAVE9.md rows 5-7) in its exact shape. The shadow asserts what our body can
-// honestly assert — that the triple came back zeroed.
+// 0x180010760 is `RtVideo_ArrayRefreshDtor` (device_startup.cpp, declared in
+// types/video/Device.h), called by name.
 // ============================================================================
 void Video_DisplayMode_Dtor(DisplayMode* self) {
-    using Fn = void (*)(void*);
-    static Fn freeRefreshArray =
-        reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180010760));
-    freeRefreshArray(&self->refreshData);
+    RtVideo_ArrayRefreshDtor(&self->refreshData);
 }
 
 // ============================================================================
@@ -421,32 +392,6 @@ int RtVideoCompanionRegister() {
     RegisterRuntimeExport("??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z",
                           (void*)&Video_DeviceData_Ctor);
     RegisterRuntimeAddr(0x1800f8cd0, (void*)&Video_DeviceData_Ctor);
-    n++;
-
-
-    RegisterRuntimeExport("?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z",
-                          (void*)&Video_IndexBuffer_Lock);
-    RegisterRuntimeAddr(0x1800f34e0, (void*)&Video_IndexBuffer_Lock);
-    n++;
-
-    RegisterRuntimeExport("?Unlock@IndexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_IndexBuffer_Unlock);
-    RegisterRuntimeAddr(0x1800f34c0, (void*)&Video_IndexBuffer_Unlock);
-    n++;
-
-    RegisterRuntimeExport("?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z",
-                          (void*)&Video_VertexBuffer_Lock);
-    RegisterRuntimeAddr(0x1800f5640, (void*)&Video_VertexBuffer_Lock);
-    n++;
-
-    RegisterRuntimeExport("?Unlock@VertexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_VertexBuffer_Unlock);
-    RegisterRuntimeAddr(0x1800f5620, (void*)&Video_VertexBuffer_Unlock);
-    n++;
-
-    RegisterRuntimeExport("?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z",
-                          (void*)&Video_ConstantBuffer_Bind);
-    RegisterRuntimeAddr(0x1800eef70, (void*)&Video_ConstantBuffer_Bind);
     n++;
 
     RegisterRuntimeExport("??0DisplayMode@Device@Video@@QEAA@HH@Z",

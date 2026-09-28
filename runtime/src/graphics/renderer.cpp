@@ -73,6 +73,9 @@
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
 #include "../collection/array_internal.h"
+#include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
+#include "../../types/volume/Volume.h"           // RtVolume_Frustum_Projection
+#include "../../types/system/MemoryAllocator.h"
 
 using RtGraphics::Camera;
 using RtGraphics::MaterialInstance;
@@ -80,56 +83,10 @@ using RtGraphics::MaterialTexture;
 using RtGraphics::Renderer;
 using RtGraphics::RendererDrawGroup;
 
-// ----------------------------------------------------------------------------
-// ResolveAddr / ResolveExport, forward-declared rather than pulled in from
-// standalone/resolve.h — the same reasoning rt_port.h gives for declaring
-// RegisterRuntimeExport locally. resolve.h drags in <windows.h>, whose
-// <wingdi.h> declares a FUNCTION called `Rectangle` (so `Volume::Rectangle`
-// would stop naming a type) and whose <windef.h> still #defines the Win16 `near`
-// and `far` keywords away (so a frustum's near/far plane distances would not
-// parse). PLAN §4.1 decision 1 requires runtime/src/ to stay platform-neutral
-// outside a `_win` twin, and this file has no Win32 in it.
-//
-// These declarations must stay byte-identical to resolve.h's; the linker checks
-// them against each other, and standalone/resolve_standalone.cpp includes both.
-// The precedent is runtime/src/picking/scene.cpp:88 and
-// runtime/src/achievement/achievement_manager.cpp:71.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-void*     ResolveExport(const char* mangled_name);
-
 namespace {
 
 // ============================================================================
-// Mangled names for the diff-oracle calls. The registrations at the bottom of
-// this file deliberately repeat each name as its own literal rather than using
-// these constants: tools/runtime_census.py matches `RegisterRuntimeExport("<lit>"`
-// and cannot see through a NAMED CONSTANT, which is exactly how Wave 3's Object
-// count stood at 21/41 when it was really 27/41
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-const char* const kCameraCtor =
-    "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z";
-const char* const kSetFrustum        = "?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z";
-const char* const kSetCameraToWorld  = "?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z";
-const char* const kSnapCameraToWorld = "?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z";
-const char* const kGetFrustum        = "?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ";
-const char* const kRendererCtor      = "??0Renderer@Graphics@@QEAA@XZ";
-const char* const kGetCullCamera     = "?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ";
-const char* const kGetShader         = "?GetShader@Renderer@Graphics@@QEBAHXZ";
-const char* const kSetMaterial =
-    "?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z";
-
-// ============================================================================
-// The DLL symbols the ported bodies call.
-//
-// Resolved through ResolveExport / ResolveAddr — which consult the runtime
-// registry FIRST — and cached in a function-local static, never through
-// the raw DLL door outside a diff guard. the raw DLL door is GetProcAddress: an export-table
-// binary search by string taken under the loader lock on every call. Two of them
-// sitting in the body of System::Time cost Wave 2 five points of sim time and
-// were invisible to both profilers (reference_rtoriginal_is_getprocaddress.md).
+// The Runtime bodies the ported bodies call, by name (B3R).
 // ============================================================================
 
 // Volume::Frustum::Projection(bool) -> Math::Matrix BY VALUE.
@@ -138,13 +95,9 @@ const char* const kSetMaterial =
 // lands in our own code and this call site is the ONLY thing that exercises it.
 // Wave 1 skipped it — "Volume ported only the 12 functions our tree calls, and
 // no exe call site asks for Projection" — which was true and is what this
-// comment said until 2026-09-07. ResolveExport is unchanged and still correct:
-// it consults the port registry first, which is how it finds the port.
+// comment said until 2026-09-07. B3R: RtVolume_Frustum_Projection by name.
 Matrix* RtFrustumProjection(const Frustum* self, Matrix* ret, bool zeroToOneDepth) {
-    using Fn = Matrix* (*)(const Frustum*, Matrix*, bool);
-    static Fn fn = reinterpret_cast<Fn>(
-        ResolveExport("?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z"));
-    return fn(self, ret, zeroToOneDepth);
+    return RtVolume_Frustum_Projection(self, ret, zeroToOneDepth);
 }
 
 // Math::Matrix::operator*(const Matrix&) -> Matrix BY VALUE.
@@ -164,10 +117,7 @@ Matrix* RtMatrixMul(const Matrix* lhs, Matrix* ret, const Matrix* rhs) {
 // which is what retail's inlined `System::String::~String` calls. Retail
 // 0x1800c7ad0, ordinal 3228.
 void RtMemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    fn(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ---- DLL internals, called at their retail addresses -----------------------
@@ -648,11 +598,10 @@ extern "C" int RtGraphics_Renderer_GetFrameIndex(const Renderer* self) {
 // ============================================================================
 namespace Graphics {
 MaterialInstance::~MaterialInstance() {
-    using ArrayDtorFn = void* (*)(void*);
     uint8_t* const d = reinterpret_cast<uint8_t*>(this);
-    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004d60))(d + 0x50);
-    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004c80))(d + 0x40);
-    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004b70))(d + 0x30);
+    rtcoll::RtColl_ArrayDtorElem_180004d60(d + 0x50);
+    rtcoll::RtColl_ArrayDtorElem_180004c80(d + 0x40);
+    rtcoll::RtColl_ArrayDtorElem_180004b70(d + 0x30);
 }
 }  // namespace Graphics
 
@@ -988,62 +937,12 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
 int RtGraphicsRendererRegister() {
     int count = 0;
 
-    // --- Graphics::Camera (all five of the class's exports) -----------------
+    // --- Graphics::Camera ------------------------------------------------------
     RegisterRuntimeExport("??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z",
                           (void*)&RtGraphics_Camera_Ctor); ++count;
     RegisterRuntimeAddr(0x1800fe960, (void*)&RtGraphics_Camera_Ctor);
 
-    RegisterRuntimeExport("?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z",
-                          (void*)&RtGraphics_Camera_SetFrustum); ++count;
-    RegisterRuntimeAddr(0x1800fe5c0, (void*)&RtGraphics_Camera_SetFrustum);
-
-    RegisterRuntimeExport("?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z",
-                          (void*)&RtGraphics_Camera_SetCameraToWorld); ++count;
-    RegisterRuntimeAddr(0x1800feb00, (void*)&RtGraphics_Camera_SetCameraToWorld);
-
-    RegisterRuntimeExport("?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z",
-                          (void*)&RtGraphics_Camera_SnapCameraToWorld); ++count;
-    RegisterRuntimeAddr(0x1800fe560, (void*)&RtGraphics_Camera_SnapCameraToWorld);
-
-    RegisterRuntimeExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ",
-                          (void*)&RtGraphics_Camera_GetFrustum); ++count;
-    RegisterRuntimeAddr(0x1800fe3e0, (void*)&RtGraphics_Camera_GetFrustum);
-
-    // --- Graphics::Camera, the FIVE exports block F added -------------------
-    // With these, ALL THIRTEEN of the class's exports are ported: five here from
-    // wave 6 lane F, two in wave9_lane_gfxd.cpp (the two constructors), ONE —
-    // `operator=` — in wave28_lane_gfxbody.cpp, and these five. Every address
-    // below was checked for a pre-existing `RegisterRuntime*` across runtime/,
-    // standalone/, code/, engine/ and dx11/ (a duplicate is last-binding-wins and
-    // silently turns one body into dead code,
-    // reference_grep_for_the_port_before_writing_it.md) — AND the address grep
-    // was not enough: `operator=` came back with comments only, because
-    // wave28_lane_gfxbody.cpp registers it by NAME and never by address. It took
-    // a link error to find. Sized by the EXPORT LIST, not by the grep.
-    RegisterRuntimeExport("?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@XZ",
-                          (void*)&RtGraphics_Camera_GetCameraToWorld); ++count;
-    RegisterRuntimeAddr(0x180017e70, (void*)&RtGraphics_Camera_GetCameraToWorld);
-
-    RegisterRuntimeExport("?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@M@Z",
-                          (void*)&RtGraphics_Camera_GetCameraToWorldAtT); ++count;
-    RegisterRuntimeAddr(0x180017e10, (void*)&RtGraphics_Camera_GetCameraToWorldAtT);
-
-    RegisterRuntimeExport("?GetProjection@Camera@Graphics@@QEBA?AVMatrix@Math@@XZ",
-                          (void*)&RtGraphics_Camera_GetProjection); ++count;
-    RegisterRuntimeAddr(0x180017ed0, (void*)&RtGraphics_Camera_GetProjection);
-
-    RegisterRuntimeExport("?IsMirrored@Camera@Graphics@@QEBA_NXZ",
-                          (void*)&RtGraphics_Camera_IsMirrored); ++count;
-    RegisterRuntimeAddr(0x1800fe480, (void*)&RtGraphics_Camera_IsMirrored);
-
-    RegisterRuntimeExport("?SetZUp@Camera@Graphics@@QEAAX_N@Z",
-                          (void*)&RtGraphics_Camera_SetZUp); ++count;
-    RegisterRuntimeAddr(0x1800fe550, (void*)&RtGraphics_Camera_SetZUp);
-
-    // ??4Camera@ (0x180017c40) is registered in wave28_lane_gfxbody.cpp. NOT
-    // duplicated here — see the note above its door.
-
-    // --- Graphics::Renderer (4 of the 6 rows this lane owns) ----------------
+    // --- Graphics::Renderer ----------------------------------------------------
     RegisterRuntimeExport("??0Renderer@Graphics@@QEAA@XZ",
                           (void*)&RtGraphics_Renderer_Ctor); ++count;
     RegisterRuntimeAddr(0x180105180, (void*)&RtGraphics_Renderer_Ctor);
@@ -1051,72 +950,6 @@ int RtGraphicsRendererRegister() {
     RegisterRuntimeExport("??1Renderer@Graphics@@QEAA@XZ",
                           (void*)&RtGraphics_Renderer_Dtor); ++count;
     RegisterRuntimeAddr(0x1800180a0, (void*)&RtGraphics_Renderer_Dtor);
-
-    RegisterRuntimeExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ",
-                          (void*)&RtGraphics_Renderer_GetCullCamera); ++count;
-    RegisterRuntimeAddr(0x180017f90, (void*)&RtGraphics_Renderer_GetCullCamera);
-
-    RegisterRuntimeExport("?GetShader@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetShader); ++count;
-    RegisterRuntimeAddr(0x180018010, (void*)&RtGraphics_Renderer_GetShader);
-
-    // --- Graphics::Renderer, the ELEVEN accessors block F added -------------
-    // All eleven are one to six instructions, read as disassembly this pass, and
-    // all eleven addresses came back with zero pre-existing registrations.
-    RegisterRuntimeExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z",
-                          (void*)&RtGraphics_Renderer_GetCullCameraAt); ++count;
-    RegisterRuntimeAddr(0x180017fd0, (void*)&RtGraphics_Renderer_GetCullCameraAt);
-
-    RegisterRuntimeExport("?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ",
-                          (void*)&RtGraphics_Renderer_GetCamera); ++count;
-    RegisterRuntimeAddr(0x180017f70, (void*)&RtGraphics_Renderer_GetCamera);
-
-    RegisterRuntimeExport("?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z",
-                          (void*)&RtGraphics_Renderer_GetCameraAt); ++count;
-    RegisterRuntimeAddr(0x180017fb0, (void*)&RtGraphics_Renderer_GetCameraAt);
-
-    RegisterRuntimeExport("?GetSceneGroup@Renderer@Graphics@@QEBAAEBUSceneGroup@12@H@Z",
-                          (void*)&RtGraphics_Renderer_GetSceneGroup); ++count;
-    RegisterRuntimeAddr(0x180018090, (void*)&RtGraphics_Renderer_GetSceneGroup);
-
-    RegisterRuntimeExport("?GetMaterialTypeFlags@Renderer@Graphics@@QEBAIXZ",
-                          (void*)&RtGraphics_Renderer_GetMaterialTypeFlags); ++count;
-    RegisterRuntimeAddr(0x180017ff0, (void*)&RtGraphics_Renderer_GetMaterialTypeFlags);
-
-    RegisterRuntimeExport("?GetCurrentSceneGroup@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetCurrentSceneGroup); ++count;
-    RegisterRuntimeAddr(0x180018030, (void*)&RtGraphics_Renderer_GetCurrentSceneGroup);
-
-    RegisterRuntimeExport("?GetAlphaT@Renderer@Graphics@@QEBAMXZ",
-                          (void*)&RtGraphics_Renderer_GetAlphaT); ++count;
-    RegisterRuntimeAddr(0x180018040, (void*)&RtGraphics_Renderer_GetAlphaT);
-
-    RegisterRuntimeExport("?SetShaderDetail@Renderer@Graphics@@QEAAXH@Z",
-                          (void*)&RtGraphics_Renderer_SetShaderDetail); ++count;
-    RegisterRuntimeAddr(0x180018050, (void*)&RtGraphics_Renderer_SetShaderDetail);
-
-    RegisterRuntimeExport("?GetShaderDetail@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetShaderDetail); ++count;
-    RegisterRuntimeAddr(0x180018060, (void*)&RtGraphics_Renderer_GetShaderDetail);
-
-    RegisterRuntimeExport("?GetDetailId@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetDetailId); ++count;
-    RegisterRuntimeAddr(0x180018070, (void*)&RtGraphics_Renderer_GetDetailId);
-
-    RegisterRuntimeExport("?GetFrameIndex@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetFrameIndex); ++count;
-    RegisterRuntimeAddr(0x180018080, (void*)&RtGraphics_Renderer_GetFrameIndex);
-
-    // --- Graphics::MaterialInstance (2 rows; ENDGAME B.3.9 GFX: the ??0 door
-    // 0x180103980 is retired -- the class is built by its real ctor) --------
-
-    RegisterRuntimeExport("?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_SetMaterial); ++count;
-    RegisterRuntimeAddr(0x180103340, (void*)&RtGraphics_MaterialInstance_SetMaterial);
-
-    RegisterRuntimeExport("?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_AddTexture); ++count;
-    RegisterRuntimeAddr(0x180103350, (void*)&RtGraphics_MaterialInstance_AddTexture);
 
     return count;
 }

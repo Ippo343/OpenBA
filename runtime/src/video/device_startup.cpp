@@ -94,6 +94,8 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/system/Error.h"
 #include "../../types/video/Device.h"
 #include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
 #include "../../types/application/Application.h"  // ENDGAME B.3.7 callers (K5)
@@ -107,12 +109,6 @@ using RtVideo::GraphicsInterface;
 using RtVideo::InterfaceSlot;
 using RtVideo::RefreshRate;
 
-// Declared locally rather than by including standalone/resolve.h (PLAN §4.1
-// decision 1). Byte-identical to array.cpp:133.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-void*     ResolveExport(const char* mangled_name);
-
 // The Win32 half (device_startup_win.cpp): the two message callbacks whose
 // ADDRESSES PlatformStartup stores, and the EnumDisplaySettingsW probe.
 extern "C" int  RtVideo_Device_SizeWindow(void* hwnd, unsigned msg, uint64_t w, int64_t l);
@@ -124,22 +120,6 @@ extern "C" int  RtVideo_Device_MoveWindow(void* hwnd, unsigned msg, uint64_t w, 
 extern "C" int  RtVideo_Device_GetDefaultResolution(void* self, const void* adapter);
 
 namespace {
-
-// ---------------------------------------------------------------------------
-// The allocator boundary. Cache a hit, RETRY a miss.
-// ---------------------------------------------------------------------------
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
 
 // The two exported DATA singletons these bodies read. Both minted, so both keep
 // working with the DLL absent.
@@ -156,15 +136,6 @@ Configuration** ConfigSlot() {
 void** AppSlot() {
     // The class static since ENDGAME B.3.9 ENG (the minted row is redirected onto it).
     return reinterpret_cast<void**>(&::Application::Application::_singleton);
-}
-
-// `?SetText@Error@System@@SAXPEBD_N@Z` — ported in Wave 2
-// (runtime/src/system/error.cpp), reached by NAME so the port registry wins.
-void ErrorSetText(const char* text, bool append) {
-    using Fn = void (*)(const char*, bool);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("?SetText@Error@System@@SAXPEBD_N@Z"));
-    if (fn) fn(text, append);
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +176,7 @@ inline void GrowFor(ArrayHdr* dst, const ArrayHdr* src, int stride, int align) {
     if (n > dst->capacity) {
         dst->capacity = n;
         if (n == old + 1 && old != 0) dst->capacity = n * 3;
-        dst->data = MemAlloc(static_cast<uint64_t>(
+        dst->data = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
                         static_cast<int64_t>(dst->capacity) * stride), align);
     }
 }
@@ -223,13 +194,13 @@ inline void GrowFor(ArrayHdr* dst, const ArrayHdr* src, int stride, int align) {
 // ============================================================================
 extern "C" void RtVideo_ArrayRefreshDtor(void* arr) {
     ArrayHdr* a = static_cast<ArrayHdr*>(arr);
-    if (a->data) MemFree(a->data);
+    if (a->data) System::MemoryAllocator::MemFree(a->data);
     a->data = nullptr;
     *reinterpret_cast<uint64_t*>(&a->size) = 0;
 }
 extern "C" void RtVideo_ArrayBoolDtor(void* arr) {
     ArrayHdr* a = static_cast<ArrayHdr*>(arr);
-    if (a->data) MemFree(a->data);
+    if (a->data) System::MemoryAllocator::MemFree(a->data);
     a->data = nullptr;
     *reinterpret_cast<uint64_t*>(&a->size) = 0;
 }
@@ -249,7 +220,7 @@ extern "C" void RtVideo_ArrayModeElemDestroy(void* /*unused*/, void* data, int32
     uint8_t* e = static_cast<uint8_t*>(data) + 8;
     for (int64_t i = count; i != 0; --i) {
         void* p = *reinterpret_cast<void**>(e);
-        if (p) MemFree(p);
+        if (p) System::MemoryAllocator::MemFree(p);
         *reinterpret_cast<uint64_t*>(e)     = 0;
         *reinterpret_cast<uint64_t*>(e + 8) = 0;
         e += 0x18;
@@ -262,7 +233,7 @@ extern "C" void RtVideo_ArrayModeElemDestroy(void* /*unused*/, void* data, int32
 extern "C" void RtVideo_ArrayModeDtor(void* arr) {
     ArrayHdr* a = static_cast<ArrayHdr*>(arr);
     RtVideo_ArrayModeElemDestroy(arr, a->data, a->size);
-    if (a->data) MemFree(a->data);
+    if (a->data) System::MemoryAllocator::MemFree(a->data);
     a->data = nullptr;
     *reinterpret_cast<uint64_t*>(&a->size) = 0;
 }
@@ -595,7 +566,7 @@ bool Video::Device::CreateVideoInterface(int index) {
         // the player sees; passing the DLL's pointer would fault. This is the
         // one place in the file where our standalone genuinely differs from
         // retail, and it is stated rather than hidden.
-        ErrorSetText("Video::Device::CreateVideoInterface: the selected renderer "
+        ::System::Error::SetText("Video::Device::CreateVideoInterface: the selected renderer "
                      "plugin did not export the expected entry points.", false);
         return false;
     }
@@ -655,7 +626,7 @@ bool Video::Device::PlatformStartup() {
     if (!Video::Device::ValidateConfiguration()) {
         // 0x1800f8283 — the shipped string at 0x1801589b0; see
         // CreateVideoInterface for why the text is ours.
-        ErrorSetText("Video::Device::PlatformStartup: no usable video "
+        ::System::Error::SetText("Video::Device::PlatformStartup: no usable video "
                      "configuration.", false);
         return false;
     }
@@ -669,7 +640,7 @@ bool Video::Device::PlatformStartup() {
     int64_t cursor = idx;
 
     if (tried[cursor] != 0) {                        // 0x1800f82e2, before the loop
-        ErrorSetText("Video::Device::PlatformStartup: no renderer interface "
+        ::System::Error::SetText("Video::Device::PlatformStartup: no renderer interface "
                      "could be started.", false);
         return false;
     }
@@ -718,7 +689,7 @@ bool Video::Device::PlatformStartup() {
     }
 
     // 0x1800f8360 — every interface tried, or the success path bailed.
-    ErrorSetText("Video::Device::PlatformStartup: no renderer interface could "
+    ::System::Error::SetText("Video::Device::PlatformStartup: no renderer interface could "
                  "be started.", false);
     return false;
 }
@@ -859,43 +830,6 @@ int RtVideoDeviceStartupRegister() {
     // after is necessary but not sufficient, because it cannot see a swap that
     // happened and was undone.
     printf("[LaneVID2] identity: device_startup.cpp built " __DATE__ " " __TIME__ "\n");
-
-    RegisterRuntimeExport("?PlatformStartup@Device@Video@@AEAA_NXZ",
-                          (void*)&RtVideo_Device_PlatformStartup); ++n;
-    RegisterRuntimeExport("?Startup@Device@Video@@QEAA_NXZ",
-                          (void*)&RtVideo_Device_Startup); ++n;
-    RegisterRuntimeExport("?PlatformShutdown@Device@Video@@AEAAXXZ",
-                          (void*)&RtVideo_Device_PlatformShutdown); ++n;
-    RegisterRuntimeExport("?Shutdown@Device@Video@@QEAAXXZ",
-                          (void*)&RtVideo_Device_Shutdown); ++n;
-    RegisterRuntimeExport("?ValidateConfiguration@Device@Video@@QEAA_NXZ",
-                          (void*)&RtVideo_Device_ValidateConfiguration); ++n;
-    RegisterRuntimeExport("?CreateVideoInterface@Device@Video@@QEAA_NH@Z",
-                          (void*)&RtVideo_Device_CreateVideoInterface); ++n;
-    RegisterRuntimeExport("?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z",
-                          (void*)&RtVideo_Device_SizeWindow); ++n;
-    RegisterRuntimeExport("?MoveWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z",
-                          (void*)&RtVideo_Device_MoveWindow); ++n;
-    RegisterRuntimeExport("?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z",
-                          (void*)&RtVideo_Device_GetDefaultResolution); ++n;
-
-    RegisterRuntimeAddr(0x1800f8260, (void*)&RtVideo_Device_PlatformStartup);
-    RegisterRuntimeAddr(0x1800f7270, (void*)&RtVideo_Device_Startup);
-    RegisterRuntimeAddr(0x1800f83f0, (void*)&RtVideo_Device_PlatformShutdown);
-    RegisterRuntimeAddr(0x1800f7280, (void*)&RtVideo_Device_Shutdown);
-    RegisterRuntimeAddr(0x1800f8830, (void*)&RtVideo_Device_ValidateConfiguration);
-    RegisterRuntimeAddr(0x1800f7930, (void*)&RtVideo_Device_CreateVideoInterface);
-    RegisterRuntimeAddr(0x1800f7d20, (void*)&RtVideo_Device_SizeWindow);
-    RegisterRuntimeAddr(0x1800f7d90, (void*)&RtVideo_Device_MoveWindow);
-    RegisterRuntimeAddr(0x1800f7540, (void*)&RtVideo_Device_GetDefaultResolution);
-
-    RegisterRuntimeAddr(0x180010760, (void*)&RtVideo_ArrayRefreshDtor);
-    RegisterRuntimeAddr(0x180009560, (void*)&RtVideo_ArrayBoolDtor);
-    RegisterRuntimeAddr(0x180010cf0, (void*)&RtVideo_ArrayModeElemDestroy);
-    RegisterRuntimeAddr(0x180010830, (void*)&RtVideo_ArrayModeDtor);
-    RegisterRuntimeAddr(0x18000fbf0, (void*)&RtVideo_ArrayRefreshAssign);
-    RegisterRuntimeAddr(0x180008b00, (void*)&RtVideo_ArrayBoolAssign);
-    RegisterRuntimeAddr(0x18000fcd0, (void*)&RtVideo_ArrayModeAssign);
 
     return n;
 }
