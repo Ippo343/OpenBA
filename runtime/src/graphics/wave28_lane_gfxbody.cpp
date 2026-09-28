@@ -508,8 +508,6 @@ extern "C" void RtGraphics_Animation_ApplyEvents(const void* self, const void* t
 // ----------------------------------------------------------------------------
 namespace {
 
-using CameraCopyCtorFn = Camera* (*)(Camera* dst, const Camera* src);   // ??0Camera@
-using CameraAssignFn   = Camera* (*)(Camera* dst, const Camera* src);   // ??4Camera@
 
 // The eh-vector ctor at 0x1800801e8 runs 0x180062950 over three 0x10-byte
 // elements, and 0x180062950 is five instructions:
@@ -1070,9 +1068,11 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
         uint8_t* const g = reinterpret_cast<uint8_t*>(r->drawGroups.GetData()) +
                            static_cast<int64_t>(idx) * 0x1f0;
         *reinterpret_cast<const void**>(g) = renderBuffer;
-        RT_EXPORT_ONCE(rtgfxbody28::CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
+        // ??4Camera@Graphics@@ (0x180017c40): the door body above, by name (it
+        // counts its calls for the [GFXBODY28] line).
+        rtgfxbody28::RtGraphics_Camera_Assign(
             reinterpret_cast<RtGraphics::Camera*>(g + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
-        RT_EXPORT_ONCE(rtgfxbody28::CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
+        rtgfxbody28::RtGraphics_Camera_Assign(
             reinterpret_cast<RtGraphics::Camera*>(g + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
         *reinterpret_cast<int32_t*>(g + 0x1b8)  = shader;
         *reinterpret_cast<uint32_t*>(g + 0x1bc) = passMask;
@@ -1083,9 +1083,10 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
     ++rtgfxbody28::g_beginGroupAppends;
     alignas(8) uint8_t temp[0x1f0];
     *reinterpret_cast<const void**>(temp) = renderBuffer;
-    RT_EXPORT_ONCE(rtgfxbody28::CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
+    // ??0Camera@Graphics@@QEAA@AEBV01@@Z (0x180017a70), the copy door, by name.
+    rtgfxd::RtGraphics_Camera_CopyCtor(
         reinterpret_cast<RtGraphics::Camera*>(temp + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
-    RT_EXPORT_ONCE(rtgfxbody28::CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
+    rtgfxd::RtGraphics_Camera_CopyCtor(
         reinterpret_cast<RtGraphics::Camera*>(temp + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
     *reinterpret_cast<int32_t*>(temp + 0x1b8)  = shader;
     *reinterpret_cast<uint32_t*>(temp + 0x1bc) = passMask;

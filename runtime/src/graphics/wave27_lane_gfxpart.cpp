@@ -88,6 +88,11 @@
 #include "../../types/graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Graphics::Renderer
 #include "../../types/graphics/Material.h"  // ENDGAME B.3.5 caller batch: Graphics::MaterialInstance
 #include "../../types/video/Context.h"      // ENDGAME B.3.5 caller batch: Video::Context
+#include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
+#include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_MaterialInstance
+#include "../../types/object/TypeInfo.h"         // Object::Base::IsDerivedFrom
+#include "../../types/system/Value.h"            // System::Random::NextGroup
+#include "../../types/system/MemoryAllocator.h"
 
 using RtGraphics::Geometry;
 using RtGraphics::Particle;
@@ -98,12 +103,6 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/ must
-// stay platform-neutral. Byte-identical to resolve.h's declaration; the linker
-// checks the two spellings agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace rtcoll {
 // Lane Q's `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) door:
@@ -152,10 +151,6 @@ inline float DegToRad() {
     return f;
 }
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
 
 inline uint8_t*       B(void* p)        { return static_cast<uint8_t*>(p); }
 inline const uint8_t* B(const void* p)  { return static_cast<const uint8_t*>(p); }
@@ -237,9 +232,9 @@ constexpr size_t kRec_SizePrv   = 0x54;
 //   +0x04..      uint32 state[624]
 // `?NextGroup@Random@System@@AEAAXXZ` (0x1800c7dd0) is the twist. AEAA means
 // PRIVATE, not unexported — this DLL exports its private members
-// (reference_aeaa_is_private_not_unexported.md) — so it is reached BY NAME.
+// (reference_aeaa_is_private_not_unexported.md); our header declares it public,
+// so it is a member call (B3R).
 // ---------------------------------------------------------------------------
-using NextGroupFn = void (*)(void* rng);
 
 // (`ParticleRng()`, the lazy name door onto ?_rng@Particle@Graphics@@, is gone:
 // ENDGAME B.3.9 GFX made it the class static `Graphics::Particle::_rng`.)
@@ -251,21 +246,9 @@ uint32_t RngNext(void* rngv) {
     uint8_t* rng = B(rngv);
     int32_t index = I32(rng, 0);
     if (index == 0) {
-        // NAME DOOR — SYMBOL: ?NextGroup@Random@System@@AEAAXXZ (0x1800c7dd0).
-        // CONDITION: private (AEAA) but EXPORTED, so a name door is the plain
-        // door, not a workaround. CONSEQUENCE: null here means the state is never
-        // regenerated and the generator repeats its last block forever; the
-        // guard below makes that visible instead of a wild call.
-        static NextGroupFn fn = nullptr;
-        static bool tried = false;
-        if (!tried) {
-            tried = true;
-            fn = reinterpret_cast<NextGroupFn>(ResolveExport("?NextGroup@Random@System@@AEAAXXZ"));
-            if (!fn)
-                std::fprintf(stderr, "[GFXPART27] ?NextGroup@Random@System@@ resolved "
-                                     "NULL -- the MT19937 state will never be twisted\n");
-        }
-        if (fn) fn(rng);
+        // ?NextGroup@Random@System@@AEAAXXZ (0x1800c7dd0): System::Random::NextGroup,
+        // the member (B3R). B.3.x bridge: `rng` is the Random's storage.
+        reinterpret_cast<System::Random*>(rng)->NextGroup();
         index = I32(rng, 0);
     }
     uint32_t y;
@@ -377,20 +360,9 @@ bool Particle::Serialize(void* streamv) {
     // name). It is the same body shape as 0x1800042a0 / 0x180005dc0, which
     // runtime/src/achievement/goal_serialize.cpp already reaches the same way,
     // and it compares against `_typeInfo` at 0x1801fa778.
-    // CONDITION: needs ResolveAddr(Module::Runtime, ...) to hand back something;
-    // at cutover it needs whatever registers 0x180014520.
-    // CONSEQUENCE: null here is a wild call, so it is checked. Skipping the call
-    // instead would leave the ExternalPtr field unconsumed and desync every
-    // later record in the stream — the silent save-desync failure family.
-    using PtrSerializeFn = void (*)(void*, Serializer*);
-    PtrSerializeFn extPtrSerialize = RtAddr<PtrSerializeFn>(0x180014520ull);
-    if (extPtrSerialize) {
-        extPtrSerialize(&_material, &ser);
-    } else {
-        std::fprintf(stderr, "[GFXPART27] Particle::Serialize: 0x180014520 unresolved -- "
-                             "the material ExternalPtr record is NOT consumed and this "
-                             "stream is now desynchronised\n");
-    }
+    // B3R: RtObject_ExternalPtrSerialize_MaterialInstance, by name.
+    RtObject_ExternalPtrSerialize_MaterialInstance(
+        reinterpret_cast<RtObject::External**>(&_material), &ser);   // B.3.x bridge
 
     if (stream->direction == rt::io::kDirectionReading && _active != 0) {
         // ADDRESS DOOR — SYMBOL: `Collection::Array<void*>::SetSize(this, int)`
@@ -398,42 +370,25 @@ bool Particle::Serialize(void* streamv) {
         // `SHL RCX,3 / MOV EDX,8` with a plain qword copy loop whose else-arm is
         // empty, i.e. stride 8, align 8, new tail UNINITIALISED — which is
         // kSpec_Fill8 in runtime/src/collection/array.cpp's J3 family exactly.
-        // CONDITION: it is NOT registered as a J3 row today, so ResolveAddr hands
-        // back the DLL's body and this call makes 0x180062110 newly `called`
-        // (reference_porting_can_grow_the_cutover_surface.md).
-        // CONSEQUENCE: null means the record array is never sized and the loop
-        // below writes past a null base. Registering it as a J3 row is this
-        // lane's declared debt — see WAVE27_LANE_GFXPART.md §6, ADDRESSEE named.
-        using ArraySetSizeFn = void (*)(void*, int32_t);
-        ArraySetSizeFn setSize = RtAddr<ArraySetSizeFn>(0x180062110ull);
-
-        // ADDRESS DOOR — SYMBOL: the pool-record constructor at retail
-        // 0x180103bf0, UNNAMED (checked by VA). It seeds a Volume::Box to
-        // (+1e8,+1e8,+1e8)/(-1e8,-1e8,-1e8), zeroes +0x18..+0x28, writes -1 at
-        // +0x2c and sizes its own sub-array at +0x18 to `particle->_subCount`
-        // through a second unnamed SetSize at 0x180061bb0.
-        // CONDITION / CONSEQUENCE: as above — null means no record is built and
-        // every slot stays whatever SetSize left, so it is checked.
-        using RecordCtorFn = void* (*)(void*, void*);
-        RecordCtorFn recordCtor = RtAddr<RecordCtorFn>(0x180103bf0ull);
-
-        if (!setSize || !recordCtor) {
-            std::fprintf(stderr, "[GFXPART27] Particle::Serialize: setSize=%p ctor=%p -- "
-                                 "the particle pool is NOT rebuilt on this load\n",
-                         (void*)setSize, (void*)recordCtor);
-        } else {
-            // The loop bound is RE-READ from `_recordCount` at the bottom and the
-            // array base RE-READ from `_records._data` at the top of each
-            // iteration, exactly as retail does (point 2 of the banner). Spelling
-            // them as members changes neither read.
-            setSize(&_records, _recordCount);
-            for (int32_t i = 0; i < _recordCount; ++i) {
-                void* p = rtcoll::MemAlloc(0x40, 8);
-                void* v = p ? recordCtor(p, this) : nullptr;
-                void** base = reinterpret_cast<void**>(_records._data);
-                base[i] = v;
-                ++g_particleSerRecords;
-            }
+        // B3R: ported as rtcoll::RtColl_ArraySetSize_180062110 and called by name.
+        //
+        // The pool-record constructor at retail 0x180103bf0, UNNAMED (checked by
+        // VA): RtGraphics_ParticlePoolRecord_Ctor (below), by name. It seeds a
+        // Volume::Box to (+1e8,+1e8,+1e8)/(-1e8,-1e8,-1e8), zeroes +0x18..+0x28,
+        // writes -1 at +0x2c and sizes its own sub-array at +0x18 to
+        // `particle->_subCount` through a second unnamed SetSize at 0x180061bb0.
+        //
+        // The loop bound is RE-READ from `_recordCount` at the bottom and the
+        // array base RE-READ from `_records._data` at the top of each
+        // iteration, exactly as retail does (point 2 of the banner). Spelling
+        // them as members changes neither read.
+        rtcoll::RtColl_ArraySetSize_180062110(&_records, _recordCount);
+        for (int32_t i = 0; i < _recordCount; ++i) {
+            void* p = rtcoll::MemAlloc(0x40, 8);
+            void* v = p ? RtGraphics_ParticlePoolRecord_Ctor(p, this) : nullptr;
+            void** base = reinterpret_cast<void**>(_records._data);
+            base[i] = v;
+            ++g_particleSerRecords;
         }
     }
 
@@ -780,16 +735,9 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
         // stores nullptr and the caller copes — so it is NOT an error here.
         void* m = RtGraphics_ParticlePool_OperatorNew();
         if (m) {
-            using RecordCtorFn = void* (*)(void*, void*);
-            // ADDRESS DOOR — SYMBOL: the pool-record ctor at 0x180103bf0,
-            // UNNAMED; the same door Particle::Serialize above opens, described
-            // in full there. CONSEQUENCE of null: an uninitialised 0x40-byte
-            // record reaches the renderer, so it is checked.
-            RecordCtorFn ctor = RtAddr<RecordCtorFn>(0x180103bf0ull);
-            rec = ctor ? ctor(m, p) : nullptr;
-            if (!ctor)
-                std::fprintf(stderr, "[GFXPART27] SetParticle: 0x180103bf0 unresolved "
-                                     "-- the new pool record is UNINITIALISED\n");
+            // The pool-record ctor at 0x180103bf0, UNNAMED; the same body
+            // Particle::Serialize above calls, by name.
+            rec = RtGraphics_ParticlePoolRecord_Ctor(m, p);
         }
     }
     pi->_boundsPtr = static_cast<RtGraphics::ParticleBoundsRecord*>(rec);
@@ -873,40 +821,17 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
 
     uint8_t* res = B(pi->_resource);
     if (res && res[kParticle_Active] == 0 && psi->_f_d8) {
-        // ADDRESS DOOR — SYMBOL: the emitter release at retail 0x180020d60,
-        // UNNAMED (checked by VA). CONDITION: reached only on the
-        // inactive-resource path. CONSEQUENCE: null leaks the previous emitter,
-        // which is a slow leak rather than a fault, so it is reported once and
-        // the body continues — matching what retail does when the pointer is
-        // already null (it skips the call).
-        using ReleaseFn = void (*)(void*);
-        ReleaseFn release = RtAddr<ReleaseFn>(0x180020d60ull);
-        if (release) release(psi->_f_d8);
-        else std::fprintf(stderr, "[GFXPART27] PSI::SetParticle: 0x180020d60 unresolved "
-                                  "-- the previous emitter is LEAKED\n");
+        // The emitter release at retail 0x180020d60, UNNAMED (checked by VA):
+        // RtGraphics_Emitter_DeleteDtor, by name. Reached only on the
+        // inactive-resource path.
+        RtGraphics_Emitter_DeleteDtor(psi->_f_d8);
     }
 
-    // NAME DOORS — ?IsDerivedFrom@Base@Object@@QEBA_NI@Z (0x1800c0390) and the
-    // ParticleSystem typeinfo DATA row. CONSEQUENCE of either being null: the
-    // derived-from test cannot be made, so this body bails rather than guessing
-    // — guessing `true` would deref a non-ParticleSystem at +0xf8.
-    using IsDerivedFn = bool (*)(const void*, uint32_t);
-    static IsDerivedFn isDerived = nullptr;
-    static const uint32_t* psTypeInfo = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        isDerived = reinterpret_cast<IsDerivedFn>(
-            ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-        psTypeInfo = &ParticleSystem::GetTypeInfo().typeId;   // ENDGAME B.3.9 TI-REST
-        if (!isDerived || !psTypeInfo)
-            std::fprintf(stderr, "[GFXPART27] PSI::SetParticle: IsDerivedFrom=%p "
-                                 "ParticleSystem::_typeInfo=%p -- no emitter is built\n",
-                         (void*)isDerived, (const void*)psTypeInfo);
-    }
-    if (!isDerived || !psTypeInfo) return;
-
-    const uint8_t* sys = isDerived(particlev, psTypeInfo[0]) ? B(particlev) : nullptr;
+    // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z (0x1800c0390), the member, against
+    // the ParticleSystem type record's id (ENDGAME B.3.9 TI-REST), read fresh.
+    const uint8_t* sys =
+        reinterpret_cast<const Object::Base*>(particlev)->IsDerivedFrom(   // B.3.x bridge
+            ParticleSystem::GetTypeInfo().typeId) ? B(particlev) : nullptr;
 
     if (B(pi->_resource)[kParticle_Active] != 0) {
         void* const* table = *reinterpret_cast<void* const* const*>(sys + 0xf8);
@@ -914,33 +839,20 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
         return;
     }
 
-    // ADDRESS DOOR — SYMBOL: the emitter allocator at retail 0x1800205a0,
-    // UNNAMED. CONDITION: the inactive-resource path only. CONSEQUENCE: retail
-    // tolerates a null result (it stores null), so a null RESULT is not an error;
-    // a null FUNCTION is, and is reported.
-    using EmitterNewFn = void* (*)();
-    EmitterNewFn emitterNew = RtAddr<EmitterNewFn>(0x1800205a0ull);
-    if (!emitterNew) {
-        std::fprintf(stderr, "[GFXPART27] PSI::SetParticle: 0x1800205a0 unresolved "
-                             "-- no emitter allocated\n");
-        psi->_f_d8 = nullptr;
-        return;
-    }
-    void* m = emitterNew();
+    // The emitter allocator at retail 0x1800205a0, UNNAMED:
+    // RtGraphics_Emitter_OperatorNew, by name. The inactive-resource path only;
+    // retail tolerates a null result (it stores null).
+    void* m = RtGraphics_Emitter_OperatorNew();
     if (m) {
         uint8_t* e = B(m);
         std::memset(e, 0, 16);                          // two zeroed qwords
         const uint32_t seed = *reinterpret_cast<const uint32_t*>(sys + 0x48);
         std::memcpy(e + 0x10, &seed, sizeof seed);
-        // ADDRESS DOOR — SYMBOL: the emitter initialiser at 0x180020e90, UNNAMED.
-        // CONSEQUENCE of null: a half-built emitter reaches Update, so it is
-        // reported and the object is still stored — which is what retail does
-        // with whatever that call leaves behind.
-        using EmitterInitFn = void (*)(void*, uint32_t);
-        EmitterInitFn init = RtAddr<EmitterInitFn>(0x180020e90ull);
-        if (init) init(m, *reinterpret_cast<const uint32_t*>(sys + 0x28));
-        else std::fprintf(stderr, "[GFXPART27] PSI::SetParticle: 0x180020e90 unresolved "
-                                  "-- the emitter is HALF-BUILT\n");
+        // The emitter initialiser at 0x180020e90, UNNAMED: the Array SetSize
+        // rtcoll::RtColl_ArraySetSize_180020e90, by name. The door typed the
+        // count as uint32_t; the body takes int — the same 32 bits in EDX.
+        rtcoll::RtColl_ArraySetSize_180020e90(
+            m, static_cast<int>(*reinterpret_cast<const uint32_t*>(sys + 0x28)));
     }
     psi->_f_d8 = m;
 }
@@ -1217,12 +1129,10 @@ extern "C" void* RtGraphics_Emitter_OperatorNew(void) {
 }
 extern "C" void RtGraphics_Emitter_OperatorDelete(void* p) {
     if (!p) return;                                    // 180020600 TEST/JZ
-    using FreeFn = void (*)(void*);
-    RtAddr<FreeFn>(0x1800c7ad0ull)(p);                 // 0x1800c7ad0 re-tests null
+    System::MemoryAllocator::MemFree(p);               // 0x1800c7ad0 re-tests null
 }
 extern "C" void* RtGraphics_Emitter_DeleteDtor(void* p) {
-    using DtorFn = void* (*)(void*);
-    RtAddr<DtorFn>(0x180021490ull)(p);                 // 180020d76  ~X (a J1 body)
+    rtcoll::RtColl_ArrayDtor_180021490(p);             // 180020d76  ~X (a J1 body)
     RtGraphics_Emitter_OperatorDelete(p);              // 180020d7e
     return p;                                          // 180020d83  MOV RAX,RBX
 }
@@ -1276,24 +1186,10 @@ extern "C" void* RtGraphics_ParticlePoolRecord_Ctor(void* recv, void* particlev)
     *reinterpret_cast<uint64_t*>(b + 0x30) = 0;
     *reinterpret_cast<uint64_t*>(b + 0x38) = 0;
 
-    // ADDRESS DOOR -- SYMBOL: 0x180061bb0, `Collection::Array<T>::SetSize` for
-    // the record's 0x58-byte live-particle slot. Ported and registered by
-    // runtime/src/collection/array.cpp in this same commit, so registry-first
-    // makes this our body; it is still reached by address because that is how
-    // retail reaches it and because array.cpp owns the family.
-    using ArraySetSizeFn = void (*)(void*, int32_t);
-    ArraySetSizeFn setSize = RtAddr<ArraySetSizeFn>(0x180061bb0ull);
-    if (setSize) {
-        setSize(b + 0x18, *reinterpret_cast<const int32_t*>(
-                              static_cast<const uint8_t*>(particlev) + 0x28));
-    } else {
-        // Retail has no such branch. Ours can only be taken if the registry AND
-        // the DLL both lack the address, which at cutover means a missing port
-        // rather than a runtime condition -- say so instead of silently
-        // shipping an unsized sub-array.
-        std::fprintf(stderr, "[GFXPART27] pool-record ctor: 0x180061bb0 unresolved "
-                             "-- the record's live-particle array is UNSIZED\n");
-    }
+    // 0x180061bb0, `Collection::Array<T>::SetSize` for the record's 0x58-byte
+    // live-particle slot: rtcoll::RtColl_ArraySetSize_180061bb0 (array.cpp), by name.
+    rtcoll::RtColl_ArraySetSize_180061bb0(b + 0x18, *reinterpret_cast<const int32_t*>(
+                                              static_cast<const uint8_t*>(particlev) + 0x28));
     return recv;
 }
 

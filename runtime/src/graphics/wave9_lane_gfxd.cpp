@@ -162,14 +162,10 @@ using rtcoll::ArraySpec;
 // converts). Rewriting the call below as `dst->drawableIds =
 // src->drawableIds;` would silently swap this deep, allocator-owning assign
 // for a shallow one — sharing `_data` between the two records and double-
-// freeing it. Left as the by-address call onto the SAME ported body
-// (registry-first, so this already reaches our `RtColl_I32ArrayAssign_
-// 18001cdf0`, not the DLL's).
+// freeing it. B3R: a call of that SAME ported body by name,
+// `rtcoll::RtColl_I32ArrayAssign_18001cdf0`.
 void RtArrayAssignI32(void* dst, const void* src) {
-    using Fn = void (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001cdf0));
-    fn(dst, src);
+    rtcoll::RtColl_I32ArrayAssign_18001cdf0(dst, src);
 }
 
 // ENDGAME B.3.2 step 2 (callers) — the `RtArrayDtorI32` forwarder that used to

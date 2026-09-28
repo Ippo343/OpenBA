@@ -177,16 +177,12 @@
 #include "../../types/graphics/Mesh.h"              // ENDGAME B.3.5 block G
 #include "../../types/graphics/AnimationManager.h"  // ENDGAME B.3.5 block G
 #include "../../types/io/Serializer.h"             // IO::ReaderWriter (B3X W0)
+#include "../../types/graphics/AnimationState.h"   // Graphics::AnimationState::Serialize, the anim-array bodies
+#include "../../types/collection/Collection.h"     // rtcoll:: the array instantiations
+#include "../../types/object/External.h"           // the ExternalPtr serializers
+#include "../../types/system/String.h"
 
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — same reasoning rt_port.h gives (resolve.h drags in <windows.h>, which
-// collides with the engine's own type/member names: <wingdi.h> declares a
-// function called `Rectangle`). This declaration must stay byte-identical to
-// resolve.h's, and animation.cpp in this same directory carries the same pair.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 // ---------------------------------------------------------------------------
 // NEGATIVE-CONTROL SEAM — COMPILED ONLY INTO tools/gfxmat24_probe.
@@ -420,17 +416,20 @@ void* MakeEncoding(RtIoSerializer* ser) {
     return enc;
 }
 
-// The ten address doors, each resolved once per call site.
-using SerExtPtrFn   = void (*)(void* field, RtIoSerializer* ser);
-using ArraySetSizeFn= void (*)(void* arrayField, int count);
-using SerStringFn   = void (*)(void* field, RtIoSerializer* ser);
-using MeshSubSerFn  = void (*)(void* field, RtIoSerializer* ser);
-using MeshSerElemFn = void (*)(RtIoSerializer* ser, int count, void* data);
-using AnimSerElemFn = void (*)(RtIoSerializer* ser, int count, void* data);
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
+// The ten callees, by name (B3R). B.3.x bridges: `RtIoSerializer` is this
+// lane's view of an rt::io::Serializer; the fields are ExternalPtr / String.
+using ArraySetSizeFn = void (*)(void* arrayField, int count);   // the probe's control 1
+inline rt::io::Serializer* AsSer(RtIoSerializer* ser) {
+    return reinterpret_cast<rt::io::Serializer*>(ser);
+}
+inline void SerExtPtrMaterial(void* field, RtIoSerializer* ser) {      // 0x180061100
+    RtObject_ExternalPtrSerialize_Material(reinterpret_cast<RtObject::External**>(field), AsSer(ser));
+}
+inline void SerExtPtrImageBuffer(void* field, RtIoSerializer* ser) {   // 0x18005d0f0
+    RtObject_ExternalPtrSerialize_ImageBuffer(reinterpret_cast<RtObject::External**>(field), AsSer(ser));
+}
+inline void SerString(void* field, RtIoSerializer* ser) {              // 0x1800c9930
+    static_cast<System::String*>(field)->Serialize(ser);
 }
 
 }  // namespace
@@ -498,7 +497,7 @@ bool MaterialInstance::Serialize(void* streamv) {
     void* enc = MakeEncoding(&ser);
 
     // The ExternalPtr<Material> at +0x28.
-    RtAddr<SerExtPtrFn>(0x180061100ull)(&_material, &ser);
+    SerExtPtrMaterial(&_material, &ser);
 
     // Control 2 is THE documented retail-vs-profile Encoding offset trap turned
     // into a negative control: a port written from the profile decompile would
@@ -516,7 +515,8 @@ bool MaterialInstance::Serialize(void* streamv) {
     int32_t n = _textures._size;
     serializeCount(n);
     if (localStream->mode == 0)
-        RtAddr<ArraySetSizeFn>(RT_GFXMAT_CORRUPT(1) ? 0x1800616c0ull : 0x180061880ull)(
+        (RT_GFXMAT_CORRUPT(1) ? ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_1800616c0)
+                              : ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_180061880))(
             &_textures, n);
     {
         uint8_t* p = reinterpret_cast<uint8_t*>(_textures._data);
@@ -527,8 +527,8 @@ bool MaterialInstance::Serialize(void* streamv) {
         // latches the bound in EDI, nothing under the loop can resize the
         // array, so a re-read is genuinely unobservable here.
         for (int32_t i = 0; i < (RT_GFXMAT_CORRUPT(6) ? _textures._size : n); ++i) {
-            RtAddr<SerStringFn>(0x1800c9930ull)(p, &ser);
-            RtAddr<SerExtPtrFn>(0x18005d0f0ull)(p + 8, &ser);
+            SerString(p, &ser);
+            SerExtPtrImageBuffer(p + 8, &ser);
             p += stride;                                     // static_asserted 0x10
             ++g_matSerTextures;
         }
@@ -538,12 +538,13 @@ bool MaterialInstance::Serialize(void* streamv) {
     n = _constants._size;
     serializeCount(n);
     if (localStream->mode == 0)
-        RtAddr<ArraySetSizeFn>(RT_GFXMAT_CORRUPT(1) ? 0x180061880ull : 0x1800616c0ull)(
+        (RT_GFXMAT_CORRUPT(1) ? ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_180061880)
+                              : ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_1800616c0))(
             &_constants, n);
     {
         uint8_t* p = reinterpret_cast<uint8_t*>(_constants._data);
         for (int32_t i = n; i > 0; --i) {
-            RtAddr<SerStringFn>(0x1800c9930ull)(p, &ser);
+            SerString(p, &ser);
             AsRw(enc)->SerializeFloatArray(
                 RT_GFXMAT_CORRUPT(5) ? 3 : 4, reinterpret_cast<float*>(p + 8), nullptr);
             p += sizeof(RtGraphics::MaterialConstant);       // static_asserted 0x18
@@ -621,7 +622,8 @@ void MeshInstance::Serialize(IO::Serializer& serializer) {
     // `IO::Serializer` describes.
     RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(&serializer);  // B.3.5 bridge
 
-    RtAddr<MeshSubSerFn>(0x1800fe250ull)(&_animation, ser);       // +0xd8
+    reinterpret_cast<Graphics::AnimationState*>(&_animation)      // +0xd8, 0x1800fe250
+        ->Graphics::AnimationState::Serialize(serializer);        // B.3.x bridge
 
     int32_t n = _materials._size;                                 // +0xd0
     void* enc = ser->encoding;
@@ -631,9 +633,10 @@ void MeshInstance::Serialize(IO::Serializer& serializer) {
     // the disassembly is `MOV RAX,[RDI] ; CMP dword [RAX+8],0`, and a decompile
     // that drops one of those two derefs reads as `ser->mode`.
     if (ser->stream->mode == 0)
-        RtAddr<ArraySetSizeFn>(0x18005cc60ull)(&_materials, n);    // +0xc8
+        rtcoll::RtColl_ArraySetSize_18005cc60(&_materials, n);     // +0xc8
 
-    RtAddr<MeshSerElemFn>(0x18005d4a0ull)(ser, n, _materials._data);
+    RtObject_ExternalPtrArraySerialize_MaterialInstance(          // 0x18005d4a0
+        AsSer(ser), n, reinterpret_cast<RtObject::External**>(_materials._data));
 }
 
 }  // namespace Graphics
@@ -696,9 +699,9 @@ void AnimationManager::Serialize(IO::Serializer& s) {
     AsRw(enc)->SerializeInt(n, nullptr);
 
     if (localStream->mode == 0)
-        RtAddr<ArraySetSizeFn>(0x18005c3d0ull)(&_instances, n);  // +0x00 == this
+        rtcoll::Rt_SetSize_18005c3d0(&_instances, n);            // +0x00 == this
 
-    RtAddr<AnimSerElemFn>(0x18005c660ull)(&localSer, n, _instances._data);
+    RtGraphics_SerializeAnimInstances(AsSer(&localSer), n, _instances._data);   // 0x18005c660
 
     if (enc) delete AsRw(enc);
 }

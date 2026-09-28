@@ -40,6 +40,7 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../../types/graphics/AnimationManager.h"   // ENDGAME B.3.5 block GC
 #include "../../types/graphics/AnimationState.h"     // ditto
 #include "../../types/graphics/FrameCopyImageBuffer.h"
@@ -69,14 +70,7 @@
 
 using RtGraphics::FrameCopyImageBuffer;
 
-// ----------------------------------------------------------------------------
-// Declared here rather than pulled in from standalone/resolve.h, for the reason
-// wave21_lane_gfxbody.cpp:47 gives at length: resolve.h drags in <windows.h>,
-// whose <wingdi.h> declares a FUNCTION called `Rectangle`. These must stay
-// byte-identical to resolve.h's declarations; the linker checks them.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 namespace {
 
@@ -114,19 +108,8 @@ unsigned long long g_animUpdStates  = 0;   // inner-loop iterations; 0 == "ran, 
 // instruction-for-instruction `MemAlloc(n, 8)`, with the alignment arriving in
 // EDX instead of an immediate. Routing through MemAlloc is therefore not an
 // approximation of the inlined sequence, it is that sequence; and it keeps the
-// arena identical whether or not lane ALLOC's port is armed.
-//
-// Resolved by ADDRESS through ResolveAddr, which consults the port registry
-// FIRST (reference_resolveaddr_consults_port_registry_first.md) — the door
-// runtime/src/video/context_ctor.cpp:105 and wave21_lane_gfxbody.cpp:143
-// already use. Never the raw DLL door: that is GetProcAddress
-// (reference_rtoriginal_is_getprocaddress.md).
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
+// arena identical whether or not lane ALLOC's port is armed. B3R: it is
+// System::MemoryAllocator::MemAlloc, called directly.
 
 // ---------------------------------------------------------------------------
 // The seven named dependencies. ALL SEVEN ARE ALREADY `called` AND `ported=1`
@@ -135,10 +118,8 @@ void* MemAlloc(uint64_t bytes, int align) {
 // is the hazard; here it is measured and it is zero). The one place this lane
 // DOES grow the surface is AnimationState::Update — see its own note below.
 //
-// RT_EXPORT_ONCE, not the raw DLL door: these calls are the WORK, so they must
-// reach our ports where ports exist.
+// Called by name (B3R).
 // ---------------------------------------------------------------------------
-using VoidThisFn  = void (*)(void*);
 
 // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired.
 void ImageBufferCtor(void* p) {
@@ -149,7 +130,7 @@ void ImageBufferCtor(void* p) {
 // ENDGAME B.3.5 caller batch: `PlatformConstruct`, `PlatformDestruct` and
 // `Create` are DEFINED members of the real `Video::RenderBuffer` today, so the
 // three by-name doors become member calls and `RbCreateFn` goes with them. The
-// `??3` operator delete below stays a door (B4b-2 / B35_RULES section 11).
+// `??3` operator delete below is the class member too (B3R).
 void RenderBufferPlatformConstruct(void* p) {
     reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
 }
@@ -157,7 +138,7 @@ void RenderBufferPlatformDestruct(void* p) {
     reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
 }
 void RenderBufferOperatorDelete(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(p);
+    Video::RenderBuffer::operator delete(p);       // 0x18001f360
 }
 bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
     return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
@@ -260,7 +241,7 @@ Graphics::FrameCopyImageBuffer::FrameCopyImageBuffer() {
     p->_destTarget      = nullptr;                   // 0x1800a3d54
 
     // --- the back-buffer alias ---------------------------------------------
-    void* const image = MemAlloc(0x68, 8);           // LEA EDX,[RBP+0x68] / LEA R8D,[RBP+8]
+    void* const image = System::MemoryAllocator::MemAlloc(0x68, 8);           // LEA EDX,[RBP+0x68] / LEA R8D,[RBP+8]
     if (image != nullptr) ImageBufferCtor(image);
     p->_backBufferImage = image;                     // never the ctor's return; see banner
 
@@ -277,7 +258,7 @@ Graphics::FrameCopyImageBuffer::FrameCopyImageBuffer() {
     }
 
     // --- the RenderBuffer over it -------------------------------------------
-    void* const rb = MemAlloc(0x30, 8);              // MOV EDX,0x30 / LEA R8D,[RDX-0x28]
+    void* const rb = System::MemoryAllocator::MemAlloc(0x30, 8);              // MOV EDX,0x30 / LEA R8D,[RDX-0x28]
     if (rb != nullptr) {
         // Three qword zero stores INSIDE the success arm, then PlatformConstruct
         // — the same shape saveload_draw.cpp:497 transcribed for the standalone
@@ -696,7 +677,7 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
     // 0x1800a3be2. Same five instructions as the inlined form in the ctor, and
     // MemAlloc(0x30, 8) is that body (see the MemAlloc note above), so this is
     // spelled the same way for one arena and one reader.
-    void* const rb = MemAlloc(0x30, 8);
+    void* const rb = System::MemoryAllocator::MemAlloc(0x30, 8);
     if (rb != nullptr) {
         reinterpret_cast<uint64_t*>(rb)[0] = 0;
         reinterpret_cast<uint64_t*>(rb)[1] = 0;

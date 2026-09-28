@@ -1145,17 +1145,9 @@ bool AnimationState::Update(const System::Time& timeRef,
                     //                non-trivial element, so the cheap route is
                     //                two more ArraySpec rows, not two bodies.
                     // -----------------------------------------------------
-                    using SetSizeFn = void (*)(void* array, int newSize);
-                    static SetSizeFn nodeSetSize  = nullptr;
-                    static SetSizeFn stateSetSize = nullptr;
-                    if (!nodeSetSize)   // cache a hit, retry a miss
-                        nodeSetSize = reinterpret_cast<SetSizeFn>(
-                            ResolveAddr(Module::Runtime, 0x18005aa30));
-                    if (!stateSetSize)
-                        stateSetSize = reinterpret_cast<SetSizeFn>(
-                            ResolveAddr(Module::Runtime, 0x18005b1e0));
-                    if (nodeSetSize)  nodeSetSize(g + 0x10, 0);
-                    if (stateSetSize) stateSetSize(g + 0x20, 0);
+                    // B3R: the two instantiations by body name.
+                    rtcoll::Rt_SetSize_18005aa30(g + 0x10, 0);
+                    rtcoll::Rt_SetSize_18005b1e0(g + 0x20, 0);
                 }
             }
         }
@@ -1285,20 +1277,15 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
                     // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8b, faithfully):
                     // RtGraphics_Renderer_DrawItemSort, above, registered at
                     // the bottom of this file together with its 0x180063b90
-                    // selection-sort callee. ResolveAddr consults the port
-                    // registry first, so this call site needs no change.
+                    // selection-sort callee; called by name (B3R).
                     // ---------------------------------------------------------
-                    using SortFn = void (*)(void* data, int32_t count, void* scratch);
-                    static SortFn sort = nullptr;
-                    if (!sort)   // cache a hit, retry a miss — rt_port.h's contract
-                        sort = reinterpret_cast<SortFn>(
-                            ResolveAddr(Module::Runtime, 0x180062d60));
                     // Retail hands it its OWN unused R8 home slot (X+0x18) as
                     // scratch — a float argument in XMM2 leaves that slot free.
                     // Four qwords is strictly more than the 16 bytes retail's
                     // window can hold.
                     uint64_t scratch[4];
-                    if (sort) { sort(list._data, list._size, scratch); ++rtgfxbig::g_drawSorts; }
+                    rtgfxbig::RtGraphics_Renderer_DrawItemSort(list._data, list._size, scratch);
+                    ++rtgfxbig::g_drawSorts;
                 }
             }
 

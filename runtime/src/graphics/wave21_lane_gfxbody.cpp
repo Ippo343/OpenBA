@@ -33,6 +33,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/VideoProgram.h"   // ENDGAME B.3.5 caller batch
 #include "../../types/video/Context.h"
@@ -44,15 +45,6 @@ using RtGraphics::MaterialParameterSet;
 using RtGraphics::MaterialTexture;
 using RtVideo::Context;
 
-// ----------------------------------------------------------------------------
-// Declared here rather than pulled in from standalone/resolve.h, for the reason
-// renderer.cpp:78 gives at length: resolve.h drags in <windows.h>, whose
-// <wingdi.h> declares a FUNCTION called `Rectangle`. These must stay
-// byte-identical to resolve.h's declarations; the linker checks them.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-void*     ResolveExport(const char* mangled_name);
 
 namespace {
 
@@ -133,19 +125,8 @@ unsigned long long g_setupCalls   = 0;
 unsigned long long g_fcibNewCalls = 0;
 unsigned long long g_matNewCalls  = 0;
 
-// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z, retail 0x1800c7a50.
-//
-// Resolved by ADDRESS through ResolveAddr, which consults the port registry
-// first, exactly as runtime/src/video/context_ctor.cpp:105 does — this is the
-// door that file family already uses and sharing it keeps one allocator arena.
-// Never the raw DLL door: that is GetProcAddress, and two of them in a hot body cost
-// Wave 2 five points of sim time (reference_rtoriginal_is_getprocaddress.md).
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
+// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z, retail 0x1800c7a50, is
+// System::MemoryAllocator::MemAlloc, called directly (B3R).
 
 // ?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z, retail 0x1800f4520.
 //
@@ -195,12 +176,12 @@ void SetupShaders(void* program, Context* ctx) {
 // ============================================================================
 extern "C" void* RtGraphics_FrameCopyImageBuffer_OperatorNew(uint64_t bytes) {
     Attend("FrameCopyImageBuffer::operator new", g_fcibNewCalls);
-    return MemAlloc(bytes, 8);                          // MOV R8D,0x8 @ 0x18001eff4
+    return System::MemoryAllocator::MemAlloc(bytes, 8);                          // MOV R8D,0x8 @ 0x18001eff4
 }
 
 extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
     Attend("MaterialInstance::operator new", g_matNewCalls);
-    return MemAlloc(bytes, 8);                          // MOV R8D,0x8 @ 0x180002854
+    return System::MemoryAllocator::MemAlloc(bytes, 8);                          // MOV R8D,0x8 @ 0x180002854
 }
 
 // ============================================================================

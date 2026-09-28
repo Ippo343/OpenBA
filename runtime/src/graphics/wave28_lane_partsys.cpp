@@ -151,6 +151,11 @@
 #include "../../types/graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Renderer, Camera
 #include "../../types/graphics/Scene.h"     // ENDGAME B.3.5 caller batch: Graphics::Scene
 #include "../../types/video/Device.h"       // ENDGAME B.3.5 caller batch: Video::RenderBuffer
+#include "../../types/graphics/Material.h"  // RtGraphics_Material_OperatorDelete
+#include "../../types/collection/Collection.h"   // rtcoll::RtColl_ArrayDtor_180062320
+#include "../../types/object/TypeInfo.h"    // Object::Base::IsDerivedFrom
+#include "../../types/system/Value.h"       // System::Random::NextGroup
+#include "../../types/system/Timer.h"       // System::Timer::TicksToSeconds / SecondsToTicks
 
 using RtGraphics::Geometry;
 using RtGraphics::Particle;
@@ -225,10 +230,6 @@ inline void    SetI64(void* p, size_t o, int64_t v)   { std::memcpy(B(p) + o, &v
 inline uint32_t U32(const void* p, size_t o) { uint32_t v; std::memcpy(&v, B(p) + o, sizeof v); return v; }
 inline void    SetU32(void* p, size_t o, uint32_t v)  { std::memcpy(B(p) + o, &v, sizeof v); }
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
 
 // ---------------------------------------------------------------------------
 // Graphics::Particle's static MT19937, and the draw retail inlines.
@@ -237,7 +238,6 @@ Fn RtAddr(uintptr_t ghidra) {
 // namespace and this lane must not reshape another wave's translation unit
 // (the same decision that file records for its own Serialize helpers).
 // ---------------------------------------------------------------------------
-using NextGroupFn = void (*)(void* rng);
 
 // (`ParticleRng()`, the lazy name door onto ?_rng@Particle@Graphics@@, is gone:
 // ENDGAME B.3.9 GFX made it the class static `Graphics::Particle::_rng`.)
@@ -247,26 +247,9 @@ uint32_t RngNext(void* rngv) {
     uint8_t* rng = B(rngv);   // Particle::_rng: never null (B.3.9 GFX; the NULL-door guard is gone)
     int32_t index = I32(rng, 0);
     if (index == 0) {
-        // NAME DOOR — SYMBOL: ?NextGroup@Random@System@@AEAAXXZ (0x1800c7dd0).
-        // AEAA is PRIVATE, not unexported — this DLL exports its private
-        // members (reference_aeaa_is_private_not_unexported.md) — so a name
-        // door is the plain door. Wave 28 lane MISC ports and registers this
-        // symbol; ResolveExport is registry-aware, so after that lane merges
-        // this call lands in OUR body. Same algorithm either side (MISC
-        // verified 0x1800c7dd0 instruction-by-instruction against the Wave 2
-        // NextGroupImpl), so it is a no-behaviour-change swap — but any number
-        // measured here before that merge was measured against the DLL.
-        static NextGroupFn fn = nullptr;
-        static bool tried = false;
-        if (!tried) {
-            tried = true;
-            fn = reinterpret_cast<NextGroupFn>(
-                ResolveExport("?NextGroup@Random@System@@AEAAXXZ"));
-            if (!fn)
-                std::fprintf(stderr, "[PARTSYS28] ?NextGroup@Random@System@@ resolved "
-                                     "NULL -- the MT19937 state will never be twisted\n");
-        }
-        if (fn) fn(rng);
+        // ?NextGroup@Random@System@@AEAAXXZ (0x1800c7dd0): System::Random::NextGroup,
+        // the member (B3R). B.3.x bridge: `rng` is the Random's storage.
+        reinterpret_cast<System::Random*>(rng)->NextGroup();
         index = I32(rng, 0);
     }
     uint32_t y = U32(rng, 4 + static_cast<size_t>(static_cast<uint32_t>(index)) * 4);
@@ -297,14 +280,11 @@ inline float RngSigned(void* rng) {
 //   ?TicksToSeconds@Timer@System@@SAM_J@Z  CVTSI2SD / MULSD spt / CVTPD2PS
 //   ?SecondsToTicks@Timer@System@@SA_JM@Z  CVTSS2SD / DIVSD spt / CVTTSD2SI
 // ---------------------------------------------------------------------------
-using TicksToSecondsFn = float   (*)(int64_t);
-using SecondsToTicksFn = int64_t (*)(float);
-
 inline float TicksToSeconds(int64_t t) {
-    return RT_EXPORT_ONCE(TicksToSecondsFn, "?TicksToSeconds@Timer@System@@SAM_J@Z")(t);
+    return System::Timer::TicksToSeconds(t);
 }
 inline int64_t SecondsToTicks(float s) {
-    return RT_EXPORT_ONCE(SecondsToTicksFn, "?SecondsToTicks@Timer@System@@SA_JM@Z")(s);
+    return System::Timer::SecondsToTicks(s);
 }
 
 // ---------------------------------------------------------------------------
@@ -611,19 +591,12 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     const float dt  = TicksToSeconds(deltaTicks);   // CVTSI2SDQ/MULSD/CVTPD2PS
     const float dt2 = dt * dt;
 
-    static IsDerivedFromFn isDerived = nullptr;
-    {
-        static bool tried = false;
-        if (!tried) {
-            tried = true;
-            isDerived = reinterpret_cast<IsDerivedFromFn>(
-                ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-        }
-    }
     // CMOVNE: `sys` is the resource when the test passes and NULL when it does
-    // not — and retail reads through it either way.
+    // not — and retail reads through it either way. ?IsDerivedFrom@Base@Object@@
+    // (0x1800c0390) is the member (B3R); B.3.x bridge on the receiver.
     uint8_t* sys = nullptr;
-    if (isDerived && isDerived(resource, ParticleSystemTypeId())) sys = resource;
+    if (reinterpret_cast<const Object::Base*>(resource)->IsDerivedFrom(ParticleSystemTypeId()))
+        sys = resource;
 
     // ENDGAME B.3.5 block GC item 5. Past the run-time type test, `sys` is either a
     // real `Graphics::ParticleSystem` or NULL, so the tuning reads below go through
@@ -1029,17 +1002,14 @@ void ParticleInstance::RemoveState() {
         uint8_t* pool = *reinterpret_cast<uint8_t**>(self + 0xc8);
         if (pool) {
             ++g_piRemoveStateFree;
-            // ADDRESS DOORS. Both are UNNAMED in the shipped export directory
-            // (checked with pefile by VA, not assumed — AEAA means private, not
-            // unexported), so an address door is the only door.
-            //   0x180062320  Collection::Array<T>::~Array — one of the eleven
-            //                identical bodies runtime/src/collection/array.cpp
-            //                calls ArrayDtorImpl. It is NOT in that file's
-            //                J1 registration list; see the lane doc's RESIDUAL
-            //                for the one-line entry that would register it.
-            //   0x180061ae0  the per-TU `operator delete` (locked MemFree).
-            RtAddr<void (*)(void*)>(0x180062320)(pool + 0x18);
-            RtAddr<void (*)(void*)>(0x180061ae0)(pool);
+            // Both are UNNAMED in the shipped export directory (checked with
+            // pefile by VA), both ported, both called by body name (B3R):
+            //   0x180062320  Collection::Array<T>::~Array —
+            //                rtcoll::RtColl_ArrayDtor_180062320 (array.cpp)
+            //   0x180061ae0  the per-TU `operator delete` (locked MemFree) —
+            //                RtGraphics_Material_OperatorDelete (system/closure_batch2b.cpp)
+            rtcoll::RtColl_ArrayDtor_180062320(pool + 0x18);
+            RtGraphics_Material_OperatorDelete(pool);
             *reinterpret_cast<void**>(self + 0xc8) = nullptr;
             return;
         }
