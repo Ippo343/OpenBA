@@ -729,11 +729,8 @@ void Element::ReleaseFields() {
     // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
     if (_border != nullptr) {
         void* border = _border;
-        if (border != nullptr) {           // retail's second, redundant test
-            using DeletingDtorFn = void* (*)(void*, unsigned);
-            void** vtbl = *reinterpret_cast<void***>(border);
-            reinterpret_cast<DeletingDtorFn>(vtbl[0])(border, 1u);
-        }
+        if (border != nullptr)             // retail's second, redundant test
+            static_cast<Element*>(border)->DeletingDtor(1u);
         _border = nullptr;
     }
 

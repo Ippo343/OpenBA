@@ -29,6 +29,7 @@
 // slot 0 (free on `flags & 1`, the downward array arm on `flags & 2`).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/pathfinding/PointList.h"
 #include "runtime/types/pathfinding/IPathInfo.h"
@@ -48,11 +49,12 @@ int         g_lastMark = -1;
 void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
 
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -84,6 +86,7 @@ struct BareExternalProbe final : Object::External {
 // here) and check the marker each one leaves. Slots 1 and 2 are DECLARE_TYPE's
 // real inline bodies (ENDGAME B.3.9 TI-REST) over the class's own record, so
 // they are checked against that record, not a marker.
+template <class T>
 void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
     using DtorFn    = void* (*)(void*, unsigned);
     using NameFn    = const char* (*)(const void*);
@@ -94,19 +97,19 @@ void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
     using PtrFn     = void* (*)(void*);
     using VoidFn    = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
+    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
-    CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record.name);
-    CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record.typeId);
-    Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);  CHECK_EQ(g_lastMark, kGetFileVersion / 8);
+    CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record.name);
+    CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record.typeId);
+    Reset(); (SlotAt<VerFn, T>(raw, kGetFileVersion)(raw));  CHECK_EQ(g_lastMark, kGetFileVersion / 8);
     Reset();
-    const uint32_t r = SlotAt<CompileFn>(raw, kCompile)(raw, nullptr);
+    const uint32_t r = SlotAt<CompileFn, T>(raw, kCompile)(raw, nullptr);
     CHECK_EQ(g_lastMark, kCompile / 8);
     CHECK_EQ(r, 1u);                                    // retail's `MOV EAX,1`
-    Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr); CHECK_EQ(g_lastMark, kSerialize / 8);
-    Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);     CHECK_EQ(g_lastMark, kReconstruct / 8);
-    Reset(); SlotAt<VoidFn>(raw, kDestruct)(raw);       CHECK_EQ(g_lastMark, kDestruct / 8);
-    Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);       CHECK_EQ(g_lastMark, kConstruct / 8);
+    Reset(); (SlotAt<SerFn, T>(raw, kSerialize)(raw, nullptr)); CHECK_EQ(g_lastMark, kSerialize / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kReconstruct)(raw));     CHECK_EQ(g_lastMark, kReconstruct / 8);
+    Reset(); (SlotAt<VoidFn, T>(raw, kDestruct)(raw));       CHECK_EQ(g_lastMark, kDestruct / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kConstruct)(raw));       CHECK_EQ(g_lastMark, kConstruct / 8);
     CHECK(g_lastSelf == raw);
 
     const void* const* vt = VTableOf(raw);
@@ -115,7 +118,7 @@ void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
             CHECK(vt[i] != vt[j]);
 
     BareExternalProbe bare;
-    CHECK(vt[kCompile / 8] != VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<T>(raw, kCompile / 8) != RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
 }
 
 }  // namespace
@@ -205,7 +208,7 @@ UNIT_TEST(pathfinding_pointlist_getters_read_retails_offsets) {
 UNIT_TEST(pathfinding_pointlist_slot_order_is_retails) {
     PointListProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineOwnSlots(raw, Pathfinding::PointList::GetTypeInfo());
+    CheckNineOwnSlots<PointListProbe>(raw, Pathfinding::PointList::GetTypeInfo());
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 
@@ -218,13 +221,14 @@ UNIT_TEST(pathfinding_pointlist_qualified_call_does_not_reenter_the_door) {
     const void* minted[9] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 9; ++i) minted[i] = real[i];
-    minted[kGetFileVersion / 8] = reinterpret_cast<const void*>(&MintedPointListGetFileVersionDoor);
+    minted[RetailSlot<PointListProbe>(kGetFileVersion / 8)] =
+        reinterpret_cast<const void*>(&MintedPointListGetFileVersionDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;
     Reset();
     using VerFn = int32_t (*)(const void*);
-    const int32_t v = SlotAt<VerFn>(raw, kGetFileVersion)(raw);
+    const int32_t v = SlotAt<VerFn, PointListProbe>(raw, kGetFileVersion)(raw);
     CHECK_EQ(g_doorEntries, 1);
     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
     CHECK_EQ(v, 5);                      // retail's literal (0x18010f880)
@@ -236,28 +240,19 @@ UNIT_TEST(pathfinding_pointlist_qualified_call_does_not_reenter_the_door) {
 // ENDGAME B.3.9 ENG (B39_RULES D1/D2, rule B9-16) -- the concrete PointList.
 // ---------------------------------------------------------------------------
 namespace {
-template <typename PMF>
-uintptr_t PlSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 }  // namespace
 
 UNIT_TEST(b39_pointlist_slot_order_by_pmf) {
     using PL = Pathfinding::PointList;
-    CHECK_EQ(PlSlotOffset(&PL::DeletingDtor),   (uintptr_t)0x00);   // 0x1800713b0
-    CHECK_EQ(PlSlotOffset(&PL::TypeName),       (uintptr_t)0x08);   // 0x180070e40
-    CHECK_EQ(PlSlotOffset(&PL::Type),           (uintptr_t)0x10);   // 0x180070e20
-    CHECK_EQ(PlSlotOffset(&PL::GetFileVersion), (uintptr_t)0x18);   // 0x18010f880
-    CHECK_EQ(PlSlotOffset(&PL::Compile),        (uintptr_t)0x20);   // 0x18010f6d0
-    CHECK_EQ(PlSlotOffset(&PL::Serialize),      (uintptr_t)0x28);   // 0x18010f6e0
-    CHECK_EQ(PlSlotOffset(&PL::Reconstruct),    (uintptr_t)0x30);   // 0x180071060
-    CHECK_EQ(PlSlotOffset(&PL::Destruct),       (uintptr_t)0x38);   // 0x180071150
-    CHECK_EQ(PlSlotOffset(&PL::Construct),      (uintptr_t)0x40);   // 0x1800710e0
+    CHECK_DTOR_SLOT(PL);   // 0x1800713b0
+    CHECK_SLOT(PL, TypeName,       0x08/8);   // 0x180070e40
+    CHECK_SLOT(PL, Type,           0x10/8);   // 0x180070e20
+    CHECK_SLOT(PL, GetFileVersion, 0x18/8);   // 0x18010f880
+    CHECK_SLOT(PL, Compile,        0x20/8);   // 0x18010f6d0
+    CHECK_SLOT(PL, Serialize,      0x28/8);   // 0x18010f6e0
+    CHECK_SLOT(PL, Reconstruct,    0x30/8);   // 0x180071060
+    CHECK_SLOT(PL, Destruct,       0x38/8);   // 0x180071150
+    CHECK_SLOT(PL, Construct,      0x40/8);   // 0x1800710e0
 }
 
 // The real constructor makes retail's factory stores (0x180070f93..fd4): six
@@ -329,8 +324,8 @@ UNIT_TEST(pathfinding_ipathinfo_is_two_pure_slots_and_no_dtor_slot) {
     PathInfoProbe probe;
     void* raw = static_cast<void*>(&probe);
     using VoidFn = void (*)(void*);
-    Reset(); SlotAt<VoidFn>(raw, 0x00)(raw); CHECK_EQ(g_lastMark, 100);
-    Reset(); SlotAt<VoidFn>(raw, 0x08)(raw); CHECK_EQ(g_lastMark, 101);
+    Reset(); (SlotAt<VoidFn, PathInfoProbe>(raw, 0x00)(raw)); CHECK_EQ(g_lastMark, 100);
+    Reset(); (SlotAt<VoidFn, PathInfoProbe>(raw, 0x08)(raw)); CHECK_EQ(g_lastMark, 101);
 }
 
 UNIT_TEST(pathfinding_scene_layout) {
@@ -379,18 +374,6 @@ struct PickingMeshProbe final : Picking::PickingMesh {
     Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
 };
 
-// Itanium PMF -> vtable byte offset (the exe_class_abi_test.cpp model):
-// 1 + offset for a virtual, and adjustment 0 for single inheritance.
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
-
 
 // B7-5 pin: `Object::ExternalPtr<T>` BY VALUE travels as the bare pointer in
 // the next integer register — what `Scene::AddMesh`'s door hands the member,
@@ -437,15 +420,15 @@ UNIT_TEST(picking_pickingmesh_layout) {
 // Slot order read off the REAL header's pointers-to-virtual-member.
 UNIT_TEST(b39_pickingmesh_slot_order_by_pmf) {
     using PM = Picking::PickingMesh;
-    CHECK_EQ(SlotOffset(&PM::DeletingDtor),   (uintptr_t)0x00);   // 0x180072050
-    CHECK_EQ(SlotOffset(&PM::TypeName),       (uintptr_t)0x08);   // 0x180071ab0
-    CHECK_EQ(SlotOffset(&PM::Type),           (uintptr_t)0x10);   // 0x180071a90
-    CHECK_EQ(SlotOffset(&PM::GetFileVersion), (uintptr_t)0x18);   // 0x180122940
-    CHECK_EQ(SlotOffset(&PM::Compile),        (uintptr_t)0x20);   // 0x180122950
-    CHECK_EQ(SlotOffset(&PM::Serialize),      (uintptr_t)0x28);   // 0x180122960
-    CHECK_EQ(SlotOffset(&PM::Reconstruct),    (uintptr_t)0x30);   // 0x180071cd0
-    CHECK_EQ(SlotOffset(&PM::Destruct),       (uintptr_t)0x38);   // 0x180071db0
-    CHECK_EQ(SlotOffset(&PM::Construct),      (uintptr_t)0x40);   // 0x180071d40
+    CHECK_DTOR_SLOT(PM);   // 0x180072050
+    CHECK_SLOT(PM, TypeName,       0x08/8);   // 0x180071ab0
+    CHECK_SLOT(PM, Type,           0x10/8);   // 0x180071a90
+    CHECK_SLOT(PM, GetFileVersion, 0x18/8);   // 0x180122940
+    CHECK_SLOT(PM, Compile,        0x20/8);   // 0x180122950
+    CHECK_SLOT(PM, Serialize,      0x28/8);   // 0x180122960
+    CHECK_SLOT(PM, Reconstruct,    0x30/8);   // 0x180071cd0
+    CHECK_SLOT(PM, Destruct,       0x38/8);   // 0x180071db0
+    CHECK_SLOT(PM, Construct,      0x40/8);   // 0x180071d40
 }
 
 // The real constructor makes retail's factory stores (0x180071c03..c3f): every
@@ -532,7 +515,7 @@ UNIT_TEST(picking_pickingmesh_accessors_read_retails_offsets) {
 UNIT_TEST(picking_pickingmesh_slot_order_is_retails) {
     PickingMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineOwnSlots(raw, Picking::PickingMesh::GetTypeInfo());
+    CheckNineOwnSlots<PickingMeshProbe>(raw, Picking::PickingMesh::GetTypeInfo());
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 

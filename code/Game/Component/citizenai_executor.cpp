@@ -60,6 +60,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
+#include "Action/Action.h"     // B.3.x W0: the executor's Action slots by name
 
 namespace {
 
@@ -79,26 +80,18 @@ static inline bool MoveTickTraceOn() {
 }
 
 // ---------------------------------------------------------------------------
-// Action vtable slot signatures (return INT — bug #7).
-//   precheck (+0x20): (node, stack)
-//   main     (+0x28): (node, stack, time)
-//   exit     (+0x38): (node, stack)
+// The Action slots the executor drives, by name (Action.h; return INT — bug #7):
+//   precheck [4] AbstractImpl(stack), main [5] Execute(stack, time),
+//   exit [7] Exit(stack).
 // ---------------------------------------------------------------------------
-typedef int (*ActSlotPre_t)(void* node, void* stack);
-typedef int (*ActSlotMain_t)(void* node, void* stack, void* time);
-typedef int (*ActSlotExit_t)(void* node, void* stack);
-
 static inline int CallPre(int64_t* node, void* stack) {
-    void* vt = *reinterpret_cast<void**>(node);
-    return reinterpret_cast<ActSlotPre_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x20))(node, stack);
+    return reinterpret_cast<Action*>(node)->AbstractImpl(stack);   // B.3.x bridge (slot 4)
 }
 static inline int CallMain(int64_t* node, void* stack, void* time) {
-    void* vt = *reinterpret_cast<void**>(node);
-    return reinterpret_cast<ActSlotMain_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x28))(node, stack, time);
+    return reinterpret_cast<Action*>(node)->Execute(stack, time);   // B.3.x bridge (slot 5)
 }
 static inline void CallExit(int64_t* node, void* stack) {
-    void* vt = *reinterpret_cast<void**>(node);
-    reinterpret_cast<ActSlotExit_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x38))(node, stack);
+    reinterpret_cast<Action*>(node)->Exit(stack);   // B.3.x bridge (slot 7)
 }
 
 
@@ -120,8 +113,9 @@ static void EnsureInit() {
 //   ret != 1; CheckPtr; advance via node+0x10. After the walk: DeletePtr(stack+0x10) +
 //   re-Ctor the slot (InternalBasePtr default ctor, null internal).
 // param_1 = stack object (== CharacterComponent+0x48).
-// NOTE: in the disasm the precheck here is CALL [vt+0x20] with only RCX=node set (no
-// stack/time forwarded), so this precheck takes a single arg. Match exactly.
+// The precheck is Action slot 4 with RDX = the stack: 0x1400c4be0 `MOV RDX,RBX`
+// (RBX = RCX = param_1 from 0x1400c4bbe) before `CALL [RAX+0x20]` at 0x1400c4bea.
+// (An older note here read it as RCX-only; the disassembly loads RDX.)
 // ===========================================================================
 extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
     EnsureInit();
@@ -129,10 +123,7 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
     if (node != nullptr) {
         do {
             *reinterpret_cast<uint8_t*>(node + 3) = 1;          // node+0x18 = 1
-            // precheck +0x20 with RCX=node only (single-arg form, per disasm)
-            void* vt = *reinterpret_cast<void**>(node);
-            int iVar1 = reinterpret_cast<int(*)(void*)>(
-                *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x20))(node);
+            int iVar1 = CallPre(node, reinterpret_cast<void*>(param_1));   // slot 4 (node, stack)
             if (iVar1 != 1) break;
             node = reinterpret_cast<int64_t*>(node[2]);          // advance via node+0x10
         } while (node != nullptr);

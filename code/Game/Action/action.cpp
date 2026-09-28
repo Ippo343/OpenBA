@@ -28,7 +28,7 @@ void Action::Persist(void* stream) {
 
 // [5]-[9]: retail's shared trivial bodies.
 int  Action::Execute(void*, void*) { return 0; }   // 0x1400c4a90 XOR EAX,EAX
-void Action::Enter() {}                             // 0x1400c4b90 RET 0
+void Action::Enter(void*, void*) {}                 // 0x1400c4b90 RET 0
 void Action::Exit(void*) {}                         // 0x1400c4ba0 RET 0
 void Action::CheckEntity() {}                       // 0x1400c4a30 RET 0
 bool Action::GetTarget(void*) { return false; }     // 0x1400c4a40 XOR AL,AL

@@ -130,8 +130,7 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
     // Tear down existing controller IBP
     if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
         int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-        int64_t vt = *reinterpret_cast<int64_t*>(ctrl);
-        (*reinterpret_cast<void(**)(void*)>(vt + 0x28))(reinterpret_cast<void*>(ctrl));
+        reinterpret_cast<Tool*>(ctrl)->Shutdown();   // B.3.x bridge (slot 5)
         if (s_b60_DeletePtr) s_b60_DeletePtr(self + 0x28);
     }
 
@@ -211,13 +210,13 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
     if (*reinterpret_cast<int64_t*>(found + 4) == 0) {
         int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
         int* probe = reinterpret_cast<int*>(
-            (*reinterpret_cast<void*(**)(void*, void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x58))(
-                reinterpret_cast<void*>(ctrl), &ibpA));
+            reinterpret_cast<Tool*>(ctrl)->GetSettingType(
+                reinterpret_cast<Object::Type*>(&ibpA)));   // B.3.x bridge (slot 11, retslot)
         if (probe && *probe != 0) {
             ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
             uint32_t* setRef = reinterpret_cast<uint32_t*>(
-                (*reinterpret_cast<void*(**)(void*, void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x58))(
-                    reinterpret_cast<void*>(ctrl), &ibpA));
+                reinterpret_cast<Tool*>(ctrl)->GetSettingType(
+                    reinterpret_cast<Object::Type*>(&ibpA)));   // B.3.x bridge (slot 11, retslot)
             void* setObj = (factory && s_b60_CreateObject)
                                ? s_b60_CreateObject(factory, *setRef) : nullptr;
             void* setValidated = nullptr;
@@ -239,8 +238,7 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
     *reinterpret_cast<int64_t*>(ctrl + 0x20) = keyVal;
     *reinterpret_cast<int64_t*>(ctrl + 0x18) = setting;
     ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-    (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x20))(
-        reinterpret_cast<void*>(ctrl));
+    reinterpret_cast<Tool*>(ctrl)->Startup();   // B.3.x bridge (slot 4)
 }
 
 // ============================================================
@@ -275,7 +273,7 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 // VA dereferenced as a pointer" and sent the investigation after an unregistered slot.
 // The fault address was stale-register garbage, not a resolve failure. (Same trap family
 // as reference_byvalue_return_hidden_rdx.)
-typedef char  (*fn_ctrl_active_t)(void* ctrl, int64_t* entityRef);   // vtable+0x50
+// The slot is Tool [10] IsSelected(uint64_t* entityRef) (Player/Tool.h), called by name below.
 typedef void  (*fn_FUN_140102b60_t)(int64_t self, int v);  // 0x140102b60
 typedef void  (*fn_TradeWork_c690_t)(int64_t* listBase, void* ibp); // 0x14002c690
 // slot 0x140151768 -- member, non-trivial return AND a THIRD argument Ghidra hides.
@@ -335,9 +333,8 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
         // address as the slot's second argument (see the typedef note above).
         int64_t entityRef = *reinterpret_cast<int64_t*>(param_2);
         int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-        int64_t vt = *reinterpret_cast<int64_t*>(ctrl);
-        char active = (*reinterpret_cast<fn_ctrl_active_t*>(vt + 0x50))(
-            reinterpret_cast<void*>(ctrl), &entityRef);
+        char active = reinterpret_cast<Tool*>(ctrl)->IsSelected(
+            reinterpret_cast<uint64_t*>(&entityRef));   // B.3.x bridge (slot 10)
         // 0x140102b60 is EntityUI::SetEditMode / Toolbar::ShowGroup — resetting the
         // active tool to mode 0 when the entity it was bound to goes away. This call
         // was DEAD for the whole life of the project (0x140102b60 was ported but never

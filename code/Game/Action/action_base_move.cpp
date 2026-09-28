@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Work/Work.h"         // B.3.x W0: Work::GetTarget by name
 #include "Component/CharacterComponent.h"   // ENDGAME B.3.8 CB3: CharacterComponent::TypeId()
 #include "Component/CharacterDescription.h"
 
@@ -66,7 +67,7 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
         for (int i = 0; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
             void* comp = *slot;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == wantId) {
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantId)) ? c : nullptr;
@@ -384,8 +385,9 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
 
     // value->vtable[+0x50](value, &out) -> record ptr in 'out'.
     uintptr_t outRec = 0;
-    (*reinterpret_cast<void(**)(void*, void*)>(*reinterpret_cast<uintptr_t*>(v) + 0x50))(
-        reinterpret_cast<void*>(v), &outRec);
+    // The value is the scheduler's work IBP (gw+0x118 id map, filled by
+    // CitizenAI_impl_88a0 0x1400f88a0 with the posted Work leaves).
+    reinterpret_cast<Work*>(v)->GetTarget(&outRec);   // B.3.x bridge (slot 10, retslot)
 
     // Original copies 8 bytes (*(undefined8*)(rec+0x54)) — a9290 reads BOTH floats
     // (pair[0] = value, pair[1] = weight). Passing a single float would feed it stack

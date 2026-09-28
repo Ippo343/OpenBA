@@ -36,6 +36,7 @@
 #include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/Component.h"          // B.3.x W0: Component slots by name
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
@@ -168,9 +169,7 @@ static void BC8_ReaddDrawChildren(uintptr_t meshElem) {
     for (int k = 0; k < hc; ++k) {
         void* h = *reinterpret_cast<void**>(arr + (int64_t)k * 8);
         if (!h) continue;
-        typedef void (*Slot60_t)(void*, int);
-        void* vt = *reinterpret_cast<void**>(h);
-        ((Slot60_t)(*reinterpret_cast<uintptr_t*>((uint8_t*)vt + 0x60)))(h, 0);
+        reinterpret_cast<Component*>(h)->OnEvent(0);   // B.3.x bridge (slot 12)
     }
 }
 // Set one mesh element to `frame` (hide old via slot +0x38, SetMesh new frame, show via
@@ -178,17 +177,16 @@ static void BC8_ReaddDrawChildren(uintptr_t meshElem) {
 static void BC8_SetMeshFrame(uintptr_t meshElem, int frame) {
     int16_t cur = *reinterpret_cast<int16_t*>(meshElem + 0x166);
     if ((int)cur == frame) return;
-    typedef void (*SlotV_t)(void*);
-    void* vt = *reinterpret_cast<void**>(meshElem);
+    Component* model = reinterpret_cast<Component*>(meshElem);   // B.3.x bridge (a ModelComponent)
     if (cur >= 0)
-        ((SlotV_t)(*reinterpret_cast<uintptr_t*>((uint8_t*)vt + 0x38)))(reinterpret_cast<void*>(meshElem));
+        model->OnRemove();   // slot 7
     *reinterpret_cast<int16_t*>(meshElem + 0x166) = (int16_t)frame;
     if (frame >= 0) {
         void* modelDesc = BC8_MeshModelDesc(meshElem);
         void* framePtr = BC8_MeshFramePtr(meshElem, modelDesc, frame);
         reinterpret_cast<Graphics::MeshInstance*>(meshElem + 0x28)
             ->SetMesh(Graphics::ExternalPtrHandle{framePtr});   // B.3.5 bridge
-        ((SlotV_t)(*reinterpret_cast<uintptr_t*>((uint8_t*)vt + 0x30)))(reinterpret_cast<void*>(meshElem));
+        model->OnAdded();    // slot 6
     }
 }
 

@@ -70,6 +70,7 @@
 // retail. These tests compare GCC against GCC, which is exactly the question.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 // The shipped constant tables. The tests index through THESE, not through
 // local copies, so a test failure means the header and the ABI disagree.
@@ -119,12 +120,13 @@ uintptr_t FieldOffset(const Obj* obj, const Field* field) {
     return reinterpret_cast<uintptr_t>(field) - reinterpret_cast<uintptr_t>(obj);
 }
 
-// The one instruction all three legacy idioms compile to.
-template <typename Fn>
+// The one instruction all three legacy idioms compile to. `byteOffset` is
+// RETAIL's; T (the object's class, or the mirror's) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 // ===========================================================================
@@ -206,27 +208,27 @@ public:
 // `rw_vtbl::k*` site under runtime/src.
 void LegacySerializeInt(void* rw, int32_t* v, const char* name) {
     using Fn = void (*)(void*, int32_t*, const char*);
-    SlotAt<Fn>(rw, rw_vtbl::kScalarInt)(rw, v, name);
+    SlotAt<Fn, TestReaderWriter>(rw, rw_vtbl::kScalarInt)(rw, v, name);
 }
 void LegacySerializeUInt(void* rw, uint32_t* v, const char* name) {
     using Fn = void (*)(void*, uint32_t*, const char*);
-    SlotAt<Fn>(rw, rw_vtbl::kScalarUInt)(rw, v, name);
+    SlotAt<Fn, TestReaderWriter>(rw, rw_vtbl::kScalarUInt)(rw, v, name);
 }
 void LegacySerializeBool(void* rw, bool* v, const char* name) {
     using Fn = void (*)(void*, bool*, const char*);
-    SlotAt<Fn>(rw, rw_vtbl::kScalarBool)(rw, v, name);
+    SlotAt<Fn, TestReaderWriter>(rw, rw_vtbl::kScalarBool)(rw, v, name);
 }
 void LegacySerializeFloat(void* rw, float* v, const char* name) {
     using Fn = void (*)(void*, float*, const char*);
-    SlotAt<Fn>(rw, rw_vtbl::kScalarFloat)(rw, v, name);
+    SlotAt<Fn, TestReaderWriter>(rw, rw_vtbl::kScalarFloat)(rw, v, name);
 }
 void LegacySerializeIntArray(void* rw, int n, int32_t* p, const char* name) {
     using Fn = void (*)(void*, int, int32_t*, const char*);
-    SlotAt<Fn>(rw, rw_vtbl::kArrayInt)(rw, n, p, name);
+    SlotAt<Fn, TestReaderWriter>(rw, rw_vtbl::kArrayInt)(rw, n, p, name);
 }
 void LegacySerializeBytes(void* rw, int size, void* p, const char* name) {
     using Fn = void (*)(void*, int, void*, const char*);
-    SlotAt<Fn>(rw, rw_vtbl::kSerializeBytes)(rw, size, p, name);
+    SlotAt<Fn, TestReaderWriter>(rw, rw_vtbl::kSerializeBytes)(rw, size, p, name);
 }
 
 UNIT_TEST(raw_rw_vtbl_offsets_reach_a_real_ReaderWriter_class) {
@@ -268,13 +270,13 @@ UNIT_TEST(raw_rw_vtbl_offsets_reach_a_real_ReaderWriter_class) {
     // GetVersion forwarder reach (serializer.cpp rw_vtbl::kDtor / kGetVersion).
     Reset();
     using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn>(raw, rw_vtbl::kDtor)(raw, 1u);
+    SlotAt<DtorFn, TestBinaryReader>(raw, rw_vtbl::kDtor)(raw, 1u);
     CHECK_EQ(g_lastMark, 0);
     CHECK_EQ(g_lastArg, 1LL);
 
     Reset();
     using GetVerFn = int (*)(void*);
-    CHECK_EQ(SlotAt<GetVerFn>(raw, rw_vtbl::kGetVersion)(raw), 7);
+    CHECK_EQ((SlotAt<GetVerFn, TestBinaryReader>(raw, rw_vtbl::kGetVersion)(raw)), 7);
     CHECK_EQ(g_lastMark, 1);
 }
 
@@ -502,14 +504,14 @@ UNIT_TEST(encoding_factory_slots_sit_at_0x18_and_0x20_with_arity_three) {
 
     int marker = 0;
     Reset();
-    void* r = SlotAt<MakeRw>(raw, enc_vtbl::kCreateReader)(raw, &marker, 11);
+    void* r = SlotAt<MakeRw, TestBinaryEncoding>(raw, enc_vtbl::kCreateReader)(raw, &marker, 11);
     CHECK_EQ(g_lastMark, 200);
     CHECK_EQ(g_lastArg, 11LL);
     CHECK(r == static_cast<void*>(&marker));   // arg 2 survived: arity really is 3
     CHECK(g_lastSelf == static_cast<void*>(&enc));
 
     Reset();
-    void* w = SlotAt<MakeRw>(raw, enc_vtbl::kCreateWriter)(raw, &marker, 12);
+    void* w = SlotAt<MakeRw, TestBinaryEncoding>(raw, enc_vtbl::kCreateWriter)(raw, &marker, 12);
     CHECK_EQ(g_lastMark, 201);
     CHECK_EQ(g_lastArg, 12LL);
     CHECK(w == static_cast<void*>(&marker));
@@ -518,10 +520,10 @@ UNIT_TEST(encoding_factory_slots_sit_at_0x18_and_0x20_with_arity_three) {
     // `DeletingDtor` first here would move both factories one slot down and the
     // Serializer constructor would call GetKind() as a factory.
     using BoolFn = bool (*)(void*);
-    CHECK(SlotAt<BoolFn>(raw, 0x00)(raw) == true);    // IsBinary
-    CHECK(SlotAt<BoolFn>(raw, 0x08)(raw) == false);   // IsText
+    CHECK((SlotAt<BoolFn, TestBinaryEncoding>(raw, 0x00)(raw)) == true);    // IsBinary
+    CHECK((SlotAt<BoolFn, TestBinaryEncoding>(raw, 0x08)(raw)) == false);   // IsText
     using IntFn = int (*)(void*);
-    CHECK_EQ(SlotAt<IntFn>(raw, 0x10)(raw), 2);       // GetKind == Binary
+    CHECK_EQ((SlotAt<IntFn, TestBinaryEncoding>(raw, 0x10)(raw)), 2);       // GetKind == Binary
 }
 
 // ---------------------------------------------------------------------------
@@ -590,24 +592,24 @@ public:
                              : enc_vtbl::kCreateWriter;
         using MakeRw = void* (*)(void*, void*, int);
         readerWriter = reinterpret_cast<rt::io::ReaderWriter*>(
-            SlotAt<MakeRw>(factory, slot)(factory, this, version));
+            SlotAt<MakeRw, TestEncoding>(factory, slot)(factory, this, version));
     }
     // ??1Serializer@IO@@QEAA@XZ, retail 0x1800b99b0: slot 0 with flags == 1,
     // and retail does NOT null the field afterwards.
     ~TestSerializer() {
         if (readerWriter) {
             using Fn = void (*)(void*, unsigned);
-            SlotAt<Fn>(readerWriter, rw_vtbl::kDtor)(readerWriter, 1u);
+            SlotAt<Fn, MintedRwStorage>(readerWriter, rw_vtbl::kDtor)(readerWriter, 1u);
         }
     }
 
     void Serialize(int32_t& v, const char* name) {
         using Fn = void (*)(void*, int32_t*, const char*);
-        SlotAt<Fn>(readerWriter, rw_vtbl::kScalarInt)(readerWriter, &v, name);
+        SlotAt<Fn, MintedRwStorage>(readerWriter, rw_vtbl::kScalarInt)(readerWriter, &v, name);
     }
     void Serialize(bool& v, const char* name) {
         using Fn = void (*)(void*, bool*, const char*);
-        SlotAt<Fn>(readerWriter, rw_vtbl::kScalarBool)(readerWriter, &v, name);
+        SlotAt<Fn, MintedRwStorage>(readerWriter, rw_vtbl::kScalarBool)(readerWriter, &v, name);
     }
 
     rt::io::Stream*       stream;        // +0x00
@@ -828,17 +830,17 @@ UNIT_TEST(the_Stream_family_keeps_retail_offsets_as_real_classes) {
     // Slot 7 (+0x38) is Close on the MemoryStream branch...
     Reset();
     using VoidFn = void (*)(void*);
-    SlotAt<VoidFn>(rawMs, 0x38)(rawMs);
+    SlotAt<VoidFn, TestMemoryStream>(rawMs, 0x38)(rawMs);
     CHECK_EQ(g_lastMark, 407);
     // ...and Close on the Compressed branch too, with PreCommit at +0x40.
-    Reset(); SlotAt<VoidFn>(rawCs, 0x38)(rawCs); CHECK_EQ(g_lastMark, 408);
-    Reset(); SlotAt<VoidFn>(rawCs, 0x40)(rawCs); CHECK_EQ(g_lastMark, 409);
+    Reset(); (SlotAt<VoidFn, TestCompressedStream>(rawCs, 0x38)(rawCs)); CHECK_EQ(g_lastMark, 408);
+    Reset(); (SlotAt<VoidFn, TestCompressedStream>(rawCs, 0x40)(rawCs)); CHECK_EQ(g_lastMark, 409);
 
     // Slot 1 (GetSource) is where `??_7FileStream@` and `??_7BinaryFileStream@`
     // are byte-identical in retail, which is the whole reason
     // `file_stream.cpp`'s `NoteSlotDispatch` vptr counter exists. Two real
     // classes that do not override it share the compiler's entry as well:
-    CHECK(SlotAt<void*>(rawMs, 0x08) == SlotAt<void*>(rawCs, 0x08));
+    CHECK((SlotAt<void*, TestMemoryStream>(rawMs, 0x08)) == (SlotAt<void*, TestCompressedStream>(rawCs, 0x08)));
 }
 
 UNIT_TEST(a_derived_stream_is_reachable_through_the_base_slot_indices) {
@@ -855,7 +857,7 @@ UNIT_TEST(a_derived_stream_is_reachable_through_the_base_slot_indices) {
     uint8_t buf[4] = {0};
     Reset();
     using ReadFn = bool (*)(void*, int, void*);
-    CHECK(SlotAt<ReadFn>(raw, 0x18)(raw, 4, buf) == true);
+    CHECK((SlotAt<ReadFn, TestStream>(raw, 0x18)(raw, 4, buf)) == true);
     CHECK_EQ(g_lastMark, 500);
     CHECK_EQ(g_lastArg, 4LL);
     CHECK(g_lastSelf == raw);   // single inheritance: no this-adjustment
@@ -1182,18 +1184,18 @@ UNIT_TEST(the_real_ReaderWriter_declares_its_26_slots_in_retail_order) {
     // The three singular shapes first.
     Reset();
     using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn>(raw, rw_vtbl::kDtor)(raw, 1u);
+    SlotAt<DtorFn, order::OrderProbe>(raw, rw_vtbl::kDtor)(raw, 1u);
     CHECK_EQ(g_lastMark, rw_vtbl::kDtor / 8);
     CHECK(g_lastSelf == raw);                       // `this` unadjusted
 
     Reset();
     using IntFn = int (*)(void*);
-    SlotAt<IntFn>(raw, rw_vtbl::kGetVersion)(raw);
+    SlotAt<IntFn, order::OrderProbe>(raw, rw_vtbl::kGetVersion)(raw);
     CHECK_EQ(g_lastMark, rw_vtbl::kGetVersion / 8);
 
     Reset();
     using VoidFn = void (*)(void*);
-    SlotAt<VoidFn>(raw, rw_vtbl::kSkip)(raw);
+    SlotAt<VoidFn, order::OrderProbe>(raw, rw_vtbl::kSkip)(raw);
     CHECK_EQ(g_lastMark, rw_vtbl::kSkip / 8);
 
     // The eleven ARRAY slots, (int, T*, const char*) — one shape, eleven
@@ -1208,7 +1210,7 @@ UNIT_TEST(the_real_ReaderWriter_declares_its_26_slots_in_retail_order) {
     using ArrFn = void (*)(void*, int, void*, const char*);
     for (int i = 0; i < 11; ++i) {
         Reset();
-        SlotAt<ArrFn>(raw, arrayOffsets[i])(raw, 1, scratch, "n");
+        SlotAt<ArrFn, order::OrderProbe>(raw, arrayOffsets[i])(raw, 1, scratch, "n");
         CHECK_EQ(g_lastMark, arrayOffsets[i] / 8);
         CHECK_EQ(g_lastMark, 3 + i);          // contiguous, slots 3..13
     }
@@ -1223,13 +1225,13 @@ UNIT_TEST(the_real_ReaderWriter_declares_its_26_slots_in_retail_order) {
     using ScaFn = void (*)(void*, void*, const char*);
     for (int i = 0; i < 11; ++i) {
         Reset();
-        SlotAt<ScaFn>(raw, scalarOffsets[i])(raw, scratch, "n");
+        SlotAt<ScaFn, order::OrderProbe>(raw, scalarOffsets[i])(raw, scratch, "n");
         CHECK_EQ(g_lastMark, scalarOffsets[i] / 8);
         CHECK_EQ(g_lastMark, 14 + i);         // contiguous, slots 14..24
     }
 
     Reset();
-    SlotAt<ArrFn>(raw, rw_vtbl::kSerializeBytes)(raw, 8, scratch, "b");
+    SlotAt<ArrFn, order::OrderProbe>(raw, rw_vtbl::kSerializeBytes)(raw, 8, scratch, "b");
     CHECK_EQ(g_lastMark, rw_vtbl::kSerializeBytes / 8);
     CHECK_EQ(g_lastMark, 25);                 // the last slot in the table
 
@@ -1258,20 +1260,20 @@ UNIT_TEST(the_real_Encoding_declares_its_5_slots_in_retail_order) {
     // a ReaderWriter* and corrupt every save.
     using BoolFn = bool (*)(void*);
     using IntFn  = int (*)(void*);
-    Reset(); CHECK(SlotAt<BoolFn>(raw, 0x00)(raw) == true);  CHECK_EQ(g_lastMark, 0);
-    Reset(); CHECK(SlotAt<BoolFn>(raw, 0x08)(raw) == false); CHECK_EQ(g_lastMark, 1);
-    Reset(); CHECK_EQ(SlotAt<IntFn>(raw, 0x10)(raw), 2);     CHECK_EQ(g_lastMark, 2);
+    Reset(); CHECK((SlotAt<BoolFn, order::EncOrderProbe>(raw, 0x00)(raw)) == true);  CHECK_EQ(g_lastMark, 0);
+    Reset(); CHECK((SlotAt<BoolFn, order::EncOrderProbe>(raw, 0x08)(raw)) == false); CHECK_EQ(g_lastMark, 1);
+    Reset(); CHECK_EQ((SlotAt<IntFn, order::EncOrderProbe>(raw, 0x10)(raw)), 2);     CHECK_EQ(g_lastMark, 2);
 
     // The two factories, at the byte offsets the Serializer constructor reads
     // RAW, with retail's arity 3.
     int marker = 0;
     using MakeRw = void* (*)(void*, void*, int);
     Reset();
-    CHECK(SlotAt<MakeRw>(raw, enc_vtbl::kCreateReader)(raw, &marker, 11) == nullptr);
+    CHECK((SlotAt<MakeRw, order::EncOrderProbe>(raw, enc_vtbl::kCreateReader)(raw, &marker, 11)) == nullptr);
     CHECK_EQ(g_lastMark, enc_vtbl::kCreateReader / 8);
     CHECK_EQ(g_lastMark, 3);
     Reset();
-    CHECK(SlotAt<MakeRw>(raw, enc_vtbl::kCreateWriter)(raw, &marker, 12) == nullptr);
+    CHECK((SlotAt<MakeRw, order::EncOrderProbe>(raw, enc_vtbl::kCreateWriter)(raw, &marker, 12)) == nullptr);
     CHECK_EQ(g_lastMark, enc_vtbl::kCreateWriter / 8);
     CHECK_EQ(g_lastMark, 4);
 
@@ -1353,32 +1355,32 @@ void CheckSharedStreamSlots(void* raw) {
 
     Reset();
     using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn>(raw, kDtor)(raw, 0u);
+    SlotAt<DtorFn, IO::Stream>(raw, kDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDtor / 8);
     CHECK(g_lastSelf == raw);
 
     Reset();
     using WriteFn = bool (*)(void*, int, const void*);
-    CHECK(SlotAt<WriteFn>(raw, kWrite)(raw, 8, scratch) == true);
+    CHECK((SlotAt<WriteFn, IO::Stream>(raw, kWrite)(raw, 8, scratch)) == true);
     CHECK_EQ(g_lastMark, kWrite / 8);
 
     Reset();
     using ReadFn = bool (*)(void*, int, void*);
-    CHECK(SlotAt<ReadFn>(raw, kRead)(raw, 8, scratch) == true);
+    CHECK((SlotAt<ReadFn, IO::Stream>(raw, kRead)(raw, 8, scratch)) == true);
     CHECK_EQ(g_lastMark, kRead / 8);
 
     Reset();
     using SeekFn = bool (*)(void*, int);
-    CHECK(SlotAt<SeekFn>(raw, kSetCurrentPos)(raw, 3) == true);
+    CHECK((SlotAt<SeekFn, IO::Stream>(raw, kSetCurrentPos)(raw, 3)) == true);
     CHECK_EQ(g_lastMark, kSetCurrentPos / 8);
 
     Reset();
     using U32Fn = uint32_t (*)(void*);
-    SlotAt<U32Fn>(raw, kGetCurrentPos)(raw);
+    SlotAt<U32Fn, IO::Stream>(raw, kGetCurrentPos)(raw);
     CHECK_EQ(g_lastMark, kGetCurrentPos / 8);
 
     Reset();
-    SlotAt<U32Fn>(raw, kGetSize)(raw);
+    SlotAt<U32Fn, IO::Stream>(raw, kGetSize)(raw);
     CHECK_EQ(g_lastMark, kGetSize / 8);
 }
 
@@ -1425,7 +1427,7 @@ UNIT_TEST(the_real_MemoryStream_adds_Close_at_slot_7_and_no_PreCommit) {
     // branch. The same +0x38 means `Open` on the FileStream branch.
     Reset();
     using VoidFn = void (*)(void*);
-    SlotAt<VoidFn>(raw, streamorder::kSlot7)(raw);
+    SlotAt<VoidFn, IO::Stream>(raw, streamorder::kSlot7)(raw);
     CHECK_EQ(g_lastMark, streamorder::kSlot7 / 8);
     CHECK_EQ(g_lastMark, 7);
 
@@ -1525,7 +1527,7 @@ UNIT_TEST(the_real_FileStream_puts_Open_at_slot_7_not_Close) {
     Reset();
     using OpenFn = bool (*)(void*, const void*);
     System::Filename fn;
-    CHECK(SlotAt<OpenFn>(raw, streamorder::kSlot7)(raw, &fn) == true);
+    CHECK((SlotAt<OpenFn, IO::Stream>(raw, streamorder::kSlot7)(raw, &fn)) == true);
     CHECK_EQ(g_lastMark, streamorder::kSlot7 / 8);
     CHECK_EQ(g_lastMark, 7);
 
@@ -1554,7 +1556,7 @@ UNIT_TEST(BinaryFileStream_differs_from_FileStream_in_slot_0_only) {
     Reset();
     using OpenFn = bool (*)(void*, const void*);
     System::Filename fn;
-    SlotAt<OpenFn>(rawBfs, streamorder::kSlot7)(rawBfs, &fn);
+    SlotAt<OpenFn, IO::Stream>(rawBfs, streamorder::kSlot7)(rawBfs, &fn);
     CHECK_EQ(g_lastMark, 7);
     streamorder::CheckDistinctSlots(rawBfs, 8);
 
@@ -1655,10 +1657,11 @@ struct PkgOrderProbe : Object::External {
     ~PkgOrderProbe() = default;
 };
 
-template <typename Fn>
+// `index` is RETAIL's slot; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn PkgSlot(const void* obj, int index) {
     void* const* vt = *reinterpret_cast<void* const* const*>(obj);
-    return reinterpret_cast<Fn>(vt[index]);
+    return reinterpret_cast<Fn>(vt[RetailSlot<T>(index)]);
 }
 
 }  // namespace
@@ -1670,28 +1673,28 @@ UNIT_TEST(package_file_adds_exactly_one_virtual_at_slot_8_over_External) {
     // mis-ordered declaration in PackageFile.h would land a call on the wrong
     // body and the marker would disagree with the index.
     g_pkgMark = -1;
-    PkgSlot<void* (*)(void*, unsigned)>(&probe, 0)(&probe, 0u);
+    PkgSlot<void* (*)(void*, unsigned), PkgOrderProbe>(&probe, 0)(&probe, 0u);
     CHECK_EQ(g_pkgMark, 0);
     g_pkgMark = -1;
-    PkgSlot<const char* (*)(const void*)>(&probe, 1)(&probe);
+    PkgSlot<const char* (*)(const void*), PkgOrderProbe>(&probe, 1)(&probe);
     CHECK_EQ(g_pkgMark, 1);
     g_pkgMark = -1;
-    PkgSlot<uint32_t (*)(const void*)>(&probe, 2)(&probe);
+    PkgSlot<uint32_t (*)(const void*), PkgOrderProbe>(&probe, 2)(&probe);
     CHECK_EQ(g_pkgMark, 2);
     g_pkgMark = -1;
-    PkgSlot<int32_t (*)(const void*)>(&probe, 3)(&probe);
+    PkgSlot<int32_t (*)(const void*), PkgOrderProbe>(&probe, 3)(&probe);
     CHECK_EQ(g_pkgMark, 3);
     g_pkgMark = -1;
-    PkgSlot<uint32_t (*)(void*, const void*)>(&probe, 4)(&probe, nullptr);
+    PkgSlot<uint32_t (*)(void*, const void*), PkgOrderProbe>(&probe, 4)(&probe, nullptr);
     CHECK_EQ(g_pkgMark, 4);
     g_pkgMark = -1;
-    PkgSlot<bool (*)(void*, void*)>(&probe, 5)(&probe, nullptr);
+    PkgSlot<bool (*)(void*, void*), PkgOrderProbe>(&probe, 5)(&probe, nullptr);
     CHECK_EQ(g_pkgMark, 5);
     g_pkgMark = -1;
-    PkgSlot<void* (*)(void*)>(&probe, 6)(&probe);
+    PkgSlot<void* (*)(void*), PkgOrderProbe>(&probe, 6)(&probe);
     CHECK_EQ(g_pkgMark, 6);
     g_pkgMark = -1;
-    PkgSlot<void (*)(void*)>(&probe, 7)(&probe);
+    PkgSlot<void (*)(void*), PkgOrderProbe>(&probe, 7)(&probe);
     CHECK_EQ(g_pkgMark, 7);
 
     // *** THE ONE THAT MATTERS. *** Retail's ??_7PackageFile@IO@@6B@ has its
@@ -1702,7 +1705,7 @@ UNIT_TEST(package_file_adds_exactly_one_virtual_at_slot_8_over_External) {
     // slots in retail, and it is not. So what this pins is the C++ side of the
     // claim: External plus one added virtual puts that virtual at index 8.
     g_pkgMark = -1;
-    PkgSlot<void* (*)(void*)>(&probe, 8)(&probe);
+    PkgSlot<void* (*)(void*), PkgOrderProbe>(&probe, 8)(&probe);
     CHECK_EQ(g_pkgMark, 8);
 
     // Nine DISTINCT entries and no more. A virtual destructor anywhere in the

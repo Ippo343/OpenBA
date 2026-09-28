@@ -75,15 +75,11 @@ static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
 static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
 static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
 
-// RETAIL ReaderWriter vtable offsets, the ones these ten bodies use. The
-// profile build's table disagrees and must NOT be used to check them: its
-// NAMES win, its OFFSETS do not. Full table: runtime/types/io/Serializer.h.
+// RETAIL IO::Encoding factory offsets (Encoding has no destructor slot, so
+// these stay byte offsets; B3X_RULES X1). The ReaderWriter the factory returns
+// is dispatched BY NAME (IO::ReaderWriter, runtime/types/io/Serializer.h).
 constexpr int kEncCreateReader = 0x18;
 constexpr int kEncCreateWriter = 0x20;
-constexpr int kRwScalarBool    = 0x78;
-constexpr int kRwScalarUInt    = 0x98;
-constexpr int kRwScalarInt     = 0xa0;
-constexpr int kRwDeletingDtor  = 0x00;
 
 // Element layout constants these bodies reach through. Element.h pins them.
 constexpr int kElemFlags    = 0x34;   // OR dword [RCX+0x34],0x8000000
@@ -98,12 +94,6 @@ inline Fn RtAddr(uintptr_t ghidra) {
 
 inline void** VTableOf(const void* o) {
     return *const_cast<void***>(reinterpret_cast<void** const*>(o));
-}
-
-// slot 0 is the VECTOR deleting destructor; flag 0 = destroy WITHOUT freeing.
-inline void CallSlot0(void* self, unsigned flag) {
-    using Slot0Fn = void* (*)(void*, unsigned);
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
 }
 
 // ---- the vtables and the allocator, resolved by name ------------------------
@@ -129,25 +119,18 @@ inline void* MemAlloc(uint64_t bytes, int align) {
 }
 
 // ---- fragment 1/2: the reader-writer the encoding factory hands back --------
-inline void* MakeReaderWriter(Stream* stream, Serializer* ser) {
+// Returned as the class it is; each caller dispatches the ReaderWriter's
+// members by name (`rw->SerializeInt(v, nullptr)`, and the teardown
+// `if (rw) rw->DeletingDtor(1)`). The encoding factory call itself stays a
+// byte-offset read: IO::Encoding has no destructor slot (B3X_RULES X1).
+inline IO::ReaderWriter* MakeReaderWriter(Stream* stream, Serializer* ser) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? kEncCreateReader : kEncCreateWriter;
     using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
     void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, ser, 0);
     ser->readerWriter = rw;
-    return rw;
-}
-inline void DestroyReaderWriter(void* rw) {
-    if (rw != nullptr) {
-        using DeleteFn = void (*)(void*, int);
-        reinterpret_cast<DeleteFn>(VTableOf(rw)[kRwDeletingDtor / 8])(rw, 1);
-    }
-}
-// `CALL qword [RAX + <slot>]` with (rw, &value, nullptr).
-inline void RwScalar(void* rw, int slot, void* value) {
-    using ScalarFn = void (*)(void*, void*, const char*);
-    reinterpret_cast<ScalarFn>(VTableOf(rw)[slot / 8])(rw, value, nullptr);
+    return reinterpret_cast<IO::ReaderWriter*>(rw);                        // B.3.x bridge
 }
 
 // ---- fragment 3: the refcounted System::String release ---------------------

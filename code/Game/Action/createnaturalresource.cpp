@@ -272,7 +272,7 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
             for (int ci = 0; ci < compN && compA; ++ci) {
                 void* c = *(void**)(compA + (uintptr_t)ci * 8);
                 if (!c) continue;
-                uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)c + 0x10))(c);
+                uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
                 if (tidByName && t == tidByName) ++growthByName;
             }
             std::fprintf(stderr, "[CreateNR]   GrowthComponent::TypeId()=%u | components on entity=%d, "

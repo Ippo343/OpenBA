@@ -27,7 +27,7 @@ public:
     void Persist(void* stream) override;                       // [3] 0x1400c8ec0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c8ab0
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c8570
-    void Enter() override;                                     // [6] 0x1400c8970
+    void Enter(void* actionStack, void* time) override;        // [6] 0x1400c8970
     void Exit(void* actionStack) override;                     // [7] 0x1400c8520
     void CheckEntity() override;                               // [8] 0x1400c84d0
     bool GetTarget(void* param) override;                      // [9] 0x1400c8480

@@ -19,6 +19,7 @@
 // proves the loop bases' ctor/dtor stamp order through stand-in subclasses).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Game/InnerLoaderLoop.h"
 #include "Game/GameLoaderLoop.h"
@@ -52,17 +53,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
-constexpr uintptr_t S(int slot) { return static_cast<uintptr_t>(slot) * 8; }
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -139,53 +129,53 @@ UNIT_TEST(loop_classes_shape) {
 // ===========================================================================
 UNIT_TEST(loop_loaderloop_slots) {
     // 0x140158870: own [0], [6], [10].
-    CHECK_EQ(SlotOffset(&InnerLoaderLoop::DeletingDtor),        S(0));
-    CHECK_EQ(SlotOffset(&InnerLoaderLoop::Load),                S(6));
-    CHECK_EQ(SlotOffset(&InnerLoaderLoop::GetResourceFilename), S(10));
+    CHECK_DTOR_SLOT(InnerLoaderLoop);
+    CHECK_SLOT(InnerLoaderLoop, Load,                6);
+    CHECK_SLOT(InnerLoaderLoop, GetResourceFilename, 10);
     // 0x1401588d0: own [0] only.
-    CHECK_EQ(SlotOffset(&GameLoaderLoop::DeletingDtor),         S(0));
+    CHECK_DTOR_SLOT(GameLoaderLoop);
     // Both tables are 12 slots: the last is AllowsModChanges, UpdateLoop's.
-    CHECK_EQ(SlotOffset(&Engine::UpdateLoop::AllowsModChanges), S(11));
+    CHECK_SLOT(Engine::UpdateLoop, AllowsModChanges, 11);
 }
 
 UNIT_TEST(loop_splash_slots) {
     // 0x140158800: own [0], [1], [2], [3], [12].
-    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::DeletingDtor),     S(0));
-    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::Startup),          S(1));
-    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::Shutdown),         S(2));
-    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::Update),           S(3));
-    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::CreateLoopDialog), S(12));
+    CHECK_DTOR_SLOT(GameLoadDialogLoopT);
+    CHECK_SLOT(GameLoadDialogLoopT, Startup,          1);
+    CHECK_SLOT(GameLoadDialogLoopT, Shutdown,         2);
+    CHECK_SLOT(GameLoadDialogLoopT, Update,           3);
+    CHECK_SLOT(GameLoadDialogLoopT, CreateLoopDialog, 12);
 }
 
 UNIT_TEST(loop_menu_slots) {
     // 0x14015ed00: own [0]-[4], [6], [8]-[12]; [5] and [7] are UpdateLoop's.
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::DeletingDtor),        S(0));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Startup),             S(1));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Shutdown),            S(2));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Update),              S(3));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Draw),                S(4));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Load),                S(6));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::OnVideoError),        S(8));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::OnVideoRestart),      S(9));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::GetResourceFilename), S(10));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::AllowsModChanges),    S(11));
-    CHECK_EQ(SlotOffset(&MenuDialogLoopT::CreateLoopDialog),    S(12));
+    CHECK_DTOR_SLOT(MenuDialogLoopT);
+    CHECK_SLOT(MenuDialogLoopT, Startup,             1);
+    CHECK_SLOT(MenuDialogLoopT, Shutdown,            2);
+    CHECK_SLOT(MenuDialogLoopT, Update,              3);
+    CHECK_SLOT(MenuDialogLoopT, Draw,                4);
+    CHECK_SLOT(MenuDialogLoopT, Load,                6);
+    CHECK_SLOT(MenuDialogLoopT, OnVideoError,        8);
+    CHECK_SLOT(MenuDialogLoopT, OnVideoRestart,      9);
+    CHECK_SLOT(MenuDialogLoopT, GetResourceFilename, 10);
+    CHECK_SLOT(MenuDialogLoopT, AllowsModChanges,    11);
+    CHECK_SLOT(MenuDialogLoopT, CreateLoopDialog,    12);
 }
 
 UNIT_TEST(loop_gameupdateloop_slots) {
     // 0x14015e2f0: own [0]-[10]; [11] AllowsModChanges is UpdateLoop's.
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::DeletingDtor),        S(0));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::Startup),             S(1));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::Shutdown),            S(2));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::Update),              S(3));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::Draw),                S(4));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::DrawFailed),          S(5));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::Load),                S(6));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::SaveRestore),         S(7));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::OnVideoError),        S(8));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::OnVideoRestart),      S(9));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::GetResourceFilename), S(10));
-    CHECK_EQ(SlotOffset(&GameUpdateLoop::AllowsModChanges),    S(11));   // inherited
+    CHECK_DTOR_SLOT(GameUpdateLoop);
+    CHECK_SLOT(GameUpdateLoop, Startup,             1);
+    CHECK_SLOT(GameUpdateLoop, Shutdown,            2);
+    CHECK_SLOT(GameUpdateLoop, Update,              3);
+    CHECK_SLOT(GameUpdateLoop, Draw,                4);
+    CHECK_SLOT(GameUpdateLoop, DrawFailed,          5);
+    CHECK_SLOT(GameUpdateLoop, Load,                6);
+    CHECK_SLOT(GameUpdateLoop, SaveRestore,         7);
+    CHECK_SLOT(GameUpdateLoop, OnVideoError,        8);
+    CHECK_SLOT(GameUpdateLoop, OnVideoRestart,      9);
+    CHECK_SLOT(GameUpdateLoop, GetResourceFilename, 10);
+    CHECK_SLOT(GameUpdateLoop, AllowsModChanges,    11);   // inherited
 }
 
 // The retslot slot 12: RCX = this, RDX = the caller's InternalPtr slot, RAX =
@@ -285,15 +275,15 @@ void CheckExternalShape() {
     CHECK(std::is_final<T>::value);
     CHECK(!std::has_virtual_destructor<T>::value);
     CHECK_EQ(alignof(T), (size_t)8);
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),   S(0));
-    CHECK_EQ(SlotOffset(&T::TypeName),       S(1));
-    CHECK_EQ(SlotOffset(&T::Type),           S(2));
-    CHECK_EQ(SlotOffset(&T::GetFileVersion), S(3));
-    CHECK_EQ(SlotOffset(&T::Compile),        S(4));
-    CHECK_EQ(SlotOffset(&T::Serialize),      S(5));
-    CHECK_EQ(SlotOffset(&T::Reconstruct),    S(6));
-    CHECK_EQ(SlotOffset(&T::Destruct),       S(7));
-    CHECK_EQ(SlotOffset(&T::Construct),      S(8));   // the class's own new virtual
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,       1);
+    CHECK_SLOT(T, Type,           2);
+    CHECK_SLOT(T, GetFileVersion, 3);
+    CHECK_SLOT(T, Compile,        4);
+    CHECK_SLOT(T, Serialize,      5);
+    CHECK_SLOT(T, Reconstruct,    6);
+    CHECK_SLOT(T, Destruct,       7);
+    CHECK_SLOT(T, Construct,      8);   // the class's own new virtual
 }
 
 UNIT_TEST(loop_externals_shape_and_slots) {
@@ -320,11 +310,11 @@ void CheckGeometryShape() {
     CHECK(std::is_final<T>::value);
     CHECK(!std::has_virtual_destructor<T>::value);
     CHECK_EQ(alignof(T), (size_t)8);
-    CHECK_EQ(SlotOffset(&T::DeletingDtor), S(0));
-    CHECK_EQ(SlotOffset(&T::Update),       S(1));
-    CHECK_EQ(SlotOffset(&T::Draw),         S(2));
-    CHECK_EQ(SlotOffset(&T::AddDrawItems), S(3));
-    CHECK_EQ(SlotOffset(&Graphics::Geometry::Clean), S(8));   // the tables stop at 9
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, Update,                 1);
+    CHECK_SLOT(T, Draw,                   2);
+    CHECK_SLOT(T, AddDrawItems,           3);
+    CHECK_SLOT(Graphics::Geometry, Clean, 8);   // the tables stop at 9
 }
 
 UNIT_TEST(loop_geometry_subclasses) {
@@ -344,8 +334,8 @@ UNIT_TEST(loop_pathfinder_thread) {
     CHECK(!std::is_abstract<PathfinderThread>::value);
     CHECK(std::is_final<PathfinderThread>::value);
     CHECK(!std::has_virtual_destructor<PathfinderThread>::value);
-    CHECK_EQ(SlotOffset(&PathfinderThread::Run),         S(0));
-    CHECK_EQ(SlotOffset(&PathfinderThread::OnCompleted), S(1));   // inherited
+    CHECK_SLOT(PathfinderThread, Run,         0);
+    CHECK_SLOT(PathfinderThread, OnCompleted, 1);   // inherited
 }
 
 // TORNADO (reflected Graphics::Particle, 10 slots) AND ITS INSTANCE (10 slots)
@@ -360,20 +350,20 @@ UNIT_TEST(loop_tornado_classes) {
     CHECK(std::is_final<TornadoInstance>::value);
     CHECK(!std::has_virtual_destructor<Tornado>::value);
     CHECK(!std::has_virtual_destructor<TornadoInstance>::value);
-    CHECK_EQ(SlotOffset(&Tornado::DeletingDtor),   S(0));
-    CHECK_EQ(SlotOffset(&Tornado::TypeName),       S(1));
-    CHECK_EQ(SlotOffset(&Tornado::Type),           S(2));
-    CHECK_EQ(SlotOffset(&Tornado::GetFileVersion), S(3));
-    CHECK_EQ(SlotOffset(&Tornado::Compile),        S(4));
-    CHECK_EQ(SlotOffset(&Tornado::Serialize),      S(5));
-    CHECK_EQ(SlotOffset(&Tornado::Reconstruct),    S(6));
-    CHECK_EQ(SlotOffset(&Tornado::Destruct),       S(7));
-    CHECK_EQ(SlotOffset(&Tornado::CreateSystem),   S(8));
-    CHECK_EQ(SlotOffset(&Tornado::Construct),      S(9));
-    CHECK_EQ(SlotOffset(&TornadoInstance::DeletingDtor), S(0));
+    CHECK_DTOR_SLOT(Tornado);
+    CHECK_SLOT(Tornado, TypeName,       1);
+    CHECK_SLOT(Tornado, Type,           2);
+    CHECK_SLOT(Tornado, GetFileVersion, 3);
+    CHECK_SLOT(Tornado, Compile,        4);
+    CHECK_SLOT(Tornado, Serialize,      5);
+    CHECK_SLOT(Tornado, Reconstruct,    6);
+    CHECK_SLOT(Tornado, Destruct,       7);
+    CHECK_SLOT(Tornado, CreateSystem,   8);
+    CHECK_SLOT(Tornado, Construct,      9);
+    CHECK_DTOR_SLOT(TornadoInstance);
     void (TornadoInstance::*upd)(const System::Time&) = &TornadoInstance::Update;
-    CHECK_EQ(SlotOffset(upd), S(1));
-    CHECK_EQ(SlotOffset(&Graphics::ParticleInstance::SetParticle), S(9));
+    CHECK_PMF_SLOT(upd, 1);
+    CHECK_SLOT(Graphics::ParticleInstance, SetParticle, 9);
     CHECK_EQ(offsetof(Tornado, _particleFadeOut), (size_t)0x88);
     CHECK_EQ(offsetof(TornadoInstance, _funnelSpinDegrees), (size_t)0xd8);
 }

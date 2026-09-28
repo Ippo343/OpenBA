@@ -152,7 +152,7 @@ static inline uint32_t GetTypeId(void* obj) {
     // in standalone a partially-built entity can leave one null (crash READ of 0x0 on
     // the vtable load). Return 0 (matches no registered type-id) so the scan skips it.
     if (!obj) return 0;
-    return (*(uint32_t(**)(void*))(*(uintptr_t*)obj + 0x10))(obj);
+    return reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)
 }
 
 

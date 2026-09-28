@@ -13,6 +13,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/io/Serializer.h"
 #include "runtime/types/io/FileStream.h"
@@ -25,16 +26,6 @@
 #include <type_traits>
 
 namespace {
-
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
 
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
@@ -65,11 +56,11 @@ ReaderWriter* VisitorEncoding::CreateWriter(Serializer&, int) { return nullptr; 
 // MemAlloc(8,4) block. Retail's whole "constructor" is ONE vptr store, so the
 // real class must write the first 8 bytes and nothing after them.
 UNIT_TEST(b39_io_encoding_slot_order_by_pmf) {
-    CHECK_EQ(SlotOffset(&IO::Encoding::IsBinary),     (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::Encoding::IsText),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&IO::Encoding::GetKind),      (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&IO::Encoding::CreateReader), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&IO::Encoding::CreateWriter), (uintptr_t)0x20);
+    CHECK_SLOT(IO::Encoding, IsBinary,     0x00/8);
+    CHECK_SLOT(IO::Encoding, IsText,       0x08/8);
+    CHECK_SLOT(IO::Encoding, GetKind,      0x10/8);
+    CHECK_SLOT(IO::Encoding, CreateReader, 0x18/8);
+    CHECK_SLOT(IO::Encoding, CreateWriter, 0x20/8);
     CHECK(!std::is_abstract<IO::BinaryEncoding>::value);
     CHECK(!std::is_abstract<IO::TextEncoding>::value);
     CHECK(!std::is_abstract<IO::VisitorEncoding>::value);
@@ -203,19 +194,19 @@ UNIT_TEST(b39_io_readerwriter_family_shape) {
     CHECK(!std::has_virtual_destructor<IO::BinaryReader>::value);
     CHECK(!std::has_virtual_destructor<IO::BinaryWriter>::value);
     CHECK(!std::has_virtual_destructor<IO::Visitor>::value);
-    CHECK_EQ(SlotOffset(&IO::BinaryReader::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::BinaryReader::GetVersion),     (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&IO::BinaryReader::Skip),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&IO::BinaryReader::SerializeCharArray), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&IO::BinaryReader::SerializeChar),  (uintptr_t)0x70);
-    CHECK_EQ(SlotOffset(&IO::BinaryReader::SerializeInt),   (uintptr_t)0xA0);
-    CHECK_EQ(SlotOffset(&IO::BinaryReader::SerializeBytes), (uintptr_t)0xC8);
-    CHECK_EQ(SlotOffset(&IO::BinaryWriter::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::BinaryWriter::SerializeUInt),  (uintptr_t)0x98);
-    CHECK_EQ(SlotOffset(&IO::BinaryWriter::SerializeBytes), (uintptr_t)0xC8);
-    CHECK_EQ(SlotOffset(&IO::Visitor::DeletingDtor),        (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::Visitor::GetVersion),          (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&IO::Visitor::SerializeBytes),      (uintptr_t)0xC8);
+    CHECK_DTOR_SLOT(IO::BinaryReader);
+    CHECK_SLOT(IO::BinaryReader, GetVersion,         0x08/8);
+    CHECK_SLOT(IO::BinaryReader, Skip,               0x10/8);
+    CHECK_SLOT(IO::BinaryReader, SerializeCharArray, 0x18/8);
+    CHECK_SLOT(IO::BinaryReader, SerializeChar,      0x70/8);
+    CHECK_SLOT(IO::BinaryReader, SerializeInt,       0xA0/8);
+    CHECK_SLOT(IO::BinaryReader, SerializeBytes,     0xC8/8);
+    CHECK_DTOR_SLOT(IO::BinaryWriter);
+    CHECK_SLOT(IO::BinaryWriter, SerializeUInt,  0x98/8);
+    CHECK_SLOT(IO::BinaryWriter, SerializeBytes, 0xC8/8);
+    CHECK_DTOR_SLOT(IO::Visitor);
+    CHECK_SLOT(IO::Visitor, GetVersion,     0x08/8);
+    CHECK_SLOT(IO::Visitor, SerializeBytes, 0xC8/8);
 }
 
 // 0x1800a8a30 then 0x1800a8980: magic, -1 placeholder, version; then the
@@ -313,10 +304,10 @@ UNIT_TEST(b39_io_visitorstream_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::VisitorStream>::value);
     CHECK(!std::is_destructible<IO::VisitorStream>::value);
     CHECK(!std::has_virtual_destructor<IO::VisitorStream>::value);
-    CHECK_EQ(SlotOffset(&IO::VisitorStream::DeletingDtor),  (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::VisitorStream::GetSource),     (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&IO::VisitorStream::Write),         (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&IO::VisitorStream::GetSize),       (uintptr_t)0x30);
+    CHECK_DTOR_SLOT(IO::VisitorStream);
+    CHECK_SLOT(IO::VisitorStream, GetSource, 0x08/8);
+    CHECK_SLOT(IO::VisitorStream, Write,     0x10/8);
+    CHECK_SLOT(IO::VisitorStream, GetSize,   0x30/8);
 
     // 0x1800bb090: +0x08 = 1 (WRITING), +0x10 = a fresh VISITOR encoding,
     // +0x0c never written.
@@ -355,13 +346,13 @@ UNIT_TEST(b39_io_filestream_family_shape) {
     CHECK(!std::is_destructible<IO::TextFileStream>::value);
     CHECK(!std::has_virtual_destructor<IO::FileStream>::value);
     CHECK(!std::has_virtual_destructor<IO::TextFileStream>::value);
-    CHECK_EQ(SlotOffset(&IO::FileStream::DeletingDtor),        (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::FileStream::GetSource),           (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&IO::FileStream::Open),                (uintptr_t)0x38);   // NOT Close
-    CHECK_EQ(SlotOffset(&IO::BinaryFileStream::DeletingDtor),  (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::TextFileStream::DeletingDtor),    (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::TextFileStream::OpenWithFormat),  (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&IO::TextFileStream::Create),          (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(IO::FileStream);
+    CHECK_SLOT(IO::FileStream, GetSource, 0x08/8);
+    CHECK_SLOT(IO::FileStream, Open,      0x38/8);   // NOT Close
+    CHECK_DTOR_SLOT(IO::BinaryFileStream);
+    CHECK_DTOR_SLOT(IO::TextFileStream);
+    CHECK_SLOT(IO::TextFileStream, OpenWithFormat, 0x40/8);
+    CHECK_SLOT(IO::TextFileStream, Create,         0x48/8);
 }
 
 // 0x1800aaa10: Stream base, `_filename` null, FileInfo handle -1, size/cursor
@@ -429,9 +420,9 @@ UNIT_TEST(b39_io_memorystream_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::MemoryStream>::value);
     CHECK(!std::is_destructible<IO::MemoryStream>::value);
     CHECK(!std::has_virtual_destructor<IO::MemoryStream>::value);
-    CHECK_EQ(SlotOffset(&IO::MemoryStream::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::MemoryStream::Write),        (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&IO::MemoryStream::Close),        (uintptr_t)0x38);   // NOT Open
+    CHECK_DTOR_SLOT(IO::MemoryStream);
+    CHECK_SLOT(IO::MemoryStream, Write, 0x10/8);
+    CHECK_SLOT(IO::MemoryStream, Close, 0x38/8);   // NOT Open
 
     // +0x08 = 0, +0x18 = null, +0x20 = 0 (one byte), +0x24..+0x2b = 0, +0x10 =
     // a fresh BINARY encoding; +0x0c, +0x21..+0x23 and +0x2c never written.
@@ -473,9 +464,9 @@ UNIT_TEST(b39_io_compressedfilestream_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::CompressedFileStream>::value);
     CHECK(!std::is_destructible<IO::CompressedFileStream>::value);
     CHECK(!std::has_virtual_destructor<IO::CompressedFileStream>::value);
-    CHECK_EQ(SlotOffset(&IO::CompressedFileStream::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::CompressedFileStream::Close),        (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&IO::CompressedFileStream::PreCommit),    (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(IO::CompressedFileStream);
+    CHECK_SLOT(IO::CompressedFileStream, Close,     0x38/8);
+    CHECK_SLOT(IO::CompressedFileStream, PreCommit, 0x40/8);
 
     // 0x1800aa3d0: +0x1c = 0, +0x20 = -1, +0x28..+0x67 = 0, a BINARY encoding;
     // +0x0c, +0x18, +0x24 never written. 0x1800a93b0 then builds the
@@ -521,11 +512,11 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::PackageFile>::value);
     CHECK(!std::is_destructible<IO::PackageFile>::value);
     CHECK(!std::has_virtual_destructor<IO::PackageFile>::value);
-    CHECK_EQ(SlotOffset(&IO::PackageFile::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::PackageFile::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&IO::PackageFile::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&IO::PackageFile::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&IO::PackageFile::Construct),      (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(IO::PackageFile);
+    CHECK_SLOT(IO::PackageFile, TypeName,  0x08/8);
+    CHECK_SLOT(IO::PackageFile, Serialize, 0x28/8);
+    CHECK_SLOT(IO::PackageFile, Destruct,  0x38/8);
+    CHECK_SLOT(IO::PackageFile, Construct, 0x40/8);
 
     // 0x1800b4440's stores; +0x78..+0x7f, +0x90..+0x97, +0xad..+0xaf, +0xc4
     // and +0xd4 are never written.
@@ -576,9 +567,9 @@ UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
     CHECK(!std::is_abstract<IO::CompressedMemoryStream>::value);
     CHECK(!std::is_destructible<IO::CompressedMemoryStream>::value);
     CHECK(!std::has_virtual_destructor<IO::CompressedMemoryStream>::value);
-    CHECK_EQ(SlotOffset(&IO::CompressedMemoryStream::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::CompressedMemoryStream::Close),        (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&IO::CompressedMemoryStream::PreCommit),    (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(IO::CompressedMemoryStream);
+    CHECK_SLOT(IO::CompressedMemoryStream, Close,     0x38/8);
+    CHECK_SLOT(IO::CompressedMemoryStream, PreCommit, 0x40/8);
 
     // 0x1800a9520 = 0x1800aa3d0 (the base) + the vptr + 0x1800ae710 at +0x68.
     alignas(8) uint8_t mem[0x98];
@@ -628,8 +619,8 @@ UNIT_TEST(b39_io_persistenceworker_shape) {
     CHECK(!std::is_destructible<IO::PersistenceWorker>::value);
     CHECK(!std::has_virtual_destructor<IO::PersistenceWorker>::value);
     CHECK((std::is_base_of<System::Thread, IO::PersistenceWorker>::value));
-    CHECK_EQ(SlotOffset(&IO::PersistenceWorker::Run),         (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&IO::PersistenceWorker::OnCompleted), (uintptr_t)0x08);
+    CHECK_SLOT(IO::PersistenceWorker, Run,         0x00/8);
+    CHECK_SLOT(IO::PersistenceWorker, OnCompleted, 0x08/8);
     CHECK_EQ(sizeof(IO::PersistenceWorker), (size_t)0x80);
     CHECK_EQ(offsetof(IO::PersistenceWorker, _command), (size_t)0x3c);
 }

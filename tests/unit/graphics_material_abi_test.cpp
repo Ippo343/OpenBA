@@ -66,6 +66,7 @@
 // layouts depend on.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/graphics/Material.h"
 #include "runtime/types/graphics/GraphicsMesh.h"
@@ -96,12 +97,13 @@ void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
 
 // The one instruction every hand-inlined `(*(void***)p)[N]` caller compiles to,
-// spelled by BYTE OFFSET because that is how the tree spells it.
-template <typename Fn>
+// spelled by BYTE OFFSET because that is how the tree spells it. The offset is
+// RETAIL's; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -172,6 +174,7 @@ struct EdgeMeshProbe final : Graphics::EdgeMesh {
 // EAX with NO hidden return slot (B35_RULES section 2.5 excludes `?AW4`), so it
 // raw-calls safely too — but it is NOT marked, because three of the four classes
 // inherit `Object::External`'s body, which does not Note().
+template <class T>
 void CheckExternalFamilySlots(void* raw, const ::Object::BaseTypeInfo* record) {
     using DtorFn = void* (*)(void*, unsigned);
     using NameFn = const char* (*)(const void*);
@@ -181,34 +184,34 @@ void CheckExternalFamilySlots(void* raw, const ::Object::BaseTypeInfo* record) {
     using PtrFn  = void* (*)(void*);
     using VoidFn = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
+    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8);
     CHECK(g_lastSelf == raw);
 
     if (record) {   // DECLARE_TYPE's real slots 1/2 over the class's record (B.3.9 TI-REST)
-        CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record->name);
-        CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record->typeId);
+        CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record->name);
+        CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record->typeId);
     } else {
-        Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);
+        Reset(); SlotAt<NameFn, T>(raw, kTypeName)(raw);
         CHECK_EQ(g_lastMark, kTypeName / 8);
 
-        Reset(); SlotAt<TypeFn>(raw, kType)(raw);
+        Reset(); SlotAt<TypeFn, T>(raw, kType)(raw);
         CHECK_EQ(g_lastMark, kType / 8);
     }
 
-    Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);
+    Reset(); SlotAt<VerFn, T>(raw, kGetFileVersion)(raw);
     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
 
-    Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr);
+    Reset(); SlotAt<SerFn, T>(raw, kSerialize)(raw, nullptr);
     CHECK_EQ(g_lastMark, kSerialize / 8);
 
-    Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);
+    Reset(); SlotAt<PtrFn, T>(raw, kReconstruct)(raw);
     CHECK_EQ(g_lastMark, kReconstruct / 8);
 
-    Reset(); SlotAt<VoidFn>(raw, kDestruct)(raw);
+    Reset(); SlotAt<VoidFn, T>(raw, kDestruct)(raw);
     CHECK_EQ(g_lastMark, kDestruct / 8);
 
-    Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);
+    Reset(); SlotAt<PtrFn, T>(raw, kConstruct)(raw);
     CHECK_EQ(g_lastMark, kConstruct / 8);
 }
 
@@ -228,15 +231,15 @@ UNIT_TEST(graphics_material_slot_order_is_retails) {
     MaterialProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw, &Graphics::Material::GetTypeInfo());
+    CheckExternalFamilySlots<MaterialProbe>(raw, &Graphics::Material::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     // *** SLOT 4 IS INHERITED. *** B35_SLOTS.md:141 marks Material's [4] as
     // `0x1800066e0 ?Compile@External@Object@@ … inherited-from Object::External`,
     // so the entry at +0x20 must be byte-identical to a bare External leaf's.
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<MaterialProbe>(raw, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
 
     // `this` is unadjusted at +0x00: single inheritance, no virtual bases.
     CHECK(static_cast<void*>(static_cast<Graphics::Material*>(&probe)) == raw);
@@ -248,12 +251,12 @@ UNIT_TEST(graphics_materialinstance_slot_order_is_retails) {
     MaterialInstanceProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw, &Graphics::MaterialInstance::GetTypeInfo());
+    CheckExternalFamilySlots<MaterialInstanceProbe>(raw, &Graphics::MaterialInstance::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<MaterialInstanceProbe>(raw, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
 
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
@@ -268,15 +271,15 @@ UNIT_TEST(graphics_material_construct_is_the_leafs_own_slot8) {
 
     // The leaf tables carry a distinct `Construct` at +0x40; the base leaf's
     // eighth entry (+0x38) is its last declared slot, `Destruct`.
-    CHECK(VTableOf(static_cast<void*>(&mat))[kConstruct / 8] !=
-          VTableOf(static_cast<void*>(&inst))[kConstruct / 8]);
+    CHECK(RetailEntry<MaterialProbe>(&mat, kConstruct / 8) !=
+          RetailEntry<MaterialInstanceProbe>(&inst, kConstruct / 8));
 
     // And slots 0..7 of each leaf are its own or the base's, never Construct's.
     for (int i = 0; i < 8; ++i) {
         CHECK(VTableOf(static_cast<void*>(&mat))[i] !=
-              VTableOf(static_cast<void*>(&mat))[kConstruct / 8]);
+              RetailEntry<MaterialProbe>(&mat, kConstruct / 8));
         CHECK(VTableOf(static_cast<void*>(&inst))[i] !=
-              VTableOf(static_cast<void*>(&inst))[kConstruct / 8]);
+              RetailEntry<MaterialInstanceProbe>(&inst, kConstruct / 8));
     }
     (void)bare;
 }
@@ -304,7 +307,8 @@ UNIT_TEST(graphics_material_qualified_call_does_not_reenter_the_door) {
     const void* minted[9] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 9; ++i) minted[i] = real[i];
-    minted[kGetFileVersion / 8] = reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
+    minted[RetailSlot<MaterialProbe>(kGetFileVersion / 8)] =
+        reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
 
     const void* const* saved = real;
     *reinterpret_cast<const void* const**>(raw) = minted;
@@ -312,7 +316,7 @@ UNIT_TEST(graphics_material_qualified_call_does_not_reenter_the_door) {
     g_qualifiedDoorEntries = 0;
     Reset();
     using VerFn = int32_t (*)(const void*);
-    const int32_t v = SlotAt<VerFn>(raw, kGetFileVersion)(raw);
+    const int32_t v = SlotAt<VerFn, MaterialProbe>(raw, kGetFileVersion)(raw);
 
     // Entered ONCE — the qualified call went to the member, not back through
     // the minted slot — and the member's marker ran.
@@ -427,7 +431,7 @@ UNIT_TEST(graphics_graphicsmesh_slot_order_is_retails) {
     GraphicsMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw, &Graphics::GraphicsMesh::GetTypeInfo());
+    CheckExternalFamilySlots<GraphicsMeshProbe>(raw, &Graphics::GraphicsMesh::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     // Slot 4 is INHERITED `?Compile@External@Object@@` (0x1800066e0), the same
@@ -435,8 +439,8 @@ UNIT_TEST(graphics_graphicsmesh_slot_order_is_retails) {
     // does NOT override it, which is why the pointer must be identical even
     // though the two probes sit on different bases.
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<GraphicsMeshProbe>(raw, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
 
     CHECK(static_cast<void*>(static_cast<Object::CompiledExternal*>(&probe)) == raw);
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
@@ -553,7 +557,7 @@ UNIT_TEST(graphics_edgemesh_slot_order_is_retails) {
     EdgeMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw, &Graphics::EdgeMesh::GetTypeInfo());
+    CheckExternalFamilySlots<EdgeMeshProbe>(raw, &Graphics::EdgeMesh::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     // *** SLOT 4 IS ITS OWN, AND THAT IS THE ASYMMETRY THIS TEST EXISTS FOR. ***
@@ -562,14 +566,14 @@ UNIT_TEST(graphics_edgemesh_slot_order_is_retails) {
     // wrongly INHERITED slot 4 would behave identically and the mistake would
     // never surface. The only thing that can see it is the pointer.
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] !=
-          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<EdgeMeshProbe>(raw, kCompile / 8) !=
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
 
     // And the marker proves the override is EdgeMesh's body, not something that
     // merely differs.
     Reset();
     using CompFn = uint32_t (*)(void*, const void*);
-    const uint32_t r = SlotAt<CompFn>(raw, kCompile)(raw, nullptr);
+    const uint32_t r = SlotAt<CompFn, EdgeMeshProbe>(raw, kCompile)(raw, nullptr);
     CHECK_EQ(g_lastMark, kCompile / 8);
     CHECK_EQ((int)r, 1);
 
@@ -577,12 +581,12 @@ UNIT_TEST(graphics_edgemesh_slot_order_is_retails) {
     MaterialProbe mat;
     GraphicsMeshProbe gm;
     MaterialInstanceProbe mi;
-    CHECK(VTableOf(static_cast<void*>(&mat))[kCompile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
-    CHECK(VTableOf(static_cast<void*>(&gm))[kCompile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
-    CHECK(VTableOf(static_cast<void*>(&mi))[kCompile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<MaterialProbe>(&mat, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
+    CHECK(RetailEntry<GraphicsMeshProbe>(&gm, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
+    CHECK(RetailEntry<MaterialInstanceProbe>(&mi, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
 
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
     CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::EdgeMesh>::value));
@@ -675,26 +679,18 @@ UNIT_TEST(graphics_block_g_all_four_introduce_construct_at_slot8) {
     for (int c = 0; c < 4; ++c) {
         Reset();
         using PtrFn = void* (*)(void*);
-        SlotAt<PtrFn>(all[c], kConstruct)(all[c]);
+        SlotAt<PtrFn, Object::Base>(all[c], kConstruct)(all[c]);
         CHECK_EQ(g_lastMark, kConstruct / 8);
         CHECK(g_lastSelf == all[c]);
         // And slot 8 is distinct from all of slots 0..7 in that same table.
         for (int i = 0; i < 8; ++i)
-            CHECK(VTableOf(all[c])[i] != VTableOf(all[c])[kConstruct / 8]);
+            CHECK(VTableOf(all[c])[i] != RetailEntry<Object::Base>(all[c], kConstruct / 8));
     }
 }
 
 // ===========================================================================
 // ENDGAME B.3.9 block GFX -- Material / GraphicsMesh CONCRETE (D1, B9-16).
 // ===========================================================================
-template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
 
 template <class T> void CheckBothSlot0Arms(size_t stride) {
     void* m = Object::detail::InternalMemAlloc(sizeof(T), 8);
@@ -720,14 +716,14 @@ UNIT_TEST(b39_gfx_material_concrete_ctor_stores_and_both_slot0_arms) {
     using M = Graphics::Material;
     CHECK(!std::is_destructible<M>::value);
     CHECK(!std::has_virtual_destructor<M>::value);
-    CHECK_EQ(GfxSlotOffset(&M::DeletingDtor),   (uintptr_t)0x00);   // 0x180011d20
-    CHECK_EQ(GfxSlotOffset(&M::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(GfxSlotOffset(&M::Type),           (uintptr_t)0x10);
-    CHECK_EQ(GfxSlotOffset(&M::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(GfxSlotOffset(&M::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(GfxSlotOffset(&M::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(GfxSlotOffset(&M::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(GfxSlotOffset(&M::Construct),      (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(M);   // 0x180011d20
+    CHECK_SLOT(M, TypeName,       0x08/8);
+    CHECK_SLOT(M, Type,           0x10/8);
+    CHECK_SLOT(M, GetFileVersion, 0x18/8);
+    CHECK_SLOT(M, Serialize,      0x28/8);
+    CHECK_SLOT(M, Reconstruct,    0x30/8);
+    CHECK_SLOT(M, Destruct,       0x38/8);
+    CHECK_SLOT(M, Construct,      0x40/8);
 
     // retail 0x1801029a0 / the FACTREST steps: External's three zero qwords,
     // +0x20 dword 0, +0x24 untouched, +0x28 / +0x30 zero.
@@ -751,14 +747,14 @@ UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
     using G = Graphics::GraphicsMesh;
     CHECK(!std::is_destructible<G>::value);
     CHECK(!std::has_virtual_destructor<G>::value);
-    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor),   (uintptr_t)0x00);   // 0x180012bd0
-    CHECK_EQ(GfxSlotOffset(&G::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(GfxSlotOffset(&G::Type),           (uintptr_t)0x10);
-    CHECK_EQ(GfxSlotOffset(&G::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(GfxSlotOffset(&G::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(GfxSlotOffset(&G::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(GfxSlotOffset(&G::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(GfxSlotOffset(&G::Construct),      (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(G);   // 0x180012bd0
+    CHECK_SLOT(G, TypeName,       0x08/8);
+    CHECK_SLOT(G, Type,           0x10/8);
+    CHECK_SLOT(G, GetFileVersion, 0x18/8);
+    CHECK_SLOT(G, Serialize,      0x28/8);
+    CHECK_SLOT(G, Reconstruct,    0x30/8);
+    CHECK_SLOT(G, Destruct,       0x38/8);
+    CHECK_SLOT(G, Construct,      0x40/8);
 
     // retail 0x1800ff170, the store list read as bit patterns.
     alignas(8) uint8_t buf[0x98];

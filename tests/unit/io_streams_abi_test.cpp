@@ -42,6 +42,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/io/Stream.h"
 #include "runtime/types/io/FileStream.h"
@@ -63,11 +64,14 @@ void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = 0; }
 
 // The one instruction every raw slot caller in runtime/src compiles to.
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
+// Every object here is read through its `IO::Stream` base, so T is IO::Stream
+// (a virtual destructor is inherited: the whole family shifts alike).
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 // ---------------------------------------------------------------------------
@@ -93,32 +97,32 @@ void CheckSharedStreamSlots(void* raw) {
 
     Reset();
     using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn>(raw, kDtor)(raw, 0u);
+    SlotAt<DtorFn, IO::Stream>(raw, kDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDtor / 8);
     CHECK(g_lastSelf == raw);
 
     Reset();
     using WriteFn = bool (*)(void*, int, const void*);
-    CHECK(SlotAt<WriteFn>(raw, kWrite)(raw, 8, scratch) == true);
+    CHECK((SlotAt<WriteFn, IO::Stream>(raw, kWrite)(raw, 8, scratch)) == true);
     CHECK_EQ(g_lastMark, kWrite / 8);
 
     Reset();
     using ReadFn = bool (*)(void*, int, void*);
-    CHECK(SlotAt<ReadFn>(raw, kRead)(raw, 8, scratch) == true);
+    CHECK((SlotAt<ReadFn, IO::Stream>(raw, kRead)(raw, 8, scratch)) == true);
     CHECK_EQ(g_lastMark, kRead / 8);
 
     Reset();
     using SeekFn = bool (*)(void*, int);
-    CHECK(SlotAt<SeekFn>(raw, kSetCurrentPos)(raw, 3) == true);
+    CHECK((SlotAt<SeekFn, IO::Stream>(raw, kSetCurrentPos)(raw, 3)) == true);
     CHECK_EQ(g_lastMark, kSetCurrentPos / 8);
 
     Reset();
     using U32Fn = uint32_t (*)(void*);
-    SlotAt<U32Fn>(raw, kGetCurrentPos)(raw);
+    SlotAt<U32Fn, IO::Stream>(raw, kGetCurrentPos)(raw);
     CHECK_EQ(g_lastMark, kGetCurrentPos / 8);
 
     Reset();
-    SlotAt<U32Fn>(raw, kGetSize)(raw);
+    SlotAt<U32Fn, IO::Stream>(raw, kGetSize)(raw);
     CHECK_EQ(g_lastMark, kGetSize / 8);
 }
 
@@ -126,11 +130,11 @@ void CheckSharedStreamSlots(void* raw) {
 void CheckCompressedTail(void* raw) {
     using VoidFn = void (*)(void*);
     Reset();
-    SlotAt<VoidFn>(raw, kSlot7)(raw);
+    SlotAt<VoidFn, IO::Stream>(raw, kSlot7)(raw);
     CHECK_EQ(g_lastMark, kSlot7 / 8);
     CHECK_EQ(g_lastMark, 7);
     Reset();
-    SlotAt<VoidFn>(raw, kSlot8)(raw);
+    SlotAt<VoidFn, IO::Stream>(raw, kSlot8)(raw);
     CHECK_EQ(g_lastMark, kSlot8 / 8);
     CHECK_EQ(g_lastMark, 8);
 }
@@ -337,14 +341,14 @@ UNIT_TEST(the_real_TextFileStream_has_10_slots_with_Open_at_7_and_OpenWithFormat
     // shape, completely different behaviour, and nothing else diagnoses it.
     using OpenFn = bool (*)(void*, const void*);
     Reset();
-    CHECK(SlotAt<OpenFn>(raw, kSlot7)(raw, nullptr) == true);
+    CHECK((SlotAt<OpenFn, IO::Stream>(raw, kSlot7)(raw, nullptr)) == true);
     CHECK_EQ(g_lastMark, 7);
 
     // Slot 8 is the class's OWN overload of that same name. On the compressed
     // branch this offset is `PreCommit()`.
     using OpenFmtFn = bool (*)(void*, const void*, int32_t);
     Reset();
-    CHECK(SlotAt<OpenFmtFn>(raw, kSlot8)(raw, nullptr, 3) == true);
+    CHECK((SlotAt<OpenFmtFn, IO::Stream>(raw, kSlot8)(raw, nullptr, 3)) == true);
     CHECK_EQ(g_lastMark, 8);
 
     // Slot 9 — `Create(Filename const&, Format, Format)`. THREE arguments after
@@ -354,7 +358,7 @@ UNIT_TEST(the_real_TextFileStream_has_10_slots_with_Open_at_7_and_OpenWithFormat
     constexpr int kSlot9 = 0x48;
     using CreateFn = bool (*)(void*, const void*, int32_t, int32_t);
     Reset();
-    CHECK(SlotAt<CreateFn>(raw, kSlot9)(raw, nullptr, 6, 3) == true);
+    CHECK((SlotAt<CreateFn, IO::Stream>(raw, kSlot9)(raw, nullptr, 6, 3)) == true);
     CHECK_EQ(g_lastMark, 9);
 
     CheckDistinctSlots(raw, 10);

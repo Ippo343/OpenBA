@@ -20,6 +20,7 @@
 // real run and the resave gate verify those.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Goal/BuildingGoal.h"
 #include "Goal/PopulationGoal.h"
@@ -36,16 +37,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
-
 template <typename T, typename Base>
 void CheckShape(bool abstract) {
     CHECK(std::is_polymorphic<T>::value);
@@ -58,29 +49,29 @@ void CheckShape(bool abstract) {
 // Achievement::Goal leaves: 11 slots (B38_SLOTS section 6, B38_RULES D8).
 template <typename T>
 void CheckGoalSlots() {
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),    (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&T::TypeName),        (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&T::Type),            (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&T::GetFileVersion),  (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&T::Compile),         (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&T::Serialize),       (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&T::Reconstruct),     (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&T::Destruct),        (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&T::CheckGoalState),  (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&T::GetInstanceType), (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&T::Construct),       (uintptr_t)0x50);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,        0x08/8);
+    CHECK_SLOT(T, Type,            0x10/8);
+    CHECK_SLOT(T, GetFileVersion,  0x18/8);
+    CHECK_SLOT(T, Compile,         0x20/8);
+    CHECK_SLOT(T, Serialize,       0x28/8);
+    CHECK_SLOT(T, Reconstruct,     0x30/8);
+    CHECK_SLOT(T, Destruct,        0x38/8);
+    CHECK_SLOT(T, CheckGoalState,  0x40/8);
+    CHECK_SLOT(T, GetInstanceType, 0x48/8);
+    CHECK_SLOT(T, Construct,       0x50/8);
 }
 
 // Achievement::GoalInstance leaves: 7 slots.
 template <typename T>
 void CheckGoalInstanceSlots() {
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&T::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&T::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&T::Persist),        (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&T::Startup),        (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&T::Update),         (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&T::CheckGoalState), (uintptr_t)0x30);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,       0x08/8);
+    CHECK_SLOT(T, Type,           0x10/8);
+    CHECK_SLOT(T, Persist,        0x18/8);
+    CHECK_SLOT(T, Startup,        0x20/8);
+    CHECK_SLOT(T, Update,         0x28/8);
+    CHECK_SLOT(T, CheckGoalState, 0x30/8);
 }
 
 }  // namespace
@@ -147,15 +138,15 @@ UNIT_TEST(scenario_is_retail_9_slots_and_0x90) {
     CHECK_EQ(offsetof(Scenario, scenarioName), (size_t)0x58);
     CHECK_EQ(offsetof(Scenario, _field68), (size_t)0x68);
     CHECK_EQ(offsetof(Scenario, _field88), (size_t)0x88);
-    CHECK_EQ(SlotOffset(&Scenario::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&Scenario::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&Scenario::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&Scenario::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&Scenario::Compile),        (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&Scenario::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&Scenario::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&Scenario::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&Scenario::Construct),      (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(Scenario);
+    CHECK_SLOT(Scenario, TypeName,       0x08/8);
+    CHECK_SLOT(Scenario, Type,           0x10/8);
+    CHECK_SLOT(Scenario, GetFileVersion, 0x18/8);
+    CHECK_SLOT(Scenario, Compile,        0x20/8);
+    CHECK_SLOT(Scenario, Serialize,      0x28/8);
+    CHECK_SLOT(Scenario, Reconstruct,    0x30/8);
+    CHECK_SLOT(Scenario, Destruct,       0x38/8);
+    CHECK_SLOT(Scenario, Construct,      0x40/8);
     CheckShape<Scenario, Achievement::Achievement>(false);
 }
 
@@ -170,27 +161,27 @@ UNIT_TEST(scenario_is_retail_9_slots_and_0x90) {
 namespace {
 template <typename T>
 void CheckExternalSlots() {
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&T::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&T::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&T::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&T::Compile),        (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&T::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&T::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&T::Destruct),       (uintptr_t)0x38);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,       0x08/8);
+    CHECK_SLOT(T, Type,           0x10/8);
+    CHECK_SLOT(T, GetFileVersion, 0x18/8);
+    CHECK_SLOT(T, Compile,        0x20/8);
+    CHECK_SLOT(T, Serialize,      0x28/8);
+    CHECK_SLOT(T, Reconstruct,    0x30/8);
+    CHECK_SLOT(T, Destruct,       0x38/8);
 }
 template <typename T>
 void CheckTutorialGoalLeaf() {
     CheckExternalSlots<T>();
-    CHECK_EQ(SlotOffset(&T::IsComplete), (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&T::Construct),  (uintptr_t)0x48);
+    CHECK_SLOT(T, IsComplete, 0x40/8);
+    CHECK_SLOT(T, Construct,  0x48/8);
     CheckShape<T, TutorialGoal>(false);
 }
 }  // namespace
 
 UNIT_TEST(tutorialgoal_family_is_retail) {
     CheckExternalSlots<TutorialGoal>();
-    CHECK_EQ(SlotOffset(&TutorialGoal::IsComplete), (uintptr_t)0x40);
+    CHECK_SLOT(TutorialGoal, IsComplete, 0x40/8);
     CheckShape<TutorialGoal, Object::External>(true);
     CHECK_EQ(sizeof(TutorialGoal), (size_t)0x20);
     CheckTutorialGoalLeaf<TutorialGoalButton>();
@@ -214,14 +205,14 @@ namespace {
 template <typename T>
 void CheckTutorialSetupSlots() {
     CheckExternalSlots<T>();
-    CHECK_EQ(SlotOffset(&T::Begin),  (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&T::Update), (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&T::End),    (uintptr_t)0x50);
+    CHECK_SLOT(T, Begin,  0x40/8);
+    CHECK_SLOT(T, Update, 0x48/8);
+    CHECK_SLOT(T, End,    0x50/8);
 }
 template <typename T>
 void CheckTutorialSetupLeaf() {
     CheckTutorialSetupSlots<T>();
-    CHECK_EQ(SlotOffset(&T::Construct), (uintptr_t)0x58);
+    CHECK_SLOT(T, Construct, 0x58/8);
     CheckShape<T, TutorialSetup>(false);
 }
 }  // namespace
@@ -251,8 +242,8 @@ namespace {
 template <typename T>
 void CheckTutorialImageSlots() {
     CheckExternalSlots<T>();
-    CHECK_EQ(SlotOffset(&T::Construct),     (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&T::CreateElement), (uintptr_t)0x48);
+    CHECK_SLOT(T, Construct,     0x40/8);
+    CHECK_SLOT(T, CreateElement, 0x48/8);
     CheckShape<T, TutorialImage>(false);
 }
 }  // namespace
@@ -279,10 +270,10 @@ UNIT_TEST(tutorialinstance_is_retail_4_slots_and_0x38) {
     CHECK_EQ(sizeof(TutorialInstance), (size_t)0x38);
     CHECK_EQ(offsetof(TutorialInstance, currentStep), (size_t)0x10);
     CHECK_EQ(offsetof(TutorialInstance, tutorialDef), (size_t)0x30);
-    CHECK_EQ(SlotOffset(&TutorialInstance::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&TutorialInstance::TypeName),     (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&TutorialInstance::Type),         (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&TutorialInstance::Persist),      (uintptr_t)0x18);
+    CHECK_DTOR_SLOT(TutorialInstance);
+    CHECK_SLOT(TutorialInstance, TypeName, 0x08/8);
+    CHECK_SLOT(TutorialInstance, Type,     0x10/8);
+    CHECK_SLOT(TutorialInstance, Persist,  0x18/8);
     CheckShape<TutorialInstance, Object::Internal>(false);
 }
 
@@ -294,12 +285,12 @@ UNIT_TEST(tutorialinstance_is_retail_4_slots_and_0x38) {
 
 UNIT_TEST(tutorial_and_step_are_retail_9_slots) {
     CheckExternalSlots<Tutorial>();
-    CHECK_EQ(SlotOffset(&Tutorial::Construct), (uintptr_t)0x40);
+    CHECK_SLOT(Tutorial, Construct, 0x40/8);
     CheckShape<Tutorial, Object::External>(false);
     CHECK_EQ(sizeof(Tutorial), (size_t)0x40);
     CHECK_EQ(offsetof(Tutorial, currentStep), (size_t)0x38);
     CheckExternalSlots<TutorialStep>();
-    CHECK_EQ(SlotOffset(&TutorialStep::Construct), (uintptr_t)0x40);
+    CHECK_SLOT(TutorialStep, Construct, 0x40/8);
     CheckShape<TutorialStep, Object::External>(false);
     CHECK_EQ(sizeof(TutorialStep), (size_t)0x70);
     CHECK_EQ(offsetof(TutorialStep, goalCount), (size_t)0x68);
@@ -337,16 +328,16 @@ UNIT_TEST(tutorialsetupdialog_is_retail_12_slots_and_0x78) {
 
 UNIT_TEST(tutorialhighlightdialog_is_retail_10_slots_and_0xf0) {
     using T = TutorialHighlightDialog;
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),        (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&T::TypeName),            (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&T::Type),                (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&T::Persist),             (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&T::OnOpened),            (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&T::OnClosed),            (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&T::OnUpdateLayout),      (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&T::OnUpdate),            (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&T::OnElementEvent),      (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&T::OnSerializeSettings), (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,            0x08/8);
+    CHECK_SLOT(T, Type,                0x10/8);
+    CHECK_SLOT(T, Persist,             0x18/8);
+    CHECK_SLOT(T, OnOpened,            0x20/8);
+    CHECK_SLOT(T, OnClosed,            0x28/8);
+    CHECK_SLOT(T, OnUpdateLayout,      0x30/8);
+    CHECK_SLOT(T, OnUpdate,            0x38/8);
+    CHECK_SLOT(T, OnElementEvent,      0x40/8);
+    CHECK_SLOT(T, OnSerializeSettings, 0x48/8);
     CheckShape<T, UI::DialogInstance>(false);
     CHECK_EQ(sizeof(T), (size_t)0xF0);
     CHECK_EQ(offsetof(T, elapsedTicks), (size_t)0xB8);
@@ -361,17 +352,17 @@ UNIT_TEST(tutorialhighlightdialog_is_retail_10_slots_and_0xf0) {
 
 UNIT_TEST(tutorialui_is_retail_11_slots_and_0x60) {
     using T = TutorialUI;
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),        (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&T::TypeName),            (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&T::Type),                (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&T::Persist),             (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&T::OnCreated),           (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&T::OnOpened),            (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&T::OnClosed),            (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&T::OnUpdateLayout),      (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&T::OnUpdate),            (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&T::OnElementEvent),      (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&T::OnSerializeSettings), (uintptr_t)0x50);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,            0x08/8);
+    CHECK_SLOT(T, Type,                0x10/8);
+    CHECK_SLOT(T, Persist,             0x18/8);
+    CHECK_SLOT(T, OnCreated,           0x20/8);
+    CHECK_SLOT(T, OnOpened,            0x28/8);
+    CHECK_SLOT(T, OnClosed,            0x30/8);
+    CHECK_SLOT(T, OnUpdateLayout,      0x38/8);
+    CHECK_SLOT(T, OnUpdate,            0x40/8);
+    CHECK_SLOT(T, OnElementEvent,      0x48/8);
+    CHECK_SLOT(T, OnSerializeSettings, 0x50/8);
     CheckShape<T, UI::DialogController>(false);
     CHECK_EQ(sizeof(T), (size_t)0x60);
     CHECK_EQ(offsetof(T, nextButton), (size_t)0x50);

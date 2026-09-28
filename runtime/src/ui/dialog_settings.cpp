@@ -155,33 +155,12 @@ namespace {
 
 using SerCtorFn = void* (*)(void* self, void* stream, int version);
 
-// Virtual-call shapes used below. All are RETAIL offsets.
-using VoidVFn    = void     (*)(void* self);
-using StreamVFn  = void     (*)(void* self, void* stream);
-using U32VFn     = uint32_t (*)(void* self);
-using SerVFn     = void     (*)(void* rw, void* value, const char* name);
-using DelDtorVFn = void*    (*)(void* self, unsigned int flags);
-
-inline void* VSlot(void* obj, int off) {
-    return (*reinterpret_cast<void***>(obj))[off / 8];
-}
-
-// DialogInstance's own vtable slot that receives the settings stream.
-constexpr int kDlgVtblOnSerializeSettings = 0x48;
-// DialogController vtable, confirmed against ??_7DialogController@UI@@6B@.
-constexpr int kCtrlVtblType                = 0x10;
-// +0x28 is ?OnOpened@DialogController@UI@@UEAAXXZ (0x1800cd2a0), named the same
-// way +0x30 and +0x50 were: by reading ??_7DialogController@UI@@6B@ byte-wise
-// and resolving the slot against the EXPORT TABLE, not by a caller. Wave 10B
-// lane DLGV ported that body (runtime/src/ui/dialog_controller_base.cpp) and
-// this is the one call site in the tree that dispatches it.
-constexpr int kCtrlVtblOnOpened            = 0x28;
-constexpr int kCtrlVtblOnClosed            = 0x30;
-constexpr int kCtrlVtblOnSerializeSettings = 0x50;
-// IO::ReaderWriter vtable (runtime/types/io/Serializer.h, rw_vtbl).
-constexpr int kRwDeletingDtor = 0x00;
-constexpr int kRwScalarUInt   = 0x98;
-constexpr int kRwScalarInt    = 0xA0;
+// (B3X W0: the slot offsets that lived here -- DialogInstance +0x48, the
+// DialogController's +0x10/+0x28/+0x30/+0x50 and the ReaderWriter's
+// +0x00/+0x10/+0x98/+0xa0 -- are gone; every one is a by-name member call.
+// DialogController +0x28 is ?OnOpened@DialogController@UI@@UEAAXXZ
+// (0x1800cd2a0), read off ??_7DialogController@UI@@6B@ against the export
+// table.)
 
 }  // namespace
 
@@ -356,30 +335,30 @@ void DialogInstance::SaveSettings() {
 
     rt::io::Serializer ser;
     SerCtor(&ser, &ms);
-    void* rw = ser.readerWriter;
+    IO::ReaderWriter* rw = reinterpret_cast<IO::ReaderWriter*>(ser.readerWriter);   // B.3.x bridge
 
     OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
 
     int32_t count = _controllers._size;
-    reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarInt))(rw, &count, nullptr);
+    rw->SerializeInt(count, nullptr);           // +0xa0
 
     for (int32_t i = 0; i < count; ++i) {
         DialogController* c = _controllers._data[i];
         uint32_t id = c->Type();                // controller slot 2
-        reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarUInt))(rw, &id, nullptr);
+        rw->SerializeUInt(id, nullptr);         // +0x98
 
         rt::io::Serializer ser2;
         SerCtor(&ser2, &ms);
-        void* rw2 = ser2.readerWriter;
+        IO::ReaderWriter* rw2 = reinterpret_cast<IO::ReaderWriter*>(ser2.readerWriter);   // B.3.x bridge
 
         _controllers._data[i]->OnSerializeSettings(&ms);   // controller slot 10 (re-read)
 
         if (rw2 != nullptr)
-            reinterpret_cast<DelDtorVFn>(VSlot(rw2, kRwDeletingDtor))(rw2, 1u);
+            rw2->DeletingDtor(1);
     }
 
     if (rw != nullptr)
-        reinterpret_cast<DelDtorVFn>(VSlot(rw, kRwDeletingDtor))(rw, 1u);
+        rw->DeletingDtor(1);
 
     MsDtor(&ms);
 }
@@ -423,17 +402,17 @@ void DialogInstance::OnOpened() {                              // [4]
 
     rt::io::Serializer ser;
     SerCtor(&ser, &ms);
-    void* rw = ser.readerWriter;
+    IO::ReaderWriter* rw = reinterpret_cast<IO::ReaderWriter*>(ser.readerWriter);   // B.3.x bridge
 
     OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
 
     int32_t count = 0;
-    reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarInt))(rw, &count, nullptr);
+    rw->SerializeInt(count, nullptr);           // +0xa0
 
     for (int32_t k = 0; k < count; ++k) {
         ++g_openCounts.records;
         uint32_t id = 0;
-        reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarUInt))(rw, &id, nullptr);
+        rw->SerializeUInt(id, nullptr);         // +0x98
 
         int64_t found = -1;
         for (int32_t j = 0; j < _controllers._size; ++j) {
@@ -445,20 +424,20 @@ void DialogInstance::OnOpened() {                              // [4]
 
         rt::io::Serializer ser2;
         SerCtor(&ser2, &ms);
-        void* rw2 = ser2.readerWriter;
+        IO::ReaderWriter* rw2 = reinterpret_cast<IO::ReaderWriter*>(ser2.readerWriter);   // B.3.x bridge
 
         if (found < 0) {
-            reinterpret_cast<VoidVFn>(VSlot(rw2, rt::io::rw_vtbl::kSkip))(rw2);
+            rw2->Skip();                        // +0x10
         } else {
             _controllers._data[found]->OnSerializeSettings(&ms);   // controller slot 10
         }
 
         if (rw2 != nullptr)
-            reinterpret_cast<DelDtorVFn>(VSlot(rw2, kRwDeletingDtor))(rw2, 1u);
+            rw2->DeletingDtor(1);
     }
 
     if (rw != nullptr)
-        reinterpret_cast<DelDtorVFn>(VSlot(rw, kRwDeletingDtor))(rw, 1u);
+        rw->DeletingDtor(1);
 
     MsDtor(&ms);
 }

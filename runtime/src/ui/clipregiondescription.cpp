@@ -76,15 +76,15 @@ bool ClipRegionDescription::Serialize(void* streamv) {
     ElementDescription::Serialize(stream);                  // 1800cc02a
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    RwScalar(rw, kRwScalarInt, &_width);                    // 1800cc06e
-    RwScalar(rw, kRwScalarInt, &_height);                   // 1800cc083
+    rw->SerializeInt(_width, nullptr);                      // 1800cc06e
+    rw->SerializeInt(_height, nullptr);                     // 1800cc083
 
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180038f90ull)(&_childDesc, &ser);  // 1800cc092
 
-    DestroyReaderWriter(rw);                                // 1800cc0aa
+    if (rw != nullptr) rw->DeletingDtor(1);                 // 1800cc0aa
     return true;
 }
 

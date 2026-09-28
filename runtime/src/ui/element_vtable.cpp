@@ -352,11 +352,10 @@ void Element::Persist(void* stream) {
 
     scope.node = node;
     if (node) {
-        // vt[0](node, 1) — the scalar deleting destructor with the delete flag,
-        // exactly as 0x1801168b4 spells it. The node is an IO::ReaderWriter,
-        // not a UI class: this stays a raw slot call.
-        using DeleteFn = void (*)(void*, int32_t);
-        (*reinterpret_cast<DeleteFn const* const*>(node))[0](node, 1);
+        // slot 0 (node, 1) — the scalar deleting destructor with the delete
+        // flag, exactly as 0x1801168b4 spells it. The node is the
+        // IO::ReaderWriter the encoding factory returned, not a UI class.
+        reinterpret_cast<IO::ReaderWriter*>(node)->DeletingDtor(1);        // B.3.x bridge
     }
 }
 

@@ -44,6 +44,7 @@
 #include "../../types/system/String.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/Element.h"
+#include "../../types/object/VSlot.h"   // B3X W0: Object::SlotAddressOf for the recorder
 #include "../../types/ui/TableElement.h"
 #include "../../types/ui/ImageElement.h"
 #include "../../types/ui/LabelElement.h"
@@ -222,12 +223,13 @@ static void TabElement_UpdateContainers_Body(void* self, RtSink& out) {
             const int32_t a3  = *reinterpret_cast<int32_t*>(B(self, 0x70)) - pad;
             const int32_t a4  = *reinterpret_cast<int32_t*>(B(self, 0x74)) - pad;
 
-            using SetBoundsFn = void (*)(void*, int32_t, int32_t, int32_t, int32_t);
-            SetBoundsFn slot = *reinterpret_cast<SetBoundsFn*>(
-                *reinterpret_cast<uint8_t**>(child) + 0x28);
-            if (out.Call("Element::vtbl+0x28 (resize container)",
-                         reinterpret_cast<const void*>(slot), a1, a2, a3, a4)) {
-                slot(child, a1, a2, a3, a4);
+            // The recorder is handed the slot's address, taken from the member
+            // (never a literal index); the call itself is by name.
+            const void* const slot =
+                Object::SlotAddressOf(child, &UI::Element::ComputeLayout);
+            if (out.Call("Element::ComputeLayout (resize container)",
+                         slot, a1, a2, a3, a4)) {
+                reinterpret_cast<UI::Element*>(child)->ComputeLayout(a1, a2, a3, a4);
             }
         }
     }

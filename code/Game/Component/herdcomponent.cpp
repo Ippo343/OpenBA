@@ -323,9 +323,7 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
                 // Detach from the scene while the mesh is swapped (slot +0x38),
                 // then re-add (slot +0x30).
                 if (*(int16_t*)(model + 0x166) >= 0) {
-                    uintptr_t vt = *(uintptr_t*)model;
-                    auto detach = *reinterpret_cast<void (**)(void*)>(vt + 0x38);
-                    if (detach) detach((void*)model);
+                    reinterpret_cast<Component*>(model)->OnRemove();   // B.3.x bridge (slot 7)
                 }
                 *(int16_t*)(model + 0x166) = 1;
 
@@ -343,9 +341,7 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
                         ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
                 }
 
-                uintptr_t vt = *(uintptr_t*)model;
-                auto attach = *reinterpret_cast<void (**)(void*)>(vt + 0x30);
-                if (attach) attach((void*)model);
+                reinterpret_cast<Component*>(model)->OnAdded();   // B.3.x bridge (slot 6)
             }
             if (s_fn_ModelHelper2b70) s_fn_ModelHelper2b70(*(int64_t*)(model + 0x10), 0);
         }

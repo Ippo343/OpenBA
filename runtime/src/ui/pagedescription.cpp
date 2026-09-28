@@ -104,11 +104,11 @@ bool PageDescription::Serialize(void* streamv) {
     GroupDescription::Serialize(stream);                       // 1800d542a
 
     rtdesc::Serializer ser = { stream, nullptr };
-    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 1800d545a
+    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800d545a
 
-    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &_activePage);
+    rw->SerializeInt(_activePage, nullptr);
 
-    rtdesc::DestroyReaderWriter(rw);                           // 1800d547d
+    if (rw != nullptr) rw->DeletingDtor(1);                    // 1800d547d
     return true;
 }
 

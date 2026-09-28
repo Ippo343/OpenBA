@@ -73,20 +73,20 @@ bool LabelDescription::Serialize(void* streamv) {
     UI::TextDescription::Serialize(stream);                  // 1800d283a
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser); // 1800d287b ExternalPtr<SpriteSheet>
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);  // 1800d288c System::String
 
-    RwScalar(rw, kRwScalarUInt, &_word90);                   // 1800d28a3
-    RwScalar(rw, kRwScalarUInt, &_word94);                   // 1800d28bb
-    RwScalar(rw, kRwScalarInt,  &_word98);                   // 1800d28d3
-    RwScalar(rw, kRwScalarInt,  &_word9c);                   // 1800d28eb
-    RwScalar(rw, kRwScalarInt,  &_worda0);                   // 1800d2903
-    RwScalar(rw, kRwScalarInt,  &_worda4);                   // 1800d291b
+    rw->SerializeUInt(_word90, nullptr);                     // 1800d28a3
+    rw->SerializeUInt(_word94, nullptr);                     // 1800d28bb
+    rw->SerializeInt(_word98, nullptr);                      // 1800d28d3
+    rw->SerializeInt(_word9c, nullptr);                      // 1800d28eb
+    rw->SerializeInt(_worda0, nullptr);                      // 1800d2903
+    rw->SerializeInt(_worda4, nullptr);                      // 1800d291b
 
-    DestroyReaderWriter(rw);                                 // 1800d2934
+    if (rw != nullptr) rw->DeletingDtor(1);                  // 1800d2934
     return true;
 }
 

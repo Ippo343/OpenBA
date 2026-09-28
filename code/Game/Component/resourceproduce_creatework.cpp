@@ -354,9 +354,7 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* 
         for (int i = 0; i < n && arr; ++i) {
             void* c = arr[i];
             if (!c) continue;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            const uint32_t tid = (reinterpret_cast<GetTypeId_t>(
-                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
             if (tid == want) {
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, want)) cpDesc = c;
                 break;

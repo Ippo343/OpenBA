@@ -90,32 +90,9 @@ inline void* AtomicAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
     return p;
 }
 
-inline void* const* VTableOf(const void* o) {
-    return *reinterpret_cast<void* const* const*>(o);
-}
-template <typename Fn>
-inline Fn VSlot(const void* o, int index) {
-    return reinterpret_cast<Fn>(VTableOf(o)[index]);
-}
-
-// ---- UI::Element vtable slot indices (runtime/types/ui/Element.h) ----------
-constexpr int kSlotDeletingDtor  = 0;
-constexpr int kSlotTypeName      = 1;
-constexpr int kSlotType          = 2;
-constexpr int kSlotComputeSize   = 4;   // +0x20
-constexpr int kSlotComputeLayout = 5;   // +0x28
-constexpr int kSlotDraw          = 6;   // +0x30
-constexpr int kSlotUpdate        = 7;   // +0x38
-constexpr int kSlotEnable        = 8;   // +0x40
-constexpr int kSlotContains      = 9;   // +0x48
-constexpr int kSlotSetColor      = 10;  // +0x50
-constexpr int kSlotGetBorder     = 11;  // +0x58
-
-using ComputeSizeFn   = void (*)(void* self);
-using ComputeLayoutFn = void (*)(void* self, int x, int y, int w, int h);
-using DrawFn          = void (*)(const void* self, void* spriteContext, uint8_t alpha);
-using UpdateFn        = void (*)(void* self, const void* time, void* ui,
-                                 void** dialogInstance, const void* updateState);
+// (B3X W0: `VTableOf`, `VSlot<Fn>(o, INDEX)`, the `kSlot*` Element slot
+// indices and the four slot typedefs are gone -- every UI::Element slot is
+// dispatched by name, `static_cast<UI::Element*>(e)->ComputeSize()`.)
 
 // ---- UI::Element field offsets, all proven in runtime/types/ui/Element.h ---
 constexpr int kElemName          = 0x10;

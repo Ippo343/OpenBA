@@ -76,6 +76,7 @@
 // `"Particle"` and, for ParticleSystem's PARENT, `"Particle"` with NO namespace.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 // The shipped header. The tests measure THIS, not a local copy, so a failure
 // means the header and the ABI disagree.
@@ -105,12 +106,13 @@ void Note(const void* self, int mark, long long arg = 0) {
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 
 // The one instruction every hand-inlined `(*(void***)p)[N]` caller compiles to,
-// spelled by BYTE OFFSET because that is how the tree spells it.
-template <typename Fn>
+// spelled by BYTE OFFSET because that is how the tree spells it. The offset is
+// RETAIL's; T (the object's class, here the mirror) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 // ===========================================================================
@@ -324,33 +326,33 @@ UNIT_TEST(graphics_particle_slot_order_is_retail_order) {
     // and every minted row spell it — must land on the right member with `this`
     // UNADJUSTED at every index.
     Reset();
-    SlotAt<void* (*)(void*, unsigned)>(&leaf, kSlot0_DeletingDtor)(&leaf, 3u);
+    SlotAt<void* (*)(void*, unsigned), ProbeParticleLeaf>(&leaf, kSlot0_DeletingDtor)(&leaf, 3u);
     CHECK_EQ(g_lastMark, 300);
     CHECK_EQ(g_lastSelf, (const void*)&leaf);
     CHECK_EQ(g_lastArg, 3LL);
 
     // 1, 2, 3 and 5 reach PARTICLE's bodies: the leaf does not override them.
-    Reset(); SlotAt<const char* (*)(const void*)>(&leaf, kSlot1_TypeName)(&leaf);
+    Reset(); SlotAt<const char* (*)(const void*), ProbeParticleLeaf>(&leaf, kSlot1_TypeName)(&leaf);
     CHECK_EQ(g_lastMark, 101);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(&leaf, kSlot2_Type)(&leaf);
+    Reset(); SlotAt<uint32_t (*)(const void*), ProbeParticleLeaf>(&leaf, kSlot2_Type)(&leaf);
     CHECK_EQ(g_lastMark, 102);
-    Reset(); SlotAt<int32_t (*)(const void*)>(&leaf, kSlot3_GetFileVersion)(&leaf);
+    Reset(); SlotAt<int32_t (*)(const void*), ProbeParticleLeaf>(&leaf, kSlot3_GetFileVersion)(&leaf);
     CHECK_EQ(g_lastMark, 103);
-    Reset(); SlotAt<bool (*)(void*, void*)>(&leaf, kSlot5_Serialize)(&leaf, nullptr);
+    Reset(); SlotAt<bool (*)(void*, void*), ProbeParticleLeaf>(&leaf, kSlot5_Serialize)(&leaf, nullptr);
     CHECK_EQ(g_lastMark, 105);
 
     // 4 reaches EXTERNAL's body, inherited through Particle untouched — which is
     // why `Graphics::Particle` declares no `Compile` at all.
-    Reset(); SlotAt<uint32_t (*)(void*, const void*)>(&leaf, kSlot4_Compile)(&leaf, nullptr);
+    Reset(); SlotAt<uint32_t (*)(void*, const void*), ProbeParticleLeaf>(&leaf, kSlot4_Compile)(&leaf, nullptr);
     CHECK_EQ(g_lastMark, 4);
 
     // 6, 7, 8 are the three the leaf itself fills — the three retail leaves
     // `_purecall` on `Particle`.
-    Reset(); SlotAt<void* (*)(void*)>(&leaf, kSlot6_Reconstruct)(&leaf);
+    Reset(); SlotAt<void* (*)(void*), ProbeParticleLeaf>(&leaf, kSlot6_Reconstruct)(&leaf);
     CHECK_EQ(g_lastMark, 306);
-    Reset(); SlotAt<void (*)(void*)>(&leaf, kSlot7_Destruct)(&leaf);
+    Reset(); SlotAt<void (*)(void*), ProbeParticleLeaf>(&leaf, kSlot7_Destruct)(&leaf);
     CHECK_EQ(g_lastMark, 307);
-    Reset(); SlotAt<void* (*)(const void*)>(&leaf, kSlot8_CreateSystem)(&leaf);
+    Reset(); SlotAt<void* (*)(const void*), ProbeParticleLeaf>(&leaf, kSlot8_CreateSystem)(&leaf);
     CHECK_EQ(g_lastMark, 308);
 }
 
@@ -361,14 +363,14 @@ UNIT_TEST(graphics_particlesystem_construct_is_slot_nine_behind_createsystem) {
     // Byte offset 0x40 — slot EIGHT — is `CreateSystem`, and it returns the
     // instance sentinel, not `this`.
     Reset();
-    void* created = SlotAt<void* (*)(const void*)>(&ps, kSlot8_CreateSystem)(&ps);
+    void* created = SlotAt<void* (*)(const void*), ProbeParticleSystem>(&ps, kSlot8_CreateSystem)(&ps);
     CHECK_EQ(g_lastMark, 208);
     CHECK_EQ(g_lastSelf, (const void*)&ps);
     CHECK_EQ(created, ps.kSentinel);
 
     // Byte offset 0x48 — slot NINE — is `Construct`, and it returns `this`.
     Reset();
-    void* constructed = SlotAt<void* (*)(void*)>(&ps, kSlot9_Construct)(&ps);
+    void* constructed = SlotAt<void* (*)(void*), ProbeParticleSystem>(&ps, kSlot9_Construct)(&ps);
     CHECK_EQ(g_lastMark, 209);
     CHECK_EQ(g_lastSelf, (const void*)&ps);
     CHECK_EQ(constructed, (void*)&ps);
@@ -376,41 +378,42 @@ UNIT_TEST(graphics_particlesystem_construct_is_slot_nine_behind_createsystem) {
     // And the two are DIFFERENT entries: the naive "Construct is slot 8" reading
     // would make these compare equal, which is exactly how the mistake would
     // survive a build and a run.
-    const void* const* vt = *reinterpret_cast<const void* const* const*>(&ps);
-    CHECK(vt[kSlot8_CreateSystem / 8] != vt[kSlot9_Construct / 8]);
+    CHECK(RetailEntry<ProbeParticleSystem>(&ps, kSlot8_CreateSystem / 8) !=
+          RetailEntry<ProbeParticleSystem>(&ps, kSlot9_Construct / 8));
 
     // Slot 9 exists ONLY on this class. `ProbeParticle`'s branch has nine
     // entries, so a `Particle` subclass that is not a `ParticleSystem` has
     // nothing at 0x48 — which is why `Construct` cannot be declared on
     // `Particle` "for symmetry".
     ProbeParticleLeaf leaf;
-    const void* const* leafVt = *reinterpret_cast<const void* const* const*>(&leaf);
-    CHECK(leafVt[kSlot8_CreateSystem / 8] != vt[kSlot8_CreateSystem / 8]);
+    CHECK(RetailEntry<ProbeParticleLeaf>(&leaf, kSlot8_CreateSystem / 8) !=
+          RetailEntry<ProbeParticleSystem>(&ps, kSlot8_CreateSystem / 8));
 
     // The inherited slot 4 is the SAME entry in both tables — the one qword the
     // vtable dump marks `inherited-from` on both classes.
-    CHECK_EQ(leafVt[kSlot4_Compile / 8], vt[kSlot4_Compile / 8]);
+    CHECK_EQ(RetailEntry<ProbeParticleLeaf>(&leaf, kSlot4_Compile / 8),
+             RetailEntry<ProbeParticleSystem>(&ps, kSlot4_Compile / 8));
 }
 
 UNIT_TEST(graphics_particlesystem_overrides_the_seven_slots_retail_says) {
     ProbeParticleSystem ps;
 
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(&ps, kSlot0_DeletingDtor)(&ps, 1u);
+    Reset(); SlotAt<void* (*)(void*, unsigned), ProbeParticleSystem>(&ps, kSlot0_DeletingDtor)(&ps, 1u);
     CHECK_EQ(g_lastMark, 200);
-    Reset(); SlotAt<const char* (*)(const void*)>(&ps, kSlot1_TypeName)(&ps);
+    Reset(); SlotAt<const char* (*)(const void*), ProbeParticleSystem>(&ps, kSlot1_TypeName)(&ps);
     CHECK_EQ(g_lastMark, 201);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(&ps, kSlot2_Type)(&ps);
+    Reset(); SlotAt<uint32_t (*)(const void*), ProbeParticleSystem>(&ps, kSlot2_Type)(&ps);
     CHECK_EQ(g_lastMark, 202);
-    Reset(); SlotAt<int32_t (*)(const void*)>(&ps, kSlot3_GetFileVersion)(&ps);
+    Reset(); SlotAt<int32_t (*)(const void*), ProbeParticleSystem>(&ps, kSlot3_GetFileVersion)(&ps);
     CHECK_EQ(g_lastMark, 203);
     // Slot 4 is NOT overridden: retail's dump marks it inherited.
-    Reset(); SlotAt<uint32_t (*)(void*, const void*)>(&ps, kSlot4_Compile)(&ps, nullptr);
+    Reset(); SlotAt<uint32_t (*)(void*, const void*), ProbeParticleSystem>(&ps, kSlot4_Compile)(&ps, nullptr);
     CHECK_EQ(g_lastMark, 4);
-    Reset(); SlotAt<bool (*)(void*, void*)>(&ps, kSlot5_Serialize)(&ps, nullptr);
+    Reset(); SlotAt<bool (*)(void*, void*), ProbeParticleSystem>(&ps, kSlot5_Serialize)(&ps, nullptr);
     CHECK_EQ(g_lastMark, 205);
-    Reset(); SlotAt<void* (*)(void*)>(&ps, kSlot6_Reconstruct)(&ps);
+    Reset(); SlotAt<void* (*)(void*), ProbeParticleSystem>(&ps, kSlot6_Reconstruct)(&ps);
     CHECK_EQ(g_lastMark, 206);
-    Reset(); SlotAt<void (*)(void*)>(&ps, kSlot7_Destruct)(&ps);
+    Reset(); SlotAt<void (*)(void*), ProbeParticleSystem>(&ps, kSlot7_Destruct)(&ps);
     CHECK_EQ(g_lastMark, 207);
 }
 
@@ -438,8 +441,10 @@ UNIT_TEST(graphics_particlesystem_qualified_call_suppresses_minted_dispatch) {
     static void* table[10] = { nullptr };
     void** const gccTable = *reinterpret_cast<void***>(&ps);
     for (int i = 0; i < 10; ++i) table[i] = gccTable[i];
-    table[kSlot8_CreateSystem / 8] = reinterpret_cast<void*>(&MintedCreateSystem);
-    table[kSlot9_Construct    / 8] = reinterpret_cast<void*>(&MintedConstruct);
+    table[RetailSlot<ProbeParticleSystem>(kSlot8_CreateSystem / 8)] =
+        reinterpret_cast<void*>(&MintedCreateSystem);
+    table[RetailSlot<ProbeParticleSystem>(kSlot9_Construct / 8)] =
+        reinterpret_cast<void*>(&MintedConstruct);
     *reinterpret_cast<void***>(&ps) = table;
 
     // An ordinary virtual call goes through the minted array …
