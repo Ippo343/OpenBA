@@ -149,8 +149,8 @@ Base* ExternalList::CreateInPlaceObject(void* place) {
 
 // ============================================================================
 // Registration — the factory pair (B39_RULES D2): the class's OWN statics by
-// retail name AND VA. The minted `?_typeInfo@ExternalList@Object@@` record
-// (which stays until the W3 fold) resolves them by name in MintTypeInfos.
+// retail name AND VA. The class record (DEFINE_TYPE, external_class.cpp)
+// names them directly.
 // ============================================================================
 int RtObjectExternalListRegister() {
     int n = 0;

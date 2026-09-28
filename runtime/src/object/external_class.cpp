@@ -71,11 +71,9 @@ namespace Object {
 // reads one. This is a TEST seam, not a guard on a faithful path — the real
 // build's door below is unguarded, as retail's rip-relative load is.
 const BaseTypeInfo* g_unitExternalTypeInfo         = nullptr;
-const BaseTypeInfo* g_unitExternalListTypeInfo     = nullptr;
 const BaseTypeInfo* g_unitCompiledExternalTypeInfo = nullptr;
 
 const BaseTypeInfo* ExternalTypeInfoRecord()         { return g_unitExternalTypeInfo; }
-const BaseTypeInfo* ExternalListTypeInfoRecord()     { return g_unitExternalListTypeInfo; }
 const BaseTypeInfo* CompiledExternalTypeInfoRecord() { return g_unitCompiledExternalTypeInfo; }
 #else
 // ############################################################################
@@ -102,7 +100,6 @@ const BaseTypeInfo* CompiledExternalTypeInfoRecord() { return g_unitCompiledExte
 namespace {
 
 std::atomic<const BaseTypeInfo*> g_externalTypeInfo{nullptr};          // 0x1801f9b38
-std::atomic<const BaseTypeInfo*> g_externalListTypeInfo{nullptr};      // 0x1801f9be0
 std::atomic<const BaseTypeInfo*> g_compiledExternalTypeInfo{nullptr};  // 0x1801f9b00
 
 const BaseTypeInfo* MintedRecord(std::atomic<const BaseTypeInfo*>& slot,
@@ -120,10 +117,6 @@ const BaseTypeInfo* MintedRecord(std::atomic<const BaseTypeInfo*>& slot,
 const BaseTypeInfo* ExternalTypeInfoRecord() {
     return MintedRecord(g_externalTypeInfo,
                         "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
-}
-const BaseTypeInfo* ExternalListTypeInfoRecord() {
-    return MintedRecord(g_externalListTypeInfo,
-                        "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A");
 }
 const BaseTypeInfo* CompiledExternalTypeInfoRecord() {
     return MintedRecord(g_compiledExternalTypeInfo,
@@ -279,6 +272,16 @@ uint32_t    CompiledExternal::Type() const     { return TypeId(); }
 // GCC emits the same store on entry to ~CompiledExternal, naming the compiler's
 // table instead of the minted one, which is the whole point of the class.
 CompiledExternal::~CompiledExternal() {}
+
+// ============================================================================
+// Object::ExternalList's reflection record — ENDGAME B.3.9 OBJ (B39_RULES D6
+// W3). `?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A` (0x1801f9be0),
+// name "ExternalList", parent literal "Object::External" EXACTLY as the retail
+// record carries it (the ctor strips it to "External"), no file extension.
+// The factory pair it names is external_list.cpp's. The minted record is
+// retired (tools/rt_mint_retired/obj.txt) in the same commit.
+// ============================================================================
+DEFINE_TYPE(Object::ExternalList, "Object::External", nullptr)
 
 // ============================================================================
 // Object::ExternalList's registry-free members ARE NOT HERE, and that is a LINK

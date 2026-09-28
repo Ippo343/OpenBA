@@ -18,3 +18,6 @@
 
 # -- W3: Object::Base (INVENTORY_A row 12, RT_DELDTOR row 0x1800065b0) -- LAST
 ??_7Base@Object@@6B@   OBJ   no stamper left; Base::DeletingDtor carries both arms; RT_DELDTOR row 0x1800065b0 (the last: the RT_DELDTOR machinery deleted), ??1Base door (deleting_dtor_leaves.cpp deleted), ?Type@Base slot door deleted
+
+# -- W3: the Object _typeInfo folds (B39_RULES D6) --
+?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::ExternalList, "Object::External", nullptr) in external_class.cpp; readers (ExtPtr thunk, UpdateLoop LoadResources, ExternalList slots) read the class record

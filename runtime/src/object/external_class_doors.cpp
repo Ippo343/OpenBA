@@ -344,11 +344,7 @@ ExternalList::~ExternalList() {
 // slot 1 — ?TypeName@ExternalList@Object@@UEBAPEBDXZ   0x180007370  MOV RAX,[0x1801f9be8]
 // slot 2 — ?Type@ExternalList@Object@@UEBAIXZ          0x180007350  MOV EAX,[0x1801f9be0]
 // ?TypeId@ExternalList@Object@@SAIXZ                   0x180007360  the same load
-// All three over the record accessor (external_class.cpp; ENDGAME B.3.9 OBJ,
-// B39_RULES D6 step 1).
-const char* ExternalList::TypeName() const { return ExternalListTypeInfoRecord()->name; }
-uint32_t    ExternalList::Type() const     { return TypeId(); }
-uint32_t    ExternalList::TypeId()         { return ExternalListTypeInfoRecord()->typeId; }
+// All three are DECLARE_TYPE's over the class record (ENDGAME B.3.9 OBJ W3).
 
 // slot 3 — ?GetFileVersion@ExternalList@Object@@UEBAHXZ  0x1800bfa10
 //          `MOV EAX,3; RET` — a literal of its own, not ElementDescription's.

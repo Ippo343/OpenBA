@@ -571,8 +571,11 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundBuffer,
 // 0x18003dc90 — ExternalPtr<Object::ExternalList>. The export spells the
 // enclosing namespace with a back-reference (`@2@`), exactly as
 // `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` does.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ExternalList,
-             "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A")
+// ENDGAME B.3.9 OBJ (D6 W3): the class record, not a by-name read of the
+// retired minted one (the macro's by-name door stays for the other rows).
+extern "C" void RtObject_ExternalPtrSerialize_ExternalList(External** self, Serializer* ser) {
+    RtObject_ExternalPtr_Serialize(self, ser, &::Object::ExternalList::GetTypeInfo());
+}
 
 #undef EXTPTR_THUNK
 

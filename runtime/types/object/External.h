@@ -754,6 +754,13 @@ static_assert(sizeof(CompiledExternal) == 0x20,
 // are retired (tools/rt_mint_retired/obj.txt).
 // ============================================================
 class ExternalList : public External {
+    // ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A (retail 0x1801f9be0):
+    // slot 1 TypeName 0x180007370, slot 2 Type 0x180007350, TypeId 0x180007360
+    // and the factory pair (0x180007460 / 0x180007510, external_list.cpp) are
+    // retail's reflection block; DEFINE_TYPE is in external_class.cpp (ENDGAME
+    // B.3.9 OBJ, B39_RULES D6 W3 -- the minted record is retired).
+    DECLARE_TYPE(ExternalList)
+
 public:
     // ??0ExternalList — retail's stores (the inlined half of the factory pair
     // 0x1800074c3..f4 / Construct 0x1800075e0): Base's and External's vptr and
@@ -770,7 +777,7 @@ public:
     // `flags & 1` and returns it; otherwise ~ExternalList, free on `flags & 1`.
     // Nothing `new[]`s an ExternalList, so the array arm is the faithful
     // unreachable it is in Object::Internal's. INLINE so `make unit` can drive
-    // both arms; the key function is TypeName (external_class_doors.cpp).
+    // both arms; the key function is GetFileVersion (external_class_doors.cpp).
     Base* DeletingDtor(unsigned flags) override {
         if (flags & 2u) {
             uint8_t* const self = reinterpret_cast<uint8_t*>(this);
@@ -784,8 +791,6 @@ public:
         if (flags & 1u) TypeTreeFree(this);
         return this;
     }
-    const char*     TypeName() const override;               // [1] 0x180007370
-    uint32_t        Type() const override;                   // [2] 0x180007350
     int32_t         GetFileVersion() const override;         // [3] 0x1800bfa10
     bool            Serialize(void* stream) override;        // [5] 0x1800bfa20
     External*       Reconstruct() override;                  // [6] 0x180007570
@@ -799,15 +804,6 @@ public:
     //   retail 0x1800bf700.  *** THE `Type` PARAMETER IS NEVER READ *** — R9 is
     //   dead in the whole body. Kept because the slot's signature demands it.
     ExternalPtr<External> Find(const System::Filename& path, uint32_t type) const;
-
-    // ?TypeId@ExternalList@Object@@SAIXZ 0x180007360 — `MOV EAX,[_typeInfo]`
-    // over the (still minted) record, through the Object accessor slot
-    // (external_class.cpp; B39_RULES D6 step 1).
-    static uint32_t TypeId();
-
-    // Retail's factory pair (B39_RULES D2), defined in external_list.cpp.
-    static Base* CreateNewObject();                    // 0x180007460
-    static Base* CreateInPlaceObject(void* place);     // 0x180007510
 
 protected:
     // ??1ExternalList 0x1800076c0. NON-VIRTUAL (no virtual dtor until the
@@ -1088,7 +1084,6 @@ static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simple
 // "faithful partial beats a complete-looking conversion" rule.
 // ############################################################################
 const BaseTypeInfo* ExternalTypeInfoRecord();          // ?_typeInfo@External@Object@@
-const BaseTypeInfo* ExternalListTypeInfoRecord();      // ?_typeInfo@ExternalList@Object@@
 const BaseTypeInfo* CompiledExternalTypeInfoRecord();  // ?_typeInfo@CompiledExternal@Object@@
 
 }  // namespace Object
