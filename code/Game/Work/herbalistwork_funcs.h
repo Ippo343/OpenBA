@@ -6,4 +6,3 @@
 #include "Work/HerbalistWork.h"
 #include <cstdint>
 
-bool HerbalistWork_ResolveFuncs();

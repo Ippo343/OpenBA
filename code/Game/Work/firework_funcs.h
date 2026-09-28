@@ -6,4 +6,3 @@
 #include "Work/FireWork.h"
 #include <cstdint>
 
-bool FireWork_ResolveFuncs();

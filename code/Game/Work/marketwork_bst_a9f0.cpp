@@ -52,47 +52,18 @@
 // ---------------------------------------------------------------------------
 // Runtime primitives
 // ---------------------------------------------------------------------------
-// Retail reaches these through .rdata dispatch slots, and so do we — deliberately NOT
-// through the engine_funcs globals.  standalone/redzone_alloc.cpp rewires the SLOTS
-// (0x140152b60/0x140152b68) but leaves `fn_MemAllocStatic` alone, so mixing the two
-// would pair a real alloc with a shimmed free.  Reading the slots keeps alloc and free
-// on the same allocator under every harness configuration.
+// Retail reaches these through .rdata dispatch slots; B3R calls them by name (the
+// REDZONE / ALLOC_STATS instruments sit on the allocator's own hook since W0-A0):
 //   [0x140152b60] System::MemoryAllocator::MemAlloc (static 2-arg: size, align)
 //   [0x140152b68] System::MemoryAllocator::MemFree  (static 1-arg)
+//   0x14000d9d0   ActRm_VectorClone_d9d0     (Action/exe_bodies.h)
+//   0x140025920   PlayerTrade_Retrace_25920  (Player/exe_bodies.h)
 
 #include "Work/marketwork_bst_a9f0.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"
+#include "Player/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 #include <cstdint>
-
-namespace {
-
-typedef void* (*MBst_MemAlloc_t)(uint64_t size, int align);   // slot 0x140152b60
-typedef void  (*MBst_MemFree_t)(void* p);                     // slot 0x140152b68
-typedef void  (*MBst_VectorClone_t)(int64_t* dst, int64_t* src);   // 0x14000d9d0
-typedef void  (*MBst_Retrace_t)(int64_t* tree, int64_t* pNode);    // 0x140025920
-
-MBst_MemAlloc_t    s_memAlloc    = nullptr;
-MBst_MemFree_t     s_memFree     = nullptr;
-MBst_VectorClone_t s_vectorClone = nullptr;
-MBst_Retrace_t     s_retrace     = nullptr;
-bool               s_resolved    = false;
-
-// Lazy one-shot resolve.  The dispatch slots are .rdata storage filled at startup, so
-// they must be dereferenced (not called as if the slot address were the function).
-void ResolveOnce() {
-    if (s_resolved) return;
-    s_resolved = true;
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60))
-        s_memAlloc = *reinterpret_cast<MBst_MemAlloc_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b68))
-        s_memFree = *reinterpret_cast<MBst_MemFree_t*>(s);
-    // Direct exe calls — these are our own reimplementations, resolved through the
-    // address registry exactly as marketwork.cpp resolves its helpers.
-    s_vectorClone = reinterpret_cast<MBst_VectorClone_t>(ResolveAddr(Module::Exe, 0x14000d9d0));
-    s_retrace     = reinterpret_cast<MBst_Retrace_t>(ResolveAddr(Module::Exe, 0x140025920));
-}
-
-} // namespace
 
 // ============================================================================
 // 0x14002ae50 — create one market BST node
@@ -122,9 +93,8 @@ void ResolveOnce() {
 // InternalBasePtr default-ctor followed by the copy-assign; kept verbatim.
 extern "C" void* MarketBst_ae50(void* unused, int64_t* src, void* parent) {
     (void)unused;   // homed at [RSP+8] by retail and never loaded — genuinely dead.
-    ResolveOnce();
 
-    void* mem = s_memAlloc ? s_memAlloc(0x38, 8) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x38, 8);
     if (mem == nullptr) return nullptr;   // faithful: retail's JZ skips ALL initialisation
 
     uintptr_t n = reinterpret_cast<uintptr_t>(mem);
@@ -138,8 +108,7 @@ extern "C" void* MarketBst_ae50(void* unused, int64_t* src, void* parent) {
                                                   // would leave a stale capacity behind.
 
     // 0x14000d9d0 — deep-copy the 16-byte-element dynamic array from src+0x08.
-    if (s_vectorClone)
-        s_vectorClone(reinterpret_cast<int64_t*>(n + 0x08), src + 1);  // src + 1 == src+0x08
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(n + 0x08), src + 1);  // src + 1 == src+0x08
 
     *reinterpret_cast<void**>(n + 0x18)   = parent;   // aeb5
     *reinterpret_cast<uint64_t*>(n + 0x20) = 0;       // aeb9 — left
@@ -190,7 +159,6 @@ extern "C" void* MarketBst_ae50(void* unused, int64_t* src, void* parent) {
 // itself (its first 8 bytes ARE the InternalBasePtr) and on the source key.  They are
 // kept; CheckPtr is a no-op in retail but the call is part of the shape.
 extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
-    ResolveOnce();
 
     uintptr_t cur = static_cast<uintptr_t>(tree[0]);   // tree->root
 
@@ -246,7 +214,7 @@ extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
     }
 
     // ac0e — AVL retrace/rebalance starting from the PARENT (retraceSlot), not the new node.
-    if (s_retrace) s_retrace(tree, &retraceSlot);
+    PlayerTrade_Retrace_25920(tree, &retraceSlot);
 
     out[0] = reinterpret_cast<int64_t>(newNode);                       // ac1e
     *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(tree) + 8) += 1;  // ac21
@@ -286,7 +254,6 @@ extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
 // Wasteful, and faithful; do not "optimise" it away, the temp's buffer is a distinct
 // allocation from the node's and freeing it here is what keeps the node's copy valid.
 extern "C" int64_t* MarketBst_a9f0(int64_t* tree, int64_t* out, int64_t* key, int64_t* vec) {
-    ResolveOnce();
 
     // tmp[0] = key, tmp[1] = array.ptr, tmp[2] = array.count(int32)+cap(int32)
     int64_t tmp[3];
@@ -295,11 +262,11 @@ extern "C" int64_t* MarketBst_a9f0(int64_t* tree, int64_t* out, int64_t* key, in
     tmp[1] = 0;                                     // aa23
     tmp[2] = 0;                                     // aa27 — 8-byte zero covers count AND cap
 
-    if (s_vectorClone) s_vectorClone(&tmp[1], vec); // aa32
+    ActRm_VectorClone_d9d0(&tmp[1], vec); // aa32
 
     MarketBst_ab60(tree, out, &tmp[0]);             // aa43 (return value discarded here)
 
-    if (s_memFree) s_memFree(reinterpret_cast<void*>(tmp[1]));  // aa58 — free the temp buffer
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(tmp[1]));  // aa58 — free the temp buffer
     tmp[1] = 0;                                     // aa5e
     tmp[2] = 0;                                     // aa63
 

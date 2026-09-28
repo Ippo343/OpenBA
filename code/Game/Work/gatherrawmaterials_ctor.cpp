@@ -30,17 +30,17 @@
 #include "Work/gatherrawmaterials_funcs.h"
 #include <new>
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Dialog/dialog_exe_helpers.h"   // B3R: Dialog_FindComponent_d6c0
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include "Component/BuildDescription.h"   // ENDGAME B.3.8 CB3: BuildDescription::TypeId()
 
 #include "Object/factory_registration.h"
 
-// FindComponent that returns the BuildComponent (holds BuildDescription at +0x18).
-typedef void  (*GRMC_FindCompUnk_t)(uintptr_t entity, void* retIBP);    // 0x14000d6c0
-// FindComponent that returns the site StorageComponent (type 0x1401c7e78).
-typedef void* (*GRMC_FindCompStorage_t)(uintptr_t entity, void* retIBP); // 0x140006270
+// FindComponent that returns the BuildComponent (holds BuildDescription at +0x18):
+// 0x14000d6c0 Dialog_FindComponent_d6c0 (Dialog/dialog_exe_helpers.h).
+// FindComponent that returns the site StorageComponent (type 0x1401c7e78):
+// 0x140006270 WorkBase_FindComponent_6270 (Work/exe_bodies.h). Both called by name (B3R).
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
 // GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
@@ -70,23 +70,19 @@ GatherRawMaterials::GatherRawMaterials(void* buildEntityIBP) : Work(buildEntityI
 
     // --- Locate BuildComponent (-> BuildDescription at +0x18) on the build entity ---
     uintptr_t buildCompIBP = 0;
-    GRMC_FindCompUnk_t findComp =
-        reinterpret_cast<GRMC_FindCompUnk_t>(ResolveAddr(Module::Exe, 0x14000d6c0));
-    if (findComp && buildEntityIBP)
-        findComp(*reinterpret_cast<uintptr_t*>(buildEntityIBP), &buildCompIBP);
+    if (buildEntityIBP)
+        Dialog_FindComponent_d6c0(*reinterpret_cast<void**>(buildEntityIBP), &buildCompIBP);
 
     void* descObj = buildCompIBP ? *reinterpret_cast<void**>(buildCompIBP + 0x18) : nullptr;
     uint32_t descTid = GRMC_BuildDescTypeId();
     void* desc = nullptr;
-    if (descObj && fn_IsDerivedFrom && descTid && fn_IsDerivedFrom(descObj, descTid))
+    if (descObj && descTid && Object::IsDerivedFromNullSafe(descObj, descTid))
         desc = descObj;
 
     // --- Locate the site StorageComponent ---
     uintptr_t storage = 0;
-    GRMC_FindCompStorage_t findStorage =
-        reinterpret_cast<GRMC_FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    if (findStorage && buildEntityIBP)
-        findStorage(*reinterpret_cast<uintptr_t*>(buildEntityIBP), &storage);
+    if (buildEntityIBP)
+        WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(buildEntityIBP), &storage);
 
     // --- Size the two parallel int arrays to the material count ---
     // FLAG: original reads desc+0x28 unconditionally (assumes desc valid). We guard

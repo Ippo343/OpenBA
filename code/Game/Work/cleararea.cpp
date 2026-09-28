@@ -20,8 +20,14 @@
 #include "Work/ClearArea.h"
 #include "Work/cleararea_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_bodies.h"        // B3R: 0x14009f3e0
+#include "Game/exe_constants.h"     // B3R: kRdata_*
+#include "system/MemoryAllocator.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdio>
@@ -36,78 +42,18 @@
 // BANISHED_CLEAR_TRACE (shared with clearareacomponent_states.cpp); default off.
 
 // ============================================================
-// Local function pointers (resolved once on first use)
+// Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
-
-
-
-// BST serialization helpers
-// ClearArea_helper_9c10: serializes tree at +0x48 (InternalBasePtr BST)
-typedef void (*fn_BST_Serialize_IBP_t)(void* bst, void* serializer);
-static fn_BST_Serialize_IBP_t s_fn_BST_Serialize_IBP = nullptr;  // 0x140029c10
-
-// TradeDescription_impl_9de0: serializes tree at +0x58 (cell index BST)
-typedef void (*fn_BST_Serialize_Cell_t)(void* bst, void* serializer);
-static fn_BST_Serialize_Cell_t s_fn_BST_Serialize_Cell = nullptr;  // 0x140029de0
-
-// FUN_140002340: InternalBasePtr serialize
-typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;  // 0x140002340
-
-// BST tree node operations
-// ClearArea_helper_98a0: insert into IBP BST at +0x48
-typedef void (*fn_BST_Insert_IBP_t)(void* bst, void* entry);
-static fn_BST_Insert_IBP_t s_fn_BST_Insert_IBP = nullptr;  // 0x1400298a0
-
-// TradeDescription_impl_ca60: remove node from BST (local variant, returns void*)
-typedef void* (*fn_BST_RemoveLocal_t)(void* bst, void* node);
-static fn_BST_RemoveLocal_t s_fn_BST_Remove = nullptr;  // 0x14001ca60
-
-// FUN_14000e320: recursive free of tree branch
-typedef void (*fn_TreeNodeFree_t)(void* tree, void* branch);
-static fn_TreeNodeFree_t s_fn_TreeNodeFree = nullptr;  // 0x14000e320
-
-// FUN_1400c5400: remove pending action from state machine
-typedef void (*fn_RemovePendingAction_t)(void* smActionList);
-static fn_RemovePendingAction_t s_fn_RemovePendingAction = nullptr;  // 0x1400c5400
-
-// Cached vtable addresses
-
-// ============================================================
-// Lazy resolver — called once before first use
-// ============================================================
-static bool s_resolved = false;
-
-static bool ResolveAll() {
-    if (s_resolved) return true;
-
-    // BST serialization
-    s_fn_BST_Serialize_IBP = reinterpret_cast<fn_BST_Serialize_IBP_t>(
-        ResolveAddr(Module::Exe, 0x140029c10));
-    s_fn_BST_Serialize_Cell = reinterpret_cast<fn_BST_Serialize_Cell_t>(
-        ResolveAddr(Module::Exe, 0x140029de0));
-    s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    // BST operations
-    s_fn_BST_Insert_IBP = reinterpret_cast<fn_BST_Insert_IBP_t>(
-        ResolveAddr(Module::Exe, 0x1400298a0));
-    s_fn_BST_Remove = reinterpret_cast<fn_BST_RemoveLocal_t>(
-        ResolveAddr(Module::Exe, 0x14001ca60));
-    s_fn_TreeNodeFree = reinterpret_cast<fn_TreeNodeFree_t>(
-        ResolveAddr(Module::Exe, 0x14000e320));
-    s_fn_RemovePendingAction = reinterpret_cast<fn_RemovePendingAction_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-
-    s_resolved = true;
-    return true;
-}
+//   0x140029c10 WorkLeaf_BstSerializeIBPpair_29c10   0x140029de0 WorkCellBST_Serialize_9de0
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable
+//   0x1400298a0 WorkLeaf_BstRemoveByIBP_298a0        0x14001ca60 WorkCellBST_Remove_ca60
+//   0x14000e320 WorkBase_TreeNodeFree_e320           0x1400c5400 WorkBase_TaskListCleanup_c5400
 
 // ============================================================
 // ClearArea::Ctor (0x1400e68d0)
 // ============================================================
 // The Work base init and the two stamps are the compiler's (Work(), then this
-// class's table). ResolveAll wires the file's helper pointers for the members.
+// class's table).
 ClearArea::ClearArea()
     : Work(),
       field_48(nullptr),  // tree root
@@ -115,7 +61,6 @@ ClearArea::ClearArea()
       field_58(nullptr),  // cell tree root
       field_60(0),        // cell count
       field_68(nullptr) { // map entity IBP
-    ResolveAll();
 }
 
 // ============================================================
@@ -143,15 +88,14 @@ ClearArea::ClearArea(void* pEntityIBP, uint64_t descRef, uint8_t clearTrees,
 // resets vtable to Work, then tail-calls Internal::~Internal.
 // The stamps (ClearArea, then Work) and the `~Internal` tail call are the compiler's.
 ClearArea::~ClearArea() {
-    ResolveAll();
 
     // Free cell tree (+0x58)
     void* cellRoot = field_58;
     if (cellRoot) {
         // Recursively free left subtree, then right subtree, then root
-        s_fn_TreeNodeFree(&field_58, *(void**)((uintptr_t)cellRoot + 0x18));
-        s_fn_TreeNodeFree(&field_58, *(void**)((uintptr_t)cellRoot + 0x20));
-        fn_MemFreeStatic(cellRoot);
+        WorkBase_TreeNodeFree_e320(&field_58, *(void**)((uintptr_t)cellRoot + 0x18));
+        WorkBase_TreeNodeFree_e320(&field_58, *(void**)((uintptr_t)cellRoot + 0x20));
+        System::MemoryAllocator::MemFree(cellRoot);
     }
     field_58 = nullptr;
     field_60 = 0;
@@ -159,9 +103,9 @@ ClearArea::~ClearArea() {
     // Free entity tree (+0x48)
     void* treeRoot = field_48;
     if (treeRoot) {
-        s_fn_TreeNodeFree(&field_48, *(void**)((uintptr_t)treeRoot + 0x18));
-        s_fn_TreeNodeFree(&field_48, *(void**)((uintptr_t)treeRoot + 0x20));
-        fn_MemFreeStatic(treeRoot);
+        WorkBase_TreeNodeFree_e320(&field_48, *(void**)((uintptr_t)treeRoot + 0x18));
+        WorkBase_TreeNodeFree_e320(&field_48, *(void**)((uintptr_t)treeRoot + 0x20));
+        System::MemoryAllocator::MemFree(treeRoot);
     }
     field_48 = nullptr;
     field_50 = 0;
@@ -174,7 +118,6 @@ ClearArea::~ClearArea() {
 //          IBP_Serialize(+0x68) + Bool(+0x70) + [v1: BST_Cell(+0x58) +
 //          Bool(+0x71) + Bool(+0x72)]
 void ClearArea::Persist(void* stream) {
-    ResolveAll();
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
@@ -184,10 +127,10 @@ void ClearArea::Persist(void* stream) {
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize entity BST at +0x48
-    s_fn_BST_Serialize_IBP(&field_48, serializerBuf);
+    WorkLeaf_BstSerializeIBPpair_29c10(&field_48, serializerBuf);
 
     // Serialize map entity InternalBasePtr at +0x68
-    s_fn_IBP_Serialize(&field_68, serializerBuf);
+    Reimpl_ExternalPtr_Serialize_StringTable(&field_68, serializerBuf);
 
     // Serialize clearTrees bool at +0x70
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&field_70), nullptr);   // B.3.4 bridge
@@ -196,7 +139,7 @@ void ClearArea::Persist(void* stream) {
     int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
         // Serialize cell BST at +0x58
-        s_fn_BST_Serialize_Cell(&field_58, serializerBuf);
+        WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_58), serializerBuf);
 
         // Serialize clearGround bool at +0x71
         reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&field_71), nullptr);   // B.3.4 bridge
@@ -218,12 +161,11 @@ void ClearArea::Persist(void* stream) {
 //
 // Params: self, citizen (unused), treeEntry (IBP*), cellIndex
 int ClearArea::OnComplete(void* /*citizen*/, void* treeEntry, int cellIndex) {
-    ResolveAll();
 
     // If treeEntry is non-null, insert into entity BST at +0x48
     uintptr_t entryPtr = treeEntry ? *(uintptr_t*)treeEntry : 0;
     if (entryPtr != 0) {
-        s_fn_BST_Insert_IBP(&field_48, treeEntry);
+        WorkLeaf_BstRemoveByIBP_298a0(&field_48, treeEntry);
     }
 
     // Search cell BST (+0x58) for cellIndex and remove if found
@@ -250,7 +192,7 @@ int ClearArea::OnComplete(void* /*citizen*/, void* treeEntry, int cellIndex) {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x20);
                 } else {
                     // Remove this node from cell tree
-                    s_fn_BST_Remove(&field_58, searchNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_58), searchNode);
                     return 0;
                 }
             }
@@ -281,7 +223,6 @@ int ClearArea::OnCancel(void* citizen, void* treeEntry, int arg3) {
 // component (+0x278), and removes the pending action (+0x48).
 // Then does the same for cell tree (+0x58).
 int ClearArea::Cleanup() {
-    ResolveAll();
 
     // Clean up entity tree (+0x48)
     while (field_50 > 0) {
@@ -301,7 +242,7 @@ int ClearArea::Cleanup() {
         uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
 
         // Remove pending action from state machine action list (+0x48)
-        s_fn_RemovePendingAction((void*)(smComp + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
 
         // Re-read count (RemovePendingAction may have modified it indirectly)
         // The tree node gets removed by the action system
@@ -322,7 +263,7 @@ int ClearArea::Cleanup() {
 
         // Get state machine component and remove pending action
         uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
-        s_fn_RemovePendingAction((void*)(smComp + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
     }
     return 0;
 }
@@ -349,147 +290,19 @@ int ClearArea::GetPriority() {
 }
 
 // ============================================================
-// Sub-function pointers (internal exe functions)
-// Resolved once on first call to ClearArea_Execute.
+// Execute's sub-functions, called by name (B3R)
 // ============================================================
-
-// FUN_14012e5c0: Get total slot count for a storage/workplace component
-// param: entity ptr. Returns int count (stored at entity+0x30 if 0).
-typedef int (*fn_GetSlotCount_t)(void* entity);
-static fn_GetSlotCount_t fn_GetSlotCount = nullptr;
-
-// FUN_140002e10: FindComponent_BuildState2 (WorkplaceComponent)
-// entity, retval -> InternalBasePtr
-// Already available as fn_FindComponent_WorkPlace inline in engine_funcs.h
-
-// FUN_140004680: FindComponent_Build (BuildComponent_Slot4)
-// Already available as fn_FindComponent_Build inline in engine_funcs.h
-
-// FUN_14009fc00: WorldGrid::GetTilesInArea(grid, x1, y1, x2, y2, outArray, filterBool)
-// outArray is a dynamic array: [0]=ptr, [8]=count
-typedef void (*fn_WorldGrid_GetTilesInArea_t)(void* grid, int x1, int y1, int x2, int y2,
-                                               void* outArray, char filter);
-static fn_WorldGrid_GetTilesInArea_t fn_WorldGrid_GetTilesInArea = nullptr;
-
-// FUN_14009d7c0: WorldGrid::SortTilesByDistance(grid, tileArray, refTileIdx)
-typedef void (*fn_WorldGrid_SortTiles_t)(void* grid, void* tileArray, int refTileIdx);
-static fn_WorldGrid_SortTiles_t fn_WorldGrid_SortTiles = nullptr;
-
-// FUN_1400052c0: FindComponent (NaturalResourceDescription type — DAT_1401c7c80-based)
-// entity, retval -> InternalBasePtr
-typedef void (*fn_FindComponent_NatRes_t)(void* entity, void* retval);
-static fn_FindComponent_NatRes_t fn_FindComponent_NatRes = nullptr;
-
-// FUN_14009ccf0: WorldGrid::FindCellForAction(grid, tileIdx, refTileIdx, flags) -> int cellIdx
-typedef int (*fn_WorldGrid_FindCell_t)(void* grid, int tileIdx, int refTileIdx, uint32_t flags);
-static fn_WorldGrid_FindCell_t fn_WorldGrid_FindCell = nullptr;
-
-// FUN_1400a00f0: WorldGrid::ValidateCell(grid, validationFlags, cellIdx, refTileIdx) -> bool
-typedef int (*fn_WorldGrid_ValidateCell_t)(void* grid, int validationFlags, int cellIdx, int refTileIdx);
-static fn_WorldGrid_ValidateCell_t fn_WorldGrid_ValidateCell = nullptr;
-
-// BuildStructure_impl_6ef0: validate/setup structure building
-// (self, citizenIBP, cellIdx, refTileIdx, time) -> bool
-typedef int (*fn_BuildStructure_impl_t)(void* self, void* citizenIBP, uint32_t cellIdx,
-                                         uint32_t refTileIdx, void* time);
-static fn_BuildStructure_impl_t fn_BuildStructure_impl = nullptr;
-
-// FUN_14009f3e0: CharacterComponent::GetWorldPosition(grid, outPos, inPos, walkable, outParam)
-typedef void (*fn_GetWorldPosition_t)(void* grid, float* outPos, float* inPos, char walkable, void* outParam);
-static fn_GetWorldPosition_t fn_GetWorldPosition = nullptr;
-
-// PerformWork_Action_Ctor3 (0x1400c1eb0): Create PerformWork action for tree clearing
-// (citizenIBP, workId, targetIBP, worldPos, zero, zeroByte)
-typedef void (*fn_PerformWork_Ctor3_t)(void* citizenIBP, int workId, void* targetIBP,
-                                        float* worldPos, int zero, char zeroByte);
-static fn_PerformWork_Ctor3_t fn_PerformWork_Ctor3 = nullptr;
-
-// PerformWork_Action_Ctor (0x1400bffd0): Create PerformWork action for ground clearing
-// (citizenIBP, workId, worldPos, tileIdx, mode, zeroByte, tileIdx2, zero, zero, clearInfo, workIBP)
-typedef void (*fn_PerformWork_Ctor_t)(void* citizenIBP, int workId, void* worldPos,
-                                       void* tileIdx, int mode, char zeroByte,
-                                       uint32_t tileIdx2, int64_t zero1, int zero2,
-                                       float* clearInfo, void* workIBP);
-static fn_PerformWork_Ctor_t fn_PerformWork_Ctor = nullptr;
-
-// ClearArea_helper_9920 (0x140029920): BST insert for tree tracking set at +0x48
-typedef void (*fn_ClearArea_TreeInsert_t)(void* treeSet, void* workIBP, void* keyValue);
-static fn_ClearArea_TreeInsert_t fn_ClearArea_TreeInsert = nullptr;
-
-// TradeDescription_impl_9a40 (0x140029a40): BST insert for ground tile tracking set at +0x58
-typedef void (*fn_ClearArea_GroundInsert_t)(void* groundSet, void* workIBP, void* keyValue);
-static fn_ClearArea_GroundInsert_t fn_ClearArea_GroundInsert = nullptr;
-
-// FUN_1400f8620: GatherWork — attempt to gather a natural resource
-// (gatherSys, citizenIBP, resourceTypeId, pickupBool) -> bool
-typedef int (*fn_GatherWork_Attempt_t)(void* gatherSys, void* citizenIBP, int resourceTypeId, char pickupBool);
-static fn_GatherWork_Attempt_t fn_GatherWork_Attempt = nullptr;
-
-// Math::Vector3::Vector3 — the real class (math/Math.h), B.3.1 step 2
-
-// System::MemoryAllocator::MemFree — dispatch at 0x140152b68
-typedef void (*fn_MemFreeDispatch_t)(void* ptr);
-static fn_MemFreeDispatch_t fn_MemFreeDispatch = nullptr;
-
-// RawMaterialComponent type ID — DAT_1401c7c80 (ENDGAME B.3.9 D5: the old local
-// variable name "NaturalResourceDesc" named a different class than the cell held;
-// read directly through RawMaterialComponent::TypeId() below).
-
-// WorkComponent type ID — DAT_1401c8070 (already in engine_funcs.h as
-// TypeId_WorkComponent; the comment here used to say "StorageLocationComponent",
-// which was also wrong).
-
-// Float constant: half-cell offset (DAT_140172114)
-static float* g_pHalfCellOffset = nullptr;
-
-// ============================================================
-// One-time resolution (Execute-specific helpers)
-// ============================================================
-static bool s_exec_resolved = false;
-
-static bool ResolveClearAreaFuncs() {
-    if (s_exec_resolved) return true;
-
-    fn_GetSlotCount = reinterpret_cast<fn_GetSlotCount_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-    fn_WorldGrid_GetTilesInArea = reinterpret_cast<fn_WorldGrid_GetTilesInArea_t>(
-        ResolveAddr(Module::Exe, 0x14009fc00));
-    fn_WorldGrid_SortTiles = reinterpret_cast<fn_WorldGrid_SortTiles_t>(
-        ResolveAddr(Module::Exe, 0x14009d7c0));
-    fn_FindComponent_NatRes = reinterpret_cast<fn_FindComponent_NatRes_t>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-    fn_WorldGrid_FindCell = reinterpret_cast<fn_WorldGrid_FindCell_t>(
-        ResolveAddr(Module::Exe, 0x14009ccf0));
-    fn_WorldGrid_ValidateCell = reinterpret_cast<fn_WorldGrid_ValidateCell_t>(
-        ResolveAddr(Module::Exe, 0x1400a00f0));
-    fn_BuildStructure_impl = reinterpret_cast<fn_BuildStructure_impl_t>(
-        ResolveAddr(Module::Exe, 0x1400f6ef0));
-    fn_GetWorldPosition = reinterpret_cast<fn_GetWorldPosition_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));
-    fn_PerformWork_Ctor3 = reinterpret_cast<fn_PerformWork_Ctor3_t>(
-        ResolveAddr(Module::Exe, 0x1400c1eb0));
-    fn_PerformWork_Ctor = reinterpret_cast<fn_PerformWork_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400bffd0));
-    fn_ClearArea_TreeInsert = reinterpret_cast<fn_ClearArea_TreeInsert_t>(
-        ResolveAddr(Module::Exe, 0x140029920));
-    fn_ClearArea_GroundInsert = reinterpret_cast<fn_ClearArea_GroundInsert_t>(
-        ResolveAddr(Module::Exe, 0x140029a40));
-    fn_GatherWork_Attempt = reinterpret_cast<fn_GatherWork_Attempt_t>(
-        ResolveAddr(Module::Exe, 0x1400f8620));
-
-    // Dispatch slots (indirect via .rdata)
-    {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152b68));
-        if (slot) fn_MemFreeDispatch = reinterpret_cast<fn_MemFreeDispatch_t>(*slot);
-    }
-
-    // Float constant
-    g_pHalfCellOffset = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x140172114));
-
-    s_exec_resolved = true;
-    return fn_GetSlotCount && fn_WorldGrid_GetTilesInArea && fn_WorldGrid_SortTiles;
-}
+//   0x14012e5c0 WorkComponent_CalcMaxWorkers   0x14009fc00 WorkLeaf_GetTilesInArea_9fc00
+//   0x14009d7c0 WorkLeaf_SortTilesByDistance_9d7c0  0x1400052c0 WorkBase_FindComponent_52c0
+//   0x14009ccf0 WorkGrid_FindCell_9ccf0        0x1400a00f0 WorkBase_ValidateCell_a00f0
+//   0x1400f6ef0 WorkImpl_BuildStructureStep_6ef0  0x14009f3e0 Reimpl_MapGetTerrainPos
+//   0x1400c1eb0 WorkAct_PerformWorkCtor_c1eb0  0x1400bffd0 WorkAct_PerformWorkCtor_bffd0
+//   0x140029920 WorkLeaf_BstInsertByIBP_29920  0x140029a40 WorkCellBST_Insert_9a40
+//   0x1400f8620 WorkGrid_TryAssignWorkplace_f8620
+//   slot 0x140152b68 System::MemoryAllocator::MemFree; DAT_140172114 kRdata_140172114
+// (0x140002e10 / 0x140004680 are fn_FindComponent_WorkPlace / _Build, engine_funcs.h.)
+// RawMaterialComponent (DAT_1401c7c80) and WorkComponent (DAT_1401c8070) are read
+// through their classes' TypeId().
 
 // ============================================================
 // Tile info entry — 16 bytes per tile returned by GetTilesInArea
@@ -505,7 +318,6 @@ static_assert(sizeof(TileInfo) == 0x10, "TileInfo size mismatch");
 // ClearArea::Execute implementation
 // ============================================================
 int ClearArea::Execute(void* actionStack, void* time) {
-    if (!ResolveClearAreaFuncs()) return 1;
 
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
@@ -520,7 +332,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
 
     // Get total slot count for the entity
     if (*(int*)((uintptr_t)workEntity + 0x30) == 0) {
-        int count = fn_GetSlotCount(workEntity);
+        int count = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workEntity));
         *(int*)((uintptr_t)workEntity + 0x30) = count;
     }
 
@@ -593,7 +405,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
     int16_t y2 = *(int16_t*)((uintptr_t)buildComp + 0x2e);
 
     // Get tiles in the area
-    fn_WorldGrid_GetTilesInArea(worldGrid, (int)x1, (int)y1, (int)x2, (int)y2,
+    WorkLeaf_GetTilesInArea_9fc00(reinterpret_cast<int*>(worldGrid), (int)x1, (int)y1, (int)x2, (int)y2,
                                  &tileArray, includeEmptyTiles);
 
     int tileCount = tileArray.count;
@@ -632,7 +444,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
         uint32_t refTileIdx = (uint32_t)(gridSize * tileY + tileX);
 
         // Sort tiles by distance from citizen
-        fn_WorldGrid_SortTiles(worldGrid, &tileArray, refTileIdx);
+        WorkLeaf_SortTilesByDistance_9d7c0(reinterpret_cast<int*>(worldGrid), &tileArray, refTileIdx);
 
         // ============================================================
         // Phase 1: Clear trees (field_70)
@@ -677,28 +489,28 @@ int ClearArea::Execute(void* actionStack, void* time) {
 
                 // Find NaturalResource component on tree entity
                 uint64_t natResIBP = 0;
-                fn_FindComponent_NatRes(reinterpret_cast<void*>(treeEntity), &natResIBP);
+                WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(treeEntity), &natResIBP);
 
                 if (natResIBP == 0) {
                     continue;
                 }
 
                 // Find valid cell near this tile
-                int cellIdx = fn_WorldGrid_FindCell(worldGrid, tile->tileIndex, refTileIdx, 0xe07);
+                int cellIdx = WorkGrid_FindCell_9ccf0(reinterpret_cast<int*>(worldGrid), tile->tileIndex, refTileIdx, 0xe07);
                 if (cellIdx < 0) {
                     continue;
                 }
 
                 // Validate cell is passable
-                int valid = fn_WorldGrid_ValidateCell(worldGrid, 0xe1f, (int)(uint32_t)cellIdx, refTileIdx);
+                int valid = static_cast<int>(WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(worldGrid), 0xe1f, (int)(uint32_t)cellIdx, refTileIdx));   // the door read EAX
                 if (!(valid & 0xFF)) {
                     continue;
                 }
 
                 // Try to set up the build structure work
                 void* actionStackPtr = *(void**)actionStack;
-                int buildResult = fn_BuildStructure_impl(this, &actionStackPtr,
-                                                          (uint32_t)cellIdx, refTileIdx, time);
+                int buildResult = static_cast<int>(WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &actionStackPtr,
+                                                          (uint32_t)cellIdx, refTileIdx, time));   // the door read EAX
                 if (!(buildResult & 0xFF)) {
                     // BuildStructure_impl returned false → result = 0 (no work assigned)
                     result = 0;
@@ -716,7 +528,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
 
                 // Compute world position from cell index
                 int gridSz = *(int*)worldGrid;
-                float halfOffset = (float)(gridSz >> 1) - *g_pHalfCellOffset;
+                float halfOffset = (float)(gridSz >> 1) - kRdata_140172114;
                 float worldX = (float)(cellIdx % gridSz) - halfOffset;
                 float worldY = (float)(cellIdx / gridSz) - halfOffset;
 
@@ -724,14 +536,14 @@ int ClearArea::Execute(void* actionStack, void* time) {
 
                 // Get nearby walkable position
                 float walkPos[4];
-                fn_GetWorldPosition(worldGrid, walkPos, &posVec.x, 0, nullptr);
+                Reimpl_MapGetTerrainPos(worldGrid, walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for tree removal
                 uint64_t targetIBP = natResIBP;
                 uint64_t citizenRef = reinterpret_cast<uint64_t>(*(void**)actionStack);
 
                 // PerformWork_Action_Ctor3(citizenIBP, workId, targetIBP, worldPos, 0, 0)
-                fn_PerformWork_Ctor3(&citizenRef, field_20, &targetIBP, walkPos, 0, 0);
+                WorkAct_PerformWorkCtor_c1eb0(&citizenRef, field_20, &targetIBP, walkPos, 0, 0);
 
                 // Post-work setup on citizen
                 int workId = field_20;
@@ -756,7 +568,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
                 struct { uint64_t key; uint64_t value; } insertPair;
                 insertPair.key = treeEntity;
                 insertPair.value = reinterpret_cast<uint64_t>(*(void**)actionStack);
-                fn_ClearArea_TreeInsert(reinterpret_cast<void*>(s + 0x48), &workIBP,
+                WorkLeaf_BstInsertByIBP_29920(reinterpret_cast<void*>(s + 0x48), &workIBP,
                                         reinterpret_cast<void*>(&insertPair));
 
                 result = 2;
@@ -798,7 +610,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
                 }
 
                 // Validate cell passability
-                int passable = fn_WorldGrid_ValidateCell(worldGrid, 0xe1f, (int)tileIdx, refTileIdx);
+                int passable = static_cast<int>(WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(worldGrid), 0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
                 if (!(passable & 0xFF)) {
                     tileCount = tileArray.count;
                     continue;
@@ -815,24 +627,24 @@ int ClearArea::Execute(void* actionStack, void* time) {
 
                 // Compute world position
                 int gridSz = *(int*)worldGrid;
-                float halfOffset = (float)(gridSz >> 1) - *g_pHalfCellOffset;
+                float halfOffset = (float)(gridSz >> 1) - kRdata_140172114;
                 float worldX = (float)((int)tileIdx % gridSz) - halfOffset;
                 float worldY = (float)((int)tileIdx / gridSz) - halfOffset;
 
                 Math::Vector3 posVec(worldX, worldY, 0.0f);
 
                 float walkPos[4];
-                fn_GetWorldPosition(worldGrid, walkPos, &posVec.x, 0, nullptr);
+                Reimpl_MapGetTerrainPos(worldGrid, walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for ground clearing
                 void* actionStackPtrForWork = *(void**)actionStack;
                 uint64_t citizenRef = reinterpret_cast<uint64_t>(actionStackPtrForWork);
                 int workId = field_20;
 
-                fn_PerformWork_Ctor(&citizenRef, workId, walkPos,
-                                     reinterpret_cast<void*>((uint64_t)tileIdx),
+                WorkAct_PerformWorkCtor_bffd0(&citizenRef, workId, reinterpret_cast<uint32_t*>(walkPos),
+                                     static_cast<int>(tileIdx),   // the door passed (uint64_t)tileIdx; the body reads R9D
                                      2, 0, tileIdx, 0, 0,
-                                     reinterpret_cast<float*>(&clearInfo), &nullIBP);
+                                     reinterpret_cast<float*>(&clearInfo), reinterpret_cast<int64_t*>(&nullIBP));
 
                 // Post-work setup on citizen
                 int workIdSaved = field_20;
@@ -856,7 +668,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
                 groundPair.tileKey = tileIdx;
                 groundPair.pad = 0;
                 groundPair.citizenRef = reinterpret_cast<uint64_t>(*(void**)actionStack);
-                fn_ClearArea_GroundInsert(reinterpret_cast<void*>(s + 0x58), &workIBP,
+                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(s + 0x58), &workIBP,
                                            reinterpret_cast<void*>(&groundPair));
 
                 result = 0;
@@ -894,7 +706,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
                         void** compIBP2 = reinterpret_cast<void**>(
                             *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
                         void* comp2 = *compIBP2;
-                        if (fn_IsDerivedFrom(comp2, RawMaterialComponent::TypeId())) {
+                        if (Object::IsDerivedFromNullSafe(comp2, RawMaterialComponent::TypeId())) {
                             natResComp = comp2;
                         }
                         break;  // goto LAB_1400e6532
@@ -925,7 +737,7 @@ int ClearArea::Execute(void* actionStack, void* time) {
                         void** compIBP2 = reinterpret_cast<void**>(
                             *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
                         void* comp2 = *compIBP2;
-                        if (fn_IsDerivedFrom(comp2, WorkComponent::TypeId())) {
+                        if (Object::IsDerivedFromNullSafe(comp2, WorkComponent::TypeId())) {
                             storageLocComp = comp2;
                         }
                         break;
@@ -946,8 +758,8 @@ int ClearArea::Execute(void* actionStack, void* time) {
                 // Create citizen IBP for gather work
                 uint64_t citizenRef = reinterpret_cast<uint64_t>(*(void**)actionStack);
 
-                int gatherResult = fn_GatherWork_Attempt(gatherSys, &citizenRef,
-                                                          resourceTypeId, 0);
+                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(gatherSys), &citizenRef,
+                                                          resourceTypeId, 0));   // the door read EAX
                 if (gatherResult & 0xFF) {
                     result = 2;
                     goto cleanup;
@@ -961,8 +773,8 @@ done_nothing:
 
 cleanup:
     // Free the tile array
-    if (fn_MemFreeDispatch && tileArray.ptr) {
-        fn_MemFreeDispatch(tileArray.ptr);
+    if (tileArray.ptr) {
+        System::MemoryAllocator::MemFree(tileArray.ptr);
     }
     tileArray.ptr = nullptr;
     tileArray.count = 0;
@@ -983,28 +795,10 @@ cleanup:
 // NOT HOOKED — bug class 3 (RSP capture), standalone exe only.
 // ============================================================
 
-// FUN_1400f7100: Work::ValidateTask helper
-typedef uint8_t (*fn_ValidateTask_t)(void* self, void* citizenIBP, void* ibp, void* outTask);
-static fn_ValidateTask_t s_fn_ValidateTask_CA = nullptr;
-
-// CitizenAI_impl_ca60 (0x14001ca60): BST remove node
-typedef void* (*fn_BST_RemoveNode_t)(void* bstRoot, void* node);
-static fn_BST_RemoveNode_t s_fn_BST_RemoveNode_CA = nullptr;
-
-static bool EnsureValidateFuncs() {
-    if (!s_fn_ValidateTask_CA) {
-        s_fn_ValidateTask_CA = reinterpret_cast<fn_ValidateTask_t>(
-            ResolveAddr(Module::Exe, 0x1400f7100));
-    }
-    if (!s_fn_BST_RemoveNode_CA) {
-        s_fn_BST_RemoveNode_CA = reinterpret_cast<fn_BST_RemoveNode_t>(
-            ResolveAddr(Module::Exe, 0x14001ca60));
-    }
-    return s_fn_ValidateTask_CA && s_fn_BST_RemoveNode_CA;
-}
+// Sub-functions, called by name (B3R): 0x1400f7100 WorkBase_ValidateTask_f7100,
+// 0x14001ca60 WorkCellBST_Remove_ca60.
 
 int ClearArea::Validate() {
-    if (!EnsureValidateFuncs()) return 1;
 
     uintptr_t s = (uintptr_t)this;
 
@@ -1028,7 +822,7 @@ int ClearArea::Validate() {
             uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
 
             // Validate this entry
-            uint8_t valid = s_fn_ValidateTask_CA((void*)s, nullptr,
+            uint8_t valid = WorkBase_ValidateTask_f7100((void*)s, nullptr,
                                                   (void*)&entityIBP, nullptr);
 
             if (valid == 0) {
@@ -1041,8 +835,7 @@ int ClearArea::Validate() {
                             newCap = newCount * 3;
                         }
                         removeCap = newCap;
-                        uintptr_t* newArr = (uintptr_t*)fn_MemAlloc(
-                            g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+                        uintptr_t* newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8);
 
                         // Copy existing entries
                         uint32_t copyStart = 0;
@@ -1062,7 +855,7 @@ int ClearArea::Validate() {
                         }
 
                         if (removeArr != newArr) {
-                            fn_MemFreeStatic(removeArr);
+                            System::MemoryAllocator::MemFree(removeArr);
                         }
                         removeArr = newArr;
                     } else {
@@ -1108,12 +901,12 @@ int ClearArea::Validate() {
         while (node != nullptr) {
             uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
 
-            uint8_t valid = s_fn_ValidateTask_CA((void*)s, nullptr,
+            uint8_t valid = WorkBase_ValidateTask_f7100((void*)s, nullptr,
                                                   (void*)&entityIBP, nullptr);
             if (valid == 0) {
                 // Cell tree has invalid entry — early return 0
-                fn_MemFreeStatic(nullptr);
-                fn_MemFreeStatic(removeArr);
+                System::MemoryAllocator::MemFree(nullptr);
+                System::MemoryAllocator::MemFree(removeArr);
                 return 0;
             }
 
@@ -1151,7 +944,7 @@ int ClearArea::Validate() {
                 } else {
                     if (removeArr[i] <= nodeKey) {
                         // Found — remove it
-                        s_fn_BST_RemoveNode_CA(&field_48, bstNode);
+                        WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);
                         break;
                     }
                     bstNode = *(void**)((uintptr_t)bstNode + 0x20); // right
@@ -1160,8 +953,8 @@ int ClearArea::Validate() {
         }
     }
 
-    fn_MemFreeStatic(nullptr);
-    fn_MemFreeStatic(removeArr);
+    System::MemoryAllocator::MemFree(nullptr);
+    System::MemoryAllocator::MemFree(removeArr);
     return 1;
 }
 
