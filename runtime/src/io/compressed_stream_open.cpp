@@ -53,15 +53,13 @@ void ArraySetSize(uintptr_t addr, void* arr, int n) {
     fn(arr, n);
 }
 
-// A Stream virtual, called through the OBJECT's vtable exactly as retail does.
-// Not shortcut to our MemoryStream bodies: the source is a Stream* and its
-// dynamic type is the caller's business, not ours.
-inline void* const* VTable(const Stream* s) {
-    return *reinterpret_cast<void* const* const*>(s);
+// The source's Stream virtuals are called through the OBJECT's vtable exactly
+// as retail does -- by name on `IO::Stream` (B3X W0). Not shortcut to our
+// MemoryStream bodies: the source is a Stream* and its dynamic type is the
+// caller's business, not ours. `Stream` here is the RtIo POD view.
+inline ::IO::Stream* AsStream(Stream* s) {
+    return reinterpret_cast<::IO::Stream*>(s);   // B.3.x bridge
 }
-
-typedef bool     (*StreamReadFn)(Stream*, int32_t, void*);
-typedef uint32_t (*StreamGetSizeFn)(const Stream*);
 
 }  // namespace
 
@@ -133,16 +131,15 @@ extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
 
     RtIo_CompressedStream_SetWindowCount(self, windowCount);   // 1800aa583
 
-    void* const* svt = VTable(self->source);               // 1800aa588/58c
     const int64_t len = static_cast<int32_t>(
-        reinterpret_cast<StreamGetSizeFn>(svt[6])(self->source));   // 1800aa58f MOVSXD
+        AsStream(self->source)->GetSize());                // 1800aa588..58f slot 6, MOVSXD
 
     if (static_cast<uint64_t>(len) < 4u) {                 // 1800aa595 CMP/JNC (UNSIGNED)
         return false;                                      // 1800aa59b
     }
 
     int32_t blockCount = 0;
-    reinterpret_cast<StreamReadFn>(VTable(src)[3])(src, 4, &blockCount);  // 1800aa5bd
+    AsStream(src)->Read(4, &blockCount);                   // 1800aa5bd slot 3
 
     if (static_cast<int32_t>(blockCount * 8) >
         static_cast<int32_t>(len)) {                       // 1800aa5cb CMP/JG (SIGNED, 32-bit)
@@ -151,8 +148,7 @@ extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
 
     ArraySetSize(0x180024d70, &self->headerData, blockCount);   // 1800aa5d8
 
-    reinterpret_cast<StreamReadFn>(VTable(src)[3])(
-        src, self->headerSize * 8, self->headerData);      // 1800aa5ed
+    AsStream(src)->Read(self->headerSize * 8, self->headerData);   // 1800aa5ed slot 3
 
     int32_t total = 4 + blockCount * 8;                    // 1800aa5f7 LEA
     const uint8_t* e = static_cast<const uint8_t*>(self->headerData) + 4;  // 1800aa609

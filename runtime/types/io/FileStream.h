@@ -404,10 +404,9 @@ struct VisitorStream {
 static_assert(sizeof(VisitorStream) == 0x18,
               "sizeof(IO::VisitorStream) == 0x18 (eh_vector_dtor stride 0x18002bf80)");
 
-// FileStream's slot 7 is Open, NOT Close. Named so a call site cannot repeat
-// the mistake the comment on FileStream warns about; Stream.h's
-// kStreamVtblCloseSlot is 7 as well and means something else on that branch.
-constexpr size_t kFileStreamVtblOpenSlot = 7;
+// FileStream's slot 7 is Open, NOT Close (the MemoryStream / CompressedStream
+// branch puts Close there). B3X W0: callers name `IO::FileStream::Open`; the
+// `kFileStreamVtblOpenSlot` index constant had no reader and is retired.
 
 }  // namespace RtIo
 

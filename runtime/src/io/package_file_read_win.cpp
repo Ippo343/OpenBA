@@ -262,7 +262,6 @@ typedef bool (*ReadPackfileFn)(PackageFileView*, const Filename*);
 typedef void (*VoidThisFn)(void*);
 typedef void (*ArraySetSizeFn)(void*, int32_t);
 typedef void (*ArraySetSizeFillFn)(void*, int32_t, const void*);
-typedef void (*StreamVFn)(void*);
 
 // ---- the frame's two overlapping stack buffers, §93 ------------------------
 // `[RBP+0x60] .. [RBP+0x18a0)` is 0x1840 bytes; the raw-read buffer starts
@@ -308,11 +307,10 @@ void ArraySetSizeFill(uintptr_t addr, void* arr, int32_t n, const void* fill) {
 }
 
 // A Stream virtual through the OBJECT's vtable, exactly as retail dispatches it
-// at 0x1800b603e (`MOV RAX,[RBP-0x58] ; CALL qword ptr [RAX+0x38]`).
+// at 0x1800b603e (`MOV RAX,[RBP-0x58] ; CALL qword ptr [RAX+0x38]`). B3X W0:
+// the virtual call by name.
 void CallStreamClose(MemoryStream* ms) {
-    const void* const* vtbl = *reinterpret_cast<const void* const* const*>(ms);
-    reinterpret_cast<StreamVFn>(
-        const_cast<void*>(vtbl[RtIo::kStreamVtblCloseSlot]))(ms);
+    reinterpret_cast<IO::MemoryStream*>(ms)->Close();   // slot 7 +0x38 (B.3.x bridge)
 }
 
 // ---- §94: the two jump-table bodies ---------------------------------------

@@ -212,26 +212,28 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
     return rw;
 }
 
+// B3X W0: the four ReaderWriter calls by name. `rw` is the rt::io POD view of
+// the object the Encoding factory built.
+inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
+    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;                                             // 1800b6261
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+    Rw(rw)->DeletingDtor(1);                                     // slot 0, flags 1
 }
 
 void RecInt(ReaderWriter* rw, void* v) {
-    using Fn = void (*)(ReaderWriter*, void*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, v, nullptr);
+    Rw(rw)->SerializeInt(*static_cast<int32_t*>(v), nullptr);    // +0xa0
 }
 
 void RecBool(ReaderWriter* rw, void* v) {
-    using Fn = void (*)(ReaderWriter*, void*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8])(rw, v, nullptr);
+    Rw(rw)->SerializeBool(*static_cast<bool*>(v), nullptr);      // +0x78
 }
 
-// `kArrayUInt` is (count, uint*, name) — EDX, R8, R9 at 0x1800b624c-0x1800b6259.
+// `SerializeUIntArray` is (count, uint*, name) — EDX, R8, R9 at 0x1800b624c-0x1800b6259.
 void RecArrayUInt(ReaderWriter* rw, int32_t n, void* data) {
-    using Fn = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kArrayUInt / 8])(rw, n, data, nullptr);
+    Rw(rw)->SerializeUIntArray(n, static_cast<uint32_t*>(data), nullptr);   // +0x40
 }
 
 // The five unnamed offsets this body touches. PackageFileView (FileSystem.h)

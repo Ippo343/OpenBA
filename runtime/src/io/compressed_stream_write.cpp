@@ -200,19 +200,13 @@ inline uint32_t StoredLength(const Header& h) {
     return h.compressedSize != 0 ? h.compressedSize : h.uncompressedSize;
 }
 
-// The source Stream's vtable, by SLOT INDEX rather than byte offset so the
-// arithmetic is visible — the same convention compressed_stream_read.cpp uses.
-// Retail calls [RAX+0x10] and [RAX+0x20] on the source and [RAX+0x40] on
-// `this`.
-constexpr int kSlotWrite         = 2;   // +0x10  bool Write(int n, const void* src)
-constexpr int kSlotSetCurrentPos = 4;   // +0x20  bool SetCurrentPos(int pos)
-constexpr int kSlotPreCommit     = 8;   // +0x40  void PreCommit()
-
-typedef bool (*StreamWriteFn)(void*, int32_t, const void*);
-typedef bool (*StreamSetPosFn)(void*, int32_t);
-typedef void (*ThisVoidFn)(void*);
-
-inline void* Slot(void* obj, int slot) { return (*static_cast<void***>(obj))[slot]; }
+// Retail calls [RAX+0x10] (Write, slot 2) and [RAX+0x20] (SetCurrentPos,
+// slot 4) on the source and [RAX+0x40] (PreCommit, slot 8) on `this`. B3X W0:
+// by name on `IO::Stream` / `IO::CompressedStream`, through each object's own
+// vtable as retail does.
+inline ::IO::Stream* AsStream(void* s) {
+    return static_cast<::IO::Stream*>(s);   // B.3.x bridge
+}
 
 // The two System::MemoryAllocator doors. Retail INLINES lock/Allocate/unlock in
 // ?Create below (`MOV RBX,[0x1801fc718] / ADD RBX,0x640 / EnterCriticalSection
@@ -523,7 +517,7 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
     }
 
     // ---- 2. virtual PreCommit --------------------------------------------
-    reinterpret_cast<ThisVoidFn>(Slot(self, kSlotPreCommit))(self);   // 1800a9f26..2c
+    reinterpret_cast<::IO::CompressedStream*>(self)->PreCommit();   // 1800a9f26..2c  +0x40  (B.3.x bridge)
 
     // ---- 3. lay the blocks out in the file --------------------------------
     const int32_t n = self->headerSize;                  // 1800a9f2f
@@ -538,19 +532,19 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
 
     // ---- 4. write [count][directory][blocks] ------------------------------
     void* const src = self->source;                      // 1800a9f7b
-    reinterpret_cast<StreamSetPosFn>(Slot(src, kSlotSetCurrentPos))(src, 0);  // 1800a9f84
+    AsStream(src)->SetCurrentPos(0);                     // 1800a9f84  +0x20
 
     int32_t count = self->headerSize;                    // 1800a9f87/8e  ([RSP+0x30])
-    reinterpret_cast<StreamWriteFn>(Slot(src, kSlotWrite))(src, 4, &count);   // 1800a9f9f
-    reinterpret_cast<StreamWriteFn>(Slot(src, kSlotWrite))(
-        src, self->headerSize * 8, self->headerData);    // 1800a9fa2..b3
+    AsStream(src)->Write(4, &count);                     // 1800a9f9f  +0x10
+    AsStream(src)->Write(
+        self->headerSize * 8, self->headerData);         // 1800a9fa2..b3
 
     if (self->headerSize > 0) {                          // 1800a9fb6/b9
         const Header* const h = Headers(self);
         void* const* const blocks = Blocks(self);
         for (int32_t i = 0; i < self->headerSize; ++i)   // 1800a9fee
-            reinterpret_cast<StreamWriteFn>(Slot(src, kSlotWrite))(
-                src, static_cast<int32_t>(StoredLength(h[i])), blocks[i]);   // 1800a9fc0..e5
+            AsStream(src)->Write(
+                static_cast<int32_t>(StoredLength(h[i])), blocks[i]);   // 1800a9fc0..e5
     }
 
     // ---- 5. release the working set ---------------------------------------

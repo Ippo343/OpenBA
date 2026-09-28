@@ -325,8 +325,9 @@ static_assert(sizeof(CompressedMemoryStream) == 0x98,
 
 // Stream vtable slot 7 (+0x38) is Close() on every concrete Stream in this
 // header. The ported dtor and Close both dispatch the embedded MemoryStream's
-// Close through it, exactly as retail does.
-constexpr size_t kStreamVtblCloseSlot = 7;
+// Close through it, exactly as retail does -- by name since B3X W0
+// (`IO::MemoryStream::Close()`), which retired the `kStreamVtblCloseSlot`
+// index constant.
 
 }  // namespace RtIo
 
