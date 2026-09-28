@@ -44,12 +44,6 @@
 
 #include "../../runtime/types/object/External.h"
 
-namespace Object {
-// runtime/src/object/external_class.cpp defines this under -DBANISHED_UNIT_TEST:
-// the unit build has no mint and no port registry, so the test supplies the one
-// reflection record `Type()`/`TypeName()`/`TypeId()` read.
-extern const BaseTypeInfo* g_unitExternalTypeInfo;
-}  // namespace Object
 
 namespace {
 
@@ -69,17 +63,6 @@ public:
 
     uint32_t _marker = 0xABCDEF01u;   // a field past External's 0x20 bytes
 };
-
-Object::BaseTypeInfo g_externalRecord;
-
-// The record seam is process-global, exactly as the real minted cell is.
-// Installed by whichever test runs first; nothing else in the suite reads it.
-void InstallRecord() {
-    g_externalRecord.typeId     = 0x11223344u;
-    g_externalRecord.name       = "External";
-    g_externalRecord.parentName = "Base";
-    ::Object::g_unitExternalTypeInfo = &g_externalRecord;
-}
 
 void** VTableOf(const void* o) { return *reinterpret_cast<void** const*>(o); }
 
@@ -124,8 +107,6 @@ UNIT_TEST(object_external_layout_matches_the_alias_pods) {
 // 2. Slot order, read the way an unconverted C body reads it
 // ---------------------------------------------------------------------------
 UNIT_TEST(object_external_vtable_slot_order_is_retails) {
-    InstallRecord();
-
     TestExternal obj;
     void*  self = &obj;
     void** vt   = VTableOf(self);
@@ -139,7 +120,7 @@ UNIT_TEST(object_external_vtable_slot_order_is_retails) {
 
     // slot 2 — Type (0x1800066d0, `MOV EAX,dword[0x1801f9b38]`).
     using TypeFn = uint32_t (*)(const void*);
-    CHECK_EQ(reinterpret_cast<TypeFn>(vt[2])(self), 0x11223344u);
+    CHECK_EQ(reinterpret_cast<TypeFn>(vt[2])(self), Object::External::TypeId());
 
     // slot 3 — GetFileVersion. Pure in External; the leaf overrides it.
     using VersionFn = int32_t (*)(const void*);
@@ -172,13 +153,17 @@ UNIT_TEST(object_external_vtable_slot_order_is_retails) {
     // ...and the same answers through ordinary C++ dispatch: the other of the
     // two directions object_vtable_abi_test.cpp proves in general.
     Object::Base* asBase = &obj;
-    CHECK_EQ(asBase->Type(), 0x11223344u);
+    // The class record (DEFINE_TYPE, ENDGAME B.3.9 OBJ): no Factory::Startup in
+    // the unit harness, so the id is the ctor's sentinel; what matters is that
+    // slot 2, TypeId() and IsA agree on the ONE record.
+    CHECK_EQ(asBase->Type(), Object::External::TypeId());
     CHECK_STREQ(asBase->TypeName(), "External");
-    CHECK_EQ(Object::External::TypeId(), 0x11223344u);
+    CHECK_STREQ(Object::External::GetTypeInfo().parentName, "Base");
+    CHECK(Object::External::GetTypeInfo().fileExtension == nullptr);
 
     // `IsA` is an EXACT-type test, not a derivation test (0x1800491c0).
-    CHECK(asBase->IsA(0x11223344u));
-    CHECK(!asBase->IsA(0x11223345u));
+    CHECK(asBase->IsA(Object::External::TypeId()));
+    CHECK(!asBase->IsA(Object::External::TypeId() ^ 1u));
 
     // The leaf's own field survived construction through the whole chain.
     CHECK_EQ(obj._marker, 0xABCDEF01u);
@@ -188,8 +173,6 @@ UNIT_TEST(object_external_vtable_slot_order_is_retails) {
 // 3/4. Slot 0 and Object::Destroy
 // ---------------------------------------------------------------------------
 UNIT_TEST(object_external_destroy_reaches_slot0_with_flags1) {
-    InstallRecord();
-
     // `Destroy(p)` is `p->DeletingDtor(1)`, and flags&1 FREES the storage — so
     // the object has to come from the allocator `DeletingDtor` frees with,
     // which is `Object::TypeTreeFree` (the seam type_reflection.cpp exposes and

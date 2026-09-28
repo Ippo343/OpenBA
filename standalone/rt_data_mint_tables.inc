@@ -3,130 +3,20 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 4 vtables, 6 BaseTypeInfo, 10 storage symbols.
-// Retired (ENDGAME B.3 step 9): 284 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 0 vtables, 0 BaseTypeInfo, 10 storage symbols.
+// Retired (ENDGAME B.3 step 9): 294 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
-RT_MINT_TRAP(0,0)
-RT_MINT_TRAP(0,1)
-RT_MINT_TRAP(0,2)
-RT_MINT_TRAP(1,0)
-RT_MINT_TRAP(1,1)
-RT_MINT_TRAP(1,2)
-RT_MINT_TRAP(1,3)
-RT_MINT_TRAP(1,4)
-RT_MINT_TRAP(1,5)
-RT_MINT_TRAP(1,6)
-RT_MINT_TRAP(1,7)
-RT_MINT_TRAP(2,0)
-RT_MINT_TRAP(2,1)
-RT_MINT_TRAP(2,2)
-RT_MINT_TRAP(2,3)
-RT_MINT_TRAP(2,4)
-RT_MINT_TRAP(2,5)
-RT_MINT_TRAP(2,6)
-RT_MINT_TRAP(2,7)
-RT_MINT_TRAP(3,0)
-RT_MINT_TRAP(3,1)
-RT_MINT_TRAP(3,2)
-RT_MINT_TRAP(3,3)
-
-// ??_7Base@Object@@6B@  DLL 0x180154788  3 slots  [adjacent-export:??_7External@Object@@6B@]
-static const RtMintVSlot kVSlots0[] = {
-    { nullptr, 0x1800065b0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?Type@Base@Object@@UEBAIXZ", 0x1800c0380ull, RT_MINT_NAMED },
-};
-static void* kVTable0[3];
-static const RtMintTrapFn kVTraps0[] = { &RtMintTrapStub_0_0, &RtMintTrapStub_0_1, &RtMintTrapStub_0_2 };
-
-// ??_7CompiledExternal@Object@@6B@  DLL 0x180154a30  8 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots1[] = {
-    { nullptr, 0x18000b7e0ull, RT_MINT_UNNAMED },
-    { "?TypeName@CompiledExternal@Object@@UEBAPEBDXZ", 0x18000b6b0ull, RT_MINT_NAMED },
-    { "?Type@CompiledExternal@Object@@UEBAIXZ", 0x18000b690ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-};
-static void* kVTable1[8];
-static const RtMintTrapFn kVTraps1[] = { &RtMintTrapStub_1_0, &RtMintTrapStub_1_1, &RtMintTrapStub_1_2, &RtMintTrapStub_1_3, &RtMintTrapStub_1_4, &RtMintTrapStub_1_5, &RtMintTrapStub_1_6, &RtMintTrapStub_1_7 };
-
-// ??_7External@Object@@6B@  DLL 0x1801547a0  8 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots2[] = {
-    { nullptr, 0x180006640ull, RT_MINT_UNNAMED },
-    { "?TypeName@External@Object@@UEBAPEBDXZ", 0x1800066c0ull, RT_MINT_NAMED },
-    { "?Type@External@Object@@UEBAIXZ", 0x1800066d0ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-};
-static void* kVTable2[8];
-static const RtMintTrapFn kVTraps2[] = { &RtMintTrapStub_2_0, &RtMintTrapStub_2_1, &RtMintTrapStub_2_2, &RtMintTrapStub_2_3, &RtMintTrapStub_2_4, &RtMintTrapStub_2_5, &RtMintTrapStub_2_6, &RtMintTrapStub_2_7 };
-
-// ??_7Internal@Object@@6B@  DLL 0x180154720  4 slots  [adjacent-export:??_7Achievement@0@6B@]
-static const RtMintVSlot kVSlots3[] = {
-    { nullptr, 0x180006440ull, RT_MINT_UNNAMED },
-    { "?TypeName@Internal@Object@@UEBAPEBDXZ", 0x1800064c0ull, RT_MINT_NAMED },
-    { "?Type@Internal@Object@@UEBAIXZ", 0x1800064d0ull, RT_MINT_NAMED },
-    { "?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z", 0x1800bfda0ull, RT_MINT_NAMED },
-};
-static void* kVTable3[4];
-static const RtMintTrapFn kVTraps3[] = { &RtMintTrapStub_3_0, &RtMintTrapStub_3_1, &RtMintTrapStub_3_2, &RtMintTrapStub_3_3 };
 
 static RtMintVtable kMintVtables[] = {
-    { "??_7Base@Object@@6B@", 0x180154788ull, 3, kVSlots0, kVTable0, kVTraps0, "adjacent-export:??_7External@Object@@6B@" },
-    { "??_7CompiledExternal@Object@@6B@", 0x180154a30ull, 8, kVSlots1, kVTable1, kVTraps1, "tail-not-a-pointer" },
-    { "??_7External@Object@@6B@", 0x1801547a0ull, 8, kVSlots2, kVTable2, kVTraps2, "tail-not-a-pointer" },
-    { "??_7Internal@Object@@6B@", 0x180154720ull, 4, kVSlots3, kVTable3, kVTraps3, "adjacent-export:??_7Achievement@0@6B@" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from
 // the DLL; `next` is deliberately NOT copied (it reads 0x0 on disk and is
 // built by running constructors) and is rebuilt from OUR init order.
-static RtObject::BaseTypeInfo kTypeInfoStorage[6];
-RT_MINT_TI_TRAP(0,0)
-RT_MINT_TI_TRAP(0,1)
-RT_MINT_TI_TRAP(1,0)
-RT_MINT_TI_TRAP(1,1)
-RT_MINT_TI_TRAP(2,0)
-RT_MINT_TI_TRAP(2,1)
-RT_MINT_TI_TRAP(3,0)
-RT_MINT_TI_TRAP(3,1)
-RT_MINT_TI_TRAP(4,0)
-RT_MINT_TI_TRAP(4,1)
-RT_MINT_TI_TRAP(5,0)
-RT_MINT_TI_TRAP(5,1)
+static RtObject::BaseTypeInfo kTypeInfoStorage[0];
 static RtMintTypeInfo kMintTypeInfos[] = {
-    { "?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A", 0x1801f9c50ull, &kTypeInfoStorage[0],
-      "Base", nullptr, nullptr,
-      nullptr, 0x0ull, &RtMintTiTrapStub_0_0,
-      nullptr, 0x0ull, &RtMintTiTrapStub_0_1 },
-    { "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", 0x1801f9b00ull, &kTypeInfoStorage[1],
-      "CompiledExternal", "External", nullptr,
-      "?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ", 0x18000b6c0ull, &RtMintTiTrapStub_1_0,
-      "?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z", 0x18000b6d0ull, &RtMintTiTrapStub_1_1 },
-    { "?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9ba8ull, &kTypeInfoStorage[2],
-      "ExtensionCompiler", "Base", nullptr,
-      "?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c260ull, &RtMintTiTrapStub_2_0,
-      "?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c270ull, &RtMintTiTrapStub_2_1 },
-    { "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A", 0x1801f9b38ull, &kTypeInfoStorage[3],
-      "External", "Base", nullptr,
-      "?CreateNewObject@External@Object@@SAPEAVBase@2@XZ", 0x18002c980ull, &RtMintTiTrapStub_3_0,
-      "?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c990ull, &RtMintTiTrapStub_3_1 },
-    { "?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9b70ull, &kTypeInfoStorage[4],
-      "ExternalCompiler", "Base", nullptr,
-      "?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c0e0ull, &RtMintTiTrapStub_4_0,
-      "?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c0f0ull, &RtMintTiTrapStub_4_1 },
-    { "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A", 0x1801f9be0ull, &kTypeInfoStorage[5],
-      "ExternalList", "Object::External", nullptr,
-      "?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ", 0x180007460ull, &RtMintTiTrapStub_5_0,
-      "?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z", 0x180007510ull, &RtMintTiTrapStub_5_1 },
 };
 
 // ---- Plain storage: the singleton pointers plus the ten other exported

@@ -40,6 +40,12 @@ class FireWork final : public Work {
 
 public:
     FireWork();                                                     // (Work_GenericCtor shape)
+    // 0x1400e9bd0, the 3-argument ctor (FireComponent::Ignite's, the only
+    // producer): the entity-seeded Work base ctor 0x1400f72e0, the table, a
+    // DWORD store of `capacity` at +0x48 (the upper dword is not written),
+    // +0x50 = 0 (qword), +0x58 = 0 (dword). ENDGAME B.3.9 OBJ: replaces the
+    // `??0Internal` door + stamp in FireWork_CtorFull_e9bd0.
+    FireWork(void* pEntityIBP, uint32_t capacity);
 
     Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a230
     void  Persist(void* stream) override;                           // [3]  0x1400e9a50

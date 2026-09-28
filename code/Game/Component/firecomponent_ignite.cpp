@@ -67,7 +67,6 @@ typedef void  (*fn_RemovalCalc_t)(int64_t townMgr, int id);
 typedef void  (*fn_StopSlot_t)(uintptr_t workComp);
 typedef void  (*fn_ParticleFade_t)(void* particleComp, int emitterIdx);
 typedef void  (*fn_AudioMove_t)(void* ambientComp, void* newPos);
-typedef void* (*fn_WorkCtor25_t)(void* work, void* pEntityIBP);
 typedef bool  (*fn_Gate11e710_t)(void* destroyComp);
 
 fn_Find_t         s_findDestroy   = nullptr;  // 0x140005780 DestroyComponent
@@ -82,7 +81,6 @@ fn_StopSlot_t     s_stopSlot      = nullptr;  // 0x14012eb50
 fn_ParticleFade_t s_particleFadeIn  = nullptr;// 0x140053660
 fn_ParticleFade_t s_particleFadeOut = nullptr;// 0x140053720 (tornado lane's port)
 fn_AudioMove_t    s_audioMove       = nullptr;// 0x140042960 (tornado lane's port)
-fn_WorkCtor25_t   s_workCtor25    = nullptr;  // 0x1400f72e0
 fn_Gate11e710_t   s_gate11e710    = nullptr;  // 0x14011e710
 
 const float* s_pK300 = nullptr;   // DAT_140172234 = 300.0f  (seconds-per-unit scale)
@@ -107,7 +105,6 @@ void EnsureInit() {
     s_particleFadeIn = reinterpret_cast<fn_ParticleFade_t>(ResolveAddr(Module::Exe, 0x140053660));
     s_particleFadeOut= reinterpret_cast<fn_ParticleFade_t>(ResolveAddr(Module::Exe, 0x140053720));
     s_audioMove      = reinterpret_cast<fn_AudioMove_t>(ResolveAddr(Module::Exe, 0x140042960));
-    s_workCtor25     = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_gate11e710     = reinterpret_cast<fn_Gate11e710_t>(ResolveAddr(Module::Exe, 0x14011e710));
     s_pK300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
     s_pHalf = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
@@ -269,28 +266,14 @@ extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx) {
 // ============================================================
 extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32_t capacity) {
     EnsureInit();
-    // The Work's own leaf pointers + type-id globals are resolved by
-    // FireWork_ResolveFuncs(), which is called ONLY from FireWork_Factory /
-    // FireWork_CreateInPlace. Retail reaches a FireWork through the factory
-    // cascade; WE do not — Ignite mints one here directly, which is the only
-    // producer of a FireWork in the whole exe (0x1400e9bd0 has exactly one
-    // caller). Without this call every s_* in firework.cpp stays null and
-    // FireWork::Execute faults on *s_TypeId_CitizenComponent (READ of 0x0) the
-    // first time a citizen picks the job up. This is the documented
-    // "CreateWork must call the Work's *_ResolveFuncs()" rule — the factory
-    // path is not the only construction path.
-    FireWork_ResolveFuncs();
-    if (!mem || !s_workCtor25) return nullptr;
+    // ENDGAME B.3.9 OBJ: the real 3-argument ctor (FireWork.h) -- the Work
+    // base ctor 0x1400f72e0, the table, the +0x48 dword / +0x50 / +0x58 stores
+    // and FireWork_ResolveFuncs() (the Work's own leaf pointers: the factory
+    // path is not the only construction path, and this is the only producer)
+    // -- instead of the `??0Internal` door, a hand stamp and three raw stores.
+    if (!mem) return nullptr;
     uint64_t local = pEntityIBP ? *pEntityIBP : 0;
-    s_workCtor25(mem, &local);
-    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
-    // The Work base ctor installs vtable_Work; retype to FireWork's.
-    uintptr_t vt = reinterpret_cast<uintptr_t>(FireWork::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
-    if (vt) *reinterpret_cast<void**>(w) = reinterpret_cast<void*>(vt);
-    *reinterpret_cast<uint32_t*>(w + 0x48) = capacity;   // max firefighters
-    *reinterpret_cast<uint64_t*>(w + 0x50) = 0;          // assignment BST root
-    *reinterpret_cast<uint32_t*>(w + 0x58) = 0;          // assigned count
-    return mem;
+    return ::new (mem) FireWork(&local, capacity);
 }
 
 // ============================================================

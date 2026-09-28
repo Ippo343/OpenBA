@@ -34,8 +34,6 @@ status paragraph at the end of this file says what the files hold.)
 - `goal_list.cpp`
 - `goal_serialize.cpp`
 - `rt_achievement_port.cpp`
-- `rt_factories_achievement.cpp`
-- `rt_factories_achievement.inc`
 
 ## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
 

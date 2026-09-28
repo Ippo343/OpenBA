@@ -81,10 +81,8 @@ public:
     uint8_t  _pad44[4];  // +0x44 never written
 
     // The body of the shared base ctor 0x1400f72e0 MINUS its `??0Internal` call
-    // and vptr store (B8-1: one body, two entry points). `Work(void*)` runs it
-    // after the compiler's stamps; the by-address door `Work_Ctor25_Impl`
-    // (standalone/reg_work_base.cpp, reached by address from the component
-    // CreateWork bodies of other blocks) runs it after the minted stamp.
+    // and vptr store. `Work(void*)` runs it after the compiler's stamps (its
+    // by-address door `Work_Ctor25_Impl` went at ENDGAME B.3.9 OBJ).
     void InitFromEntity(void* pEntityIBP);
 
 protected:

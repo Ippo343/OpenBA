@@ -165,22 +165,9 @@ void RtAudioPortInit();       // runtime/src/audio/ — Wave 8 lane C
 void RtInputPortInit();       // runtime/src/input/ — Wave 8 lane D
 void RtApplicationPortInit(); // runtime/src/application/ — Wave 8 lane E
 void RtUtilityPortInit();     // runtime/src/utility/ — Wave 8 lane E
-// Wave 28 lane FACTREST. The `?Create{New,InPlace}Object@` pair for the 35
-// NON-UI classes of the absent-factory roster (Graphics 11, Video 7, Object 6,
-// Achievement 4, Collision2D 2, Audio 2, IO 1, Pathfinding 1, Picking 1).
-// Cross-namespace on purpose: what the 35 share is the SHAPE and the fact that
-// the mint reaches every one of them through BaseTypeInfo::factoryFn, not a
-// namespace. Kill switch BANISHED_RT_FACTREST, DEFAULT ON — an opt-in switch
-// is why dialog_factory.cpp has cleared no trap since Wave 11.
-//
-// It must run BEFORE RtDataMintInit(), which is what reads these registrations
-// and decides whether each of the 70 slots is a port or an abort trap. It may
-// run in any position among the other *PortInit()s: nothing in our tree calls
-// any of these 70 names today (verified by grep over runtime/ code/ standalone/
-// engine/ dx11/ at the branch point), so its registrations change no live call
-// site.
-void RtFactoriesPortInit();   // runtime/src/*/rt_factories_*.cpp — Wave 28
-void RtFactoriesSummary();    // one attendance line; expected to read all zeros
+// (Wave 28 lane FACTREST's interpreter -- RtFactoriesPortInit /
+// RtFactoriesSummary -- is deleted with its last row, ENDGAME B.3.9 OBJ: every
+// non-UI factory pair is its class's own statics, B39_RULES D2.)
 // Wave 9 lane Q. Collection::Array<T> is header-only with NO exports in either
 // build, so this wave registers only ADDRESSES (RegisterRuntimeAddr) — 27 of
 // them for two bodies. It must run LAST of the wave inits: registering
@@ -200,16 +187,6 @@ void RtCollectionPortInit();  // runtime/src/collection/ — Wave 9 lane Q
 // addresses through function-local `static Fn fn = ResolveAddr(...)`, which
 // initialises on first USE (a real Array call) and not at init.
 void RtCollectionDestroyPortInit();  // runtime/src/collection/ -- Wave 9 lane D2
-// Wave 9 lane K. The unnamed deleting-destructor family: slot 0 of 37 of lane
-// C2's minted vtables, all ONE body (MSVC's VECTOR deleting destructor, not the
-// scalar one) parameterized by ~Class and sizeof(Class). Registered by ADDRESS
-// only -- none of the 37 is exported under any name.
-//
-// It must run AFTER every other wave init: it resolves ~Class through the
-// port-aware ResolveAddr, and its probe runs at the end of the init, so a
-// destructor registered by a LATER init would be invisible to the probe. It
-// must run BEFORE RtDataMintInit(), which is what fills the 37 slots.
-void RtObjectDeletingDtorPortInit();  // runtime/src/object/ -- Wave 9 lane K
 // Wave 9 lane X. The fourteen constructors that publish a `?_singleton@...`
 // DATA export -- lane C2's tier-1 rows, where the mint would otherwise hand out
 // zeroed storage nothing ever writes. Cross-namespace on purpose: what the

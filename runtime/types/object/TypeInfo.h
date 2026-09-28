@@ -278,6 +278,7 @@ uint32_t TypeIdFromName(const char* name);
 namespace Object {
 
 class Factory;
+class BaseTypeInfo;
 
 // ============================================================
 // Object::Base — ENDGAME §B.1 decision 2, the first real class with a
@@ -333,12 +334,27 @@ public:
     // call (0x1800c039a-0x1800c03a6); the body preserves that.
     bool IsDerivedFrom(uint32_t typeId) const;
 
+    // ?TypeId@Base@Object@@SAIXZ   retail 0x18007e010 — `MOV EAX,dword ptr
+    // [0x1801f9c50]; RET`: the record's +0x00, 0xFFFFFFFF until
+    // Factory::Startup. Defined inline below BaseTypeInfo.
+    static uint32_t TypeId();
+    static const BaseTypeInfo& GetTypeInfo();
+
 protected:
     // Retail's ctor is the compiler's: one vptr store, which the compiler
     // emits for us. `= default` rather than a user-provided no-op (B31_RULES
     // class rule 5).
     Base() = default;
     ~Base() = default;   // NON-VIRTUAL — decision 2. Reached by DeletingDtor.
+
+private:
+    // ?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A   retail 0x1801f9c50 — name
+    // "Base", NO parent, no extension, NO factory pair (retail exports none
+    // for Base: slot 1 is `_purecall`, slot 2 answers the literal 0). Not
+    // DECLARE_TYPE: Base's slots 1/2 are not reads of this record. Defined in
+    // runtime/src/object/type_reflection.cpp (ENDGAME B.3.9 OBJ, B39_RULES D6
+    // W3 -- the minted record is retired).
+    static BaseTypeInfo _typeInfo;
 };
 static_assert(sizeof(Base) == 8, "Object::Base is one vtable pointer");
 static_assert(sizeof(Base) == sizeof(RtObject::Base),
@@ -481,6 +497,9 @@ static_assert(offsetof(BaseTypeInfo, fileExtension)    == offsetof(RtObject::Bas
 static_assert(offsetof(BaseTypeInfo, factoryFn)        == offsetof(RtObject::BaseTypeInfo, factoryFn),        "alias factoryFn");
 static_assert(offsetof(BaseTypeInfo, inPlaceFactoryFn) == offsetof(RtObject::BaseTypeInfo, inPlaceFactoryFn), "alias inPlaceFactoryFn");
 static_assert(offsetof(BaseTypeInfo, next)             == offsetof(RtObject::BaseTypeInfo, next),             "alias next");
+
+inline uint32_t Base::TypeId() { return _typeInfo.typeId; }            // 0x18007e010
+inline const BaseTypeInfo& Base::GetTypeInfo() { return _typeInfo; }
 
 // ============================================================
 // Object::Factory — 0x10 bytes: the Set's {root, count}.

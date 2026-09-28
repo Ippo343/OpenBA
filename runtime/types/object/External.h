@@ -599,6 +599,13 @@ class ExternalFactory;
 // Object::External — one loaded resource file. 0x20 bytes.
 // ============================================================
 class External : public Base {
+    // ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A (0x1801f9b38): slot 1
+    // TypeName 0x1800066c0 `MOV RAX,[0x1801f9b40]`, slot 2 Type 0x1800066d0
+    // `MOV EAX,[0x1801f9b38]`, TypeId 0x180029350 and the factory pair
+    // 0x18002c980 / 0x18002c990 (both `XOR EAX,EAX; RET` -- abstract).
+    // DEFINE_TYPE is in external_class.cpp (ENDGAME B.3.9 OBJ, D6 W3).
+    DECLARE_TYPE(External)
+
 public:
     // `?A W4CompileResult@External@Object@@` — returned BY VALUE, but a `W4`
     // enum is four bytes, so it comes back in EAX with NO hidden return slot
@@ -615,8 +622,7 @@ public:
 
     // ---- the eight slots, in measured order ----
     Base*       DeletingDtor(unsigned flags) override;          // [0] 0x180006640
-    const char* TypeName() const override;                      // [1] 0x1800066c0
-    uint32_t    Type() const override;                          // [2] 0x1800066d0
+    // [1] TypeName 0x1800066c0 / [2] Type 0x1800066d0: DECLARE_TYPE.
     virtual int32_t       GetFileVersion() const = 0;           // [3] pure
     virtual CompileResult Compile(const System::Filename& path);// [4] 0x1800066e0
     virtual bool          Serialize(void* stream) = 0;          // [5] pure
@@ -638,10 +644,6 @@ public:
     //   SAME type, so both arguments are `System::Filename const&`. Returns
     //   `_N` (bool) in AL — no hidden return slot.
     bool SaveText(const System::Filename& path, const System::Filename& name);
-
-    // The static companion retail's reflection block emits. NOT `DECLARE_TYPE`
-    // — see the banner on ExternalTypeInfoRecord() below.
-    static uint32_t TypeId();
 
 protected:
     // ??1External@Object@@UEAA@XZ  retail 0x1800bc950. NON-VIRTUAL; reached by
@@ -690,14 +692,38 @@ static_assert(offsetof(External, _refs) == 0x10, "External::_refs @ +0x10 (~Exte
 // 0x20, i.e. the same as External's: this class adds no data.
 // ============================================================
 class CompiledExternal : public External {
+    // ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A (0x1801f9b00):
+    // slot 1 TypeName 0x18000b6b0 `MOV RAX,[_typeInfo+8]`, slot 2 Type
+    // 0x18000b690 `MOV EAX,[_typeInfo]`, TypeId 0x18000b6a0 and the factory
+    // pair 0x18000b6c0 / 0x18000b6d0 (both `XOR EAX,EAX; RET` -- abstract).
+    // DEFINE_TYPE is in external_class.cpp (ENDGAME B.3.9 OBJ, D6 W3).
+    DECLARE_TYPE(CompiledExternal)
+
 public:
+    // ??0CompiledExternal@Object@@QEAA@XZ  retail 0x1800bb920: Base's and
+    // External's vptr, +0x08/+0x10/+0x18 zero (External(), the compiler's),
+    // then CompiledExternal's vptr (the compiler's). No store of its own.
     CompiledExternal() = default;
-    // ?TypeId@CompiledExternal@Object@@SAIXZ 0x18000b6a0 — `MOV EAX,[_typeInfo]`
-    // over the (still minted) record, through the Object accessor slot
-    // (external_class.cpp; B39_RULES D6 step 1). Slots 1/2 of the class
-    // (0x18000b6b0 / 0x18000b690) stay the registered doors on the minted
-    // table until the W3 row conversion.
-    static uint32_t TypeId();
+
+    // [0] 0x18000b7e0 — MSVC's VECTOR deleting destructor (`MOV EDX,0x20` =
+    // the element size, `LEA R9,[0x1800bb980]` = ~CompiledExternal), both arms
+    // exactly as the retired RT_DELDTOR row ran them. The class's OWN slot 0
+    // (ENDGAME B.3.9 OBJ, B39_RULES D1.3): an inherited External::DeletingDtor
+    // would run ~External and skip ~CompiledExternal. INLINE so `make unit`
+    // can drive both arms.
+    Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<CompiledExternal*>(self + static_cast<int64_t>(i) * 0x20)->~CompiledExternal();
+            if (flags & 1u) TypeTreeFree(self - 8);
+            return reinterpret_cast<Base*>(self - 8);
+        }
+        this->~CompiledExternal();
+        if (flags & 1u) TypeTreeFree(this);
+        return this;
+    }
 protected:
     ~CompiledExternal();     // 0x1800bb980
 };
@@ -726,6 +752,13 @@ static_assert(sizeof(CompiledExternal) == 0x20,
 // are retired (tools/rt_mint_retired/obj.txt).
 // ============================================================
 class ExternalList : public External {
+    // ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A (retail 0x1801f9be0):
+    // slot 1 TypeName 0x180007370, slot 2 Type 0x180007350, TypeId 0x180007360
+    // and the factory pair (0x180007460 / 0x180007510, external_list.cpp) are
+    // retail's reflection block; DEFINE_TYPE is in external_class.cpp (ENDGAME
+    // B.3.9 OBJ, B39_RULES D6 W3 -- the minted record is retired).
+    DECLARE_TYPE(ExternalList)
+
 public:
     // ??0ExternalList — retail's stores (the inlined half of the factory pair
     // 0x1800074c3..f4 / Construct 0x1800075e0): Base's and External's vptr and
@@ -742,7 +775,7 @@ public:
     // `flags & 1` and returns it; otherwise ~ExternalList, free on `flags & 1`.
     // Nothing `new[]`s an ExternalList, so the array arm is the faithful
     // unreachable it is in Object::Internal's. INLINE so `make unit` can drive
-    // both arms; the key function is TypeName (external_class_doors.cpp).
+    // both arms; the key function is GetFileVersion (external_class_doors.cpp).
     Base* DeletingDtor(unsigned flags) override {
         if (flags & 2u) {
             uint8_t* const self = reinterpret_cast<uint8_t*>(this);
@@ -756,8 +789,6 @@ public:
         if (flags & 1u) TypeTreeFree(this);
         return this;
     }
-    const char*     TypeName() const override;               // [1] 0x180007370
-    uint32_t        Type() const override;                   // [2] 0x180007350
     int32_t         GetFileVersion() const override;         // [3] 0x1800bfa10
     bool            Serialize(void* stream) override;        // [5] 0x1800bfa20
     External*       Reconstruct() override;                  // [6] 0x180007570
@@ -771,15 +802,6 @@ public:
     //   retail 0x1800bf700.  *** THE `Type` PARAMETER IS NEVER READ *** — R9 is
     //   dead in the whole body. Kept because the slot's signature demands it.
     ExternalPtr<External> Find(const System::Filename& path, uint32_t type) const;
-
-    // ?TypeId@ExternalList@Object@@SAIXZ 0x180007360 — `MOV EAX,[_typeInfo]`
-    // over the (still minted) record, through the Object accessor slot
-    // (external_class.cpp; B39_RULES D6 step 1).
-    static uint32_t TypeId();
-
-    // Retail's factory pair (B39_RULES D2), defined in external_list.cpp.
-    static Base* CreateNewObject();                    // 0x180007460
-    static Base* CreateInPlaceObject(void* place);     // 0x180007510
 
 protected:
     // ??1ExternalList 0x1800076c0. NON-VIRTUAL (no virtual dtor until the
@@ -1022,45 +1044,10 @@ static_assert(offsetof(ExternalFactory, _loadEnabled)          == 0x41, "_loadEn
 static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simpleLoad @ +0x42");
 
 // ############################################################################
-// WHY THERE IS NO `DECLARE_TYPE(External)` / `DEFINE_TYPE(...)` HERE.
-//
-// `External`, `ExternalList` and `CompiledExternal` DO each have a retail
-// reflection block — `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` @
-// 0x1801f9b38, `…@ExternalList@…` @ 0x1801f9be0, `…@CompiledExternal@…` @
-// 0x1801f9b00 — so B33_RULES §9 step 5 would have the macro emit them. It
-// CANNOT, in this step, and the reason is a file-set boundary rather than a
-// design one:
-//
-//   * unlike the 305 `REGISTER_TYPE` sites in code/Game/, these three records
-//     are not built by our code at all. They come out of the MINT
-//     (standalone/rt_data_mint*.inc), `standalone/cutover_manifest.inc:65`
-//     carries the CompiledExternal one as `CUTOVER_REQUIRED`, and
-//     `MintStorage()` splices the minted nodes into
-//     `BaseTypeInfo::_firstTypeInfo`;
-//   * roughly twenty live sites read them BY NAME through `RT_DATA_SLOT`
-//     (runtime/src/engine/mainloop_video.cpp:343,
-//     runtime/src/engine/updateloop_loadresources.cpp:126,
-//     runtime/src/io/modification_setupfilesystem.cpp:403,
-//     runtime/src/object/{external_list,external_load,external_ptr_serialize,
-//     object_typeinfo_accessors}.cpp, code/Game/Game/gameupdateloop_load.cpp);
-//   * a `DEFINE_TYPE` would therefore construct a SECOND `BaseTypeInfo` for the
-//     same name and head-insert it into the same chain. `Factory::Startup`
-//     CRCs the name, so both records claim the same typeId and the second
-//     insert hits the equal-key arm — the "split brain" hazard
-//     standalone/rt_data_mint.cpp's own banner names, and exactly the shape
-//     runtime/src/object/external.cpp:659-670 refuses for these two symbols.
-//
-// Retiring the mint rows in favour of the macro means editing
-// standalone/rt_data_mint.cpp and re-running tools/rt_mint_gen.py, both outside
-// this agent's file set, and it is the same move step 3 made for
-// `_firstTypeInfo` (redirect, don't duplicate). Until then the three classes
-// read the ONE existing record through the existing door, which is what the C
-// bodies already do, and `Type()` / `TypeName()` / `TypeId()` answer from it
-// byte for byte. Handing this to step 6/7 rather than guessing at it is the
-// "faithful partial beats a complete-looking conversion" rule.
+// ENDGAME B.3.9 OBJ (B39_RULES D6 W3): `External`, `ExternalList` and
+// `CompiledExternal` carry retail's reflection block through DECLARE_TYPE /
+// DEFINE_TYPE (external_class.cpp); their minted `?_typeInfo@` records are
+// retired, so each name has exactly one record in `_firstTypeInfo`.
 // ############################################################################
-const BaseTypeInfo* ExternalTypeInfoRecord();          // ?_typeInfo@External@Object@@
-const BaseTypeInfo* ExternalListTypeInfoRecord();      // ?_typeInfo@ExternalList@Object@@
-const BaseTypeInfo* CompiledExternalTypeInfoRecord();  // ?_typeInfo@CompiledExternal@Object@@
 
 }  // namespace Object

@@ -986,17 +986,9 @@ static void RegisterDispatchSlots() {
     // (code/Game/Work/gatherrawmaterials.cpp calls this same slot "iatSerIntBulk" —
     // a misnomer; the retail call site at 0x1400E095A is CreateElement.)
 
-    // Object::Internal::Internal — the CTOR slot. MUST be registered alongside the
-    // ~Internal dtor slot below: without it, fn_ObjectInternal_Ctor stays NULL, so every
-    // dynamically-built object (citizen action stack: MoveTo/PlayAnimation/
-    // SendComponentMessage) skips Object::Internal registration and its registry index
-    // (+0x08) is left as uninitialized heap garbage. ~Internal (the dtor, which IS
-    // resolved) then does a swap-remove using that garbage index -> OOB write into the
-    // InternalFactory registry array -> crash when c5400 tears the action stack down.
-    // (World-build entities are unaffected: they're built by the real exe factories that
-    //  call the real Object::Internal::Internal directly at load.)
-    RegisterDispatchSlot(0x140152768,
-        (uintptr_t)ResolveExport("??0Internal@Object@@QEAA@XZ"));
+    // (0x140152768 ??0Internal: row deleted at ENDGAME B.3.9 OBJ — its one
+    // reader, engine_funcs' fn_ObjectInternal_Ctor, served only the Work_Ctor25
+    // door, whose builders now construct the real Work leaves.)
     // (0x140152770 ??1Internal: row deleted at ENDGAME B.3.9 EXA — its readers
     // were the never-called fn_ObjectInternal_Dtor and five Action-local copies,
     // used only as readiness conjuncts.)

@@ -636,6 +636,12 @@ ClearStorage::ClearStorage()
     ClearStorage_InitFuncs();
 }
 
+ClearStorage::ClearStorage(void* pEntityIBP)
+    : Work(pEntityIBP), _field48(nullptr), _field50(nullptr), _field58(nullptr),
+      _field60(0), _pad64{} {
+    ClearStorage_InitFuncs();
+}
+
 // ============================================================
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================

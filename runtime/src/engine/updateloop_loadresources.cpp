@@ -127,9 +127,9 @@ void* ConfigurationSingleton() {
 // `MOV EDX,dword ptr [0x1801f9be0]` — BaseTypeInfo's FIRST dword is the typeId.
 // Retail reads +0x00 and nothing else, which is the whole content of
 // reference_basetypeinfo_name_is_content_only.md.
+// ENDGAME B.3.9 OBJ: the class record (the minted one is retired).
 uint32_t ExternalListTypeId() {
-    uint32_t* s = RT_DATA_SLOT(uint32_t*, "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A");
-    return s ? *s : 0u;
+    return ::Object::ExternalList::TypeId();
 }
 
 // ENDGAME B.3.1 step 2. The two helpers that used to live here — `AddRefInto`

@@ -108,7 +108,6 @@ typedef void  (*fn_RegEntity_t)(void* entityList, void* entityIBP, int category)
 // Inverse of [reference_int_arg_typed_as_float_hides_at_index_zero].
 typedef void  (*fn_SetTransform_t)(int64_t fp, void* xyz, float yaw);  // 0x140003870
 typedef void  (*fn_SetOrient_t)(int64_t fp, uint16_t orient, int16_t p3); // 0x1401253d0
-typedef void* (*fn_Work_Ctor25_t)(void* self, void* pEntity);   // 0x1400f72e0
 
 static fn_FindIBP_t         s_find3050  = nullptr;  // production yard
 static fn_FindIBP_t         s_findD6c0  = nullptr;  // build-material yard (+0x48 delivered, +0x4c mult)
@@ -129,8 +128,6 @@ static fn_CopyCtor_t        s_copyCtor  = nullptr;
 static fn_RegEntity_t       s_regEntity = nullptr;
 static fn_SetTransform_t    s_setTransform = nullptr;
 static fn_SetOrient_t       s_setOrient = nullptr;
-static fn_Work_Ctor25_t     s_workCtor25 = nullptr;
-static void*                s_clearStorageVtbl = nullptr;  // 0x1401611a0
 
 static bool s_resolved = false;
 static void EnsureResolved() {
@@ -154,8 +151,6 @@ static void EnsureResolved() {
     s_regEntity = reinterpret_cast<fn_RegEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
     s_setTransform = reinterpret_cast<fn_SetTransform_t>(ResolveAddr(Module::Exe, 0x140003870));
     s_setOrient = reinterpret_cast<fn_SetOrient_t>(ResolveAddr(Module::Exe, 0x1401253d0));
-    s_workCtor25 = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    s_clearStorageVtbl = const_cast<void*>(ClearStorage::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
 }
 
 // starttown.cpp — world-registration (region-map cells + pick mesh) for a building
@@ -600,18 +595,13 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
     // path: Work_Ctor25 base bind (field_10 = entity) + ClearStorage vtable +
     // zeroed tail fields (ClearStorage_Ctor 0x1400e74b0 shape).
     int64_t yard = FindOn(entity, s_find3050);
-    if (yard && s_ec60 && s_workCtor25 && s_clearStorageVtbl &&
-        fn_MemAlloc && g_pMemAllocSingleton) {
+    if (yard && s_ec60 && fn_MemAlloc && g_pMemAllocSingleton) {
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
         if (mem) {
+            // ENDGAME B.3.9 OBJ: the real class (Work_Ctor25 + the table +
+            // four zero qwords), not the `??0Internal` door + hand stamp.
             int64_t entityTmp = entity;
-            s_workCtor25(mem, &entityTmp);
-            *reinterpret_cast<void**>(mem) = s_clearStorageVtbl;
-            uintptr_t w = reinterpret_cast<uintptr_t>(mem);
-            *reinterpret_cast<int64_t*>(w + 0x48) = 0;
-            *reinterpret_cast<int64_t*>(w + 0x50) = 0;
-            *reinterpret_cast<int64_t*>(w + 0x58) = 0;
-            *reinterpret_cast<int64_t*>(w + 0x60) = 0;
+            ::new (mem) ClearStorage(&entityTmp);
             int64_t workIBP = 0;
             if (fn_InternalBasePtr_Ctor) new (&workIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge

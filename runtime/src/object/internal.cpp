@@ -28,47 +28,10 @@
 //     own arrays in place. No replica, no second table, no second heap — the
 //     buffers are allocated and freed through the DLL's own
 //     System::MemoryAllocator statics.
-//   * There is ONE vtable, and it is THEIRS. `??_7Internal@Object@@6B@`
-//     (0x180154720) and `??_7Base@Object@@6B@` (0x180154788) are exported data
-//     symbols, so the ported constructor stamps the DLL's vtable by name. An
-//     object built by our ctor is byte-for-byte indistinguishable from one
-//     built by the DLL's, including its virtual dispatch.
-//
-//     *** THAT SECOND BULLET IS CONDITIONALLY TRUE, AND ITS CONDITION IS NOT
-//         VISIBLE FROM HERE. *** (Wave 11 lane OBJLIFE, 2026-09-09.)
-//     `VtblInternal()` / `VtblBase()` below reach those two symbols through
-//     `ResolveExport`, which consults the PORT REGISTRY FIRST. Both symbols are
-//     already MINTED into standalone/rt_data_mint_tables.inc; they are simply
-//     not promoted yet. The moment anything registers them — and that is
-//     exactly what Wave 11 lane OBJDATA's Class A row set is for —
-//     `ResolveExport` starts handing back OUR MINTED VTABLE, and:
-//
-//         objects built by OUR ctor (the doors we intercept) carry the minted
-//         vptr, while objects built by the DLL's ctor (its own in-DLL rel32
-//         callers, which we do NOT intercept) carry 0x180154720.
-//
-//     That is TWO VTABLES IN PLAY ON ONE CLASS — PLAN.md §4.3 risk 3 verbatim,
-//     the hazard this very bullet exists to deny. Neither lane creates it
-//     alone: it needs the TABLE tier armed AND those two ??_7 rows promoted.
-//     Do not arm this tier and promote those rows in the same build without
-//     first making these two accessors resolve RAW (theirs when the DLL is
-//     present) and fall back to the registry only when it is absent.
-//
-//     *** THAT CHANGE IS NOW MADE, HERE. *** (Wave 11 follow-up 5, lane TINFO,
-//     2026-09-10.) `VtblInternal()` / `VtblBase()` below pin to the DLL's own
-//     table while the DLL is present and fall back to the registry only when it
-//     is not — so the second bullet above is UNCONDITIONALLY true again, and it
-//     stays true whatever the mint registers. The long note beside those two
-//     functions has the measurement that showed the hazard was live (123,149
-//     objects carrying the minted table in one armed run) and the kill switch
-//     that reproduces it.
-//
-//     ⚠ SCOPE. The advisor amendment names these two accessors, and they are
-//     the two this class uses. They are NOT the only stampers of
-//     `??_7Base@Object@@6B@` in the tree — TWELVE other files reach that symbol
-//     through a registry-first door (`ResolveExport` / `RT_DATA_SLOT` /
-//     `RtVtable`) and would split the same way if that row were ever promoted.
-//     See docs/runtime_port/WAVE11F_LANE_TINFO.md for the list.
+//   * There is ONE vtable per class, the compiler's (ENDGAME B.3.9 OBJ): the
+//     `??0Internal` / `??1Internal` doors that hand-stamped the exported
+//     `??_7Internal@Object@@6B@` / `??_7Base@Object@@6B@` tables are gone with
+//     those minted rows; every Internal is built by `Object::Internal()`.
 //
 // What is left is therefore an ordinary faithfulness question — does our body
 // compute the same indices and the same array growth as theirs — and that is
@@ -152,61 +115,13 @@ namespace {
 //   ?_singleton@InternalFactory@Object@@0PEAV12@EA 0x1801fc6d8
 
 // ============================================================
-// The two exported vtables
+// The two exported vtables -- GONE (ENDGAME B.3.9 OBJ)
 // ============================================================
-void* g_vtblInternal  = nullptr;
-void* g_vtblBase      = nullptr;
+// `VtblInternal()` / `VtblBase()` served the `??0Internal` / `??1Internal`
+// doors' hand stamps of the minted tables. The doors went with the minted
+// `??_7Internal@Object@@6B@` row and its RT_DELDTOR row; every Internal is
+// built by `Object::Internal::Internal()` and wears the compiler's table.
 
-// An exported ??_7 symbol's ADDRESS *is* the vtable (slot 0 first), so these
-// are used as values, not dereferenced. Verified against the .rdata dump in
-// Internal.h: 0x180154720 holds 0x180006440, the scalar deleting destructor.
-//
-// ============================================================================
-// CONDITION (b) — WAVE 11 follow-up 5, lane TINFO. THE SPLIT-VPTR FIX.
-// ============================================================================
-//
-// This is the change the banner at the top of this file described and declined
-// to make, and the advisor adjudication in docs/runtime_port/WAVE11.md made
-// binding on whoever promotes `??_7Internal@Object@@6B@`:
-//
-//     may be promoted only when BOTH hold: (a) [ObjTI] ATTENDANCE entries>0,
-//     and (b) VtblInternal()/VtblBase() pin to the RAW DLL symbol while the
-//     DLL is present, falling back to the registry only when it is absent.
-//
-// WHY IT MATTERS, MEASURED RATHER THAN ARGUED. `ResolveExport` is registry-
-// first, so with the minted row registered these two returned OUR table while
-// the DLL's own in-DLL `rel32` callers — which we do not intercept — kept
-// stamping 0x180154720. Lane TINFO ran exactly that: `??_7Internal@Object@@6B@`
-// armed with the TABLE tier armed, `[RtInternalTable] ctorRuns=123149`. That is
-// 123,149 live objects carrying a DIFFERENT vtable from the ones the DLL built,
-// on one class, which is PLAN.md §4.3 risk 3 verbatim.
-//
-// WHAT PINNING COSTS, AND WHY IT IS NOTHING. Every slot of both tables is one
-// of our ported bodies either way (`READY slots=4 ported=4 TRAP=0 purecall=0`);
-// what changes is WHICH POINTER the object carries, and the only correct answer
-// while the DLL is present is the DLL's, because that is the answer every
-// object we did not build already has. At cutover there is no DLL, `RtRawVtable`
-// comes back null, and the registry answer — the minted table — is the only one
-// there is. So the same code is right on both sides of cutover.
-//
-// behaviour. It exists so the A/B that demonstrates the split is runnable with
-// ONE variable, and it is the half you must NOT ship: with it set and the minted
-// row registered, this class has two vtables.
-void* VtblInternal() {
-    if (!g_vtblInternal) {
-        g_vtblInternal = ResolveExport("??_7Internal@Object@@6B@");
-    }
-    return g_vtblInternal;
-}
-void* VtblBase() {
-    if (!g_vtblBase) {
-        g_vtblBase = ResolveExport("??_7Base@Object@@6B@");
-    }
-    return g_vtblBase;
-}
-
-// Whether the pin is armed. Read by the exit screen below, which lives at
-// global scope with the other read-outs.
 
 // ============================================================
 // Collection::Array<T> bodies, as retail instantiates them — MOVED
@@ -336,19 +251,9 @@ void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr* self) {
     ::Object::InternalBasePtr::Shim_CheckPtr(AsClass(self));
 }
 
-// ?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z
-//                                      retail 0x1800bfda0, profile 0x18008b490
-// Empty in both builds. It is slot 3 of ??_7Internal@Object@@6B@ and exists so
-// that a subclass has something to override; InternalFactory::PersistObject
-// calls it on every object it creates from a stream.
-// B.3.3 step 5: the body is `Object::Internal::Persist`, and the call is
-// QUALIFIED so it is NOT a virtual dispatch — this shim IS slot 3, so
-// re-entering the vtable here would recurse on a minted-table object.
-void RtObject_Internal_Persist(Internal* self, void* stream /*IO::Stream&*/) {
-    // B.3.3 bridge
-    ::Object::Internal* p = reinterpret_cast< ::Object::Internal*>(self);
-    p->Object::Internal::Persist(stream);
-}
+// ?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z (0x1800bfda0, slot 3):
+// ENDGAME B.3.9 OBJ -- the slot door went with the minted table, its only
+// reader; the body is `Object::Internal::Persist` (internal_class.cpp).
 
 // ?Clone@Internal@Object@@QEAAPEAV12@XZ            retail 0x1800bfb10, ord 1716
 //
@@ -407,81 +312,12 @@ void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
 //
 // The `-1` / `0` pair is a dead store in both builds — AddObject overwrites
 // both before anything can observe them — and is reproduced anyway.
-// WAVE 11 LANE OBJLIFE — ATTENDANCE COUNTERS.
-//
-// A run of the TABLE tier that boots and plays is NOT evidence that these
-// bodies ran: a green readiness screen is not a route, and only an attendance
-// counter separates "safe" from "never executed"
-// (reference_a_green_readiness_screen_is_not_a_route). The shadow tier gets its
-// `calls=` from RT_DIFF; the table tier had NOTHING, so an armed run could only
-// ever be reported as "did not crash".
-//
-// Two plain counters, incremented unconditionally in the ported bodies. They
-// are not diff sites and cost one increment on a path that already does a
-// locked array grow. `RtObjectInternalAttendance()` reads them out.
-// All FOUR tier-2 rows, not just this lane's two. The other pair
-// (ClearPersistState / ResetPersistState) is lane OBJINT's subject, and this
-// file's own banner has said since Wave 9 that they have NEVER EXECUTED — a
-// claim nothing in the tree could actually check. Now it can, and OBJINT's
-// verdict can cite a counter instead of an absence of evidence.
-unsigned long long g_tableCtorRuns  = 0;
-unsigned long long g_tableDtorRuns  = 0;
-unsigned long long g_tableClearRuns = 0;
-unsigned long long g_tableResetRuns = 0;
-
-// ENDGAME B.3.3 step 5. The TABLE half of this body is now
-// `Object::InternalFactory::AddObject`. The two vptr stores stay HERE and are
-// NOT routed through `Object::Internal`'s real constructor, deliberately: this
-// door serves objects whose derived classes still carry MINTED vtables, so the
-// value it must stamp is the one `VtblInternal()` answers — the DLL's while the
-// DLL is present, the minted table at cutover. A placement-new of the real class
-// would stamp the COMPILER's table instead, which is a different pointer in
-// every live object built through this door. That is the split-vptr hazard the
-// banner at the top of this file exists to deny.
-Internal* RtObject_Internal_Ctor(Internal* self) {
-    ++g_tableCtorRuns;
-    self->vptr = VtblBase();
-    self->vptr = VtblInternal();
-    self->factoryIndex = -1;
-    self->generation   = 0;
-
-    // B.3.3 bridge — `RtObject::Internal` is the layout-asserted alias of
-    // `Object::Internal`; the factory's members now own the table arithmetic.
-    ::Object::InternalFactory::Get()->AddObject(
-        reinterpret_cast< ::Object::Internal*>(self));
-    return self;
-}
-
-// ??1Internal@Object@@UEAA@XZ          retail 0x1800bfdb0, profile 0x18008b400
-//
-//     this->vptr = &Internal::_vftable_;
-//     this->_generation = 0;
-//     RemoveObject(_singleton, this);          // 0x1800c0110, inlined
-//     Base::~Base(this);                       // vptr = &Base::_vftable_
-//
-// RemoveObject is the swap-remove that
-// reference_internalfactory_swapremove_wild_write.md is about:
-//     last = _objects._size - 1;  idx = obj->_factoryIndex;
-//     if (last != idx) { _objects[idx] = _objects[last];
-//                        _objects[idx]->_factoryIndex = idx; }
-//     _objects.SetSize(last);
-// There is NO validation of `idx` — not here and not in the profile build. If
-// `idx` is stale the second store lands wherever the allocator has since put
-// that block. That is retail's behaviour and this port keeps it; the fix for
-// the family is upstream (unregister before freeing), never a guard here.
-void RtObject_Internal_Dtor(Internal* self) {
-    ++g_tableDtorRuns;
-    self->vptr = VtblInternal();
-    self->generation = 0;
-
-    // B.3.3 bridge — the swap-remove is `Object::InternalFactory::RemoveObject`
-    // now, unguarded exactly as it was. The two vptr stores stay here for the
-    // reason given on the constructor above.
-    ::Object::InternalFactory::Get()->RemoveObject(
-        reinterpret_cast< ::Object::Internal*>(self));
-
-    self->vptr = VtblBase();
-}
+// ??0Internal@Object@@QEAA@XZ (0x1800bfd10) / ??1Internal@Object@@UEAA@XZ
+// (0x1800bfdb0): ENDGAME B.3.9 OBJ -- the two doors went with the minted
+// `??_7Internal@Object@@6B@` row, its RT_DELDTOR row 0x180006440 (the ??1
+// door's caller) and import slot 0x140152768 (the ??0 door's). The bodies are
+// `Object::Internal::Internal()` / `~Internal()` (internal_class.cpp); the
+// [RtInternalTable] / [RtInternalVtbl] instruments went with them (D9).
 
 // ?ClearPersistState@InternalFactory@Object@@QEAAXXZ
 //                                      retail 0x1800bfe30, profile 0x18008c0b0
@@ -490,7 +326,6 @@ void RtObject_Internal_Dtor(Internal* self) {
 // UNCONDITIONALLY, where retail's inline null-checks first. Same behaviour:
 // MemoryAllocator::Free opens with `test rdx,rdx; jz`.
 void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
-    ++g_tableClearRuns;
     // LIVENESS. This body is DEFAULT-ON as of Wave 11 lane OBJINT, and a
     // verified body that nothing calls is dead code that reads exactly like a
     // landed port (reference_uncalled_port_is_not_verified.md). Once per
@@ -551,7 +386,6 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
 // passes 0 — this call site does not version its record. Written as a named
 // constant so the 0 cannot be mistaken for a placeholder.
 void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* stream) {
-    ++g_tableResetRuns;
     // B.3.3 bridge — the body is `Object::InternalFactory::ResetPersistState`,
     // moved verbatim including the three-argument encoding-factory call and the
     // RETAIL ReaderWriter vtable offsets.
@@ -704,70 +538,6 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
 // ============================================================================
 // Registration
 // ============================================================================
-// WAVE 11 LANE OBJLIFE — the attendance read-out, called from standalone/main.cpp
-// at exit. Prints unconditionally, including 0/0, and says which of the two
-// zeroes it is: "the tier was never armed" and "the tier was armed and never
-// entered" are opposite findings and a silent log cannot tell them apart.
-// ============================================================================
-// WAVE 11 FOLLOW-UP 5, lane TINFO — THE SCREEN THAT MAKES CONDITION (b)
-// CHECKABLE FROM A LOG
-// ============================================================================
-// Printed once at exit beside the attendance counters. Per symbol: the pointer
-// our constructor actually stamps, the DLL's own, the registry's — so "the
-// split is closed" is a line in a log and not a claim about a code path.
-//
-// It is a GATE and not a tally, by this project's own test: the quantity VARIES
-// with the thing it gates. With `??_7Internal@Object@@6B@` registered,
-// `the old DLL-era switch` makes both rows read `MINTED (SPLIT)` and
-// the default makes them read `DLL`.
-// Both symbols are spelled as LITERALS at every resolve call below rather than
-// travelling through a loop variable: tools/port_bypass_audit.py cannot classify
-// a name that arrives in a variable and files it as UNRESOLVED-NAME, which is
-// residue a later lane has to re-derive. Two symbols, so the duplication is
-// three lines.
-static void RtInternalVtblPinRow(const char* sym, void* stamped, void* port) {
-    printf("[RtInternalVtbl] %-26s stamped=%p registry=%p  -> %s\n",
-           sym, stamped, port,
-           stamped == port ? "the registry's table is the only one"
-                           : "NEITHER -- unexpected, investigate");
-}
-
-void RtObjectInternalVtblPin() {
-    using namespace RtObject;
-    // `stamped` comes through the same accessors the CONSTRUCTOR uses, so the
-    // report cannot drift from the behaviour it describes.
-    RtInternalVtblPinRow("??_7Internal@Object@@6B@", VtblInternal(),
-                         ResolveExport("??_7Internal@Object@@6B@"));
-    RtInternalVtblPinRow("??_7Base@Object@@6B@", VtblBase(),
-                         ResolveExport("??_7Base@Object@@6B@"));
-}
-
-void RtObjectInternalAttendance() {
-    using namespace RtObject;
-    const bool armed = RuntimeExportIsRegistered("??0Internal@Object@@QEAA@XZ");
-    printf("[RtInternalTable] ctorRuns=%llu dtorRuns=%llu clearRuns=%llu "
-           "resetRuns=%llu  (%s)\n",
-           g_tableCtorRuns, g_tableDtorRuns, g_tableClearRuns, g_tableResetRuns,
-           g_tableCtorRuns == 0
-               ? (armed ? "REGISTERED BUT NEVER ENTERED -- the door exists and "
-                          "nothing came through it; do NOT read this run as "
-                          "evidence the port works"
-                        : "the ctor is NOT registered on this run -- which is a "
-                          "REGRESSION, not the default")
-               : "our ported bodies drove the LIVE handle table this many times");
-    // The persist-state pair is reported SEPARATELY from the ctor/dtor pair on
-    // purpose: they live only on the save/load path, so zero here with a large
-    // ctorRuns means "this run never saved or loaded", which is a statement
-    // about the RUN, not about those two ports. Reading one pair's zero through
-    // the other pair's non-zero is how an unexercised body gets written up as
-    // exercised.
-    if (armed && g_tableClearRuns == 0 && g_tableResetRuns == 0)
-        printf("[RtInternalTable]   persist-state pair NEVER ENTERED on this "
-               "run -- expected unless the run saved or loaded (they are only "
-               "on that path). NOT evidence about those two ports either way; "
-               "use BANISHED_AUTOLOAD to reach them.\n");
-}
-
 int RtObjectInternalRegister() {
     using namespace RtObject;
     int n = 0;
@@ -861,10 +631,6 @@ int RtObjectInternalRegister() {
                           (void*)&RtObject_InternalBasePtr_DeletePtr); ++n;
     RegisterRuntimeAddr(0x1800c0150, (void*)&RtObject_InternalBasePtr_DeletePtr);
 
-    RegisterRuntimeExport("?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtObject_Internal_Persist); ++n;
-    RegisterRuntimeAddr(0x1800bfda0, (void*)&RtObject_Internal_Persist);
-
     // B.3.4 STREAMS (6/6) — the symbol's FIRST registration. BY NAME *AND* BY
     // ADDRESS, because `ResolveExport` falls through silently for an unported
     // symbol while `ResolveAddr(Module::Runtime, ..)` is registry-first: a
@@ -956,14 +722,6 @@ int RtObjectInternalRegister() {
     RegisterRuntimeAddr(0x1800bfe30, (void*)&RtObject_InternalFactory_ClearPersistState);
 
     // ---- Tier 2: the real table ports. ---------------------------------------
-        RegisterRuntimeExport("??0Internal@Object@@QEAA@XZ",
-                              (void*)&RtObject_Internal_Ctor); ++n;
-        RegisterRuntimeAddr(0x1800bfd10, (void*)&RtObject_Internal_Ctor);
-
-        RegisterRuntimeExport("??1Internal@Object@@UEAA@XZ",
-                              (void*)&RtObject_Internal_Dtor); ++n;
-        RegisterRuntimeAddr(0x1800bfdb0, (void*)&RtObject_Internal_Dtor);
-
         // ---- ResetPersistState — STAYS IN THE TIER, and NOT because it is
         // unverified. Lane OBJINT verified the BODY as thoroughly as
         // ClearPersistState's: the shadow ran (calls=1, divergences=0) and the
@@ -991,6 +749,18 @@ int RtObjectInternalRegister() {
                               (void*)&RtObject_InternalFactory_ResetPersistState); ++n;
         RegisterRuntimeAddr(0x1800bfe40, (void*)&RtObject_InternalFactory_ResetPersistState);
 
+
+    // ENDGAME B.3.9 OBJ (B39_RULES D2): retail's factory pair is the class's
+    // own statics (internal_class.cpp, both `XOR EAX,EAX; RET`), registered by
+    // name AND VA here instead of by the FACTREST interpreter row. The in-place
+    // one is the SHARED `?CreateInPlaceObject@Internal@Object@@` every
+    // Internal-rooted class's record names; it stays registered here.
+    RegisterRuntimeExport("?CreateNewObject@Internal@Object@@SAPEAVBase@2@XZ",
+                          (void*)&::Object::Internal::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x18002fc80, (void*)&::Object::Internal::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z",
+                          (void*)&::Object::Internal::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x1800070c0, (void*)&::Object::Internal::CreateInPlaceObject);
 
     printf("[RtPort]   Object::Internal: TABLE mode — our code drives the handle "
            "table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the "

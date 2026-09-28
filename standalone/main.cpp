@@ -1492,27 +1492,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Wave 9 lane F: symbols that resolved to NOTHING. Always on, prints only
     // when the list is non-empty. After lane G this is the missing-symbol list.
     DumpUnresolvedSymbols();
-    // WAVE 11 LANE OBJDATA: gate (b) for the four ??_7…@Object@@6B@ minted rows
-    // — entries, and which table each entering object carried. Called HERE and
-    // not from a static destructor because it asks the PORT REGISTRY which door
-    // a symbol resolves to, and by static-destructor time the registry is torn
-    // down and every row reads "unregistered" (its own screen0 caught that).
-    // WAVE 11 FOLLOW-UP 5 (lane TINFO): every BaseTypeInfo::factoryFn dispatch
-    // this run, classified by WHOSE node it went through. Follow-up 2 made the
-    // 104 minted factory abort traps reachable in principle; this says whether
-    // any of them is reachable in fact. Always printed, including zero, and it
-    // carries its own two controls -- read them before trusting the zero.
-    { extern void RtObjectTypeInfoAccessorsReport();
-      RtObjectTypeInfoAccessorsReport(); }
-    // WAVE 11 LANE OBJLIFE: attendance for Object::Internal's TABLE tier. One
-    // line, ALWAYS, including zero -- a tier that is armed and never entered
-    // looks exactly like a tier that is armed and correct if nothing counts
-    // entries, and "it booted fine" is not a measurement of a body that never
-    // ran (reference_a_green_readiness_screen_is_not_a_route).
-    { extern void RtObjectInternalAttendance(); RtObjectInternalAttendance(); }
-    // WAVE 11 FOLLOW-UP 5 (lane TINFO): which vtable our Internal ctor stamps.
-    // Condition (b) of the WAVE11.md advisor amendment, as a log line.
-    { extern void RtObjectInternalVtblPin(); RtObjectInternalVtblPin(); }
     // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
     // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
     // own section 11.3 mis-read, so the branch split is printed next to it.

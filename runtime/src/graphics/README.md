@@ -73,8 +73,7 @@ mostly still registered DOORS on purpose (B4b-2, `B35_RULES.md` §11).
 | `GeneratedImageBuffer`, `ReflectionImageBuffer` | `GeneratedImageBuffer.h` | `imagebuffer_derived.cpp` |
 | `FrameCopyImageBuffer` | `FrameCopyImageBuffer.h` | `imagebuffer_derived.cpp`, `wave23_lane_gfxbody.cpp` |
 
-`rt_graphics_port.cpp` is this directory's registration file and holds no bodies;
-`rt_factories_graphics.{cpp,inc}` are the reflection factory rows.
+`rt_graphics_port.cpp` is this directory's registration file and holds no bodies.
 
 THE `wave*`/`batchc*`/`closure*`/`vtbatch*` FILE NAMES ARE NOT ORIGINAL SOURCE FILES.
 They are per-lane porting batches from before B.3, and each one now holds members of

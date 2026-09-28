@@ -704,6 +704,8 @@ def deldtor_rows(repo):
     """{deleting-dtor VA: 'file:line'} for every RT_DELDTOR row."""
     out = {}
     for rel in DELDTOR_FILES:
+        if not os.path.exists(os.path.join(repo, rel)):
+            continue   # ENDGAME B.3.9 OBJ: the RT_DELDTOR table is deleted
         text = strip_comments(open(os.path.join(repo, rel), encoding="utf-8",
                                    errors="replace").read())
         for m in re.finditer(r"^\s*RT_DELDTOR\(\s*0x([0-9a-fA-F]+)", text, re.M):

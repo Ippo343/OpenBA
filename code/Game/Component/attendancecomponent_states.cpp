@@ -61,34 +61,29 @@ extern void AttendanceComponent_ProcessQueue(void* self);
 // 0x14012fc00 WorkPlace SetAccepting(wpc, accepting).
 // 0x140002f90 Entity_FindComponent_MeshInstance(entity, outIBP).
 // 0x14012c3f0 MeshInstance set-state-flag(mesh, flagIdx, value).
-typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);
 typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* outIBP);
 typedef void  (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
 typedef void  (*fn_SetAccepting_t)(uintptr_t wpc, char accepting);
 typedef void  (*fn_MeshSetFlag_t)(void* mesh, uint8_t flagIdx, char value);
 
-static fn_WorkCtor25_t   s_workCtor25   = nullptr;
 static fn_FindComp_t     s_findWork     = nullptr;
 static fn_FindComp_t     s_findWpc      = nullptr;
 static fn_PostWork_t     s_postWork     = nullptr;
 static fn_SetAccepting_t s_setAccepting = nullptr;
 static fn_FindComp_t     s_findMesh     = nullptr;
 static fn_MeshSetFlag_t  s_meshSetFlag  = nullptr;
-static uintptr_t         s_locationWorkVtable = 0;        // 0x1401616a0
 static bool              s_resolved     = false;
 
 bool LocationWork_ResolveFuncs();   // code/Game/Work/locationwork.cpp
 
 static void AC_Resolve() {
     if (s_resolved) return;
-    s_workCtor25   = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_findWork     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003050));
     s_findWpc      = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
     s_postWork     = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
     s_setAccepting = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
     s_findMesh     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_meshSetFlag  = reinterpret_cast<fn_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_locationWorkVtable = reinterpret_cast<uintptr_t>(LocationWork::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_resolved = true;
 }
 
@@ -201,11 +196,11 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
     if (fn_MemAlloc && g_pMemAllocSingleton)
         work = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
     if (work) {
+        // Retail inlines LocationWork's entity-seeded ctor here: Work_Ctor25
+        // (0x1400f72e0), the 0x1401616a0 table, +0x48 = 0. ENDGAME B.3.9 OBJ:
+        // the real class, not the `??0Internal` door + hand stamp.
         uintptr_t entity = *reinterpret_cast<uintptr_t*>(self + 0x10);
-        if (s_workCtor25) s_workCtor25(work, &entity);
-        if (s_locationWorkVtable)
-            *reinterpret_cast<uintptr_t*>(work) = s_locationWorkVtable;
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(work) + 0x48) = 0;
+        work = ::new (work) LocationWork(&entity);
     }
     uintptr_t workIbp = 0;
     if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(

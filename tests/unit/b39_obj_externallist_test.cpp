@@ -2,7 +2,7 @@
 // tests/unit/b39_obj_externallist_test.cpp — ENDGAME B.3.9 OBJ (B39_RULES D1,
 // rule B9-16): `Object::ExternalList` is concrete.
 //
-// The class's KEY FUNCTION is `TypeName` (its constructor and slot 0 are inline
+// The class's KEY FUNCTION is `GetFileVersion` (its constructor and slot 0 are inline
 // in External.h), so GCC emits its vtable in whichever translation unit defines
 // the out-of-line members. In production that is external_class_doors.cpp,
 // which stands on the port registry and cannot link into `make unit`; here THIS
@@ -47,9 +47,11 @@ const void* ElVTableOf(const void* o) { return *reinterpret_cast<const void* con
 
 // ---- the recording out-of-line members (see the banner) --------------------
 namespace Object {
-const char*       ExternalList::TypeName() const   { g_elLastSlot = 1; return "ExternalList"; }
-uint32_t          ExternalList::Type() const       { g_elLastSlot = 2; return 0x7350u; }
-uint32_t          ExternalList::TypeId()           { return 0x7360u; }
+// The factory pair lives in external_list.cpp (registry-side); the class
+// record (DEFINE_TYPE, external_class.cpp) names it, so the unit link needs a
+// definition. Slots 1/2 are DECLARE_TYPE's own over that record.
+Base*             ExternalList::CreateNewObject()        { return nullptr; }
+Base*             ExternalList::CreateInPlaceObject(void*) { return nullptr; }
 int32_t           ExternalList::GetFileVersion() const { g_elLastSlot = 3; return 3; }
 bool              ExternalList::Serialize(void*)   { g_elLastSlot = 5; return true; }
 External*         ExternalList::Reconstruct()      { g_elLastSlot = 6; return this; }

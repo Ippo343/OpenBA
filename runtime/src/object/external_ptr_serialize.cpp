@@ -461,29 +461,11 @@ extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
 // The per-instantiation thunks.
 //
 // Each retail address is one `T`, so each gets a two-line entry point that
-// supplies its own `?_typeInfo@T@…` and forwards. The type-info slot is
-// resolved by EXPORTED NAME (all 25 are exported DATA symbols — `AEAA`/`0…A`
-// spellings mean PRIVATE, not unexported, and this DLL exports its privates:
-// [[reference_aeaa_is_private_not_unexported]]), so no address door is opened
-// for the data either.
+// supplies its own `?_typeInfo@T@…` and forwards. Since the ENDGAME B.3.9 D6
+// W3 folds every `T` is a real class with a DEFINE_TYPE record, so the thunk
+// hands over `&T::GetTypeInfo()` (the by-name RT_DATA_SLOT forms of both
+// macros went with their last row, ENDGAME B.3.9 OBJ).
 // ============================================================================
-#define EXTPTR_THUNK(fnName, mangledTypeInfo)                                  \
-    extern "C" void fnName(External** self, Serializer* ser) {                 \
-        using TypeInfoPtr = const void*;                                       \
-        const void* ti = RT_DATA_SLOT(TypeInfoPtr, mangledTypeInfo);           \
-        if (ti == nullptr) {                                                   \
-            static bool warned = false;                                        \
-            if (!warned) {                                                     \
-                warned = true;                                                 \
-                std::fprintf(stderr,                                           \
-                    "[RtExtPtr] %s did not resolve -- this instantiation "     \
-                    "cannot run its type check\n", mangledTypeInfo);           \
-            }                                                                  \
-            return;                                                            \
-        }                                                                      \
-        RtObject_ExternalPtr_Serialize(self, ser, ti);                         \
-    }
-
 // ENDGAME B.3.9 D6 W3: the same thunk over a folded class's own record.
 #define EXTPTR_THUNK_OF(fnName, Class)                                         \
     extern "C" void fnName(External** self, Serializer* ser) {                 \
@@ -577,10 +559,8 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundBuffer, Audio::SoundBuffer)
 // 0x18003dc90 — ExternalPtr<Object::ExternalList>. The export spells the
 // enclosing namespace with a back-reference (`@2@`), exactly as
 // `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` does.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ExternalList,
-             "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_ExternalList, ::Object::ExternalList)
 
-#undef EXTPTR_THUNK
 #undef EXTPTR_THUNK_OF
 
 // ============================================================================
@@ -603,23 +583,6 @@ extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
     Ptr::SerializeArray(*ser, count, reinterpret_cast<Ptr*>(elems), typeInfo);
 }
 
-#define EXTPTR_ARRAY_THUNK(fnName, mangledTypeInfo)                            \
-    extern "C" void fnName(Serializer* ser, int count, External** elems) {     \
-        using TypeInfoPtr = const void*;                                       \
-        const void* ti = RT_DATA_SLOT(TypeInfoPtr, mangledTypeInfo);           \
-        if (ti == nullptr) {                                                   \
-            static bool warned = false;                                        \
-            if (!warned) {                                                     \
-                warned = true;                                                 \
-                std::fprintf(stderr,                                           \
-                    "[RtExtPtr] %s did not resolve -- this instantiation "     \
-                    "cannot run its type check\n", mangledTypeInfo);           \
-            }                                                                  \
-            return;                                                            \
-        }                                                                      \
-        RtObject_ExternalPtrArray_Serialize(ser, count, elems, ti);            \
-    }
-
 // ENDGAME B.3.9 D6 W3: the same thunk over a folded class's own record.
 #define EXTPTR_ARRAY_THUNK_OF(fnName, Class)                                   \
     extern "C" void fnName(Serializer* ser, int count, External** elems) {     \
@@ -627,8 +590,7 @@ extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
     }
 
 // 0x18002f170 — Object::External (note the `@2@` back-reference in the export)
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
-                   "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_External, ::Object::External)
 // 0x180005220 — Achievement::Goal
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Goal, Achievement::Goal)
 // 0x1800493d0 — UI::ElementDescription
@@ -659,7 +621,6 @@ EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Font, UI::Font)
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_SpriteSheet, UI::SpriteSheet)
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Surface, Collision2D::Surface)
 
-#undef EXTPTR_ARRAY_THUNK
 #undef EXTPTR_ARRAY_THUNK_OF
 
 // ---- Registration ----------------------------------------------------------

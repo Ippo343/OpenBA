@@ -6,3 +6,23 @@
 
 # -- W1: the duplicate type-info record (B39_RULES D6) --
 ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::Internal) record is the one; readers (Internal slot doors, PersistObject) read Internal::TypeId()
+
+# -- W3: Object::CompiledExternal (INVENTORY_A row 29, RT_DELDTOR row 0x18000b7e0) --
+??_7CompiledExternal@Object@@6B@   OBJ   own vector DeletingDtor + Type/TypeName on the compiler table; RT_DELDTOR row 0x18000b7e0, ??1 door, 2 slot doors, [ObjTI] instrument deleted
+
+# -- W3: Object::Internal (INVENTORY_A row 76, RT_DELDTOR row 0x180006440) --
+??_7Internal@Object@@6B@   OBJ   every builder constructs the real class (the Work_Ctor25 door and import slot 0x140152768 gone in 4d41ac02); RT_DELDTOR row 0x180006440, ??0/??1 doors, 3 slot doors, [RtInternalVtbl]/[RtInternalTable] instruments deleted
+
+# -- W3: Object::External (INVENTORY_A row 55, RT_DELDTOR row 0x180006640) --
+??_7External@Object@@6B@   OBJ   no stamper left (every External-derived class a real class); External::DeletingDtor carries both arms; RT_DELDTOR row 0x180006640, ??0/??1 doors, 3 slot doors (Type, TypeName, Compile), UI VtBase/VtExternal (dead) deleted
+
+# -- W3: Object::Base (INVENTORY_A row 12, RT_DELDTOR row 0x1800065b0) -- LAST
+??_7Base@Object@@6B@   OBJ   no stamper left; Base::DeletingDtor carries both arms; RT_DELDTOR row 0x1800065b0 (the last: the RT_DELDTOR machinery deleted), ??1Base door (deleting_dtor_leaves.cpp deleted), ?Type@Base slot door deleted
+
+# -- W3: the Object _typeInfo folds (B39_RULES D6) --
+?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::ExternalList, "Object::External", nullptr) in external_class.cpp; readers (ExtPtr thunk, UpdateLoop LoadResources, ExternalList slots) read the class record
+?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::CompiledExternal, "External", nullptr) in external_class.cpp; factory pair the class's own (FACTREST row deleted); readers were the class accessor only
+?_typeInfo@External@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::External, "Base", nullptr) in external_class.cpp; factory pair the class's own (FACTREST row deleted); readers (ExtPtr array thunk, MainLoop, Modification::SetupFileSystem, External slots) read the class record
+?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::ExtensionCompiler, "Base", nullptr) (external_compilers.cpp, the new abstract class ExternalCompiler.h); factory pair the class's own (FACTREST row deleted); no reader
+?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::ExternalCompiler, "Base", nullptr) (external_compilers.cpp, the new abstract class ExternalCompiler.h); factory pair the class's own (FACTREST row deleted, the roster empty: the interpreter core deleted); no reader
+?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A   OBJ   Base::_typeInfo("Base", no parent, no ext, no factories) in type_reflection.cpp; Base::TypeId (0x18007e010) ported over it; no reader
