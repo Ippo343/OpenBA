@@ -2,19 +2,17 @@
 // Pathfinder/Action node-pool grow + dynamic-array resize family.
 //
 // Faithful 1:1 ports of the A*/pathfinder node-pool free-list grow helpers and the
-// associated dynamic-array (vector) resize/copy/free helpers. In standalone these are
+// associated dynamic-array (vector) resize/copy/free helpers. The pathfinder /
+// trade-component / build-structure closures call them by name through
+// Action/exe_bodies.h (B3R).
 #include "Action/exe_bodies.h"
-// reached via ResolveAddr(Module::Exe, 0xADDR) from the pathfinder / trade-component /
-// build-structure closures; unless registered they resolve to 0 and the call is silently
-// skipped. None of this is on the autostart path, so a *wrong* port is undetectable
+// None of this is on the autostart path, so a *wrong* port is undetectable
 // latent corruption — every line below is transcribed literally from the Ghidra
 // decompile (cross-checked against the disassembly for the intricate index math). Do
 // NOT "improve" or simplify.
 //
-// Allocation matches engine_funcs.h: System::MemoryAllocator::MemAlloc in the exe is the
-// static singleton allocator -> fn_MemAlloc(g_pMemAllocSingleton, size, align); MemFree ->
-// fn_MemFreeStatic(ptr). The original passes (size, align) to a static MemAlloc; we route
-// through fn_MemAlloc with the singleton as the implicit `this`.
+// Allocation: the original passes (size, align) to the static
+// System::MemoryAllocator::MemAlloc and frees through MemoryAllocator::MemFree; so do we.
 //
 // CLOSURE NOTES (see RegisterPfPoolsBatch in standalone/reg_pf_pools.cpp):
 //   * Pf_VectorResize18Dup_d940 (0x14001d940) calls Pf_IntArrayClone_f9e0 (in-batch) and
@@ -23,47 +21,25 @@
 //     Pf_FreeArray30_e490 (in-batch) — closure satisfied.
 //   * Pf_VectorResize60_fa80 (0x14001fa80) calls TradeWork_impl_sub_f5e0 (0x14001f5e0,
 //     element copy-ctor; recurses into fdb0/fe60) and TradeWork_impl_sub_f250_sub_fb80
-//     (0x14001fb80, 0x60-stride element free) — NEITHER is in this batch and neither is
-//     registered. Its closure is therefore NOT satisfied; it is ported here for
-//     completeness but is left UNREGISTERED in the registrar (registering a half-null
-//     closure would be strictly worse than the skipped-call no-op).
+//     (0x14001fb80, 0x60-stride element free) — neither is in this batch; both are now
+//     Reimpl_Struct60B_CopyCtor / Reimpl_Struct60B_DtorRange (Game), called by name.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"          // Reimpl_Struct60B_CopyCtor, Reimpl_Struct60B_DtorRange
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <cstdio>    // [POOLDIAG] diagnostic reporting
 #include <cstdlib>
 
 namespace {
-// Exe sub-callees that live in OTHER functions in this closure. Resolved lazily; each is
-// registered (the in-batch ones in our own registrar). For 1fa80's two callees we resolve
-// them too, but they are not registered (see closure note above), so they stay null in
-// standalone and the calls become no-ops — matching the "skip unregistered" policy.
-typedef void  (*fn_FreeArray18_t)(void* unused, uintptr_t base, int count);   // 0x14001db40
-typedef void  (*fn_FreeArray30_t)(void* unused, uintptr_t base, int count);   // 0x14001e490
-typedef int64_t* (*fn_IntArrayClone_t)(int64_t* dst, int64_t* src);           // 0x14000f9e0
-typedef void* (*fn_Copy60_t)(void* dst, void* src);                           // 0x14001f5e0
-typedef void  (*fn_Free60_t)(void* unused, uintptr_t base, int count);        // 0x14001fb80
-
-static fn_FreeArray18_t   s_fn_FreeArray18  = nullptr;
-static fn_FreeArray30_t   s_fn_FreeArray30  = nullptr;
-static fn_IntArrayClone_t s_fn_IntClone     = nullptr;
-static fn_Copy60_t        s_fn_Copy60       = nullptr;
-static fn_Free60_t        s_fn_Free60       = nullptr;
-static bool s_fnInit = false;
-static void EnsureFns() {
-    if (s_fnInit) return;
-    s_fn_FreeArray18 = reinterpret_cast<fn_FreeArray18_t>(ResolveAddr(Module::Exe, 0x14001db40));
-    s_fn_FreeArray30 = reinterpret_cast<fn_FreeArray30_t>(ResolveAddr(Module::Exe, 0x14001e490));
-    s_fn_IntClone    = reinterpret_cast<fn_IntArrayClone_t>(ResolveAddr(Module::Exe, 0x14000f9e0));
-    s_fn_Copy60      = reinterpret_cast<fn_Copy60_t>(ResolveAddr(Module::Exe, 0x14001f5e0));
-    s_fn_Free60      = reinterpret_cast<fn_Free60_t>(ResolveAddr(Module::Exe, 0x14001fb80));
-    s_fnInit = true;
-}
+// Exe sub-callees that live in OTHER functions in this closure, called by name (B3R):
+//   0x14001db40 Pf_FreeArray18_db40   0x14001e490 Pf_FreeArray30_e490
+//   0x14000f9e0 Pf_IntArrayClone_f9e0  0x14001f5e0 Reimpl_Struct60B_CopyCtor
+//   0x14001fb80 Reimpl_Struct60B_DtorRange
 
 // MemAlloc helper mirroring System::MemoryAllocator::MemAlloc(size, align) (static).
 static inline void* PfMemAlloc(uint64_t size, uint64_t align) {
-    return fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, size, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
 }
 } // namespace
 
@@ -298,7 +274,7 @@ void Pf_ArrayResize18_d830(int64_t* param_1, int param_2) {
             } while (lVar6 < param_2);
         }
         if (pvVar2 != reinterpret_cast<void*>(param_1[0])) {
-            if (fn_MemFreeStatic) fn_MemFreeStatic(pvVar2);
+            System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
@@ -316,7 +292,7 @@ void Pf_FreeArray18_db40(uint64_t param_1, uintptr_t param_2, int param_3) {
         int64_t lVar2 = param_3;
         uint64_t* puVar1 = reinterpret_cast<uint64_t*>(param_2 + 8);
         do {
-            if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(*puVar1));
+            System::MemoryAllocator::MemFree(reinterpret_cast<void*>(*puVar1));
             puVar1[0] = 0;
             puVar1[1] = 0;
             puVar1 = puVar1 + 3;
@@ -337,10 +313,10 @@ void Pf_FreeArray30_e490(uint64_t param_1, uintptr_t param_2, int param_3) {
         int64_t lVar2 = param_3;
         uintptr_t lVar1 = param_2 + 0x2c;
         do {
-            if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(lVar1 + -0xc));
+            System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(lVar1 + -0xc));
             *reinterpret_cast<uint64_t*>(lVar1 + -0xc) = 0;
             *reinterpret_cast<uint64_t*>(lVar1 + -4) = 0;
-            if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(lVar1 + -0x1c));
+            System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(lVar1 + -0x1c));
             *reinterpret_cast<uint64_t*>(lVar1 + -0x1c) = 0;
             *reinterpret_cast<uint64_t*>(lVar1 + -0x14) = 0;
             lVar1 = lVar1 + 0x30;
@@ -392,7 +368,7 @@ void Pf_VectorResize14_ee40(int64_t* param_1, int param_2) {
             } while (lVar5 < param_2);
         }
         if (pvVar2 != reinterpret_cast<void*>(param_1[0])) {
-            if (fn_MemFreeStatic) fn_MemFreeStatic(pvVar2);
+            System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
@@ -446,7 +422,7 @@ void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3
             } while (uVar10 != 0);
         }
         if (pvVar2 != reinterpret_cast<void*>(param_1[0])) {
-            if (fn_MemFreeStatic) fn_MemFreeStatic(pvVar2);
+            System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
@@ -462,7 +438,6 @@ void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3
 // on realloc, free the whole OLD buffer's int-vectors (inline loop, walks old+8 stride 3
 // qwords) then MemFree the old buffer. Closure: f9e0 + db40 (both in-batch).
 void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3) {
-    EnsureFns();
     int iVar1 = static_cast<int>(param_1[1]);
     int64_t lVar8 = iVar1;
     if (param_2 != iVar1) {
@@ -497,8 +472,7 @@ void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3) 
                     *reinterpret_cast<uint32_t*>(puVar5 + 4) = *reinterpret_cast<uint32_t*>(puVar6 + 4);
                     *reinterpret_cast<int64_t*>(puVar5 + 8) = 0;
                     *reinterpret_cast<uint64_t*>(puVar5 + 0x10) = 0;
-                    if (s_fn_IntClone)
-                        s_fn_IntClone(reinterpret_cast<int64_t*>(puVar5 + 8),
+                    Pf_IntArrayClone_f9e0(reinterpret_cast<int64_t*>(puVar5 + 8),
                                       reinterpret_cast<int64_t*>(puVar6 + 8));
                 }
                 puVar9 = puVar9 + 0x18;
@@ -509,8 +483,7 @@ void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3) 
         }
         if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
             if (param_2 < iVar1) {
-                if (s_fn_FreeArray18)
-                    s_fn_FreeArray18(reinterpret_cast<void*>(static_cast<int64_t>(param_2) * 3),
+                Pf_FreeArray18_db40(static_cast<uint64_t>(static_cast<int64_t>(param_2) * 3),   // 0x14001db40
                                      reinterpret_cast<int64_t>(pvVar2) + static_cast<int64_t>(param_2) * 0x18,
                                      iVar1 - param_2);
             }
@@ -518,14 +491,14 @@ void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3) 
             if (0 < lVar8) {
                 uint64_t* puVar7 = reinterpret_cast<uint64_t*>(reinterpret_cast<int64_t>(pvVar2) + 8);
                 do {
-                    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(*puVar7));
+                    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(*puVar7));
                     puVar7[0] = 0;
                     puVar7[1] = 0;
                     puVar7 = puVar7 + 3;
                     lVar8 = lVar8 + -1;
                 } while (lVar8 != 0);
             }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(pvVar2);
+            System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
@@ -542,7 +515,6 @@ void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3) 
 // *** CLOSURE NOT SATISFIED: f5e0 and fb80 are NOT in this batch and are unregistered; this
 // function is therefore NOT registered in RegisterPfPoolsBatch. Ported for completeness. ***
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
-    EnsureFns();
     int iVar1 = static_cast<int>(param_1[1]);
     if (param_2 != iVar1) {
         void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
@@ -569,7 +541,7 @@ void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
                     if (iVar1 <= iVar6) {
                         puVar5 = param_3;
                     }
-                    if (s_fn_Copy60) s_fn_Copy60(plVar4, puVar5);
+                    Reimpl_Struct60B_CopyCtor(plVar4, puVar5);   // 0x14001f5e0
                 }
                 iVar6 = iVar6 + 1;
                 lVar7 = lVar7 + 0x60;
@@ -577,14 +549,13 @@ void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
         }
         if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
             if (param_2 < iVar1) {
-                if (s_fn_Free60)
-                    s_fn_Free60(nullptr,
-                                static_cast<int64_t>(param_2) * 0x60 + reinterpret_cast<int64_t>(pvVar2),
+                Reimpl_Struct60B_DtorRange(nullptr,   // 0x14001fb80
+                                reinterpret_cast<void*>(static_cast<int64_t>(param_2) * 0x60 + reinterpret_cast<int64_t>(pvVar2)),
                                 iVar1 - param_2);
             }
         } else {
-            if (s_fn_Free60) s_fn_Free60(nullptr, reinterpret_cast<int64_t>(pvVar2), iVar1);
-            if (fn_MemFreeStatic) fn_MemFreeStatic(pvVar2);
+            Reimpl_Struct60B_DtorRange(nullptr, pvVar2, iVar1);   // 0x14001fb80
+            System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
@@ -599,7 +570,6 @@ void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
 // Pf_FreeArray30_e490; on realloc free the whole old buffer's int-arrays (e490) then MemFree.
 // Closure: f9e0 + e490 (both in-batch).
 void Pf_VectorResize30_e210(int64_t* param_1, uint32_t param_2, uint32_t* param_3) {
-    EnsureFns();
     uint32_t uVar1 = *reinterpret_cast<uint32_t*>(param_1 + 1);
     if (param_2 != uVar1) {
         void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
@@ -635,13 +605,11 @@ void Pf_VectorResize30_e210(int64_t* param_1, uint32_t param_2, uint32_t* param_
                     puVar7[2] = puVar6[2];
                     *reinterpret_cast<int64_t*>(puVar7 + 4) = 0;
                     *reinterpret_cast<uint64_t*>(puVar7 + 6) = 0;
-                    if (s_fn_IntClone)
-                        s_fn_IntClone(reinterpret_cast<int64_t*>(puVar7 + 4),
+                    Pf_IntArrayClone_f9e0(reinterpret_cast<int64_t*>(puVar7 + 4),
                                       reinterpret_cast<int64_t*>(puVar6 + 4));
                     *reinterpret_cast<int64_t*>(puVar7 + 8) = 0;
                     *reinterpret_cast<uint64_t*>(puVar7 + 10) = 0;
-                    if (s_fn_IntClone)
-                        s_fn_IntClone(reinterpret_cast<int64_t*>(puVar7 + 8),
+                    Pf_IntArrayClone_f9e0(reinterpret_cast<int64_t*>(puVar7 + 8),
                                       reinterpret_cast<int64_t*>(puVar6 + 8));
                 }
                 puVar9 = puVar9 + 0xc;
@@ -653,15 +621,13 @@ void Pf_VectorResize30_e210(int64_t* param_1, uint32_t param_2, uint32_t* param_
         }
         if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
             if (static_cast<int>(param_2) < static_cast<int>(uVar1)) {
-                if (s_fn_FreeArray30)
-                    s_fn_FreeArray30(reinterpret_cast<void*>(uVar5),
+                Pf_FreeArray30_e490(static_cast<uint64_t>(uVar5),   // 0x14001e490
                                      static_cast<int64_t>(static_cast<int>(param_2)) * 0x30 + reinterpret_cast<int64_t>(pvVar2),
                                      uVar1 - param_2);
             }
         } else {
-            if (s_fn_FreeArray30)
-                s_fn_FreeArray30(reinterpret_cast<void*>(uVar5), reinterpret_cast<int64_t>(pvVar2), uVar1);
-            if (fn_MemFreeStatic) fn_MemFreeStatic(pvVar2);
+            Pf_FreeArray30_e490(static_cast<uint64_t>(uVar5), reinterpret_cast<int64_t>(pvVar2), uVar1);   // 0x14001e490
+            System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
@@ -675,7 +641,7 @@ void Pf_VectorResize30_e210(int64_t* param_1, uint32_t param_2, uint32_t* param_
 // only — used by d940 and e210 above).
 int64_t* Pf_IntArrayClone_f9e0(int64_t* param_1, int64_t* param_2) {
     if (param_1 != param_2) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(param_1[0]));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(param_1[0]));
         uint64_t uVar3 = 0;
         param_1[1] = 0;
         param_1[0] = 0;
