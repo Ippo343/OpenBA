@@ -15,6 +15,7 @@
 #include "Component/FruitDescription.h"
 #include "Component/OrchardDescription.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "Game/exe_constants.h"  // kRdata_*
 #include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0 / _3050, WorkLeaf_FindComp_a0b0
@@ -71,8 +72,8 @@ void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount) {
     if (*capPtr < newCount) {
         *capPtr = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) *capPtr = newCount * 3;
-        void* newBuf = (fn_MemAlloc && g_pMemAllocSingleton)
-                           ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(*capPtr) * 0x28, 8) : nullptr;
+        void* newBuf = (System::MemoryAllocator::_singleton)
+                           ? System::MemoryAllocator::MemAlloc((uint64_t)(*capPtr) * 0x28, 8) : nullptr;
         a[0] = reinterpret_cast<int64_t>(newBuf);
     }
     int keep = (oldBuf == reinterpret_cast<void*>(a[0])) ? oldCount : 0;
@@ -94,7 +95,7 @@ void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount) {
             *reinterpret_cast<uint64_t*>(dst + 24) = 0;
         }
     }
-    if (oldBuf != reinterpret_cast<void*>(a[0]) && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+    if (oldBuf != reinterpret_cast<void*>(a[0])) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // Reimpl of FUN_14000a230 (serialize stride-0x28 entity-ref array entries: 2 ints, 3 IBPs, 1 bool)

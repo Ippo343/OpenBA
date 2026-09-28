@@ -33,6 +33,7 @@
 // 0x14004f420 .. 0x14004fb60 and 0x1400c49d0.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/CharacterComponent.h"
 #include "Component/ControllerComponent.h"
 #include "Action/exe_bodies.h"   // Pf_ActStackPush_54e0, Pf_MoveToCtor_9170, ActHunt_MarkEntityRemoval_c2ea0
@@ -129,9 +130,9 @@ extern "C" void Nomad_MoveTo(void* nomadV, float* dest) {
     uintptr_t chr = FindCharacter(*reinterpret_cast<void**>(nomad + 0x10));
     uint64_t chrIBP = 0; MakeIBP(&chrIBP, reinterpret_cast<void*>(chr));
     chr = static_cast<uintptr_t>(chrIBP);
-    if (!chr || !fn_MemAlloc) return;
+    if (!chr) return;
     WorkBase_TaskListCleanup_c5400(reinterpret_cast<void*>(chr + 0x48));   // 0x1400c5400
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x480, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x480, 8);
     void* act = nullptr;
     if (mem) {
         uint64_t ownerIBP = chrIBP;

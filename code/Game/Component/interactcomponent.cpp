@@ -15,6 +15,7 @@
 #include "Component/MultiObjectComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
@@ -173,7 +174,7 @@ void InteractComponent::OnAdded() {
     if (multiBuf == 0) return;
 
     // Clear the existing use-location array
-    fn_MemFreeStatic(*(void**)(selfA + 0x28));
+    System::MemoryAllocator::MemFree(*(void**)(selfA + 0x28));
     *(int64_t*)(selfA + 0x28) = 0;
     *(int64_t*)(selfA + 0x30) = 0;
 
@@ -211,8 +212,7 @@ void InteractComponent::OnAdded() {
                 if (*(int*)(selfA + 0x34) < (int)newCount) {
                     *(uint32_t*)(selfA + 0x34) = newCount;
                     if (oldCount != 0) *(uint32_t*)(selfA + 0x34) = newCount * 3;
-                    void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                                           (uint64_t)((int64_t)*(int*)(selfA + 0x34) << 3), 8);
+                    void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)(selfA + 0x34) << 3), 8);
                     *(void**)(selfA + 0x28) = nb;
                 }
                 int start = (oldBuf == *(void**)(selfA + 0x28)) ? (int)oldCount : 0;
@@ -225,7 +225,7 @@ void InteractComponent::OnAdded() {
                         *dst = (i < (int)oldCount) ? oldArr[i] : interactIbp;
                     }
                 }
-                if (oldBuf != *(void**)(selfA + 0x28)) fn_MemFreeStatic(oldBuf);
+                if (oldBuf != *(void**)(selfA + 0x28)) System::MemoryAllocator::MemFree(oldBuf);
             }
         }
     }

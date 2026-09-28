@@ -30,6 +30,7 @@
 #include "Component/herdcomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // Pf_HerdStartMigration_122340, ActCNR_*, ActHunt_*, ActMv_*
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
 #include "Player/exe_bodies.h"            // ToolTile_SetTransformFromYaw_3870
@@ -310,7 +311,7 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         const int countBefore = *(int*)(self + 0x40);
 
         // Clone the animal template into a fresh ComponentEntity.
-        void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
         void* ent = mem ? ComponentEntity_CtorFromDescription(   // 0x1400c3720
                               reinterpret_cast<ComponentEntity*>(mem),
                               reinterpret_cast<void*>(descr)) : nullptr;
@@ -538,7 +539,7 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         int rndX = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(bw));   // B.3.4b bridge
         int rndY = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(bh));   // B.3.4b bridge
 
-        void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
         void* ent = mem ? ComponentEntity_CtorFromDescription(   // 0x1400c3720
                               reinterpret_cast<ComponentEntity*>(mem),
                               reinterpret_cast<void*>(descr)) : nullptr;

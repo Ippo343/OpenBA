@@ -68,6 +68,7 @@
 #include "Component/ImmigrationDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // Pf_*, ActCNR_NR_SetVariant_1253d0
 #include "Component/exe_bodies.h"         // CitizenComp_DeferredInit_117080
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
@@ -386,7 +387,7 @@ extern "C" void Immigration_Spawn(void* compV) {
         Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), meet, 2, static_cast<int>(ptIdx), nullptr);
 
         // Clone the nomad template.
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
         void* ent = mem ? ComponentEntity_CtorFromDescription(   // 0x1400c3720
                           reinterpret_cast<ComponentEntity*>(mem), *reinterpret_cast<void**>(desc + 0x20)) : nullptr;
         uint64_t entIBP = 0; MakeIBP(&entIBP, ent);
@@ -429,7 +430,7 @@ extern "C" void Immigration_Dismiss(void* compV) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(arr + static_cast<uintptr_t>(i) * 8);
         PostEventToEntity(reinterpret_cast<void*>(*slot), 1);
     }
-    if (arr && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(arr));
+    if (arr) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(arr));
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
@@ -450,7 +451,7 @@ extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t
     if (!ndesc) return nullptr;
     void* rng = Rng(gw);
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* ent = mem ? ComponentEntity_CtorFromDescription(   // 0x1400c3720
                           reinterpret_cast<ComponentEntity*>(mem), *reinterpret_cast<void**>(ndesc + 0x20)) : nullptr;
     uint64_t entIBP = 0; MakeIBP(&entIBP, ent);
@@ -545,7 +546,7 @@ extern "C" void Immigration_Accept(void* compV) {
         genderC = (genderD == 0) ? 1 : 0;
         i += 4;
     }
-    if (arr && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(arr));
+    if (arr) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(arr));
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
@@ -604,7 +605,7 @@ extern "C" char Imm_State10_Enter(void* data, void* /*sm*/) {
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
     void* old = *reinterpret_cast<void**>(comp + 0x58);
-    if (old && fn_MemFreeStatic) fn_MemFreeStatic(old);
+    if (old) System::MemoryAllocator::MemFree(old);
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
     Immigration_Spawn(data);

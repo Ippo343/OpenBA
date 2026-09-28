@@ -42,52 +42,16 @@
 // "held" inside reg_player_highlight because that whole batch waited on ace40, an
 // UNRELATED tessellation sibling — not a callee of 14b40).
 
-#include "resolve.h"
 #include <cstdint>
 #include "Component/exe_bodies.h"
-
-// Shared AVL retrace/rebalance — 0x140014b40, ported in tool_base_highlight.cpp.
-//   param_1 = &tree (root at [0]); param_2 = &cursor (start node; climbs to root).
-extern "C" void TradeWork_impl_4b40(int64_t* param_1, int64_t* param_2);
+#include "Player/exe_bodies.h"          // TradeWork_impl_4b40 (0x140014b40)
+#include "system/MemoryAllocator.h"     // System::MemoryAllocator::MemAlloc / MemFree
 
 namespace {
 
-// ---- static System::MemoryAllocator MemAlloc/MemFree (2-arg / 1-arg static forms,
-// via IAT slots 0x140152b60 / 0x140152b68, ResolveExport fallback) — mirrors
-// code/Game/Work/tradework_serialize.cpp + code/Game/Player/tool_base_trade.cpp. ----
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
-typedef void  (*MemFreeStatic_t)(void* ptr);                       // SAXPEAX
-MemAllocStatic_t s_memAlloc = nullptr;
-MemFreeStatic_t  s_memFree  = nullptr;
-bool s_memInit = false;
-
-inline uintptr_t slot(uintptr_t a) {
-    uintptr_t s = ResolveAddr(Module::Exe, a);
-    return s ? *reinterpret_cast<uintptr_t*>(s) : 0;
-}
-
-void EnsureMem() {
-    if (s_memInit) return;
-    s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x140152b60));
-    if (!s_memAlloc)
-        s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    if (!s_memAlloc)   // proven-working overload (size in RCX / align in RDX — ABI-compatible)
-        s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x140152b68));
-    if (!s_memFree)
-        s_memFree = reinterpret_cast<MemFreeStatic_t>(
-            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    s_memInit = true;
-}
-
-inline void* MemAlloc(uint64_t size, uint32_t align) {
-    return s_memAlloc ? s_memAlloc(size, align) : nullptr;
-}
-inline void MemFree(void* p) {
-    if (s_memFree) s_memFree(p);
-}
+// System::MemoryAllocator::MemAlloc / MemFree are the statics the IAT slots
+// 0x140152b60 / 0x140152b68 (?MemAlloc@ SAPEAX_KH / ?MemFree@ SAXPEAX) point at; the
+// bodies below call them by name (B3R R9).
 
 // AVL node field accessors (0x38-byte node; offsets disasm-verified).
 inline uint64_t& NodeKey(int64_t n)    { return *reinterpret_cast<uint64_t*>(n + 0x00); }
@@ -109,10 +73,9 @@ inline int64_t&  NodeRight(int64_t n)  { return *reinterpret_cast<int64_t*>(n + 
 // Returns param_1.
 // ============================================================
 extern "C" int64_t* ResidenceComponent_helper_5ec0(int64_t* param_1, int64_t* param_2) {
-    EnsureMem();
     if (param_1 == param_2) return param_1;
 
-    MemFree(reinterpret_cast<void*>(*param_1));   // MemFree(*param_1)
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(*param_1));   // MemFree(*param_1)
     param_1[1] = 0;                               // +0x08 count/capacity qword := 0
     *param_1 = 0;                                 // +0x00 data := 0
     int cnt = static_cast<int>(param_2[1]);       // (int)param_2[1] = source count (+0x08 low)
@@ -120,7 +83,7 @@ extern "C" int64_t* ResidenceComponent_helper_5ec0(int64_t* param_1, int64_t* pa
     if (cnt > 0) {
         *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0xC) = cnt; // +0x0C capacity
         *param_1 = reinterpret_cast<int64_t>(
-            MemAlloc(static_cast<uint64_t>(cnt) << 3, 8));                       // data := MemAlloc(cnt*8,8)
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 3, 8));                       // data := MemAlloc(cnt*8,8)
     }
 
     // Copy `count` 8-byte elements from *param_2 into *param_1.
@@ -151,8 +114,7 @@ extern "C" int64_t* ResidenceComponent_helper_5ec0(int64_t* param_1, int64_t* pa
 // Returns the new node (or null on OOM).
 // ============================================================
 extern "C" void* ResidenceComponent_impl_7460(int64_t /*unused*/, int64_t* param_2, int64_t param_3) {
-    EnsureMem();
-    int64_t* n = reinterpret_cast<int64_t*>(MemAlloc(0x38, 8));
+    int64_t* n = reinterpret_cast<int64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (n != nullptr) {
         n[0] = *param_2;        // +0x00 key := src key
         n[1] = 0;               // +0x08 array.data/count := 0
@@ -244,7 +206,6 @@ rebalance:
 // ============================================================
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2,
                                               uint64_t* param_3, int64_t* param_4) {
-    EnsureMem();
     // Stack record: local_20 (key) / local_18 (array.data) / local_10 (array.count/cap).
     uint64_t rec[3];
     rec[0] = *param_3;   // local_20 = *param_3 (key)
@@ -256,6 +217,6 @@ extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2,
     // 72f0(param_1, param_2, &local_20) — the full record (key at rec[0], array at rec[1..]).
     ResidenceComponent_helper_72f0(param_1, param_2, &rec[0]);
     // MemFree(local_18) — free the temporary array buffer.
-    MemFree(reinterpret_cast<void*>(rec[1]));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(rec[1]));
     return param_2;
 }

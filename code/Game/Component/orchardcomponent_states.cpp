@@ -66,6 +66,7 @@
 #include "Component/OrchardDescription.h"
 #include "Component/OrchardComponent.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/exe_bodies.h"   // the Component leaves named below
 #include "Component/orchardcomponent_funcs.h"   // OrchardComponent_GetGrowth
 #include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050, the work-item ctors
@@ -274,8 +275,8 @@ extern "C" char Orchard_State9Enter(void* selfV, void* /*sm*/) {
     // 7. build the PlantOrchard work item carrying the chosen tree type
     O9_STEP(5, "alloc + PlantOrchard_CtorFromEntity");
     void* work = nullptr;
-    if (fn_MemAlloc) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8);
+    {
+        void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
             void* entityLocal = *reinterpret_cast<void**>(s + 0x10);
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal,
@@ -403,8 +404,8 @@ void OrchardPostTendArea(uintptr_t s) {
     WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &unusedIBP);   // 0x140003050
 
     void* work = nullptr;
-    if (fn_MemAlloc) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+    {
+        void* mem = System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
             void* entityLocal = *reinterpret_cast<void**>(s + 0x10);
             work = TendArea_CtorFromEntity(mem, &entityLocal, 1);
@@ -634,8 +635,8 @@ extern "C" char Orchard_State12Enter(void* selfV, void* /*sm*/) {
     WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &unusedIBP);   // 0x140003050
 
     void* work = nullptr;
-    if (fn_MemAlloc) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8);
+    {
+        void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
             void* entityLocal = *reinterpret_cast<void**>(s + 0x10);
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal,
@@ -704,8 +705,8 @@ extern "C" char Orchard_State11Enter(void* selfV, void* /*sm*/) {
     uintptr_t s = reinterpret_cast<uintptr_t>(selfV);
 
     void* work = nullptr;
-    if (fn_MemAlloc) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+    {
+        void* mem = System::MemoryAllocator::MemAlloc(0x68, 8);
         if (mem) {
             void* entityLocal = *reinterpret_cast<void**>(s + 0x10);
             work = HarvestOrchard_CtorFromEntity(mem, &entityLocal);
@@ -859,8 +860,8 @@ extern "C" char Orchard_State20Enter(void* selfV, void* /*sm*/) {
     void* caDesc = FindClearAreaDescription(entity);
 
     void* work = nullptr;
-    if (caDesc && fn_MemAlloc) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
+    if (caDesc) {
+        void* mem = System::MemoryAllocator::MemAlloc(0x78, 8);
         if (mem) {
             void* entityLocal = reinterpret_cast<void*>(entity);
             work = ClearAreaCtrl_BuildWork(

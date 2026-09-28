@@ -33,6 +33,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // Reimpl_Array_Serialize_External_GraphicsMesh, Reimpl_ExternalPtr_Serialize_Typed_7140
 #include <cstdint>
 #include <new>
@@ -43,8 +44,8 @@ void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
     *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+    void* buf = (count > 0 && System::MemoryAllocator::_singleton)
+                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
                 : nullptr;
     *(void**)h = buf;
     return buf;
@@ -67,12 +68,12 @@ HighlightDescription::HighlightDescription()
 HighlightDescription::~HighlightDescription() {
     uint8_t* e = static_cast<uint8_t*>(_groups);
     int count = _groupCount;
-    if (e && fn_MemFreeStatic) {
+    if (e) {
         for (int i = 0; i < count; ++i) {
             void* ref = *(void**)(e + i * 0x10);
-            if (ref) fn_MemFreeStatic(ref);
+            if (ref) System::MemoryAllocator::MemFree(ref);
         }
-        fn_MemFreeStatic(e);
+        System::MemoryAllocator::MemFree(e);
     }
     _groups = nullptr;
     _groupCount = 0;

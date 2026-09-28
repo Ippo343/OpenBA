@@ -20,6 +20,7 @@
 #include "Component/growthcomponent_funcs.h"
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // ActHunt_*, ActCNR_* helpers
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
 #include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
@@ -241,8 +242,8 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     int16_t variantSeed = *reinterpret_cast<int16_t*>(*reinterpret_cast<uintptr_t*>(&parentIBP) + 0x164);
 
     // Allocate + copy-construct the new ComponentEntity from this entity's description.
-    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                    ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+    void* mem = (System::MemoryAllocator::_singleton)
+                    ? System::MemoryAllocator::MemAlloc(0x48, 8) : nullptr;
     void* newEnt = nullptr;
     if (mem) {
         void* srcDesc = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28);

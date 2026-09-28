@@ -35,6 +35,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_GraphicsMesh, Reimpl_Array_Serialize_External_GraphicsMesh
 #include <cstdint>
 #include <new>
@@ -45,8 +46,8 @@ void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
     *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+    void* buf = (count > 0 && System::MemoryAllocator::_singleton)
+                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
                 : nullptr;
     *(void**)h = buf;
     return buf;
@@ -71,12 +72,12 @@ ModelDescription::~ModelDescription() {
     // Free each MeshGroup's material sub-array, then the MeshGroup array.
     uint8_t* e = static_cast<uint8_t*>(_meshGroups);
     int count = _meshGroupCount;
-    if (e && fn_MemFreeStatic) {
+    if (e) {
         for (int i = 0; i < count; ++i) {
             void* mat = *(void**)(e + i * 0x18 + 8);
-            if (mat) fn_MemFreeStatic(mat);
+            if (mat) System::MemoryAllocator::MemFree(mat);
         }
-        fn_MemFreeStatic(e);
+        System::MemoryAllocator::MemFree(e);
     }
     _meshGroups = nullptr;
     _meshGroupCount = 0;
