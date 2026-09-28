@@ -54,6 +54,7 @@
 // `Volume::Rectangle`'s class name in Volume.h's own static_asserts.
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
 #include <cstdint>
@@ -118,11 +119,10 @@ void SpawnAmbientEntity(uint8_t* w, uint8_t* gw) {
     if (!envRes) return;
     void* templateDesc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(envRes) + 0x20);
     if (!templateDesc) return;
-    if (!s_fnEntityCopyCtor || !s_fnEntityRegister || !fn_MemAlloc ||
-        !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor)
+    if (!s_fnEntityCopyCtor || !s_fnEntityRegister || !System::MemoryAllocator::_singleton)
         return;
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     if (!mem) return;
     void* entity = s_fnEntityCopyCtor(mem, templateDesc);
 

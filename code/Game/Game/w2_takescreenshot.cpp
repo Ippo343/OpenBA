@@ -72,6 +72,7 @@
 #include "video/ImageBuffer.h"
 #include "graphics/FrameCopyImageBuffer.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/FileSystem.h"      // ENDGAME B.3.4a closing 4/4
 #include "system/Filename.h"
 #include <new>

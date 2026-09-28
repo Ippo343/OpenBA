@@ -34,6 +34,7 @@
 #include "GameUpdateLoop.h"
 #include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -190,8 +191,8 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
     // Retail's type gate: Graphics::Material's type id (ENDGAME B.3.9 TR: the class
     // accessor; was an RT_DATA_SLOT read of its ?_typeInfo@ record).
     bool isMat = false;
-    if (mat && fn_IsDerivedFrom)
-        isMat = fn_IsDerivedFrom(mat, Graphics::Material::TypeId());
+    if (mat)
+        isMat = ::Object::IsDerivedFromNullSafe(mat, Graphics::Material::TypeId());
     if (isMat) self->m_uiMaterial = mat;
 
     fprintf(stderr, "[GUL::UIMat] gw+0xb8=%p (loaded=%p isMaterial=%d)\n",
@@ -218,8 +219,8 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
     // Retail's type gate: Object::ExternalList's type id (retail reads it through the
     // exe import slot 0x140151ef0; ENDGAME B.3.9 TR: the class accessor).
     bool isList = false;
-    if (list && fn_IsDerivedFrom)
-        isList = fn_IsDerivedFrom(list, ::Object::ExternalList::TypeId());
+    if (list)
+        isList = ::Object::IsDerivedFromNullSafe(list, ::Object::ExternalList::TypeId());
     if (isList) self->m_helpTopics = list;
 
     fprintf(stderr, "[GUL::Help] gw+0xa0=%p (loaded=%p isExternalList=%d topics=%d)\n",
@@ -271,8 +272,8 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 
     // Retail's type gate (same ExternalList type id as the HelpTopics list).
     bool isList = false;
-    if (list && fn_IsDerivedFrom)
-        isList = fn_IsDerivedFrom(list, ::Object::ExternalList::TypeId());
+    if (list)
+        isList = ::Object::IsDerivedFromNullSafe(list, ::Object::ExternalList::TypeId());
     if (isList) self->m_diseaseList = list;
 
     // The `fn_ExternalList_GetResourceCount` test is KEPT even though the call
@@ -404,14 +405,14 @@ static void* Reimpl_TradeComponent_helper_f9e0(void* dstElem, void* srcElem) {
     uint8_t* d = (uint8_t*)dstElem;
     uint8_t* s = (uint8_t*)srcElem;
     void* old = *(void**)(d + 0x00);
-    if (old) fn_MemFreeStatic(old);
+    if (old) System::MemoryAllocator::MemFree(old);
     *(int32_t*)(d + 0x08) = 0;
     *(void**)(d + 0x00) = 0;
     int32_t cnt = *(int32_t*)(s + 0x08);
     *(int32_t*)(d + 0x08) = cnt;
     if (cnt > 0) {
         *(int32_t*)(d + 0x0C) = cnt;
-        *(void**)(d + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cnt << 2, 4);
+        *(void**)(d + 0x00) = System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4);
     }
     int32_t newCnt = *(int32_t*)(d + 0x08);
     if (newCnt > 0) {
@@ -441,7 +442,7 @@ void InitIntAssocOuterL(uint8_t* d) {
 void DestroyIntAssocOuterL(void* /*ignoredThis*/, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i) {
         uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
-        fn_MemFreeStatic(*reinterpret_cast<void**>(e + 0x00));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(e + 0x00));
         *reinterpret_cast<uint64_t*>(e + 0x00) = 0;
         *reinterpret_cast<uint64_t*>(e + 0x08) = 0;
     }
@@ -596,7 +597,7 @@ static void* Reimpl_TradeComponent_impl_0a30(void* selfMem) {
     Reimpl_FUN_14000f090(p + 0x180, 2);
     Reimpl_FUN_140017640(p + 0x150, 0x47);
     *(int32_t*)(p + 0x1a8) = 0;
-    void* sub = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 4);
+    void* sub = System::MemoryAllocator::MemAlloc(0x28, 4);
     if (sub) {
         uint8_t* s = (uint8_t*)sub;
         *(void**)(s + 0x00) = nullptr;
@@ -773,8 +774,8 @@ static void* Reimpl_FUN_1401025c0(void* selfMem) {
 // Small allocation helper
 // ============================================================
 static inline void* AllocSub(uint64_t size, int align) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    return fn_MemAlloc(g_pMemAllocSingleton, size, align);
+    if (!System::MemoryAllocator::_singleton) return nullptr;
+    return System::MemoryAllocator::MemAlloc(size, align);
 }
 
 // ============================================================
@@ -1209,7 +1210,7 @@ void GameUpdateLoop::Load() {
                 void* ext = const_cast<::Object::External*>(
                     efactory->FindOrLoad(fname));                            // B.3.3 bridge
                 if (!ext) return nullptr;
-                if (stTid != 0 && fn_IsDerivedFrom && !fn_IsDerivedFrom(ext, stTid)) return nullptr;
+                if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;
                 return ext;
             };
 
@@ -1456,7 +1457,7 @@ void GameUpdateLoop::Load() {
                     for (int i = 0; i < 4; ++i) {
                         float in[3] = { pts[i][0], pts[i][1], 0.0f };
                         float out[3] = {0,0,0};
-                        fn_MapGetTerrainPos(game, out, in, 1, nullptr);
+                        Reimpl_MapGetTerrainPos(game, out, in, 1, nullptr);
                         fprintf(stderr, "[startTown::DIAG]   height@(%.0f,%.0f) = %.3f\n",
                                 pts[i][0], pts[i][1], out[2]);
                     }
@@ -1489,7 +1490,7 @@ void GameUpdateLoop::Load() {
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
         GameUpdateLoop_SaveRoundtripCheck(this, savedState);
         if (s_fn_SavedState_Dtor) s_fn_SavedState_Dtor(savedState);
-        if (fn_MemFreeStatic) fn_MemFreeStatic(savedState);
+        System::MemoryAllocator::MemFree(savedState);
         m_savedState = nullptr;
         SetUnregPhase("postload");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
@@ -1567,8 +1568,7 @@ void GameUpdateLoop::Load() {
     m_scenarioInstance = nullptr;
     if (achievementId >= 0) {
         const uint32_t achTypeId = Achievement::Achievement::TypeId();
-        if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
-            !g_pKeyMapSingleton) {
+        if (!System::MemoryAllocator::_singleton || !g_pKeyMapSingleton) {
             fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved ("
                             "alloc=%p ibp=%p reslist=%p)\n",
                     (void*)fn_MemAlloc, (void*)fn_InternalBasePtr_Ctor,
@@ -1576,7 +1576,7 @@ void GameUpdateLoop::Load() {
             fflush(stderr);
         } else {
             void* instance = nullptr;
-            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+            void* mem = System::MemoryAllocator::MemAlloc(0x28, 8);
             if (mem) {
                 // ENDGAME B.3.8 LOOP (B38_RULES D8): retail runs the imported
                 // `??0AchievementInstance@Achievement@@` and then stamps the EXE's
@@ -1608,8 +1608,8 @@ void GameUpdateLoop::Load() {
             // through the .rdata slot at 0x140151f68, which points at the Runtime's
             // exported BaseTypeInfo for Achievement; its first dword IS the type id.
             void* checked = scenario;
-            if (scenario && fn_IsDerivedFrom && achTypeId)
-                checked = fn_IsDerivedFrom(scenario, achTypeId) ? scenario : nullptr;
+            if (scenario && achTypeId)
+                checked = ::Object::IsDerivedFromNullSafe(scenario, achTypeId) ? scenario : nullptr;
 
             void* inst = m_scenarioInstance;
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "

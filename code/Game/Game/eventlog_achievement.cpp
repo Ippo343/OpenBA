@@ -101,7 +101,7 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
         reinterpret_cast<const UI::String*>(uiName)->operator System::String());  // B.3.6 bridge
 
     int64_t nullEntity[1] = {0};
-    if (fn_InternalBasePtr_Ctor) new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     EventLog_AddEventWithName(eventLog, /*eventType*/ 0x19, /*severity*/ 4,
                               nullEntity, &titleText);

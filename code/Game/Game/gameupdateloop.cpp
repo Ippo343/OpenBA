@@ -40,6 +40,7 @@
 #include "Entity/entitylist_funcs.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -2094,7 +2095,7 @@ void GameUpdateLoop::Startup() {
 
         void* dialogRes = nullptr;
         if (foundBase != nullptr) {
-            if (fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId())) {   // 0x140097cba
+            if (::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId())) {   // 0x140097cba
                 dialogRes = foundBase;
             }
         }
@@ -2104,7 +2105,7 @@ void GameUpdateLoop::Startup() {
         fflush(stderr);
 
         // Allocate and construct ToolbarDialog (0x108 bytes). [GUARD-M5]
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0x108, 8);
         void* toolbar = nullptr;
         // Retail (0x140097cf1) constructs whenever the allocation succeeded; the
         // `dialogRes != nullptr` skip that sat here coped with a failed type-id
@@ -2130,7 +2131,7 @@ void GameUpdateLoop::Startup() {
         } else {
             fprintf(stderr, "[HUD] Toolbar NOT constructed (mem=%p Ctor=%p) — freeing\n",
                     mem, (void*)fn_ToolbarDialog_Ctor);
-            if (mem) fn_MemFreeStatic(mem);
+            if (mem) System::MemoryAllocator::MemFree(mem);
         }
         fflush(stderr);
     }
@@ -2156,14 +2157,14 @@ void GameUpdateLoop::Startup() {
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
-        if (foundBase != nullptr && fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId()))
+        if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
             dialogRes = foundBase;
 
         fprintf(stderr, "[HUD] EventNotify: foundBase=%p dialogRes=%p parentToolbar=%p\n",
                 foundBase, dialogRes, g_ribbonParentToolbar);
         fflush(stderr);
 
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xF0, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0xF0, 8);
         void* eventNotify = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             int64_t parentIBP[1];
@@ -2181,7 +2182,7 @@ void GameUpdateLoop::Startup() {
             fprintf(stderr, "[HUD] EventNotify ribbon CONSTRUCTED + added to UI: %p\n", eventNotify);
             fflush(stderr);
         } else if (mem) {
-            fn_MemFreeStatic(mem);
+            System::MemoryAllocator::MemFree(mem);
         }
     }
     TRACE("[GameUpdateLoop::Startup] EventNotify dialog added\n");
@@ -2210,10 +2211,10 @@ void GameUpdateLoop::Startup() {
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
-        if (foundBase != nullptr && fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId()))
+        if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
             dialogRes = foundBase;
 
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0xD0, 8);
         void* autoSave = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             int64_t nullParent[1] = {0};
@@ -2228,7 +2229,7 @@ void GameUpdateLoop::Startup() {
             reinterpret_cast<UI::UserInterface*>(m_userInterface)->AddDialog(  // B.3.6 bridge
                 reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
         } else if (mem) {
-            fn_MemFreeStatic(mem);
+            System::MemoryAllocator::MemFree(mem);
         }
         fprintf(stderr, "[AutoSave] dialog res=%p instance=%p (null instance = no autosave)\n",
                 dialogRes, autoSave);
@@ -2388,27 +2389,27 @@ void GameUpdateLoop::Shutdown() {
     // Random
     if (m_random != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing Random...\n");
-        fn_MemFreeStatic(m_random);
+        System::MemoryAllocator::MemFree(m_random);
     }
 
     // PlayerController
     if (m_playerController != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing PlayerController...\n");
-        fn_MemFreeStatic(m_playerController);
+        System::MemoryAllocator::MemFree(m_playerController);
     }
 
     // Renderer
     if (m_renderer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Renderer...\n");
         fn_Graphics_Renderer_Dtor(m_renderer);
-        fn_MemFreeStatic(m_renderer);
+        System::MemoryAllocator::MemFree(m_renderer);
     }
 
     // EntityList
     if (m_entityList != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityList...\n");
         fn_EntityList_Dtor(m_entityList);
-        fn_MemFreeStatic(m_entityList);
+        System::MemoryAllocator::MemFree(m_entityList);
     }
 
     // UserInterface
@@ -2419,76 +2420,76 @@ void GameUpdateLoop::Shutdown() {
         fn_UI_Dtor_t uiDtor = reinterpret_cast<fn_UI_Dtor_t>(
             ResolveExport("??1UserInterface@UI@@QEAA@XZ"));
         if (uiDtor) uiDtor(m_userInterface);
-        fn_MemFreeStatic(m_userInterface);
+        System::MemoryAllocator::MemFree(m_userInterface);
     }
 
     // CitizenBehavior
     if (m_citizenList != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying CitizenBehavior...\n");
         fn_CitizenList_Dtor(m_citizenList, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_citizenList);
+        System::MemoryAllocator::MemFree(m_citizenList);
     }
 
     // Game
     if (m_game != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Game...\n");
         fn_Game_Dtor(m_game);
-        fn_MemFreeStatic(m_game);
+        System::MemoryAllocator::MemFree(m_game);
     }
 
     // Tutorial
     if (m_tutorial != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Tutorial...\n");
         fn_Tutorial_Dtor(m_tutorial);
-        fn_MemFreeStatic(m_tutorial);
+        System::MemoryAllocator::MemFree(m_tutorial);
     }
 
     // EntityUI
     if (m_entityUI != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityUI...\n");
         fn_EntityUI_Dtor(m_entityUI, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_entityUI);
+        System::MemoryAllocator::MemFree(m_entityUI);
     }
 
     // DayCounter
     if (m_dayCounter != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing DayCounter...\n");
-        fn_MemFreeStatic(m_dayCounter);
+        System::MemoryAllocator::MemFree(m_dayCounter);
     }
 
     // Weather
     if (m_weather != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Weather...\n");
         fn_Weather_Dtor(m_weather, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_weather);
+        System::MemoryAllocator::MemFree(m_weather);
     }
 
     // EventNotifier
     if (m_eventNotifier != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EventNotifier...\n");
         fn_EventNotifier_Cleanup((void*)((uintptr_t)m_eventNotifier + 0x18));
-        fn_MemFreeStatic(m_eventNotifier);
+        System::MemoryAllocator::MemFree(m_eventNotifier);
     }
 
     // Graphics::Scene
     if (m_graphicsScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Graphics::Scene...\n");
         fn_Graphics_Scene_Dtor(m_graphicsScene);
-        fn_MemFreeStatic(m_graphicsScene);
+        System::MemoryAllocator::MemFree(m_graphicsScene);
     }
 
     // Audio::Scene
     if (m_audioScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Audio::Scene...\n");
         fn_Audio_Scene_Dtor(m_audioScene);
-        fn_MemFreeStatic(m_audioScene);
+        System::MemoryAllocator::MemFree(m_audioScene);
     }
 
     // Picking::Scene
     if (m_pickingScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Picking::Scene...\n");
         fn_Picking_Scene_Dtor(m_pickingScene);
-        fn_MemFreeStatic(m_pickingScene);
+        System::MemoryAllocator::MemFree(m_pickingScene);
     }
 
     // WorldGeometry, SunLight, SkyMesh — via scalar deleting dtor (vtable[0] with flags=1)
@@ -2510,34 +2511,34 @@ void GameUpdateLoop::Shutdown() {
     if (m_animationManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying AnimationManager...\n");
         fn_AnimationManager_Dtor(m_animationManager);
-        fn_MemFreeStatic(m_animationManager);
+        System::MemoryAllocator::MemFree(m_animationManager);
     }
 
     // CharacterGrid (Morton quadtree at +0x88)
     if (m_characterGrid != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying CharacterGrid...\n");
         fn_CharacterGrid_Dtor(m_characterGrid);
-        fn_MemFreeStatic(m_characterGrid);
+        System::MemoryAllocator::MemFree(m_characterGrid);
     }
 
     // SaveLoad
     if (m_saveLoad != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SaveLoad...\n");
         fn_SaveLoad_Dtor(m_saveLoad);
-        fn_MemFreeStatic(m_saveLoad);
+        System::MemoryAllocator::MemFree(m_saveLoad);
     }
 
     // ImageCapture
     if (m_imageCapture != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying ImageCapture...\n");
         fn_ImageCapture_Dtor(m_imageCapture, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_imageCapture);
+        System::MemoryAllocator::MemFree(m_imageCapture);
     }
 
     // MusicPlayer (0x18-byte POD; retail frees it with no dtor)
     if (m_musicPlayer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing MusicPlayer...\n");
-        fn_MemFreeStatic(m_musicPlayer);
+        System::MemoryAllocator::MemFree(m_musicPlayer);
     }
 
     TRACE("[GameUpdateLoop::Shutdown] EXIT\n");

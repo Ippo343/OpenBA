@@ -25,7 +25,7 @@
 
 #include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "resolve.h"
+#include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "system/String.h"
 #include "collection/Collection.h"
 #include <new>
@@ -181,14 +181,8 @@ static int EventLog_TileIndex(void* entityIBP) {
     int* game = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_game);   // B.3.8 bridge
     if (!game) return -1;
 
-    typedef void* (*fn_FindCompMember_t)(int64_t self, void* outIBP);
-    static fn_FindCompMember_t s_findMap = nullptr;
-    if (!s_findMap)
-        s_findMap = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140004680));
-    if (!s_findMap) return -1;
-
     int64_t mapIBP = 0;
-    s_findMap(*(int64_t*)entityIBP, &mapIBP);
+    FloorComponent_FindResData(reinterpret_cast<void*>(*(int64_t*)entityIBP), &mapIBP);   // 0x140004680
     if (mapIBP == 0) return -1;
 
     const uint8_t* mc = (const uint8_t*)mapIBP;
@@ -396,7 +390,7 @@ extern "C" void EventLog_CheckResourceShortages(void* townMgr, void* timeDelta) 
     int64_t tick = *(int64_t*)timeDelta;
 
     uint8_t cooldownTime[8];
-    fn_Time_Ctor_Float(cooldownTime, 120.0f);  // DAT_140172210
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(cooldownTime), 120.0f);  // DAT_140172210
     int64_t cooldownReset = *(int64_t*)cooldownTime;
 
     // --- Table 1: low-reserve warnings (townMgr+0x170), 21 entries, 6 tracked ---

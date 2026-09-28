@@ -80,6 +80,7 @@
 #include <atomic>
 #include "video/Context.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <new>
 #include <cstdint>
@@ -181,7 +182,7 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     // B.3.5: the seven Video/Graphics readiness terms are gone with their doors.
     if (!s_Transform3Copy || !s_FrustumMul || !s_FrustumContains ||
         !s_MatrixCtor ||
-        !fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
+        !System::MemoryAllocator::_singleton) {
         // Cascade-safe: skip the weather draw rather than crash on a null fn ptr.
         s_weatherDrawWarned.store(true);
         return;
@@ -284,8 +285,7 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     uint8_t*    staging    = nullptr;
     if (vtxCount > 0) {
         staging = reinterpret_cast<uint8_t*>(
-            fn_MemAlloc(g_pMemAllocSingleton,
-                        static_cast<uint64_t>(vtxCount) * kVtxStride, 4));
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(vtxCount) * kVtxStride, 4));
     }
 
     // Camera-facing billboard axes (default; overwritten per-particle if stretch).
@@ -391,5 +391,5 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     }
 
     if (staging)
-        fn_MemFreeStatic(staging);
+        System::MemoryAllocator::MemFree(staging);
 }

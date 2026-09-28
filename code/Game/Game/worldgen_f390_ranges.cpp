@@ -53,6 +53,7 @@
 // All offsets verified against live Ghidra disassembly of Application-x64.exe.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -193,7 +194,7 @@ static void CopyVec1c(void* dstHdr, void* srcHdr) {
     if (dstHdr == srcHdr) return;
     uint8_t* d = (uint8_t*)dstHdr;
     uint8_t* s = (uint8_t*)srcHdr;
-    if (*(void**)(d + 0x00) && fn_MemFreeStatic) fn_MemFreeStatic(*(void**)(d + 0x00));
+    if (*(void**)(d + 0x00)) System::MemoryAllocator::MemFree(*(void**)(d + 0x00));
     *(void**)(d + 0x00) = nullptr;
     *(int*)(d + 0x08) = 0;
     int cnt = *(int*)(s + 0x08);
@@ -201,7 +202,7 @@ static void CopyVec1c(void* dstHdr, void* srcHdr) {
     void* nd = nullptr;
     if (cnt > 0) {
         *(int*)(d + 0x0c) = cnt;
-        nd = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cnt * 0x1c, 4) : nullptr;
+        nd = System::MemoryAllocator::MemAlloc((uint64_t)cnt * 0x1c, 4);
         *(void**)(d + 0x00) = nd;
     }
     if (!nd) return;

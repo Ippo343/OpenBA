@@ -132,7 +132,7 @@ static inline uint32_t GetTypeIdOf(void* obj) {
 // TEMPLATE entity (descriptions at +0x28 raw-pointer array, count +0x30) — the
 // exact inline loop of Game_SpawnResources / cd80 / c560 / QueryCount.
 static void* FindRawMatDescOnTemplate(int64_t tmplEntity) {
-    if (!tmplEntity || !fn_IsDerivedFrom) return nullptr;
+    if (!tmplEntity) return nullptr;
     const uint32_t tid = TidRawMaterialDescription();
     int count = *reinterpret_cast<int*>(tmplEntity + 0x30);
     int64_t arr = *reinterpret_cast<int64_t*>(tmplEntity + 0x28);
@@ -140,7 +140,7 @@ static void* FindRawMatDescOnTemplate(int64_t tmplEntity) {
         void* desc = *reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
         if (GetTypeIdOf(desc) == tid) {
             // Original: IsDerivedFrom-narrow, break either way.
-            return fn_IsDerivedFrom(desc, tid) ? desc : nullptr;
+            return ::Object::IsDerivedFromNullSafe(desc, tid) ? desc : nullptr;
         }
     }
     return nullptr;
@@ -159,7 +159,7 @@ static void* FindStorageOnEntity(int64_t entity) {
         void* comp = *slot;
         if (!comp) continue;
         if (GetTypeIdOf(comp) == tid) {
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) ? comp : nullptr;
+            return (::Object::IsDerivedFromNullSafe(comp, tid)) ? comp : nullptr;
         }
     }
     return nullptr;
@@ -267,8 +267,7 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
     // StorageDescription (comp+0x18, IsDerivedFrom-narrowed).
     void* descObj = *reinterpret_cast<void**>(sc + 0x18);
     void* desc = nullptr;
-    if (descObj && fn_IsDerivedFrom &&
-        fn_IsDerivedFrom(descObj, TidStorageDescription()))
+    if (descObj && ::Object::IsDerivedFromNullSafe(descObj, TidStorageDescription()))
         desc = descObj;
     if (!desc) {
         return;  // standalone-inert guard (retail reads *(NULL+0x20))
@@ -288,13 +287,13 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
                 *reinterpret_cast<int64_t*>(ent2 + 0x30) + static_cast<int64_t>(i) * 8);
             void* comp = *slot;
             if (comp && GetTypeIdOf(comp) == tidMap) {
-                mapComp = (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tidMap)) ? comp : nullptr;
+                mapComp = (::Object::IsDerivedFromNullSafe(comp, tidMap)) ? comp : nullptr;
                 break;
             }
         }
         // Original wraps in an IBP (fn_InternalBasePtr_Ctor) then CheckPtr's it.
         uintptr_t mapIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&mapIBP) ::Object::InternalBasePtr(
+        new (&mapIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
         if (mapIBP) {
             tileArea = static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2e)) *
@@ -361,7 +360,7 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
                 void* storage = FindStorageOnEntity(entityRef);
                 // Original wraps the found component in an IBP before use.
                 uintptr_t compIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&compIBP) ::Object::InternalBasePtr(
+                new (&compIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(storage));   // B.3.3 bridge
                 if (placed < count) {
                     int64_t tmpl = matched[placed % matchedCount];

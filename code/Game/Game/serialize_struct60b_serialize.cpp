@@ -151,17 +151,7 @@ void Struct60B_Sub_F9C0_Body(void* arrayHeaderPtr, void* serializer) {
     if (innerCheck == 0) {
         // sub_ee40 (0x14001ee40) = stride-0x14 array resize. Reuse existing
         // session-5 wrapper which targets the same primitive shape.
-        if (fn_Array_Resize_Stride14) {
-            fn_Array_Resize_Stride14(arrayHeaderPtr, local_count);
-        } else {
-            static bool s_warned = false;
-            if (!s_warned) {
-                printf("[Struct60B::sub_f9c0] fn_Array_Resize_Stride14 unresolved — "
-                       "loading skipped\n");
-                fflush(stdout);
-                s_warned = true;
-            }
-        }
+        Reimpl_Array_Resize_Stride14(arrayHeaderPtr, local_count);
     }
 
     if (local_count <= 0) return;
@@ -315,17 +305,7 @@ void Struct60B_Serialize_Body(void* serializer, int count, void* arrayBase) {
             int innerCheck = *reinterpret_cast<int*>(
                 reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
             if (innerCheck == 0) {
-                if (fn_Array_Resize_Stride02) {
-                    fn_Array_Resize_Stride02(elem + 0x18, local_count);
-                } else {
-                    static bool s_warned = false;
-                    if (!s_warned) {
-                        printf("[Struct60B::Serialize] fn_Array_Resize_Stride02 unresolved — "
-                               "uint16 sub-array load skipped\n");
-                        fflush(stdout);
-                        s_warned = true;
-                    }
-                }
+                Reimpl_Array_Resize_Stride02(elem + 0x18, local_count);
             }
             // Bulk uint16 serialize of the data buffer.
             uint16_t* data16 = *reinterpret_cast<uint16_t**>(elem + 0x18);
@@ -352,8 +332,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
-    if (!fn_IsDerivedFrom ||
-        !::Object::ExternalFactory::_singleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Serialize_External<MaterialInstance>] runtime primitives "

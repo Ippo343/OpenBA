@@ -38,6 +38,7 @@
 // workflow (notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -329,9 +330,9 @@ static void wg_HeightmapPipeline_f390(int32_t* hf) {
 // ============================================================
 static void* wg_BlendTexture_cf440_stub(int32_t* hf) {
     int dim = *(int32_t*)((uint8_t*)hf + HF_GRIDSIZE);   // = mapDim*2 (== WorldGeom+0xc0)
-    if (dim <= 0 || !fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    if (dim <= 0 || !System::MemoryAllocator::_singleton) return nullptr;
     uint64_t n = (uint64_t)dim * (uint64_t)dim;
-    void* buf = fn_MemAlloc(g_pMemAllocSingleton, n * 4, 4);
+    void* buf = System::MemoryAllocator::MemAlloc(n * 4, 4);
     if (buf) {
         // Neutral mid splat weights (R rock / G grass / B AO, A=0xff). With null
         // materials the shader falls back to a flat surface — visible terrain.
@@ -392,7 +393,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
     int dim = *(int32_t*)((uint8_t*)hf + HF_GRIDSIZE);
     const float* hm = *(const float**)((uint8_t*)hf + HF_HEIGHTMAP);
     void* rng = (uint8_t*)hf + HF_RANDOM;
-    if (dim <= 0 || !hm || !fn_MemAlloc || !g_pMemAllocSingleton ||
+    if (dim <= 0 || !hm || !System::MemoryAllocator::_singleton ||
         !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate) {
         fprintf(stderr, "[worldgen] cf440: deps unresolved (hm=%p PerlinCtor=%p Gen=%p) "
                 "— falling back to flat splat\n", (void*)hm,
@@ -422,8 +423,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
     fn_PerlinNoise_Ctor(pn, kCoord, kCfOctaves, s2, s1);
 
     // Per-cell scratch: dim*dim * {x,y,h,nx,ny,nz} (6 floats / 0x18 bytes).
-    float* scratch = (float*)fn_MemAlloc(g_pMemAllocSingleton,
-                                         (uint64_t)dim * dim * 0x18, 4);
+    float* scratch = (float*)System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 0x18, 4);
     if (!scratch) return wg_BlendTexture_cf440_stub(hf);
     int edge = dim + 1;
     for (int row = 0; row < dim; ++row) {
@@ -436,9 +436,8 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
         }
     }
 
-    uint32_t* out = (uint32_t*)fn_MemAlloc(g_pMemAllocSingleton,
-                                           (uint64_t)dim * dim * 4, 4);
-    if (!out) { fn_MemFreeStatic(scratch); return wg_BlendTexture_cf440_stub(hf); }
+    uint32_t* out = (uint32_t*)System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 4, 4);
+    if (!out) { System::MemoryAllocator::MemFree(scratch); return wg_BlendTexture_cf440_stub(hf); }
 
     // --- R (rock) + G (grass) channels ---
     for (int row = 0; row < dim; ++row) {
@@ -528,7 +527,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
         }
     }
 
-    fn_MemFreeStatic(scratch);
+    System::MemoryAllocator::MemFree(scratch);
     return out;
 }
 
@@ -579,7 +578,7 @@ static void wg_FreePatchList(void* hdr) {
 static void wg_FreeScalarList(void* hdr) {
     uint8_t* h = (uint8_t*)hdr;
     void* data = *(void**)(h + 0x00);
-    if (data && fn_MemFreeStatic) fn_MemFreeStatic(data);
+    if (data) System::MemoryAllocator::MemFree(data);
     *(void**)(h + 0x00) = nullptr;
     *(int32_t*)(h + 0x08) = 0;
 }
@@ -711,8 +710,7 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
                 if (i >= s_pathHalfWidthCount) s_pathHalfWidthCount = i + 1;
             }
 
-            void* buf = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                                                  (uint64_t)srcN * 8, 4) : nullptr;
+            void* buf = System::MemoryAllocator::MemAlloc((uint64_t)srcN * 8, 4);
             if (!buf) continue;
             // dest[j] = src[srcN-1-j] — the reversal from note (1).
             for (int j = 0; j < srcN; ++j)
@@ -804,7 +802,7 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     *(void**)(w + WG_MATERIAL3) = wg_ResolveMaterial_fd10(g + GEN_MAT3);
 
     // Allocate + init the heightfield scratch struct (heap; ~0xA30 bytes).
-    void* hfMem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, HF_TOTAL, 8) : nullptr;
+    void* hfMem = System::MemoryAllocator::MemAlloc(HF_TOTAL, 8);
     if (!hfMem) {
         fprintf(stderr, "[worldgen] BuildTerrain: heightfield alloc failed — aborting\n");
         fflush(stderr);
@@ -825,7 +823,7 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     wg_FreeScalarList(hf + HF_LISTB);
     wg_FreePatchList (hf + HF_PATCHLIST);
     wg_FreeScalarList(hf + HF_HEIGHTMAP);
-    if (fn_MemFreeStatic) fn_MemFreeStatic(hfMem);
+    System::MemoryAllocator::MemFree(hfMem);
 
     fprintf(stderr, "[worldgen] BuildTerrain EXIT — wg=%p dimX2=%d edge=%d hm16=%p mat1=%p blendTex=%p\n",
             wg, *(int32_t*)(w + WG_DIMX2), *(int32_t*)(w + WG_HEIGHTEDGE),

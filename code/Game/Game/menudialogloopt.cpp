@@ -37,6 +37,7 @@
 #include <new>                            // B.3.9 GFX: placement new
 #include "MenuScene.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -267,7 +268,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     *outSkippedBadIdx = false;
 
     // 1. Allocate + construct MeshInstance.
-    void* inst = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
+    void* inst = System::MemoryAllocator::MemAlloc(0x120, 8);
     if (!inst) return 0;
     ::new (inst) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
 
@@ -396,7 +397,7 @@ void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
     // so their readiness terms and their `%p`s are gone; B.3.9 EXA took the
     // MeshInstance ctor door's (the class is constructed). MemoryAllocator and the
     // Time ctor stay.
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Time_Ctor_Float) {
+    if (!System::MemoryAllocator::_singleton || !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseB] missing required fn ptrs "
                "(TimeC=%p) — skipping\n",
                (void*)fn_Time_Ctor_Float);
@@ -505,7 +506,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
     // B.3.5: Scene::AddObject and Geometry::SetTransform are members now; the
     // Time ctor door stays. ENDGAME B.3.9 GFX (B9-13): the
     // ParticleSystemInstance CTOR door is gone -- the class's real ctor below.
-    if (!fn_MemAlloc || !g_pMemAllocSingleton ||
+    if (!System::MemoryAllocator::_singleton ||
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseC] missing required fn ptrs "
                "(TimeC=%p) — skipping\n",
@@ -530,7 +531,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
     int32_t added = 0;
     for (int32_t i = 0; i < particleCount; ++i) {
         // 1. Allocate + construct ParticleSystemInstance.
-        void* inst = fn_MemAlloc(g_pMemAllocSingleton, 0xe0, 8);
+        void* inst = System::MemoryAllocator::MemAlloc(0xe0, 8);
         if (!inst) continue;
         ::new (inst) Graphics::ParticleSystemInstance();   // B.3.9 GFX: the real ctor
 
@@ -640,7 +641,7 @@ void MenuDialogLoopT_TickParticles(void* self, void* time) {
 // PhaseB chunked iteration starts.
 bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Required Runtime functions
-    if (!fn_MemAlloc || !g_pMemAllocSingleton ||
+    if (!System::MemoryAllocator::_singleton ||
         !fn_Graphics_Renderer_Ctor || !fn_Graphics_Scene_Ctor ||
         // B.3.5: SetMesh and Scene::AddGlobalObject are members now.
         !fn_Time_Ctor_Float) {
@@ -649,7 +650,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     }
 
     // Required factory
-    if (!::Object::ExternalFactory::_singleton || !fn_IsDerivedFrom) {
+    if (!::Object::ExternalFactory::_singleton) {
         printf("[MenuDLT::LoadScene] missing factory/filename helpers — bailing out\n");
         return false;
     }
@@ -719,12 +720,12 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     printf("[MenuDLT::LoadScene] loaded MenuScene variant %u at %p\n", variant, menuScene);
 
     // --- Allocate Renderer (0x50 bytes, alignment 4) ---
-    void* renderer = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 4);
+    void* renderer = System::MemoryAllocator::MemAlloc(0x50, 4);
     if (renderer) fn_Graphics_Renderer_Ctor(renderer);
     Loop(self)->_renderer = renderer;
 
     // --- Allocate Graphics::Scene (0x78 bytes, alignment 8) ---
-    void* gScene = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
+    void* gScene = System::MemoryAllocator::MemAlloc(0x78, 8);
     if (gScene) fn_Graphics_Scene_Ctor(gScene);
     Loop(self)->_scene = gScene;
 
@@ -734,17 +735,17 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // i.e. `new Graphics::SunLight()` compiled in the exe. ENDGAME B.3.9 pilot:
     // the real class's constructor does both (SunLight.h, B38 D1 / B39 D1); the
     // ??0SunLight door and its engine_funcs global are gone.
-    void* sunLight = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
+    void* sunLight = System::MemoryAllocator::MemAlloc(0x108, 8);
     if (sunLight) ::new (sunLight) Graphics::SunLight();
     Loop(self)->_sunLight = sunLight;
 
     // --- Allocate Transform (0x10C bytes, alignment 4) ---
-    void* transform = fn_MemAlloc(g_pMemAllocSingleton, 0x10C, 4);
+    void* transform = System::MemoryAllocator::MemAlloc(0x10C, 4);
     if (transform) MenuScene_Helper_8800(transform);
     Loop(self)->_transform = transform;
 
     // --- Allocate MeshInstance (0x120 bytes, alignment 8) ---
-    void* mainMesh = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
+    void* mainMesh = System::MemoryAllocator::MemAlloc(0x120, 8);
     if (mainMesh) {
         // Retail: `??0MeshInstance` then the exe's copy 0x14015e240 of the class's
         // OWN table (Ghidra: slot 0 the exe scalar deleting dtor 0x140019e80, 1-8

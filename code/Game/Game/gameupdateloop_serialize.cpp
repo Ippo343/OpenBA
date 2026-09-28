@@ -47,6 +47,7 @@
 #include "Entity/ComponentEntity.h"   // caller batch CB6: TypeId()
 #include "Component/Component.h"      // caller batch CB6: slot 11
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "options.h"
 #include "resolve.h"
 #include "system/String.h"
@@ -438,13 +439,13 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
             int a = 0, b = 0;
             bool used = false;
             reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (key && s_tidCompEnt && !fn_IsDerivedFrom(key, s_tidCompEnt)) key = nullptr;
+            if (key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(a, nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(b, nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(used, nullptr);   // B.3.4 bridge
 
             auto makeNode = [&](uintptr_t parent) -> uintptr_t {
-                uint8_t* n = (uint8_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+                uint8_t* n = (uint8_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
                 if (!n) return 0;
                 *(void**)n = key;
                 *(int*)(n + 0x8) = a;
@@ -497,7 +498,7 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
         while (*(uintptr_t*)(cur + 0x20)) cur = *(uintptr_t*)(cur + 0x20);
         while (cur) {
             reinterpret_cast<Object::InternalBasePtr*>((void*)cur)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (*(void**)cur && s_tidCompEnt && !fn_IsDerivedFrom(*(void**)cur, s_tidCompEnt))
+            if (*(void**)cur && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(*(void**)cur, s_tidCompEnt))
                 *(void**)cur = nullptr;
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0x8), nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0xc), nullptr);   // B.3.4 bridge
@@ -668,7 +669,7 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
         for (int i = 0; i < count; i++, slot += 8) {
             reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (*(void**)slot != nullptr && s_tidCompEnt &&
-                !fn_IsDerivedFrom(*(void**)slot, s_tidCompEnt)) {
+                !::Object::IsDerivedFromNullSafe(*(void**)slot, s_tidCompEnt)) {
                 *(void**)slot = nullptr;
             }
         }
@@ -764,7 +765,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
                     // string per entry on every load.
                     char* str = reinterpret_cast<char*>(fname[0]);
                     int* rc = reinterpret_cast<int*>(str - 4);
-                    if (--*rc == 0 && fn_MemFreeStatic) fn_MemFreeStatic(str - 8);
+                    if (--*rc == 0) System::MemoryAllocator::MemFree(str - 8);
                 }
                 s_fn_EnableRefMode(extFactory, true);
                 fprintf(stderr, "[PreloadRefs] preloaded %d/%d referenced externals "
@@ -804,7 +805,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     reinterpret_cast<Object::InternalBasePtr*>(&self->m_scenarioInstance)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     if (self->m_scenarioInstance != nullptr) {
         uint32_t achTid = Achievement::AchievementInstance::TypeId();   // ENDGAME B.3.9 TR (was ResolveExport of its ?_typeInfo@)
-        if (!achTid || !fn_IsDerivedFrom(self->m_scenarioInstance, achTid))
+        if (!achTid || !::Object::IsDerivedFromNullSafe(self->m_scenarioInstance, achTid))
             self->m_scenarioInstance = nullptr;
     }
 
@@ -976,7 +977,7 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* lo
             first, diffs, an > bn ? an - bn : bn - an);
     fflush(stderr);
     std::free(a); std::free(b);
-    if (fresh.data && fn_MemFreeStatic) fn_MemFreeStatic(fresh.data);
+    if (fresh.data) System::MemoryAllocator::MemFree(fresh.data);
 }
 
 // ============================================================

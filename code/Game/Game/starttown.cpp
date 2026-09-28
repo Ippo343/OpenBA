@@ -24,6 +24,7 @@
 // name inside Volume.h's own static_asserts (Mesh.h -> Geometry.h -> Volume.h).
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -218,7 +219,7 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
     const int h0 = swapped ? fpW : fpH;
 
     uintptr_t nullIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     int marked = 0, freed = 0, roadCells = 0;
     for (int iy = 0; iy < fpH; ++iy)
@@ -485,7 +486,7 @@ static void StartTown_TileToWorld(void* gameVoid, int tileX, int tileY, float ou
     const int idx = dim * tileY + tileX;
     const float center = (float)(dim >> 1) - kCenterBias;
     float in[3] = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
-    fn_MapGetTerrainPos(gameVoid, out3, in, 0, nullptr);   // flag=0 (our f3e0 defers picking refine)
+    Reimpl_MapGetTerrainPos(gameVoid, out3, in, 0, nullptr);   // flag=0 (our f3e0 defers picking refine)
 }
 
 // Camera portion of FUN_1400a3300: locate the start-town spawn tile and return
@@ -531,9 +532,8 @@ static bool SpawnAndRegister(void* tmpl, void* entityList) {
     // Foundation B (ECS instantiate/register) not yet wired in standalone: these
     // exe primitives resolve to NULL until reimplemented. Guard so a populated
     // pool can't fault here before B lands.
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return false;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity) return false;
+    void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
     void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
     void* ibp = nullptr;
     new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
@@ -628,7 +628,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
 // when the block moved, fill at index count, old block freed only when it
 // moved. Every arm matched.
 void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
-    if (!townMgr || !desc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!townMgr || !desc || !System::MemoryAllocator::_singleton) return;
     void**  arr   = *(void***)(townMgr + 0x120);
     int     count = *(int32_t*)(townMgr + 0x128);
     // Dedup: already present -> nothing to do.
@@ -684,7 +684,7 @@ static void StartTown_SeedAvailableAgriculture(uint8_t* sc, void* game,
     // held in R13 across the loop).
     float centre[3] = { 0.0f, 0.0f, 0.0f };
     bool haveCentre = false;
-    if (game && fn_MapGetTerrainPos) {
+    if (game) {
         StartTown_TileToWorld(game, spawnX, spawnY, centre);
         haveCentre = true;
     }
@@ -1554,8 +1554,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     const int count = *(int32_t*)(startConfig + 0x88);
     uint8_t* pool   = *(uint8_t**)(startConfig + 0x80);
     if (count <= 0 || !pool) return 0;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc)
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity)
         return 0;
 
     const uint32_t tidCreatePlaced  = CreatePlacedDescription::TypeId();
@@ -1580,7 +1579,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                               void* tmpl, int tileX, int tileY, int orient,
                               int w0, int h0, bool isDemoFoundation, int logIndex) -> void* {
         // Instantiate + wrap.
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
         void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
         uintptr_t entIBP = 0;
         new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
@@ -1691,7 +1690,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //   corner1  = dim*tileY + tileX                (footprint origin)
         //   corner2  = (tileY+fpH)*dim + tileX + fpW    (footprint far corner)
         //   worldXY  = f3e0(mapGrid, {idx%dim - (dim>>1), idx/dim - (dim>>1), 0})
-        //              == fn_MapGetTerrainPos (0x14009f3e0, verified identical)
+        //              == Reimpl_MapGetTerrainPos(0x14009f3e0, verified identical)
         //   centre   = (world1 + world2) * DAT_140172114  (=0.5f, kCenterBias)
         //   yaw      = (float)orient   (raw entry+0x28, pre-normalisation); pitch = 0
         // Retail then: FromYawPitchOffset(tmp,&yaw,&pitch,&centre) ->
@@ -1699,7 +1698,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //   Graphics::Geometry::SetTransform(model+0x28, model+0x148)  (0x1400a250f).
         // `game` is the already-deref'd mapGrid (caller: game = *(gw+0xf8), line ~2790),
         // so dim = *(int*)game and f3e0's first arg is `game`, exactly retail's *local_b0.
-        if (game && fn_MapGetTerrainPos) {
+        if (game) {
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
                 uintptr_t mcIBP = 0;
@@ -1713,12 +1712,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     int idx1 = dim * tileY + tileX;
                     float in1[3] = { (float)(idx1 % dim) - half, (float)(idx1 / dim) - half, 0.0f };
                     float p1[3] = {0,0,0};
-                    fn_MapGetTerrainPos(game, p1, in1, '\0', nullptr);
+                    Reimpl_MapGetTerrainPos(game, p1, in1, '\0', nullptr);
                     // corner2 — footprint far corner (tileX+fpW, tileY+fpH).
                     int idx2 = (tileY + fpH) * dim + tileX + fpW;
                     float in2[3] = { (float)(idx2 % dim) - half, (float)(idx2 / dim) - half, 0.0f };
                     float p2[3] = {0,0,0};
-                    fn_MapGetTerrainPos(game, p2, in2, '\0', nullptr);
+                    Reimpl_MapGetTerrainPos(game, p2, in2, '\0', nullptr);
                     float center[3] = { (p1[0]+p2[0])*kCenterBias,     // DAT_140172114 = 0.5f
                                         (p1[1]+p2[1])*kCenterBias,
                                         (p1[2]+p2[2])*kCenterBias };
@@ -4310,14 +4309,13 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     const int famCount  = *(int32_t*)(startConfig + FAMILY_CNT);
     uint8_t*  families  = *(uint8_t**)(startConfig + FAMILY_ARR);
     if (famCount <= 0 || !families) return 0;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return 0;
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity) return 0;
 
     // Town-centre world position (same tile->world mapping as the camera) +
     // founding-family spawn jitter radius (startConfig+0x40). FUN_1400a3300 found
     // this tile once and reused it for both camera and the spawn passes.
     float townBase[3] = { 0.0f, 0.0f, 0.0f };
-    if (game && fn_MapGetTerrainPos)
+    if (game)
         StartTown_TileToWorld(game, spawnX, spawnY, townBase);
 
     // Resolve the shared citizen template once (ExternalRef at startConfig+0x48,
@@ -4373,7 +4371,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         for (size_t i = 0; i < g_stressHouseTiles.size(); ++i) {
             const STRectFwd& hr = g_stressHouseTiles[i];
             FamSpec sp = { (i % 3 == 0) ? 1 : 0, 3, { townBase[0], townBase[1], townBase[2] }, false };
-            if (game && fn_MapGetTerrainPos)
+            if (game)
                 StartTown_TileToWorld(game, hr.x + hr.w / 2, hr.y + hr.h / 2, sp.base);
             specs.push_back(sp);
         }
@@ -4648,7 +4646,7 @@ static int StartTown_ClassifyCell(void* game, int dim, int idx) {
     float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
     float out[3] = { 0, 0, 0 };
     float tri[4] = { 0, 0, 0, 0 };
-    fn_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only (matches e2c0)
+    Reimpl_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only (matches e2c0)
     const float h = out[2], slope = tri[2];
     if (h < kClassDeepWaterMax) return 8;
     if (h < kClassShoreMax)     return 7;
@@ -4768,13 +4766,13 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
             // landmine documented for FUN_1401253d0); here we trust the linked entity.
             if (occupied && ownerEntity) {
                 uintptr_t entIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+                new (&entIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(ownerEntity));   // B.3.3 bridge
                 *(uintptr_t*)(cell + 0x08) = entIBP;   // dc20: *(cell+8) = owner entity
             } else {
                 // dee0's clear (occupancy disabled, or non-occupied footprint cell).
                 uintptr_t nullIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 *(uintptr_t*)(cell + 0x08) = nullIBP;
             }
         }
@@ -4854,7 +4852,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     //     stops overlap once OnCreate writes occupancy). Plain data writes — always
     //     safe on the inert MapComponent (size 0x38; fields +0x28..+0x2f). ---
     void* mapComp = FindComponentOnEntity(entity, tidMap);
-    if (mapComp && fn_InternalBasePtr_Ctor) {
+    if (mapComp) {
         uintptr_t mapIBP = 0;
         new (&mapIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
         uint8_t* mc = (uint8_t*)mapIBP;
@@ -4900,7 +4898,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     const float center = (float)(dim >> 1) - kCenterBias;
     float in[3]  = { (float)(cellIdx % dim) - center, (float)(cellIdx / dim) - center, 0.0f };
     float pos[3] = {0,0,0};
-    fn_MapGetTerrainPos(game, pos, in, 0, nullptr);
+    Reimpl_MapGetTerrainPos(game, pos, in, 0, nullptr);
 
     // Per-resource jitter/yaw tolerance — byte-faithful to Entity_impl_6540, which
     // uses System::Random::RandFloatTol → [-1,1]. fn_Random_RandFloatTol is the
@@ -4914,7 +4912,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     float yaw = rtol() * ResYawScale();   // RandFloatTol * 180 -> full [-180,180] rotation
 
     void* modelComp = FindComponentOnEntity(entity, tidModel);
-    if (!modelComp || !fn_InternalBasePtr_Ctor) return;
+    if (!modelComp) return;
     uintptr_t mIBP = 0;
     new (&mIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(modelComp));   // B.3.3 bridge
     uint8_t* m = (uint8_t*)mIBP;
@@ -4942,7 +4940,7 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // action_b
 static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void* rng) {
     if (!entity) return;
     void* gComp = FindComponentOnEntity(entity, tidGrowth);
-    if (!gComp || !fn_InternalBasePtr_Ctor) return;
+    if (!gComp) return;
     uintptr_t gIBP = 0;
     new (&gIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(gComp));   // B.3.3 bridge
     uint8_t* s = (uint8_t*)gIBP;
@@ -5010,7 +5008,6 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     uint8_t* pool   = *(uint8_t**)(startConfig + RES_ARR);
     if (count <= 0 || !pool) return 0;
     if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc ||
         !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate ||
         !fn_MapGetTerrainPos) {
         fprintf(stderr, "[startTown::res] primitives unwired — skip\n"); fflush(stderr);
@@ -5168,12 +5165,12 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 const float center = (float)(dim >> 1) - kCenterBias;
                 float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
                 float pos[3] = {0,0,0}, tri[3] = {0,0,0};
-                fn_MapGetTerrainPos(game, pos, in, 0, tri);
+                Reimpl_MapGetTerrainPos(game, pos, in, 0, tri);
                 const float h = pos[2], slope = tri[2];
                 if (h < hMin || h >= hMax || slope < slopeMin) continue;
 
                 // Instantiate, place its model at the tile (Foundation F), register.
-                void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+                void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
                 void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
                 uintptr_t entIBP = 0;
                 new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
@@ -5291,9 +5288,8 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
 static bool SpawnEnvVolumeAndRegister(void* tmpl, void* entityList,
                                       int gridX, int gridY, int chunk) {
     if (!tmpl) return false;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return false;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity) return false;
+    void* mem = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
     void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
     if (!ent) return false;
 

@@ -212,8 +212,7 @@ bool TerrainGenerator::Serialize(void* stream) {
     IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
 
     // Serialize ExternalPtr at +0x20
-    if (fn_ExternalPtr_Serialize2)
-        fn_ExternalPtr_Serialize2(&_field20, serializer);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
 
     // Serialize String at +0x28
     reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);

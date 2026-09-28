@@ -48,6 +48,7 @@
 #include "video/Context.h"       // also brings Video::{Device,RenderBuffer,Viewport}
 #include "video/ImageBuffer.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "options.h"
 #include "resolve.h"
@@ -121,7 +122,7 @@ bool ResolveFuncs() {
            s_Frustum_Ortho_Ctor &&
            s_Renderer_Dtor && s_Scene_Dtor &&
            // engine_funcs primitives this port relies on:
-           fn_MemAlloc && g_pMemAllocSingleton && fn_MemFreeStatic &&
+           System::MemoryAllocator::_singleton &&
            // B.3.5: the CopyFromTexture readiness term went with its door.
            fn_Graphics_Camera_Ctor &&
            fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor;
@@ -143,7 +144,7 @@ bool ResolveFuncs() {
 // exe's own copy of the class's table), then Create it as a render-target
 // (color) / depth surface. Returns the buffer or null.
 void* MakeRenderTargetBuffer(int width, int usage, int format) {
-    void* img = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+    void* img = System::MemoryAllocator::MemAlloc(0x68, 8);
     if (!img) return nullptr;
     ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
     reinterpret_cast<Video::ImageBuffer*>(img)->Create(
@@ -183,7 +184,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     void* colorBuf = MakeRenderTargetBuffer(width, /*usage*/0, /*format*/5); // ARGB render target
     void* depthBuf = MakeRenderTargetBuffer(width, /*usage*/1, /*format*/7); // depth
 
-    void* renderBuffer = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+    void* renderBuffer = System::MemoryAllocator::MemAlloc(0x30, 8);
     if (renderBuffer) s_RenderBuffer_Ctor(renderBuffer);
     bool rbOk = reinterpret_cast<Video::RenderBuffer*>(renderBuffer)->Create(
         reinterpret_cast<const Video::ImageBuffer*>(colorBuf),
@@ -317,7 +318,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     // Free the temporary render surfaces.
     if (renderBuffer) {
         s_RenderBuffer_Dtor(renderBuffer);
-        fn_MemFreeStatic(renderBuffer);
+        System::MemoryAllocator::MemFree(renderBuffer);
     }
     FreeImageBuffer(colorBuf);
     FreeImageBuffer(depthBuf);

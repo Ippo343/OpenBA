@@ -60,42 +60,18 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Entity/ComponentEntity.h"
 #include "Game/exe_bodies.h"
+#include "Action/exe_bodies.h"      // ActCNR_CheckTerrain_cb00, Pf_RoadMeshRebuild_f370, Pf_ZoneRefresh_9c480
+#include "Component/exe_bodies.h"   // CreateNaturalResource_helper_e2c0
 
 // ============================================================
-// External declarations -- functions already ported elsewhere.
-// ============================================================
-
-// CreateNaturalResource_helper_cb00 (0x14009cb00) -- terrain-occupied check.
-// Ported + registered in code/Game/Action/createnaturalresource.cpp /
-// standalone/reg_action_cnr.cpp.
-extern uint64_t ActCNR_CheckTerrain_cb00(void* self, int cellIndex);
-
-// CreateNaturalResource_helper_e2c0 (0x14009e2c0) -- per-cell terrain classify.
-// Ported + registered in code/Game/Component/keystone_a_map.cpp /
-// standalone/reg_keystone_a_map.cpp.
-extern int CreateNaturalResource_helper_e2c0(int* self, int cellIndex);
-
-// Object_ExternalPtr_BuildComponentRef_Serialize (0x140002340) -- serializes an
-// ExternalPtr through the save-file string table. Ported in
-// code/Game/Game/serialize_externals.cpp.
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
-
-// Pf_RoadMeshRebuild_f370 (0x1400af370, aka TradeWork_impl_f370) -- ported +
-// registered in code/Game/Action/action_pf_road.cpp / standalone/reg_pf_road.cpp.
-void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);
-
+// Functions ported elsewhere, called by name through their declaring headers:
+//   0x14009cb00 ActCNR_CheckTerrain_cb00            terrain-occupied check (Action/exe_bodies.h)
+//   0x14009e2c0 CreateNaturalResource_helper_e2c0   per-cell terrain classify (Component/exe_bodies.h)
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable  ExternalPtr via the string table (Game/exe_bodies.h)
+//   0x1400af370 Pf_RoadMeshRebuild_f370             road mesh rebuild (Action/exe_bodies.h)
 // 0x14009e8c0 region/pathfinder rebuild -- large, out of scope (see file header
-// DEVIATION note). Resolved via ResolveAddr; unregistered today, so this stays
-// a guarded no-op until it gets its own port.
-static void (*s_fn_RegionSystemBuild)(void*) = nullptr;
-static bool s_regionSystemBuildResolveAttempted = false;
-
-static void EnsureRegionSystemBuild() {
-    if (s_regionSystemBuildResolveAttempted) return;
-    s_regionSystemBuildResolveAttempted = true;
-    s_fn_RegionSystemBuild = reinterpret_cast<void (*)(void*)>(
-        ResolveAddr(Module::Exe, 0x14009e8c0));
-}
+// DEVIATION note): not ported, a PORT GAP at its call site below.
+// ============================================================
 
 // ============================================================
 // GameGrid_ResizeCellArray_aa90 (0x14001aa90)
@@ -185,15 +161,13 @@ void GameGrid_SerializeCellArray_ac10(void* serializer, int32_t count, int64_t a
     for (int32_t i = 0; i < count; ++i) {
         reinterpret_cast<Object::InternalBasePtr*>(elem + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* refA = *reinterpret_cast<void**>(elem + 0x00);
-        if (refA != nullptr && fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(refA, ComponentEntity::TypeId())) {
+        if (refA != nullptr && !::Object::IsDerivedFromNullSafe(refA, ComponentEntity::TypeId())) {
             *reinterpret_cast<void**>(elem + 0x00) = nullptr;
         }
 
         reinterpret_cast<Object::InternalBasePtr*>(elem + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* refB = *reinterpret_cast<void**>(elem + 0x08);
-        if (refB != nullptr && fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(refB, ComponentEntity::TypeId())) {
+        if (refB != nullptr && !::Object::IsDerivedFromNullSafe(refB, ComponentEntity::TypeId())) {
             *reinterpret_cast<void**>(elem + 0x08) = nullptr;
         }
 
@@ -319,10 +293,8 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
             fn_Map_Invalidate(reinterpret_cast<int*>(selfPtr));
         }
 
-        EnsureRegionSystemBuild();
-        if (s_fn_RegionSystemBuild) {
-            s_fn_RegionSystemBuild(selfPtr);
-        }
+        // PORT GAP 0x14009e8c0 RegionSystem build: not ported; retail calls it here
+        // (0x14009f2a6, RCX = this grid). The null arm is: nothing.
 
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* gameWorld = *g_pGameWorldSingleton;
@@ -341,6 +313,4 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
 // ============================================================
 void RegisterGameGridSerialize() {
     RegisterExeAddr(0x14009f100, reinterpret_cast<uintptr_t>(&GameGrid_Serialize_9f100));
-    RegisterExeAddr(0x14001aa90, reinterpret_cast<uintptr_t>(&GameGrid_ResizeCellArray_aa90));
-    RegisterExeAddr(0x14001ac10, reinterpret_cast<uintptr_t>(&GameGrid_SerializeCellArray_ac10));
 }

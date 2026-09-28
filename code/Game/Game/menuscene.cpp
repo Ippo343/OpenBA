@@ -22,6 +22,7 @@
 #include "Game/MenuScene.h"
 #include "Game/WorldGeometry.h"   // caller batch CB6: +0x28's class
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
 #include "resolve.h"
@@ -265,12 +266,12 @@ bool MenuScene::Serialize(void* stream) {
 
     // (2) Allocate + ctor a Geometry container at +0x28 if needed.
     if (_field28 == nullptr) {
-        if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+        if (!System::MemoryAllocator::_singleton) {
             printf("[MenuScene::Slot5_Serialize] MemAlloc unavailable — "
                    "skipping Geometry alloc (terrain will be missing)\n");
             fflush(stdout);
         } else {
-            void* geom = fn_MemAlloc(g_pMemAllocSingleton, 0x230, 8);
+            void* geom = System::MemoryAllocator::MemAlloc(0x230, 8);
             if (geom) {
                 // Caller batch CB6: the real ctor (0x1400b00e0), where this went
                 // through the fn_Geometry_Init door (Reimpl_Geometry_Init, which
@@ -388,11 +389,11 @@ bool MenuScene::Serialize(void* stream) {
         // ----- Array #1 (+0x30, stride 0x20) -----
         int count38 = static_cast<int>(reinterpret_cast<uintptr_t>(_field38) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count38, nullptr);   // B.3.4 bridge (cast dropped: count38 is int)
-        if (count38 > 0 && fn_Array_Resize_Stride20) {
-            fn_Array_Resize_Stride20(&_field30, count38);
+        if (count38 > 0) {
+            Reimpl_Array_Resize_Stride20(&_field30, count38);
         }
-        if (count38 > 0 && fn_Array_Serialize_Stride20) {
-            fn_Array_Serialize_Stride20(outer_ser, static_cast<uint32_t>(count38),
+        if (count38 > 0) {
+            Reimpl_Array_Serialize_Stride20(outer_ser, static_cast<uint32_t>(count38),
                                         _field30);
         }
 
@@ -401,19 +402,17 @@ bool MenuScene::Serialize(void* stream) {
         // ----- Array #2 (+0x40, stride 0x08, GraphicsMesh exrefs) -----
         int count48 = static_cast<int>(reinterpret_cast<uintptr_t>(_field48) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count48, nullptr);   // B.3.4 bridge (cast dropped: count48 is int)
-        if (count48 > 0 && fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(&_field40, count48);
+        if (count48 > 0) {
+            Reimpl_Array_Resize_Stride08(&_field40, count48);
         }
-        if (count48 > 0 && fn_Array_Serialize_External_GraphicsMesh) {
-            fn_Array_Serialize_External_GraphicsMesh(outer_ser, count48, _field40);
+        if (count48 > 0) {
+            Reimpl_Array_Serialize_External_GraphicsMesh(outer_ser, count48, _field40);
         }
 
         RZ_CHECK("Slot5 after arr40 (GraphicsMesh exrefs)");
 
         // ----- Single ExternalPtr at +0x70 (GraphicsMesh) -----
-        if (fn_ExternalPtr_Serialize_GraphicsMesh) {
-            fn_ExternalPtr_Serialize_GraphicsMesh(&_field70, outer_ser);
-        }
+        Reimpl_ExternalPtr_Serialize_GraphicsMesh(&_field70, outer_ser);
 
         // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
         // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
@@ -441,18 +440,16 @@ bool MenuScene::Serialize(void* stream) {
         // Maps to original 0x1400a3779..0x1400a3825 (the `if (1 < iVar3)` block).
         // We always run it since our outer is v2; the stream's version field
         // dictates serialize behavior internally.
-        if (fn_ExternalPtr_Serialize_Weather) {
-            // Weather externalPtr at +0x80 (FUN_1400196a0).
-            fn_ExternalPtr_Serialize_Weather(&_field80, outer_ser);
-        }
+        // Weather externalPtr at +0x80 (FUN_1400196a0).
+        Reimpl_ExternalPtr_Serialize_Weather(&_field80, outer_ser);
         // Single float at +0x78 (the v2-only "scene-time" or similar).
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(_field78, nullptr);   // B.3.4 bridge (cast dropped: _field78 is float)
 
         // ----- Particle element array (+0x50, stride 0x14: 4 floats + 1 int) -----
         int count58 = static_cast<int>(reinterpret_cast<uintptr_t>(_field58) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count58, nullptr);   // B.3.4 bridge (cast dropped: count58 is int)
-        if (count58 > 0 && fn_Array_Resize_Stride14) {
-            fn_Array_Resize_Stride14(&_field50, count58);
+        if (count58 > 0) {
+            Reimpl_Array_Resize_Stride14(&_field50, count58);
         }
         // Per-element serialize (inlined in original; not a separate helper).
         if (count58 > 0 && _field50) {
@@ -472,11 +469,11 @@ bool MenuScene::Serialize(void* stream) {
         // ----- Particle resource exrefs (+0x60, stride 0x08, FUN_14001bff0) -----
         int count68 = static_cast<int>(reinterpret_cast<uintptr_t>(_field68) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count68, nullptr);   // B.3.4 bridge (cast dropped: count68 is int)
-        if (count68 > 0 && fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(&_field60, count68);
+        if (count68 > 0) {
+            Reimpl_Array_Resize_Stride08(&_field60, count68);
         }
-        if (count68 > 0 && fn_Array_Serialize_External_Particle) {
-            fn_Array_Serialize_External_Particle(outer_ser, count68, _field60);
+        if (count68 > 0) {
+            Reimpl_Array_Serialize_External_Particle(outer_ser, count68, _field60);
         }
 
         if (!s_particleLogged.exchange(true)) {

@@ -46,6 +46,7 @@
 #include "WorldGeometry.h"   // caller batch CB6: RebuildDirtyChunks is the class's
 #include <atomic>
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -330,7 +331,7 @@ extern "C" void FUN_1400ac880_Body(void* self,
 extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     if (!self) return;
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
+    if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[sub_c1e0] MemAlloc/Free unavailable — skipping mesh build (self=%p)\n", self);
@@ -382,15 +383,7 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     struct ArrayHeader16 { void* data; int32_t count; int32_t cap; };
     ArrayHeader16 scratch{nullptr, 0, 0};
 
-    if (fn_Array_Resize_Stride16B) {
-        fn_Array_Resize_Stride16B(&scratch, vertsPerChunk);
-    } else {
-        // Fallback: direct alloc.
-        scratch.cap   = vertsPerChunk;
-        scratch.count = vertsPerChunk;
-        scratch.data  = fn_MemAlloc(g_pMemAllocSingleton,
-                                    static_cast<uint64_t>(vertsPerChunk) * 0x10, 2);
-    }
+    Reimpl_Array_Resize_Stride16B(&scratch, vertsPerChunk);
 
     int16_t* vertScratch = reinterpret_cast<int16_t*>(scratch.data);
 
@@ -468,7 +461,7 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     int16_t* idxBuf = nullptr;
     if (idxCount > 0) {
         idxBuf = reinterpret_cast<int16_t*>(
-            fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(idxCount) * 2, 2));
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(idxCount) * 2, 2));
     }
 
     // The original disasm has a strange "self-copy initialise" loop that runs
@@ -530,10 +523,10 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     // (8) Free the scratch buffers (matches the original's MemFree(idxBuf);
     //     MemFree(scratch.data) at the end of sub_c1e0).
     if (idxBuf) {
-        fn_MemFreeStatic(idxBuf);
+        System::MemoryAllocator::MemFree(idxBuf);
     }
     if (scratch.data) {
-        fn_MemFreeStatic(scratch.data);
+        System::MemoryAllocator::MemFree(scratch.data);
     }
 }
 
@@ -555,7 +548,7 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
 // BANISHED_WATER_LEVEL=<float world height>.
 extern "C" void WorldGen_BuildWaterMesh(void* self) {
     if (!self) return;
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) return;
+    if (!System::MemoryAllocator::_singleton) return;
     // B.3.5: the four-door readiness guard is gone with the doors.
 
     uint8_t* sb = reinterpret_cast<uint8_t*>(self);
@@ -601,7 +594,7 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     const uint8_t nB2 = static_cast<uint8_t>(static_cast<int>((1.0f + kUVScale) * kByteScale)); // 255
 
     int16_t* vertScratch = reinterpret_cast<int16_t*>(
-        fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(vertsPerChunk) * 0x10, 2));
+        System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(vertsPerChunk) * 0x10, 2));
     if (!vertScratch) return;
 
     // (1) VertexBuffer at +0x160 (same total size as terrain VB).
@@ -656,7 +649,7 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     int idxCount      = quadsPerChunk * 6;
     int idxBytes      = quadsPerChunk * 12;
     int16_t* idxBuf = reinterpret_cast<int16_t*>(
-        fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(idxCount) * 2, 2));
+        System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(idxCount) * 2, 2));
     reinterpret_cast<Video::IndexBuffer*>(sb + 0x180)
         ->Create(idxBytes, false, nullptr);   // B.3.5 bridge
     if (idxBuf) {
@@ -683,9 +676,9 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
         }
         reinterpret_cast<Video::IndexBuffer*>(sb + 0x180)
             ->Set(idxBytes, 0, idxBuf);   // B.3.5 bridge
-        fn_MemFreeStatic(idxBuf);
+        System::MemoryAllocator::MemFree(idxBuf);
     }
-    fn_MemFreeStatic(vertScratch);
+    System::MemoryAllocator::MemFree(vertScratch);
 
     fprintf(stderr, "[water] mesh built: VB+0x160 q1=%p IB+0x180 q1=%p totalVerts=%d "
             "chunksPerSide=%d levelQ=%d vbOk=%d\n",
@@ -737,7 +730,7 @@ void WorldGeometry::RebuildDirtyChunks() {
     // tests this as the first thing — when no chunks are dirty, return.
     if (_dirtyTreeCount == 0) return;
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
+    if (!System::MemoryAllocator::_singleton) {
         if (!s_chunkUpdateWarned.exchange(true)) {
             printf("[GeometryChunkUpdate] MemAlloc/Free unavailable — skipping\n");
             fflush(stdout);
@@ -758,13 +751,7 @@ void WorldGeometry::RebuildDirtyChunks() {
     // Allocate the per-chunk scratch vertex buffer (16-byte stride).
     struct ArrayHeader16 { void* data; int32_t count; int32_t cap; };
     ArrayHeader16 scratch{nullptr, 0, 0};
-    if (fn_Array_Resize_Stride16B) {
-        fn_Array_Resize_Stride16B(&scratch, vertsPerChunk);
-    } else {
-        scratch.cap = scratch.count = vertsPerChunk;
-        scratch.data = fn_MemAlloc(g_pMemAllocSingleton,
-                                   static_cast<uint64_t>(vertsPerChunk) * 0x10, 2);
-    }
+    Reimpl_Array_Resize_Stride16B(&scratch, vertsPerChunk);
     int16_t* vertScratch = reinterpret_cast<int16_t*>(scratch.data);
     if (!vertScratch) return;
 
@@ -839,7 +826,7 @@ void WorldGeometry::RebuildDirtyChunks() {
         uint8_t* n = reinterpret_cast<uint8_t*>(node);
         self_(self_, *reinterpret_cast<void**>(n + 0x10));
         self_(self_, *reinterpret_cast<void**>(n + 0x18));
-        fn_MemFreeStatic(node);
+        System::MemoryAllocator::MemFree(node);
     };
     freeNode(freeNode, treeRoot);
 
@@ -848,7 +835,7 @@ void WorldGeometry::RebuildDirtyChunks() {
 
     // Free scratch buffer.
     if (scratch.data) {
-        fn_MemFreeStatic(scratch.data);
+        System::MemoryAllocator::MemFree(scratch.data);
     }
 
     // TODO (in-game): the original also walks the entity SoA at self+0x1F0

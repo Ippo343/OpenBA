@@ -199,8 +199,7 @@ void LoadInputNameTables() {
             printf("[InputBindings]   '%s' -> NOT FOUND\n", path);
             return nullptr;
         }
-        if (s_stringTableTypeId != 0 && fn_IsDerivedFrom
-                && !fn_IsDerivedFrom(ext, s_stringTableTypeId)) {
+        if (s_stringTableTypeId != 0 && !::Object::IsDerivedFromNullSafe(ext, s_stringTableTypeId)) {
             printf("[InputBindings]   '%s' -> WRONG TYPE\n", path);
             return nullptr;
         }

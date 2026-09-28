@@ -33,6 +33,7 @@
 // directly.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -71,7 +72,7 @@ void GenericArrayResize(void* arrayHeader, int newCount,
         }
         return;
     }
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+    if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Resize<S5>] MemAlloc unavailable — leaving array unchanged "
@@ -101,7 +102,7 @@ void GenericArrayResize(void* arrayHeader, int newCount,
         }
         size_t bytes = static_cast<size_t>(*capSlot) * stride;
         g_allocStatsCtx = arrayHeader;                         // ALLOCSTATS owner tag
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, bytes, alignment);
+        void* newBuf = System::MemoryAllocator::MemAlloc(bytes, alignment);
         g_allocStatsCtx = nullptr;
         *dataSlot = newBuf;
     }
@@ -133,7 +134,7 @@ void GenericArrayResize(void* arrayHeader, int newCount,
     }
 
     if (oldData != *dataSlot && oldData != nullptr) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -227,7 +228,7 @@ namespace {
 
 void DeepCloneInner_FF00(void* dstHeader, const void* srcHeader) {
     if (dstHeader == srcHeader) return;
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!System::MemoryAllocator::_singleton) return;
 
     auto* dst = reinterpret_cast<uint8_t*>(dstHeader);
     auto* src = reinterpret_cast<const uint8_t*>(srcHeader);
@@ -240,7 +241,7 @@ void DeepCloneInner_FF00(void* dstHeader, const void* srcHeader) {
     const int32_t* srcCount = reinterpret_cast<const int32_t*>(src + 0x08);
 
     // Free the dst's existing buffer, zero header.
-    if (*dstData && fn_MemFreeStatic) fn_MemFreeStatic(*dstData);
+    if (*dstData) System::MemoryAllocator::MemFree(*dstData);
     *dstData = nullptr;
     *dstCount = 0;
     // capacity slot is left in the existing state then overwritten below if n>0
@@ -250,7 +251,7 @@ void DeepCloneInner_FF00(void* dstHeader, const void* srcHeader) {
     if (n > 0) {
         *dstCap = n;
         size_t bytes = static_cast<size_t>(n) * 8;
-        *dstData = fn_MemAlloc(g_pMemAllocSingleton, bytes, 4);
+        *dstData = System::MemoryAllocator::MemAlloc(bytes, 4);
     }
 
     if (*dstData && *srcData) {
@@ -299,7 +300,7 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
         }
         return;
     }
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+    if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Resize_ArrOfArr] MemAlloc unavailable — leaving array "
@@ -327,7 +328,7 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
             *capSlot = newCount * 3;
         }
         size_t bytes = static_cast<size_t>(*capSlot) * 0x10;
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, bytes, 8);
+        void* newBuf = System::MemoryAllocator::MemAlloc(bytes, 8);
         *dataSlot = newBuf;
     }
 
@@ -363,7 +364,7 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
             for (int i = 0; i < freeCount; ++i) {
                 uint8_t* elem = freeBase + static_cast<size_t>(i) * 0x10;
                 void** innerData = reinterpret_cast<void**>(elem + 0x00);
-                if (*innerData && fn_MemFreeStatic) fn_MemFreeStatic(*innerData);
+                if (*innerData) System::MemoryAllocator::MemFree(*innerData);
                 *innerData = nullptr;
                 *reinterpret_cast<uint64_t*>(elem + 0x08) = 0;
             }
@@ -376,11 +377,11 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
             for (int i = 0; i < oldCount; ++i) {
                 uint8_t* elem = oldBuf + static_cast<size_t>(i) * 0x10;
                 void** innerData = reinterpret_cast<void**>(elem + 0x00);
-                if (*innerData && fn_MemFreeStatic) fn_MemFreeStatic(*innerData);
+                if (*innerData) System::MemoryAllocator::MemFree(*innerData);
                 *innerData = nullptr;
                 *reinterpret_cast<uint64_t*>(elem + 0x08) = 0;
             }
         }
-        if (oldData && fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+        if (oldData) System::MemoryAllocator::MemFree(oldData);
     }
 }

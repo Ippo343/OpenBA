@@ -65,6 +65,7 @@
 // provably equivalent — the classic parent-pointer in-order successor algorithm), not a logic change.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Object/factory_registration.h"
 #include "Work/Work.h"                // Work::TypeId() -- cell 0x1401c6cf8 (ENDGAME B.3.9 RF)
@@ -168,7 +169,7 @@ static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInse
     int32_t key = static_cast<int32_t>(value & 0xFFFFFFFFu);
     int32_t* root = *treeRoot;
     if (root == nullptr) {
-        int32_t* node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+        int32_t* node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
         if (node) {
             *reinterpret_cast<uint64_t*>(node) = value;
             node[2] = 0; node[3] = 0; node[4] = 0; node[5] = 0; node[6] = 0; node[7] = 0; node[8] = 0;
@@ -186,7 +187,7 @@ static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInse
             }
             int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
             if (right == nullptr) {
-                node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+                node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                 if (node) {
                     *reinterpret_cast<uint64_t*>(node) = value;
                     *reinterpret_cast<int32_t**>(node + 2) = parent;
@@ -199,7 +200,7 @@ static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInse
         } else {
             int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x10);
             if (left == nullptr) {
-                node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+                node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                 if (node) {
                     *reinterpret_cast<uint64_t*>(node) = value;
                     *reinterpret_cast<int32_t**>(node + 2) = parent;
@@ -255,7 +256,7 @@ static int32_t* LayoutB_Find(int32_t* root, int32_t key) {
 // ============================================================
 extern "C" int32_t* Goals_LayoutB_DeepCopy_cfb0(uint64_t param_1, int32_t* src) {
     EnsureDeps();
-    int32_t* dst = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+    int32_t* dst = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (dst != nullptr) {
         dst[0] = src[0];
         *reinterpret_cast<uint64_t*>(dst + 2) = *reinterpret_cast<uint64_t*>(src + 2); // payload/IBP @0x08
@@ -319,7 +320,7 @@ extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, co
     uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
     uint8_t* result;
     if (root == nullptr) {
-        uint8_t* buf = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+        uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
         result = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, nullptr) : nullptr;
         *reinterpret_cast<uint8_t**>(treeField) = result;
     } else {
@@ -335,7 +336,7 @@ extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, co
                 }
                 cur = *reinterpret_cast<uint8_t**>(parent + 0x28); // right
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+                    uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
                     uint8_t* node = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, parent) : nullptr;
                     *reinterpret_cast<uint8_t**>(parent + 0x28) = node;
                     result = node;
@@ -344,7 +345,7 @@ extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, co
             } else {
                 cur = *reinterpret_cast<uint8_t**>(parent + 0x20); // left
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+                    uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
                     uint8_t* node = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, parent) : nullptr;
                     *reinterpret_cast<uint8_t**>(parent + 0x20) = node;
                     result = node;
@@ -400,13 +401,13 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
             void* payload = nullptr;
             reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+            if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                 payload = nullptr;
             }
             int32_t* node = LayoutB_Find(root, key);
             if (node == nullptr) {
                 if (root == nullptr) {
-                    node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                    node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                     if (node) {
                         node[0] = key;
                         *reinterpret_cast<int32_t**>(node + 2) = reinterpret_cast<int32_t*>(payload);
@@ -420,7 +421,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
                         if (*parent <= key) {
                             int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20);
                             if (right == nullptr) {
-                                fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                 if (fresh) {
                                     fresh[0] = key;
                                     *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -434,7 +435,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
                         } else {
                             int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
                             if (left == nullptr) {
-                                fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                 if (fresh) {
                                     fresh[0] = key;
                                     *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -460,7 +461,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
             reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* payload = *reinterpret_cast<void**>(node + 0x08);
-            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+            if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                 *reinterpret_cast<void**>(node + 0x08) = nullptr;
             }
         }
@@ -489,14 +490,14 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                 reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
                 void* payload = nullptr;
                 reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+                if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                     payload = nullptr;
                 }
                 int32_t* root = reinterpret_cast<int32_t*>(slot[0]);
                 int32_t* existing = LayoutB_Find(root, key);
                 if (existing == nullptr) {
                     if (root == nullptr) {
-                        int32_t* node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                        int32_t* node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                         if (node) {
                             node[0] = key;
                             *reinterpret_cast<int32_t**>(node + 2) = reinterpret_cast<int32_t*>(payload);
@@ -510,7 +511,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                             if (*parent <= key) {
                                 int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20);
                                 if (right == nullptr) {
-                                    fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                    fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                     if (fresh) {
                                         fresh[0] = key;
                                         *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -524,7 +525,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                             } else {
                                 int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
                                 if (left == nullptr) {
-                                    fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                    fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                     if (fresh) {
                                         fresh[0] = key;
                                         *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -549,7 +550,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                 reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
                 reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
                 void* payload = *reinterpret_cast<void**>(node + 0x08);
-                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+                if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                     *reinterpret_cast<void**>(node + 0x08) = nullptr;
                 }
             }
@@ -590,7 +591,7 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
                     s_freeB(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x18)); // left
                     s_freeB(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x20)); // right
                 }
-                if (fn_MemFreeStatic) fn_MemFreeStatic(subRoot);
+                System::MemoryAllocator::MemFree(subRoot);
             }
         }
     } else {
@@ -724,7 +725,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                         if (tid == WorkComponent::TypeId()) {
                             void* obj = *slot;
-                            bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, WorkComponent::TypeId());
+                            bool derived = ::Object::IsDerivedFromNullSafe(obj, WorkComponent::TypeId());
                             workComponent = derived ? obj : nullptr;
                             break;
                         }
@@ -732,7 +733,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                 }
 
                 void* ibp = nullptr;
-                if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+                new (&ibp) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(workComponent));   // B.3.3 bridge
                 if (ibp != nullptr) {
                     int32_t workId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(ibp) + 0x28);
@@ -807,7 +808,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                         }
                     }
 
-                    if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(ibpField)->DeletePtr(
+                    reinterpret_cast< ::Object::InternalBasePtr*>(ibpField)->DeletePtr(
                         );   // B.3.3 bridge
                     if (s_eraseB) s_eraseB(self + 0x30, idTreeNode);
                 }
@@ -835,7 +836,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                 s_freeA(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x10)); // left
                 s_freeA(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x18)); // right
             }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(localFoundRoot);
+            System::MemoryAllocator::MemFree(localFoundRoot);
         }
         (void)localFoundCount;
     }

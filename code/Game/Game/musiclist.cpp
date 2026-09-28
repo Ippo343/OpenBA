@@ -40,6 +40,7 @@
 
 #include "Game/MusicList.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -124,7 +125,7 @@ static void MusicList_ResizeEntries_Fallback(void* arrayHeader, int newCount) {
         }
         return;
     }
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!System::MemoryAllocator::_singleton) return;
 
     auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
     void**   dataSlot  = reinterpret_cast<void**>(hdr + 0x00);
@@ -143,7 +144,7 @@ static void MusicList_ResizeEntries_Fallback(void* arrayHeader, int newCount) {
             *capSlot = newCount * 3;
         }
         size_t bytes = static_cast<size_t>(*capSlot) * kEntryStride;
-        *dataSlot = fn_MemAlloc(g_pMemAllocSingleton, bytes, 8);
+        *dataSlot = System::MemoryAllocator::MemAlloc(bytes, 8);
     }
 
     int copyStart = (oldData == *dataSlot) ? oldCount : 0;
@@ -166,8 +167,8 @@ static void MusicList_ResizeEntries_Fallback(void* arrayHeader, int newCount) {
         }
     }
 
-    if (oldData != *dataSlot && oldData != nullptr && fn_MemFreeStatic) {
-        fn_MemFreeStatic(oldData);
+    if (oldData != *dataSlot && oldData != nullptr) {
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -221,12 +222,11 @@ bool MusicList::Serialize(void* stream) {
             // NOT a String. The original element serializer (exe FUN_1400019a0) is
             // the templated ExternalPtr::Serialize (encoding/ref-mode aware: reads a
             // uint refId in reference mode, else a bool + path String) — NOT
-            // System::String::Serialize. fn_ExternalPtr_Serialize2 (0x14000bf40) is
+            // System::String::Serialize. Reimpl_ExternalPtr_Serialize_StringTable(0x14000bf40) is
             // the byte-identical instantiation (same one UIDescription's element
             // ptrs use). Reading +0x00 as a bare String consumed the wrong byte
             // count and drifted the whole element loop past EOF.
-            if (fn_ExternalPtr_Serialize2)
-                fn_ExternalPtr_Serialize2(elem + 0x00, ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x00, ser);
             elem += kEntryStride;
         }
     }

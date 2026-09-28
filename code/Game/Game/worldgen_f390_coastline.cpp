@@ -32,6 +32,7 @@
 // Field offsets verified against Ghidra disassembly of Application-x64.exe.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -216,7 +217,7 @@ static void* coastline_DeepCopyPath_24ac0(void* dst, void* src) {
     uint8_t* d = (uint8_t*)dst;
     uint8_t* s = (uint8_t*)src;
 
-    if (*(void**)(d + 0x00)) fn_MemFreeStatic(*(void**)(d + 0x00));
+    if (*(void**)(d + 0x00)) System::MemoryAllocator::MemFree(*(void**)(d + 0x00));
     *(int*)(d + 0x08) = 0;          // count
     *(void**)(d + 0x00) = nullptr;  // data
 
@@ -224,7 +225,7 @@ static void* coastline_DeepCopyPath_24ac0(void* dst, void* src) {
     *(int*)(d + 0x08) = n;
     if (n > 0) {
         *(int*)(d + 0x0c) = n;      // cap
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * PATHPT_STRIDE, 4);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)n * PATHPT_STRIDE, 4);
         *(void**)(d + 0x00) = nb;
 
         uint8_t* dd = (uint8_t*)nb;
@@ -648,7 +649,7 @@ extern "C" void wg_f390_coastline(void* hf) {
 
     // Guard: without the allocator the rejection sampler can't make progress;
     // bail rather than spin forever.
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!System::MemoryAllocator::_singleton) return;
 
     // branchSel = -NAN in the original (negative-as-int). Use -1.0f:
     // (int)(-1.0f) = -1 < 0 selects the closed-ring branch.

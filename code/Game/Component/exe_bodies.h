@@ -354,3 +354,6 @@ int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10
 // Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
 int fn_StorageCountQuery(void* component);  // 0x14012e5c0 (NOT the registered body: that is
                                             // WorkComponent_CalcMaxWorkers, tutorial_base.cpp; R5, two bodies)
+
+// ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
+int CreateNaturalResource_helper_e2c0(int* param_1, int param_2);  // 0x14009e2c0

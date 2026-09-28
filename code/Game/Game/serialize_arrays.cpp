@@ -28,6 +28,7 @@
 
 #include "Game/WorldGeometry.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/GraphicsMesh.h"   // ENDGAME B.3.9 TR: GraphicsMesh::TypeId()
 #include "graphics/Particle.h"       // ENDGAME B.3.9 TR: Particle::TypeId()
 #include "Component/coll_bridge.h"
@@ -362,8 +363,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
-    if (!fn_IsDerivedFrom ||
-        !::Object::ExternalFactory::_singleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Serialize_External<%s>] runtime primitives unwired — "

@@ -56,6 +56,7 @@
 // header stores (a6720's [thread+0x158]) are not arrays and are untouched.
 #include "Game/PathfinderThread.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
@@ -98,7 +99,7 @@ static void EnsureFns() {
     s_init = true;
 }
 
-inline void MemFree(void* p) { if (fn_MemFreeStatic) fn_MemFreeStatic(p); }
+inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // B.3.2 bridge: the owning structs are still untyped bytes.
 inline rtcoll::ArrayHdr& Arr(int64_t base, int64_t off) {

@@ -46,6 +46,7 @@
 // `struct Rectangle`) is kept so a later include change cannot break it silently.
 #include "video/Buffers.h"   // Video::{Vertex,Index}Buffer
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <new>               // ENDGAME B.3.4a closing: placement-new of IO::Serializer
@@ -233,8 +234,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     if (streamInner == 0) {
         // Loading path: build mesh + allocate heightmap.
         Reimpl_TradeWork_sub_c1e0(self);
-        if (fn_MemAlloc && g_pMemAllocSingleton && byteCount > 0) {
-            heightBuf = fn_MemAlloc(g_pMemAllocSingleton, byteCount, 4);
+        if (System::MemoryAllocator::_singleton && byteCount > 0) {
+            heightBuf = System::MemoryAllocator::MemAlloc(byteCount, 4);
             *reinterpret_cast<void**>(selfBytes + 0x140) = heightBuf;
         }
     } else {
@@ -379,9 +380,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
                     if (SerializerInner(serializer) == 0) {
                         // FUN_1400203a0 — 8-byte Vector2 stride resize. Use the
                         // session-prior stride-08 wrapper.
-                        if (fn_Array_Resize_Stride08) {
-                            fn_Array_Resize_Stride08(outerElem, innerCount);
-                        }
+                        Reimpl_Array_Resize_Stride08(outerElem, innerCount);
                     }
                     if (vec2Ser && innerCount > 0) {
                         void* innerData = reinterpret_cast<void*>(outerElem[0]);
@@ -442,9 +441,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     if (version < 5 && SerializerInner(serializer) == 0) {
         // FUN_140001bb0 — resize stride-08 array. Use prior session helper.
         int32_t srcCount = *reinterpret_cast<int32_t*>(selfBytes + 0x208);
-        if (fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
-        }
+        Reimpl_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
         int32_t dstCount = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         if (dstCount > 0) {
             void* srcBase = *reinterpret_cast<void**>(selfBytes + 0x200);
@@ -473,9 +470,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         int32_t c = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         serIntField(&c);
         if (SerializerInner(serializer) == 0) {
-            if (fn_Array_Resize_Stride08) {
-                fn_Array_Resize_Stride08(selfBytes + 0x210, c);
-            }
+            Reimpl_Array_Resize_Stride08(selfBytes + 0x210, c);
         }
         void* arrBase = *reinterpret_cast<void**>(selfBytes + 0x210);
         // CASCADE: MaterialInstance — session 4 reimpl handles typeInfo null.
@@ -506,8 +501,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
 
         int32_t c218 = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         int32_t c228 = *reinterpret_cast<int32_t*>(selfBytes + 0x228);
-        if (c218 != c228 && fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(selfBytes + 0x210, c228);
+        if (c218 != c228) {
+            Reimpl_Array_Resize_Stride08(selfBytes + 0x210, c228);
         }
     }
 
@@ -569,9 +564,7 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
     int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version < 3 && SerializerInner(serializer) == 0) {
         int32_t srcCount = *reinterpret_cast<int32_t*>(selfBytes + 0x208);
-        if (fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
-        }
+        Reimpl_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
         int32_t dstCount = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         int32_t gridSize = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
         void* srcBase = *reinterpret_cast<void**>(selfBytes + 0x200);
@@ -596,9 +589,7 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
         int32_t c = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         serIntField(&c);
         if (SerializerInner(serializer) == 0) {
-            if (fn_Array_Resize_Stride08) {
-                fn_Array_Resize_Stride08(selfBytes + 0x210, c);
-            }
+            Reimpl_Array_Resize_Stride08(selfBytes + 0x210, c);
         }
         void* base = *reinterpret_cast<void**>(selfBytes + 0x210);
         Reimpl_Array_Serialize_External_MaterialInstance(serializer, c, base);

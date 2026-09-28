@@ -98,6 +98,7 @@
 // exercises them, verify against Ghidra before trusting the result.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include <cstdio>
 #include "resolve.h"
@@ -207,7 +208,7 @@ void SerializeIBPArray(uint8_t* hdr, void* serializer, uint32_t typeId) {
         reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* val = *reinterpret_cast<void**>(elem);
         if (val != nullptr) {
-            if (!fn_IsDerivedFrom(val, typeId)) {
+            if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
                 *reinterpret_cast<uint64_t*>(elem) = 0;
             }
         }
@@ -223,16 +224,16 @@ void DeepCopyInner04Array(void* dstElem, void* srcElem) {
     uint8_t* d = static_cast<uint8_t*>(dstElem);
     uint8_t* s = static_cast<uint8_t*>(srcElem);
     void* old = *reinterpret_cast<void**>(d + 0);
-    if (old && fn_MemFreeStatic) fn_MemFreeStatic(old);
+    if (old) System::MemoryAllocator::MemFree(old);
     *reinterpret_cast<int32_t*>(d + 8) = 0;
     *reinterpret_cast<void**>(d + 0) = nullptr;
     int32_t cnt = *reinterpret_cast<int32_t*>(s + 8);
     *reinterpret_cast<int32_t*>(d + 8) = cnt;
     if (cnt > 0) {
         *reinterpret_cast<int32_t*>(d + 0xC) = cnt;
-        if (fn_MemAlloc && g_pMemAllocSingleton)
+        if (System::MemoryAllocator::_singleton)
             *reinterpret_cast<void**>(d + 0) =
-                fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(cnt) << 2, 4);
+                System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4);
     }
     int32_t newCnt = *reinterpret_cast<int32_t*>(d + 8);
     if (newCnt > 0) {
@@ -280,7 +281,7 @@ void InitIntAssocOuter(uint8_t* d) {
 void DestroyIntAssocOuter(void* /*ignoredThis*/, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i) {
         uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
-        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(e + 0));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(e + 0));
         *reinterpret_cast<uint64_t*>(e + 0) = 0;
         *reinterpret_cast<uint64_t*>(e + 8) = 0;
     }
@@ -415,8 +416,8 @@ void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
 // left@0x20, right@0x28, int32 balance@0x30}. Rebalance via TradeWork_impl_4b40.
 // ------------------------------------------------------------
 uint64_t* AllocCompRefTreeNode(uint64_t key, uint64_t* parent, const uint8_t valBuf[16]) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    uint64_t* n = reinterpret_cast<uint64_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+    if (!System::MemoryAllocator::_singleton) return nullptr;
+    uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
     n[0] = key;
     std::memcpy(&n[1], valBuf, 16);          // +0x08..+0x18: value header (moved, not copied-then-freed)
@@ -510,8 +511,8 @@ void SerializeCompRefTree(uint8_t* hdr, void* serializer, fn_KeyResolve_t keyFn)
 // Never reached at our fixed save version (6); ported for completeness only.
 // ------------------------------------------------------------
 uint64_t* AllocLegacyTreeNode(uint64_t key, uint64_t* parent, int32_t value) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    uint64_t* n = reinterpret_cast<uint64_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+    if (!System::MemoryAllocator::_singleton) return nullptr;
+    uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!n) return nullptr;
     n[0] = key;
     n[1] = static_cast<uint64_t>(static_cast<uint32_t>(value));
@@ -542,7 +543,7 @@ void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             uint64_t key = 0;
-            if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(&key, serializer);
+            Reimpl_ExternalPtr_Serialize_StringTable(&key, serializer);
             int32_t value = 0;
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(value, nullptr);   // B.3.4 bridge
 
@@ -577,7 +578,7 @@ void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
     } else {
         uint64_t* node = LegacyTreeMin(*reinterpret_cast<uint64_t**>(hdr));
         while (node) {
-            if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(node, serializer);
+            Reimpl_ExternalPtr_Serialize_StringTable(node, serializer);
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(&node[1]), nullptr);   // B.3.4 bridge
             node = LegacyTreeSucc(node);
         }
@@ -666,7 +667,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         SerializeLegacyKeyIntTree(base + 0x160, ser);
     } else {
         SerializeCompRefTree(base + 0x160, ser,
-            reinterpret_cast<fn_KeyResolve_t>(fn_ExternalPtr_BuildSerialize));
+            reinterpret_cast<fn_KeyResolve_t>(&Reimpl_ExternalPtr_Serialize_StringTable));   // 0x140002340
     }
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 5) {   // B.3.4 bridge
         ResizeStride0x10(base + 0x160 /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
@@ -842,7 +843,7 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
                 if (tid == DWORD_1401c79e0_TypeId()) {
                     slotPtr = reinterpret_cast<void**>(*reinterpret_cast<uint64_t*>(comp + 0x30) + static_cast<int64_t>(j) * 8);
                     void* obj = *slotPtr;
-                    if (obj && fn_IsDerivedFrom(obj, DWORD_1401c79e0_TypeId())) chosen = obj;
+                    if (obj && ::Object::IsDerivedFromNullSafe(obj, DWORD_1401c79e0_TypeId())) chosen = obj;
                     break;
                 }
             }

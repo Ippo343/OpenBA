@@ -36,6 +36,7 @@
 #include "graphics/Camera.h"    // ENDGAME B.3.5 batch K1 — Graphics::Renderer
 #include "graphics/Material.h"  // Graphics::MaterialInstance
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -107,16 +108,16 @@ static void WeatherParticle_ArrayAlloc(void* header, int newCount) {
         int cap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;  // faithful grow rule
         *reinterpret_cast<int*>(h + 0xc) = cap;
-        void* p = (fn_MemAlloc && g_pMemAllocSingleton)
-                      ? fn_MemAlloc(g_pMemAllocSingleton, (size_t)cap * 0x24, 4)
+        void* p = (System::MemoryAllocator::_singleton)
+                      ? System::MemoryAllocator::MemAlloc((size_t)cap * 0x24, 4)
                       : nullptr;
         *reinterpret_cast<void**>(h + 0) = p;
     }
     void* data = *reinterpret_cast<void**>(h + 0);
     if (data && newCount > 0)
         std::memset(data, 0, (size_t)newCount * 0x24);
-    if (oldPtr && oldPtr != data && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldPtr);
+    if (oldPtr && oldPtr != data)
+        System::MemoryAllocator::MemFree(oldPtr);
 }
 
 // ============================================================
@@ -151,8 +152,8 @@ WeatherParticleGeometry::~WeatherParticleGeometry() {
     // count) and keeps its hand-written free. B.3.2 bridge: +0xe0 is still a
     // raw header.
     reinterpret_cast<WeatherParticleArray*>(&_particles)->~Array();
-    if (fn_MemFreeStatic) {
-        if (_indices) fn_MemFreeStatic(_indices);
+    {
+        if (_indices) System::MemoryAllocator::MemFree(_indices);
     }
     _indices = nullptr;
     _indexCount = 0;
@@ -183,8 +184,8 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     // Index buffer: 6 shorts (2 tris) per particle. Header {ptr(+0), count(+8)} at geo+0xd0.
     {
         int idxCount = particleCount * 6;
-        void* p = (fn_MemAlloc && g_pMemAllocSingleton)
-                      ? fn_MemAlloc(g_pMemAllocSingleton, (size_t)idxCount * 2, 2)
+        void* p = (System::MemoryAllocator::_singleton)
+                      ? System::MemoryAllocator::MemAlloc((size_t)idxCount * 2, 2)
                       : nullptr;
         self->_indices = p;                                              // +0xD0
         *reinterpret_cast<int*>(&self->_indexCount) = idxCount;          // +0xD8 (dword store)
@@ -361,8 +362,8 @@ extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
     void* descriptor = *reinterpret_cast<void**>(entry);
     if (!descriptor) return;
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xf0, 8);
+    if (!System::MemoryAllocator::_singleton) return;
+    void* mem = System::MemoryAllocator::MemAlloc(0xf0, 8);
     if (!mem) return;
     void* geo = static_cast<Graphics::Geometry*>(::new (mem) WeatherParticleGeometry());
     activeArray[slot] = geo;

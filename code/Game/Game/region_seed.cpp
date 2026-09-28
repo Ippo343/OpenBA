@@ -30,6 +30,7 @@
 // fallback exactly as before.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -43,7 +44,7 @@ extern "C" void* Pf_RegionPairCache_Build();                                    
 extern void  Pf_FlushDirtyChunks_8a90(int64_t param_1);                                // 0x1400a8a90
 
 extern "C" void Region_Seed(void* gameObjV, int dim) {
-    if (!gameObjV || dim <= 0 || !fn_MemAlloc) return;
+    if (!gameObjV || dim <= 0) return;
 
     uint8_t* map = reinterpret_cast<uint8_t*>(gameObjV);   // the Map/Game object (gameWorld+0xf8)
     if (*reinterpret_cast<void**>(map + 0x70) != nullptr) return;   // already built
@@ -54,7 +55,7 @@ extern "C" void Region_Seed(void* gameObjV, int dim) {
     if (coarseDim <= 0) return;
 
     // 1) allocate + construct the region graph (e8c0: MemAlloc(0x108,4) -> 8670).
-    void* graphV = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 4);
+    void* graphV = System::MemoryAllocator::MemAlloc(0x108, 4);
     if (!graphV) return;
     Pf_RegionGraphCtor_8670(reinterpret_cast<int*>(graphV), reinterpret_cast<int64_t>(map),
                             /*worker*/0, /*ctx*/0, static_cast<uint32_t>(coarseDim), coarseDim);

@@ -28,6 +28,7 @@
 
 #include "Game/PathfinderThread.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <new>
@@ -113,8 +114,7 @@ static void GridCtor(uint8_t* g, int dim) {
     *reinterpret_cast<int*>(g + 0xd0)       = 0;
     *reinterpret_cast<uint16_t*>(g + 0xd4)  = 0;
     *reinterpret_cast<uint8_t*>(g + 0xd6)   = 0;
-    void* flags = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                                            static_cast<uint64_t>(dim) * static_cast<uint64_t>(dim), 4) : nullptr;
+    void* flags = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(dim) * static_cast<uint64_t>(dim), 4);
     *reinterpret_cast<void**>(g + 0xe0)     = flags;   // per-cell terrain-flag byte array
     *reinterpret_cast<int*>(g + 0xd8)       = dim;     // grid width
     for (int i = 0; i < 0x20; ++i)                     // grid cost array (all = 1)
@@ -124,7 +124,7 @@ static void GridCtor(uint8_t* g, int dim) {
 
 // Build + link the pathfinder. gameObj = *(g_pGameWorldSingleton+0xf8); dim = map width.
 extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
-    if (!gameObjV || dim <= 0 || !fn_MemAlloc) return;
+    if (!gameObjV || dim <= 0) return;
     uint8_t* game = reinterpret_cast<uint8_t*>(gameObjV);
     if (*reinterpret_cast<void**>(game + 0x68) != nullptr) return;   // already seeded
 
@@ -137,7 +137,7 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
         return;
     }
 
-    void* pfV = fn_MemAlloc(g_pMemAllocSingleton, 0x1f8, 4);
+    void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);
     if (!pfV) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(pfV);
 

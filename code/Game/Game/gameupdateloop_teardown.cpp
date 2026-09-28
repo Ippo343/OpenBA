@@ -36,6 +36,7 @@
 // frees the outer block. Trees ({root,count} pairs, 4-byte count store),
 // node chains and IBP payloads are NOT arrays and are untouched.
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include "address_registry.h"
 #include "options.h"         // Opt().teardownHeapCheck
@@ -82,7 +83,7 @@ inline void*&    P(void* base, int off)   { return *reinterpret_cast<void**>(B(b
 inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }
 inline int64_t&  I64(void* base, int off) { return *reinterpret_cast<int64_t*>(B(base) + off); }
 
-inline void MemFree(void* p) { if (p && fn_MemFreeStatic) fn_MemFreeStatic(p); }
+inline void MemFree(void* p) { if (p) System::MemoryAllocator::MemFree(p); }
 
 // B.3.2 bridge: the owning structs are still untyped bytes.
 inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }
@@ -211,7 +212,7 @@ extern "C" void TreeNodeFree_2df90(void* hdrV, void* nodeV) {
     if (!nodeV) return;
     TreeNodeFree_2df90(hdrV, P(nodeV, 0x20));
     TreeNodeFree_2df90(hdrV, P(nodeV, 0x28));
-    if (P(nodeV, 0x10) != nullptr && fn_InternalBasePtr_DeletePtr)
+    if (P(nodeV, 0x10) != nullptr)
         reinterpret_cast< ::Object::InternalBasePtr*>(B(nodeV) + 0x10)->DeletePtr();   // B.3.3 bridge
     MemFree(nodeV);
 }
@@ -225,7 +226,7 @@ extern "C" void IbpTree_Clear_2de90(void* hdrV) {
     if (root) {
         TreeNodeFree_2df90(hdrV, P(root, 0x20));
         TreeNodeFree_2df90(hdrV, P(root, 0x28));
-        if (P(root, 0x10) != nullptr && fn_InternalBasePtr_DeletePtr)
+        if (P(root, 0x10) != nullptr)
             reinterpret_cast< ::Object::InternalBasePtr*>(B(root) + 0x10)->DeletePtr();   // B.3.3 bridge
         MemFree(root);
     }
@@ -384,7 +385,7 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
     if (P(self, 0x28) != nullptr) {
         void* tool = P(self, 0x28);
         reinterpret_cast<Tool*>(tool)->Shutdown();   // B.3.x bridge (slot 5)
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(self + 0x28)->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(self + 0x28)->DeletePtr(
             );   // B.3.3 bridge
     }
 
@@ -421,7 +422,7 @@ extern "C" void Tutorial_Dtor_f8ff0(void* selfV) {
         uint8_t* node = P(self, 0x30) ? B(P(self, 0x30)) : nullptr;
         while (node && P(node, 0x18)) node = B(P(node, 0x18));
         while (node) {
-            if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(node + 0x08)->DeletePtr(
+            reinterpret_cast< ::Object::InternalBasePtr*>(node + 0x08)->DeletePtr(
                 );   // B.3.3 bridge
             uint8_t* right = P(node, 0x20) ? B(P(node, 0x20)) : nullptr;
             if (right) {
