@@ -286,17 +286,6 @@ extern "C" void RtGraphics_MaterialInstance_Setup(const MaterialInstance* self,
 // (reference_census_cannot_see_nonliteral_registrations.md).
 // ============================================================================
 
-int RtGraphicsWave21GfxbodyRegister() {
-    int count = 0;
-
-    RegisterRuntimeExport("??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_OperatorNew); ++count;
-    RegisterRuntimeExport("??2MaterialInstance@Graphics@@SAPEAX_K@Z",
-                          (void*)&RtGraphics_MaterialInstance_OperatorNew); ++count;
-
-    return count;   // 3
-}
-
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC — `Graphics::MaterialInstance::Setup`'s body,
 // whose live door is `RtGraphics_MaterialInstance_Setup` above.

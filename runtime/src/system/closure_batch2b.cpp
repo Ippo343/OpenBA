@@ -162,30 +162,17 @@ extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
     *self = ((packed ^ hdr) & 0xe0000000000ull) ^ hdr;
 }
 
-// Declared by the six sibling files of this batch.
-int RtClosure2bGraphicsRegister();
-int RtClosure2bSaveRegister();
-
 // ============================================================================
-// Registration — the one hook standalone/resolve_standalone.cpp calls.
-//
-// Unconditional: DIRECTION.md §2.3, "a port registers unconditionally".
-//
-// Every address is a LITERAL so tools/runtime_census.py can see it
-// (reference_census_cannot_see_nonliteral_registrations.md).
+// The hook standalone/resolve_standalone.cpp calls.
 // ============================================================================
 void RtClosureBatch2bPortInit() {
     // B3R W0-A0 (R3): the rows for ??3MaterialInstance@Graphics@@ (0x1800028a0),
     // ??3ImageBuffer@Video@@ (0x18001e990), ??3PackageFile@IO@@ (0x1800251e0),
     // the operator new copy 0x180011640 and LinkPrevBlock 0x180034d60 had NO
     // reader by name or by address and are deleted; their bodies above stay
-    // (provenance, R3). 0x180061ae0 keeps its row: wave28_lane_partsys.cpp
-    // reads it by address.
-
-    const int g = RtClosure2bGraphicsRegister();
-    const int s = RtClosure2bSaveRegister();
-
-    // B3R RT-Core: the video and io registrars were empty and went.
-    printf("[RtPort]   cutover closure batch 2b: 0 system + %d graphics + %d save\n",
-           g, s);
+    // (provenance, R3).
+    // B3R W2-RT: the graphics (0x18001be60) and save (0x180032f70) registrars
+    // went with their last rows, which had no reader. This registers nothing
+    // and stays defined only because RuntimePortInit() still calls it (the
+    // coordinator removes that call).
 }

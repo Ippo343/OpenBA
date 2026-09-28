@@ -937,19 +937,17 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
 int RtGraphicsRendererRegister() {
     int count = 0;
 
+    // B3R W2-RT: the three address rows (0x1800fe960, 0x180105180,
+    // 0x1800180a0) and the ??1Renderer name row had no reader and went. The two
+    // names below stay while engine_funcs.cpp reads them.
+
     // --- Graphics::Camera ------------------------------------------------------
     RegisterRuntimeExport("??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z",
                           (void*)&RtGraphics_Camera_Ctor); ++count;
-    RegisterRuntimeAddr(0x1800fe960, (void*)&RtGraphics_Camera_Ctor);
 
     // --- Graphics::Renderer ----------------------------------------------------
     RegisterRuntimeExport("??0Renderer@Graphics@@QEAA@XZ",
                           (void*)&RtGraphics_Renderer_Ctor); ++count;
-    RegisterRuntimeAddr(0x180105180, (void*)&RtGraphics_Renderer_Ctor);
-
-    RegisterRuntimeExport("??1Renderer@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_Renderer_Dtor); ++count;
-    RegisterRuntimeAddr(0x1800180a0, (void*)&RtGraphics_Renderer_Dtor);
 
     return count;
 }
