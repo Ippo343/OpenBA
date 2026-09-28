@@ -72,22 +72,22 @@ const RtSysMemPlatform kWin32 = {
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// The six exported Platform* members, byte-faithful.
+// The six exported Platform* members, byte-faithful (B3R W0-A0: members of
+// System::MemoryAllocator; they were free functions with `self` explicit).
 // ---------------------------------------------------------------------------
-namespace rtalloc_win {
 
 // 0x1800c7b30 — the ctor inlines exactly this one store.
-void PlatformConstruct(MemoryAllocator* self) { self->pageSize = 0; }
+void MemoryAllocator::PlatformConstruct() { pageSize = 0; }
 
 // 0x1800c7b50 / 0x1800c7c70 — `ret`.
-void PlatformDestruct(MemoryAllocator* /*self*/) {}
-void PlatformShutdown(MemoryAllocator* /*self*/) {}
+void MemoryAllocator::PlatformDestruct() {}
+void MemoryAllocator::PlatformShutdown() {}
 
 // 0x1800c7c40 — Startup inlines exactly this.
-bool PlatformStartup(MemoryAllocator* self) {
+bool MemoryAllocator::PlatformStartup() {
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    self->pageSize = si.dwPageSize;
+    pageSize = si.dwPageSize;
     return true;
 }
 
@@ -96,8 +96,8 @@ bool PlatformStartup(MemoryAllocator* self) {
 //                            PAGE_READWRITE)
 // The flag word in the listing is `-(uint)commitToo & 0x1000 | 0x2000`, i.e.
 // MEM_RESERVE always and MEM_COMMIT only when the bool is set.
-void* PlatformAllocate(MemoryAllocator* self, uint64_t bytes, void* at, bool commitToo) {
-    uint64_t page = self->pageSize;
+void* MemoryAllocator::PlatformAllocate(uint64_t bytes, void* at, bool commitToo) {
+    uint64_t page = pageSize;
     uint64_t n = ((bytes - 1 + page) / page) * page;
     return VirtualAlloc(at, (SIZE_T)n,
                         (commitToo ? MEM_COMMIT : 0u) | MEM_RESERVE,
@@ -106,10 +106,21 @@ void* PlatformAllocate(MemoryAllocator* self, uint64_t bytes, void* at, bool com
 
 // 0x1800c7bb0 — VirtualFree(p, 0, MEM_RELEASE). The size argument is ignored,
 // which is correct for MEM_RELEASE and is what retail passes.
-void PlatformFree(MemoryAllocator* /*self*/, void* p, uint64_t /*bytes*/) {
+void MemoryAllocator::PlatformFree(void* p, uint64_t /*bytes*/) {
     VirtualFree(p, 0, MEM_RELEASE);
 }
 
+// Registration thunks (`self` in RCX, as the rows' callers pass it). They exist
+// only for the six RegisterRuntimeExport rows below and die with them (W2).
+namespace rtalloc_win {
+void  PlatformConstruct(MemoryAllocator* self)  { self->PlatformConstruct(); }
+void  PlatformDestruct(MemoryAllocator* self)   { self->PlatformDestruct(); }
+void  PlatformShutdown(MemoryAllocator* self)   { self->PlatformShutdown(); }
+bool  PlatformStartup(MemoryAllocator* self)    { return self->PlatformStartup(); }
+void* PlatformAllocate(MemoryAllocator* self, uint64_t bytes, void* at, bool commitToo) {
+    return self->PlatformAllocate(bytes, at, commitToo);
+}
+void  PlatformFree(MemoryAllocator* self, void* p, uint64_t bytes) { self->PlatformFree(p, bytes); }
 }  // namespace rtalloc_win
 
 // ---------------------------------------------------------------------------
