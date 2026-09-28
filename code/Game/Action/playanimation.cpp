@@ -10,7 +10,8 @@
 
 #include "PlayAnimation.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActMv_* helpers
+#include "Game/exe_constants.h"  // kRdata_14017214c
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Game/force_work.h"   // ForceWork::Readable — VirtualQuery-backed crash-safe probe
 #include <cstdio>
@@ -21,47 +22,11 @@
 #include "Entity/ComponentEntity.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- PlayAnimation-specific helpers)
+// Helpers, called by name (B3R)
+//   0x1400012d0 ActMv_FindComponentFamily_12d0 (Entity_FindComponent_Family)
+//   0x14010a1f0 ActMv_SetAnimation_a1f0 -- set animation on family component
+// DAT_14017214c (1.0f, the animation-setup float) is kRdata_14017214c (Game/exe_constants.h).
 // ============================================================
-
-// Entity_FindComponent_Family (0x1400012d0)
-static void (*s_fn_FindFamily)(void* entity, void* outIBP) = nullptr;
-
-// FUN_14010a1f0 -- set animation on family component
-static void (*s_fn_SetAnimation)(void* familyComp, uint32_t animId, float p1, float p2) = nullptr;
-
-// DAT_14017214c -- float constant used in animation setup
-static float* s_AnimFloat = nullptr;
-
-static bool s_playanimation_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool PlayAnimation_ResolveFuncs() {
-    if (s_playanimation_funcs_resolved) return true;
-
-    s_AnimFloat = (float*)ResolveAddr(Module::Exe, 0x14017214c);
-    s_fn_FindFamily = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400012d0));
-    s_fn_SetAnimation = reinterpret_cast<void(*)(void*, uint32_t, float, float)>(
-        ResolveAddr(Module::Exe, 0x14010a1f0));
-
-    bool ok = s_AnimFloat &&
-              s_fn_FindFamily && s_fn_SetAnimation &&
-              fn_IsDerivedFrom;
-
-#ifdef _DEBUG
-    printf("[PlayAnimation] ResolveFuncs: FindFamily=%p SetAnim=%p AnimFloat=%p\n",
-           (void*)s_fn_FindFamily,
-           (void*)s_fn_SetAnimation, (void*)s_AnimFloat);
-    if (!ok) printf("[PlayAnimation] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_playanimation_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // PlayAnimation::Serialize (0x140042480)
@@ -69,7 +34,6 @@ bool PlayAnimation_ResolveFuncs() {
 //   Time(+0x30), Time(+0x38)
 // ============================================================
 void PlayAnimation::Persist(void* stream) {
-    PlayAnimation_ResolveFuncs();   // lazy-resolve: action may be built inline by ba6b0, not our ctor
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -81,7 +45,7 @@ void PlayAnimation::Persist(void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field20, ComponentEntity::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -148,7 +112,6 @@ static bool PlayAnim_TargetLooksLive(void* target) {
 }
 
 int  PlayAnimation::AbstractImpl(void* actionStack) {
-    PlayAnimation_ResolveFuncs();
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     void* localIBP;
@@ -160,11 +123,11 @@ int  PlayAnimation::AbstractImpl(void* actionStack) {
     if (!PlayAnim_TargetLooksLive(target)) {
         return 0;   // stale/unregistered target — abort like retail's invalidated-null path
     }
-    s_fn_FindFamily(target, &localIBP);
+    ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(target), &localIBP);   // 0x1400012d0
     if (localIBP == nullptr) {
         return 0;
     }
-    s_fn_SetAnimation(localIBP, *(uint32_t*)(s + 0x28), *s_AnimFloat, *s_AnimFloat);
+    ActMv_SetAnimation_a1f0(localIBP, *(uint32_t*)(s + 0x28), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
     return 1;
 }
 
@@ -175,7 +138,6 @@ int  PlayAnimation::AbstractImpl(void* actionStack) {
 //   return (self->_field38 < self->_field30);
 // ============================================================
 int  PlayAnimation::Execute(void* actionStack, void* time) {
-    PlayAnimation_ResolveFuncs();
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     int64_t elapsed = *(int64_t*)time;
@@ -188,7 +150,6 @@ int  PlayAnimation::Execute(void* actionStack, void* time) {
 // Returns true if param matches entity at +0x20.
 // ============================================================
 bool PlayAnimation::GetTarget(void* param) {
-    PlayAnimation_ResolveFuncs();
     return _field20 == *(void**)param;
 }
 
@@ -217,13 +178,11 @@ void PlayAnimation::CheckEntity() {}
 // [9] 0x1400423b0
 
 void* PlayAnimation::CreateNewObject() {
-    PlayAnimation_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(PlayAnimation), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PlayAnimation());
 }
 void* PlayAnimation::CreateInPlaceObject(void* storage) {
-    PlayAnimation_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PlayAnimation());
 }

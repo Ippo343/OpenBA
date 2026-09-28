@@ -14,7 +14,8 @@
 // by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 batch K1
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActCNR_* helpers
+#include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -23,64 +24,16 @@
 #include "Entity/ComponentEntity.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h — AnimateNaturalResource-specific helpers)
+// Helpers, called by name (B3R)
+//   0x1400052c0 WorkBase_FindComponent_52c0 — get NaturalResourceComponent from entity
+//   0x140126440 ActCNR_SetAnimIndex_126440  — set animation index on NaturalResourceComponent
+//   0x140003f60 ActCNR_FindComponent_3f60   — get ModelComponent from entity
 // ============================================================
-
-// FUN_1400052c0 — get NaturalResourceComponent from entity
-static void* (*s_fn_GetNRComp)(void* entity, void* outIBP) = nullptr;
-
-// FUN_140126440 — set animation index on NaturalResourceComponent
-static void (*s_fn_SetAnimIndex)(void* nrComp, uint32_t animIdx) = nullptr;
-
-// FUN_140003f60 — get ModelComponent from entity
-static void* (*s_fn_GetModelComp)(void* entity, void* outIBP) = nullptr;
-
-static bool s_funcs_resolved = false;
-
-// ============================================================
-// Resolution — called once from Install
-// ============================================================
-bool AnimateNaturalResource_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-    // Component lookup functions
-    s_fn_GetNRComp = reinterpret_cast<void*(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-    s_fn_SetAnimIndex = reinterpret_cast<void(*)(void*, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x140126440));
-    s_fn_GetModelComp = reinterpret_cast<void*(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x140003f60));
-
-    // ENDGAME B.3.5 batch K1: the `Graphics::MeshInstance::IsAnimating` cache that
-    // used to be read out of exe dispatch slot 0x1401514b0 went with its one caller
-    // in Execute, which now calls the member.
-
-    bool ok = s_fn_GetNRComp && s_fn_SetAnimIndex &&
-              s_fn_GetModelComp &&
-              fn_IsDerivedFrom &&
-              fn_InternalBasePtr_DeletePtr && fn_MemFreeStatic;
-
-#ifdef _DEBUG
-    printf("[AnimateNaturalResource] ResolveFuncs: GetNR=%p SetAnim=%p GetModel=%p\n",
-           (void*)s_fn_GetNRComp,
-           (void*)s_fn_SetAnimIndex, (void*)s_fn_GetModelComp);
-    if (!ok) printf("[AnimateNaturalResource] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
-
 // ============================================================
 // Serialize (0x1400c5660, vtable slot 3)
 // Serializes status, entity ref with type check, animIndex, waitForAnim.
 // ============================================================
 void AnimateNaturalResource::Persist(void* stream) {
-    // Reached through the registered vtable, which the factory path never
-    // has to touch — an exe-ctor-built action arrives here with the file
-    // statics still null. Lazy-resolve like the other entry points do.
-    AnimateNaturalResource_ResolveFuncs();
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
@@ -95,7 +48,7 @@ void AnimateNaturalResource::Persist(void* stream) {
     // Entity ref (+0x20) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(this->_field20, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(this->_field20, ComponentEntity::TypeId())) {
             this->_field20 = nullptr;
         }
     }
@@ -115,12 +68,11 @@ void AnimateNaturalResource::Persist(void* stream) {
 // Returns waitForAnim flag.
 // ============================================================
 int  AnimateNaturalResource::AbstractImpl(void* actionStack) {
-    AnimateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
 
     void* localIBP;
-    s_fn_GetNRComp(this->_field20, &localIBP);
-    s_fn_SetAnimIndex(localIBP, (uint32_t)this->animIndex);
+    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(this->_field20), &localIBP);   // 0x1400052c0
+    ActCNR_SetAnimIndex_126440(reinterpret_cast<int64_t>(localIBP), (uint32_t)this->animIndex);   // 0x140126440
 
     return (this->waitForAnim != 0) ? 1 : 0;
 }
@@ -134,7 +86,7 @@ int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
     (void)time;
 
     void* localIBP[4] = {nullptr, nullptr, nullptr, nullptr};
-    s_fn_GetModelComp(this->_field20, localIBP);
+    ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(this->_field20), localIBP);   // 0x140003f60
 
     // Standalone-inert guard: on a tree whose ModelComponent find resolves null (inert
     // resource-entity render layer, unfilled type-id global), report "not animating" so the
@@ -152,7 +104,6 @@ int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
 // Returns true if param matches entity at +0x20.
 // ============================================================
 bool AnimateNaturalResource::GetTarget(void* param) {
-    AnimateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     return this->_field20 == *(void**)param;
 }
 
@@ -190,13 +141,11 @@ void AnimateNaturalResource::CheckEntity() {}
 // [9] 0x1400c5560
 
 void* AnimateNaturalResource::CreateNewObject() {
-    AnimateNaturalResource_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(AnimateNaturalResource), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AnimateNaturalResource());
 }
 void* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
-    AnimateNaturalResource_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AnimateNaturalResource());
 }

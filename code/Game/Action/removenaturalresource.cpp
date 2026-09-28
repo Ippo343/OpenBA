@@ -28,7 +28,8 @@
 
 #include "RemoveNaturalResource.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActCNR_*, ActHunt_* helpers
+#include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdlib>
@@ -40,80 +41,23 @@
 #include "Entity/ComponentEntity.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h — RemoveNaturalResource-specific helpers)
-// ============================================================
-
-
-// Object::InternalBasePtr::DeletePtr — clears entity ref during dtor
-static void (*s_fn_IBP_DeletePtr)(void* self) = nullptr;
-
-// FUN_1400052c0 — FindComponent by type DAT_1401c7b30 (NaturalResourceComponent)
-// RCX=entity, RDX=outIBP
-typedef void* (*s_fn_FindNRComp_t)(void* entity, void* outIBP);
-static s_fn_FindNRComp_t s_fn_FindNRComp = nullptr;
-
-// FUN_1400c3470 — notify entity changed (triggers visual update)
-static void (*s_fn_NotifyEntityChanged)(void* entity) = nullptr;
-
-// FUN_1401260f0 — remove natural resource helper
-// Params: natResComp, citizenEntity IBP, harvestFlag
-typedef void (*s_fn_RemoveNatRes_t)(void* natResComp, void* citizenIBP, char harvestFlag);
-static s_fn_RemoveNatRes_t s_fn_RemoveNatRes = nullptr;
-
+// Helpers, called by name (B3R)
+//   0x1400052c0 WorkBase_FindComponent_52c0 -- FindComponent by type DAT_1401c7b30
+//               (NaturalResourceComponent); RCX=entity, RDX=outIBP
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470 -- notify entity changed (visual update)
+//   0x1401260f0 ActCNR_RemoveNatRes_1260f0 -- remove natural resource helper
+//               (natResComp, citizenEntity IBP, harvestFlag)
+//
 // ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
 // slot (0x1401c60c0 = the NAME field (+8) of RemoveNaturalResource's record, read by
 // RemoveNaturalResource_Slot1 0x140022f60); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
-
-static bool s_funcs_resolved = false;
-
 // ============================================================
-// Resolution — called once from Install
-// ============================================================
-bool RemoveNaturalResource_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-
-    // InternalBasePtr::DeletePtr
-    s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
-
-    // FUN_1400052c0 — FindComponent (NaturalResourceComponent)
-    s_fn_FindNRComp = (s_fn_FindNRComp_t)ResolveAddr(Module::Exe, 0x1400052c0);
-
-    // FUN_1400c3470 — notify entity changed
-    s_fn_NotifyEntityChanged = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c3470);
-
-    // FUN_1401260f0 — remove natural resource
-    s_fn_RemoveNatRes = (s_fn_RemoveNatRes_t)ResolveAddr(Module::Exe, 0x1401260f0);
-
-    bool ok = s_fn_IBP_DeletePtr &&
-              s_fn_FindNRComp &&
-              s_fn_NotifyEntityChanged && s_fn_RemoveNatRes &&
-              fn_IsDerivedFrom &&
-              fn_MemFreeStatic && g_pGameWorldSingleton;
-
-#ifdef _DEBUG
-    printf("[RemoveNaturalResource] ResolveFuncs: IBPDel=%p FindNR=%p\n",
-           (void*)s_fn_IBP_DeletePtr,
-           (void*)s_fn_FindNRComp);
-    printf("[RemoveNaturalResource]   NotifyChanged=%p RemoveNR=%p\n",
-           (void*)s_fn_NotifyEntityChanged, (void*)s_fn_RemoveNatRes);
-    if (!ok) printf("[RemoveNaturalResource] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Serialize (0x1400cac50)
 // Serializes: status(+0x18), entity(+0x20) with type check, entity(+0x28) with type check, bool(+0x30)
 // ============================================================
 void RemoveNaturalResource::Persist(void* stream) {
-    // Reached through the registered vtable, which the factory path never
-    // has to touch — an exe-ctor-built action arrives here with the file
-    // statics still null. Lazy-resolve like the other entry points do.
-    RemoveNaturalResource_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -129,7 +73,7 @@ void RemoveNaturalResource::Persist(void* stream) {
     // Serialize citizen entity ref (+0x20)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field20, CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -137,7 +81,7 @@ void RemoveNaturalResource::Persist(void* stream) {
     // Serialize resource entity ref (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(_field28, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field28, ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }
@@ -154,13 +98,12 @@ void RemoveNaturalResource::Persist(void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
-    RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     void* nrCompIBP = nullptr;
 
     // Get NaturalResourceComponent from resource entity at +0x28
-    s_fn_FindNRComp(_field28, &nrCompIBP);
+    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(_field28), &nrCompIBP);   // 0x1400052c0
 
     // Standalone-safety: the NR component find can resolve null when the action's target
     // (+0x28) is not wired to a live tree entity. In retail it is always a valid natural
@@ -177,7 +120,7 @@ int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
     void* descObj = *(void**)(nrComp + 0x18);
 
     // Check if description is NaturalResourceDescription type
-    bool isNatResDesc = fn_IsDerivedFrom(descObj, NaturalResourceDescription::TypeId());
+    bool isNatResDesc = ::Object::IsDerivedFromNullSafe(descObj, NaturalResourceDescription::TypeId());
     void* natResDesc = isNatResDesc ? descObj : nullptr;
 
     // Check if the resource has an owner and it's not the town owner
@@ -213,7 +156,7 @@ int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
 
     // Call the removal helper
     nrComp = (uintptr_t)nrCompIBP;
-    s_fn_RemoveNatRes((void*)nrComp, &workEntityIBP, *(char*)(s + 0x30));
+    ActCNR_RemoveNatRes_1260f0((int64_t)nrComp, &workEntityIBP, *(char*)(s + 0x30));   // 0x1401260f0
 
     return 0;
 }
@@ -223,10 +166,9 @@ int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
 // Clears "in use" bit (bit 20) on entity's model component at +0x28.
 // ============================================================
 void RemoveNaturalResource::CheckEntity() {
-    RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     void* localIBP[4];
 
-    s_fn_FindNRComp(_field28, localIBP);
+    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(_field28), localIBP);   // 0x1400052c0
 
     uint8_t* modelComp = (uint8_t*)(localIBP[0]);
     if (!modelComp) return;   // [standalone] NR component not found -> nothing to clear
@@ -237,7 +179,7 @@ void RemoveNaturalResource::CheckEntity() {
     if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
         void* parent = *(void**)(modelComp + 0x10);
         if (parent != nullptr) {
-            s_fn_NotifyEntityChanged(*(void**)(modelComp + 0x10));
+            ActHunt_NotifyEntityChanged_c3470(*(void**)(modelComp + 0x10));   // 0x1400c3470
         }
     }
 }
@@ -247,7 +189,6 @@ void RemoveNaturalResource::CheckEntity() {
 // Returns true if param matches entity at +0x28 or entity at +0x20's parent.
 // ============================================================
 bool RemoveNaturalResource::GetTarget(void* param) {
-    RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     void* entity28 = _field28;
@@ -283,13 +224,11 @@ RemoveNaturalResource::RemoveNaturalResource()
 // [9] 0x1400caa20
 
 void* RemoveNaturalResource::CreateNewObject() {
-    RemoveNaturalResource_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(RemoveNaturalResource), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RemoveNaturalResource());
 }
 void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
-    RemoveNaturalResource_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RemoveNaturalResource());
 }

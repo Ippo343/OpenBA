@@ -24,7 +24,10 @@
 
 #include "PerformWork.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActMv_* helpers
+#include "Game/exe_constants.h"  // kRdata_*
+#include "math/Math.h"           // Math::Vector3::FromYawPitch, Math::Scalar
+#include <cstring>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdio>
@@ -35,141 +38,34 @@
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- PerformWork-specific helpers)
-// ============================================================
-
-// Object::InternalBasePtr::DeletePtr -- via export
-static void (*s_fn_IBP_DeletePtr)(void* ibp) = nullptr;
-
-
-// Entity_FindComponent_Family (0x1400012d0)
-static void* (*s_fn_FindFamily)(void* entity, void* outIBP) = nullptr;
-
-// AnimalComponent_impl_a1f0 -- SetAnimation (0x14010a1f0)
-// Params: (familyComponent, animId, param3, param4)
-static void (*s_fn_SetAnimation)(void* familyComp, uint32_t animId, float p3, float p4) = nullptr;
-
-// PerformWork_helper_a060 -- SetFacingDirection (0x14010a060)
-// Params: (familyComponent, vector3)
-static void (*s_fn_SetFacingDirection)(void* familyComp, void* vector3) = nullptr;
-
-// Math::Vector3::FromYawPitch -- via dispatch slot at 0x1401512a0
-// Params: (retbuf, yaw_ptr, pitch_ptr) -- returns retbuf
-typedef void* (*fn_FromYawPitch_t)(void* retbuf, float* yaw, float* pitch);
-static fn_FromYawPitch_t s_fn_FromYawPitch = nullptr;
-
-// PerformWork_helper_6650 -- citizen break check (0x140116650)
-// Params: (entity) -- returns bool (true = needs break)
-typedef uint8_t (*fn_CitizenBreakCheck_t)(void* entity);
-static fn_CitizenBreakCheck_t s_fn_CitizenBreakCheck = nullptr;
-
-// DAT_14017214c -- float constant 1.0f
-static float* s_fConst1 = nullptr;
-
-// DAT_1401722a0 -- float constant -180.0f (yaw lower bound)
-static float* s_fYawMin = nullptr;
-
-// DAT_140172220 -- float constant 180.0f (yaw upper bound)
-static float* s_fYawMax = nullptr;
-
+// Helpers, called by name (B3R)
+//   0x1400012d0 ActMv_FindComponentFamily_12d0 (Entity_FindComponent_Family)
+//   0x14010a1f0 ActMv_SetAnimation_a1f0 (AnimalComponent_impl_a1f0) -- SetAnimation
+//               (familyComponent, animId, param3, param4)
+//   0x14010a060 ActMv_SetFacingDirection_a060 (PerformWork_helper_a060) -- SetFacingDirection
+//               (familyComponent, vector3)
+//   import slot 0x1401512a0 ?FromYawPitch@Vector3@Math@@ -> Math::Vector3::FromYawPitch
+//   0x140116650 ActMv_CitizenBreakCheck_116650 (PerformWork_helper_6650) -- citizen break
+//               check (entity) -- returns bool (true = needs break)
+//
+// Float constants (Game/exe_constants.h): 0x14017214c = 1.0f, 0x1401722a0 = -180.0f
+// (yaw lower bound), 0x140172220 = 180.0f (yaw upper bound).
+//
 // TypeInfo for IsDerivedFrom check in Serialize -- cell 0x1401c7158, read directly
 // through CitizenComponent::TypeId() (D5, ENDGAME B.3.9 CG3). The env-gated
 // TypeId_CitizenComponent_FC / by-name fallback pair this used to juggle read the
 // SAME cell and always agreed (verified in the 2026-08-26 graduation A/B), so there
 // is nothing left to fall back to.
-
+//
 // ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
 // slot (0x1401c5fe0 = the NAME field (+8) of PerformWork's record, read by
 // PerformWork_Slot1 0x140022b80); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
-
-static bool s_funcs_resolved = false;
-
 // ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool PerformWork_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
 
-    // IBP::DeletePtr
-    s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
-
-
-    // FindFamily (0x1400012d0)
-    s_fn_FindFamily = reinterpret_cast<void*(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400012d0));
-
-    // SetAnimation (0x14010a1f0)
-    s_fn_SetAnimation = reinterpret_cast<void(*)(void*, uint32_t, float, float)>(
-        ResolveAddr(Module::Exe, 0x14010a1f0));
-
-    // SetFacingDirection (0x14010a060)
-    s_fn_SetFacingDirection = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x14010a060));
-
-    // Math::Vector3::FromYawPitch via dispatch slot at [0x1401512a0]
-    uintptr_t iatFromYaw = ResolveAddr(Module::Exe, 0x1401512a0);
-    if (iatFromYaw) s_fn_FromYawPitch = *reinterpret_cast<fn_FromYawPitch_t*>(iatFromYaw);
-
-    // Citizen break check (0x140116650)
-    s_fn_CitizenBreakCheck = reinterpret_cast<fn_CitizenBreakCheck_t>(
-        ResolveAddr(Module::Exe, 0x140116650));
-
-    // Float constants. In STANDALONE mode ResolveAddr(Module::Exe, dataAddr) returns
-    // NULL for raw .rdata floats that aren't in the address registry (see
-    // reference_standalone_rdata_null_fallback), so fall back to the real values read
-    // from the exe .rdata: 0x14017214c=1.0 (g_fUVScale), 0x1401722a0=-180.0 (yaw min),
-    // 0x140172220=180.0 (yaw max). Without the fallback, AbstractImpl's yaw-range check
-    // (`yaw >= *s_fYawMin`) dereferences a null pointer — the crash hit the first time a
-    // forester organically arrived at a tree and its chop PerformWork precheck ran.
-    static float s_fbConst1 = 1.0f, s_fbYawMin = -180.0f, s_fbYawMax = 180.0f;
-    s_fConst1 = (float*)ResolveAddr(Module::Exe, 0x14017214c);
-    if (!s_fConst1) s_fConst1 = &s_fbConst1;
-    s_fYawMin = (float*)ResolveAddr(Module::Exe, 0x1401722a0);
-    if (!s_fYawMin) s_fYawMin = &s_fbYawMin;
-    s_fYawMax = (float*)ResolveAddr(Module::Exe, 0x140172220);
-    if (!s_fYawMax) s_fYawMax = &s_fbYawMax;
-
-    bool ok = s_fn_IBP_DeletePtr &&
-              s_fn_FindFamily &&
-              s_fn_SetAnimation && s_fn_SetFacingDirection &&
-              s_fn_FromYawPitch && s_fn_CitizenBreakCheck &&
-              s_fConst1 && s_fYawMin && s_fYawMax &&
-              fn_IsDerivedFrom && fn_MemFreeStatic;
-
-#ifdef _DEBUG
-    // Report the OUTCOME, not the intent: name the pointers that are actually null.
-    // This block used to dump three fixed lines every call and then print a bare
-    // "some function pointers not resolved!" — and because ResolveFuncs is called from
-    // every vtable slot and only caches on success, that ran on every action tick.
-    // Print once, and only the missing names.
-    if (!ok) {
-        static bool s_reported = false;
-        if (!s_reported) {
-            s_reported = true;
-            struct { const char* name; const void* p; } kDeps[] = {
-                { "IBP_DeletePtr",         (const void*)s_fn_IBP_DeletePtr },
-                { "FindFamily",            (const void*)s_fn_FindFamily },
-                { "SetAnimation",          (const void*)s_fn_SetAnimation },
-                { "SetFacingDirection",    (const void*)s_fn_SetFacingDirection },
-                { "FromYawPitch",          (const void*)s_fn_FromYawPitch },
-                { "CitizenBreakCheck",     (const void*)s_fn_CitizenBreakCheck },
-                { "fConst1",               (const void*)s_fConst1 },
-                { "fYawMin",               (const void*)s_fYawMin },
-                { "fYawMax",               (const void*)s_fYawMax },
-                { "IsDerivedFrom",         (const void*)fn_IsDerivedFrom },
-                { "MemFreeStatic",         (const void*)fn_MemFreeStatic },
-            };
-            for (const auto& d : kDeps)
-                if (!d.p) fprintf(stderr, "[PerformWork] UNRESOLVED: %s\n", d.name);
-            fflush(stderr);
-        }
-    }
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
+namespace {
+// The .rdata float constants (Game/exe_constants.h) that are stored as bit patterns.
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+}  // namespace
 
 // ============================================================
 // PerformWork::Serialize (0x1400C9550)
@@ -177,7 +73,6 @@ bool PerformWork_ResolveFuncs() {
 //   float(+0x28), int(+0x2C), Time(+0x30), Time(+0x38), bool(+0x40), int(+0x44)
 // ============================================================
 void PerformWork::Persist(void* stream) {
-    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -193,7 +88,7 @@ void PerformWork::Persist(void* stream) {
     // Serialize work target entity ref (+0x20)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (workTarget != nullptr) {
-        if (!fn_IsDerivedFrom(workTarget, CitizenComponent::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(workTarget, CitizenComponent::TypeId())) {
             workTarget = nullptr;
         }
     }
@@ -224,7 +119,6 @@ void PerformWork::Persist(void* stream) {
 // Always returns 1 (action stays active, Execute checks completion).
 // ============================================================
 int  PerformWork::AbstractImpl(void* actionStack) {
-    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
@@ -234,11 +128,11 @@ int  PerformWork::AbstractImpl(void* actionStack) {
     // Get family component from entity's +0x278 field and set animation
     uint8_t* ent = (uint8_t*)entity;
     void* familyComp = *(void**)(ent + 0x278);
-    s_fn_SetAnimation(familyComp, animId, *s_fConst1, 0.0f);
+    ActMv_SetAnimation_a1f0(familyComp, animId, kRdata_14017214c, 0.0f);   // 0x14010a1f0
 
     // If yaw is in valid range [-180, 180], set facing direction
     float yaw = facingYaw;
-    if (yaw >= *s_fYawMin && yaw <= *s_fYawMax) {
+    if (yaw >= RdataF(kRdata_1401722a0) && yaw <= kRdata_140172220) {
         float yawVal = yaw;
         float pitch = 0.0f;
 
@@ -249,13 +143,12 @@ int  PerformWork::AbstractImpl(void* actionStack) {
 
         // Find family component on the parent
         void* familyIBP = nullptr;
-        s_fn_FindFamily((void*)parentIBP, &familyIBP);
+        ActMv_FindComponentFamily_12d0(parentIBP, &familyIBP);   // 0x1400012d0
         void* familyPtr = *(void**)&familyIBP;
 
         // Convert yaw to direction vector and set it
-        uint8_t vector3Buf[24];  // Vector3 + Scalar temp
-        void* dirVec = s_fn_FromYawPitch(vector3Buf, &yawVal, &pitch);
-        s_fn_SetFacingDirection(familyPtr, dirVec);
+        Math::Vector3 dirVec = Math::Vector3::FromYawPitch(Math::Scalar(yawVal), Math::Scalar(pitch));
+        ActMv_SetFacingDirection_a060(familyPtr, &dirVec);   // 0x14010a060
     }
 
     // If use tool flag is set, decrement tool durability
@@ -281,7 +174,6 @@ int  PerformWork::AbstractImpl(void* actionStack) {
 // Returns: 0 = done, 1 = still working, 2 = needs break
 // ============================================================
 int  PerformWork::Execute(void* actionStack, void* time) {
-    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
     (void)actionStack;
 
     int64_t elapsed = elapsedTime;
@@ -290,7 +182,7 @@ int  PerformWork::Execute(void* actionStack, void* time) {
     if (elapsed >= required) {
         // Work time complete -- check if citizen needs a break
         void* entity = workTarget;
-        uint8_t needsBreak = s_fn_CitizenBreakCheck(entity);
+        uint8_t needsBreak = ActMv_CitizenBreakCheck_116650(entity);   // 0x140116650
         // If needs break, return 2; otherwise return 0 (done)
         return needsBreak ? 2 : 0;
     }
@@ -306,7 +198,6 @@ int  PerformWork::Execute(void* actionStack, void* time) {
 // Resets character animation to idle (animation 0, rate 1.0, 1.0).
 // ============================================================
 void PerformWork::Exit(void* actionStack) {
-    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
     (void)actionStack;
 
     // Get work target entity
@@ -315,7 +206,7 @@ void PerformWork::Exit(void* actionStack) {
     // Get family component at entity+0x278, reset animation to idle
     uint8_t* ent = (uint8_t*)entity;
     void* familyComp = *(void**)(ent + 0x278);
-    s_fn_SetAnimation(familyComp, 0, *s_fConst1, *s_fConst1);
+    ActMv_SetAnimation_a1f0(familyComp, 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
@@ -323,7 +214,6 @@ void PerformWork::Exit(void* actionStack) {
 // Identical to Exit: resets character animation to idle.
 // ============================================================
 void PerformWork::CheckEntity() {
-    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
 
     // Get work target entity
     void* entity = workTarget;
@@ -331,7 +221,7 @@ void PerformWork::CheckEntity() {
     // Get family component at entity+0x278, reset animation to idle
     uint8_t* ent = (uint8_t*)entity;
     void* familyComp = *(void**)(ent + 0x278);
-    s_fn_SetAnimation(familyComp, 0, *s_fConst1, *s_fConst1);
+    ActMv_SetAnimation_a1f0(familyComp, 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
@@ -339,7 +229,6 @@ void PerformWork::CheckEntity() {
 // Returns true if param matches the work target entity's parent (+0x10).
 // ============================================================
 bool PerformWork::GetTarget(void* param) {
-    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
 
     void* entity = workTarget;
     // Get parent entity at entity+0x10
@@ -378,13 +267,11 @@ PerformWork::PerformWork()
 // [9] 0x1400c92d0
 
 void* PerformWork::CreateNewObject() {
-    PerformWork_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(PerformWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PerformWork());
 }
 void* PerformWork::CreateInPlaceObject(void* storage) {
-    PerformWork_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PerformWork());
 }

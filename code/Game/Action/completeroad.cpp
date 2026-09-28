@@ -10,60 +10,25 @@
 
 #include "CompleteRoad.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // Pf_FinalizeRoadTile_9c640
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
 #include <new>
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- CompleteRoad-specific helpers)
+// Helpers, called by name (B3R)
+//   0x14009c640 Pf_FinalizeRoadTile_9c640 -- complete road tile (terrain*, tileIndex,
+//               direction, roadType)
+// DAT_1401c3dd8 (the game state singleton) is read through g_pGameWorldSingleton, the
+// engine_funcs global bound to the same cell.
 // ============================================================
-
-// FUN_14009c640 -- complete road tile
-// Params: terrain*, tileIndex, direction, roadType
-static void (*s_fn_CompleteRoadTile)(void* terrain, int tileIndex, uint8_t direction, uint32_t roadType) = nullptr;
-
-// DAT_1401c3dd8 -- game state singleton pointer
-static void** s_pGameState = nullptr;
-
-static bool s_completeroad_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool CompleteRoad_ResolveFuncs() {
-    if (s_completeroad_funcs_resolved) return true;
-
-    s_pGameState = (void**)ResolveAddr(Module::Exe, 0x1401c3dd8);
-    s_fn_CompleteRoadTile = reinterpret_cast<void(*)(void*, int, uint8_t, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x14009c640));
-    bool ok = s_pGameState && s_fn_CompleteRoadTile;
-
-#ifdef _DEBUG
-    printf("[CompleteRoad] ResolveFuncs: GameState=%p CompleteRoadTile=%p\n",
-           (void*)s_pGameState, (void*)s_fn_CompleteRoadTile);
-    if (!ok) printf("[CompleteRoad] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_completeroad_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // CompleteRoad::Serialize (0x1400c5880)
 // Serializes: status(+0x18), int(+0x20), uchar(+0x28), int(+0x24)
 // ============================================================
 void CompleteRoad::Persist(void* stream) {
-    // Lazy-resolve, same reason AbstractImpl does it. Every in-flight CompleteRoad is
-    // built by the COPY CTOR (0x1400c59d0, from work_act_perform.cpp), which bypasses
-    // both the factory and CompleteRoad_ResolveFuncs -- so on the save path these
-    // pointers were all still null and the first call was an EXEC of 0. It never
-    // surfaced before because no CompleteRoad action had ever existed to be saved:
-    // until roads started actually being built, the work item never got that far.
-    // Same hole BuildRoad_ScalarDtor_Impl documents for the BuildRoad ctor path.
-    CompleteRoad_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -88,16 +53,15 @@ void CompleteRoad::Persist(void* stream) {
 // ============================================================
 
 int CompleteRoad::AbstractImpl(void* actionStack) {                     // [4] 0x1400c5850
-    CompleteRoad_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    void* gameState = *s_pGameState;
+    void* gameState = *g_pGameWorldSingleton;
     void* terrain = *(void**)((uint8_t*)gameState + 0xf8);
 
-    s_fn_CompleteRoadTile(terrain,
-                          roadTileIndex,
-                          roadDirection,
-                          *(uint32_t*)(s + 0x24));
+    Pf_FinalizeRoadTile_9c640(static_cast<unsigned int*>(terrain),   // 0x14009c640
+                              roadTileIndex,
+                              roadDirection,
+                              *(uint32_t*)(s + 0x24));
     return 0;
 }
 
@@ -123,13 +87,11 @@ CompleteRoad::CompleteRoad(uint32_t roadTypeArg, uint32_t tileIndex, uint8_t dir
       roadDirection(direction) {}
 
 void* CompleteRoad::CreateNewObject() {
-    CompleteRoad_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(CompleteRoad), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CompleteRoad());
 }
 void* CompleteRoad::CreateInPlaceObject(void* storage) {
-    CompleteRoad_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CompleteRoad());
 }
