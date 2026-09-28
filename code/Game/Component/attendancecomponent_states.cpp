@@ -45,47 +45,26 @@
 // ControllerLive::TableController<AttendanceCtrlTag>, AttendanceComponent.h).
 #include "Component/AttendanceComponent.h"
 #include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c3f78 cell class
+#include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
 using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 
-// Ported in attendancecomponent.cpp — state 3's enter drains the waiting queue.
-extern void AttendanceComponent_ProcessQueue(void* self);
+// AttendanceComponent_ProcessQueue (attendancecomponent.cpp, declared in exe_bodies.h)
+// — state 3's enter drains the waiting queue.
 
-// ── Resolved engine helpers ───────────────────────────────────────────────────────
+// ── Engine helpers, called directly ───────────────────────────────────────────────
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
 // the exe (ENDGAME B.3.2 step 2) — the town-list append, converted at its call
 // site below to GameColl::AsArray<GameColl::Ptr8>(...).SetSizeFill(n, &fill).
 // 0x1400f72e0 Work_Ctor25(work, ownerEntityIBP)                — base Work ctor.
-// 0x140003050 FindComponent_Work(entity, outIBP)               — the citizen work ledger.
-// 0x140002e10 FindComponent_WorkPlace(entity, outIBP)          — WorkPlaceComponent.
-// 0x14012ec60 CitizenAI_impl_ec60(workComp, code, flag, workIBP) — post to the ledger.
-// 0x14012fc00 WorkPlace SetAccepting(wpc, accepting).
-// 0x140002f90 Entity_FindComponent_MeshInstance(entity, outIBP).
-// 0x14012c3f0 MeshInstance set-state-flag(mesh, flagIdx, value).
-typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* outIBP);
-typedef void  (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
-typedef void  (*fn_SetAccepting_t)(uintptr_t wpc, char accepting);
-typedef void  (*fn_MeshSetFlag_t)(void* mesh, uint8_t flagIdx, char value);
-
-static fn_FindComp_t     s_findWork     = nullptr;
-static fn_FindComp_t     s_findWpc      = nullptr;
-static fn_PostWork_t     s_postWork     = nullptr;
-static fn_SetAccepting_t s_setAccepting = nullptr;
-static fn_FindComp_t     s_findMesh     = nullptr;
-static fn_MeshSetFlag_t  s_meshSetFlag  = nullptr;
-static bool              s_resolved     = false;
+// 0x140003050 WorkBase_FindComponent_3050(entity, outIBP)       — the citizen work ledger.
+// 0x140002e10 AttendanceComponent_GetJobHostComponent(entity, outIBP) — WorkPlaceComponent.
+// 0x14012ec60 CitizenAI_WorkScheduler_Post(workComp, code, flag, workIBP) — post to the ledger.
+// 0x14012fc00 WorkPlaceComponent_SetAccepting(wpc, accepting).
+// 0x140002f90 WorkBase_FindComponent_2f90(entity, outIBP)       — MeshInstance.
+// 0x14012c3f0 CitizenComp_FUN_14012c3f0(mesh, flagIdx, value)  — MeshInstance set-state-flag.
 
 bool LocationWork_ResolveFuncs();   // code/Game/Work/locationwork.cpp
-
-static void AC_Resolve() {
-    if (s_resolved) return;
-    s_findWork     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_findWpc      = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_postWork     = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_setAccepting = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
-    s_findMesh     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002f90));
-    s_meshSetFlag  = reinterpret_cast<fn_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_resolved = true;
-}
 
 // The town attendance registry: gameWorld+0xf0 is the town object, +0x60 its array
 // base and +0x68 the element count. Both state 2's enter (append) and the component's
@@ -112,7 +91,6 @@ static uintptr_t AC_TownObject() {
 // the equality test on the line above already established that entry carries this exact
 // description pointer, so the cast cannot fail.
 extern "C" char AttendanceComponent_AllFull(void* selfP) {
-    AC_Resolve();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
     const uintptr_t town = AC_TownObject();
     if (!town) return 1;
@@ -142,12 +120,10 @@ extern "C" char AttendanceComponent_AllFull(void* selfP) {
 // the closed/full visual. This is the only per-frame work the attendance controller
 // does; there is no update handler on either state.
 static char Attendance_State2Frame(void* selfP, void* /*sm*/, void* /*time*/) {
-    AC_Resolve();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-    if (!s_findMesh || !s_meshSetFlag) return 0;
 
     uintptr_t meshIbp = 0;
-    s_findMesh(*reinterpret_cast<uintptr_t*>(self + 0x10), &meshIbp);
+    WorkBase_FindComponent_2f90(*reinterpret_cast<uintptr_t*>(self + 0x10), &meshIbp);
 
     const char full = AttendanceComponent_AllFull(selfP);
     // ⚠ Retail reads `*(longlong**)self` where `self` is the finder's RETURN value —
@@ -155,7 +131,7 @@ static char Attendance_State2Frame(void* selfP, void* /*sm*/, void* /*time*/) {
     // "load meshIbp". We already hold meshIbp by value, so there is nothing left to
     // dereference: adding retail's `*` here handed 12c3f0 the component's VTABLE and
     // it faulted reading -1 (see reference_outparam_finder_recycled_ibp).
-    s_meshSetFlag(reinterpret_cast<void*>(meshIbp), 2, full);
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(meshIbp), 2, full);
     return 0;
 }
 
@@ -174,7 +150,6 @@ static char Attendance_State2Frame(void* selfP, void* /*sm*/, void* /*time*/) {
 // HerbalistComponent's slot 18: this is a state ENTER handler that happens to build a
 // LocationWork, not LocationWork's constructor (that is 0x1400efc60).
 static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
-    AC_Resolve();
     LocationWork_ResolveFuncs();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
 
@@ -206,17 +181,17 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     // 3. post it to the citizen work ledger
-    if (s_findWork && s_postWork) {
+    {
         uintptr_t workCompIbp = 0;
-        s_findWork(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
-        s_postWork(workCompIbp, 1, '\0', &workIbp);
+        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
+        CitizenAI_WorkScheduler_Post(workCompIbp, 1, '\0', &workIbp);
     }
 
     // 4. open the workplace
-    if (s_findWpc && s_setAccepting) {
+    {
         uintptr_t wpcIbp = 0;
-        s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
-        s_setAccepting(wpcIbp, '\x01');
+        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIbp), true);
     }
 
     return 0;
@@ -231,17 +206,16 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
 // that is what retail does and because slot 7 is installed in the same wave — if it
 // ever regressed to the inert stub, a direct call here would hide it.
 static char Attendance_State3Enter(void* selfP, void* /*sm*/) {
-    AC_Resolve();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
 
     reinterpret_cast<AttendanceComponent*>(selfP)->OnRemove();   // B.3.8 bridge (slot 7, dispatched as retail does)
 
     AttendanceComponent_ProcessQueue(selfP);
 
-    if (s_findWpc && s_setAccepting) {
+    {
         uintptr_t wpcIbp = 0;
-        s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
-        s_setAccepting(wpcIbp, '\0');
+        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIbp), false);
     }
     return 0;
 }

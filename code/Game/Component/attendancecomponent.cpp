@@ -26,20 +26,13 @@
 #include "Component/WorkPlaceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c80e0 cell class
 #include "Component/CitizenComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7158 cell class
 #include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers, called directly (B.3R): FUN_140002e10 AttendanceComponent_GetJobHostComponent
+// (get the WorkPlaceComponent from the entity), FUN_140043f60
+// AttendanceComponent_ProcessQueue (drain the attendance queue), both defined below.
 // ============================================================
-
-// FUN_140002e10(entityPtr, outBuildingPtr) -- get building component from entity
-typedef void (*fn_GetBuildingComponent_t)(void* entity, void* outPtr);
-static fn_GetBuildingComponent_t s_fn_GetBuildingComponent = nullptr;
-
-// FUN_140043f60(self) -- process attendance queue
-typedef void (*fn_ProcessAttendanceQueue_t)(void* self);
-static fn_ProcessAttendanceQueue_t s_fn_ProcessAttendanceQueue = nullptr;
-
-static bool s_initialized = false;
 
 static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self, void* entity,
                                                        int32_t queueCount);
@@ -71,29 +64,18 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
                               ? ",HOST,derived" : ",HOST,NOT-derived") : "");
         }
         fprintf(stderr, "\n[AttendanceComponent::Update]   jobHost tid(1401c80e0)=%u finder=%p\n",
-                WorkPlaceComponent::TypeId(), (void*)s_fn_GetBuildingComponent);
+                WorkPlaceComponent::TypeId(), (void*)&AttendanceComponent_GetJobHostComponent);
     }
     fflush(stderr);
 }
 
-// Queue-drain dispatch helpers
-typedef void (*fn_AC_115a50_t)(void* worker, char p2);   // 0x140115a50
-typedef void (*fn_AC_59b0_t)(void* worker);              // 0x1401159b0
-typedef void (*fn_AC_1650_t)(void* worker);              // 0x140111650
-static fn_AC_115a50_t s_fn_AC_115a50 = nullptr;
-static fn_AC_59b0_t   s_fn_AC_59b0 = nullptr;
-static fn_AC_1650_t   s_fn_AC_1650 = nullptr;
-
-// Callees of the two newly-reimplemented worker-release helpers (Entity_impl_1650/59b0):
-typedef void  (*fn_AC_002cc0_t)(int64_t* listBase, void* ibp);          // 0x140002cc0
-typedef void* (*fn_AC_FindMesh_t)(int64_t entity, void* outIBP);        // 0x140002f90
-typedef void  (*fn_AC_MeshSetFlag_t)(void* mesh, uint8_t flagIdx, char value); // 0x14012c3f0
-static fn_AC_002cc0_t      s_fn_AC_002cc0 = nullptr;
-static fn_AC_FindMesh_t    s_fn_AC_FindMesh = nullptr;
-static fn_AC_MeshSetFlag_t s_fn_AC_MeshSetFlag = nullptr;
-// CitizenComponent::TryFindPartner (0x140111840) — registered by Batch A cascade round.
-typedef char (*fn_AC_TryEnrolInSchool_t)(void* citizen, int64_t* exclIBP);
-static fn_AC_TryEnrolInSchool_t s_fn_AC_TryEnrolInSchool = nullptr;
+// Queue-drain dispatch helpers, called directly: 0x140115a50
+// AttendanceComponent_ReleasePartnerSlot, 0x1401159b0 AttendanceComponent_ReleaseLink59b0,
+// 0x140111650 AttendanceComponent_ReleaseLink1650 (all defined below).
+// Callees of the two worker-release helpers (Entity_impl_1650/59b0): 0x140002cc0
+// CemeteryListErase_Reimpl, 0x140002f90 WorkBase_FindComponent_2f90, 0x14012c3f0
+// CitizenComp_FUN_14012c3f0; CitizenComponent::TryFindPartner (0x140111840) is
+// CitizenComp_TryEnrolInSchool.
 
 // Slot-3 (Shutdown/Serialize) helpers — see AttendanceComponent_SerializeSlot below.
 // Component_Serialize 0x1401189b0; the queue
@@ -102,19 +84,6 @@ static fn_AC_TryEnrolInSchool_t s_fn_AC_TryEnrolInSchool = nullptr;
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
-static bool s_acHelpersResolved = false;
-static void EnsureAcHelpers() {
-    if (s_acHelpersResolved) return;
-    s_fn_AC_115a50 = reinterpret_cast<fn_AC_115a50_t>(ResolveAddr(Module::Exe, 0x140115a50));
-    s_fn_AC_59b0   = reinterpret_cast<fn_AC_59b0_t>(ResolveAddr(Module::Exe, 0x1401159b0));
-    s_fn_AC_1650   = reinterpret_cast<fn_AC_1650_t>(ResolveAddr(Module::Exe, 0x140111650));
-    s_fn_AC_002cc0     = reinterpret_cast<fn_AC_002cc0_t>(ResolveAddr(Module::Exe, 0x140002cc0));
-    s_fn_AC_FindMesh   = reinterpret_cast<fn_AC_FindMesh_t>(ResolveAddr(Module::Exe, 0x140002f90));
-    s_fn_AC_MeshSetFlag= reinterpret_cast<fn_AC_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_fn_AC_TryEnrolInSchool = reinterpret_cast<fn_AC_TryEnrolInSchool_t>(ResolveAddr(Module::Exe, 0x140111840));
-    s_acHelpersResolved = true;
-}
-
 // ============================================================
 // Reimpl of FUN_140115a50 (0x140115a50):
 // release the citizen's partner-link slot (+0x208): detach from the partner entity's
@@ -122,7 +91,6 @@ static void EnsureAcHelpers() {
 // if param_2 set, immediately re-roll for a new partner (TryFindPartner) and clear the
 // slot again on failure. Closure-safe after the cascade registered TryFindPartner.
 void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
-    EnsureAcHelpers();
     uint8_t* self = reinterpret_cast<uint8_t*>(workerP);
     int64_t* slot = reinterpret_cast<int64_t*>(self + 0x208);
     if (*slot == 0) return;
@@ -131,14 +99,13 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
     new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(workerP));   // B.3.3 bridge
     int64_t linked = *slot;
-    if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
+    CemeteryListErase_Reimpl(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
 
     int64_t meshIbp = 0;
-    void* mesh = s_fn_AC_FindMesh
-                     ? s_fn_AC_FindMesh(*reinterpret_cast<int64_t*>(linked + 0x10), &meshIbp)
-                     : nullptr;
-    if (s_fn_AC_MeshSetFlag && mesh)
-        s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
+    void* mesh = WorkBase_FindComponent_2f90(
+        static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(linked + 0x10)), &meshIbp);
+    if (mesh)
+        CitizenComp_FUN_14012c3f0(*reinterpret_cast<int64_t**>(mesh), 2, '\0');
 
     int64_t nullIbp = 0;
     new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -147,7 +114,7 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
     if (reroll != '\0') {
         int64_t exclIbp = 0;
         new (&exclIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        char found = s_fn_AC_TryEnrolInSchool ? s_fn_AC_TryEnrolInSchool(workerP, &exclIbp) : 0;
+        char found = CitizenComp_TryEnrolInSchool(reinterpret_cast<CitizenComponent*>(workerP), &exclIbp);
         if (found == '\0') {
             int64_t z = 0;
             new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -163,7 +130,6 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
 // worker from the entity's worker list (FUN_140002cc0), reset that entity's
 // MeshInstance state flag 2 to off (FUN_14012c3f0), then null the slot.
 static void AttendanceComponent_ReleaseLinkSlot(void* workerP, int slotOff) {
-    EnsureAcHelpers();
     uint8_t* self = reinterpret_cast<uint8_t*>(workerP);
     int64_t* slot = reinterpret_cast<int64_t*>(self + slotOff);
     if (*slot == 0) return;
@@ -172,14 +138,13 @@ static void AttendanceComponent_ReleaseLinkSlot(void* workerP, int slotOff) {
     new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(workerP));   // B.3.3 bridge
     int64_t linked = *slot;
-    if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
+    CemeteryListErase_Reimpl(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
 
     int64_t meshIbp = 0;
-    void* mesh = s_fn_AC_FindMesh
-                     ? s_fn_AC_FindMesh(*reinterpret_cast<int64_t*>(linked + 0x10), &meshIbp)
-                     : nullptr;
-    if (s_fn_AC_MeshSetFlag && mesh)
-        s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
+    void* mesh = WorkBase_FindComponent_2f90(
+        static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(linked + 0x10)), &meshIbp);
+    if (mesh)
+        CitizenComp_FUN_14012c3f0(*reinterpret_cast<int64_t**>(mesh), 2, '\0');
 
     int64_t nullIbp = 0;
     new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -198,7 +163,6 @@ void AttendanceComponent_ReleaseLink59b0(void* workerP) {
 //   on an entity and return it wrapped in an InternalBasePtr via retbuf)
 // ============================================================
 void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
-    EnsureAcHelpers();
     void* found = nullptr;
     {
         const uint32_t tidJobHost = WorkPlaceComponent::TypeId();
@@ -228,7 +192,6 @@ void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
 // helpers below remove it, so the loop re-reads the count each pass. The dispatch
 // compares the queued IBP against three worker fields (+0x208/+0x228/+0x230).
 void AttendanceComponent_ProcessQueue(void* selfP) {
-    EnsureAcHelpers();
     uintptr_t self = (uintptr_t)selfP;
     while (*(int*)(self + 0x30) > 0) {
         int64_t queuedIbp = 0;
@@ -237,38 +200,17 @@ void AttendanceComponent_ProcessQueue(void* selfP) {
         int64_t* slot = *(int64_t**)(self + 0x28);
         int64_t worker = *slot;
         if (*(int64_t*)(worker + 0x208) == queuedIbp) {
-            if (s_fn_AC_115a50) s_fn_AC_115a50((void*)worker, '\x01');
+            AttendanceComponent_ReleasePartnerSlot((void*)worker, '\x01');
         } else {
             if (*(int64_t*)(worker + 0x228) == queuedIbp) {
-                if (s_fn_AC_59b0) s_fn_AC_59b0((void*)worker);
+                AttendanceComponent_ReleaseLink59b0((void*)worker);
             } else {
                 if (*(int64_t*)(worker + 0x230) == queuedIbp) {
-                    if (s_fn_AC_1650) s_fn_AC_1650((void*)worker);
+                    AttendanceComponent_ReleaseLink1650((void*)worker);
                 }
             }
         }
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void AttendanceComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_GetBuildingComponent = reinterpret_cast<fn_GetBuildingComponent_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-
-    s_fn_ProcessAttendanceQueue = reinterpret_cast<fn_ProcessAttendanceQueue_t>(
-        ResolveAddr(Module::Exe, 0x140043f60));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[AttendanceComponent] Funcs resolved: GetBuilding=%p ProcessQueue=%p\n",
-           (void*)s_fn_GetBuildingComponent,
-           (void*)s_fn_ProcessAttendanceQueue);
-#endif
 }
 
 // ============================================================
@@ -282,9 +224,8 @@ void AttendanceComponent_InitFuncs() {
 // their own: the attendance building's "work" checkbox IS the workplace's accepting
 // flag (WPC+0x50). That is why this class overrides instead of inheriting — and why
 // both bodies start by re-finding the WPC off the owner entity (self+0x10) via
-// 0x140002e10, already resolved above as s_fn_GetBuildingComponent.
-
-extern void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0x14012fc00
+// 0x140002e10 (AttendanceComponent_GetJobHostComponent). WorkPlaceComponent_SetAccepting
+// (0x14012fc00) is declared in exe_bodies.h.
 
 // ── slot 13 — retail 0x140043f10 — availability mask ──────────────────────────────
 // Retail body: find the WPC, then `return -(*(char*)(wpc+0x50) != 0) & 2 | 1;`
@@ -400,8 +341,6 @@ void* AttendanceComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x140044410.
 void AttendanceComponent::Persist(void* stream) {
-    AttendanceComponent_InitFuncs();
-    EnsureAcHelpers();
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
@@ -445,15 +384,14 @@ void AttendanceComponent::Persist(void* stream) {
 // [7] 0x1400443d0 — leave the town attendance registry (state 3's enter also calls
 // it through the vtable).
 void AttendanceComponent::OnRemove() {
-    EnsureAcHelpers();
-    if (!s_fn_AC_002cc0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     const uintptr_t town = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     if (!town) return;
     int64_t selfIbp = 0;
     new (&selfIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    s_fn_AC_002cc0(reinterpret_cast<int64_t*>(town + 0x60), &selfIbp);
+    CemeteryListErase_Reimpl(reinterpret_cast<int64_t*>(town + 0x60), &selfIbp);   // 0x140002cc0
 }
 
 // [9] 0x140044370 — the elapsed-time argument is not read by retail's body.
@@ -461,13 +399,6 @@ void AttendanceComponent::OnRemove() {
 // AttendanceComponent::Update (vtable slot [9], 0x140044370)
 // ============================================================
 void AttendanceComponent::Update(void* /*time*/) {
-    // Resolve the helpers on first use. AttendanceComponent_InitFuncs had NO caller
-    // anywhere (found 2026-09-03 by the BANISHED_STRESS town): every Update ran with
-    // s_fn_GetBuildingComponent == null, so buildingPtr stayed 0 and the +0x60 read
-    // below faulted the first time any attendance queue was non-empty. It never showed
-    // before because no run had ever STAFFED a chapel/school/hospital, and an unstaffed
-    // one never gets a queue, so the early-out above hid it. Idempotent after the first call.
-    AttendanceComponent_InitFuncs();
     uintptr_t selfAddr = (uintptr_t)this;
 
     // Check if queue count at +0x30 (as int32) is nonzero
@@ -480,8 +411,7 @@ void AttendanceComponent::Update(void* /*time*/) {
 
     // Get building component from entity
     int64_t buildingPtr = 0;
-    if (s_fn_GetBuildingComponent)
-        s_fn_GetBuildingComponent(entity, &buildingPtr);
+    AttendanceComponent_GetJobHostComponent(entity, &buildingPtr);   // 0x140002e10
 
     // DIAGNOSTIC ONLY (the deref below stays faithful): retail relies on every attendance
     // building carrying a WorkPlaceComponent, so a null here means something upstream
@@ -495,28 +425,23 @@ void AttendanceComponent::Update(void* /*time*/) {
     int32_t busyState = *(int32_t*)(buildingPtr + 0x60);
     if (busyState == 0) {
         // Building is idle -- process the attendance queue
-        if (s_fn_ProcessAttendanceQueue)
-            s_fn_ProcessAttendanceQueue(this);
+        AttendanceComponent_ProcessQueue(this);   // 0x140043f60
     }
 }
 
 // [13] 0x140043f10 — `accepting ? 3 : 1`; the command id is ignored, as in retail.
 uint32_t AttendanceComponent::CommandMask(int /*command*/) {
-    AttendanceComponent_InitFuncs();
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    if (!s_fn_GetBuildingComponent) return 0;
     int64_t wpcIbp = 0;
-    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+    AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
     return *reinterpret_cast<char*>(wpcIbp + 0x50) ? 3 : 1;
 }
 
 // [14] 0x140043e80 — flip the workplace's accepting flag; drain on the OFF edge.
 void AttendanceComponent::Command(int /*command*/) {
-    AttendanceComponent_InitFuncs();
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    if (!s_fn_GetBuildingComponent) return;
     int64_t wpcIbp = 0;
-    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+    AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
     const char cur = *reinterpret_cast<char*>(wpcIbp + 0x50);
     WorkPlaceComponent_SetAccepting(wpcIbp, cur == 0);
     if (*reinterpret_cast<char*>(wpcIbp + 0x50) == 0)
