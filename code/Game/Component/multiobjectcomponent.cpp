@@ -12,7 +12,7 @@
 #include "Component/multiobjectcomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
@@ -22,44 +22,32 @@
 #include "Entity/ComponentEntity.h"   // ENDGAME B.3.9 CB: ComponentEntity::TypeId()
 
 // ============================================================
-// Resolved helpers
-// ============================================================
-
-// IsDerivedFrom — dispatched
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// FUN_1400c2ea0 — mark entity for removal
-typedef void (*fn_MarkForRemoval_t)(void* entity);
-static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
-
-static void** s_pGameState = nullptr;
-
-static bool s_initialized = false;
-
-
-// ============================================================
 // MultiObjectComponent::OnCreate (0x1401257C0)
 // ============================================================
 // Iterates child entity array. For each valid child, checks bit 10 of
 // entity flags. If not already marked, calls MarkForRemoval and adds
 // to removal queue.
+//
+// Nothing calls this body (the class's slot 7 is a PORT GAP, MultiObjectComponent.h).
+// B3R: its two doors are gone — the game-state cell 0x1401c3dd8 is read through the
+// engine_funcs storage global bound to the same cell (converted by the STORAGE block),
+// and 0x1400c2ea0 is ActHunt_MarkEntityRemoval_c2ea0 by name.
 
 void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
     int count = *(int*)((uintptr_t)self + 0x50);
     void** array = *(void***)((uintptr_t)self + 0x48);
 
-    if (!s_pGameState || !*s_pGameState) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     for (int i = 0; i < count; i++) {
         void* entityPtr = array[i];
-        void* gameWorld = *(void**)((uintptr_t)*s_pGameState + 0xE8);
+        void* gameWorld = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xE8);
 
         if (entityPtr != nullptr) {
 
             uint32_t entityFlags = *(uint32_t*)((uintptr_t)entityPtr + 0x40);
             if (((entityFlags >> 10) & 1) == 0) {
-                if (s_fn_MarkForRemoval) s_fn_MarkForRemoval(entityPtr);
+                ActHunt_MarkEntityRemoval_c2ea0(entityPtr);
 
                 if (gameWorld) {
                     int removalCount = *(int*)((uintptr_t)gameWorld + 0xD8);
@@ -70,24 +58,6 @@ void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
             }
         }
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void MultiObjectComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
-        ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_initialized = true;
 }
 
 // ===== ENDGAME B.3.8 MI-B — MultiObjectComponent's own slot bodies =====
@@ -128,7 +98,7 @@ static void* MultiObject_FindComponent(uintptr_t entity, uint32_t tid) {
         void* c = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(i) * 8);
         const uint32_t id = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
         if (id == tid)
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+            return ::Object::IsDerivedFromNullSafe(c, tid) ? c : nullptr;
     }
     return nullptr;
 }
@@ -209,7 +179,6 @@ void* MultiObjectComponent::CreateInPlaceObject(void* storage) {
 //   After loading, remove null entries from array (compact).
 
 void MultiObjectComponent::Persist(void* stream) {
-    MultiObjectComponent_InitFuncs();
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // First empty serializer block (controller section)
@@ -244,8 +213,10 @@ void MultiObjectComponent::Persist(void* stream) {
             // field (+8) of Description's record, whose only retail reader is Description's
             // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
             void* ptr = *(void**)ibp;
-            if (ptr != nullptr && s_fn_IsDerivedFrom_d) {
-                if (!s_fn_IsDerivedFrom_d(ptr, ComponentEntity::TypeId())) {
+            if (ptr != nullptr) {
+                // slot 0x140152a98 = ?IsDerivedFrom@Base@Object@@QEBA_NI@Z
+                if (!reinterpret_cast<const Object::Base*>(ptr)->IsDerivedFrom(
+                        ComponentEntity::TypeId())) {   // B.3.x bridge
                     *(uintptr_t*)ibp = 0;
                 }
             }
@@ -297,7 +268,6 @@ void MultiObjectComponent::Persist(void* stream) {
 // one "msg 4 -> deform" (the master), both mesh passes correctly skipped on a null mesh,
 // and FootprintPass converting 18 cells -- master-level work only, no carve.
 void MultiObjectComponent::OnEvent(int eventId) {
-    MultiObjectComponent_InitFuncs();
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
 
     const int childCount = *reinterpret_cast<int*>(self + 0x50);

@@ -11,35 +11,18 @@
 
 #include "Component/MarketLocationComponent.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <new>
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// FUN_140002cc0 = DynArray8_EraseByValue — linear scan of an 8-byte-stride DynArray
-// (+0x00 data, +0x08 count, +0x0C capacity), shift-down removing EVERY slot equal to
-// *value. It is the UNREGISTER primitive, not the append one (append counterpart:
-// DynArray8_ResizeFill 0x140003110). Naming it "RegisterEntity" is the exact trap that
-// cost a day on the residence registry — see reference_ghidra_oncreate_onremove_mislabel.
-typedef void (*fn_ListEraseByValue_t)(void* listPtr, void* entityPtr);
-static fn_ListEraseByValue_t s_fn_ListEraseByValue = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_ListEraseByValue = reinterpret_cast<fn_ListEraseByValue_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_initialized = true;
-}
-
+// FUN_140002cc0 = DynArray8_EraseByValue (CemeteryListErase_Reimpl, called by name) — linear
+// scan of an 8-byte-stride DynArray (+0x00 data, +0x08 count, +0x0C capacity), shift-down
+// removing EVERY slot equal to *value. It is the UNREGISTER primitive, not the append one
+// (append counterpart: DynArray8_ResizeFill 0x140003110). Naming it "RegisterEntity" is the
+// exact trap that cost a day on the residence registry — see
+// reference_ghidra_oncreate_onremove_mislabel.
 
 
 // ============================================================================
@@ -170,9 +153,7 @@ void MarketLocationComponent::Persist(void* stream) {
 //   CALL FUN_140002cc0           ; erase-by-value
 
 void MarketLocationComponent::OnRemove() {
-    EnsureHelpers();
-
-    if (!s_fn_ListEraseByValue || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return;
 
     // Build an InternalBasePtr on the stack with the owner entity
@@ -183,7 +164,7 @@ void MarketLocationComponent::OnRemove() {
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Erase the owner entity from the market-location list at worldMgr + 0x10
-    s_fn_ListEraseByValue((void*)(worldMgr + 0x10), &entityPtr);
+    CemeteryListErase_Reimpl((void*)(worldMgr + 0x10), &entityPtr);   // 0x140002cc0
 }
 
 DEFINE_EXE_TYPE(MarketLocationComponent, "ControllerComponent")
