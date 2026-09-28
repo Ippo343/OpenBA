@@ -25,59 +25,14 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// ResidenceComponent_Controller_sub_7ad0 — resize resident array at +0x50
-// Takes (longlong* arrayField, int newCount)
-typedef void (*fn_ResizeResidentArray_t)(void* arrayFieldPtr, int newCount);
-static fn_ResizeResidentArray_t s_fn_ResizeResidentArray = nullptr;
-
-// ResidenceComponent_helper_7c50 — serialize resident array
-// Takes (Serializer*, count, arrayPtr)
-typedef void (*fn_SerializeResidentArray_t)(void* serializer, int count, void* arrayPtr);
-static fn_SerializeResidentArray_t s_fn_SerializeResidentArray = nullptr;
-
-// fn_IsDerivedFrom — dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// ResidenceComponent_helper_9ef0 — init helper (called before register)
-typedef void (*fn_ResidenceInit_t)(void* self);
-static fn_ResidenceInit_t s_fn_ResidenceInit = nullptr;
-
-// FUN_140002cc0 — register entity with world entity list
-typedef void (*fn_RegisterEntity_t)(void* listPtr, void* entityPtr);
-static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-    s_fn_ResizeResidentArray = reinterpret_cast<fn_ResizeResidentArray_t>(
-        ResolveAddr(Module::Exe, 0x140037ad0));
-
-    s_fn_SerializeResidentArray = reinterpret_cast<fn_SerializeResidentArray_t>(
-        ResolveAddr(Module::Exe, 0x140037c50));
-
-    // IsDerivedFrom via dispatch slot
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_fn_ResidenceInit = reinterpret_cast<fn_ResidenceInit_t>(
-        ResolveAddr(Module::Exe, 0x140129ef0));
-
-    s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_initialized = true;
-}
-
-
+// The exe helpers this file calls, by retail address:
+//   0x140037ad0 ResidenceComponent_ResizeResidentArray (below)
+//   0x140037c50 ResidenceComponent_SerializeResidentArray (below)
+//   0x140129ef0 ResidenceComponent_ResidenceInit (below)
+//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140007960 ResidenceComponent_CopyInnerArray (below)
+//   0x1401163d0 CitizenComponent_AssignWorkplace
+//   0x140152a98 ?IsDerivedFrom@Base@Object@@ (import slot)
 
 // ============================================================
 // ResidenceComponent::OnCreate (vtable slot [7], 0x14012a0e0)
@@ -91,14 +46,10 @@ static void EnsureHelpers() {
 //   FUN_140002cc0(*(g_pGameWorldSingleton+0xf0)+0x20, &local_res8)
 
 void ResidenceComponent_OnCreate(ResidenceComponent* self) {
-    EnsureHelpers();
-
     // Call init helper
-    if (s_fn_ResidenceInit) {
-        s_fn_ResidenceInit(self);
-    }
+    ResidenceComponent_ResidenceInit(self);
 
-    if (!s_fn_RegisterEntity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return;
 
     // Build an InternalBasePtr on the stack with the owner entity
@@ -109,45 +60,16 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Register entity at worldMgr+0x20 (residence entity list)
-    s_fn_RegisterEntity((void*)(worldMgr + 0x20), &entityPtr);
+    CemeteryListErase_Reimpl((void*)(worldMgr + 0x20), &entityPtr);   // 0x140002cc0
 }
 
-// ============================================================
-// Reimpl helper resolution for the resident-array functions
-// ============================================================
 // Resident per-slot inner-array copy on grow.
 // CALLER-BUG FIX: the literal was 0x140035ec0, which is MID-FUNCTION inside the
 // resize helper FUN_140035d50 (its body is 0x140035d50-0x140035ec8). The actual
 // per-element copy the resize loop CALLs is FUN_140007960 (verified: the only
 // CALL 0x140007960 inside FUN_140035d50 is at 0x140035e17, the inner-move site).
 // FUN_140007960(dst, src) frees dst's 8-byte-stride pointer array and deep-copies
-// src's. Closure-safe (only MemAlloc/MemFree). Reimplemented below as
-// ResidenceComponent_CopyInnerArray and registered for 0x140007960.
-typedef void (*fn_Resident_MoveElem_t)(void* dst, void* src);
-static fn_Resident_MoveElem_t s_fn_Resident_MoveElem = nullptr;
-// Object::InternalBasePtr::Serialize(this, serializer)
-// FindComponent(MeshInstance/...) + worker assignment helpers used by ResidenceInit
-typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retbuf);
-static fn_FindComp_t s_fn_Entity_FindComponent_MeshInstance = nullptr;
-typedef void (*fn_SetMeshFlag_t)(void* comp, int idx, char param3);
-static fn_SetMeshFlag_t s_fn_SetMeshFlag = nullptr;   // FUN_14012c3f0
-typedef void (*fn_AssignWorkplace_t)(void* citizen, void* ibp, int slot);
-static fn_AssignWorkplace_t s_fn_AssignWorkplace = nullptr;  // CitizenComponent_AssignWorkplace
-
-static bool s_residentHelpersResolved = false;
-static void EnsureResidentHelpers() {
-    if (s_residentHelpersResolved) return;
-    s_fn_Resident_MoveElem = reinterpret_cast<fn_Resident_MoveElem_t>(
-        ResolveAddr(Module::Exe, 0x140007960));
-    s_fn_Entity_FindComponent_MeshInstance = reinterpret_cast<fn_FindComp_t>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-    s_fn_SetMeshFlag = reinterpret_cast<fn_SetMeshFlag_t>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
-        ResolveAddr(Module::Exe, 0x1401163d0));
-    s_residentHelpersResolved = true;
-}
-
+// src's. Closure-safe (only MemAlloc/MemFree).
 // ============================================================
 // Reimpl of FUN_140007960 (resident per-slot inner pointer-array deep copy).
 // dst/src each describe an array {ptr@+0, int count@+8, int capacity@+0xc}. Frees
@@ -192,7 +114,6 @@ void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP) {
 // inner buffers (slot[0]) are MemFree'd. When realloc happens, every old slot is
 // freed and the old buffer released.
 void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
-    EnsureResidentHelpers();
     int64_t* field = (int64_t*)arrayFieldPtr;   // field[0]=ptr, [1] low=count, high=capacity
     int oldCount = (int)field[1];
     if (newCount == oldCount) return;
@@ -218,7 +139,7 @@ void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
                 if (slot) {
                     slot[0] = 0;
                     slot[1] = 0;
-                    if (s_fn_Resident_MoveElem) s_fn_Resident_MoveElem(slot, srcSlot);
+                    ResidenceComponent_CopyInnerArray(slot, srcSlot);   // 0x140007960
                 }
             } else {
                 if (slot) { slot[0] = 0; slot[1] = 0; }
@@ -257,8 +178,6 @@ void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
 // inner element count; on load grow the inner array; then serialize each inner
 // InternalBasePtr and clear it if not derived from the resident type.
 void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void* arrayPtr) {
-    EnsureHelpers();
-    EnsureResidentHelpers();
     if (count <= 0) return;
     int64_t* entry = (int64_t*)arrayPtr;
     for (int o = 0; o < count; o++) {
@@ -278,8 +197,8 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
             // slot existed from startup but only held the CRC after a post-Startup fill.
             // IsDerivedFrom(val, 0) matches nothing, so a bare pointer check would clear
             // every resident ref in that window.
-            if (val && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(val, CitizenComponent::TypeId())) {
+            if (val &&
+                !Object::IsDerivedFromNullSafe(val, CitizenComponent::TypeId())) {
                 *(uint64_t*)ibp = 0;
             }
         }
@@ -292,7 +211,6 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
 //   on create, refresh mesh flags and re-assign resident workplaces)
 // ============================================================
 void ResidenceComponent_ResidenceInit(void* selfP) {
-    EnsureResidentHelpers();
     uintptr_t self = (uintptr_t)selfP;
     uint8_t ibpBuf[8];
 
@@ -310,11 +228,11 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
         uintptr_t entry = base + (uintptr_t)s * 0x10;
         int innerCount = *(int*)(entry + 8);
         while (innerCount > 0) {
-            if (fn_InternalBasePtr_Ctor) new (ibpBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (ibpBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uintptr_t cur = *(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10;
             void* residentSlotPtr = *(void**)cur;
             void* citizen = *(void**)residentSlotPtr;
-            if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(citizen, ibpBuf, -1);
+            CitizenComponent_AssignWorkplace(citizen, ibpBuf, -1);   // 0x1401163d0
             innerCount = *(int*)(*(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10 + 8);
         }
     }
@@ -487,8 +405,6 @@ void* ResidenceComponent::CreateInPlaceObject(void* storage) {
 //   Serializer_Dtor(local2)
 
 void ResidenceComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
@@ -511,15 +427,13 @@ void ResidenceComponent::Persist(void* stream) {
 
     // On load (direction == 0): resize resident array
     if (*(int*)(pSerData[0] + 8) == 0) {
-        if (s_fn_ResizeResidentArray) {
-            s_fn_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), localCount);
-        }
+        ResidenceComponent_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), localCount);
     }
 
     // Serialize resident array
-    if (s_fn_SerializeResidentArray) {
+    {
         void* arrayPtr = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x50);
-        s_fn_SerializeResidentArray(serBuf2, localCount, arrayPtr);
+        ResidenceComponent_SerializeResidentArray(serBuf2, localCount, arrayPtr);
     }
 
     // Serialize Time at +0x48
@@ -542,15 +456,11 @@ void ResidenceComponent::Persist(void* stream) {
 //   ResizeResidentArray(self+0x50, *(pvVar2+0x20))
 
 void ResidenceComponent::Startup() {
-    EnsureHelpers();
-
-    if (!s_fn_IsDerivedFrom_dispatch || !s_fn_ResizeResidentArray)
-        return;
-
     void* obj = _description;
     if (!obj) return;
 
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, ResidenceDescription::TypeId());
+    bool derived = reinterpret_cast<const Object::Base*>(obj)
+                       ->IsDerivedFrom(ResidenceDescription::TypeId());   // B.3.x bridge (slot 0x140152a98)
     void* desc = derived ? obj : nullptr;
     if (!desc) return;
 
@@ -558,7 +468,7 @@ void ResidenceComponent::Startup() {
     int capacity = *(int*)((uintptr_t)desc + 0x20);
 
     // Resize resident array at +0x50
-    s_fn_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), capacity);
+    ResidenceComponent_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), capacity);
 }
 
 // [7] 0x14012a0e0 — helper_9ef0 (re-assign resident workplaces / evict) + remove the

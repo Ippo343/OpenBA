@@ -37,6 +37,9 @@
 #include "Work/ConsumeProduce.h"
 #include "Component/MarketComponent.h"
 #include <new>
+#include "Action/exe_bodies.h"   // Pf_RecursiveChildSum_123070
+#include "Work/exe_bodies.h"     // WorkBase_FindComponent_2ed0
+#include "Player/exe_bodies.h"   // PlayerPath_FindComponent_3ea0
 
 // ENDGAME B.3.8 MI-B: each work is now built as its REAL class (code/Game/Work/<X>.h):
 // `new (mem) X()` runs the base init and the leaf's field zeroing, calls the work's
@@ -47,26 +50,15 @@
 // with no read-back of the Work vtable addresses (0x140161320/620/5a0/3a0/710/220).
 namespace {
 
-// 0x140002ed0 Entity_FindComponent_Position — the finder FishingWork_Ctor actually
-// uses. (It is a known misnomer: it resolves the InteractComponent, not a "position"
-// component. Kept faithful to retail's choice rather than "corrected".)
-typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);
-typedef int   (*fn_ChildSum_t)(uintptr_t posComp, int kind);      // 0x140123070
-
-fn_FindComp_t      s_findPos    = nullptr;
-fn_ChildSum_t      s_childSum   = nullptr;
-// 0x140003ea0 Entity_FindComponent_StateMachine — only ForesterComponent's slot 18
-// needs it (to read the live state id before re-arming the two work flags).
-fn_FindComp_t      s_findSM     = nullptr;
-bool               s_resolved   = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_findPos    = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_childSum   = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
-    s_findSM     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_resolved = true;
-}
+// The exe helpers:
+//   0x140002ed0 WorkBase_FindComponent_2ed0 — Entity_FindComponent_Position, the finder
+//               FishingWork_Ctor actually uses. (It is a known misnomer: it resolves the
+//               InteractComponent, not a "position" component. Kept faithful to retail's
+//               choice rather than "corrected".)
+//   0x140123070 Pf_RecursiveChildSum_123070 — child attach-point count of a kind
+//   0x140003ea0 PlayerPath_FindComponent_3ea0 — Entity_FindComponent_StateMachine; only
+//               ForesterComponent's slot 18 needs it (to read the live state id before
+//               re-arming the two work flags).
 
 void* AllocWork(int size) {
     if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
@@ -89,7 +81,6 @@ uintptr_t* WrapIBP(uintptr_t* out, void* obj) {
 // fishing spots the citizen cycles through, so an unsized pair means a fisherman with
 // nowhere to stand.
 extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
-    Resolve();
     void* mem = AllocWork(0x70);
     if (!mem) return WrapIBP(out, nullptr);
 
@@ -102,17 +93,17 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
 
     uintptr_t w = reinterpret_cast<uintptr_t>(mem);
 
-    if (s_findPos && s_childSum) {
+    {
         uintptr_t posIbp = 0;
-        s_findPos(entity, &posIbp);
+        WorkBase_FindComponent_2ed0(entity, &posIbp);
         if (posIbp) {
             // posIbp IS the component — the finder returns its out-param, so retail's
             // `*pIVar3` and this local are the same value. Dereferencing again handed
             // the component's VTABLE to the child-count helper, whose garbage result
             // then sized the two arrays and blew up inside the Runtime allocator.
             const uintptr_t pos = posIbp;
-            const int n0 = s_childSum(pos, 0);
-            const int n2 = s_childSum(pos, 2);
+            const int n0 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(pos), 0);
+            const int n2 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(pos), 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
             // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). I32NoInit:
             // 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop right below
@@ -132,7 +123,6 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
 // Retail writes vtable_AutoPickupWork then immediately vtable_HuntWork over it (a
 // compiler artefact of the two-level ctor); only the final store is observable.
 extern "C" uintptr_t* HuntComponent_CreateWork(void* self, uintptr_t* out) {
-    Resolve();
     void* mem = AllocWork(0x58);
     if (!mem) return WrapIBP(out, nullptr);
 
@@ -149,7 +139,6 @@ extern "C" uintptr_t* HuntComponent_CreateWork(void* self, uintptr_t* out) {
 // ── HerbalistComponent::CreateWork — retail 0x14004b160 ───────────────────────────
 // This is the Gatherer's Hut work (GathererShelter.rsc carries HerbalistDescription).
 extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) {
-    Resolve();
     void* mem = AllocWork(0x60);
     if (!mem) return WrapIBP(out, nullptr);
 
@@ -185,14 +174,12 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) 
 // sm+0x52 is the pending state id and sm+0x50 the current one; the sign test is
 // retail's "no pending transition" check.
 extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
-    Resolve();
-
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
 
-    if (s_findSM) {
+    {
         uintptr_t smIbp = 0;
-        s_findSM(entity, &smIbp);
+        PlayerPath_FindComponent_3ea0(entity, &smIbp);
         char st = *reinterpret_cast<char*>(smIbp + 0x52);
         if (st < 0) st = *reinterpret_cast<char*>(smIbp + 0x50);
         if (st != 14 && *reinterpret_cast<char*>(comp + 0x50) == 0
@@ -226,7 +213,6 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
 // it to the citizen reservation ledger, so a stubbed slot silently means "market never
 // offers a job".
 uintptr_t* MarketComponent::CreateWork(uintptr_t* out) {
-    Resolve();
     void* mem = AllocWork(0x58);
     if (!mem) return WrapIBP(out, nullptr);
 
@@ -286,7 +272,6 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
 // then zero-filled with the count at +0x70).
 extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
                                            const int* productIdx, int second) {
-    Resolve();
     if (!mem) return nullptr;
     const uintptr_t w = reinterpret_cast<uintptr_t>(mem);
 
@@ -305,16 +290,16 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
     *reinterpret_cast<uint64_t*>(w + 0x68) = 0;
     *reinterpret_cast<uint64_t*>(w + 0x70) = 0;
 
-    if (s_findPos && s_childSum) {
+    {
         uintptr_t posIbp = 0;
-        s_findPos(*entityIbp, &posIbp);
+        WorkBase_FindComponent_2ed0(*entityIbp, &posIbp);
         if (posIbp) {
             // posIbp IS the component — the finder returns its own out-param. Retail's
             // `*pIVar3` and this local are the same value; dereferencing again would
             // hand the component's VTABLE to the child-count helper (the trap the
             // fishing port hit).
-            const int n0 = s_childSum(posIbp, 0);
-            const int n2 = s_childSum(posIbp, 2);
+            const int n0 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIbp), 0);
+            const int n2 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIbp), 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
             // (retail ConsumeProduceAction_Ctor calls them at 1400e92d8 / 1400e92e3).
             // I32NoInit: 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop
@@ -332,7 +317,6 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
 extern "C" void ConsumeProduce_DumpRecipes(void* cpDesc, int selected);
 
 extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* out) {
-    Resolve();
     ConsumeProduce_ResolveFuncs();
 
 

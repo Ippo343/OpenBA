@@ -44,6 +44,11 @@
 #include <cstdlib>
 #include <cstring>
 #include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
+#include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent, CitizenAI_WorkScheduler_Post,
+                                    // WorkPlaceComponent_SetAccepting, WorkComponent_CheckWorkSlot,
+                                    // WorkComponent_RegisterWorkSlot
+#include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050
+#include "Player/exe_bodies.h"      // PlayerPath_FindComponent_3ea0
 
 // RPCtrlTag lives in ResourceProduceComponent.h (the member type needs it).
 using RPDispatch = ::ControllerLive::Dispatcher<RPCtrlTag>;
@@ -54,39 +59,17 @@ static ResourceProduceComponent* RP_Self(void* self) {
     return reinterpret_cast<ResourceProduceComponent*>(self);   // B.3.8 bridge
 }
 
-// ── Resolved engine helpers ───────────────────────────────────────────────────────
-// 0x140003050 FindComponent_Work(entity, outIBP)  — the work-ledger component that
-//             CitizenAI_impl_ec60 posts against (same finder BuildComponent state 1 uses).
-// 0x140002e10 FindComponent_WorkPlace(entity, outIBP) -> WorkPlaceComponent.
-// 0x14012ec60 CitizenAI_impl_ec60(workComp, code, flag, workIBP) — post to the ledger.
-// 0x14012fc00 WorkPlace SetAccepting(wpc, accepting) — drives WPC+0x50.
-// 0x14012ead0 / 0x14012eb50 — work-slot occupied test / release (citizen work scheduler).
-typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* outIBP);
-typedef void  (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
-typedef void  (*fn_SetAccepting_t)(uintptr_t wpc, char accepting);
-typedef bool  (*fn_SlotOccupied_t)(uintptr_t ai);
-typedef void  (*fn_SlotRelease_t)(uintptr_t ai);
-
-static fn_FindComp_t     s_findWork      = nullptr;   // 0x140003050
-static fn_FindComp_t     s_findWpc       = nullptr;   // 0x140002e10
-static fn_PostWork_t     s_postWork      = nullptr;   // 0x14012ec60
-static fn_SetAccepting_t s_setAccepting  = nullptr;   // 0x14012fc00
-static fn_SlotOccupied_t s_slotOccupied  = nullptr;   // 0x14012ead0
-static fn_SlotRelease_t  s_slotRelease   = nullptr;   // 0x14012eb50
-static fn_FindComp_t     s_findSM        = nullptr;   // 0x140003ea0 FindComponent_StateMachine
-static bool              s_resolved      = false;
-
-static void RP_Resolve() {
-    if (s_resolved) return;
-    s_findWork     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_findWpc      = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_postWork     = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_setAccepting = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
-    s_slotOccupied = reinterpret_cast<fn_SlotOccupied_t>(ResolveAddr(Module::Exe, 0x14012ead0));
-    s_slotRelease  = reinterpret_cast<fn_SlotRelease_t>(ResolveAddr(Module::Exe, 0x14012eb50));
-    s_findSM       = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_resolved = true;
-}
+// ── Engine helpers, by retail address ────────────────────────────────────────────
+// 0x140003050 WorkBase_FindComponent_3050: FindComponent_Work(entity, outIBP) — the
+//             work-ledger component that CitizenAI_impl_ec60 posts against (same finder
+//             BuildComponent state 1 uses).
+// 0x140002e10 AttendanceComponent_GetJobHostComponent: FindComponent_WorkPlace(entity,
+//             outIBP) -> WorkPlaceComponent.
+// 0x14012ec60 CitizenAI_WorkScheduler_Post(workComp, code, flag, workIBP) — post to the ledger.
+// 0x14012fc00 WorkPlaceComponent_SetAccepting(wpc, accepting) — drives WPC+0x50.
+// 0x14012ead0 WorkComponent_CheckWorkSlot / 0x14012eb50 WorkComponent_RegisterWorkSlot —
+//             work-slot occupied test / release (citizen work scheduler).
+// 0x140003ea0 PlayerPath_FindComponent_3ea0: FindComponent_StateMachine.
 
 
 // ── state 2 enter — 0x14012b1b0 ───────────────────────────────────────────────────
@@ -108,7 +91,6 @@ static char RP_State2Enter(void* self, void* sm) {
 //   SetAccepting(wpc, 1)
 //   return self->vtable[19](self)            OnEnterProducing
 static char RP_State13Enter(void* self, void* sm) {
-    RP_Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(self);
 
     // Entry trace as well as the outcome trace below: without it a crash anywhere in
@@ -136,22 +118,22 @@ static char RP_State13Enter(void* self, void* sm) {
 
     // Post it to the reservation ledger so an idle citizen claims it.
     uintptr_t workCompIbp = 0;
-    if (s_findWork) s_findWork(owner, &workCompIbp);
-    if (s_postWork && workCompIbp != 0 && workIbp != 0) {
-        s_postWork(workCompIbp, 1, 0, &workIbp);
+    WorkBase_FindComponent_3050(owner, &workCompIbp);
+    if (workCompIbp != 0 && workIbp != 0) {
+        CitizenAI_WorkScheduler_Post(workCompIbp, 1, 0, &workIbp);
     }
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers
     // assigned but every gather bails "no target": the same trap the pasture wave hit.
     uintptr_t wpcIbp = 0;
-    if (s_findWpc) s_findWpc(owner, &wpcIbp);
-    if (wpcIbp != 0 && s_setAccepting) {
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(owner), &wpcIbp);
+    if (wpcIbp != 0) {
         // wpcIbp ALREADY holds the component pointer: the finder writes it into the
         // out-param and returns the out-param's ADDRESS, so retail's `local_res18`
         // and this local are the same value. Dereferencing again would pass the
         // component's VTABLE pointer as the workplace — which is exactly what
         // crashed here first time round.
-        s_setAccepting(wpcIbp, 1);
+        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIbp), true);
     }
 
 
@@ -161,22 +143,21 @@ static char RP_State13Enter(void* self, void* sm) {
 // ── state 14 enter — 0x14012ad20 ──────────────────────────────────────────────────
 // Release the held work slot if occupied, stop accepting, then OnExitProducing.
 static char RP_State14Enter(void* self, void* /*sm*/) {
-    RP_Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     const uintptr_t owner = *reinterpret_cast<uintptr_t*>(comp + 0x10);
 
     uintptr_t workCompIbp = 0;
-    if (s_findWork) s_findWork(owner, &workCompIbp);
+    WorkBase_FindComponent_3050(owner, &workCompIbp);
     if (workCompIbp != 0) {
         // Same out-param convention as State13Enter: this local is the component.
-        if (s_slotOccupied && s_slotRelease && s_slotOccupied(workCompIbp)) {
-            s_slotRelease(workCompIbp);
+        if (WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(workCompIbp))) {
+            WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(workCompIbp));
         }
     }
 
     uintptr_t wpcIbp = 0;
-    if (s_findWpc) s_findWpc(owner, &wpcIbp);
-    if (wpcIbp != 0 && s_setAccepting) {
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(owner), &wpcIbp);
+    if (wpcIbp != 0) {
         // FIXED 2026-08-15 — this line used to read
         //     s_setAccepting(*reinterpret_cast<uintptr_t*>(wpcIbp), 0);
         // i.e. one deref too many. `s_findWpc(owner, &wpcIbp)` writes the COMPONENT
@@ -194,7 +175,7 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
         // Latent, not new: nothing reached state 14 until ConsumeProduce/Market were
         // promoted to live controllers, because no ResourceProduce subclass had its
         // state machine running in a default build.
-        s_setAccepting(wpcIbp, 0);
+        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIbp), false);
     }
 
 
@@ -253,11 +234,9 @@ static char RP_Event3Resume(void* self, void* sm) {
 // "resume" (offered while in state 13 or 14 and not flagged). Any extra argument a
 // caller passes is ignored, exactly as retail ignores it.
 uint32_t ResourceProduceComponent::CommandMask(int /*command*/) {
-    RP_Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
-    if (!s_findSM) return 0;
     uintptr_t smcIbp = 0;
-    s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
+    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
     if (!smcIbp) return 0;
 
     int8_t cur = *reinterpret_cast<int8_t*>(smcIbp + 0x52);
@@ -295,11 +274,9 @@ uint32_t ResourceProduceComponent::CommandMask(int /*command*/) {
 // real id — which is why the orchard/cropfield tables keyed 3/4/5 are correct as written.
 // See the TableAddEvent calls in RPCtrl_PopulateTable below.
 void ResourceProduceComponent::Command(int /*command*/) {
-    RP_Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
-    if (!s_findSM) return;
     uintptr_t smcIbp = 0;
-    s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
+    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
     if (!smcIbp) return;
 
     const uintptr_t sm = smcIbp + 0x48;
@@ -314,7 +291,7 @@ void ResourceProduceComponent::Command(int /*command*/) {
     // Force an immediate StateMachineComponent tick (its vtable slot 8) with Time(0).
     {
         int64_t zeroTime = 0;
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
         reinterpret_cast<Component*>(smcIbp)->Tick(&zeroTime);   // B.3.8 bridge (slot 8)
     }
 }
