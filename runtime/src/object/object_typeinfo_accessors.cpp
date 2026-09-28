@@ -100,8 +100,6 @@
 // Forward declarations: the positive control at the bottom of the anonymous
 // namespace calls these, and they are defined below it.
 extern "C" uint32_t    RtObject_Base_Type(const void*);
-extern "C" uint32_t    RtObject_External_Type(const void*);
-extern "C" const char* RtObject_External_TypeName(const void*);
 
 // ENDGAME B.3.9 OBJ (B39_RULES D6 step 1): External's record is read through
 // the Object accessor slot in external_class.cpp (`Object::External::TypeId()`
@@ -118,19 +116,6 @@ extern "C" uint32_t RtObject_Base_Type(const void* /*self*/) {
     return ours;
 }
 
-// ---- ??_7External@Object@@6B@  slots 2 and 1 -------------------------------
-// ?Type@External@Object@@UEBAIXZ  0x1800066d0  MOV EAX,[node+0x00].
-extern "C" uint32_t RtObject_External_Type(const void* /*self*/) {
-    return ::Object::External::TypeId();
-}
-
-// ?TypeName@External@Object@@UEBAPEBDXZ  0x1800066c0  MOV RAX,[node+0x08].
-// THIS is the body that reports a permanent pointer divergence once
-// ?_typeInfo@External@Object@@ is promoted — see the banner.
-extern "C" const char* RtObject_External_TypeName(const void* /*self*/) {
-    return ::Object::ExternalTypeInfoRecord()->name;
-}
-
 // ============================================================================
 // Registration — BOTH doors on every row, for the reason the mint itself
 // gives: a minted vtable slot is filled BY NAME, but many sites in this tree
@@ -144,14 +129,6 @@ int RtObjectTypeInfoAccessorsRegister() {
     RegisterRuntimeExport("?Type@Base@Object@@UEBAIXZ",
                           (void*)&RtObject_Base_Type); ++n;
     RegisterRuntimeAddr(0x1800c0380, (void*)&RtObject_Base_Type);
-
-    RegisterRuntimeExport("?Type@External@Object@@UEBAIXZ",
-                          (void*)&RtObject_External_Type); ++n;
-    RegisterRuntimeAddr(0x1800066d0, (void*)&RtObject_External_Type);
-
-    RegisterRuntimeExport("?TypeName@External@Object@@UEBAPEBDXZ",
-                          (void*)&RtObject_External_TypeName); ++n;
-    RegisterRuntimeAddr(0x1800066c0, (void*)&RtObject_External_TypeName);
 
     return n;
 }

@@ -109,8 +109,6 @@ inline void CallSlot0(void* self, unsigned flag) {
 // ---- the vtables and the allocator, resolved by name ------------------------
 // RT_DATA_SLOT caches a HIT only, so a lookup that runs before the mint has
 // published the symbol is retried rather than frozen as null.
-inline void* VtBase()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-inline void* VtExternal() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
 // A class's OWN vtable and BaseTypeInfo are resolved in that class's own file,
 // through RT_DATA_SLOT. They are deliberately NOT wrapped in a helper here:
 // RT_DATA_SLOT's cache is one static per EXPANSION, so a single shared helper

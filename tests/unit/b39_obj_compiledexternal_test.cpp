@@ -108,3 +108,39 @@ UNIT_TEST(b39_obj_compiledexternal_deletingdtor_both_arms) {
     ::new (block + 8 + 0x20) TestCompiled();
     CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
 }
+
+// ---- Object::External (ENDGAME B.3.9 OBJ W3, vtable row 55) ----------------
+// External's own slot 0 now carries BOTH arms of the retired RT_DELDTOR row
+// 0x180006640 (element 0x20): driven through a leaf that overrides only the
+// pure slots, so slot 0 is External's.
+namespace {
+class TestPlainExternal : public Object::External {
+public:
+    int32_t           GetFileVersion() const override { return 1; }
+    bool              Serialize(void*) override { return true; }
+    Object::External* Reconstruct() override { return this; }
+    void              Destruct() override {}
+};
+static_assert(sizeof(TestPlainExternal) == 0x20, "the leaf adds no bytes");
+}  // namespace
+
+UNIT_TEST(b39_obj_external_deletingdtor_both_arms) {
+    CHECK(std::is_abstract<Object::External>::value);
+    CHECK(!std::is_destructible<Object::External>::value);
+    CHECK(!std::has_virtual_destructor<Object::External>::value);
+    CHECK_EQ(CeSlotOffset(&Object::External::DeletingDtor), (uintptr_t)0x00);   // 0x180006640
+
+    void* p = Object::detail::InternalMemAlloc(sizeof(TestPlainExternal), 8);
+    CHECK(p != nullptr);
+    Object::Base* one = ::new (p) TestPlainExternal();
+    CHECK(one->DeletingDtor(1) == one);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x20, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    TestPlainExternal* e0 = ::new (block + 8) TestPlainExternal();
+    ::new (block + 8 + 0x20) TestPlainExternal();
+    ::new (block + 8 + 0x40) TestPlainExternal();
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+}

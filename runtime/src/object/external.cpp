@@ -135,131 +135,16 @@ static ResourceSet::Node* ResourceSetSuccessor(ResourceSet::Node* n) {
     return p;
 }
 
-// The two exported vtables the ctor/dtor stamp. Wave 2 finding 1: the DLL
-// exports 147 ??_7 symbols, so a ported ctor can name the vtable instead of
-// mirroring slots out of a live object. External's case is the easy one for the
-// same reason Thread's was — the port does not replace any virtual, it only has
-// to write the address retail writes.
-static void* VtableExternal() {
-    static void* v = ResolveExport("??_7External@Object@@6B@");   // 0x1801547a0
-    return v;
-}
-static void* VtableBase() {
-    static void* v = ResolveExport("??_7Base@Object@@6B@");       // 0x180154788
-    return v;
-}
-
 // ============================================================
-// Object::External — construction and destruction. NOT DIFFED.
-//
-// An oracle is impossible for both: running the original as well would stamp
-// the vtable twice (harmless) and release the path's refcount twice (a double
-// free at refcount 1). They are short enough to verify by reading.
+// ??0External@Object@@QEAA@XZ (0x1800bc9c0), ??1External@Object@@UEAA@XZ
+// (0x1800bc950) and ?Compile@External@Object@@... (0x1800066e0, slot 4) --
+// GONE (ENDGAME B.3.9 OBJ). The two doors stamped the minted
+// `??_7Base@Object@@6B@` / `??_7External@Object@@6B@` tables over the POD; their
+// callers were the retired External / CompiledExternal RT_DELDTOR rows and the
+// CompiledExternal ??1 door. The slot-4 door's only reader was the minted
+// tables. The bodies are the real class's: External::External(),
+// External::~External() and External::Compile (external_class.cpp).
 // ============================================================
-
-// ??0External@Object@@QEAA@XZ  retail 0x1800bc9c0
-//
-// Retail stamps the BASE vtable and then immediately overwrites it with
-// External's. That is the inlined Object::Base constructor followed by
-// External's own stamp, and it is transcribed rather than folded away: a class
-// with a virtual base-class call in its constructor would observe both.
-External* RtObject_External_Ctor(External* self) {
-    self->_vftable = VtableBase();
-    self->_vftable = VtableExternal();
-    self->_path.data      = nullptr;
-    self->_refs._data     = nullptr;
-    self->_refs._size     = 0;
-    self->_refs._capacity = 0;
-    return self;
-}
-
-// ?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z
-//                                                        retail 0x1800066e0
-//
-// WAVE 9 LANE Y, 2026-09-08. Slot 4 of ??_7External@Object@@6B@ (0x1801547a0),
-// and until now a NAMED TRAP in the mint. The whole retail body, verbatim:
-//
-//     1800066e0  MOV EAX,0x1
-//     1800066e5  RET
-//
-// It is `External`'s virtual DEFAULT: the base class cannot compile anything,
-// so it answers CompileResult(1) and every resource type that can compile
-// overrides the slot. `?A` in the mangling means the enum is returned BY VALUE,
-// but a `W4` enum is 4 bytes, so it comes back in EAX and there is NO hidden
-// return slot — the arg count matches the name (this, const Filename&) with
-// nothing shifted (reference_hidden_retslot_wild_write.md checked, not assumed;
-// the returning-a-CLASS-by-value rule that bites GetPath below does not apply
-// to a scalar enum).
-//
-// `path` is genuinely dead: RDX is never read in the two instructions. It is
-// kept in the signature because the vtable slot's type demands it.
-//
-// ORACLE: the diff oracle against the shipped body. The function is pure — no
-// stores, no calls, no reads of `this` — so replaying it is free and the
-// comparison is exact rather than a shape check.
-uint32_t RtObject_External_Compile(External* self, const void* path) {
-    const uint32_t ours = 1u;
-    return ours;
-}
-
-// ??1External@Object@@UEAA@XZ  retail 0x1800bc950
-//
-// Order matters and is retail's: stamp External's vtable (so a virtual called
-// during teardown dispatches to External's override, not the subclass's), tear
-// down the +0x10 array, release the path, then revert to the Base vtable.
-//
-// The array teardown is FUN_180006b80 -> FUN_180006ac0: walk `_size` elements
-// at a stride of 0x10 releasing only the leading String of each, free the
-// buffer, then zero `_data` and the size/capacity qword together. Capacity is
-// therefore cleared here even though Collection::Array's own SetSize never
-// shrinks it (WAVE2_COLLECTION.md §4 consequence 1) — this is a destructor, not
-// a resize, and it zeroes both halves of that qword in one store.
-// *** WAVE 27 LANE FRONTIER, 2026-09-12: 0x180006b80 AND 0x180006ac0 ARE NOW
-// PORTED AND REGISTERED *** in runtime/src/collection/array_destroy.cpp (as
-// `RtColl_ArrayDtorElem_180006b80` and `RtColl_DestroyStrings_180006ac0`, both
-// under kD_Str_10). Retail's ~External at 0x1800bc950 does not inline them - it
-// CALLs 0x180006b80 at 0x1800bc974 - so the loop below is now a SECOND live
-// copy of logic that also exists behind a registered address.
-//
-// It is deliberately LEFT AS IS rather than converted to a ResolveAddr call,
-// and the reason is not taste: the registered body sits behind
-// the old DLL-era switch + the old DLL-era switch, and routing this dtor
-// through the registry would make it an EXEC-of-0 at cutover whenever either
-// gate is off, which is strictly worse than a duplicate. The two copies are
-// behaviourally identical (both are Body B with stride 0x10, slot at +0x00);
-// if they ever diverge, THIS comment is where to start, and the shape to
-// beware of is the shadowed-address defect array_destroy.cpp records against
-// lane UIW. ADDRESSEE: whoever arms the collection gates unconditionally.
-void RtObject_External_Dtor(External* self) {
-    self->_vftable = VtableExternal();
-
-    // FUN_180006ac0 — destroy [0, _size).
-    ExternalArrayElement* e = self->_refs._data;
-    for (int i = 0; i < self->_refs._size; ++i, ++e) {
-        char* p = e->owned;
-        if (p != nullptr) {
-            if (--StringRefCount(p) == 0) {
-                e->owned = p - 8;
-                if (e->owned != nullptr)
-                    RtSystem::RtMemFree(e->owned);
-            } else {
-                e->owned = nullptr;
-            }
-        }
-    }
-    if (self->_refs._data != nullptr)
-        RtSystem::RtMemFree(self->_refs._data);
-    self->_refs._data     = nullptr;
-    self->_refs._size     = 0;
-    self->_refs._capacity = 0;
-
-    // ENDGAME B.3.1 step 2: retail's inlined release IS `~Filename`
-    // (0x180006980). `_path` is a POD member of the not-yet-converted
-    // `Object::External`, so it is destroyed by hand, through the bridge.
-    Sys(self->_path).~Filename();
-
-    self->_vftable = VtableBase();
-}
 
 // ============================================================
 // Object::External::GetPath — DIFFED
@@ -675,14 +560,8 @@ int RtObjectExternalRegister() {
 
     int n = 0;
 
-    RegisterRuntimeExport("??0External@Object@@QEAA@XZ",
-                          (void*)&RtObject_External_Ctor); ++n;
-    RegisterRuntimeExport("??1External@Object@@UEAA@XZ",
-                          (void*)&RtObject_External_Dtor); ++n;
     RegisterRuntimeExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ",
                           (void*)&RtObject_External_GetPath); ++n;
-    RegisterRuntimeExport("?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z",
-                          (void*)&RtObject_External_Compile); ++n;
     RegisterRuntimeExport("?EnableReferenceMode@ExternalFactory@Object@@QEAAX_N@Z",
                           (void*)&RtObject_ExternalFactory_EnableReferenceMode); ++n;
     RegisterRuntimeExport("?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ",
@@ -701,10 +580,7 @@ int RtObjectExternalRegister() {
                           "AEBVFilename@System@@VType@2@@Z",
                           (void*)&RtObject_ExternalList_Find); ++n;
 
-    RegisterRuntimeAddr(0x1800bc9c0, (void*)&RtObject_External_Ctor);
-    RegisterRuntimeAddr(0x1800bc950, (void*)&RtObject_External_Dtor);
     RegisterRuntimeAddr(0x180006250, (void*)&RtObject_External_GetPath);
-    RegisterRuntimeAddr(0x1800066e0, (void*)&RtObject_External_Compile);
     RegisterRuntimeAddr(0x1800bcf40, (void*)&RtObject_ExternalFactory_EnableReferenceMode);
     RegisterRuntimeAddr(0x1800bf0f0, (void*)&RtObject_ExternalFactory_IsReferenceModeEnabled);
     RegisterRuntimeAddr(0x1800bdeb0, (void*)&RtObject_ExternalFactory_Find);

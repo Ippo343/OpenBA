@@ -286,7 +286,6 @@ namespace rtdtor {
 
 static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base"),   // probe subject
-    RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
     // ---- WAVE 10C lane DLG8 -------------------------------------------------
     // Slot 0 of `??_7Dialog@UI@@6B@`, the last of that vtable's eight abort
     // traps and the only one that is not a UI body. It is this family's shape
@@ -1040,10 +1039,6 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
 void* RtDelDtor_Base(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800065b0>());
 }
-// Object::External         ~External = 0x1800bc950  (PORTED)
-void* RtDelDtor_External(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180006640>());
-}
 // Graphics::ParticleSystemInstance ~ParticleSystemInstance = 0x1800a5520  (PORTED,
 //                          BATCH C 2026-09-12, graphics/batchc_gfx_leaves.cpp;
 //                          was "still the DLL's")
@@ -1129,7 +1124,6 @@ void RtObjectDeletingDtorPortInit() {
     using namespace rtdtor;
 
     RegisterRuntimeAddr(0x1800065b0, (void*)&RtDelDtor_Base);
-    RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
 
 
 

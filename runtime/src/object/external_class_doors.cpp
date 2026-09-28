@@ -62,8 +62,6 @@ namespace RtObject {
 // Declared in the files that define them; repeated here rather than pulled in
 // through a header, because several of these have no header of their own (the
 // one-body-one-file rule runtime/src/object/rt_object_port.cpp states).
-External* RtObject_External_Ctor(External* self);
-void      RtObject_External_Dtor(External* self);
 Filename* RtObject_External_GetPath(const External* self, Filename* ret);
 // external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
 extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,

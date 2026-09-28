@@ -3,22 +3,14 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 2 vtables, 103 BaseTypeInfo, 10 storage symbols.
-// Retired (ENDGAME B.3 step 9): 189 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 1 vtables, 103 BaseTypeInfo, 10 storage symbols.
+// Retired (ENDGAME B.3 step 9): 190 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
 RT_MINT_TRAP(0,0)
 RT_MINT_TRAP(0,1)
 RT_MINT_TRAP(0,2)
-RT_MINT_TRAP(1,0)
-RT_MINT_TRAP(1,1)
-RT_MINT_TRAP(1,2)
-RT_MINT_TRAP(1,3)
-RT_MINT_TRAP(1,4)
-RT_MINT_TRAP(1,5)
-RT_MINT_TRAP(1,6)
-RT_MINT_TRAP(1,7)
 
 // ??_7Base@Object@@6B@  DLL 0x180154788  3 slots  [adjacent-export:??_7External@Object@@6B@]
 static const RtMintVSlot kVSlots0[] = {
@@ -29,23 +21,8 @@ static const RtMintVSlot kVSlots0[] = {
 static void* kVTable0[3];
 static const RtMintTrapFn kVTraps0[] = { &RtMintTrapStub_0_0, &RtMintTrapStub_0_1, &RtMintTrapStub_0_2 };
 
-// ??_7External@Object@@6B@  DLL 0x1801547a0  8 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots1[] = {
-    { nullptr, 0x180006640ull, RT_MINT_UNNAMED },
-    { "?TypeName@External@Object@@UEBAPEBDXZ", 0x1800066c0ull, RT_MINT_NAMED },
-    { "?Type@External@Object@@UEBAIXZ", 0x1800066d0ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-};
-static void* kVTable1[8];
-static const RtMintTrapFn kVTraps1[] = { &RtMintTrapStub_1_0, &RtMintTrapStub_1_1, &RtMintTrapStub_1_2, &RtMintTrapStub_1_3, &RtMintTrapStub_1_4, &RtMintTrapStub_1_5, &RtMintTrapStub_1_6, &RtMintTrapStub_1_7 };
-
 static RtMintVtable kMintVtables[] = {
     { "??_7Base@Object@@6B@", 0x180154788ull, 3, kVSlots0, kVTable0, kVTraps0, "adjacent-export:??_7External@Object@@6B@" },
-    { "??_7External@Object@@6B@", 0x1801547a0ull, 8, kVSlots1, kVTable1, kVTraps1, "tail-not-a-pointer" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from

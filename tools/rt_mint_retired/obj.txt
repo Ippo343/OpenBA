@@ -12,3 +12,6 @@
 
 # -- W3: Object::Internal (INVENTORY_A row 76, RT_DELDTOR row 0x180006440) --
 ??_7Internal@Object@@6B@   OBJ   every builder constructs the real class (the Work_Ctor25 door and import slot 0x140152768 gone in 4d41ac02); RT_DELDTOR row 0x180006440, ??0/??1 doors, 3 slot doors, [RtInternalVtbl]/[RtInternalTable] instruments deleted
+
+# -- W3: Object::External (INVENTORY_A row 55, RT_DELDTOR row 0x180006640) --
+??_7External@Object@@6B@   OBJ   no stamper left (every External-derived class a real class); External::DeletingDtor carries both arms; RT_DELDTOR row 0x180006640, ??0/??1 doors, 3 slot doors (Type, TypeName, Compile), UI VtBase/VtExternal (dead) deleted
