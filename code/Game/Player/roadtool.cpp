@@ -22,7 +22,9 @@
 #include "Player/dragtool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "resolve.h"   // LEFT: the 0x14009ce00 door (see s_fn_RoadPathfind)
+#include "Player/exe_bodies.h"
+#include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
 #include "collection/Collection.h"
 #include "Component/CreateRoadDescription.h"
@@ -43,39 +45,26 @@ static const uint32_t* s_TypeId_CreateRoadDescription = nullptr;
 // Used by CalcPath and CalcCost. Takes map data, flags, start/end cells,
 // output buffer, modifier flag, and direction flag.
 // Original: referenced internally from CalcPath/CalcCost
+//
+// LEFT (B3R W1): still read through the registry. The body, RoadTool_sub_ce00
+// (code/Game/Action/keystone_a_zone.cpp), is declared VOID while these readers use
+// the int it leaves in EAX (retail's body tail-calls 0x1400a6e30, whose int return
+// is the path length); a direct call cannot read it. The body's return type is the
+// Action owner's to settle.
 // ============================================================
 typedef int (*fn_RoadPathfind_t)(uint64_t mapData, uint32_t flags, uint32_t startCell,
     uint64_t endCell, uint64_t stack_param, uint64_t outputBuffer, uint8_t modFlag, int dirFlag);
 static fn_RoadPathfind_t s_fn_RoadPathfind = nullptr;
 
-// FUN_14009c960: PlaceRoadSegment — places a road segment at a cell
-typedef void (*fn_PlaceRoadSegment_t)(void* mapGrid, int cellIndex, uint8_t roadType,
-    uint64_t endCell, uint32_t param5, uint64_t param6);
-static fn_PlaceRoadSegment_t s_fn_PlaceRoadSegment = nullptr;
-
-// FUN_1400acd90: SetupRoadPlacement — initialization before placing road segments
-typedef void (*fn_SetupRoadPlacement_t)(uint64_t mapSystem, uint8_t roadType, uint64_t descData);
-static fn_SetupRoadPlacement_t s_fn_SetupRoadPlacement = nullptr;
-
-// TradeWork_impl_f370: FinishRoadPlacement — finalization after placing road segments
-typedef uint64_t (*fn_FinishRoadPlacement_t)(uint64_t mapSystem, void* mapGrid);
-static fn_FinishRoadPlacement_t s_fn_FinishRoadPlacement = nullptr;
-
-// RoadTool_helper_6990: GetDescriptionHelper — gets description helper from entity
-typedef uint64_t* (*fn_GetDescHelper_t)(uint64_t entity, uint64_t* retval);
-static fn_GetDescHelper_t s_fn_GetDescHelper = nullptr;
-
-// FUN_140101270: ScreenToCell — ray-picks map cell under cursor
-typedef int (*fn_ScreenToCell_t)(uint64_t unused);
-static fn_ScreenToCell_t s_fn_ScreenToCell = nullptr;
+// (Four statics for 0x14009c960 / 0x1400acd90 / 0x1400af370 / 0x140026990 were never
+// resolved nor called -- dead readers, gone. 0x140101270 ScreenToCell is called by
+// name: PlayerRay_ScreenToCell_101270.)
 
 static bool s_funcsResolved = false;
 
 static void ResolveRoadToolFuncs() {
     if (s_funcsResolved) return;
 
-    s_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
-        ResolveAddr(Module::Exe, 0x140101270));
     // Road A* (0x14009ce00). Shared by Draw and CalcCost; resolved here so CalcCost —
     // which runs before ResolveRoadDrawFuncs is even declared — can reach it too.
     if (!s_fn_RoadPathfind) {
@@ -106,7 +95,7 @@ void RoadTool::Startup() {
     uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
-    if (!entity || !s_TypeId_CreateRoadDescription || !fn_IsDerivedFrom) {
+    if (!entity || !s_TypeId_CreateRoadDescription) {
         roadDesc = nullptr;
         return;
     }
@@ -124,7 +113,7 @@ void RoadTool::Startup() {
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom before casting
-            if (fn_IsDerivedFrom(comp, targetTypeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
                 result = comp;
             }
             break;
@@ -321,24 +310,9 @@ static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
     arr->SetSize(arr->_size + 1, *entry);
 }
 
-// ============================================================
-// Resolved exe-internal function pointer for Draw (ScreenToCell)
-// ============================================================
-// FUN_140101270: ScreenToCell — reuses s_fn_ScreenToCell from ResolveRoadToolFuncs
-
-static bool s_roadDrawFuncsResolved = false;
-
-static void ResolveRoadDrawFuncs() {
-    if (s_roadDrawFuncsResolved) return;
-
-    // Road pathfinding — reuse existing s_fn_RoadPathfind
-    if (!s_fn_RoadPathfind) {
-        s_fn_RoadPathfind = reinterpret_cast<fn_RoadPathfind_t>(
-            ResolveAddr(Module::Exe, 0x14009ce00));
-    }
-
-    s_roadDrawFuncsResolved = true;
-}
+// Draw calls 0x140101270 PlayerRay_ScreenToCell_101270 and 0x1401008c0
+// PlayerTileRender_DrawOverlay_08c0 by name; the road A* door is resolved by
+// ResolveRoadToolFuncs (a second resolver of the same pointer is gone).
 
 // ============================================================
 // RoadTool::Draw (vtable +0x40, Slot8)
@@ -350,7 +324,6 @@ static void ResolveRoadDrawFuncs() {
 //
 // Original: 0x140105190
 void RoadTool::Draw(void* context, char param3) {
-    ResolveRoadDrawFuncs();
     ResolveRoadToolFuncs();
 
     int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
@@ -387,9 +360,8 @@ void RoadTool::Draw(void* context, char param3) {
 
         // Render: path tiles in R8, empty array in R9
         TileArray emptyTiles;
-        if (fn_TileRender) {
-            fn_TileRender(nullptr, context, &pathTiles, &emptyTiles);
-        }
+        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&pathTiles),
+                                          reinterpret_cast<int64_t*>(&emptyTiles));
 
         // pathTiles / emptyTiles are released by ~Array at scope exit (no early
         // return inside this block).
@@ -400,10 +372,7 @@ void RoadTool::Draw(void* context, char param3) {
         uint32_t startCell, endCell;
 
         if (dragState == '\0') {
-            int cell = -1;
-            if (s_fn_ScreenToCell) {
-                cell = s_fn_ScreenToCell(0);
-            }
+            int cell = PlayerRay_ScreenToCell_101270(0);
             startCell = (uint32_t)cell;
             endCell   = (uint32_t)cell;
         } else {
@@ -482,9 +451,8 @@ void RoadTool::Draw(void* context, char param3) {
 
             // Render: path tiles in R8, empty array in R9
             TileArray emptyTiles;
-            if (fn_TileRender) {
-                fn_TileRender(nullptr, context, &pathTiles, &emptyTiles);
-            }
+            PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&pathTiles),
+                                              reinterpret_cast<int64_t*>(&emptyTiles));
 
             // pathTiles / emptyTiles are released by ~Array at scope exit (the
             // enclosing block's only early return, `startCell < 0`, precedes them).
