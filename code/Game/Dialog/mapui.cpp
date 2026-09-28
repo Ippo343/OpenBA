@@ -31,6 +31,8 @@
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Component/exe_bodies.h"   // B3R: FrustumOutline_ProjectCorners
 
 
 // ============================================================
@@ -54,17 +56,19 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // Defensive (standalone bring-up): the minimap ImageBuffer must exist — the
     // very first thing below is fn_ImageBuffer_Width(imageBuffer). If the GPU
     // buffer was never created (Minimap_CreateAndUpload not yet run) skip rather
-    // than fault. Also require the core primitives.
-    if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton) {
+    // than fault. Also require the allocator (B3R: the fn_MemAlloc readiness test was
+    // always true and is gone; the g_pMemAllocSingleton snapshot is read live).
+    if (!imageBuffer || !System::MemoryAllocator::_singleton) {
         if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p\n",
-               elementName, imageBuffer, (void*)fn_MemAlloc, g_pMemAllocSingleton);
+               elementName, imageBuffer, (void*)&System::MemoryAllocator::MemAlloc,
+               (void*)System::MemoryAllocator::_singleton);
         *materialOut = nullptr;
         *spriteSheetOut = nullptr;
         return;
     }
 
     // --- Allocate and construct MaterialInstance (0x60 bytes) ---
-    void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+    void* matInst = System::MemoryAllocator::MemAlloc(0x60, 8);
     void* materialPtr = nullptr;
     if (matInst) {
         ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
@@ -82,7 +86,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
             ->FindOrLoad(filenameObj));
     void* material = nullptr;
     if (ext) {
-        if (fn_IsDerivedFrom(ext, Graphics::Material::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId())) {
             material = ext;
         }
     }
@@ -104,7 +108,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     MAPTRC("BuildParameters done, alloc spritesheet");
 
     // --- Allocate and construct SpriteSheet (0x58 bytes) ---
-    void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+    void* sheet = System::MemoryAllocator::MemAlloc(0x58, 8);
     void* spriteSheet = nullptr;
     if (sheet) {
         ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
@@ -153,7 +157,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 
     // Cast to ImageElement via IsDerivedFrom
     void* imageElem = nullptr;
-    if (rawElem && fn_IsDerivedFrom(rawElem, UI::ImageElement::TypeId())) {
+    if (rawElem && ::Object::IsDerivedFromNullSafe(rawElem, UI::ImageElement::TypeId())) {
         imageElem = rawElem;
     }
     if (Opt().mapTrace)
@@ -199,7 +203,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 // (FUN_14006c5b0) is called as a resolved function pointer since
 // it depends on deep math/camera internals.
 
-// fn_MapUI_ProjectCornersToGround is resolved globally in engine_funcs.cpp
+// FUN_14006c5b0 is FrustumOutline_ProjectCorners, called by name (B3R).
 
 void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int mapHeight) {
     (void)param1;
@@ -207,7 +211,6 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
     if (clickX < 0 || clickX >= mapWidth || clickY < 0 || clickY >= mapHeight)
         return;
 
-    if (!fn_MapUI_ProjectCornersToGround) return;
 
     // FUN_14006c5b0 fills an array of 4 projected ground-plane corner positions
     // (Vector3, 12 bytes each) plus 4 frustum corners = 8 Vector3s total
@@ -215,7 +218,7 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
     for (int i = 0; i < 8 * 3; i++) fullBuf[i] = 0.0f;
 
     // Call the ground projection function — fills corner positions from camera frustum
-    fn_MapUI_ProjectCornersToGround(fullBuf);
+    FrustumOutline_ProjectCorners(fullBuf);   // 0x14006c5b0
 
     // The original also averages the 4 projected corners (0.25 * Σcorners) but
     // DISCARDS the result — dead code confirmed in the 0x14006c850 disassembly —

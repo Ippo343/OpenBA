@@ -311,7 +311,7 @@ void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element
                 // and *TypeId_NameDatabase is itself NULL until something
                 // lazy-resolves it. FindOrLoad by exact filename is authoritative.
 
-                fn_NameDB_GenerateName(&nameBuf, nameDB, random, 5, nameLen);
+                NameDB_GenerateName(&nameBuf, nameDB, random, 5, nameLen);   // 0x1400a4b30
 
                 uint64_t sp = (uint64_t)(uintptr_t)nameBuf._data;
                 bool endsVill = false;
