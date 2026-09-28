@@ -370,3 +370,37 @@ void ResolveExternalByName_Impl(void* nameString);  // 0x14001b1d0
 
 // ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
 int CreateNaturalResource_helper_e2c0(int* param_1, int param_2);  // 0x14009e2c0
+
+// ---- inline bodies (moved from engine/funcs/engine_funcs.h, its "TO MOVE: Component"
+// section; no .cpp. B3R Leftovers. Storage_AddItem, the third body there, had no caller
+// and was deleted.)
+#include "Entity/exe_bodies.h"   // fn_FindComponent_Work (read by fn_CitizenComponent_HasVacancy)
+
+// ---- inline body (no .cpp)
+// Alias used by professionui.cpp
+inline int fn_CalcWorkerSlots(void* storageLocComp) {
+    return fn_StorageCountQuery(storageLocComp);
+}
+
+// ---- inline body (no .cpp)
+// CitizenComponent_HasVacancy (0x140017050) — WorkPlaceComponent roster (+0x60) < seat
+// capacity (its StorageLocationComponent/WorkComponent +0x30, lazily CalcMaxWorkers'd).
+// Reimplemented INLINE: it was ResolveAddr(Module::Exe,0x140017050), which is NULL in
+// standalone (that exe address isn't registered), and citizencomponent.cpp:1176/1193 call
+// it UNGUARDED — so once a placed building reaches construction and a citizen evaluates
+// switching workplaces, the null call crashed (VCALL-of-0). Byte-faithful to 0x140017050
+// (FUN_140003050 = fn_FindComponent_Work, FUN_14012e5c0 = fn_StorageCountQuery), plus
+// one SA safety guard the original lacks: a null storage-loc component → "no vacancy"
+// rather than dereferencing null+0x30. Works in both DLL and standalone builds.
+inline bool fn_CitizenComponent_HasVacancy(uintptr_t workplaceComp) {
+    int roster = *reinterpret_cast<int*>(workplaceComp + 0x60);
+    uint64_t slComp = 0;
+    fn_FindComponent_Work(*reinterpret_cast<void**>(workplaceComp + 0x10), &slComp);
+    if (slComp == 0) return false;
+    uintptr_t sl = static_cast<uintptr_t>(slComp);
+    if (*reinterpret_cast<int*>(sl + 0x30) == 0) {
+        int cap = fn_StorageCountQuery(reinterpret_cast<void*>(sl));
+        *reinterpret_cast<int*>(sl + 0x30) = cap;
+    }
+    return roster < *reinterpret_cast<int*>(sl + 0x30);
+}
