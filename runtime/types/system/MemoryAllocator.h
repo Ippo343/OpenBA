@@ -170,6 +170,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
 namespace rt {
 namespace system {
@@ -229,10 +230,22 @@ namespace System {
 // ---------------------------------------------------------------------------
 // MemoryAllocator — 0x670 bytes (operator= at 0x18007c0c0 memcpy's 0x670).
 //
-// B3R W0-SM M1: the class, with its one static. The member functions are still
-// the `rtalloc::*` bodies in runtime/src/system/allocator.cpp (`self` explicit);
-// making them members is W0-A0's step (B3R_RULES R9), so none is declared here
-// yet. `rt::system::MemoryAllocator` (below) names this class.
+// B3R W0-A0: every exported member is declared here with retail's name and
+// signature (the mangled name and address beside each). The bodies are in
+// runtime/src/system/allocator.cpp (the portable half) and allocator_win.cpp
+// (the six Platform* members). Retail's access is noted per member ("retail:
+// private" = the `AEAA`/`AEBA`/`CA` mangling); the port keeps them public
+// because the registration thunks and the shadow oracle in allocator.cpp call
+// them from outside the class.
+//
+// NOT DECLARED, ON PURPOSE: the constructor ??0MemoryAllocator@System@@QEAA@XZ
+// (0x1800c79a0) and destructor ??1MemoryAllocator@System@@QEAA@XZ (0x1800c7960).
+// `Engine::Engine::_allocator` (Engine.h) and allocator.cpp's shadow replica
+// hold this class BY VALUE; a user-declared ctor/dtor would run on the shadow
+// at static init / exit (the shadow must never touch `_singleton`) and would
+// make every by-value holder non-trivial. Their bodies stay the free functions
+// `rtalloc::Construct` / `rtalloc::Destruct` (allocator.cpp), reached through
+// the ??0 / ??1 rows in runtime/src/engine/singleton_ctors.cpp.
 // ---------------------------------------------------------------------------
 class MemoryAllocator {
 public:
@@ -242,6 +255,74 @@ public:
     // runtime/src/system/allocator.cpp. PUBLIC: foreign files read it directly
     // (the crash log, the engine_funcs snapshot, RunStartupSelfTests).
     static MemoryAllocator* _singleton;
+
+    // ---- statics ------------------------------------------------------------
+    // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z   0x1800c7a50
+    //   Enter(_singleton->lock); Allocate(size, align); Leave. The ONE allocator
+    //   API (B3R R9). Consults g_memoryAllocatorInstrument first (below).
+    static void* MemAlloc(uint64_t size, int align);
+    // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z      0x1800c7ad0
+    //   if (p) { Enter; Free(p); Leave; }. Consults g_memoryAllocatorInstrument.
+    static void  MemFree(void* p);
+    // ?Get@MemoryAllocator@System@@SAPEAV12@XZ        0x1800534e0
+    static MemoryAllocator* Get();
+    // ?PointerOffset@MemoryAllocator@System@@CA_JPEAX0@Z  0x180034e20 (retail: private)
+    static int64_t PointerOffset(void* a, void* b);
+
+    // ---- public members -----------------------------------------------------
+    // ?Startup@MemoryAllocator@System@@QEAA_N_K0@Z    0x1800c7620
+    bool     Startup(uint64_t minRangeMB, uint64_t maxTotalMB);
+    // ?Shutdown@MemoryAllocator@System@@QEAAXXZ       0x1800c75b0
+    void     Shutdown();
+    // ?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z 0x1800c6e60 — RAW: no lock,
+    //   exactly as retail. The locked entry point is MemAlloc.
+    void*    Allocate(uint64_t size, int align);
+    // ?Free@MemoryAllocator@System@@QEAAXPEAX@Z       0x1800c6c00 — RAW: no lock.
+    void     Free(void* p);
+    // ?GetAllocationSize@MemoryAllocator@System@@QEAA_KPEAX@Z  0x1800c71d0
+    uint64_t GetAllocationSize(void* p);
+    // ?GetAllocatedSize@MemoryAllocator@System@@QEBA_JXZ       0x18007c0b0
+    int64_t  GetAllocatedSize() const;
+    // ??4MemoryAllocator@System@@QEAAAEAV01@AEBV01@@Z          0x18007c0c0
+    //   retail memcpy's 0x670 bytes: exactly the defaulted (trivial) copy.
+    MemoryAllocator& operator=(const MemoryAllocator&) = default;
+
+    // ---- retail: private ----------------------------------------------------
+    // ?GetMemoryRange@MemoryAllocator@System@@AEAAPEAUMemoryRange@12@PEAX@Z  0x1800c71f0
+    rt::system::MemoryRange* GetMemoryRange(void* p);
+    // ?GetFreeTagForSize@MemoryAllocator@System@@AEAAPEAUFreeTag@12@_K@Z    0x1800c7230
+    rt::system::FreeTag*     GetFreeTagForSize(uint64_t want);
+    // ?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z         0x1800c7310
+    void LinkFreeTag(rt::system::MemoryTag* tag);
+    // ?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z        0x1800c7410
+    void UnlinkFreeTag(rt::system::FreeTag* node, rt::system::FreeTag* unused);
+    // ?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z       0x1800c7580
+    void UnlinkFreeTag(rt::system::MemoryTag* tag);
+    // ?AddNewMemoryRange@MemoryAllocator@System@@AEAA_N_K@Z                 0x1800c7690
+    bool AddNewMemoryRange(uint64_t want);
+    // ?ExpandMemoryRangeTable@MemoryAllocator@System@@AEAA_NXZ              0x1800c77e0
+    bool ExpandMemoryRangeTable();
+    // ?GetBinForSize@MemoryAllocator@System@@AEBAH_K@Z                      0x1800c78d0
+    int  GetBinForSize(uint64_t n) const;
+    // ?GetBinForLargeSize@MemoryAllocator@System@@AEBAH_K@Z                 0x1800c7920
+    int  GetBinForLargeSize(uint64_t n) const;
+    // ?CommitToPage@MemoryAllocator@System@@AEAAXPEAUMemoryRange@12@PEAX@Z  0x1800c7bd0
+    void CommitToPage(rt::system::MemoryRange* range, void* upTo);
+    // ?ReleaseToPage@MemoryAllocator@System@@AEAAXPEAUMemoryRange@12@PEAX@Z 0x1800c7c80
+    void ReleaseToPage(rt::system::MemoryRange* range, void* downTo);
+    // The six Platform* members — defined in runtime/src/system/allocator_win.cpp.
+    // ?PlatformConstruct@MemoryAllocator@System@@AEAAXXZ          0x1800c7b30
+    void  PlatformConstruct();
+    // ?PlatformDestruct@MemoryAllocator@System@@AEAAXXZ           0x1800c7b50
+    void  PlatformDestruct();
+    // ?PlatformAllocate@MemoryAllocator@System@@AEAAPEAX_KPEAX_N@Z 0x1800c7b60
+    void* PlatformAllocate(uint64_t bytes, void* at, bool commitToo);
+    // ?PlatformFree@MemoryAllocator@System@@AEAAXPEAX_K@Z         0x1800c7bb0
+    void  PlatformFree(void* p, uint64_t bytes);
+    // ?PlatformStartup@MemoryAllocator@System@@AEAA_NXZ           0x1800c7c40
+    bool  PlatformStartup();
+    // ?PlatformShutdown@MemoryAllocator@System@@AEAAXXZ          0x1800c7c70
+    void  PlatformShutdown();
 
     rt::system::MemoryRange* ranges; // +0x000 ctor, GetMemoryRange, Shutdown
     int32_t      rangeCount;     // +0x008 ctor, AddNewMemoryRange
@@ -280,6 +361,11 @@ static_assert(offsetof(MemoryAllocator, allocCount) == 0x638, "allocCount");
 static_assert(offsetof(MemoryAllocator, freeTagCount) == 0x63c, "freeTagCount");
 static_assert(offsetof(MemoryAllocator, lock) == 0x640, "lock");
 static_assert(offsetof(MemoryAllocator, pageSize) == 0x668, "pageSize");
+// The by-value holders (Engine::_allocator, the shadow replica) rely on this:
+// no user-declared ctor/dtor, a trivial operator=.
+static_assert(std::is_trivially_copyable<MemoryAllocator>::value &&
+              std::is_trivially_default_constructible<MemoryAllocator>::value,
+              "MemoryAllocator must stay trivial: see the NOT DECLARED note on the class");
 
 // ---------------------------------------------------------------------------
 // Platform seam. See the PORTABILITY note above: the host installs this table,
