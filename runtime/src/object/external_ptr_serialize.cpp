@@ -164,6 +164,10 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
+#include "../../types/ui/CharacterSet.h"   // ENDGAME B.3.9 TI-UI: UI::CharacterSet::GetTypeInfo()
+#include "../../types/ui/Font.h"   // ENDGAME B.3.9 TI-UI: UI::Font::GetTypeInfo()
+#include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.9 TI-UI: UI::SpriteSheet::GetTypeInfo()
+#include "../../types/ui/StringTable.h"   // ENDGAME B.3.9 TI-UI: UI::StringTable::GetTypeInfo()
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -463,6 +467,12 @@ extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
         RtObject_ExternalPtr_Serialize(self, ser, ti);                         \
     }
 
+// ENDGAME B.3.9 D6 W3: the same thunk over a folded class's own record.
+#define EXTPTR_THUNK_OF(fnName, Class)                                         \
+    extern "C" void fnName(External** self, Serializer* ser) {                 \
+        RtObject_ExternalPtr_Serialize(self, ser, &Class::GetTypeInfo());      \
+    }
+
 // 0x180038f90 — ElementDescription+0x48
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ElementDescription,
              "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
@@ -470,16 +480,14 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ElementDescription,
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Dialog,
              "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A")
 // 0x1800042a0 — ElementDescription+0x58, and Achievement::Goal+0x20
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_StringTable,
-             "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_StringTable, UI::StringTable)
 // 0x180005dc0 — Achievement::GoalInstance+0x18. The oracle route; see the banner.
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Goal,
              "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
 // 0x180004590 — Achievement::Achievement+0x38 (WAVE 26 LANE INT33). The FIFTH,
 // and it is registered for the same reason the fourth was: it is on an ORACLE
 // route that already exists. See the registration block below.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SpriteSheet,
-             "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SpriteSheet, UI::SpriteSheet)
 // 0x180014520 — the SIXTH (WAVE 29 LANE WALL). `SpriteSheet+0x30`, and also
 // the four material slots of `Graphics::EdgeMeshInstance` and
 // `Graphics::Particle`. See the registration block below for why it moves now.
@@ -533,8 +541,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_RenderState,
 // standalone/rt_data_mint_tables.inc:4373, where the mint carries that same
 // name at that same address. The class UI::Font itself is NOT ported here and
 // is not needed: this body only ever compares its type id.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Font,
-             "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Font, UI::Font)
 // VTABLE BATCH 7 (2026-09-12): 0x1800594a0 — Graphics::AnimationEvent. Reached
 // from Graphics::AnimationGroup::Serialize's per-clip event-list element loop
 // (runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp), the same
@@ -563,8 +570,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
 //   0x18003dc90  <- runtime/src/ui/documenttextdescription.cpp:194 resolves it
 //                   by address for the +0xe0 container field.
 // 0x180076e90 — ExternalPtr<UI::CharacterSet>
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_CharacterSet,
-             "?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_CharacterSet, UI::CharacterSet)
 // 0x180052a50 — ExternalPtr<Audio::SoundBuffer>
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundBuffer,
              "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A")
@@ -575,6 +581,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ExternalList,
              "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A")
 
 #undef EXTPTR_THUNK
+#undef EXTPTR_THUNK_OF
 
 // ============================================================================
 // The ARRAY form of the same template — 818 bytes, eight instantiations.
@@ -613,6 +620,12 @@ extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
         RtObject_ExternalPtrArray_Serialize(ser, count, elems, ti);            \
     }
 
+// ENDGAME B.3.9 D6 W3: the same thunk over a folded class's own record.
+#define EXTPTR_ARRAY_THUNK_OF(fnName, Class)                                   \
+    extern "C" void fnName(Serializer* ser, int count, External** elems) {     \
+        RtObject_ExternalPtrArray_Serialize(ser, count, elems, &Class::GetTypeInfo()); \
+    }
+
 // 0x18002f170 — Object::External (note the `@2@` back-reference in the export)
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
                    "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A")
@@ -646,14 +659,13 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_VideoProgram,
 // Three call sites in our tree resolve these by address today and therefore
 // still run retail's copies until this registration block runs:
 // documenttextdescription.cpp:171 and :177, spritecapture_class.cpp:216.
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Font,
-                   "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_SpriteSheet,
-                   "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Font, UI::Font)
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_SpriteSheet, UI::SpriteSheet)
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Surface,
                    "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A")
 
 #undef EXTPTR_ARRAY_THUNK
+#undef EXTPTR_ARRAY_THUNK_OF
 
 // ---- Registration ----------------------------------------------------------
 //

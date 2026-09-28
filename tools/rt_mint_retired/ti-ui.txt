@@ -66,3 +66,11 @@
 ?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TabElement, "Element") in tabelement.cpp; readers: own accessor slot gone
 ?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DocumentTextDescription, "ElementDescription") in documenttextdescription.cpp; readers: own accessor slot gone
 ?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DocumentTextElement, "Element") in documenttextelement.cpp; readers: own accessor slot gone
+
+# -- cluster 6: the resources (CharacterSet / Cursor / Font / SpriteCapture / SpriteSheet / StringTable) --
+?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::CharacterSet, "Object::External") in characterset.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp ExternalPtr<CharacterSet> thunk -> EXTPTR_THUNK_OF(UI::CharacterSet)
+?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::Cursor, "Object::External") in cursor.cpp; readers: own accessor slot gone
+?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::Font, "Object::External") in font.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp single + array thunks -> EXTPTR_*THUNK_OF(UI::Font)
+?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpriteCapture, "Object::External") in spritecapture_class.cpp; readers: own accessor slot gone, documenttext / documenttextelement -> SpriteCapture::TypeId() (cluster 1)
+?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpriteSheet, "Object::External") in spritesheet_vtable.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp single + array thunks -> EXTPTR_*THUNK_OF(UI::SpriteSheet)
+?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::StringTable, "Object::External") in stringtable_factory.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp thunk -> EXTPTR_THUNK_OF(UI::StringTable)

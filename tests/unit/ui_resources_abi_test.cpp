@@ -98,7 +98,7 @@ struct CharacterSetProbe final : UI::CharacterSet {
 };
 
 // Raw-call slots 0,1,2,3,5,6,7,8 and check the marker each one leaves.
-void CheckNineSlots(void* raw) {
+void CheckNineSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
     using DtorFn = void* (*)(void*, unsigned);
     using NameFn = const char* (*)(const void*);
     using TypeFn = uint32_t (*)(const void*);
@@ -109,8 +109,9 @@ void CheckNineSlots(void* raw) {
 
     Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
-    Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);       CHECK_EQ(g_lastMark, kTypeName / 8);
-    Reset(); SlotAt<TypeFn>(raw, kType)(raw);           CHECK_EQ(g_lastMark, kType / 8);
+    // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
+    CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == rec.name);
+    CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), rec.typeId);
     Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);  CHECK_EQ(g_lastMark, kGetFileVersion / 8);
     Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr); CHECK_EQ(g_lastMark, kSerialize / 8);
     Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);     CHECK_EQ(g_lastMark, kReconstruct / 8);
@@ -148,7 +149,7 @@ UNIT_TEST(ui_characterset_layout) {
 UNIT_TEST(ui_characterset_slot_order_is_retails) {
     CharacterSetProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw);
+    CheckNineSlots(raw, UI::CharacterSet::GetTypeInfo());
     CheckCompileInherited(raw);
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
@@ -216,7 +217,7 @@ UNIT_TEST(ui_cursor_layout) {
 UNIT_TEST(ui_cursor_slot_order_is_retails) {
     CursorProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw);
+    CheckNineSlots(raw, UI::Cursor::GetTypeInfo());
     CheckCompileInherited(raw);
 }
 
@@ -249,7 +250,7 @@ UNIT_TEST(ui_stringtable_layout) {
 UNIT_TEST(ui_stringtable_slot_order_is_retails) {
     StringTableProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw);
+    CheckNineSlots(raw, UI::StringTable::GetTypeInfo());
     CheckCompileInherited(raw);
 }
 
@@ -298,7 +299,7 @@ UNIT_TEST(ui_spritesheet_layout) {
 UNIT_TEST(ui_spritesheet_slot_order_is_retails) {
     SpriteSheetProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw);
+    CheckNineSlots(raw, UI::SpriteSheet::GetTypeInfo());
     CheckCompileOverridden(raw);
 }
 
@@ -332,7 +333,7 @@ UNIT_TEST(ui_spritecapture_layout) {
 UNIT_TEST(ui_spritecapture_slot_order_is_retails) {
     SpriteCaptureProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw);
+    CheckNineSlots(raw, UI::SpriteCapture::GetTypeInfo());
     CheckCompileInherited(raw);
 }
 
@@ -390,7 +391,7 @@ UNIT_TEST(ui_font_getters_read_retails_offsets) {
 UNIT_TEST(ui_font_slot_order_is_retails) {
     FontProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineSlots(raw);
+    CheckNineSlots(raw, UI::Font::GetTypeInfo());
     CheckCompileOverridden(raw);
 }
 
@@ -585,8 +586,6 @@ UNIT_TEST(b39_uid_font_deleting_dtor_both_arms) {
 // ############################################################################
 namespace UI {
 
-const char* CharacterSet::TypeName() const { Note(this, kTypeName / 8); return "CharacterSet"; }
-uint32_t    CharacterSet::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     CharacterSet::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
 bool        CharacterSet::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* CharacterSet::Reconstruct() { Note(this, kReconstruct / 8); return this; }
@@ -594,8 +593,6 @@ void        CharacterSet::Destruct() { Note(this, kDestruct / 8); }
 Object::External* CharacterSet::Construct() { Note(this, kConstruct / 8); return this; }
 CharacterSet::~CharacterSet() { B39NoteDtor(this); }
 
-const char* Cursor::TypeName() const { Note(this, kTypeName / 8); return "Cursor"; }
-uint32_t    Cursor::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     Cursor::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
 bool        Cursor::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* Cursor::Reconstruct() { Note(this, kReconstruct / 8); return this; }
@@ -603,8 +600,6 @@ void        Cursor::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Cursor::Construct() { Note(this, kConstruct / 8); return this; }
 Cursor::~Cursor() { B39NoteDtor(this); }
 
-const char* StringTable::TypeName() const { Note(this, kTypeName / 8); return "StringTable"; }
-uint32_t    StringTable::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     StringTable::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
 bool        StringTable::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* StringTable::Reconstruct() { Note(this, kReconstruct / 8); return this; }
@@ -612,8 +607,6 @@ void        StringTable::Destruct() { Note(this, kDestruct / 8); }
 Object::External* StringTable::Construct() { Note(this, kConstruct / 8); return this; }
 StringTable::~StringTable() { B39NoteDtor(this); }
 
-const char* SpriteSheet::TypeName() const { Note(this, kTypeName / 8); return "SpriteSheet"; }
-uint32_t    SpriteSheet::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     SpriteSheet::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 6; }
 // The OVERRIDE of slot 4; answers retail's 1 (0x18011d720).
 Object::External::CompileResult SpriteSheet::Compile(const System::Filename&) {
@@ -625,8 +618,6 @@ void        SpriteSheet::Destruct() { Note(this, kDestruct / 8); }
 Object::External* SpriteSheet::Construct() { Note(this, kConstruct / 8); return this; }
 SpriteSheet::~SpriteSheet() {}
 
-const char* SpriteCapture::TypeName() const { Note(this, kTypeName / 8); return "SpriteCapture"; }
-uint32_t    SpriteCapture::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     SpriteCapture::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
 bool        SpriteCapture::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* SpriteCapture::Reconstruct() { Note(this, kReconstruct / 8); return this; }
@@ -634,8 +625,6 @@ void        SpriteCapture::Destruct() { Note(this, kDestruct / 8); }
 Object::External* SpriteCapture::Construct() { Note(this, kConstruct / 8); return this; }
 SpriteCapture::~SpriteCapture() {}
 
-const char* Font::TypeName() const { Note(this, kTypeName / 8); return "Font"; }
-uint32_t    Font::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     Font::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 8; }
 // The OVERRIDE of slot 4; answers retail's 1 (0x1801176c0).
 Object::External::CompileResult Font::Compile(const System::Filename&) {
@@ -648,3 +637,22 @@ Object::External* Font::Construct() { Note(this, kConstruct / 8); return this; }
 Font::~Font() { B39NoteDtor(this); }
 
 }  // namespace UI
+
+// ENDGAME B.3.9 TI-UI: the six records (literals as runtime/src/ui passes them)
+// and the null factory pair they point at; never called here.
+#define RES_TEST_FACTORIES(CLS)                                             \
+    ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \
+    ::Object::Base* UI::CLS::CreateInPlaceObject(void*) { return nullptr; }
+RES_TEST_FACTORIES(CharacterSet)
+DEFINE_TYPE(UI::CharacterSet, "Object::External", nullptr)
+RES_TEST_FACTORIES(Cursor)
+DEFINE_TYPE(UI::Cursor, "Object::External", nullptr)
+RES_TEST_FACTORIES(StringTable)
+DEFINE_TYPE(UI::StringTable, "Object::External", nullptr)
+RES_TEST_FACTORIES(SpriteSheet)
+DEFINE_TYPE(UI::SpriteSheet, "Object::External", nullptr)
+RES_TEST_FACTORIES(SpriteCapture)
+DEFINE_TYPE(UI::SpriteCapture, "Object::External", nullptr)
+RES_TEST_FACTORIES(Font)
+DEFINE_TYPE(UI::Font, "Object::External", nullptr)
+#undef RES_TEST_FACTORIES

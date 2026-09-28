@@ -98,20 +98,6 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace {
-
-// ---- the exported DATA these bodies read -----------------------------------
-// `?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A` is spelled `0V…A`, the
-// PRIVATE static form — and this DLL exports its private members, so a name
-// door is the correct door and no address door is needed
-// (reference_aeaa_is_private_not_unexported.md). Read as a byte pointer at
-// +0x00 / +0x08, the same idiom runtime/src/io/package_file.cpp uses.
-const uint8_t* SheetTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A");
-}
-}  // namespace
-
 // ############################################################################
 // UI::SpriteSheet's slot bodies (ENDGAME B.3.6 block D), inside `namespace UI`
 // after the anonymous namespace (B34_BRIEFS A.2). ENDGAME B.3.9 UI-D: a live
@@ -120,26 +106,9 @@ const uint8_t* SheetTypeInfo() {
 // ############################################################################
 namespace UI {
 
-// ---- slot 2  ?Type@SpriteSheet@UI@@UEBAIXZ  0x180002e30 --------------------
-//   MOV EAX,dword ptr [0x1801fadd0] / RET     — RCX is never read.
-uint32_t SpriteSheet::Type() const { return TypeId(); }
-
-// The STATIC spelling of the same two instructions, at its own address
-// (0x180002e40). A separate export with a separate call surface; sharing the
-// body is what the DLL does too.
-uint32_t SpriteSheet::TypeId() {
-    uint32_t ours = 0;
-    std::memcpy(&ours, SheetTypeInfo(), sizeof ours);
-    return ours;
-}
-
-// ---- slot 1  ?TypeName@SpriteSheet@UI@@UEBAPEBDXZ  0x180002e50 -------------
-//   MOV RAX,qword ptr [0x1801fadd8] / RET     — typeInfo + 8, RCX unread.
-const char* SpriteSheet::TypeName() const {
-    const char* ours = nullptr;
-    std::memcpy(&ours, SheetTypeInfo() + 8, sizeof ours);
-    return ours;
-}
+// ---- slots 1/2 and the static TypeId (0x180002e50 / 0x180002e30 /
+// 0x180002e40, `MOV RAX,[0x1801fadd8]` / `MOV EAX,[0x1801fadd0]`) are
+// DECLARE_TYPE's, over the class's own record (ENDGAME B.3.9 TI-UI).
 
 // ---- slot 3  ?GetFileVersion@SpriteSheet@UI@@UEBAHXZ  0x18011d710 ----------
 //   MOV EAX,6 / RET. The sheet resource's on-disk format version. A LITERAL.
@@ -584,3 +553,12 @@ int RtUiSpriteSheetVtableRegister() {
     RegisterRuntimeAddr(0x180078ad0, (void*)&RtUi_SpriteSheet_SerializeEntries); ++n;
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::SpriteSheet's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@SpriteSheet@UI@@ (0x1801fadd0): name "SpriteSheet", parent
+// "Object::External" (retail ?_ParentTypeName@SpriteSheet@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::SpriteSheet, "Object::External", nullptr)
