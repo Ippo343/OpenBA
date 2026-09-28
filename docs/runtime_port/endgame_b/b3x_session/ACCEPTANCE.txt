@@ -1,0 +1,55 @@
+== B3X acceptance @ 7b577c20 2026-09-28 03:23
+X1   DeletingDtor( declarations / definitions, product                          12     target 12 (the *Data classes)
+X1b    ... of them outside runtime/types/video/CompanionData.h                  0      target 0
+X2   DeletingDtor(0) calls, product                                             0      target 0
+X3   DeletingDtor(1) calls, product                                             8      target 8 (*Data receivers)
+     receivers:
+       runtime/src/video/context_lifecycle.cpp:293:->DeletingDtor(1);
+       runtime/src/video/context_lifecycle.cpp:484:reinterpret_cast<Video::ContextData*>(self->_contextData)->DeletingDtor(1);
+       runtime/src/video/device_startup.cpp:611:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
+       runtime/src/video/device_startup.cpp:709:(void)reinterpret_cast<Video::DeviceData*>(d2)->DeletingDtor(1);
+       runtime/src/video/device_startup.cpp:797:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
+       runtime/src/video/enumerate_video_modes.cpp:156:(void)reinterpret_cast<Video::DeviceData*>(data)->DeletingDtor(1);
+       runtime/src/video/renderstate.cpp:209:_data->DeletingDtor(1);
+       runtime/src/video/video_resources.cpp:525:(void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);
+X4   Object::Destroy( calls, product                                            0      target 0
+X5   Object::Destroy is delete (runtime/types/object/TypeInfo.h)                1      target 1
+X6   CallSlot0( anywhere                                                        0      target 0
+X7   per-file PMF decoders in tests (PmfSlot)                                   0      target 0
+X8   static_assert(!has_virtual_destructor<Video::*Data>) pins                  12     target 12
+X9   DeletingDtor in tests (mirrors of exempt classes, the control, slot_check) 12     target listed in W1_TESTS_DONE.md
+     files:       3 tests/unit/b39_vid_data_test.cpp       2 tests/unit/object_vtable_abi_test.cpp       2 tests/unit/slot_check.h       2 tests/unit/slot_check_test.cpp       3 tests/unit/video_data_abi_test.cpp 
+X10  global operator delete replaced                                            0      target 0
+X11  root operator delete definitions (root_operator_delete.cpp)                5      target 5
+X12  classes.py --summary:
+       classes that declare or inherit DeletingDtor(unsigned): 22  (product 12, tests 10)
+         of which declare it themselves: 17  (product 12, tests 5)
+       
+       roots (hierarchies) -> classes  [product / tests]  (root file)
+         FakeRetailShape                                  2  [0 / 2]  tests/unit/object_vtable_abi_test.cpp:136  dirs: tests 2
+         WithDeletingDtor                                 2  [0 / 2]  tests/unit/slot_check_test.cpp:27  dirs: tests 2
+         MirrorDeviceData                                 2  [0 / 2]  tests/unit/video_data_abi_test.cpp:140  dirs: tests 2
+         MirrorIndexBufferData                            2  [0 / 2]  tests/unit/video_data_abi_test.cpp:195  dirs: tests 2
+         MirrorVertexLayoutData                           2  [0 / 2]  tests/unit/video_data_abi_test.cpp:225  dirs: tests 2
+         Video::DeviceData                                1  [1 / 0]  runtime/types/video/CompanionData.h:210  dirs: runtime/types 1
+         Video::ContextData                               1  [1 / 0]  runtime/types/video/CompanionData.h:264  dirs: runtime/types 1
+         Video::ImageBufferData                           1  [1 / 0]  runtime/types/video/CompanionData.h:318  dirs: runtime/types 1
+X13  partc.py (slot-index residue; every product line is classified in W0_AUDIT.md):
+       DeletingDtor decl/def: 17
+       DeletingDtor(0) self-call: 1
+       ->DeletingDtor(1): 9
+       Object::Destroy(: 17
+       CallSlot0(: 0
+       explicit ~T() call: 978
+       raw vt[0] dispatch: 20
+       raw vt[N>=1] index: 94
+       vtable byte offset (+0x..): 9
+       slot helpers (VSlot/SlotOf/VCall*/CallVSlot/Slot<N>): 39
+       PMF-order test (PmfSlot): 0
+       dx11 seam slot index: 23
+       B3X table[k / 8]: 48
+       B3X named slot constant: 48
+       B3X byte offset on a cast table: 41
+       B3X helper-returned table indexed: 28
+       B3X slot helper names: 170
+       B3X cast vptr indexed: 22
