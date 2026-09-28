@@ -17,7 +17,7 @@
 //                queue-push, 0c2ea0 mark-removal; see loop-exit note below)
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
@@ -27,48 +27,16 @@
 
 namespace {
 
-// ---- exe sub-callees (all registered) resolved via ResolveAddr(Module::Exe) ----
-//   0x14009f3e0  CharacterComponent_impl_f3e0: grid->world; writes Vector3 to outA.
-//   0x140018dd0  quadtree/box-walker init.
-//   0x140018880  quadtree node subdivide / push 4 children.
-//   0x140053ca0  pasture/migration target picker.
-//   0x140003110  dynamic 8-byte-element array set-count + insert.
-//   0x1400c2ea0  mark entity (+ removable components) for removal.
-typedef float* (*fn_f3e0_t)(int* mapGrid, float* outA, float* inCell, char flag, void* extra);
-typedef void   (*fn_QInit_t)(void* walker, float* box, uint32_t a, uint32_t b);   // 18dd0
-typedef void   (*fn_QSubdiv_t)(void* walker);                                     // 18880
-typedef int    (*fn_TargetPick_t)(void* self, int idx);                           // 053ca0
-typedef void   (*fn_DynArrSet_t)(void* arr, int newCount, void* valuePtr);        // 003110
-typedef void   (*fn_MarkRemoval_t)(void* self);                                   // 0c2ea0
-
-static fn_f3e0_t        s_f3e0      = nullptr;
-static fn_QInit_t       s_qinit     = nullptr;
-static fn_QSubdiv_t     s_qsubdiv   = nullptr;
-static fn_TargetPick_t  s_pick      = nullptr;
-static fn_DynArrSet_t   s_dynset    = nullptr;
-static fn_MarkRemoval_t s_markrem   = nullptr;
+// ---- exe sub-callees, called by name (B3R) ----
+//   9f3e0 Reimpl_MapGetTerrainPos (f3e0)     18dd0 Pf_QuadtreeInit_18dd0
+//   18880 Pf_QuadtreeSubdivide_18880          053ca0 Pf_PastureTargetPick_53ca0
+//   003110 ActHunt_DynArraySetCount_3110      0c2ea0 ActHunt_MarkEntityRemoval_c2ea0
 
 // ---- Math / Volume engine exports (Runtime-x64.dll) -------------------------
 // Math::Vector3 ctor(x,y,z) / splat ctor / Dot and Math::Scalar::Abs are now direct
-// members of the real classes (B.3.1). They used to be dispatch-slot pointers:
-//   3-float ctor:  ??0Vector3@Math@@QEAA@MMM@Z              slot 0x140152a30
-//   splat ctor:    ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z    slot 0x140151320
-//   Dot:           ?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z slot 0x140151298
-//   Scalar::Abs:   ?Abs@Scalar@Math@@QEBA?AV12@XZ           slot 0x140152420
-//   [2026-07-26] The Abs string used to read `?Abs@Scalar@Math@@SA?AV12@V12@@Z` — a STATIC
-//   taking a Scalar by value. No such export exists (objdump: ordinal 1530 is
-//   `?Abs@Scalar@Math@@QEBA?AV12@XZ`, a const MEMBER taking nothing), so ResolveExport
-//   returned 0, the dispatch-slot lookup at 0x140152420 is unregistered ("NOT
-//   IMPLEMENTED"), and s_scalarabs stayed NULL — a hard EXEC-of-0 the moment
-//   FindPlacementCell reached its height-delta check. That is the mainline drop-off
-//   path, so it killed any soak long enough for a citizen to place a raw material.
-//   The ABI was never wrong: a const member returning a class by value passes this in
-//   RCX and the return buffer in RDX, which is exactly `(const float* val, float*
-//   retbuf)` — the old comment's own "disasm shows RCX=val, RDX=retbuf — member-style"
-//   note was right about the shape while the name said static. Only the string changed.
-// Box::Intersect:?Intersect@Box@Volume@@QEBA_NAEBV12@@Z   (this, &other)->bool
-typedef bool  (*fn_BoxIntersect_t)(const void* self, const void* other);
-
+// members of the real classes (B.3.1). Box::Intersect (slot 0x140151e80,
+// ?Intersect@Box@Volume@@QEBA_NAEBV12@@Z) was also resolved here but never called: the
+// hot path uses InlBoxIsect below; the dead resolve is gone (B3R).
 
 // PERF (2026-09-04): bit-identical inline copy of the trivial Runtime Volume export
 // the hot path called through a dispatch slot (a DLL call per box test). Body
@@ -80,32 +48,6 @@ typedef bool  (*fn_BoxIntersect_t)(const void* self, const void* other);
 static inline bool InlBoxIsect(const void* a, const void* b) {
     const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
     return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
-}
-
-static fn_BoxIntersect_t s_boxisect   = nullptr;  // slot 0x140151e80
-
-// Type-id / float globals (resolved from exe .rdata).
-
-static bool s_init = false;
-static void EnsureFns() {
-    if (s_init) return;
-    auto R = [](uintptr_t a) -> uintptr_t { return ResolveAddr(Module::Exe, a); };
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    s_f3e0    = reinterpret_cast<fn_f3e0_t>(R(0x14009f3e0));
-    s_qinit   = reinterpret_cast<fn_QInit_t>(R(0x140018dd0));
-    s_qsubdiv = reinterpret_cast<fn_QSubdiv_t>(R(0x140018880));
-    s_pick    = reinterpret_cast<fn_TargetPick_t>(R(0x140053ca0));
-    s_dynset  = reinterpret_cast<fn_DynArrSet_t>(R(0x140003110));
-    s_markrem = reinterpret_cast<fn_MarkRemoval_t>(R(0x1400c2ea0));
-
-    s_boxisect = reinterpret_cast<fn_BoxIntersect_t>(slot(0x140151e80));
-    if (!s_boxisect) s_boxisect = reinterpret_cast<fn_BoxIntersect_t>(
-        ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));
-
-    s_init = true;
 }
 
 // Float constants (read_memory-verified, inlined bit-exact):
@@ -143,7 +85,6 @@ static inline float C_neg1() { return -1.0f; }
 //
 // Literal transcription of the decompile, node/flag offsets disasm-verified.
 int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* param_4, uint32_t param_5) {
-    EnsureFns();
     const float fHalf = C_half();    // DAT_140172114
     const float fMinGrowth = C_097(); // DAT_14017213c
     const float fTol = C_1000();     // DAT_140172248
@@ -221,7 +162,7 @@ int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* 
                                                 Math::Vector3 v98((float)(iVar12 % iVar14) - fVar25,
                                                                   (float)(iVar12 / iVar14) - fVar25, 0.0f);
                                                 float v88[3];
-                                                s_f3e0(param_1, v88, reinterpret_cast<float*>(&v98), '\0', nullptr);   // B.3.1 bridge
+                                                Reimpl_MapGetTerrainPos(param_1, v88, reinterpret_cast<float*>(&v98), '\0', nullptr);   // B.3.1 bridge
                                                 iVar14 = *param_1;
                                                 if ((iVar20 < iVar14) && (iVar18 < iVar14)) {
                                                     iVar12 = iVar14 * iVar18 + iVar20;
@@ -236,7 +177,7 @@ int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* 
                                                         Math::Vector3 vB8((float)(iVar12 % iVar14) - fVar25,
                                                                           (float)(iVar12 / iVar14) - fVar25, 0.0f);
                                                         float vA8[3];
-                                                        s_f3e0(param_1, vA8, reinterpret_cast<float*>(&vB8), '\0', ext);   // B.3.1 bridge
+                                                        Reimpl_MapGetTerrainPos(param_1, vA8, reinterpret_cast<float*>(&vB8), '\0', ext);   // B.3.1 bridge
                                                         if (fMinGrowth <= ext[2]) {   // local_c8
                                                             Math::Scalar local_e0(vA8[2] - v88[2]); // local_a0 - local_80
                                                             Math::Scalar absv = local_e0.Abs();
@@ -312,7 +253,6 @@ int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* 
 // max touched +0x2438).
 int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float* param_3,
                                          void* param_4, int param_5, void* param_6) {
-    EnsureFns();
     const float fUV = *g_fUVScale;      // g_fUVScale (1.0)
     const float fNeg1 = C_neg1();       // DAT_140172280
     const float f2 = C_2();             // DAT_140172174
@@ -320,7 +260,7 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
     // Walker buffer: 18dd0 writes records[0..255] (stride 0x24 from +0x38) and the
     // param backref at +0x2428 -> highest touched byte = +0x2438. Match that size.
     alignas(16) uint8_t walker[0x2438];
-    s_qinit(walker, param_1, /*DAT_140172280*/ *reinterpret_cast<const uint32_t*>(&fNeg1),
+    Pf_QuadtreeInit_18dd0(reinterpret_cast<uintptr_t>(walker), param_1, /*DAT_140172280*/ *reinterpret_cast<const uint32_t*>(&fNeg1),
             /*g_fUVScale*/ *reinterpret_cast<const uint32_t*>(&fUV));
 
     float fr = *reinterpret_cast<float*>(param_4);
@@ -438,7 +378,7 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
                             }
                         }
                         if (found == 0) {
-                            if (fn_InternalBasePtr_Ctor) new (&found) ::Object::InternalBasePtr(
+                            new (&found) ::Object::InternalBasePtr(
                                 nullptr);   // B.3.3 bridge
                         }
                         region = *reinterpret_cast<int64_t*>(walker + 0x2428); // lVar15 = local_e0 reload
@@ -462,7 +402,7 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
                 ent = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(region + 0x10) + 8 + (int64_t)ent * 0x18);
             } while (ent != headSentinel);
         }
-        s_qsubdiv(walker);
+        Pf_QuadtreeSubdivide_18880(reinterpret_cast<uintptr_t>(walker));   // 0x140018880
         top = *reinterpret_cast<int*>(walker + 0x08);
         region = *reinterpret_cast<int64_t*>(walker + 0x2428);
     }
@@ -494,10 +434,9 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
 //    +0x38 when derived from DAT_1401c7858) and writes the 4 int16 target fields
 //    (+0x38..+0x3e) into each member's movement component (found by type DAT_1401c6f98).
 void Pf_HerdStartMigration_122340(void* param_1) {
-    EnsureFns();
     uintptr_t self = reinterpret_cast<uintptr_t>(param_1);
 
-    int iVar4 = s_pick(*reinterpret_cast<void**>(self + 0x28), *reinterpret_cast<int*>(self + 0x30));
+    int iVar4 = Pf_PastureTargetPick_53ca0(*reinterpret_cast<uintptr_t*>(self + 0x28), *reinterpret_cast<int*>(self + 0x30));   // 0x140053ca0
     *reinterpret_cast<int*>(self + 0x4c) = iVar4;
 
     if (iVar4 < 0) {
@@ -508,8 +447,8 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                 int64_t lVar2 = *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0xe8);
                 if (local_res8 != 0) {
                     if ((*reinterpret_cast<uint32_t*>(local_res8 + 0x40) >> 10 & 1) == 0) {
-                        s_markrem(reinterpret_cast<void*>(local_res8));
-                        s_dynset(reinterpret_cast<void*>(lVar2 + 0xd0),
+                        ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(local_res8));   // 0x1400c2ea0
+                        ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(lVar2 + 0xd0),   // 0x140003110
                                  *reinterpret_cast<int*>(lVar2 + 0xd8) + 1, &local_res8);
                     }
                 }
@@ -520,7 +459,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
 
     // Positive branch: compute clamped target rectangle + write member move targets.
     void* pvVar11 = *reinterpret_cast<void**>(self + 0x18);
-    bool bVar3 = fn_IsDerivedFrom && fn_IsDerivedFrom(pvVar11, HerdDescription::TypeId());
+    bool bVar3 = ::Object::IsDerivedFromNullSafe(pvVar11, HerdDescription::TypeId());
     void* pvVar6 = bVar3 ? pvVar11 : nullptr;
     int local_res10 = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pvVar6) + 0x38);
     int worldW = **reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
@@ -558,7 +497,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                         // LAB_1401225ef: re-read the slot, IsDerivedFrom-confirm.
                         void** p2 = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + slotOff * 8);
                         void* comp = *p2;
-                        bool d = fn_IsDerivedFrom && fn_IsDerivedFrom(comp, AnimalComponent::TypeId());
+                        bool d = ::Object::IsDerivedFromNullSafe(comp, AnimalComponent::TypeId());
                         foundComp = d ? comp : nullptr;
                         break;
                     }
@@ -587,7 +526,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                 continue;
             }
             int64_t local_50[2];
-            if (fn_InternalBasePtr_Ctor) new (local_50) ::Object::InternalBasePtr(
+            new (local_50) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(foundComp));   // B.3.3 bridge
             *reinterpret_cast<int16_t*>(local_50[0] + 0x38) = (int16_t)local_res18;
             *reinterpret_cast<int16_t*>(local_50[0] + 0x3a) = (int16_t)local_res20;

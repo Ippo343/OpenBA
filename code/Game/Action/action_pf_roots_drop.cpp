@@ -2,8 +2,7 @@
 // Wave 3 (Action) — DropOff / RemoveAnimal-ctor ROOT callers.
 //
 // Faithful 1:1 ports of the 4 root-caller exe helpers in the raw-material drop-off /
-// RemoveAnimal-action closure. In standalone these resolve to 0 (silently skipped)
-// unless registered; each is transcribed literally from the Ghidra decompile,
+// RemoveAnimal-action closure. Each is transcribed literally from the Ghidra decompile,
 // cross-checked against disassembly for the call-site arg ABI. Do NOT "improve" — none
 // of this is exercised on the autostart path, so a wrong port is undetectable latent
 // corruption.
@@ -11,8 +10,7 @@
 //
 // Registration: RegisterPfRootsDropBatch() in standalone/reg_pf_roots_drop.cpp.
 //
-// Sub-callees (all registered elsewhere or in earlier batches — called via ResolveAddr,
-// bodies NOT duplicated):
+// Sub-callees (called by name, B3R — bodies NOT duplicated):
 //   0x14009bd40 CreateRawMaterial_FindPlacementCell — ported by another agent THIS wave
 //   0x1400c3720 ComponentEntity_CtorFromDescription (CopyCtor)
 //   0x1400223c0 FindComponent (rawmat batch)
@@ -23,9 +21,9 @@
 //   0x14012d150 StorageComponent::SubtractItem (rawmat)
 //   0x1401167c0 storage count-delta (action_pf_ctors)
 //   0x140116760 storage drop-off (action_pf_ctors)
-//   0x14012cd80 StorageComponent::CanAdd (engine_funcs fn_StorageCanAdd)
+//   0x14012cd80 StorageComponent::CanAdd (Pf_StorageCanAccept_cd80)
 //   0x14012d000 StorageComponent::AddItem (rawmat)
-//   0x14008d590 FindStorageForResource (engine_funcs fn_FindStorageForResource)
+//   0x14008d590 FindStorageForResource (Pf_PickBestDropTarget_8d590)
 //   0x1400c9170 MoveTo_Action_Ctor (action_pf_ctors)
 //   0x1400c9720 PerformWork_Action_Ctor7 (action_pf_ctors)
 //   0x1400c5da0 CompleteTask_Action_CopyCtor (action_pf_ctors)
@@ -34,15 +32,18 @@
 //   0x1400c54e0 action-stack push (action_pf_ctors) — bbea0/c7620 inline this; call helper
 //   0x1400c5400 TaskListCleanup (work_base)
 //   0x140107260 set-flag/refresh/Update == RemoveAnimal_helper_7260 (action_pf_ctors)
-// Engine helpers (engine_funcs.h): fn_InternalBasePtr_Ctor,
-//   fn_InternalBasePtr_DeletePtr, fn_MemAlloc/fn_MemFreeStatic, fn_Time_Ctor_Float.
-// Runtime exports: System::Random::RandTol, System::MemoryAllocator::MemAlloc.
+// Engine members: Object::InternalBasePtr, System::MemoryAllocator::MemAlloc,
+//   RtSystem_Time_Ctor, System::Random::RandTol.
 //
 // bbea0 inlines the RemoveAnimal ctor; ENDGAME B.3.8 ACT: `new (p) RemoveAnimal(animal)`.
 
 #include "Action/RemoveAnimal.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"              // WorkBase_FindComponent_6270, WorkBase_TaskListCleanup_c5400
+#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Game/exe_constants.h"           // kRdata_*
+#include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
+#include <cstring>
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include <new>
@@ -53,105 +54,18 @@
 
 namespace {
 
-// --- Float constants (exe .rdata). ---
-static const float* s_pDAT_172204 = nullptr;  // c78c0 RandTol(2) scale
-static const float* s_pDAT_172280 = nullptr;  // MoveTo speed (c7620, bbea0)
-static const float* s_pDAT_172194 = nullptr;  // PerformWork Time seconds (bbea0)
-static const float* s_pDAT_1722a8 = nullptr;  // PerformWork animIndex float (bbea0)
-static const float* s_pUVScale_17214c = nullptr;  // g_fUVScale — CreateRawMaterial CopyCtor float arg
-// --- Type-id global (exe .rdata) for bbea0's SendComponentMessage message id. ---
-// --- Vtable addresses (exe .rdata). ---
+// .rdata constants (Game/exe_constants.h): 0x140172204 (c78c0 RandTol(2) scale),
+// 0x140172280 (MoveTo speed, c7620 / bbea0), 0x140172194 (PerformWork Time seconds, bbea0),
+// 0x1401722a8 (PerformWork animIndex float, bbea0; a bit pattern), 0x14017214c (g_fUVScale,
+// the CreateRawMaterial CopyCtor float arg).
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
-// --- Registered exe sub-callees, resolved lazily via ResolveAddr. ---
-typedef int  (*fn_bd40_t)(int* mapGrid, int cellIdx, char flag, void* outIBP, int z);  // 0x14009bd40
-typedef void* (*fn_entityCopyCtor_t)(void* dst, int64_t src);          // 0x1400c3720
-typedef void (*fn_223c0_t)(int64_t entity, void* outIBP);             // 0x1400223c0
-typedef void (*fn_pos9760_t)(int64_t entity, int cell, float yaw);    // 0x140129760
-typedef void (*fn_regEntity_t)(void* entityList, void* entityIBP, int category); // 0x1400c48a0
-typedef void* (*fn_findStorage_t)(int64_t entity, void* outIBP);      // 0x140006270
-typedef void* (*fn_findFamily_t)(int64_t entity, void* outIBP);       // 0x1400012d0
-typedef void (*fn_storageSub_t)(int64_t storage, int64_t resType, int count); // 0x14012d150
-typedef int  (*fn_countDelta_t)(int64_t self, int64_t resType);       // 0x1401167c0
-typedef void (*fn_dropOff_t)(int64_t self, int64_t resType, int count); // 0x140116760
-typedef uint32_t (*fn_canAdd_t)(void* storageComp, void* entityPtr, int qty); // 0x14012cd80
-typedef void (*fn_addItem_t)(int64_t storageComp, int64_t entityPtr, int qty); // 0x14012d000
-typedef void (*fn_findStorageForRes_t)(void** citizenList, void* outEntity, int cell,
-                                       int64_t resType, int p5, char p6, float* vel, void* outIBP); // 0x14008d590
-typedef void* (*fn_moveToCtor_t)(void* self, void* entity, uint32_t pathType, int p4,
-                                 float* dest, int p6, int p7, float speed); // 0x1400c9170
-typedef void* (*fn_perfWkCtor7_t)(void* self, void* entity, float animIdx, uint32_t actType,
-                                  int64_t time, uint8_t p6, int p7);  // 0x1400c9720
-typedef void* (*fn_completeCtor_t)(void* self, uint32_t p2, uint64_t* p3, uint64_t* p4, uint32_t p5); // 0x1400c5da0
-typedef void* (*fn_createRawCtor_t)(void* self, uint64_t p2, float p3, uint64_t* p4, uint64_t* p5,
-                                    uint64_t p6, uint32_t p7, uint32_t p8, uint8_t p9, uint64_t* p10, uint32_t p11); // 0x1400c71a0 (p3 float/XMM2)
-typedef void* (*fn_sendMsgCtor_t)(void* self, uint64_t* p2, uint32_t* p3, uint32_t p4, uint64_t* p5, uint32_t p6); // 0x1400cb1d0
-typedef void (*fn_push54e0_t)(int64_t* stack, void* srcEntry);        // 0x1400c54e0
-typedef void (*fn_taskCleanup_t)(void* listAt48);                     // 0x1400c5400
-typedef void (*fn_remHelper7260_t)(int64_t* self);                    // 0x140107260
 // 0x1400032e0 (array-grow) was resolved here but never called anywhere in this file
 // -- dead resolved-pointer machinery, removed rather than converted (B.3.2 step 2).
 
-static fn_bd40_t            s_fn_bd40 = nullptr;
-static fn_entityCopyCtor_t  s_fn_entityCopyCtor = nullptr;
-static fn_223c0_t           s_fn_223c0 = nullptr;
-static fn_pos9760_t         s_fn_pos9760 = nullptr;
-static fn_regEntity_t       s_fn_regEntity = nullptr;
-static fn_findStorage_t     s_fn_findStorage = nullptr;
-static fn_findFamily_t      s_fn_findFamily = nullptr;
-static fn_storageSub_t      s_fn_storageSub = nullptr;
-static fn_countDelta_t      s_fn_countDelta = nullptr;
-static fn_dropOff_t         s_fn_dropOff = nullptr;
-static fn_canAdd_t          s_fn_canAdd = nullptr;
-static fn_addItem_t         s_fn_addItem = nullptr;
-static fn_findStorageForRes_t s_fn_findStorageForRes = nullptr;
-static fn_moveToCtor_t      s_fn_moveToCtor = nullptr;
-static fn_perfWkCtor7_t     s_fn_perfWkCtor7 = nullptr;
-static fn_completeCtor_t    s_fn_completeCtor = nullptr;
-static fn_createRawCtor_t   s_fn_createRawCtor = nullptr;
-static fn_sendMsgCtor_t     s_fn_sendMsgCtor = nullptr;
-static fn_push54e0_t        s_fn_push = nullptr;
-static fn_taskCleanup_t     s_fn_taskCleanup = nullptr;
-static fn_remHelper7260_t   s_fn_remHelper7260 = nullptr;
-
-static bool s_init = false;
-static void EnsureInit() {
-    if (s_init) return;
-    s_pDAT_172204 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172204));
-    s_pDAT_172280 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
-    s_pDAT_172194 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172194));
-    s_pDAT_1722a8 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401722a8));
-    s_pUVScale_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-
-    s_fn_bd40           = reinterpret_cast<fn_bd40_t>(ResolveAddr(Module::Exe, 0x14009bd40));
-    s_fn_entityCopyCtor = reinterpret_cast<fn_entityCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_fn_223c0          = reinterpret_cast<fn_223c0_t>(ResolveAddr(Module::Exe, 0x1400223c0));
-    s_fn_pos9760        = reinterpret_cast<fn_pos9760_t>(ResolveAddr(Module::Exe, 0x140129760));
-    s_fn_regEntity      = reinterpret_cast<fn_regEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_fn_findStorage    = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_findFamily     = reinterpret_cast<fn_findFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
-    s_fn_storageSub     = reinterpret_cast<fn_storageSub_t>(ResolveAddr(Module::Exe, 0x14012d150));
-    s_fn_countDelta     = reinterpret_cast<fn_countDelta_t>(ResolveAddr(Module::Exe, 0x1401167c0));
-    s_fn_dropOff        = reinterpret_cast<fn_dropOff_t>(ResolveAddr(Module::Exe, 0x140116760));
-    s_fn_canAdd         = reinterpret_cast<fn_canAdd_t>(ResolveAddr(Module::Exe, 0x14012cd80));
-    s_fn_addItem        = reinterpret_cast<fn_addItem_t>(ResolveAddr(Module::Exe, 0x14012d000));
-    s_fn_findStorageForRes = reinterpret_cast<fn_findStorageForRes_t>(ResolveAddr(Module::Exe, 0x14008d590));
-    s_fn_moveToCtor     = reinterpret_cast<fn_moveToCtor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
-    s_fn_perfWkCtor7    = reinterpret_cast<fn_perfWkCtor7_t>(ResolveAddr(Module::Exe, 0x1400c9720));
-    s_fn_completeCtor   = reinterpret_cast<fn_completeCtor_t>(ResolveAddr(Module::Exe, 0x1400c5da0));
-    s_fn_createRawCtor  = reinterpret_cast<fn_createRawCtor_t>(ResolveAddr(Module::Exe, 0x1400c71a0));
-    s_fn_sendMsgCtor    = reinterpret_cast<fn_sendMsgCtor_t>(ResolveAddr(Module::Exe, 0x1400cb1d0));
-    s_fn_push           = reinterpret_cast<fn_push54e0_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_fn_taskCleanup    = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_remHelper7260  = reinterpret_cast<fn_remHelper7260_t>(ResolveAddr(Module::Exe, 0x140107260));
-    s_init = true;
-}
-
-// MemAlloc shim matching the original `System::MemoryAllocator::MemAlloc(size, align)`
-// (the engine_funcs wrapper takes the singleton as its first argument).
+// MemAlloc shim matching the original `System::MemoryAllocator::MemAlloc(size, align)`.
 static void* MemAlloc(int64_t size, int64_t align) {
-    return fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(size),
-                                     static_cast<uint64_t>(align))
-                       : nullptr;
+    return System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(size), static_cast<int>(align));
 }
 } // namespace
 
@@ -165,7 +79,6 @@ static void* MemAlloc(int64_t size, int64_t align) {
 // entity list (c48a0). Finally subtract `amount` from the source storage (12d150).
 // ============================================================
 void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_3) {
-    EnsureInit();
     void* gworld = *g_pGameWorldSingleton;
     if (param_3 == 0) return;
 
@@ -175,7 +88,7 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
     uint32_t local_38 = 0;
 
     int* piVar2 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gworld) + 0xf8);
-    if (fn_InternalBasePtr_Ctor) new (&local_res20) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&local_res20) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     int64_t lVar3 = *reinterpret_cast<int64_t*>(param_1 + 0x30);
     lVar3 = *reinterpret_cast<int64_t*>(lVar3 + 0x278);
     lVar3 = *reinterpret_cast<int64_t*>(lVar3 + 0x68);
@@ -188,31 +101,29 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
     if (iVar1 <= iVar6) iVar6 = iVar1 - 1;
     if (iVar5 < 0) iVar5 = 0;
     if (iVar1 <= iVar5) iVar5 = iVar1 - 1;
-    int cell = s_fn_bd40 ? s_fn_bd40(piVar2, iVar1 * iVar5 + iVar6, '\0', &local_res20, 0) : -1;
+    int cell = Pf_FindPlacementCell_bd40(piVar2, iVar1 * iVar5 + iVar6, '\0', &local_res20, 0);   // 0x14009bd40
     if (-1 < cell) {
         local_40 = MemAlloc(0x48, 8);
         if (local_40 != nullptr) {
-            ptr = s_fn_entityCopyCtor ? s_fn_entityCopyCtor(local_40, param_2) : nullptr;
+            ptr = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(local_40), reinterpret_cast<void*>(param_2));   // 0x1400c3720
         }
-        if (fn_InternalBasePtr_Ctor) new (&local_48) ::Object::InternalBasePtr(
+        new (&local_48) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
-        if (s_fn_223c0) s_fn_223c0(local_48, &local_res20);
+        ActRm_FindComponent_223c0(static_cast<uintptr_t>(local_48), &local_res20);   // 0x1400223c0
         void* random = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gworld) + 0xd8);
         int64_t entAdj = local_res20;
         int randv = random ? reinterpret_cast<System::Random*>(random)->RandTol(2) : 0;   // B.3.4b bridge
-        if (s_fn_pos9760)
-            s_fn_pos9760(entAdj, cell,
-                         static_cast<float>(randv) * (s_pDAT_172204 ? *s_pDAT_172204 : 0.0f));
+        ActRm_PositionEntity_9760(entAdj, cell,   // 0x140129760
+                                  static_cast<float>(randv) * kRdata_140172204);
         *reinterpret_cast<int*>(local_res20 + 0x28) = param_3;
         *reinterpret_cast<uint64_t*>(local_res20 + 0x30) = 0;
         local_40 = reinterpret_cast<void*>(local_48);
-        if (s_fn_regEntity)
-            s_fn_regEntity(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gworld) + 0xe8),
+        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gworld) + 0xe8),
                            &local_40, *reinterpret_cast<int*>(param_2 + 0x20));
     }
     lVar3 = *reinterpret_cast<int64_t*>(param_1 + 0x30);
-    if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(lVar3 + 0x10), &local_res20);
-    if (s_fn_storageSub) s_fn_storageSub(local_res20, param_2, param_3);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(lVar3 + 0x10), &local_res20);   // 0x140006270
+    ActRm_StorageSubtract_d150(static_cast<uintptr_t>(local_res20), param_2, param_3);   // 0x14012d150
     (void)local_38;
 }
 
@@ -222,11 +133,10 @@ void Pf_SpawnRawMaterialOnCell_78c0(int64_t param_1, int64_t param_2, int param_
 // iteration because 78c0 mutates it (12d150 compacts the array). param_1 = action self.
 // ============================================================
 void Pf_SpillAllStorage_7570(int64_t param_1) {
-    EnsureInit();
     int64_t local_res8 = 0;
     int64_t local_res10 = 0;
     local_res10 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + 0x10);
-    if (s_fn_findStorage) s_fn_findStorage(local_res10, &local_res8);
+    WorkBase_FindComponent_6270(static_cast<uintptr_t>(local_res10), &local_res8);   // 0x140006270
     int iVar1 = *reinterpret_cast<int*>(local_res8 + 0x30);
     while (0 < iVar1) {
         int64_t* arr = *reinterpret_cast<int64_t**>(local_res8 + 0x28);
@@ -248,18 +158,17 @@ void Pf_SpillAllStorage_7570(int64_t param_1) {
 // build a MoveTo action toward it and push it (c54e0). Returns 1.
 // ============================================================
 uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, uint64_t param_4) {
-    EnsureInit();
-    int iVar5 = s_fn_countDelta ? s_fn_countDelta(*reinterpret_cast<int64_t*>(param_1 + 0x30), param_4) : 0;
+    int iVar5 = Pf_StorageCountDelta_1167c0(*reinterpret_cast<int64_t*>(param_1 + 0x30), param_4);   // 0x1401167c0
     int iVar8 = *reinterpret_cast<int*>(param_1 + 0x24);
     int iVar9 = iVar5;
     if ((-1 < iVar8) && (iVar9 = iVar8, iVar5 < iVar8)) {
         iVar9 = iVar5;
     }
     if (0 < iVar9) {
-        uint32_t uVar6 = s_fn_canAdd ? s_fn_canAdd(*reinterpret_cast<void**>(param_3), reinterpret_cast<void*>(param_4), iVar9) : 0;
+        uint32_t uVar6 = Pf_StorageCanAccept_cd80(*reinterpret_cast<int64_t*>(param_3), static_cast<int64_t>(param_4), iVar9);   // 0x14012cd80
         if (static_cast<char>(uVar6) != '\0') {
-            if (s_fn_addItem) s_fn_addItem(*reinterpret_cast<int64_t*>(param_3), param_4, iVar9);
-            if (s_fn_dropOff) s_fn_dropOff(*reinterpret_cast<int64_t*>(param_1 + 0x30), param_4, iVar9);
+            ActRm_StorageAdd_d000(*reinterpret_cast<uintptr_t*>(param_3), static_cast<int64_t>(param_4), iVar9);   // 0x14012d000
+            Pf_StorageDropOff_116760(*reinterpret_cast<int64_t*>(param_1 + 0x30), static_cast<int64_t>(param_4), iVar9);   // 0x140116760
             return 1;
         }
     }
@@ -285,9 +194,9 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
         if (iVar1 <= iVar8) iVar8 = iVar1 - 1;
         if (iVar5 < 0) iVar5 = 0;
         if (iVar1 <= iVar5) iVar5 = iVar1 - 1;
-        if (s_fn_findStorageForRes)
-            s_fn_findStorageForRes(pplVar3, local_70, iVar1 * iVar5 + iVar8, param_4, iVar9, '\x01',
-                                   local_50, &local_res8);
+        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(pplVar3), local_70,   // 0x14008d590
+                                    static_cast<uint32_t>(iVar1 * iVar5 + iVar8), param_4, iVar9, '\x01',
+                                    reinterpret_cast<uint32_t*>(local_50), &local_res8);
         if (local_70[0] == 0) {
             Pf_SpawnRawMaterialOnCell_78c0(param_1, param_4, iVar9);
             return 2;
@@ -296,13 +205,13 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
         void* self = MemAlloc(0x480, 8);
         if (self != nullptr) {
             local_res8 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + 0x10);
-            void* pIVar7 = s_fn_findFamily ? s_fn_findFamily(local_res8, local_60) : nullptr;
-            ptr = s_fn_moveToCtor ? s_fn_moveToCtor(self, pIVar7, /*Slow*/1, 0, local_50, 0xe1f, 0,
-                                                    s_pDAT_172280 ? *s_pDAT_172280 : 0.0f) : nullptr;
+            void* pIVar7 = ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(local_res8), local_60);   // 0x1400012d0
+            ptr = Pf_MoveToCtor_9170(self, pIVar7, /*Slow*/1, 0, local_50, 0xe1f, 0,   // 0x1400c9170
+                                     kRdata_140172280);
         }
-        if (fn_InternalBasePtr_Ctor) new (local_70) ::Object::InternalBasePtr(
+        new (local_70) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(param_2, local_70);
+        Pf_ActStackPush_54e0(param_2, local_70);
         (void)local_58;
     }
     return 1;
@@ -321,7 +230,6 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
 // ============================================================
 void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4,
                                void* param_5, int64_t param_6, uint32_t param_7) {
-    EnsureInit();
 
     int64_t local_78 = 0;
     uint64_t local_70 = 0;
@@ -334,23 +242,22 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
     int64_t* plVar18 = reinterpret_cast<int64_t*>(lVar3 + 0x48);  // action-stack list
 
     if (static_cast<char>(param_7) != '\0') {
-        if (s_fn_taskCleanup) s_fn_taskCleanup(plVar18);
+        WorkBase_TaskListCleanup_c5400(plVar18);   // 0x1400c5400
         // --- SendComponentMessage child action ---
         void* pIVar7 = MemAlloc(0x40, 8);
         void* pIVar8 = nullptr;
         local_68 = pIVar7;
         if (pIVar7 != nullptr) {
-            if (fn_InternalBasePtr_Ctor) new (&local_res8_v) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&local_res8_v) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             local_78 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            pIVar8 = s_fn_sendMsgCtor ? s_fn_sendMsgCtor(pIVar7, reinterpret_cast<uint64_t*>(&local_78),
-                                                         &msgId, 0, reinterpret_cast<uint64_t*>(&local_res8_v), 0)
-                                      : nullptr;
+            pIVar8 = Pf_SendComponentMessageCopyCtor_b1d0(pIVar7, reinterpret_cast<uint64_t*>(&local_78),   // 0x1400cb1d0
+                                                          &msgId, 0, reinterpret_cast<uint64_t*>(&local_res8_v), 0);
         }
-        if (fn_InternalBasePtr_Ctor) new (&local_70) ::Object::InternalBasePtr(
+        new (&local_70) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(pIVar8));   // B.3.3 bridge
         if (*reinterpret_cast<int64_t*>(lVar3 + 0x58) != 0) {
-            if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(lVar3 + 0x58))->DeletePtr(
+            reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(lVar3 + 0x58))->DeletePtr(
                 );   // B.3.3 bridge
         }
         *reinterpret_cast<uint64_t*>(lVar3 + 0x58) = local_70;
@@ -361,19 +268,18 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         if (pIVar8b != nullptr) {
             local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_5) + 0x10);
             local_70 = *reinterpret_cast<uint64_t*>(param_1);
-            pIVar9 = s_fn_completeCtor ? s_fn_completeCtor(pIVar8b, param_2,
-                                                           &local_70, reinterpret_cast<uint64_t*>(&local_res8_v), 0)
-                                       : nullptr;
+            pIVar9 = Pf_CompleteTaskCopyCtor_5da0(pIVar8b, param_2,   // 0x1400c5da0
+                                                  &local_70, reinterpret_cast<uint64_t*>(&local_res8_v), 0);
         }
-        if (fn_InternalBasePtr_Ctor) new (&local_78) ::Object::InternalBasePtr(
+        new (&local_78) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(pIVar9));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(plVar18, &local_78);
+        Pf_ActStackPush_54e0(plVar18, &local_78);
     }
 
     // --- find Storage on entity (+0x10) for the CreateRawMaterial loop ---
     local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-    void* pStorIBP = s_fn_findStorage ? s_fn_findStorage(local_res8_v, &local_68) : nullptr;
-    float fVar6 = s_pUVScale_17214c ? *s_pUVScale_17214c : 0.0f;  // g_fUVScale
+    void* pStorIBP = WorkBase_FindComponent_6270(static_cast<uintptr_t>(local_res8_v), &local_68);   // 0x140006270
+    float fVar6 = kRdata_14017214c;  // g_fUVScale, 0x14017214c
     // StorageComponent+0x38 is NOT a dead load: retail keeps it in R12D (1400bc048) and
     // passes it as arg7 of EVERY CreateRawMaterial_Action_CopyCtor below (stored to
     // RSP+0x30 at 1400bc0d8). R12D is only zeroed at 1400bc294, AFTER the loop — which is
@@ -403,7 +309,7 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                 local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x248);
                 local_78 = *reinterpret_cast<int64_t*>(param_1);
                 local_70 = *reinterpret_cast<uint64_t*>(local_78 + 0x248);
-                pIVar9 = s_fn_createRawCtor ? s_fn_createRawCtor(
+                pIVar9 = Pf_CreateRawMaterialCopyCtor_71a0(   // 0x1400c71a0
                     pIVar8,
                     *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_6 + 0x48) + static_cast<int64_t>(iVar20) * 8),
                     fVar6,   // float arg3 -> XMM2 (ctor MOVSS to +0x4c); pass the value, not its bits
@@ -411,11 +317,11 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
                     &local_70,
                     0 /*arg6 uninitialized — unused by ctor*/,
                     uVar1 /*arg7 = R12D = StorageComponent+0x38*/, param_4 /*arg8 = R13D*/, 1,
-                    reinterpret_cast<uint64_t*>(&local_res8_v), 0xc) : nullptr;
+                    reinterpret_cast<uint64_t*>(&local_res8_v), 0xc);
             }
-            if (fn_InternalBasePtr_Ctor) new (&local_68) ::Object::InternalBasePtr(
+            new (&local_68) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(pIVar9));   // B.3.3 bridge
-            if (s_fn_push) s_fn_push(plVar18, &local_68);
+            Pf_ActStackPush_54e0(plVar18, &local_68);
             iVar20 = iVar20 + 1;
         } while (iVar20 < *reinterpret_cast<int*>(param_6 + 0x50));
     }
@@ -428,9 +334,9 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
             // ENDGAME B.3.8 ACT: the real ctor (RemoveAnimal.h) — retail inlines it here.
             new (pIVar9) RemoveAnimal(uVar4);
         }
-        if (fn_InternalBasePtr_Ctor) new (&local_res8_v) ::Object::InternalBasePtr(
+        new (&local_res8_v) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(pIVar9));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(plVar18, &local_res8_v);
+        Pf_ActStackPush_54e0(plVar18, &local_res8_v);
     }
 
     // --- PerformWork action ---
@@ -440,16 +346,16 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         if (pIVar13 != nullptr) {
             local_res8_v = *reinterpret_cast<int64_t*>(param_1);
             uint64_t timeStore = 0;
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(local_58, s_pDAT_172194 ? *s_pDAT_172194 : 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(local_58), kRdata_140172194);   // 0x140172194
             timeStore = *reinterpret_cast<uint64_t*>(local_58);
-            pvVar11 = s_fn_perfWkCtor7 ? s_fn_perfWkCtor7(pIVar13, &local_res8_v,
-                                                          s_pDAT_1722a8 ? *s_pDAT_1722a8 : 0.0f,
-                                                          0xb /*Fast|ShowGroup*/, static_cast<int64_t>(timeStore),
-                                                          1, 2) : nullptr;
+            pvVar11 = Pf_PerformWorkCtor7_9720(pIVar13, &local_res8_v,   // 0x1400c9720
+                                               RdataF(kRdata_1401722a8),   // 0x1401722a8
+                                               0xb /*Fast|ShowGroup*/, static_cast<int64_t>(timeStore),
+                                               1, 2);
         }
-        if (fn_InternalBasePtr_Ctor) new (&local_68) ::Object::InternalBasePtr(
+        new (&local_68) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(pvVar11));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(plVar18, &local_68);
+        Pf_ActStackPush_54e0(plVar18, &local_68);
     }
 
     // --- MoveTo action toward param_3 ---
@@ -458,18 +364,18 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         void* pvVar11 = nullptr;
         if (pIVar13 != nullptr) {
             local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            void* pIVar15 = s_fn_findFamily ? s_fn_findFamily(local_res8_v, local_58) : nullptr;
-            pvVar11 = s_fn_moveToCtor ? s_fn_moveToCtor(pIVar13, pIVar15, /*Slow*/1, 0,
-                                                        reinterpret_cast<float*>(param_3), 0xe1f, 0,
-                                                        s_pDAT_172280 ? *s_pDAT_172280 : 0.0f) : nullptr;
+            void* pIVar15 = ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(local_res8_v), local_58);   // 0x1400012d0
+            pvVar11 = Pf_MoveToCtor_9170(pIVar13, pIVar15, /*Slow*/1, 0,   // 0x1400c9170
+                                         reinterpret_cast<float*>(param_3), 0xe1f, 0,
+                                         kRdata_140172280);
         }
-        if (fn_InternalBasePtr_Ctor) new (&local_68) ::Object::InternalBasePtr(
+        new (&local_68) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(pvVar11));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(plVar18, &local_68);
+        Pf_ActStackPush_54e0(plVar18, &local_68);
     }
 
     // --- finalise on param_5 (the animal's NaturalResourceComponent) ---
-    // MUST be param_5, NOT pStorIBP. s_fn_findStorage returns its OUT-IBP argument
+    // MUST be param_5, NOT pStorIBP. WorkBase_FindComponent_6270 returns its OUT-IBP argument
     // (work_base_reimpl.cpp:57 `return retIBP`), so pStorIBP == &local_68 — and local_68
     // is recycled as the push-IBP for every child action above (lines 482 / 520 / 537).
     // By this point it holds the MoveTo action, whose +0x10 the Action base ctor zeroes,
@@ -487,6 +393,6 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
     // already flagged for removal. A null guard here would be WRONG — this is the only
     // writer of that flag, so guarding would leave the culled animal unflagged and the
     // pasture would re-select it every tick: a silent livelock instead of a crash.
-    if (s_fn_remHelper7260) s_fn_remHelper7260(*reinterpret_cast<int64_t**>(param_5));
+    Pf_SetFlagRefreshUpdate_107260(*reinterpret_cast<int64_t**>(param_5));   // 0x140107260
     (void)plVar18; (void)param_3;
 }

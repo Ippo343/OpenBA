@@ -5,7 +5,6 @@
 #include "Object/exe_type.h"
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"
-#include "resolve.h"
 
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.

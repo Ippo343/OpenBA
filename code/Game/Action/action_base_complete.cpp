@@ -1,12 +1,9 @@
 // code/Game/Action/action_base_complete.cpp
 // Wave 3 (Action) — CompleteTask / ShowTool exe sub-helpers (closure-safe subset).
 //
-// These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from the
-// CompleteTask / ShowTool action .cpp files. They resolve to 0 (silently skipped)
-// unless registered.
-// This file provides faithful 1:1 reimplementations and a single registration point
-// (RegisterActionCompleteBatch in standalone/reg_action_complete.cpp) so the shared
-// call sites fire real logic in the standalone exe.
+// The CompleteTask / ShowTool action .cpp files call them by name through
+// Action/exe_bodies.h (B3R); the registration (RegisterActionCompleteBatch in
+// standalone/reg_action_complete.cpp) stays for readers other blocks still have.
 //
 // Wired (closure-safe): CompleteTask BST helpers 0x1400f8760 / 0x1400f8800 / 0x1400f8e30
 // and ShowTool 0x1401173b0 / 0x1401176e0. Each is a 1:1 port of the decompiled exe
@@ -19,14 +16,9 @@
 // task-list append FUN_1400c54e0, and an allocator dispatch slot). Drafted in
 // notes/wave3_drafts/action_base_complete.cpp.draft; wire once that closure lands.
 //
-// REFACTOR NOTE (this commit): the original draft re-resolved the InternalBasePtr /
-// IsDerivedFrom dispatch slots through an ad-hoc local "ResolveIATSlot" helper. Those
-// four ops already exist as engine_funcs fn_ pointers (resolved by mangled-name export
-// at startup, so they work whether or not the .rdata slot is registered) — we use those
-// directly. Genuine graphics dispatch slots (SetMesh / Vector4 ctor / Time ctor /
-// Scene::AddObject) are read via the project-standard ReadDispatchSlot (ResolveAddr the
-// .rdata slot, deref one level), exactly like action_base_move.cpp; an unregistered slot
-// resolves to null and the guarded graphics op is safely skipped.
+// B3R: every dispatch-slot and engine_funcs door this file read is a direct call now:
+// the IsDerivedFrom door is Object::IsDerivedFromNullSafe, the Time ctor slot
+// 0x140152b00 is RtSystem_Time_Ctor, the BST removes are the Work bodies by name.
 //
 
 // The runtime type headers come FIRST: they reach runtime/types/volume/Volume.h,
@@ -39,7 +31,8 @@
 #include "graphics/Scene.h"
 #include "system/Value.h"       // System::Time, for Geometry::Update's argument
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"      // WorkCellBST_Remove_ca60, WorkBST_BSTRemove_a6e0
+#include "Game/exe_constants.h"  // kRdata_14017214c
 #include "Component/ModelDescription.h"         // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7cb8 cell class
 #include "math/Math.h"
@@ -53,18 +46,6 @@
 #include <windows.h>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Work/Work.h"         // B.3.x W0: Work slots 6/7/8/10 by name
-
-namespace {
-
-// Read a .rdata dispatch slot: ResolveAddr gives us the slot storage; deref one level
-// to obtain the runtime function pointer the original prologue would have called.
-// Returns null if the slot is unregistered (standalone) — callers guard every use.
-static void* ReadDispatchSlot(uintptr_t slotAddr) {
-    uintptr_t slot = ResolveAddr(Module::Exe, slotAddr);
-    return slot ? *reinterpret_cast<void**>(slot) : nullptr;
-}
-
-} // namespace
 
 // ============================================================
 // CompleteTask task-manager BST helpers
@@ -159,20 +140,11 @@ void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx,
 //     remove the task node itself from the param_1+0x30 BST via ca60.
 // Caller signature: void fn(void* taskMgr, int taskIdx)
 //
-// ca60 (0x14001ca60) / a6e0 (0x14001a6e0) are intrusive-BST removes already registered
-// by the Work wave (reg_work_cellbst.cpp / reg_work_bst.cpp) — closure-safe.
+// ca60 (0x14001ca60, WorkCellBST_Remove_ca60 -- TradeDescription_impl_ca60, the generic
+// BST remove) / a6e0 (0x14001a6e0, WorkBST_BSTRemove_a6e0 -- CitizenAI_impl_a6e0, the
+// BST_Remove variant) are the Work wave's intrusive-BST removes, called by name.
 
 namespace {
-typedef void (*fn_BstRemove_t)(void* treeOwner, void* node);  // 0x14001ca60 / 0x14001a6e0
-static fn_BstRemove_t s_ca60 = nullptr;  // TradeDescription_impl_ca60 (generic BST remove)
-static fn_BstRemove_t s_a6e0 = nullptr;  // CitizenAI_impl_a6e0      (BST_Remove variant)
-static bool s_8e30Init = false;
-static void Ensure8e30() {
-    if (s_8e30Init) return;
-    s_ca60 = reinterpret_cast<fn_BstRemove_t>(ResolveAddr(Module::Exe, 0x14001ca60));
-    s_a6e0 = reinterpret_cast<fn_BstRemove_t>(ResolveAddr(Module::Exe, 0x14001a6e0));
-    s_8e30Init = true;
-}
 
 // ---------------------------------------------------------------------------
 // WAVE 9 LANE N — THE PROFESSION-BUCKET INVARIANT PROBE (Finding 3)
@@ -210,7 +182,6 @@ static void Ensure8e30() {
 
 
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
-    Ensure8e30();
     uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
 
     // 1. Locate the task node in the param_1+0x30 BST.
@@ -240,7 +211,7 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
             } else if (k < taskIdx) {
                 n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x20);
             } else {
-                if (s_ca60) s_ca60(reinterpret_cast<void*>(listSlot), n);
+                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(listSlot), n);   // 0x14001ca60
                 break;
             }
         }
@@ -263,7 +234,7 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
             } else if (k < wantKey) {
                 n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x18);  // greater
             } else {
-                if (s_a6e0) s_a6e0(reinterpret_cast<void*>(self + 0x10), n);
+                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(self + 0x10), n);   // 0x14001a6e0
                 break;
             }
         }
@@ -303,7 +274,7 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
                 } else if (k < taskIdx) {
                     e = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(e) + 0x20);
                 } else {
-                    if (s_ca60) s_ca60(entryTreeOwner, e);
+                    WorkCellBST_Remove_ca60(static_cast<uintptr_t*>(entryTreeOwner), e);   // 0x14001ca60
                     break;
                 }
             }
@@ -320,19 +291,16 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
         reinterpret_cast<Work*>(owner)->Cleanup();   // B.3.x bridge (slot 8)
     }
-    if (fn_InternalBasePtr_DeletePtr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8))->DeletePtr(
+    reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8))->DeletePtr(
             );   // B.3.3 bridge
-    if (s_ca60) s_ca60(reinterpret_cast<void*>(self + 0x30), task);
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(self + 0x30), task);   // 0x14001ca60
 }
 
 // ============================================================
 // ShowTool helpers (Entity_impl_73b0 / FUN_1401176e0)
 // ============================================================
 // These attach/detach a "tool" mesh to a citizen entity. They call several Runtime
-// graphics functions; each is mirrored via the same exe dispatch slot the original uses
-// (ReadDispatchSlot — null-safe if unregistered) or via the named export. Sub-callees
-// are NOT registered; an unresolved op is safely skipped (no tool mesh, no corruption).
+// graphics functions, each as a member of its real class.
 
 namespace {
 // ENDGAME B.3.5 batch K1: the six Video/Graphics caches this block used to hold —
@@ -340,37 +308,18 @@ namespace {
 // Geometry::Attach / Geometry::Detach / Scene::RemoveObject /
 // GraphicsMesh::GetNodeIndexFromName (all four by mangled name) — went with their
 // last callers below, which now call the members directly. What stays:
-// the System::Time ctor door (a System class, not this step's), and the
-// MeshInstance default-CTOR door (no Video/Graphics class has a real ctor,
-// B35_RULES section 11 / B4b-2).
-typedef void  (*fn_TimeCtor_t)(void* retTime, float seconds);            // 0x140152b00
-
-static fn_TimeCtor_t         s_TimeCtorMesh   = nullptr;  // 0x140152b00 (MeshInstance update arg)
-static float*                s_pUVScale       = nullptr;  // g_fUVScale (DAT_14017214c)
-static bool                  s_showInit       = false;
-
-static void EnsureShow() {
-    if (s_showInit) return;
-    // ⚠ 0x140152970 is NOT a Vector4 ctor — the disasm at 0x14011765b shows that slot
-    // family is Graphics: 0x140152970 = GraphicsMesh::GetNodeIndexFromName (returns int
-    // in EAX). The uv-scale block used to sit behind a permanently-null s_Vector4Ctor
-    // (audit 2026-07-26); B.3.1 calls Math::Vector4 directly, so the block now runs.
-    // Still: do NOT register 0x140152970 as a ctor.
-    // ⚠ was ReadDispatchSlot(0x140152968) — that slot is Graphics::Geometry::Attach
-    // (dst, src, nodeIdx), not the Time ctor; retail's Time(0.0) there goes through
-    // 0x140152b00 (disasm 0x14011766c). Dormant until now only because 0x140152968 is
-    // unregistered. Bind the REAL Time-from-float slot.
-    s_TimeCtorMesh   = reinterpret_cast<fn_TimeCtor_t>(ReadDispatchSlot(0x140152b00));
-    // The `Geometry::Attach` / `Geometry::Detach` pointers used to be resolved here by
-    // the PHANTOM names `AEAV12@` (a Geometry REFERENCE); the DLL only ever exported the
-    // POINTER spelling `PEAV12@` (Attach 0x1800a3fa0, Detach 0x1800a3f20), so both
-    // pointers were NULL and the two `if (s_Geom*)` guards silently skipped every attach
-    // and detach this file performs — dead since the day they were written (found by
-    // tools/export_name_audit.py; reference_resolveexport_phantom_names.md). Both are
-    // members of the real `Graphics::Geometry` now, so the phantom cannot come back.
-    s_pUVScale       = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_showInit = true;
-}
+// the System::Time ctor door (a System class, not this step's) -- B3R: now
+// RtSystem_Time_Ctor by name -- and the MeshInstance default-CTOR door (no Video/Graphics
+// class has a real ctor, B35_RULES section 11 / B4b-2). g_fUVScale (DAT_14017214c) is
+// kRdata_14017214c.
+//
+// ⚠ 0x140152970 is NOT a Vector4 ctor — the disasm at 0x14011765b shows that slot
+// family is Graphics: 0x140152970 = GraphicsMesh::GetNodeIndexFromName (returns int
+// in EAX). Do NOT register 0x140152970 as a ctor. Retail's Time(0.0) at 0x14011766c
+// goes through 0x140152b00 (the Time-from-float slot), not 0x140152968 (Geometry::Attach).
+// The `Geometry::Attach` / `Geometry::Detach` pointers used to be resolved by the
+// PHANTOM names `AEAV12@`; both are members of the real `Graphics::Geometry` now, so
+// the phantom cannot come back.
 
 // g_pGameWorldSingleton is the DAT_1401c3dd8 singleton (declared in engine_funcs.h).
 } // namespace
@@ -381,7 +330,6 @@ static void EnsureShow() {
 // and removes the scene object, then marks the id slot invalid (-1).
 // Caller signature: void fn(void* entity)
 void ActCt_HideTool_1176e0(void* entityV) {
-    EnsureShow();
     uintptr_t e = reinterpret_cast<uintptr_t>(entityV);
     if (*reinterpret_cast<int*>(e + 0x1dc) < 0) return;
 
@@ -411,7 +359,6 @@ void ActCt_HideTool_1176e0(void* entityV) {
 //     geometry to the game world scene and record the resulting object id.
 // Caller signature: void fn(void* entity, int toolId)
 void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
-    EnsureShow();
     uintptr_t e = reinterpret_cast<uintptr_t>(entityV);
 
     // [diag] BANISHED_SHOWTOOL_TRACE — dump every link 73b0 is about to deref, BEFORE it
@@ -472,7 +419,7 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
                 uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (t == tidModelDesc) {
                     void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidModelDesc)) fenceComp = c;
+                    if (::Object::IsDerivedFromNullSafe(c, tidModelDesc)) fenceComp = c;
                     break;
                 }
             }
@@ -490,7 +437,7 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
                 uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (t == tidRawMat) {
                     void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidRawMat)) rawComp = c;
+                    if (::Object::IsDerivedFromNullSafe(c, tidRawMat)) rawComp = c;
                     break;
                 }
             }
@@ -500,7 +447,7 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
         // mesh table lookup from the model description at entity+0x288 → +0x138
         uintptr_t descArr = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(e + 0x288) + 0x138);
         meshPtr = *reinterpret_cast<void**>(descArr + static_cast<uintptr_t>(toolId) * 8);
-        uvScale = s_pUVScale ? *s_pUVScale : 1.0f;
+        uvScale = kRdata_14017214c;   // g_fUVScale, 0x14017214c
     }
 
     // Ensure the held-item MeshInstance (entity+0xb8) is a constructed object before
@@ -542,8 +489,8 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
 
     // MeshInstance::Update(time=0) via vtable +0x8 (skip if the instance has no vtable)
     uint8_t timeVal[8];
-    if (s_TimeCtorMesh && *reinterpret_cast<uintptr_t*>(e + 0xb8) != 0) {
-        s_TimeCtorMesh(timeVal, 0.0f);
+    if (*reinterpret_cast<uintptr_t*>(e + 0xb8) != 0) {
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 0.0f);   // slot 0x140152b00
         // B.3.5 bridge — vtable +0x8 is slot 1 of `Graphics::Geometry`, i.e.
         // `Update(const System::Time&)`. The receiver is a PROVED
         // `Graphics::MeshInstance`: entity+0xb8 was run through

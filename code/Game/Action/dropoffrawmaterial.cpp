@@ -30,7 +30,9 @@
 
 #include "DropOffRawMaterial.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"        // Pf_DropOffExec_7620, Pf_SpillAllStorage_7570
+#include "Game/exe_bodies.h"          // Reimpl_ExternalPtr_Serialize_StringTable
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -41,77 +43,24 @@
 #include "Entity/ComponentEntity.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h — DropOffRawMaterial-specific helpers)
-// ============================================================
-
-
-// Object::InternalBasePtr::DeletePtr — clears entity ref during dtor
-static void (*s_fn_IBP_DeletePtr)(void* self) = nullptr;
-
-// FUN_140002340 — ExternalPtr_BuildSerialize (for resource type at +0x28)
-// Already in engine_funcs.h as fn_ExternalPtr_BuildSerialize
-
-// DropOffRawMaterial_Serialize_sub_7620 — actual resource transfer sub-helper
-// Params: (self, actionStack, storageIBP, resourceType)
-typedef uint64_t (*s_fn_DropOffSub_t)(void* self, void* actionStack, void* storageIBP, uint64_t resourceType);
-static s_fn_DropOffSub_t s_fn_DropOffSub = nullptr;
-
-// Entity_impl_7570 — drop off ALL inventory items (called when +0x38 is null)
-// Also used as CheckEntity slot (slot 8 is a JMP to this)
-typedef void (*s_fn_DropAllInventory_t)(void* self);
-static s_fn_DropAllInventory_t s_fn_DropAllInventory = nullptr;
-
+// Helpers, called by name (B3R)
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable -- ExternalPtr serialize (resource
+//               type at +0x28)
+//   0x1400c7620 Pf_DropOffExec_7620 (DropOffRawMaterial_Serialize_sub_7620) -- the resource
+//               transfer sub-helper (self, actionStack, storageIBP, resourceType)
+//   0x1400c7570 Pf_SpillAllStorage_7570 (Entity_impl_7570) -- drop off ALL inventory items
+//               (called when +0x38 is null; slot 8 is a JMP to it)
+//
 // ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
 // slot (0x1401c5f38 = the NAME field (+8) of DropOffRawMaterial's record, read by
 // DropOffRawMaterial_Slot1 0x1400225f0); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
-
-static bool s_funcs_resolved = false;
-
 // ============================================================
-// Resolution — called once from Install
-// ============================================================
-bool DropOffRawMaterial_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-
-    // InternalBasePtr::DeletePtr
-    s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
-
-    // DropOffRawMaterial_Serialize_sub_7620 — resource transfer helper
-    s_fn_DropOffSub = (s_fn_DropOffSub_t)ResolveAddr(Module::Exe, 0x1400c7620);
-
-    // Entity_impl_7570 — drop all inventory
-    s_fn_DropAllInventory = (s_fn_DropAllInventory_t)ResolveAddr(Module::Exe, 0x1400c7570);
-
-    bool ok = s_fn_IBP_DeletePtr &&
-              s_fn_DropOffSub &&
-              s_fn_DropAllInventory &&
-              fn_IsDerivedFrom &&
-              fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize;
-
-#ifdef _DEBUG
-    printf("[DropOffRawMaterial] ResolveFuncs: IBPDel=%p DropSub=%p\n",
-           (void*)s_fn_IBP_DeletePtr,
-           (void*)s_fn_DropOffSub);
-    printf("[DropOffRawMaterial]   DropAll=%p CompEnt=%08x\n",
-           (void*)s_fn_DropAllInventory, ComponentEntity::TypeId());
-    if (!ok) printf("[DropOffRawMaterial] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Serialize (0x1400c7b10)
 // Serializes: status(+0x18), storage(+0x30), source(+0x38), resource(+0x28), flag(+0x20), count(+0x24)
 // ============================================================
 void DropOffRawMaterial::Persist(void* stream) {
-    // Reached through the registered vtable, which the factory path never
-    // has to touch — an exe-ctor-built action arrives here with the file
-    // statics still null. Lazy-resolve like the other entry points do.
-    DropOffRawMaterial_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -127,7 +76,7 @@ void DropOffRawMaterial::Persist(void* stream) {
     // Serialize target storage entity ref (+0x30)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field30 != nullptr) {
-        if (!fn_IsDerivedFrom(_field30, CitizenComponent::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field30, CitizenComponent::TypeId())) {
             _field30 = nullptr;
         }
     }
@@ -135,13 +84,13 @@ void DropOffRawMaterial::Persist(void* stream) {
     // Serialize source entity ref (+0x38)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field38 != nullptr) {
-        if (!fn_IsDerivedFrom(_field38, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field38, ComponentEntity::TypeId())) {
             _field38 = nullptr;
         }
     }
 
     // Serialize resource type ExternalPtr (+0x28)
-    fn_ExternalPtr_BuildSerialize(s + 0x28, ser2);
+    Reimpl_ExternalPtr_Serialize_StringTable(s + 0x28, ser2);   // 0x140002340
 
     // Serialize flag (+0x20) and count (+0x24)
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
@@ -160,7 +109,6 @@ void DropOffRawMaterial::Persist(void* stream) {
 // Returns 1 (needs more work) or 2 (action pushed, e.g. MoveTo for full storage).
 // ============================================================
 int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
-    DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     { // [HAUL-DIAG] gated: did the citizen's executor actually RUN a dropoff?
@@ -168,7 +116,7 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
 
     // If source entity is null, drop all inventory items
     if (_field38 == nullptr) {
-        s_fn_DropAllInventory(this);
+        Pf_SpillAllStorage_7570(reinterpret_cast<int64_t>(this));   // 0x1400c7570
         return 1;
     }
 
@@ -178,8 +126,9 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
 
     // If resource type (+0x28) is specified, transfer just that type
     if (_field28 != 0) {
-        uint64_t result = s_fn_DropOffSub(this, actionStack, &storageIBP,
-                                          *(uint64_t*)(s + 0x28));
+        uint64_t result = Pf_DropOffExec_7620(reinterpret_cast<int64_t>(this),   // 0x1400c7620
+                                              static_cast<int64_t*>(actionStack), &storageIBP,
+                                              *(uint64_t*)(s + 0x28));
         if ((int)result == 2) {
             return 2;
         }
@@ -214,8 +163,8 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
                     if (itemCount != 0) {
                         itemCapacity = newCount * 3;
                     }
-                    uint64_t* newArray = (uint64_t*)fn_MemAlloc(
-                        g_pMemAllocSingleton, (int64_t)(int)itemCapacity * 16, 8);
+                    uint64_t* newArray = (uint64_t*)System::MemoryAllocator::MemAlloc(
+                        (int64_t)(int)itemCapacity * 16, 8);
 
                     // Copy existing and new entries
                     uint32_t copyStart = 0;
@@ -238,7 +187,7 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
                     }
 
                     if (itemArray != newArray) {
-                        fn_MemFreeStatic(itemArray);
+                        System::MemoryAllocator::MemFree(itemArray);
                     }
                     itemArray = newArray;
                 } else {
@@ -266,7 +215,8 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
         uint64_t* ptr = itemArray;
         do {
             if ((int)ptr[1] > 0) {
-                uint64_t result = s_fn_DropOffSub(this, actionStack, &storageIBP, ptr[0]);
+                uint64_t result = Pf_DropOffExec_7620(reinterpret_cast<int64_t>(this),   // 0x1400c7620
+                                                      static_cast<int64_t*>(actionStack), &storageIBP, ptr[0]);
                 anyPushed = anyPushed || ((int)result == 2);
             }
             ptr += 2;
@@ -274,12 +224,12 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
         } while (remaining != 0);
 
         if (anyPushed) {
-            fn_MemFreeStatic(itemArray);
+            System::MemoryAllocator::MemFree(itemArray);
             return 2;
         }
     }
 
-    fn_MemFreeStatic(itemArray);
+    System::MemoryAllocator::MemFree(itemArray);
     return 1;
 }
 
@@ -289,8 +239,7 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
 // Only 5 bytes (JMP rel32), not hookable.
 // ============================================================
 void DropOffRawMaterial::CheckEntity() {
-    DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    s_fn_DropAllInventory(this);
+    Pf_SpillAllStorage_7570(reinterpret_cast<int64_t>(this));   // 0x1400c7570
 }
 
 // ============================================================
@@ -299,7 +248,6 @@ void DropOffRawMaterial::CheckEntity() {
 // the target storage entity at +0x30's parent entity (+0x10).
 // ============================================================
 bool DropOffRawMaterial::GetTarget(void* param) {
-    DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     void* sourceEntity = _field38;
@@ -338,13 +286,11 @@ DropOffRawMaterial::DropOffRawMaterial()
 // [9] 0x1400c7270
 
 void* DropOffRawMaterial::CreateNewObject() {
-    DropOffRawMaterial_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(DropOffRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DropOffRawMaterial());
 }
 void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
-    DropOffRawMaterial_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DropOffRawMaterial());
 }

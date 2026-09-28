@@ -7,9 +7,7 @@
 // Transcribed literally from the Ghidra decompile; cross-checked against the disassembly.
 #include "Action/exe_bodies.h"
 //
-// Sub-callees resolved via ResolveAddr(Module::Exe, 0xADDR) into once-resolved static
-// fn-ptrs. Engine helpers (IBP/IsDerivedFrom/FindComponent) use the existing engine_funcs.h
-// pointers. Registration state of each sub-callee (confirmed from disassembly CALL targets):
+// Sub-callees are called by name (B3R). Registration state of each sub-callee (confirmed from disassembly CALL targets):
 //   0x1400a00f0  WorkBase_ValidateCell      — REG (reg_work_base)
 //   0x14009d0a0  Pf_RegionSpiral            — REG (reg_pf_geom)  [Ghidra mislabels as d0a0]
 //   0x1400a5ac0  Pf_RegionPairLookup        — REG (reg_pf_geom)
@@ -20,11 +18,11 @@
 //   0x140122e20  Pf_EntityResolvePos        — REG (reg_pf_road)
 //   0x14009c480  ZoneRefresh                — REG (reg_pf_roots_road; the pathfinding wave landed it)
 //   0x140008830  WorkBase_CalcDistance      — REG (reg_work_base)
-//   0x14009f3e0  fn_MapGetTerrainPos        — REG (address_registry M5 5c)
+//   0x14009f3e0  Reimpl_MapGetTerrainPos    — REG (address_registry M5 5c)
 //   0x140087fb0  Pf_EntityAnchorCell        — REG (reg_pf_road)
 //   0x14004edb0  Pf_PickReachableCell       — REG (reg_pf_road)
 //   0x140004680  FloorComponent_FindResData — REG (reg_component_nature)  [member-ABI FindComp]
-//   0x140002ed0  Entity_FindComponent_Position — fn_Entity_FindComponent_Position (engine_funcs)
+//   0x140002ed0  WorkBase_FindComponent_2ed0 — REG (reg_work_base)  [Position component]
 //   0x140132010  sqrtf                      — REG (reg_work_impl2)
 //
 // CLOSURE for the registrar (reg_pf_roots_route.cpp): ALL FOUR closure-satisfied → REGISTER.
@@ -57,7 +55,11 @@
 //   param_8 = exclude-entity IBP.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"            // WorkBase_* (a00f0, 8830, 2ed0)
+#include "Game/exe_bodies.h"            // Reimpl_MapGetTerrainPos
+#include "Game/exe_constants.h"         // kRdata_140172114
+#include "Component/exe_bodies.h"       // FloorComponent_FindResData, CitizenComp_StorageComponent_QueryCount
+#include "system/MemoryAllocator.h"     // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -71,82 +73,11 @@
 
 namespace {
 
-// ---- exe sub-callee fn-ptrs (resolved once) ----
-typedef uint64_t (*fn_ValidateCell_t)(int* map, int mask, uint64_t a, uint32_t b);     // 0x1400a00f0
-typedef int      (*fn_RegionSpiral_t)(int* map, int idx);                              // 0x14009d0a0
-typedef uint32_t (*fn_RegionPairLookup_t)(int64_t cache, uint32_t a, uint32_t b);      // 0x1400a5ac0
-typedef int      (*fn_RegionPathLen_t)(int* graph, int a, uint32_t b, uint64_t c);     // 0x1400a8ba0
-typedef void     (*fn_RegionPairInsert_t)(uint64_t* cache, int a, int b, uint32_t v);  // 0x1400a5b30
-typedef uint32_t (*fn_ResLimitFlag_t)(int64_t self, int64_t resDesc);                  // 0x14012c560
-typedef int      (*fn_ChildSum_t)(int64_t node, int flag);                             // 0x140123070
-typedef void*    (*fn_EntityResolvePos_t)(int64_t ent, void* outVec3, int p3, int idx, float* p5); // 0x140122e20
-typedef void     (*fn_ZoneRefresh_t)(int* map, uint64_t a, uint64_t b, int c);         // 0x14009c480 (UNREG)
-typedef int      (*fn_CalcDistance_t)(int* map, uint32_t a, uint32_t b);               // 0x140008830
-typedef float*   (*fn_GridToWorld_t)(int* map, float* out3, float* in2, char f, uint32_t* p5); // 0x14009f3e0
-typedef uint32_t (*fn_AnchorCell_t)(void* ibp, float* p2);                             // 0x140087fb0
-typedef int      (*fn_PickReachable_t)(int64_t ent, uint32_t qty, float* out3);        // 0x14004edb0
-typedef void*    (*fn_FindCompMember_t)(int64_t self, void* outIBP);                   // 0x140004680
-typedef float    (*fn_Sqrtf_t)(float x);                                              // 0x140132010
-
-static fn_ValidateCell_t      s_ValidateCell      = nullptr;
-static fn_RegionSpiral_t      s_RegionSpiral      = nullptr;
-static fn_RegionPairLookup_t  s_RegionPairLookup  = nullptr;
-static fn_RegionPathLen_t     s_RegionPathLen     = nullptr;
-static fn_RegionPairInsert_t  s_RegionPairInsert  = nullptr;
-static fn_ResLimitFlag_t      s_ResLimitFlag      = nullptr;
-static fn_ChildSum_t          s_ChildSum          = nullptr;
-static fn_EntityResolvePos_t  s_EntityResolvePos  = nullptr;
-static fn_ZoneRefresh_t       s_ZoneRefresh       = nullptr;
-static fn_CalcDistance_t      s_CalcDistance      = nullptr;
-static fn_GridToWorld_t       s_GridToWorld       = nullptr;
-static fn_AnchorCell_t        s_AnchorCell        = nullptr;
-static fn_PickReachable_t     s_PickReachable     = nullptr;
-static fn_FindCompMember_t    s_FindComp_4680     = nullptr;
-static fn_Sqrtf_t             s_Sqrtf             = nullptr;
-
-// type-id .rdata globals (resolved as raw const uint32_t* — value read at use site).
-static const uint32_t* s_pTid_c7cb8 = nullptr; // DWORD_1401c7cb8 RawMaterialDescription
-static const uint32_t* s_pTid_c7ee8 = nullptr; // DAT_1401c7ee8
-static const uint32_t* s_pTid_c4560 = nullptr; // DAT_1401c4560
-static const uint32_t* s_pTid_c7e78 = nullptr; // DWORD_1401c7e78 StorageComponent
-static const uint32_t* s_pTid_c7f20 = nullptr; // DAT_1401c7f20
-static const float*    s_pHalfCell_172114 = nullptr; // DAT_140172114 (0.5 cell-centre offset)
-// g_pGameWorldSingleton (DAT_1401c3dd8) comes from engine_funcs.h — used directly.
-typedef uint32_t (*fn_QueryCount_t)(void* self);   // 0x14012cf10 StorageComponent::QueryCount
-static fn_QueryCount_t s_QueryCount = nullptr;
-static bool s_init = false;
-
-static void EnsureFns() {
-    if (s_init) return;
-    s_ValidateCell     = reinterpret_cast<fn_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_RegionSpiral     = reinterpret_cast<fn_RegionSpiral_t>(ResolveAddr(Module::Exe, 0x14009d0a0));
-    s_RegionPairLookup = reinterpret_cast<fn_RegionPairLookup_t>(ResolveAddr(Module::Exe, 0x1400a5ac0));
-    s_RegionPathLen    = reinterpret_cast<fn_RegionPathLen_t>(ResolveAddr(Module::Exe, 0x1400a8ba0));
-    s_RegionPairInsert = reinterpret_cast<fn_RegionPairInsert_t>(ResolveAddr(Module::Exe, 0x1400a5b30));
-    s_ResLimitFlag     = reinterpret_cast<fn_ResLimitFlag_t>(ResolveAddr(Module::Exe, 0x14012c560));
-    s_ChildSum         = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
-    s_EntityResolvePos = reinterpret_cast<fn_EntityResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_ZoneRefresh      = reinterpret_cast<fn_ZoneRefresh_t>(ResolveAddr(Module::Exe, 0x14009c480));
-    s_CalcDistance     = reinterpret_cast<fn_CalcDistance_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_GridToWorld      = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_AnchorCell       = reinterpret_cast<fn_AnchorCell_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_PickReachable    = reinterpret_cast<fn_PickReachable_t>(ResolveAddr(Module::Exe, 0x14004edb0));
-    s_FindComp_4680    = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_Sqrtf            = reinterpret_cast<fn_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    // Type-id .rdata globals. In standalone ResolveAddr(Exe, .rdata) returns NULL, so the
-    // `*s_pTid_X` reads at the use sites fault (READ of 0x0). Resolve the VALUES self-
-    // contained via Object::GetTypeIdByName and point the pointers at static storage
-    // (names verified from the *_RegisterType writers in factory_registrations.csv).
-    static uint32_t v_c7cb8, v_c7ee8, v_c4560, v_c7e78, v_c7f20;
-    v_c7cb8 = RawMaterialDescription::TypeId();     s_pTid_c7cb8 = &v_c7cb8;
-    v_c7ee8 = StorageLocationComponent::TypeId();   s_pTid_c7ee8 = &v_c7ee8;
-    v_c4560 = MarketLocationComponent::TypeId();    s_pTid_c4560 = &v_c4560;
-    v_c7e78 = StorageComponent::TypeId();           s_pTid_c7e78 = &v_c7e78;
-    v_c7f20 = StorageLocationDescription::TypeId(); s_pTid_c7f20 = &v_c7f20;
-    s_pHalfCell_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_QueryCount = reinterpret_cast<fn_QueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    s_init = true;
-}
+// Type ids formerly read from .rdata (DWORD_1401c7cb8 RawMaterialDescription,
+// DAT_1401c7ee8 StorageLocationComponent, DAT_1401c4560 MarketLocationComponent,
+// DWORD_1401c7e78 StorageComponent, DAT_1401c7f20 StorageLocationDescription) are read
+// from the classes' TypeId() (names verified from the *_RegisterType writers).
+// DAT_140172114 (0.5 cell-centre offset) is kRdata_140172114.
 
 static inline uint32_t GetTypeId(void* obj) {
     // A null component slot yields no type-id match. The exe's slots are never null;
@@ -178,17 +109,16 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
 // and is the value passed to a8ba0 as its 4th (ctx) arg. `BuildStructure_Serialize_sub_d0a0`
 // in the decompile is 0x14009d0a0 (the region spiral) per the disassembly CALL target.
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
-    EnsureFns();
     uint64_t uVar5 = (uint64_t)param_3;
-    uint64_t uVar4 = s_ValidateCell(param_1, 0xe1f, (uint64_t)param_2, param_3);
+    uint64_t uVar4 = WorkBase_ValidateCell_a00f0(param_1, 0xe1f, param_2, (int)param_3);   // 0x1400a00f0
     if ((char)uVar4 != '\0') {
         uint32_t uVar1 = *(uint32_t*)(*(int64_t*)(param_1 + 0x20) + 0x18 + (int64_t)(int)param_2 * 0x30);
         uint32_t uVar2 = *(uint32_t*)(*(int64_t*)(param_1 + 0x20) + 0x18 + (int64_t)(int)param_3 * 0x30);
         if ((int)uVar1 < 0) {
-            uVar1 = (uint32_t)s_RegionSpiral(param_1, (int)param_2);
+            uVar1 = (uint32_t)Pf_RegionSpiral_9d0a0(param_1, (int)param_2);
         }
         if ((int)uVar2 < 0) {
-            uVar2 = (uint32_t)s_RegionSpiral(param_1, (int)param_3);
+            uVar2 = (uint32_t)Pf_RegionSpiral_9d0a0(param_1, (int)param_3);
         }
         int iVar3;
         if (((int)uVar1 < 0) || ((int)uVar2 < 0)) {
@@ -196,11 +126,11 @@ int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, cha
         } else if (uVar1 == uVar2) {
             iVar3 = 1;
         } else {
-            iVar3 = (int)s_RegionPairLookup(*(int64_t*)(param_1 + 0x1e), uVar1, uVar2);
+            iVar3 = (int)Pf_RegionPairLookup_5ac0(*(uintptr_t*)(param_1 + 0x1e), (int)uVar1, (int)uVar2);   // 0x1400a5ac0
             if (iVar3 < 0) {
-                iVar3 = s_RegionPathLen(*(int**)(param_1 + 0x1c), uVar1, uVar2, uVar5);
+                iVar3 = Pf_RegionPathLength_8ba0(*(int**)(param_1 + 0x1c), (int)uVar1, uVar2, uVar5);   // 0x1400a8ba0
                 if (param_4 != '\0') {
-                    s_RegionPairInsert(*(uint64_t**)(param_1 + 0x1e), uVar1, uVar2, iVar3);
+                    Pf_RegionPairCacheInsert_5b30(*(uint64_t**)(param_1 + 0x1e), (int)uVar1, (int)uVar2, (uint32_t)iVar3);   // 0x1400a5b30
                 }
             }
         }
@@ -211,25 +141,24 @@ int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, cha
 
 
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3) {
-    EnsureFns();
-    uint32_t uVar3 = s_ResLimitFlag(param_1, param_2);
+    uint32_t uVar3 = (uint32_t)Pf_ResourceLimitFlagTest_c560(param_1, param_2);   // 0x14012c560
     if ((char)uVar3 == '\0') {
         return uVar3;
     }
     // StorageComponent::QueryCount(self) — current stored total (0x14012cf10).
-    uVar3 = s_QueryCount ? s_QueryCount((void*)param_1) : 0;
+    uVar3 = (uint32_t)CitizenComp_StorageComponent_QueryCount(param_1);
 
     void* pvVar5 = (void*)0x0;          // matched RawMaterialDescription component
     int   pvVar7 = 0;                   // running index (Ghidra reused as ptr; it is an int idx)
     int64_t pvVar8 = 0;                 // byte cursor into the +0x28 ptr array
     if (0 < *(int*)(param_2 + 0x30)) {
         do {
-            uint32_t dVar1 = *s_pTid_c7cb8;
+            uint32_t dVar1 = RawMaterialDescription::TypeId();
             void* comp = *(void**)((int64_t)pvVar8 + *(int64_t*)(param_2 + 0x28));
             uint32_t tid = GetTypeId(comp);
             if (tid == dVar1) {
                 void* pvVar7c = *(void**)(*(int64_t*)(param_2 + 0x28) + (int64_t)pvVar7 * 8);
-                bool bVar2 = fn_IsDerivedFrom(pvVar7c, *s_pTid_c7cb8);
+                bool bVar2 = ::Object::IsDerivedFromNullSafe(pvVar7c, RawMaterialDescription::TypeId());
                 if (bVar2) {
                     pvVar5 = pvVar7c;
                 }
@@ -268,7 +197,6 @@ uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3)
 // world pos; DAT_140172114 = 0.5 cell-centre offset. mode (B)'s `uVar20` reachable-flag is
 // passed unchanged into the recursive 12d5d0 in 8d590 — preserved here as the `param_4` ctx.
 int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param_3, int64_t param_4) {
-    EnsureFns();
     int64_t* self = (int64_t*)(param_1 + 0x10);
     int* piVar3 = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
     int64_t local_70 = 0;
@@ -278,12 +206,12 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
     //   worldVec[0..2] = local_58/local_54/local_50 (GridToWorld out)
     float posVec[3] = {0, 0, 0};
     float worldVec[3] = {0, 0, 0};
-    fn_Entity_FindComponent_Position(*self, &local_70);
+    WorkBase_FindComponent_2ed0((uintptr_t)*self, &local_70);   // 0x140002ed0
     int iVar15;
     if (local_70 == 0) {
         // FindComp writes an 8-byte IBP into the start of posVec (matches the original stack
         // aliasing: the IBP slot overlaps local_68/local_64).
-        void* self_00 = s_FindComp_4680(*self, posVec);
+        void* self_00 = FloorComponent_FindResData((void*)*self, posVec);   // 0x140004680
         int64_t lVar10 = *(int64_t*)self_00;
         uint64_t uVar9 = 0xffffffff;
         int iVar5 = *(short*)(lVar10 + 0x2a) + -1;
@@ -302,7 +230,7 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
                             int64_t lVar10b = (int64_t)(int)uVar14;
                             if ((1 << (*(uint8_t*)(*(int64_t*)(piVar3 + 0x20) + 0x29 + lVar10b * 0x30) & 0x1f) &
                                  0xe07U) != 0) {
-                                s_ZoneRefresh(piVar3, uVar9, uVar18, (int)param_4);
+                                Pf_ZoneRefresh_9c480(piVar3, (void*)uVar9, (void*)uVar18, (int)param_4);   // 0x14009c480
                                 param_4 = *(int64_t*)(piVar3 + 0x20);
                                 uint32_t uVar17 = 1 << (*(uint8_t*)(param_4 + 0x29 + (int64_t)(int)param_2 * 0x30) & 0x1f);
                                 uVar18 = (uint64_t)uVar17;
@@ -316,7 +244,7 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
                                         (*(short*)(param_4 + 0x26 + lVar10b * 0x30) ==
                                          *(short*)(param_4 + 0x26 + (int64_t)(int)param_2 * 0x30))))))) {
                                     uVar18 = (uint64_t)param_2;
-                                    int iVar8 = s_CalcDistance(piVar3, uVar14, param_2);
+                                    int iVar8 = WorkBase_CalcDistance_8830(piVar3, uVar14, param_2);   // 0x140008830
                                     if (iVar8 < iVar15) {
                                         uVar9 = (uint64_t)uVar14;
                                         iVar15 = iVar8;
@@ -334,11 +262,11 @@ LAB_14012d8ce:;
             } while (iVar5 <= iVar6);
             iVar6 = (int)uVar9;
             if (-1 < iVar6) {
-                posVec[1] = (float)(*piVar3 >> 1) - *s_pHalfCell_172114;
+                posVec[1] = (float)(*piVar3 >> 1) - kRdata_140172114;
                 posVec[0] = (float)(iVar6 % *piVar3) - posVec[1];
                 posVec[1] = (float)(iVar6 / *piVar3) - posVec[1];
                 posVec[2] = 0.0f;
-                s_GridToWorld(piVar3, worldVec, posVec, '\0', (uint32_t*)0x0);
+                Reimpl_MapGetTerrainPos(piVar3, worldVec, posVec, '\0', (void*)0x0);   // 0x14009f3e0
                 *param_3 = worldVec[0];
                 param_3[1] = worldVec[1];
                 param_3[2] = worldVec[2];
@@ -348,11 +276,11 @@ LAB_14012d8ce:;
         iVar15 = -1;
     } else {
         int iVar6 = 0x7fffffff;
-        int iVar4 = s_ChildSum(local_70, 0);
+        int iVar4 = Pf_RecursiveChildSum_123070(local_70, 0);
         iVar15 = 0;
         if (0 < iVar4) {
             do {
-                s_EntityResolvePos(local_70, posVec, 0, iVar15, (float*)0x0);
+                Pf_EntityResolvePos_2e20((void*)local_70, posVec, 0, iVar15, (float*)0x0);   // 0x140122e20
                 int iVar13 = *piVar3;
                 int iVar4b = (int)(posVec[0] + (float)(iVar13 >> 1));
                 int iVar5 = (int)(posVec[1] + (float)(iVar13 >> 1));
@@ -361,7 +289,7 @@ LAB_14012d8ce:;
                 if (iVar5 < 0) iVar5 = 0;
                 if (iVar13 <= iVar5) iVar5 = iVar13 + -1;
                 uint32_t uVar16 = iVar13 * iVar5 + iVar4b;
-                uint64_t uVar9 = s_ValidateCell(piVar3, 0xe1f, (uint64_t)param_2, uVar16);
+                uint64_t uVar9 = WorkBase_ValidateCell_a00f0(piVar3, 0xe1f, param_2, (int)uVar16);   // 0x1400a00f0
                 if ((char)uVar9 != '\0') {
                     int iVar4c = Pf_IsDstReachable_f810(piVar3, param_2, uVar16, '\x01');
                     if (iVar4c < 0) {
@@ -381,7 +309,7 @@ LAB_14012d8ce:;
                 }
 LAB_14012d744:
                 iVar15 = iVar15 + 1;
-                iVar4 = s_ChildSum(local_70, 0);
+                iVar4 = Pf_RecursiveChildSum_123070(local_70, 0);
             } while (iVar15 < iVar4);
         }
         iVar15 = -1;
@@ -423,7 +351,6 @@ LAB_14012d744:
 int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3,
                                      uint64_t param_4, int param_5, char param_6,
                                      uint32_t* param_7, void* param_8) {
-    EnsureFns();
     int64_t local_58[3];
     local_58[1] = (int64_t)0xfffffffffffffffe;
     int* local_60 = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
@@ -439,11 +366,11 @@ int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32
     if (0 < *(int*)(param_4 + 0x30)) {
         int64_t lVar22 = 0;
         do {
-            uint32_t dVar5 = *s_pTid_c7cb8;
+            uint32_t dVar5 = RawMaterialDescription::TypeId();
             uint32_t dVar8 = GetTypeId(*(void**)(lVar22 + *(int64_t*)(param_4 + 0x28)));
             if (dVar8 == dVar5) {
                 void* pvVar3 = *(void**)(*(int64_t*)(param_4 + 0x28) + (int64_t)iVar17 * 8);
-                bool bVar7 = fn_IsDerivedFrom(pvVar3, *s_pTid_c7cb8);
+                bool bVar7 = ::Object::IsDerivedFromNullSafe(pvVar3, RawMaterialDescription::TypeId());
                 pvVar19 = bVar7 ? pvVar3 : (void*)0x0;
                 goto LAB_14008d65b;
             }
@@ -462,12 +389,12 @@ LAB_14008d65b:;
         int64_t* local_b8 = (int64_t*)0x0;
         uint64_t uVar16 = 0;
         if (&local_b8 != (int64_t**)pplVar18) {
-            fn_MemFreeStatic((void*)0x0);
+            System::MemoryAllocator::MemFree((void*)0x0);
             local_b8 = (int64_t*)0x0;
             uint32_t uVar10 = *(uint32_t*)((int64_t)pplVar18 + 8);
             uVar16 = (uint64_t)uVar10;
             if (0 < (int)uVar10) {
-                local_b8 = (int64_t*)fn_MemAlloc(g_pMemAllocSingleton, (int64_t)(int)uVar10 << 3, 8);
+                local_b8 = (int64_t*)System::MemoryAllocator::MemAlloc((int64_t)(int)uVar10 << 3, 8);
                 if (0 < (int)uVar10) {
                     uint64_t uVar14 = (uint64_t)uVar10;
                     int64_t* plVar12 = local_b8;
@@ -500,12 +427,12 @@ LAB_14008d65b:;
                         if (0 < *(int*)(local_c8 + 0x38)) {
                             do {
                                 uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                uint32_t iVar11 = *s_pTid_c7ee8;
+                                uint32_t iVar11 = StorageLocationComponent::TypeId();
                                 uint32_t iVar9 = GetTypeId((void*)*puVar1);
                                 if (iVar9 == iVar11) {
                                     puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
                                     void* pvVar3 = (void*)*puVar1;
-                                    pvVar13 = fn_IsDerivedFrom(pvVar3, *s_pTid_c7ee8) ? pvVar3 : (void*)0x0;
+                                    pvVar13 = ::Object::IsDerivedFromNullSafe(pvVar3, StorageLocationComponent::TypeId()) ? pvVar3 : (void*)0x0;
                                     goto FOUND_c0;
                                 }
                                 iVar17b = iVar17b + 1;
@@ -527,12 +454,12 @@ FOUND_c0:
                         if (0 < *(int*)(local_c8 + 0x38)) {
                             do {
                                 uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                uint32_t iVar11 = *s_pTid_c4560;
+                                uint32_t iVar11 = MarketLocationComponent::TypeId();
                                 uint32_t iVar9 = GetTypeId((void*)*puVar1);
                                 if (iVar9 == iVar11) {
                                     puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
                                     void* pvVar3 = (void*)*puVar1;
-                                    pvVar13 = fn_IsDerivedFrom(pvVar3, *s_pTid_c4560) ? pvVar3 : (void*)0x0;
+                                    pvVar13 = ::Object::IsDerivedFromNullSafe(pvVar3, MarketLocationComponent::TypeId()) ? pvVar3 : (void*)0x0;
                                     goto FOUND_70;
                                 }
                                 iVar17b = iVar17b + 1;
@@ -554,12 +481,12 @@ FOUND_70:
                         if (0 < *(int*)(local_c8 + 0x38)) {
                             do {
                                 uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                uint32_t dVar5 = *s_pTid_c7e78;
+                                uint32_t dVar5 = StorageComponent::TypeId();
                                 uint32_t dVar8 = GetTypeId((void*)*puVar1);
                                 if (dVar8 == dVar5) {
                                     puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
                                     void* pvVar3 = (void*)*puVar1;
-                                    pvVar13 = fn_IsDerivedFrom(pvVar3, *s_pTid_c7e78) ? pvVar3 : (void*)0x0;
+                                    pvVar13 = ::Object::IsDerivedFromNullSafe(pvVar3, StorageComponent::TypeId()) ? pvVar3 : (void*)0x0;
                                     goto FOUND_a8;
                                 }
                                 iVar17b = iVar17b + 1;
@@ -577,7 +504,7 @@ FOUND_a8:
                         // Guard: the exe derefs this description unconditionally, but in
                         // standalone local_c0's description (+0x18) can be null/unresolved,
                         // and Runtime IsDerivedFrom has no null-check (crash READ 0x0).
-                        void* pvVar13 = (pvVar3 && fn_IsDerivedFrom(pvVar3, *s_pTid_c7f20)) ? pvVar3 : (void*)0x0;
+                        void* pvVar13 = (pvVar3 && ::Object::IsDerivedFromNullSafe(pvVar3, StorageLocationDescription::TypeId())) ? pvVar3 : (void*)0x0;
                         uint32_t uVar10 = pvVar13 ? *(uint32_t*)((int64_t)pvVar13 + 0x20) : 0;
                         if (uVar10 == 0) {
                             lVar22 = *(int64_t*)(lVar22 + 0x10);
@@ -587,12 +514,12 @@ FOUND_a8:
                             if (0 < *(int*)(lVar22 + 0x38)) {
                                 do {
                                     uint64_t* puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
-                                    uint32_t dVar5 = *s_pTid_c7e78;
+                                    uint32_t dVar5 = StorageComponent::TypeId();
                                     uint32_t dVar8 = GetTypeId((void*)*puVar1);
                                     if (dVar8 == dVar5) {
                                         puVar1 = (uint64_t*)(*(int64_t*)(lVar22 + 0x30) + lVar23 * 8);
                                         void* pvVar3b = (void*)*puVar1;
-                                        pvVar13b = fn_IsDerivedFrom(pvVar3b, *s_pTid_c7e78) ? pvVar3b : (void*)0x0;
+                                        pvVar13b = ::Object::IsDerivedFromNullSafe(pvVar3b, StorageComponent::TypeId()) ? pvVar3b : (void*)0x0;
                                         goto FOUND_78;
                                     }
                                     iVar17b = iVar17b + 1;
@@ -643,7 +570,7 @@ AFTER_HEADROOM:
                     }
                     if (accepted) {
                         local_58[0] = local_c8;
-                        uint32_t uVar10 = s_AnchorCell((void*)local_58, (float*)0x0);
+                        uint32_t uVar10 = (uint32_t)Pf_EntityAnchorCell_7fb0((void*)local_58, (float*)0x0);   // 0x140087fb0
                         int* piVar6 = local_60;
                         uVar20 = ((uVar20 >> 8) << 8) | 1;  // CONCAT71(.., 1)
                         int iVar17d = Pf_IsDstReachable_f810(local_60, uVar10, param_3, '\x01');
@@ -661,7 +588,7 @@ AFTER_HEADROOM:
                             float dropVec[3] = {0, 0, 0};
                             int iVar11;
                             if (local_c0 == 0) {
-                                iVar11 = s_PickReachable(local_70v, param_3, dropVec);
+                                iVar11 = Pf_PickReachableCell_edb0(local_70v, param_3, dropVec);   // 0x14004edb0
                             } else {
                                 iVar11 = Pf_FindBestAdjacentCell_d5d0(local_c0, param_3,
                                                                      dropVec, uVar20);
@@ -684,7 +611,7 @@ LAB_14008db2a:
                 uVar16 = local_68 - 1;
             } while (local_68 - 1 != 0);
         }
-        fn_MemFreeStatic(local_b8);
+        System::MemoryAllocator::MemFree(local_b8);
         local_a0 = local_a0 + 1;
         if (1 < local_a0) {
             param_7[0] = (uint32_t)local_98;

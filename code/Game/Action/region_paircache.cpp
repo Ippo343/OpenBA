@@ -19,22 +19,18 @@
 // FUN_14001cca0 resizes that ring to 0x20000 entries of stride 0x18 (~6 MB), which is
 // faithful/correct.
 //
-// DEVIATION (one, documented): the original seeds q[1] via
-//   System::Time::Time(&tmp, DAT_140172210)
-// DAT_140172210 is a raw .rdata constant; ResolveAddr(Module::Exe, dataAddr) returns
-// NULL for raw .rdata reads in standalone (see reference_standalone_rdata_null_fallback).
-// q[1] is only a staleness timestamp used by cache eviction; for a freshly-built cache
-// a 0 seed is safe (nothing in the cache yet to evict). We therefore store 0 and avoid
-// the System::Time::Time dependency entirely.
+// q[1] is seeded via System::Time::Time(&tmp, DAT_140172210) with DAT_140172210 = 120.0f
+// (see the builder below).
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"          // WorkCellBST_Remove_ca60
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "system/Value.h"             // RtSystem_Time_Ctor
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
-// 0x14001ca60 - the shared intrusive-AVL delete (registered by reg_work_cellbst).
-typedef void (*fn_BstRemove5d10_t)(uintptr_t* root, void* node);
+// 0x14001ca60 - the shared intrusive-AVL delete, WorkCellBST_Remove_ca60 (Work/exe_bodies.h).
 
 // ---- FUN_14001cca0: resize the region-pair ring buffer to 0x20000 entries (stride 0x18).
 // param_1 is the ring Vector header: [0]=base ptr, +0x08=count(int), +0x0c=capacity(int).
@@ -48,7 +44,7 @@ void Pf_RegionPairRingResize_cca0(int64_t* param_1) {
             if (iVar1 == 0x1ffff) {
                 *(uint32_t*)((int64_t)param_1 + 0xc) = 0x60000;
             }
-            void* pvVar4 = fn_MemAlloc(g_pMemAllocSingleton,
+            void* pvVar4 = System::MemoryAllocator::MemAlloc(
                                        (int64_t)*(int*)((int64_t)param_1 + 0xc) * 0x18, 8);
             *param_1 = (int64_t)pvVar4;
         }
@@ -80,7 +76,7 @@ void Pf_RegionPairRingResize_cca0(int64_t* param_1) {
             } while (lVar5 < 0x300000);
         }
         if (pvVar2 != (void*)*param_1) {
-            fn_MemFreeStatic(pvVar2);
+            System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
@@ -89,7 +85,7 @@ void Pf_RegionPairRingResize_cca0(int64_t* param_1) {
 // Replicates the snippet in CreateNaturalResource_impl_sub_e8c0 (0x14009e8c0).
 // Returns null on allocation failure (caller then zeroes Map+0x78 fields).
 extern "C" void* Pf_RegionPairCache_Build() {
-    void* pc = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 4);
+    void* pc = System::MemoryAllocator::MemAlloc(0x38, 4);
     if (pc == nullptr) {
         return nullptr;
     }
@@ -102,10 +98,9 @@ extern "C" void* Pf_RegionPairCache_Build() {
     //   (now - entry.timestamp) > window
     // so a 0 window evicts each entry on the first tick after it is inserted and
     // defeats the cache entirely. Fixed 2026-08-30 alongside LANE1 row 41.
-    q[1] = 0;
-    if (fn_Time_Ctor_Float) {
+    {
         int64_t window = 0;
-        fn_Time_Ctor_Float(&window, 120.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&window), 120.0f);   // slot 0x140152b00
         q[1] = window;
     }
     q[2] = 0;       // [2] ring head/cap ints
@@ -167,12 +162,6 @@ extern "C" void* Pf_RegionPairCache_Build() {
 //  - The outer test is `> window` (retail JLE skips the whole loop), and the loop repeats
 //    on the same strict `>` after advancing - so an entry exactly AT the window survives.
 void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
-    static fn_BstRemove5d10_t s_remove = nullptr;
-    static bool s_init = false;
-    if (!s_init) {
-        s_init = true;
-        s_remove = reinterpret_cast<fn_BstRemove5d10_t>(ResolveAddr(Module::Exe, 0x14001ca60));
-    }
     if (param_1 == nullptr || param_2 == nullptr) return;
 
     // 1) advance the cache clock.
@@ -212,7 +201,7 @@ void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
                             continue;
                         }
                         if (keyB <= node[1]) {
-                            if (s_remove) s_remove((uintptr_t*)(param_1 + 5), node);
+                            WorkCellBST_Remove_ca60((uintptr_t*)(param_1 + 5), node);   // 0x14001ca60
                             break;
                         }
                     }

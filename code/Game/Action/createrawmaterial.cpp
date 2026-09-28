@@ -22,7 +22,11 @@
 
 #include "CreateRawMaterial.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"            // Pf_FindPlacementCell_bd40, ActRm_* helpers
+#include "Work/exe_bodies.h"              // WorkAcc_FindComponent_22520, WorkBase_FindComponent_3050
+#include "Game/exe_bodies.h"              // Reimpl_ExternalPtr_Serialize_StringTable
+#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdio>
@@ -38,106 +42,22 @@
 #include "Component/WorkPlaceDescription.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- CreateRawMaterial-specific helpers)
+// Helpers, called by name (B3R)
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable -- serialize StringHash/type ref
+//   0x1400c3720 ComponentEntity_CtorFromDescription      -- clone entity from description
+//   0x14009bd40 Pf_FindPlacementCell_bd40 -- find placement cell
+//               (mapGrid*, cellIndex, naturalResourceFlag, outEntityPtr*, placementFlags)
+//   0x140129760 ActRm_PositionEntity_9760 -- position entity at cell with rotation
+//   0x140088ef0 ActRm_RegisterRawMaterial_88ef0 -- register raw material with resource tracker
+//               (entityList, sourceIBP, placeNearFlag, descEntity, quantity)
+//   0x1400c48a0 EntityList_RegisterEntity_Impl -- register entity with entity list
+//   0x140022520 WorkAcc_FindComponent_22520 -- get child entities from source building
+//               (member ABI: RCX=entity, RDX=retbuf)
+//   0x140003050 WorkBase_FindComponent_3050 -- find component on entity (ResourceDescription?)
 // ============================================================
-
-// FUN_140002340 -- serialize StringHash/type ref
-static void (*s_fn_SerializeTypeRef)(void* field, void* serializer) = nullptr;
-
-// ComponentEntity_CopyCtor (0x1400c3720) -- clone entity from description
-static void* (*s_fn_ComponentEntity_CopyCtor)(void* self, void* desc) = nullptr;
-
-// CreateRawMaterial_helper_bd40 (0x14009bd40) -- find placement cell
-// Params: mapGrid*, cellIndex, naturalResourceFlag, outEntityPtr*, placementFlags
-static int (*s_fn_FindPlacementCell)(int* mapGrid, int cellIndex, char nrFlag,
-                                      int64_t* outEntity, uint32_t flags) = nullptr;
-
-// CreateRawMaterial_helper_9760 (0x140129760) -- position entity at cell with rotation
-// Params: componentPtr, cellIndex, rotationAngle
-static void (*s_fn_PositionEntity)(int64_t comp, int cellIndex, float rotation) = nullptr;
-
-// CreateRawMaterial_helper_8ef0 (0x140088ef0) -- register raw material with resource tracker
-// Params: entityList, sourceIBP, placeNearFlag, descEntity, quantity
-static void (*s_fn_RegisterRawMaterial)(int64_t entityList, void* sourceIBP,
-                                         char placeNear, int64_t descEntity, int quantity) = nullptr;
-
-// FUN_1400c48a0 -- register entity with entity list
-static void (*s_fn_RegisterEntity)(void** entityList, void* entityIBP, int typeGroup) = nullptr;
-
-// FUN_140022520 -- get child entities from source building
-// Member ABI: RCX=entity, RDX=retbuf
-static void* (*s_fn_GetChildEntities)(int64_t entity, void* retbuf) = nullptr;
-
-// FUN_140003050 -- find component on entity (ResourceDescription?)
-// Member ABI: RCX=entity, RDX=retbuf
-static void* (*s_fn_FindComponent_RD)(int64_t entity, void* retbuf) = nullptr;
 
 // Constant: rotation scale factor (90.0f) at 0x140172204
 static const float ROTATION_SCALE = 90.0f;
-
-static bool s_crm_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool CreateRawMaterial_ResolveFuncs() {
-    if (s_crm_funcs_resolved) return true;
-
-    s_fn_SerializeTypeRef = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    s_fn_ComponentEntity_CopyCtor = reinterpret_cast<void*(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400c3720));
-
-    s_fn_FindPlacementCell = reinterpret_cast<int(*)(int*, int, char, int64_t*, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x14009bd40));
-
-    s_fn_PositionEntity = reinterpret_cast<void(*)(int64_t, int, float)>(
-        ResolveAddr(Module::Exe, 0x140129760));
-
-    s_fn_RegisterRawMaterial = reinterpret_cast<void(*)(int64_t, void*, char, int64_t, int)>(
-        ResolveAddr(Module::Exe, 0x140088ef0));
-
-    s_fn_RegisterEntity = reinterpret_cast<void(*)(void**, void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400c48a0));
-
-    s_fn_GetChildEntities = reinterpret_cast<void*(*)(int64_t, void*)>(
-        ResolveAddr(Module::Exe, 0x140022520));
-
-    s_fn_FindComponent_RD = reinterpret_cast<void*(*)(int64_t, void*)>(
-        ResolveAddr(Module::Exe, 0x140003050));
-
-    // FUN_140044810 (set up growth/maturity component) is the exe-side
-    // Collection::Array<int32>::SetSize(n,fill) monomorphisation --
-    // ENDGAME B.3.2 step 2 converted its call site below to a
-    // GameColl::AsArray<GameColl::I32> member call, so its resolved-pointer
-    // stand-in is gone.
-
-    bool ok = s_fn_SerializeTypeRef && s_fn_ComponentEntity_CopyCtor &&
-              s_fn_FindPlacementCell && s_fn_PositionEntity &&
-              s_fn_RegisterRawMaterial && s_fn_RegisterEntity &&
-              s_fn_GetChildEntities && s_fn_FindComponent_RD &&
-              fn_InternalBasePtr_DeletePtr &&
-              fn_MemFreeStatic &&
-              fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
-              g_pGameWorldSingleton && fn_MemAlloc && g_pMemAllocSingleton;
-
-#ifdef _DEBUG
-    printf("[CreateRawMaterial] ResolveFuncs: SerTypeRef=%p CopyCtor=%p FindCell=%p\n",
-           (void*)s_fn_SerializeTypeRef, (void*)s_fn_ComponentEntity_CopyCtor,
-           (void*)s_fn_FindPlacementCell);
-    printf("[CreateRawMaterial]   PosEnt=%p RegRM=%p RegEnt=%p GetChild=%p\n",
-           (void*)s_fn_PositionEntity, (void*)s_fn_RegisterRawMaterial,
-           (void*)s_fn_RegisterEntity, (void*)s_fn_GetChildEntities);
-    printf("[CreateRawMaterial]   FindRD=%p\n",
-           (void*)s_fn_FindComponent_RD);
-    if (!ok) printf("[CreateRawMaterial] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_crm_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Helper: find RawMaterialDescription component in description entity
@@ -155,7 +75,7 @@ static void* FindRawMaterialDesc(void* descEntity) {
         uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (typeId == RawMaterialDescription::TypeId()) {
             // Verify with IsDerivedFrom
-            if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
+            if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
                 return comp;
             }
         }
@@ -180,7 +100,7 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
         uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (compTypeId == typeId) {
             comp = *(void**)compIBP;
-            if (fn_IsDerivedFrom(comp, typeId)) {
+            if (::Object::IsDerivedFromNullSafe(comp, typeId)) {
                 return comp;
             }
         }
@@ -194,11 +114,6 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
 // Version gates at 0, 1, 2, and 3 control which fields are serialized.
 // ============================================================
 void CreateRawMaterial::Persist(void* stream) {
-    // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
-    // was the one that never got it, so a save taken while one of these actions was
-    // in flight called a null serializer pointer (EXEC of 0). Found live on
-    // CompleteRoad once roads started being built; these four are the same shape.
-    CreateRawMaterial_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -212,12 +127,12 @@ void CreateRawMaterial::Persist(void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     // Type reference (+0x20)
-    s_fn_SerializeTypeRef(s + 0x20, ser2);
+    Reimpl_ExternalPtr_Serialize_StringTable(s + 0x20, ser2);   // 0x140002340
 
     // Source building IBP (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (sourceBuilding != nullptr) {
-        if (!fn_IsDerivedFrom(sourceBuilding, CitizenComponent::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(sourceBuilding, CitizenComponent::TypeId())) {
             sourceBuilding = nullptr;
         }
     }
@@ -242,7 +157,7 @@ void CreateRawMaterial::Persist(void* stream) {
     if (version > 0) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (secondaryEntity != nullptr) {
-            if (!fn_IsDerivedFrom(secondaryEntity, ComponentEntity::TypeId())) {
+            if (!::Object::IsDerivedFromNullSafe(secondaryEntity, ComponentEntity::TypeId())) {
                 secondaryEntity = nullptr;
             }
         }
@@ -261,7 +176,7 @@ void CreateRawMaterial::Persist(void* stream) {
     if (version > 2) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (tertiaryEntity != nullptr) {
-            if (!fn_IsDerivedFrom(tertiaryEntity, ComponentEntity::TypeId())) {
+            if (!::Object::IsDerivedFromNullSafe(tertiaryEntity, ComponentEntity::TypeId())) {
                 tertiaryEntity = nullptr;
             }
         }
@@ -273,7 +188,6 @@ void CreateRawMaterial::Persist(void* stream) {
 
 int  CreateRawMaterial::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    CreateRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
@@ -370,7 +284,7 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
         if (*(char*)(s + 0x50) != '\0') {
             // Natural resource placement: use helper
             void* thirdEntity = tertiaryEntity;
-            cellIndex = s_fn_FindPlacementCell(
+            cellIndex = Pf_FindPlacementCell_bd40(   // 0x14009bd40
                 *(int**)(gameWorld + 0xf8), matIdx, '\x01',
                 (int64_t*)&thirdEntity, placementFlags);
         } else {
@@ -382,10 +296,10 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
             batchSize = batchSize;  // keep batchSize as is
         } else {
             // Allocate new ComponentEntity from description
-            void* newEntityMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+            void* newEntityMem = System::MemoryAllocator::MemAlloc(0x48, 8);
             void* newEntity = nullptr;
             if (newEntityMem != nullptr) {
-                newEntity = s_fn_ComponentEntity_CopyCtor(newEntityMem, (void*)descEntity);
+                newEntity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(newEntityMem), (void*)descEntity);   // 0x1400c3720
             }
 
             // Wrap in InternalBasePtr
@@ -403,7 +317,7 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
             // Position entity at cell with random rotation
             void* randomPtr = *(void**)(gameWorld + 0xd8);
             int randVal = reinterpret_cast<System::Random*>(randomPtr)->RandTol(2);   // B.3.4b bridge
-            s_fn_PositionEntity(compIBP, cellIndex, (float)randVal * ROTATION_SCALE);
+            ActRm_PositionEntity_9760(compIBP, cellIndex, (float)randVal * ROTATION_SCALE);   // 0x140129760
 
             // Handle secondary entity (+0x30) if present
             if (*(int64_t*)(s + 0x30) != 0) {
@@ -416,7 +330,7 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
                     void* secComp = *(void**)(*(uintptr_t*)(secDesc + 0x28) + (int64_t)i * 8);
                     uint32_t secTypeId = reinterpret_cast<Object::Base*>(secComp)->Type();   // B.3.8 bridge
                     if (secTypeId == WorkPlaceDescription::TypeId()) {
-                        fn_IsDerivedFrom(secComp, WorkPlaceDescription::TypeId());
+                        ::Object::IsDerivedFromNullSafe(secComp, WorkPlaceDescription::TypeId());
                         break;
                     }
                 }
@@ -429,22 +343,22 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
 
             // Register raw material with resource tracker
             int64_t sourceIBP = *(int64_t*)(s + 0x30);
-            s_fn_RegisterRawMaterial(
+            ActRm_RegisterRawMaterial_88ef0(   // 0x140088ef0
                 *(int64_t*)(gameWorld + 0xf0), &sourceIBP,
                 *(char*)(s + 0x51), descEntity, batchSize);
 
             // Register entity with entity list
             int64_t entityRef = entityIBP;
             int typeGroup = *(int*)(descEntity + 0x20);
-            s_fn_RegisterEntity(*(void***)(gameWorld + 0xe8), &entityRef, typeGroup);
+            EntityList_RegisterEntity_Impl(*(void**)(gameWorld + 0xe8), &entityRef, typeGroup);   // 0x1400c48a0
 
             // Handle place-near behavior: link to secondary entity
             if (*(char*)(s + 0x51) != '\0' && *(int64_t*)(s + 0x30) != 0) {
                 int64_t childIBP = 0;
-                s_fn_GetChildEntities(*(int64_t*)(s + 0x30), &childIBP);
+                WorkAcc_FindComponent_22520(*(uintptr_t*)(s + 0x30), &childIBP);   // 0x140022520
                 if (childIBP != 0) {
                     void* rdCompIBP = nullptr;
-                    s_fn_FindComponent_RD(entityIBP, &rdCompIBP);
+                    WorkBase_FindComponent_3050(static_cast<uintptr_t>(entityIBP), &rdCompIBP);   // 0x140003050
                     uint32_t rdValue = *(uint32_t*)(*(uintptr_t*)&rdCompIBP + 0x28);
 
                     // B.3.2 bridge: FUN_140044810 == Collection::Array<int32>::
@@ -471,7 +385,6 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
 // Returns true if param matches entity at +0x28->+0x10, or +0x30, or +0x38.
 // ============================================================
 bool CreateRawMaterial::GetTarget(void* param) {
-    CreateRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Check +0x28 -> building entity -> +0x10 (the actual target entity)
@@ -527,13 +440,11 @@ CreateRawMaterial::CreateRawMaterial()
 // [9] 0x1400c6aa0
 
 void* CreateRawMaterial::CreateNewObject() {
-    CreateRawMaterial_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateRawMaterial());
 }
 void* CreateRawMaterial::CreateInPlaceObject(void* storage) {
-    CreateRawMaterial_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateRawMaterial());
 }

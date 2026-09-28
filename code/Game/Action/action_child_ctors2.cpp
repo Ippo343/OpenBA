@@ -12,9 +12,9 @@
 // ENDGAME B.3.8 ACT: the ctors are the classes' REAL constructors now (defined
 // below, next to their by-address doors); the compiler stamps the vtables.
 #include "Action/exe_bodies.h"
-// Closure (all registered):
-// Entity_FindComponent_Storage 0x140006270 (reg_work_base), and the static
-// MemAlloc/MemFree engine helpers.
+// Closure (called by name, B3R): Entity_FindComponent_Storage 0x140006270
+// (WorkBase_FindComponent_6270), 0x140116540 (WorkLeaf_FreeStorageCapacity_116540), and
+// System::MemoryAllocator::MemAlloc / MemFree.
 //
 // Registration: RegisterActionChildCtors2Batch() in standalone/reg_action_child_ctors2.cpp.
 
@@ -24,32 +24,14 @@
 #include "Action/HuntAnimal.h"
 #include "Action/PickupStoredRawMaterial.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include <atomic>
+#include "Work/exe_bodies.h"          // WorkBase_FindComponent_6270, WorkLeaf_FreeStorageCapacity_116540
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Component/RawMaterialDescription.h"
 #include "Component/StateMachineComponent.h"
-
-namespace {
-
-typedef void* (*fn_findStorage_t)(int64_t inner, void* retIBP);  // 0x140006270
-typedef int   (*fn_calc116540_t)(int64_t comp);                  // 0x140116540
-static fn_findStorage_t s_fn_findStorage = nullptr;
-static fn_calc116540_t  s_fn_calc116540  = nullptr;
-// ENDGAME B.3.8 ACT (B8-10): the class ctors below call EnsureInit and are
-// reached from the loader thread too, so the once-flag is an acquire/release
-// atomic (a racing second init stores the same resolved values).
-static std::atomic<bool> s_init{false};
-static void EnsureInit() {
-    if (s_init.load(std::memory_order_acquire)) return;
-    s_fn_findStorage  = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_calc116540   = reinterpret_cast<fn_calc116540_t >(ResolveAddr(Module::Exe, 0x140116540));
-    s_init.store(true, std::memory_order_release);
-}
-} // namespace
 
 // ============================================================
 // FUN_1400c59d0 — CompleteRoad_Action_CopyCtor
@@ -105,9 +87,8 @@ DropOffRawMaterial::DropOffRawMaterial(uint64_t* storage, uint64_t* source, uint
 //   param_1 = self (the ConsumeRawMaterial action), param_2 = resType, param_3 = count.
 // ============================================================
 void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
-    EnsureInit();
     int64_t storageIbp = 0;
-    if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(self + 0x20), &storageIbp);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x20), &storageIbp);
 
     if (*reinterpret_cast<char*>(self + 0x38) != '\0') {
         int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
@@ -147,8 +128,8 @@ void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
     if (*reinterpret_cast<int*>(self + 0x34) < (int)newCount) {
         *reinterpret_cast<uint32_t*>(self + 0x34) = newCount;
         if (oldCount != 0) *reinterpret_cast<uint32_t*>(self + 0x34) = newCount * 3;
-        void* na = (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton,
+        void* na = System::MemoryAllocator::_singleton
+            ? System::MemoryAllocator::MemAlloc(
                           (uint64_t)((int64_t)*reinterpret_cast<int*>(self + 0x34) << 4), 8)
             : nullptr;
         *reinterpret_cast<void**>(self + 0x28) = na;
@@ -171,7 +152,7 @@ void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
             byteOff += 0x10;
         } while (i < (int)newCount);
     }
-    if (oldArr != *reinterpret_cast<void**>(self + 0x28) && fn_MemFreeStatic) fn_MemFreeStatic(oldArr);
+    if (oldArr != *reinterpret_cast<void**>(self + 0x28) ) System::MemoryAllocator::MemFree(oldArr);
 }
 
 // ============================================================
@@ -203,9 +184,8 @@ ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage, int64_t resType, uint8
 //   self = the PickupStored action; resType = resource type id; count = amount.
 // ============================================================
 void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) {
-    EnsureInit();
     int64_t storageIbp = 0;
-    if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(self + 0x28), &storageIbp);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x28), &storageIbp);
 
     // bump storage inventory reserved(+0xc) for the matching resType
     int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
@@ -254,8 +234,8 @@ void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) 
     if (*reinterpret_cast<int*>(self + 0x3c) < (int)newCount) {
         *reinterpret_cast<uint32_t*>(self + 0x3c) = newCount;
         if (oldCount != 0) *reinterpret_cast<uint32_t*>(self + 0x3c) = newCount * 3;
-        void* na = (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton,
+        void* na = System::MemoryAllocator::_singleton
+            ? System::MemoryAllocator::MemAlloc(
                           (uint64_t)((int64_t)*reinterpret_cast<int*>(self + 0x3c) << 4), 8)
             : nullptr;
         *reinterpret_cast<void**>(self + 0x30) = na;
@@ -278,7 +258,7 @@ void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) 
             byteOff += 0x10;
         } while (i < (int)newCount);
     }
-    if (oldArr != *reinterpret_cast<void**>(self + 0x30) && fn_MemFreeStatic) fn_MemFreeStatic(oldArr);
+    if (oldArr != *reinterpret_cast<void**>(self + 0x30) ) System::MemoryAllocator::MemFree(oldArr);
 }
 
 // ============================================================
@@ -306,11 +286,10 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* pa
       _field30(nullptr),
       _field38(nullptr),
       _field40(param_6) {
-    EnsureInit();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     int64_t storageIbp = 0;
-    if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(s + 0x28), &storageIbp);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(s + 0x28), &storageIbp);
 
     if (param_4 == 0) return;
 
@@ -329,7 +308,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* pa
             if (tid == wantTid) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(param_4 + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + (int64_t)idx * 8);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(match, RawMaterialDescription::TypeId()))
+                if (::Object::IsDerivedFromNullSafe(match, RawMaterialDescription::TypeId()))
                     rawMatDesc = match;
                 break;
             }
@@ -340,7 +319,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* pa
 
     int requested = param_5;
     if (requested <= 0) {
-        int total = s_fn_calc116540 ? s_fn_calc116540(*reinterpret_cast<int64_t*>(s + 0x20)) : 0;
+        int total = WorkLeaf_FreeStorageCapacity_116540(*reinterpret_cast<intptr_t*>(s + 0x20));   // 0x140116540
         // perUnitSize = *(int*)(rawMatDesc+0x48); guard the null-find (original assumes found).
         int perUnit = rawMatDesc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatDesc) + 0x48) : 0;
         requested = (perUnit != 0) ? total / perUnit : 0;
@@ -410,7 +389,6 @@ ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage)
 // param_2 via InternalBasePtr_Ctor and returns param_2.
 // ============================================================
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
-    EnsureInit();
     void* found = nullptr;
     uint32_t wantTid = StateMachineComponent::TypeId();
     int count = *reinterpret_cast<int*>(param_1 + 0x38);
@@ -424,7 +402,7 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
             if (tid == wantTid) {
                 int64_t* mslot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + (int64_t)idx * 8);
                 void* match = reinterpret_cast<void*>(*mslot);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(match, StateMachineComponent::TypeId()))
+                if (::Object::IsDerivedFromNullSafe(match, StateMachineComponent::TypeId()))
                     found = match;
                 break;
             }
@@ -432,7 +410,7 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
             if (idx >= count) break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+    new (param_2) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return param_2;
 }
@@ -445,7 +423,6 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
 // (Returns ulonglong index; non-negative *(int*)(+0x50) returns that value.)
 // ============================================================
 uint64_t WeightedRandomIndex_119470(int64_t param_1) {
-    EnsureInit();
     uint32_t sel = *reinterpret_cast<uint32_t*>(param_1 + 0x50);
     uint64_t result = sel;
     if ((int)sel < 0) {
