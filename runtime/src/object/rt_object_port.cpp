@@ -37,6 +37,7 @@ extern int RtObjectTypeSystemRegister();   // type_system.cpp   (lane A)
 extern int RtObjectFactoryFileExtensionRegister(); // factory_file_extension.cpp
 extern int RtObjectInternalRegister();     // internal.cpp      (lane B)
 extern int RtObjectExternalRegister();     // external.cpp      (lane C)
+extern int RtObjectExternalCompilersRegister();  // external_compilers.cpp (ENDGAME B.3.9 OBJ)
 extern int RtObjectExternalSetRegister();  // external_set.cpp  (Wave 9 lane RES)
 extern int RtObjectExternalPathRegister(); // external_path_win.cpp (Wave 9 lane RRES)
 extern int RtObjectExternalFindRegister(); // external_find.cpp     (Wave 9 lane RRES)
@@ -88,6 +89,7 @@ void RtObjectPortInit() {
     n += RtObjectFactoryFileExtensionRegister();
     n += RtObjectInternalRegister();
     n += RtObjectExternalRegister();
+    n += RtObjectExternalCompilersRegister();   // the two compiler records' factory pairs
     // Wave 9 lane RES: the resource tree's own Set bodies, plus Clean. Nested
     // under the old DLL-era switch because it is the same class's state, with its
     // own switch so the twelve unexported Set doors can be A/B'd on their own.
