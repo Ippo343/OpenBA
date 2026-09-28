@@ -366,7 +366,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
         int candidateCell = WorldToCell(gridSize, candidatePos[0], candidatePos[1]);
 
         if (candidateCell != 0) {
-            fn_Map_Invalidate(mapGrid);
+            Pf_ZoneRefresh_9c480(mapGrid, nullptr, nullptr, 0);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
 
             uintptr_t gridData = *(uintptr_t*)(mapGrid + 0x20);
             if (CheckCellConnectivity(gridData, buildingCell, candidateCell)) {
@@ -398,13 +398,13 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
                     int testCell = WorldToCell(gridSize, testPos[0], testPos[1]);
 
                     // Check connectivity (first pass)
-                    fn_Map_Invalidate(mapGrid);
+                    Pf_ZoneRefresh_9c480(mapGrid, nullptr, nullptr, 0);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
                     gridData = *(uintptr_t*)(mapGrid + 0x20);
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;
 
                     // Check connectivity (second pass after re-invalidation)
-                    fn_Map_Invalidate(mapGrid);
+                    Pf_ZoneRefresh_9c480(mapGrid, nullptr, nullptr, 0);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
                     gridData = *(uintptr_t*)(mapGrid + 0x20);
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;
@@ -465,9 +465,11 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
                         }
 
                         if (!cached) {
-                            dist = fn_Map_CalcPathDist(
+                            // Retail 0x1400e5630..0x1400e56a1: R9D = the smaller region id (`lo`), left there by
+                            // the cache-key normalisation; 0x1400a8ba0 forwards R9 to 0x14001dc00 untouched.
+                            dist = Pf_RegionPathLength_8ba0(
                                 *(int**)((uintptr_t)mapGrid + 0x70),
-                                regionCenter, regionTest);
+                                regionCenter, static_cast<uint32_t>(regionTest), static_cast<uint64_t>(lo));
                             Pf_RegionPairCacheInsert_5b30(
                                 reinterpret_cast<uint64_t*>(*(void**)((uintptr_t)mapGrid + 0x78)),
                                 regionCenter, regionTest, dist);
@@ -854,10 +856,8 @@ extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
     return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(citizenIBP, nullptr);   // B.3.8 bridge
 }
 
-// Execute-readiness gate for the force harness. B3R: BuildStructure's Execute/ctor helpers
-// are called by name, so the only things left to test are the two argument-list doors
-// that stay engine_funcs globals (fn_Map_Invalidate, fn_Map_CalcPathDist; R2) and the
-// game world.
+// Execute-readiness gate for the force harness (no retail address). B3R: BuildStructure's
+// helpers are called by name, so the only thing left to test is the game world (STORAGE).
 extern "C" bool BuildStructure_DepsReady() {
-    return fn_Map_Invalidate && fn_Map_CalcPathDist && g_pGameWorldSingleton && *g_pGameWorldSingleton;
+    return g_pGameWorldSingleton && *g_pGameWorldSingleton;
 }
