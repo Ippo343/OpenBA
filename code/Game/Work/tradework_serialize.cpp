@@ -1,10 +1,9 @@
 // code/Game/Work/tradework_serialize.cpp
 // Keystone B tail — TradeWork (CitizenComponent work-tracking) AVL serialize cascade.
 //
-// These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from
-// TradeWork_Serialize. In standalone mode they resolve to 0 (silently skipped) unless
+// These exe sub-helpers are called by name from TradeWork_Serialize.
 #include "Work/exe_bodies.h"
-// registered. Registration point: RegisterWorkTailTradeBatch in
+// Registration point: RegisterWorkTailTradeBatch in
 // standalone/reg_work_tail_trade.cpp.
 //
 // All functions are faithful 1:1 ports of the decompiled exe helpers (Ghidra
@@ -37,28 +36,13 @@
 //   0x14002c830 -> static MemAlloc (leaf)
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 namespace {
-
-// ---- static System::MemoryAllocator MemAlloc (2-arg static form: slot 0x140152b60,
-// matching code/Game/Player/tool_base_trade.cpp). MemAlloc(size, align). ----
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
-MemAllocStatic_t s_memAlloc = nullptr;
-bool s_memInit = false;
-void EnsureMem() {
-    if (s_memInit) return;
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b60);
-    if (slot) s_memAlloc = *reinterpret_cast<MemAllocStatic_t*>(slot);
-    if (!s_memAlloc)
-        s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_memInit = true;
-}
 
 
 // AVL node field accessors (0x38-byte node; offsets disasm-verified).
@@ -82,8 +66,7 @@ extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor); // 0x
 // Returns the new node (or null on OOM).
 // ============================================================
 extern "C" void* TradeWork_NodeAlloc_c830(void* /*unused*/, uint64_t* src, int64_t parent) {
-    EnsureMem();
-    uint64_t* n = reinterpret_cast<uint64_t*>(s_memAlloc ? s_memAlloc(0x38, 8) : nullptr);
+    uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (n == nullptr) return nullptr;
     n[0] = 0;
     n[0] = src[0];   // +0x00 key
@@ -104,13 +87,12 @@ extern "C" void* TradeWork_NodeAlloc_c830(void* /*unused*/, uint64_t* src, int64
 //   param_3 = IBP record to insert (0x18-byte triple; key = *param_3)
 // ============================================================
 extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t param_3) {
-    EnsureMem();
     int64_t root = *param_1;
 
     if (root == 0) {
         // Empty tree: allocate the root node inline (matches the decompile's MemAlloc
         // here rather than via the c830 sub-helper).
-        uint64_t* n = reinterpret_cast<uint64_t*>(s_memAlloc ? s_memAlloc(0x38, 8) : nullptr);
+        uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
         void* newNode = nullptr;
         if (n != nullptr) {
             n[0] = 0;
@@ -198,8 +180,8 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
             reinterpret_cast<Object::InternalBasePtr*>(&rec[0])->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
             // Validate the deserialized object against CitizenComponent (DWORD_1401c7158,
             // ENDGAME B.3.9 D5: by cell, read directly).
-            if (rec[0] != 0 && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(reinterpret_cast<void*>(rec[0]), CitizenComponent::TypeId())) {
+            if (rec[0] != 0 &&
+                !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(rec[0]), CitizenComponent::TypeId())) {
                 rec[0] = 0;
             }
             // int payload at record +0x10.
@@ -226,8 +208,8 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
         while (node != 0) {
             // Serialize this node's IBP (+0x00), int (+0x10), ExternalPtr (+0x08).
             reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
-            if (*reinterpret_cast<int64_t*>(node) != 0 && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(*reinterpret_cast<void**>(node), CitizenComponent::TypeId())) {
+            if (*reinterpret_cast<int64_t*>(node) != 0 &&
+                !Object::IsDerivedFromNullSafe(*reinterpret_cast<void**>(node), CitizenComponent::TypeId())) {
                 *reinterpret_cast<int64_t*>(node) = 0;
             }
             reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(node + 0x10), nullptr);   // B.3.4 bridge
