@@ -75,7 +75,8 @@ typedef void  (*MW_MarketBST_EraseByKey_t)(void* bstRoot, void* keyIBP);
 // (0x1400efd20), which locates the node itself before calling.
 typedef void  (*MW_MarketBST_EraseByNode_t)(void* bstRoot, void* node);
 // FUN_14002af40 -- market tree cleanup (recursive, frees node + data)
-typedef void  (*MW_TreeCleanup_t)(void* bstRoot, void* node, void* param3, void* param4);
+// Two arguments: retail 0x14002af40 reads only RCX/RDX (TEST RDX,RDX / MOV RBX,RCX / MOV RDI,RDX).
+typedef void  (*MW_TreeCleanup_t)(void* bstRoot, void* node);
 // FUN_1400f7100 -- validate work entity
 typedef bool  (*MW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
 // FUN_1400c5400 -- cancel all work items
@@ -1748,8 +1749,8 @@ MarketWork::~MarketWork() {
     if (bstRoot != nullptr) {
         // FUN_14002af40 recursively frees left(+0x20), right(+0x28),
         // then frees data at +0x08, zeros +0x08 and +0x10, frees node
-        s_fn_TreeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20), nullptr, nullptr);
-        s_fn_TreeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x28), nullptr, nullptr);
+        s_fn_TreeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
+        s_fn_TreeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x28));
         // Free root node's data and the root itself
         if (s_fn_MemFreeStatic) {
             void* rootData = *(void**)((uintptr_t)bstRoot + 0x08);
