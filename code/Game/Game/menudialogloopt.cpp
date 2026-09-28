@@ -111,11 +111,6 @@ namespace MenuSceneConst {
 //   frustum = Volume::Frustum(near=1, far=100, fovY=90, fovX=90)
 //   Graphics::Camera::Camera(self+0x34, frustum, ident, true /* isPerspective */)
 static void* MenuScene_Helper_8800(void* transformObj) {
-    if (!fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_Ctor) {
-        printf("[MenuDLT::Helper8800] missing fn ptrs (FrustC=%p CamC=%p)\n",
-               (void*)fn_Volume_Frustum_Ctor, (void*)fn_Graphics_Camera_Ctor);
-        return transformObj;
-    }
     // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
     *reinterpret_cast<Math::Transform*>(transformObj) = Math::Transform();
 
@@ -138,11 +133,11 @@ static void* MenuScene_Helper_8800(void* transformObj) {
     float farZ  = MenuSceneConst::kHelper8800_FarZ;
 
     uint8_t frustumBuf[0x80] = {};
-    fn_Volume_Frustum_Ctor(frustumBuf, &nearZ, &farZ, &fovX, &fovY);
+    RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustumBuf), reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ), reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
 
     // Camera ctor: self = transform+0x34, frustum, transform3, isPerspective=true
     void* cameraObj = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transformObj) + 0x34);
-    fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, &ident, true);
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(cameraObj), reinterpret_cast<const ::Frustum*>(frustumBuf), reinterpret_cast<const Math::Transform3*>(&ident), true);
     return transformObj;
 }
 
@@ -152,9 +147,8 @@ static void* MenuScene_Helper_8800(void* transformObj) {
 // This matches the original's behavior for aspect <= 16/9.
 static void MenuScene_Helper_8660(void* transformObj, float fovY_deg, float nearZ, float farZ) {
     // B.3.5: the `!fn_Graphics_Camera_SetFrustum` readiness term went with the
-    // door; the Frustum ctor door and the two singleton object tests stay.
-    if (!fn_Volume_Frustum_Ctor ||
-        !::Video::Configuration::_singleton) {
+    // door; B3R: the Frustum ctor door's too. The singleton object test stays.
+    if (!::Video::Configuration::_singleton) {
         return;
     }
     void* videoConfig = ::Video::Configuration::_singleton;
@@ -173,7 +167,7 @@ static void MenuScene_Helper_8660(void* transformObj, float fovY_deg, float near
     // (Original ultrawide clamp at aspect > 16/9 omitted — Phase A MVP.)
 
     uint8_t frustumBuf[0x80] = {};
-    fn_Volume_Frustum_Ctor(frustumBuf, &nearZ, &farZ, &fovX, &fovY_deg);
+    RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustumBuf), reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ), reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY_deg));
 
     // Camera lives at transform+0x34.
     void* cameraObj = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transformObj) + 0x34);
@@ -363,7 +357,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     // 0x120 bytes (sizeof) from MemAlloc, run through `??0MeshInstance@Graphics@@`
     // above, so the virtual call reads the same vptr the hand-inlined slot read.
     uint8_t timeBuf[8] = {};
-    fn_Time_Ctor_Float(timeBuf, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
     reinterpret_cast<Graphics::Geometry*>(inst)->Update(
         *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.5 bridge
 
@@ -395,12 +389,10 @@ void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
     if (!self || !menuScene || !scene) return;
     // B.3.5: SetMesh / Scene::AddObject / Geometry::SetTransform are members now,
     // so their readiness terms and their `%p`s are gone; B.3.9 EXA took the
-    // MeshInstance ctor door's (the class is constructed). MemoryAllocator and the
-    // Time ctor stay.
-    if (!System::MemoryAllocator::_singleton || !fn_Time_Ctor_Float) {
-        printf("[MenuDLT::PhaseB] missing required fn ptrs "
-               "(TimeC=%p) — skipping\n",
-               (void*)fn_Time_Ctor_Float);
+    // MeshInstance ctor door's (the class is constructed). MemoryAllocator stays;
+    // the Time ctor is called by name (B3R).
+    if (!System::MemoryAllocator::_singleton) {
+        printf("[MenuDLT::PhaseB] missing required fn ptrs — skipping\n");
         return;
     }
 
@@ -506,11 +498,8 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
     // B.3.5: Scene::AddObject and Geometry::SetTransform are members now; the
     // Time ctor door stays. ENDGAME B.3.9 GFX (B9-13): the
     // ParticleSystemInstance CTOR door is gone -- the class's real ctor below.
-    if (!System::MemoryAllocator::_singleton ||
-        !fn_Time_Ctor_Float) {
-        printf("[MenuDLT::PhaseC] missing required fn ptrs "
-               "(TimeC=%p) — skipping\n",
-               (void*)fn_Time_Ctor_Float);
+    if (!System::MemoryAllocator::_singleton) {
+        printf("[MenuDLT::PhaseC] missing required fn ptrs — skipping\n");
         return;
     }
 
@@ -567,7 +556,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
 
         // Initial Update(Time(0)) — slot 1 of Graphics::Geometry.
         uint8_t timeBuf[8] = {};
-        fn_Time_Ctor_Float(timeBuf, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
         reinterpret_cast<Graphics::Geometry*>(inst)->Update(
             *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.5 bridge
 
@@ -641,10 +630,9 @@ void MenuDialogLoopT_TickParticles(void* self, void* time) {
 // PhaseB chunked iteration starts.
 bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Required Runtime functions
-    if (!System::MemoryAllocator::_singleton ||
-        !fn_Graphics_Renderer_Ctor || !fn_Graphics_Scene_Ctor ||
-        // B.3.5: SetMesh and Scene::AddGlobalObject are members now.
-        !fn_Time_Ctor_Float) {
+    // B.3.5: SetMesh and Scene::AddGlobalObject are members now; B3R: the
+    // Renderer / Scene / Time ctors are called by name.
+    if (!System::MemoryAllocator::_singleton) {
         printf("[MenuDLT::LoadScene] missing required fn pointers — bailing out\n");
         return false;
     }
@@ -721,12 +709,12 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
 
     // --- Allocate Renderer (0x50 bytes, alignment 4) ---
     void* renderer = System::MemoryAllocator::MemAlloc(0x50, 4);
-    if (renderer) fn_Graphics_Renderer_Ctor(renderer);
+    if (renderer) RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(renderer));
     Loop(self)->_renderer = renderer;
 
     // --- Allocate Graphics::Scene (0x78 bytes, alignment 8) ---
     void* gScene = System::MemoryAllocator::MemAlloc(0x78, 8);
-    if (gScene) fn_Graphics_Scene_Ctor(gScene);
+    if (gScene) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(gScene));
     Loop(self)->_scene = gScene;
 
     // --- Allocate SunLight (0x108 bytes, alignment 8) ---
@@ -764,7 +752,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // --- Time(0.0f) construction + Update vtable[+0x08] dispatch on the MeshInstance ---
     if (mainMesh) {
         uint8_t timeBuf[8] = {};
-        fn_Time_Ctor_Float(timeBuf, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
         // B.3.5 bridge — slot 1 of Graphics::Geometry is `Update(const Time&)`.
         // (Original code uses the overridden vtable but the base Runtime vtable
         // still has a valid Update slot here; the virtual call reads whichever

@@ -527,14 +527,6 @@ bool MenuScene::Serialize(void* stream) {
 static void MenuScene_TransformInit_Standalone(void* transformObj) {
     if (!transformObj) return;
 
-    if (!fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_Ctor) {
-        printf("[MenuScene::TransformInit] missing Runtime fn ptrs "
-               "(FrustC=%p CamC=%p) — leaving transform zeroed\n",
-               (void*)fn_Volume_Frustum_Ctor,
-               (void*)fn_Graphics_Camera_Ctor);
-        return;
-    }
-
     *reinterpret_cast<Math::Transform*>(transformObj) = Math::Transform();
 
     // Zero scalars at +0x1C (qword) and +0x24 (dword) per original disasm.
@@ -547,12 +539,12 @@ static void MenuScene_TransformInit_Standalone(void* transformObj) {
     // near=1.0, far=100.0, fovX=fovY=90.0 (FUN_140098800).
     float fovX = 90.0f, fovY = 90.0f, nearZ = 1.0f, farZ = 100.0f;
     uint8_t frustumBuf[0x80] = {};
-    fn_Volume_Frustum_Ctor(frustumBuf, &nearZ, &farZ, &fovX, &fovY);
+    RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustumBuf), reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ), reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
 
     // Camera lives at transform+0x34 (per the embedded Camera at +0x34 inside
     // the 0x10C-byte Transform block).
     void* cameraObj = reinterpret_cast<uint8_t*>(transformObj) + 0x34;
-    fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, &ident, true);
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(cameraObj), reinterpret_cast<const ::Frustum*>(frustumBuf), reinterpret_cast<const Math::Transform3*>(&ident), true);
 }
 
 // ============================================================

@@ -69,7 +69,8 @@
 // Trace: BANISHED_STORAGE_TRACE=1 prints [StorageSeed] lines.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"      // ActHunt_DynArraySetCount_3110, ActRm_StorageAdd_d000, ActRm_GetResourceCategory_88f90
+#include "Component/exe_bodies.h"   // StorageComponent_DynArrayResize
 #include "object/TypeInfo.h"                     // caller batch CB6: Object::Base::Type()
 #include "Game/GameUpdateLoop.h"                // caller batch CB6: the world's named fields
 #include "Component/RawMaterialDescription.h"   // caller batch CB6: TypeId()
@@ -91,27 +92,12 @@ static uint32_t TidStorageDescription()     { return StorageDescription::TypeId(
 static uint32_t TidMapComponent()           { return MapComponent::TypeId(); }
 
 // ============================================================
-// Resolved exe helpers (all already registered in standalone)
+// Exe helpers, called by name (all registered in standalone):
+//   0x140003110 ActHunt_DynArraySetCount_3110     (Action/exe_bodies.h)
+//   0x14012d000 ActRm_StorageAdd_d000             (Action/exe_bodies.h)
+//   0x14000f090 StorageComponent_DynArrayResize   (Component/exe_bodies.h)
+//   0x140088f90 ActRm_GetResourceCategory_88f90   (Action/exe_bodies.h)
 // ============================================================
-typedef void (*fn_GrowAppend8_t)(void* list, int newCount, void* value);       // 0x140003110
-typedef void (*fn_SeedAddItem_t)(uintptr_t storage, int64_t mat, int n);       // 0x14012d000
-typedef void (*fn_SlotArrayResize_t)(void* arrayBase, int newCount);           // 0x14000f090
-typedef int  (*fn_StockTableIndex_t)(int64_t a, int64_t material);             // 0x140088f90
-
-static fn_GrowAppend8_t    s_fnGrowAppend8    = nullptr;
-static fn_SeedAddItem_t    s_fnAddItem        = nullptr;
-static fn_SlotArrayResize_t s_fnSlotResize    = nullptr;
-static fn_StockTableIndex_t s_fnStockIndex    = nullptr;
-static bool s_fnInit = false;
-
-static void EnsureFns() {
-    if (s_fnInit) return;
-    s_fnGrowAppend8 = reinterpret_cast<fn_GrowAppend8_t>(ResolveAddr(Module::Exe, 0x140003110));
-    s_fnAddItem     = reinterpret_cast<fn_SeedAddItem_t>(ResolveAddr(Module::Exe, 0x14012d000));
-    s_fnSlotResize  = reinterpret_cast<fn_SlotArrayResize_t>(ResolveAddr(Module::Exe, 0x14000f090));
-    s_fnStockIndex  = reinterpret_cast<fn_StockTableIndex_t>(ResolveAddr(Module::Exe, 0x140088f90));
-    s_fnInit = true;
-}
 
 static inline void* TownMgr() {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
@@ -211,15 +197,14 @@ static int Seed_CanAccept_cd80(int64_t storageComp, int64_t matTemplEntity, int 
 // town storage-location list (townMgr+0x00 base / +0x08 count / +0x0c cap)
 // via FUN_140003110. Retail does NOT dedup and does NOT CheckPtr here.
 extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) {
-    EnsureFns();
     void* townMgr = TownMgr();
-    if (!townMgr || !s_fnGrowAppend8 || !storageLocationComp) {
+    if (!townMgr || !storageLocationComp) {
         return;
     }
     uint64_t entityRef = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(storageLocationComp) + 0x10);
     int newCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 8) + 1;
-    s_fnGrowAppend8(townMgr, newCount, &entityRef);
+    ActHunt_DynArraySetCount_3110(townMgr, newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of
@@ -232,7 +217,6 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) 
 // param = any component whose +0x10 holds the building's entity IBP (retail
 // passes the BuildComponent; the StorageComponent itself works — same layout).
 extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
-    EnsureFns();
     if (!componentWithEntity) return;
     uintptr_t p = reinterpret_cast<uintptr_t>(componentWithEntity);
 
@@ -248,13 +232,14 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
     // table at townMgr+0x170 (+0xc field per 0x20-stride row, index FUN_140088f90).
     // No-op for a freshly spawned building (0 slots).
     int slots = *reinterpret_cast<int*>(sc + 0x30);
-    if (slots > 0 && s_fnStockIndex && townMgr &&
+    if (slots > 0 && townMgr &&
         *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(townMgr) + 0x170)) {
         int64_t arr = *reinterpret_cast<int64_t*>(sc + 0x28);
         for (int i = 0; i < slots; i++) {
             int64_t slot = arr + static_cast<int64_t>(i) * 0x10;
             int cnt = *reinterpret_cast<int*>(slot + 8);
-            int idx = s_fnStockIndex(arr, *reinterpret_cast<int64_t*>(slot));
+            int idx = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(arr),
+                                                      *reinterpret_cast<uintptr_t*>(slot));   // 0x140088f90
             if (idx >= 0) {
                 int* cell = reinterpret_cast<int*>(
                     static_cast<int64_t>(idx) * 0x20 + 0xc +
@@ -304,7 +289,7 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
 
     int volumeLimit    = *reinterpret_cast<int*>(d + 0x24);
     uint32_t storageFlags = *reinterpret_cast<uint32_t*>(d + 0x28);
-    if (s_fnSlotResize) s_fnSlotResize(reinterpret_cast<void*>(sc + 0x28), 0);
+    StorageComponent_DynArrayResize(reinterpret_cast<void*>(sc + 0x28), 0);   // 0x14000f090
     *reinterpret_cast<uint32_t*>(sc + 0x3c) = storageFlags;
     *reinterpret_cast<int*>(sc + 0x38) = volumeLimit * tileArea;
 
@@ -314,7 +299,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
 // 0x140091660 — Game_SpawnResources(townMgr, mask, count)
 // ============================================================
 extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, int count) {
-    EnsureFns();
     int64_t* townMgr = reinterpret_cast<int64_t*>(townMgrV);
     if (!townMgr) return;
 
@@ -349,7 +333,7 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
 
     // ---- Phase B: round-robin the matched templates over townMgr+0x00 ----
     int placed = 0;
-    if (matchedCount > 0 && count > 0 && s_fnAddItem) {
+    if (matchedCount > 0 && count > 0) {
         for (;;) {
             bool progress = false;
             int locCount = static_cast<int>(townMgr[1]);   // +0x08
@@ -366,7 +350,7 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
                     int64_t tmpl = matched[placed % matchedCount];
                     if (compIBP &&
                         Seed_CanAccept_cd80(static_cast<int64_t>(compIBP), tmpl, 1)) {
-                        s_fnAddItem(compIBP, tmpl, 1);
+                        ActRm_StorageAdd_d000(compIBP, tmpl, 1);   // 0x14012d000
                         placed++;
                         progress = true;
                     }

@@ -16,7 +16,10 @@
 // +0x08 array.data / +0x10 count / +0x14 cap / +0x18 parent / +0x20 left /
 // +0x28 right / +0x30 balance.
 
-#include "resolve.h"
+#include "options.h"             // Opt().liveSeatShuffle
+#include "Action/exe_bodies.h"    // ActHunt_DynArraySetCount_3110
+#include "Component/exe_bodies.h" // ResidenceComponent_impl_7230, AttendanceComponent_GetJobHostComponent
+#include "Tutorial/exe_bodies.h"  // WorkComponent_CalcMaxWorkers
 #include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()
@@ -29,37 +32,20 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "Game/exe_bodies.h"
 
-// Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
-// *out = the found/created node. p4 = the empty array record {data=0, count/cap=0}.
-extern "C" void* ResidenceComponent_impl_7230(int64_t* p1, void** p2, uint64_t* p3, int64_t* p4);
+// Called by name:
+//   0x140017230 ResidenceComponent_impl_7230 -- Keystone-A insert wrapper; returns param_2
+//               (&out), *out = the found/created node (Component/exe_bodies.h)
+//   0x140003110 ActHunt_DynArraySetCount_3110 -- growable 8-byte-element array: set count
+//               to newCount + append *elem (Action/exe_bodies.h)
+//   0x140089470 TownRegistry_ShuffleProfessionList -- per-profession building-list
+//               shuffle; registered (and so reached) only under Opt().liveSeatShuffle
+//               (BANISHED_LIVE_SEAT_SHUFFLE): the option is tested at the call site
+//   0x14012e5c0 WorkComponent_CalcMaxWorkers -- max worker slots (Tutorial/exe_bodies.h;
+//               the registered, live one of the two bodies of this address)
+//   0x140002e10 AttendanceComponent_GetJobHostComponent -- find the job host into an
+//               IBP (Component/exe_bodies.h)
 
 namespace {
-// 0x140003110 — growable 8-byte-element array: set-count-to newCount + append *elem.
-typedef void (*fn_ArrayAdd3110_t)(int64_t* arrayStruct, int newCount, void* elemIBP);
-fn_ArrayAdd3110_t s_arrayAdd3110 = nullptr;
-
-// --- FindAvailableBuilding (0x14008d100) reader-side closure ---
-// 0x140089470 — per-profession building-list distance sort/optimize. OPTIONAL:
-//   pure reorder of node.arr; skipped (unregistered) leaves correctness intact.
-typedef void  (*fn_Optimize89470_t)(int64_t townMgr, uint64_t professionKey);
-// 0x14012e5c0 — WorkComponent CalcMaxWorkers (returns max worker slots).
-typedef int   (*fn_CalcMaxWorkers_t)(void* workComp);
-// 0x140002e10 — find storage/host + reachability probe; returns an IBP* (=outBuf).
-typedef void* (*fn_FindReach_t)(int64_t buildingEntity, void* outIBP);
-
-fn_Optimize89470_t  s_optimize89470  = nullptr;
-fn_CalcMaxWorkers_t s_calcMaxWorkers = nullptr;
-fn_FindReach_t      s_findReach      = nullptr;
-bool s_init = false;
-
-void EnsureFns() {
-    if (s_init) return;
-    s_arrayAdd3110   = reinterpret_cast<fn_ArrayAdd3110_t>(ResolveAddr(Module::Exe, 0x140003110));
-    s_optimize89470  = reinterpret_cast<fn_Optimize89470_t>(ResolveAddr(Module::Exe, 0x140089470));
-    s_calcMaxWorkers = reinterpret_cast<fn_CalcMaxWorkers_t>(ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_findReach      = reinterpret_cast<fn_FindReach_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_init = true;
-}
 
 // Scan an entity's component list (entity+0x30 = IBP array, entity+0x38 = count)
 // for the first component whose GetTypeId (vtable +0x10) equals `typeId`. Mirrors
@@ -95,7 +81,6 @@ void* FindComponentByTypeId(int64_t entity, uint32_t typeId) {
 // workplace against the node's entity array; append if absent. Faithful 1:1.
 // ============================================================
 extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uint64_t param_3) {
-    EnsureFns();
 
     // BST search for the key (key<node -> left[+0x20]; key>node -> right[+0x28]; == -> found).
     uint64_t* node = *reinterpret_cast<uint64_t**>(param_1 + 0x100);   // root
@@ -133,8 +118,7 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uin
     }
 
     // Append: 003110(&node.array (node+0x08), count+1, workplaceRef).
-    if (s_arrayAdd3110)
-        s_arrayAdd3110(reinterpret_cast<int64_t*>(found + 1), count + 1, param_2);
+    ActHunt_DynArraySetCount_3110(reinterpret_cast<int64_t*>(found + 1), count + 1, param_2);   // 0x140003110
 }
 
 // ------------------------------------------------------------
@@ -216,7 +200,6 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
 //     param_3 = professionKey
 // ============================================================
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey) {
-    EnsureFns();
 
     // Type-ids resolved self-contained (do NOT read the shared .rdata DWORDs):
     // the classes' TypeId() (caller batch CB6; was a lazy by-name cache).
@@ -224,7 +207,7 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
     const uint32_t s_tidWork      = WorkComponent::TypeId();        // DWORD_1401c8070
 
     // Step 1: optimize/sort the profession node's building list (OPTIONAL — guard).
-    if (s_optimize89470) s_optimize89470(townMgr, professionKey);
+    if (Opt().liveSeatShuffle) TownRegistry_ShuffleProfessionList(townMgr, professionKey);   // 0x140089470
 
     // Step 2: walk the +0x100 profession BST for the key (key<node -> left[+0x20];
     // key>node -> right[+0x28]; == -> found).
@@ -281,8 +264,8 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         // capacity = WorkComponent+0x30; lazily compute+cache via CalcMaxWorkers.
         int capRaw = *reinterpret_cast<int*>(wcPtr + 0x30);
         int capacity = capRaw;
-        if (capacity == 0 && s_calcMaxWorkers) {
-            capacity = s_calcMaxWorkers(reinterpret_cast<void*>(wcPtr));
+        if (capacity == 0) {
+            capacity = WorkComponent_CalcMaxWorkers(static_cast<uintptr_t>(wcPtr));   // 0x14012e5c0
             *reinterpret_cast<int*>(wcPtr + 0x30) = capacity;
         }
 
@@ -291,8 +274,12 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         bool reachOk = false;
         if (workerCount < capacity) {
             int64_t tmpIBP[2] = { 0, 0 };                 // 16-byte scratch IBP (matches local_50)
-            if (s_findReach) {
-                void* reach = s_findReach(building, tmpIBP);
+            {
+                // 0x140002e10. The port is declared `void`; this reader reads RAX as
+                // the IBP* (retail returns outIBP). The cast keeps the bits it reads
+                // today (a behaviour: candidate, B3R).
+                void* reach = reinterpret_cast<void* (*)(void*, void*)>(
+                    &AttendanceComponent_GetJobHostComponent)(reinterpret_cast<void*>(building), tmpIBP);
                 if (reach) {
                     accepting = *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(reach) + 0x50);
                     reachOk = (accepting != 0);
