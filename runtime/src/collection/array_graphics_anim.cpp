@@ -358,9 +358,11 @@ void Clear_18005bbb0(ArrayHdr* a) {                                // Array<Anim
 // The registered entry points. One free function per ADDRESS; the address is in
 // the name so a crash log or a census line names it directly.
 // ============================================================================
-namespace {
+// B3R RT-Core: external linkage (namespace rtcoll, declared in
+// runtime/types/collection/Collection.h) so the graphics readers can call
+// each body by name instead of by its retail address.
+namespace rtcoll {
 
-using rtcoll::ArrayHdr;
 using namespace rtcoll::gfxanim;
 
 // ---- J1 / J2: ~Array ------------------------------------------------------
@@ -414,7 +416,7 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<Interpolated
                            0x38, 4, &Clear_18001c550, &Assign38D);
 }
 
-}  // namespace
+}  // namespace rtcoll
 
 // Every one of the seventeen is a template instantiation with NO export name in
 // either shipped build, so all seventeen are RegisterRuntimeAddr and none is a
@@ -428,22 +430,22 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<Interpolated
 // file's own dtor bodies, so only the retail-arity forwarders went.
 int RtCollectionGraphicsAnimRegister() {
     int n = 0;
-    RegisterRuntimeAddr(0x18001c480ull, (void*)&Rt_ArrayDtor_18001c480);          ++n;
-    RegisterRuntimeAddr(0x18001c550ull, (void*)&Rt_ArrayDtor_18001c550);          ++n;
-    RegisterRuntimeAddr(0x180014090ull, (void*)&Rt_ArrayDtor_180014090);          ++n;
-    RegisterRuntimeAddr(0x18005bbb0ull, (void*)&Rt_ArrayDtor_18005bbb0);          ++n;
+    RegisterRuntimeAddr(0x18001c480ull, (void*)&rtcoll::Rt_ArrayDtor_18001c480);          ++n;
+    RegisterRuntimeAddr(0x18001c550ull, (void*)&rtcoll::Rt_ArrayDtor_18001c550);          ++n;
+    RegisterRuntimeAddr(0x180014090ull, (void*)&rtcoll::Rt_ArrayDtor_180014090);          ++n;
+    RegisterRuntimeAddr(0x18005bbb0ull, (void*)&rtcoll::Rt_ArrayDtor_18005bbb0);          ++n;
 
 
-    RegisterRuntimeAddr(0x18005aa30ull, (void*)&Rt_SetSize_18005aa30);            ++n;
-    RegisterRuntimeAddr(0x18005b1e0ull, (void*)&Rt_SetSize_18005b1e0);            ++n;
-    RegisterRuntimeAddr(0x18005c8a0ull, (void*)&Rt_SetSize_18005c8a0);            ++n;
-    RegisterRuntimeAddr(0x18005ac50ull, (void*)&Rt_SetSize_18005ac50);            ++n;
-    RegisterRuntimeAddr(0x18005c3d0ull, (void*)&Rt_SetSize_18005c3d0);            ++n;
-    RegisterRuntimeAddr(0x18005be30ull, (void*)&Rt_SetSize_18005be30);            ++n;
+    RegisterRuntimeAddr(0x18005aa30ull, (void*)&rtcoll::Rt_SetSize_18005aa30);            ++n;
+    RegisterRuntimeAddr(0x18005b1e0ull, (void*)&rtcoll::Rt_SetSize_18005b1e0);            ++n;
+    RegisterRuntimeAddr(0x18005c8a0ull, (void*)&rtcoll::Rt_SetSize_18005c8a0);            ++n;
+    RegisterRuntimeAddr(0x18005ac50ull, (void*)&rtcoll::Rt_SetSize_18005ac50);            ++n;
+    RegisterRuntimeAddr(0x18005c3d0ull, (void*)&rtcoll::Rt_SetSize_18005c3d0);            ++n;
+    RegisterRuntimeAddr(0x18005be30ull, (void*)&rtcoll::Rt_SetSize_18005be30);            ++n;
 
-    RegisterRuntimeAddr(0x180013960ull, (void*)&Rt_ArrayAssign_180013960);        ++n;
-    RegisterRuntimeAddr(0x18005b130ull, (void*)&Rt_ArrayAssign_18005b130);        ++n;
-    RegisterRuntimeAddr(0x18001b700ull, (void*)&Rt_ArrayAssign_18001b700);        ++n;
-    RegisterRuntimeAddr(0x18001b810ull, (void*)&Rt_ArrayAssign_18001b810);        ++n;
+    RegisterRuntimeAddr(0x180013960ull, (void*)&rtcoll::Rt_ArrayAssign_180013960);        ++n;
+    RegisterRuntimeAddr(0x18005b130ull, (void*)&rtcoll::Rt_ArrayAssign_18005b130);        ++n;
+    RegisterRuntimeAddr(0x18001b700ull, (void*)&rtcoll::Rt_ArrayAssign_18001b700);        ++n;
+    RegisterRuntimeAddr(0x18001b810ull, (void*)&rtcoll::Rt_ArrayAssign_18001b810);        ++n;
     return n;
 }

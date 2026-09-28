@@ -1933,3 +1933,28 @@ namespace rtsetclear {
 void Clear(rtsetavl::Set* set);  // 0x18000f7d0
 }  // namespace rtsetclear
 // ==== end B3R W0-P0c ====
+
+// ==== B3R RT-Core: the graphics Array instantiations, given external linkage ====
+namespace rtcoll {
+// ---- collection/array_graphics_anim.cpp
+void* Rt_ArrayDtor_18001c480(void* a);                       // 0x18001c480
+void* Rt_ArrayDtor_18001c550(void* a);                       // 0x18001c550
+void* Rt_ArrayDtor_180014090(void* a);                       // 0x180014090
+void* Rt_ArrayDtor_18005bbb0(void* a);                       // 0x18005bbb0
+void  Rt_SetSize_18005aa30(void* a, int n);                  // 0x18005aa30
+void  Rt_SetSize_18005b1e0(void* a, int n);                  // 0x18005b1e0
+void  Rt_SetSize_18005c8a0(void* a, int n);                  // 0x18005c8a0
+void  Rt_SetSize_18005ac50(void* a, int n);                  // 0x18005ac50
+void  Rt_SetSize_18005c3d0(void* a, int n);                  // 0x18005c3d0
+void  Rt_SetSize_18005be30(void* a, int n, const void* fill); // 0x18005be30
+void* Rt_ArrayAssign_180013960(void* d, const void* s);      // 0x180013960
+void* Rt_ArrayAssign_18005b130(void* d, const void* s);      // 0x18005b130
+void* Rt_ArrayAssign_18001b700(void* d, const void* s);      // 0x18001b700
+void* Rt_ArrayAssign_18001b810(void* d, const void* s);      // 0x18001b810
+// ---- collection/array_graphics_mesh.cpp
+void* Rt_ArrayDtor_180013fb0(void* a);                       // 0x180013fb0
+void* Rt_ArrayDtor_180014160(void* a);                       // 0x180014160
+void  Rt_SetSize_18005d840(void* a, int n);                  // 0x18005d840
+void  Rt_SetSize_18005cda0(void* a, int n);                  // 0x18005cda0
+}  // namespace rtcoll
+// ==== end B3R RT-Core ====

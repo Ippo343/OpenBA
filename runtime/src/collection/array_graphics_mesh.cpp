@@ -304,9 +304,11 @@ static_assert(kSpec_InnerArray.seedZeroHi <= kSpec_InnerArray.stride,
 // The registered entry points. One free function per ADDRESS, with the address
 // in the name so a crash log or a census line names it directly.
 // ============================================================================
-namespace {
+// B3R RT-Core: external linkage (namespace rtcoll, declared in
+// runtime/types/collection/Collection.h) so the graphics readers can call
+// each body by name instead of by its retail address.
+namespace rtcoll {
 
-using rtcoll::ArrayHdr;
 using namespace rtcoll::gfxmesh;
 
 void* Rt_ArrayDtor_180013fb0(void* a) {       // ~Array<TriangleList>
@@ -333,7 +335,7 @@ void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
     rtcoll::AsArray<&kSpec_InnerArray>(a)->SetSize(n);
 }
 
-}  // namespace
+}  // namespace rtcoll
 
 // Every one of the six Collection rows is a template instantiation with NO
 // export name in either shipped build (checked against the shipped export
@@ -351,9 +353,9 @@ void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
 // for four; the two it counted are these.
 int RtCollectionGraphicsMeshRegister() {
     int n = 0;
-    RegisterRuntimeAddr(0x180013fb0ull, (void*)&Rt_ArrayDtor_180013fb0);            ++n;
-    RegisterRuntimeAddr(0x180014160ull, (void*)&Rt_ArrayDtor_180014160);            ++n;
-    RegisterRuntimeAddr(0x18005d840ull, (void*)&Rt_SetSize_18005d840);              ++n;
-    RegisterRuntimeAddr(0x18005cda0ull, (void*)&Rt_SetSize_18005cda0);              ++n;
+    RegisterRuntimeAddr(0x180013fb0ull, (void*)&rtcoll::Rt_ArrayDtor_180013fb0);            ++n;
+    RegisterRuntimeAddr(0x180014160ull, (void*)&rtcoll::Rt_ArrayDtor_180014160);            ++n;
+    RegisterRuntimeAddr(0x18005d840ull, (void*)&rtcoll::Rt_SetSize_18005d840);              ++n;
+    RegisterRuntimeAddr(0x18005cda0ull, (void*)&rtcoll::Rt_SetSize_18005cda0);              ++n;
     return n;
 }
