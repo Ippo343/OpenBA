@@ -7,7 +7,8 @@ UNIT_TREE_SRCS =
 # seam they call through. rt_libm.cpp installs the ported MSVC CRT bodies
 # (msvc_libm.cpp) behind RtLibm::Sqrt/Sin/Cos/Atan2/Pow, and its Init() also
 # registers the CRT qsort pair, so msvc_qsort.cpp comes along. The port-registry
-# symbols these files reference are stubbed in tests/unit/rt_port_stub.cpp.
+# (B3R W2-RES: the port-registry stubs they needed, tests/unit/rt_port_stub.cpp, are gone
+# with the registry.)
 UNIT_TREE_SRCS += runtime/src/math/vector.cpp \
                   runtime/src/math/transform.cpp \
                   runtime/src/math/from_lookat.cpp \
@@ -34,13 +35,6 @@ UNIT_TREE_SRCS +=
 # back to malloc under BANISHED_UNIT_TEST (same seam as string.cpp's), and its
 # by-address doors go through tests/unit/rt_port_stub.cpp's ResolveAddr.
 UNIT_TREE_SRCS += runtime/src/collection/array.cpp runtime/src/collection/array_destroy.cpp
-# ENDGAME B.3.2 closing pass: the ONE allocator door the containers and the
-# ported collection cores share (tests/unit/alloc_door_test.cpp). It contains no
-# allocator — it answers with the function to call, reading the exe dispatch
-# slot through `ResolveAddr`, which rt_port_stub.cpp's `g_unitResolveAddr` hook
-# lets the test drive. Nothing else in the suite reaches it: under
-# BANISHED_UNIT_TEST array.cpp and linkedlist.cpp take their malloc seams.
-UNIT_TREE_SRCS += runtime/src/collection/alloc_door.cpp
 # ENDGAME B.3.2 Set core (tests/unit/set_test.cpp): header-only on the host.
 # `Collection::Set<T, Compare, Allocator, Key>` lives in
 # runtime/types/collection/Collection.h. Its out-of-line half — the two
@@ -317,9 +311,9 @@ UNIT_TREE_SRCS += runtime/src/graphics/graphics_type_records.cpp
 # a deleting destructor that calls one of these; registry-free, and std::free
 # under -DBANISHED_UNIT_TEST.
 UNIT_TREE_SRCS += runtime/src/object/root_operator_delete.cpp
-# B3R W0-A0: alloc_door.cpp now answers System::MemoryAllocator::MemAlloc / MemFree
-# directly, and tests/unit/alloc_door_test.cpp drives the allocator's instrument
-# seat through them, so the allocator's two translation units link here. With a
+# B3R W0-A0: tests/unit/allocator_seat_test.cpp drives the allocator's instrument
+# seat through System::MemoryAllocator::MemAlloc / MemFree, so the allocator's two
+# translation units link here. With a
 # hook in the seat the statics never touch `_singleton`; nothing else in the
 # suite calls them (array.cpp / linkedlist.cpp keep their malloc seams).
 UNIT_TREE_SRCS += runtime/src/system/allocator.cpp runtime/src/system/allocator_win.cpp
