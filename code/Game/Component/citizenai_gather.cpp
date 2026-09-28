@@ -90,53 +90,18 @@
 #include "scene_watch.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
 
 namespace {
 
-// --- registered exe sub-callees ---
-typedef int64_t* (*fn_dd30_t)(int64_t*, int64_t*, uint32_t, uint32_t, int64_t*, float*, uint32_t); // 0x14008dd30
-typedef char     (*fn_checkWork_t)(void* citizen, void* workplaceSlot);                  // 0x1401158d0
-typedef void*    (*fn_findComp_t)(int64_t entity, void* outIBP);                         // 0x140002f90 / 0x140002ed0 / 0x140006270 / 0x140008090
-typedef void     (*fn_2e20_t)(int64_t comp, float* outVec3, int, int, void*);            // 0x140122e20
-typedef uint32_t (*fn_7fb0_t)(void* ibp, float* outVec3orNull);                          // 0x140087fb0
-typedef void     (*fn_ef40_t)(int64_t ignored, int64_t* out, void* entityIBP, int cat);  // 0x14008ef40
-typedef void     (*fn_c3470_t)(void* internal);                                          // 0x1400c3470
-typedef int      (*fn_116540_t)(int64_t citizen);                                        // 0x140116540
-typedef void     (*fn_12c3f0_t)(int64_t* mesh, int mode, char flag);                     // 0x14012c3f0
-typedef int      (*fn_queryCount_t)(int64_t storageWrap);                                // 0x14012cf10
-typedef int      (*fn_getCount_t)(int64_t storageWrap);                                  // 0x14012a9d0
-typedef void     (*fn_transfer_t)(int64_t carrier, int64_t storage, int one);            // 0x1400ca230
-typedef void     (*fn_findPath_t)(void* outResult, void* citizenPtr, int pathType,
-                                  void* destEntityIBP, float* destPos, void* srcEntityIBP,
-                                  float* srcPos, int64_t materialDesc, int itemCount, int flags,
-                                  int p11, char p12, int p13, int p14);                   // 0x1400bf790
-// NB: the 8th param is a 64-bit RawMaterialDescription* (0 = "any material"), NOT a 32-bit
-// `long`. On Win64 `long` is 32-bit: declaring it `long` here made the caller write only the
-// low dword of the 8-byte stack slot, leaving the high dword as stack garbage. The callee
-// (WorkAct_GatherRawMatCtor_bf790 / exe Pathfinding_FindPath, which reads the full 8 bytes via
-// CONCAT44) then reassembled e.g. 0x1fa00000000 and passed it to the PickupStored ctor
-// (ca520), whose `if (materialDesc==0) return` guard was bypassed -> READ of +0x30 off garbage
-// -> ACCESS_VIOLATION once LIVE_STORAGE made storage non-empty. int64_t writes the full 0.
-typedef uint64_t (*fn_ltp_t)(int64_t citizen);                                           // 0x140115e60
-
-static fn_dd30_t       s_dd30       = nullptr;
-static fn_checkWork_t  s_checkWork  = nullptr;
-static fn_findComp_t   s_findMesh   = nullptr;  // 0x140002f90
-static fn_findComp_t   s_findPos    = nullptr;  // 0x140002ed0
-static fn_findComp_t   s_findStor1  = nullptr;  // 0x140006270 (citizen+0x10)
-static fn_findComp_t   s_findStor2  = nullptr;  // 0x140008090 (workplace)
-static fn_2e20_t       s_2e20       = nullptr;
-static fn_7fb0_t       s_7fb0       = nullptr;
-static fn_ef40_t       s_ef40       = nullptr;
-static fn_c3470_t      s_c3470      = nullptr;
-static fn_116540_t     s_116540     = nullptr;
-static fn_12c3f0_t     s_12c3f0     = nullptr;
-static fn_queryCount_t s_queryCount = nullptr;
-static fn_getCount_t   s_getCount   = nullptr;
-static fn_transfer_t   s_transfer   = nullptr;
-static fn_findPath_t   s_findPath   = nullptr;
-static fn_ltp_t        s_ltp        = nullptr;
-static int             (*s_getCount2)(int64_t) = nullptr;  // Storage_GetResourceCount2 (this file)
+// --- registered exe sub-callees: called by name (Component/Action/Work exe_bodies.h) ---
+// NB: WorkAct_GatherRawMatCtor_bf790's 8th param is a 64-bit RawMaterialDescription* (0 =
+// "any material"), NOT a 32-bit `long`. On Win64 `long` is 32-bit: a `long` there made the
+// caller write only the low dword of the 8-byte stack slot, leaving the high dword as stack
+// garbage, which the callee (exe Pathfinding_FindPath, which reads the full 8 bytes via
+// CONCAT44) passed to the PickupStored ctor (ca520) and crashed once LIVE_STORAGE made
+// storage non-empty. The declaration's int64_t writes the full 0.
 
 static uint32_t s_tid_CitizenDescription     = 0;  // DWORD_1401c7190
 static uint32_t s_tid_RawMaterialDescription = 0;  // DWORD_1401c7cb8
@@ -144,34 +109,10 @@ static uint32_t s_tid_RawMaterialDescription = 0;  // DWORD_1401c7cb8
 static const float kMultEmpty   = 300.0f;  // DAT_140172234
 static const float kMultInvalid = 75.0f;   // DAT_1401721fc
 
-// fwd-decl of the helper (registered separately)
-} // namespace
-
-extern "C" int Storage_GetResourceCount2(int64_t param_1);
-
-namespace {
-
 static bool s_init = false;
 static void EnsureInit() {
     if (s_init) return;
-    s_dd30       = reinterpret_cast<fn_dd30_t>(ResolveAddr(Module::Exe, 0x14008dd30));
-    s_checkWork  = reinterpret_cast<fn_checkWork_t>(ResolveAddr(Module::Exe, 0x1401158d0));
-    s_findMesh   = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140002f90));
-    s_findPos    = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_findStor1  = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_findStor2  = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140008090));
-    s_2e20       = reinterpret_cast<fn_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_7fb0       = reinterpret_cast<fn_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_ef40       = reinterpret_cast<fn_ef40_t>(ResolveAddr(Module::Exe, 0x14008ef40));
-    s_c3470      = reinterpret_cast<fn_c3470_t>(ResolveAddr(Module::Exe, 0x1400c3470));
-    s_116540     = reinterpret_cast<fn_116540_t>(ResolveAddr(Module::Exe, 0x140116540));
-    s_12c3f0     = reinterpret_cast<fn_12c3f0_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_queryCount = reinterpret_cast<fn_queryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    s_getCount   = reinterpret_cast<fn_getCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
-    s_transfer   = reinterpret_cast<fn_transfer_t>(ResolveAddr(Module::Exe, 0x1400ca230));
-    s_findPath   = reinterpret_cast<fn_findPath_t>(ResolveAddr(Module::Exe, 0x1400bf790));
-    s_ltp        = reinterpret_cast<fn_ltp_t>(ResolveAddr(Module::Exe, 0x140115e60));
-    s_getCount2  = &Storage_GetResourceCount2;
+
     if (s_tid_CitizenDescription == 0)     s_tid_CitizenDescription     = CitizenDescription::TypeId();
     if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = RawMaterialDescription::TypeId();
     s_init = true;
@@ -201,31 +142,33 @@ static uint32_t ModelCell(int64_t model, int* mapGrid) {
 // Original reads *(0+0xd8) when the IsDerivedFrom check fails — guard to 0 to stay crash-safe.
 static int64_t CooldownStamp(int64_t citizen, float mult) {
     void* desc = *reinterpret_cast<void**>(citizen + 0x18);
-    bool ok = (desc && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, s_tid_CitizenDescription));
+    bool ok = (desc && Object::IsDerivedFromNullSafe(desc, s_tid_CitizenDescription));
     float rate = ok ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0xd8) : 0.0f;
     int64_t stamp = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&stamp, rate * mult);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&stamp), rate * mult);
     return stamp;
 }
 
 // The shared MeshInstance "hide-render" branch (decompile: found==0 + workplace storage empty).
 // Mirrors citizenai_handlers2.cpp SeekHappiness hide-render. flagBit distinguishes Gather (0x40)
 // from Gather2 (0x80) — the OR into *(plVar3+0x1e) (== mi+0xf0). Every deref null-guarded.
-static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (*getCount)(int64_t),
+// The workplace storage finder is 0x140008090 (CitizenComp_Entity_FindComponent_Storage) for
+// both callers; `getCount` is the caller's count body, passed by name.
+static void HideRenderWorkplaceMesh(int64_t* self, int (*getCount)(int64_t),
                                     uint32_t flagBit) {
     int64_t citizen = *self;
     if (*reinterpret_cast<int64_t*>(citizen + 0x238) == 0) return;
 
     int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
     int64_t storBuf[2] = {0, 0};
-    void* sp = findStor ? findStor(wp, storBuf) : nullptr;
+    void* sp = CitizenComp_Entity_FindComponent_Storage(wp, storBuf);
     int64_t storComp = sp ? *reinterpret_cast<int64_t*>(sp) : 0;
-    int cnt = (storComp && getCount) ? getCount(storComp) : 0;
+    int cnt = storComp ? getCount(storComp) : 0;
     if (cnt != 0) return;  // not empty -> nothing to hide
 
     int64_t wp2 = *reinterpret_cast<int64_t*>(*self + 0x238);
     int64_t meshBuf[2] = {0, 0};
-    void* mp = s_findMesh ? s_findMesh(wp2, meshBuf) : nullptr;
+    void* mp = WorkBase_FindComponent_2f90(wp2, meshBuf);
     if (!mp) return;
     int64_t mi = *reinterpret_cast<int64_t*>(mp);  // plVar3 (MeshInstance object)
     if (mi == 0) return;
@@ -259,7 +202,7 @@ static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (
             SceneWatch_Note(id, reinterpret_cast<void*>(mi + 0x28), "CitizenAI::Gather carry-mesh");
         }
         int64_t t0 = 0;
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t0, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t0), 0.0f);
         // `mi` is a Component (the +0x10 entity / +0x20 flag-notify idiom below).
         reinterpret_cast<Component*>(mi)->Tick(&t0);   // B.3.x bridge (slot 8)
         uint32_t before = *reinterpret_cast<uint32_t*>(mi + 0x20);
@@ -269,7 +212,7 @@ static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (
     }
     if ((changed & 0xffff) != 0 && *reinterpret_cast<int64_t*>(mi + 0x10) != 0) {
         int64_t notifyTarget = *reinterpret_cast<int64_t*>(mi + 0x10);
-        if (s_c3470) s_c3470(reinterpret_cast<void*>(notifyTarget));
+        ActHunt_NotifyEntityChanged_c3470(reinterpret_cast<void*>(notifyTarget));
     }
 }
 
@@ -285,7 +228,7 @@ static void* FindRawMaterialChild(int64_t entity) {
         if (child == 0) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.8 bridge (slot 2)
         if (tid == s_tid_RawMaterialDescription) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(child), s_tid_RawMaterialDescription))
+            if (Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(child), s_tid_RawMaterialDescription))
                 return reinterpret_cast<void*>(child);
             return nullptr;
         }
@@ -305,7 +248,7 @@ static void* FindRawMaterialChild(int64_t entity) {
 extern "C" int Storage_GetResourceCount2(int64_t param_1) {
     EnsureInit();
     int64_t storBuf[2] = {0, 0};
-    if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
+    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
     int64_t stor = storBuf[0];
     int total = 0;
     if (stor == 0) return 0;
@@ -332,15 +275,15 @@ static void GatherTransferLoop(int64_t* self, int64_t pathResult, int64_t found,
     int64_t citizen = *self;
     int64_t entIBP = found;                  // &found is the ef40 entityIBP arg (RBP+0x6f)
     int64_t carrierSlot = 0;                 // ef40 out (RBP+0x77 / local_res18)
-    if (s_ef40) s_ef40(citizen, &carrierSlot, &entIBP, 0);
+    CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(citizen), &carrierSlot, &entIBP, 0);
     while (carrierSlot != 0) {
         void* rm = FindRawMaterialChild(carrierSlot);
         int slotCost = rm ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rm) + 0x48) : 0x7fffffff;
         if (capLeft < slotCost) break;
-        if (s_transfer) s_transfer(pathResult, carrierSlot, 1);
+        ActChild_TransferToCarrier_ca230(pathResult, carrierSlot, 1);
         capLeft -= slotCost;
         entIBP = found;
-        if (s_ef40) s_ef40(pathResult, &carrierSlot, &entIBP, 0);
+        CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(pathResult), &carrierSlot, &entIBP, 0);
     }
 }
 
@@ -359,7 +302,7 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
         // Storage(found) -> stor
         int64_t storWrap = found;
         int64_t storBuf[2] = {0, 0};
-        if (s_findStor1) s_findStor1(storWrap, storBuf);
+        WorkBase_FindComponent_6270(storWrap, storBuf);
         int64_t stor = storBuf[0];
         if (stor == 0) {
             return;
@@ -418,7 +361,7 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
         if (capLeft < cost) {
             return;
         }
-        if (s_transfer) s_transfer(pathResult, hitChild, 1);
+        ActChild_TransferToCarrier_ca230(pathResult, hitChild, 1);
         ++transfers;
         capLeft -= cost;
         // goto LAB_14010b92f: re-loop with reduced capacity
@@ -445,17 +388,20 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
     char valid = 0;
     if (haveWorkplace) {
         int64_t workplace = *reinterpret_cast<int64_t*>(*self + 0x238);  // local_res8
-        valid = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &workplace) : 0;
+        valid = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(*self), &workplace);
     }
 
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount: Storage(citizen+0x10) -> QueryCount
         int64_t citizen = *self;
         int64_t storBuf[2] = {0, 0};
-        if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(citizen + 0x10), storBuf);
-        int qc = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
+        WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(citizen + 0x10), storBuf);
+        int qc = (storBuf[0]) ? CitizenComp_StorageComponent_QueryCount(storBuf[0]) : 0;
         if (qc > 0) {
-            uint64_t r = s_ltp ? s_ltp(*self) : 0;
+            // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
+            // (CitizenAI_ValidateAndEnterState), so the upper bits of r carry no value.
+            CitizenAI_State_LongTermPlan(*self);
+            uint64_t r = 0;
             *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 6;
             return (r & 0xffffffffffffff00ULL) | 1;
         }
@@ -473,7 +419,7 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
             bGoal = 0xffffffff;
         } else {
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-            bGoal = s_7fb0 ? s_7fb0(&wp, nullptr) : 0xffffffff;
+            bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
         }
 
         // dd30 find carry target
@@ -481,7 +427,7 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
         int64_t found = 0;              // local_res10
         int64_t outComp = 0;           // local_res18
         int64_t* listpair = *reinterpret_cast<int64_t**>(GW() + 0xf0);
-        if (s_dd30) s_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
+        CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
         (void)w;
 
         if (found == 0) {
@@ -490,7 +436,7 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
             int64_t stamp = CooldownStamp(cz, kMultEmpty);
             *reinterpret_cast<int64_t*>(param_1 + 0x70) = stamp;
             *reinterpret_cast<uint32_t*>(*self + 0x88) |= 4;
-            HideRenderWorkplaceMesh(self, s_findStor2, s_getCount, 0x40);
+            HideRenderWorkplaceMesh(self, &CitizenComp_Storage_GetResourceCount, 0x40);   // 0x14012a9d0
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
         }
 
@@ -499,28 +445,28 @@ extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1) {
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
             int64_t meshBuf[2] = {0, 0};
-            void* mp = s_findMesh ? s_findMesh(wp, meshBuf) : nullptr;
-            if (mp && s_12c3f0) s_12c3f0(*reinterpret_cast<int64_t**>(mp), 6, '\0');
+            void* mp = WorkBase_FindComponent_2f90(wp, meshBuf);
+            if (mp) CitizenComp_FUN_14012c3f0(*reinterpret_cast<int64_t**>(mp), 6, '\0');
         }
 
         // 2) Position(workplace) -> 2e20 -> destPos; FindPath
         int64_t wpForPos = *reinterpret_cast<int64_t*>(*self + 0x238);
         int64_t posBuf[2] = {0, 0};
-        void* pp = s_findPos ? s_findPos(wpForPos, posBuf) : nullptr;
+        void* pp = WorkBase_FindComponent_2ed0(wpForPos, posBuf);
         float destPos[4] = {0, 0, 0, 0};  // local_60
-        if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), destPos, 0, 0, nullptr);
+        if (pp) Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(pp), destPos, 0, 0, nullptr);
 
         int64_t citizenVal = *self;                                     // local_88
         int64_t destEntityIBP = *reinterpret_cast<int64_t*>(citizenVal + 0x238);  // local_res18
         int64_t pathResult = 0;                                          // local_res20
-        if (s_findPath)
-            s_findPath(&pathResult, &citizenVal, -1, &destEntityIBP, destPos,
-                       &found, dest, 0, -1, 0, 1, '\x01', 1, 0);
+        WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
+                       reinterpret_cast<uint64_t*>(&destEntityIBP), destPos,
+                       reinterpret_cast<void**>(&found), dest, 0, -1, 0, 1, '\x01', 1, 0);
 
         // 3) capLeft = max( town-capacity, FUN_140116540(citizen) )
         int townCap = *reinterpret_cast<int*>(
             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30) + 0x50);
-        int citCap = s_116540 ? s_116540(*self) : 0;
+        int citCap = WorkLeaf_FreeStorageCapacity_116540(*self);
         int capLeft = (townCap < citCap) ? citCap : townCap;
 
         // 4) transfer loop (ef40 walks carrier slots of `found`, the carry target)
@@ -554,17 +500,20 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
     char valid = 0;
     if (haveWorkplace) {
         int64_t workplace = *reinterpret_cast<int64_t*>(*self + 0x238);
-        valid = s_checkWork ? s_checkWork(reinterpret_cast<void*>(*self), &workplace) : 0;
+        valid = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(*self), &workplace);
     }
 
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount
         int64_t citizen = *self;
         int64_t storBuf[2] = {0, 0};
-        if (s_findStor1) s_findStor1(*reinterpret_cast<int64_t*>(citizen + 0x10), storBuf);
-        int qc = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
+        WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(citizen + 0x10), storBuf);
+        int qc = (storBuf[0]) ? CitizenComp_StorageComponent_QueryCount(storBuf[0]) : 0;
         if (qc > 0) {
-            uint64_t r = s_ltp ? s_ltp(*self) : 0;
+            // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
+            // (CitizenAI_ValidateAndEnterState), so the upper bits of r carry no value.
+            CitizenAI_State_LongTermPlan(*self);
+            uint64_t r = 0;
             *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 7;
             return (r & 0xffffffffffffff00ULL) | 1;
         }
@@ -582,7 +531,7 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
             bGoal = 0xffffffff;
         } else {
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
-            bGoal = s_7fb0 ? s_7fb0(&wp, nullptr) : 0xffffffff;
+            bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
         }
 
         // dd30 find carry target (category arg = 1 here, vs 0 in Gather)
@@ -590,7 +539,7 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         int64_t found = 0;               // local_70
         int64_t outComp = 0;             // local_res10
         int64_t* listpair = *reinterpret_cast<int64_t**>(GW() + 0xf0);
-        if (s_dd30) s_dd30(listpair, &found, cell, bGoal, &outComp, srcPos, 1);
+        CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, srcPos, 1);
         (void)w;
 
         if (found == 0) {
@@ -599,7 +548,7 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
             int64_t cz = *self;
             int64_t stamp = CooldownStamp(cz, kMultEmpty);
             *reinterpret_cast<int64_t*>(param_1 + 0x78) = stamp;
-            HideRenderWorkplaceMesh(self, s_findStor2, s_getCount2, 0x80);
+            HideRenderWorkplaceMesh(self, &Storage_GetResourceCount2, 0x80);   // 0x14012ab00
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
         }
 
@@ -607,27 +556,27 @@ extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1) {
         if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
             int64_t wp = *reinterpret_cast<int64_t*>(*self + 0x238);
             int64_t meshBuf[2] = {0, 0};
-            void* mp = s_findMesh ? s_findMesh(wp, meshBuf) : nullptr;
-            if (mp && s_12c3f0) s_12c3f0(*reinterpret_cast<int64_t**>(mp), 7, '\0');
+            void* mp = WorkBase_FindComponent_2f90(wp, meshBuf);
+            if (mp) CitizenComp_FUN_14012c3f0(*reinterpret_cast<int64_t**>(mp), 7, '\0');
         }
 
         int64_t wpForPos = *reinterpret_cast<int64_t*>(*self + 0x238);
         int64_t posBuf[2] = {0, 0};
-        void* pp = s_findPos ? s_findPos(wpForPos, posBuf) : nullptr;
+        void* pp = WorkBase_FindComponent_2ed0(wpForPos, posBuf);
         float destPos[4] = {0, 0, 0, 0};  // local_98
-        if (pp && s_2e20) s_2e20(*reinterpret_cast<int64_t*>(pp), destPos, 0, 0, nullptr);
+        if (pp) Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(pp), destPos, 0, 0, nullptr);
 
         int64_t citizenVal = *self;                                     // local_res20
         int64_t destEntityIBP = *reinterpret_cast<int64_t*>(citizenVal + 0x238);  // local_res18
         int64_t pathResult = 0;                                          // local_78
-        if (s_findPath)
-            s_findPath(&pathResult, &citizenVal, -1, &destEntityIBP, destPos,
-                       &found, srcPos, 0, -1, 0, 1, '\x01', 1, 0);
+        WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
+                       reinterpret_cast<uint64_t*>(&destEntityIBP), destPos,
+                       reinterpret_cast<void**>(&found), srcPos, 0, -1, 0, 1, '\x01', 1, 0);
 
         // capLeft = max( town-capacity, FUN_140116540(citizen) )
         int townCap = *reinterpret_cast<int*>(
             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30) + 0x50);
-        int citCap = s_116540 ? s_116540(*self) : 0;
+        int citCap = WorkLeaf_FreeStorageCapacity_116540(*self);
         int capLeft = (townCap < citCap) ? citCap : townCap;
         // Distribution diagnostic (firewood-evenness): the per-trip take budget is
         // max(town default, citizen free carry) in WEIGHT units — degenerate values
