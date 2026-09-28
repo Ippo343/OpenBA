@@ -109,15 +109,15 @@
 #include "options.h"
 #include "ui/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4); B3R: RtUi_UserInterface_UpdateStandAloneUI
+#include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree / _singleton
 
 namespace ModalDriver {
 namespace {
 
 // --- Layout, all read off the shipped Runtime-x64.dll -----------------------
-constexpr uintptr_t kUpdateStandAloneUI   = 0x180120310;  // appended to MainLoop+0x90 by ShowDialog
-constexpr uintptr_t kDrawStandAloneUI     = 0x1801203f0;  // appended to MainLoop+0x80 by ShowDialog
-constexpr uintptr_t kShowDialog           = 0x18011fd10;
+// (UpdateStandAloneUI 0x180120310 is appended to MainLoop+0x90 and DrawStandAloneUI
+// 0x1801203f0 to MainLoop+0x80 by ShowDialog 0x18011fd10.)
 
 constexpr uintptr_t kML_DrawArray   = 0x80;   // {void(*fn)(...); void* ctx;}[]
 constexpr uintptr_t kML_DrawCount   = 0x88;   // int32
@@ -173,7 +173,7 @@ bool AppendEntry(uintptr_t base, uintptr_t arrOff, uintptr_t cntOff, uintptr_t c
     if (count < 0) return false;
 
     Entry* fresh = reinterpret_cast<Entry*>(
-        fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(count + 1) * sizeof(Entry), 8));
+        System::MemoryAllocator::MemAlloc((uint64_t)(count + 1) * sizeof(Entry), 8));
     if (!fresh) return false;
 
     for (int i = 0; i < count; ++i) fresh[i] = old[i];
@@ -183,7 +183,7 @@ bool AppendEntry(uintptr_t base, uintptr_t arrOff, uintptr_t cntOff, uintptr_t c
     *reinterpret_cast<int*>(base + cntOff)    = count + 1;
     *reinterpret_cast<int*>(base + capOff)    = count + 1;
 
-    if (old) fn_MemFree(g_pMemAllocSingleton, old);
+    if (old) System::MemoryAllocator::MemFree(old);
     return true;
 }
 
@@ -223,13 +223,14 @@ void* FindModalDialog() {
     // BANISHED_MODAL_DRIVER_TEST run HUNG to its timeout with no error line --
     // an instrument confidently reporting nothing, about the wrong thing.
     //
-    // The registry address is what OUR ShowDialog port installs; a null
-    // (nothing registered) simply never matches.
-    void* wantedPort = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, kUpdateStandAloneUI));
+    // B3R: OUR ShowDialog port (userinterface_showdialog.cpp) installs
+    // RtUi_UserInterface_UpdateStandAloneUI, the body registered at 0x180120310;
+    // it is compared by name.
+    void* const wantedPort = reinterpret_cast<void*>(&RtUi_UserInterface_UpdateStandAloneUI);
 
     for (int i = 0; i < count; ++i) {
         void* const fn = arr[i].fn;
-        if (!wantedPort || fn != wantedPort) continue;
+        if (fn != wantedPort) continue;
         void* nestedUi = arr[i].ctx;
         if (!nestedUi) continue;
         // nestedUI->_dialogs head at +0x00; node->dialog at +0x00.
@@ -282,7 +283,7 @@ bool Poll() {
 
     void* ml = MainLoopSingleton();
     if (!ml) return false;                 // Engine::Startup has not built it yet
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return false;
+    if (!System::MemoryAllocator::_singleton) return false;   // B3R: read live (was the g_pMemAllocSingleton snapshot)
 
     uintptr_t base = reinterpret_cast<uintptr_t>(ml);
 
