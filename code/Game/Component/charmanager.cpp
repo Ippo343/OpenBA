@@ -50,21 +50,14 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "Game/exe_constants.h"
 
 namespace {
 
-// --- exe .rdata consts (resolved lazily) ---
-static const float* s_pUVScale   = nullptr;   // g_fUVScale @ 0x14017214c (= 1.0f)
-static const float* s_pRadiusEps = nullptr;   // DAT_1401720b8 (radius bias)
-static const float* s_pHalf      = nullptr;   // DAT_140172114 (= 0.5f)
-static bool s_constInit = false;
-static void EnsureConsts() {
-    if (s_constInit) return;
-    s_pUVScale   = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pRadiusEps = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720b8));
-    s_pHalf      = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_constInit = true;
-}
+// --- exe .rdata consts (exe_constants.h) ---
+//   g_fUVScale @ 0x14017214c (= 1.0f), DAT_1401720b8 (radius bias, 0.001),
+//   DAT_140172114 (= 0.5f)
+inline float RadiusEps() { float f; const uint32_t b = kRdata_1401720b8; std::memcpy(&f, &b, sizeof f); return f; }
 
 
 } // namespace
@@ -161,7 +154,6 @@ extern "C" void CharMgr_helper_8d00(int64_t mgr, int idx) {
 //   position and, if it changed, move it (8d00 out of old cell, 8c40 into new).
 // ===========================================================================
 extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
-    EnsureConsts();
     uint8_t* mgr = reinterpret_cast<uint8_t*>(mgrF);
     uint8_t* slots = *reinterpret_cast<uint8_t**>(mgr + 0x10);
     uint8_t* slot  = slots + static_cast<int64_t>(idx) * 0x18;
@@ -192,7 +184,7 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     }
 
     // Rectangle::Center / Size (inlined) ; radius = max(half-extent.x, half-extent.y)
-    float half = s_pHalf ? *s_pHalf : 0.5f;
+    float half = kRdata_140172114;
     float cx = (rect[0] + rect[2]) * half;                 // center.x
     float cy = (rect[1] + rect[3]) * half;                 // center.y
     float hx = (rect[2] - rect[0]) * half;                 // half-extent.x
@@ -218,7 +210,7 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     std::memcpy(&radiusBits, &radius, 4);
     std::memcpy(&worldBits, &worldSize, 4);
     if (radiusBits != s_mRadiusBits || worldBits != s_mWorldBits || levels != s_mLevels) {
-        float eps = s_pRadiusEps ? *s_pRadiusEps : 0.0f;
+        float eps = RadiusEps();
         float lr = worldSize / (radius + eps);
 
         // level = floor(log2(lr)) via float-exponent extraction, clamped to [0, levels-1]
@@ -229,7 +221,7 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
         if (level < 0) level = 0;
 
         int cellsPerSide = 1 << level;
-        float uvScale = s_pUVScale ? *s_pUVScale : 1.0f;
+        float uvScale = kRdata_14017214c;
         s_mCellsPerUnit = uvScale / (worldSize / static_cast<float>(cellsPerSide));
         s_mLevel = level; s_mCellsPerSide = cellsPerSide;
         s_mRadiusBits = radiusBits; s_mWorldBits = worldBits; s_mLevels = levels;

@@ -11,5 +11,3 @@
 // Size: 0x80 bytes
 // ============================================================
 
-// Init: resolve all internal function pointers (called once at startup)
-void CharacterComponent_InitFuncs();

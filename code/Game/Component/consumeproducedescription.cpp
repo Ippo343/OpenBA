@@ -53,6 +53,7 @@
 #include <new>
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "object/Type.h"
 
 namespace {
 // serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
@@ -134,14 +135,9 @@ bool ConsumeProduceDescription::Serialize(void* stream) {
     }
     ser.Serialize(_i40, nullptr);
     ser.Serialize(_u50, nullptr);
-    {
-        // Type @ +0x38 via Object::Type::Serialize dispatch slot 0x1401516b0
-        uintptr_t slotAddr = ResolveAddr(Module::Exe, 0x1401516b0);
-        typedef void (*TypeSer_t)(void* typeField, void* serializer);
-        TypeSer_t fnTypeSer = slotAddr ? *reinterpret_cast<TypeSer_t*>(slotAddr) : nullptr;
-        if (fnTypeSer) fnTypeSer(&_toolType, &ser);
-        // else: slot unwired in standalone — Type read skipped (would desync)
-    }
+    // Type @ +0x38: Object::Type::Serialize (import slot 0x1401516b0; body
+    // RtObject_Type_Serialize, runtime/types/object/Type.h).
+    RtObject::RtObject_Type_Serialize(&_toolType, &ser);
     ser.Serialize(_i3c, nullptr);
     ser.Serialize(_f44, nullptr);
     ser.Serialize(_i48, nullptr);

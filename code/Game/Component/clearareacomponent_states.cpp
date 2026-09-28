@@ -54,6 +54,9 @@
 #include "Component/RawMaterialDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/ClearAreaDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7200 cell class
 #include "system/MemoryAllocator.h"
+#include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"
 
 // The instant footprint sweep lives in clearareacomponent.cpp (also used by the
 // harness + the _flag5 instant path). Reused here for the guarded sweep.
@@ -61,22 +64,9 @@ class ClearAreaComponent;
 extern int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self);
 
 // ============================================================
-// Resolved helpers (once)
+// Helpers, called directly: FUN_140003050 WorkBase_FindComponent_3050 (the
+// WorkComponent), 0x14012ec60 CitizenAI_WorkScheduler_Post.
 // ============================================================
-typedef void  (*fn_FindWorkComp_t)(void* entity, void* retIBP);        // FUN_140003050
-typedef void  (*fn_WorkSchedPost_t)(uintptr_t workComp, uint32_t code, // ec60
-                                    char flag, void* pWorkIBP);
-
-static fn_FindWorkComp_t   s_FindWorkComp   = nullptr;   // 0x140003050
-static fn_WorkSchedPost_t  s_WorkSchedPost  = nullptr;   // 0x14012ec60
-static bool s_resolved = false;
-
-static void ResolveStates() {
-    if (s_resolved) return;
-    s_FindWorkComp  = reinterpret_cast<fn_FindWorkComp_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_WorkSchedPost = reinterpret_cast<fn_WorkSchedPost_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_resolved = true;
-}
 
 // ============================================================
 // Grid area-status helpers (ports of FUN_14009d860 / dac0 / d930).
@@ -343,7 +333,6 @@ static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
 //   data = the ClearAreaComponent (node+0x18); sm = the state machine.
 // ============================================================
 extern "C" char ClearArea_State0Enter(void* data, void* sm) {
-    ResolveStates();
     if (!data || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -372,7 +361,7 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
 
     // (3) dispatch the harvest work-action to the citizen work-scheduler.
     uint64_t workCompIBP = 0;
-    if (s_FindWorkComp) s_FindWorkComp(*reinterpret_cast<void**>(c + 0x10), &workCompIBP);
+    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(c + 0x10), &workCompIBP);
 
     uint64_t buildComp = 0;
     fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
@@ -388,7 +377,7 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
         kind = ClearArea_ScanKindFlags(data, grid, x1, y1, w, h);
     }
 
-    if (!workCompIBP || !s_WorkSchedPost || !::System::MemoryAllocator::_singleton) return 1;
+    if (!workCompIBP || !::System::MemoryAllocator::_singleton) return 1;
 
     // Build the ClearArea work-action and post it.
     void* work = ::System::MemoryAllocator::MemAlloc(0x78, 8);
@@ -402,7 +391,7 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     uint64_t workIBP = 0;
     new (&workIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-    s_WorkSchedPost(static_cast<uintptr_t>(workCompIBP), kind, static_cast<char>(f3), &workIBP);
+    CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(workCompIBP), kind, static_cast<char>(f3), &workIBP);
 
     return 1;
 }
@@ -422,7 +411,6 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
 //   State0Enter keeps its short-circuit: that guards the already-built founding houses,
 //   whose own footprint self-occupancy would otherwise post phantom clear-work forever.
 extern "C" char ClearArea_State0PerFrame(void* data, void* sm) {
-    ResolveStates();
     if (!data) return 1;
     if (ClearArea_IsDone(data)) {
         ::ControllerLive::RequestStateTransition(sm, 1);
@@ -433,22 +421,16 @@ extern "C" char ClearArea_State0PerFrame(void* data, void* sm) {
 // ============================================================
 // State-0 UPDATE (on transition) — port of ClearAreaDescription_helper_7890.
 //   Stop the owner WorkComponent's active work slot when leaving state 0.
-//   FUN_14012ead0 = has-active-slot, FUN_14012eb50 = stop-slot.
+//   FUN_14012ead0 = has-active-slot (WorkComponent_CheckWorkSlot),
+//   FUN_14012eb50 = stop-slot (WorkComponent_RegisterWorkSlot).
 // ============================================================
-typedef char (*fn_HasSlot_t)(uintptr_t);
-typedef void (*fn_StopSlot_t)(uintptr_t);
-static fn_HasSlot_t  s_HasSlot  = nullptr;   // 0x14012ead0
-static fn_StopSlot_t s_StopSlot = nullptr;   // 0x14012eb50
 extern "C" char ClearArea_State0Update(void* data, void* /*sm*/) {
-    ResolveStates();
     if (!data) return 1;
-    if (!s_HasSlot)  s_HasSlot  = reinterpret_cast<fn_HasSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
-    if (!s_StopSlot) s_StopSlot = reinterpret_cast<fn_StopSlot_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
     uint64_t wcIBP = 0;
-    if (s_FindWorkComp) s_FindWorkComp(*reinterpret_cast<void**>(c + 0x10), &wcIBP);
-    if (wcIBP && s_HasSlot && s_HasSlot(static_cast<uintptr_t>(wcIBP))) {
-        if (s_StopSlot) s_StopSlot(static_cast<uintptr_t>(wcIBP));
+    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(c + 0x10), &wcIBP);
+    if (wcIBP && WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(wcIBP))) {
+        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(wcIBP));
     }
     return 1;
 }
@@ -479,9 +461,7 @@ static void ClearArea_BroadcastEvent(void* ownerEntity, uint32_t ev) {
 // (terrain regrow — DEFERRED, e0e0 not yet ported) then broadcasts event 5 to the
 // owner's components. When +0x2c is clear (the common case) it is a no-op.
 // ============================================================
-typedef void (*fn_e0e0_t)(void* map, int x1, int y1, int x2, int y2);   // CitizenAI_impl_e0e0
-static fn_e0e0_t s_e0e0 = nullptr;
-static bool s_e0e0_res = false;
+// CitizenAI_impl_e0e0 (0x14009e0e0) = Pf_RefreshRegionHeight_9e0e0, called directly.
 
 void ClearArea_Finalize8270(void* comp) {
     if (!comp) return;
@@ -493,8 +473,7 @@ void ClearArea_Finalize8270(void* comp) {
     if (flag2c == 0) return;
 
     // desc+0x2c set: terrain regrow over the footprint, then broadcast event 5.
-    if (!s_e0e0_res) { s_e0e0 = reinterpret_cast<fn_e0e0_t>(ResolveAddr(Module::Exe, 0x14009e0e0)); s_e0e0_res = true; }
-    if (s_e0e0 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         uint64_t bc = 0;
         fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &bc);
         if (bc) {
@@ -504,7 +483,7 @@ void ClearArea_Finalize8270(void* comp) {
             int y1 = *reinterpret_cast<int16_t*>(b + 0x2a);
             int x2 = *reinterpret_cast<int16_t*>(b + 0x2c) + x1;
             int y2 = *reinterpret_cast<int16_t*>(b + 0x2e) + y1;
-            s_e0e0(map, x1, y1, x2, y2);
+            Pf_RefreshRegionHeight_9e0e0(reinterpret_cast<unsigned int*>(map), x1, y1, x2, y2);
         }
     }
     ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 5);
@@ -515,7 +494,6 @@ void ClearArea_Finalize8270(void* comp) {
 //   ModelComponent_impl_8270(comp) then request the 1 -> 2 transition.
 // ============================================================
 extern "C" char ClearArea_State1Enter(void* data, void* sm) {
-    ResolveStates();
     if (!data) return 1;
     ClearArea_Finalize8270(data);
     ::ControllerLive::RequestStateTransition(sm, 2);   // 1 -> 2
@@ -528,7 +506,6 @@ extern "C" char ClearArea_State1Enter(void* data, void* sm) {
 //   icon, finishes the model). The SM then rests in state 2 (terminal for the flow).
 // ============================================================
 extern "C" char ClearArea_State2Enter(void* data, void* /*sm*/) {
-    ResolveStates();
     if (!data) return 1;
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
     ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 1);
@@ -588,6 +565,5 @@ extern "C" bool ClearAreaCtrl_IsDone(void* comp) { return ClearArea_IsDone(comp)
 extern "C" void* ClearAreaCtrl_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
                                          uint8_t clearTrees, uint8_t clearGround,
                                          uint8_t clearBuildings) {
-    ResolveStates();   // the orchard reaches this without going through a ClearArea state
     return ClearArea_BuildWork(work, ownerEnt, descRef, clearTrees, clearGround, clearBuildings);
 }

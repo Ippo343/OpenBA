@@ -21,29 +21,14 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Action/Action.h"     // B.3.x W0: Action::Enter by name
 #include "Component/exe_bodies.h"
-
-// ============================================================
-// Resolved helpers
-// ============================================================
+#include "Work/exe_bodies.h"
 
 // Character_UpdateAnimation(arrayBase*, InternalBasePtr*, Time)
-// Located at 0x1400c4f80 in Application-x64.exe.
+// Located at 0x1400c4f80 in Application-x64.exe; Character_UpdateAnimation_Reimpl below,
+// called directly.
 // Iterates a linked list of character objects from the InternalBasePtr,
 // calling each object's vtable[6] (Draw/UpdateAnimation) method.
 // RCX = arrayBase (this+0x48), RDX = &localPtr (InternalBasePtr*), R8 = Time (int64)
-typedef void (*fn_Character_UpdateAnimation_t)(void* arrayBase, void* ptrRef, int64_t deltaTime);
-static fn_Character_UpdateAnimation_t s_fn_Character_UpdateAnimation = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    s_fn_Character_UpdateAnimation = reinterpret_cast<fn_Character_UpdateAnimation_t>(
-        ResolveAddr(Module::Exe, 0x1400c4f80));
-
-    s_helpersResolved = true;
-}
 
 // ============================================================
 // CharacterComponent::Update (vtable slot [9], 0x140109480)
@@ -84,17 +69,6 @@ void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t del
         node = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x10);
         *reinterpret_cast<int64_t*>(ptrRef) = node;
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void CharacterComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[CharacterComponent] Funcs resolved: UpdateAnimation=%p\n",
-           (void*)s_fn_Character_UpdateAnimation);
-#endif
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
@@ -180,7 +154,6 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
 // query then reads the stale slot's entity +0x68 -> +0x160 and faults on freed memory.
 // Gated with the same flag as the allocation so the two halves can never be on separately.
 // ------------------------------------------------------------------
-typedef void (*fn_ActStackClear_t)(void* stackAt48);
 extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
 
 // ============================================================================
@@ -306,9 +279,7 @@ void CharacterComponent::OnAdded() {}
 void CharacterComponent::OnRemove() {
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
-    // Resolved per call, no first-call cache (B6-5).
-    const auto actStackClear = reinterpret_cast<fn_ActStackClear_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    if (actStackClear) actStackClear(p + 0x48);
+    WorkBase_TaskListCleanup_c5400(p + 0x48);   // 0x1400c5400, the action-stack clear
 
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     int64_t charMgr = gw ? *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(gw) + 0x88)
@@ -338,11 +309,8 @@ void CharacterComponent::Tick(void* time) {
 // dereferenced.
 void CharacterComponent::Update(void* time) {
     const int64_t deltaTime = reinterpret_cast<int64_t>(time);   // forwarded raw (see above)
-    EnsureHelpers();
 
     if (data60 >= 0) {
-        if (!s_fn_Character_UpdateAnimation) return;
-
         // data48 is a pointer to an array of object pointers
         // data60 is the index into that array
         void** objArray = *reinterpret_cast<void***>(&data48);
@@ -351,7 +319,7 @@ void CharacterComponent::Update(void* time) {
         // Character_UpdateAnimation expects a pointer to the object pointer
         // (InternalBasePtr is just a pointer-sized wrapper)
         void* localPtr = obj;
-        s_fn_Character_UpdateAnimation(
+        Character_UpdateAnimation_Reimpl(
             reinterpret_cast<void*>(&data48),
             &localPtr,
             deltaTime
