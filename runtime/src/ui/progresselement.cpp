@@ -31,6 +31,7 @@
 
 #include "widget_common.h"
 #include "../../types/ui/ProgressElement.h"
+#include "../../types/ui/SpriteContext.h"
 
 using namespace rtui;
 
@@ -192,35 +193,28 @@ void ProgressElement::Draw(SpriteContext& context, uint8_t alpha) const {
     const int32_t rightX = _layoutRight;
 
     // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackLeft, left, top, trackColor);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackLeft, left, top, trackColor);
 
     const int32_t midH   = SpriteH(_trackMiddle);
     const int32_t rightW = SpriteW(_trackRight);
     const int32_t leftW  = SpriteW(_trackLeft);
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
-                                         left + leftW, top,
-                                         rightX - rightW, top + midH, trackColor);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left + leftW, top, rightX - rightW, top + midH, trackColor);
 
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackRight,
-                                         rightX - SpriteW(_trackRight), top, trackColor);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackRight, rightX - SpriteW(_trackRight), top, trackColor);
 
     if (_currentValue > 0.0f) {
         int32_t barW = static_cast<int32_t>(
             (_currentValue / _maxValue) * static_cast<float>(rightX - left));
         if (barW < _layoutWidth) barW = _layoutWidth;
 
-        RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_fillLeft, left, top, fillColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_fillLeft, left, top, fillColor);
 
         const int32_t fMidH = SpriteH(_fillMiddle);
         const int32_t fCapW = SpriteW(_fillRight);
         const int32_t fLefW = SpriteW(_fillLeft);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_fillMiddle,
-                                             left + fLefW, top,
-                                             (left - fCapW) + barW, top + fMidH, fillColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_fillMiddle, left + fLefW, top, (left - fCapW) + barW, top + fMidH, fillColor);
 
-        RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_fillRight,
-                                             (left - SpriteW(_fillRight)) + barW,
-                                             top, fillColor);
+        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_fillRight, (left - SpriteW(_fillRight)) + barW, top, fillColor);
     }
 
     if (_children.GetSize() > 0) {

@@ -40,6 +40,7 @@
 #include "element_common.h"
 #include "../../types/ui/ButtonElement.h"
 #include "../../types/input/Input.h"   // ENDGAME B.3.7 callers (K5): Input::KeyMap
+#include "../../types/ui/UserInterface.h"
 
 using namespace rtuielem;
 
@@ -48,9 +49,7 @@ namespace {
 // `_children` indices this class dispatches on.
 constexpr int kChildLabel = 4;
 
-using PlayFn            = void  (*)(void* ui, int soundId);
 // Collection::Array<UI::UserInterface::Event>::SetSize(array, newSize, &fill)
-using EventPushFn       = void  (*)(void* array, int newSize, const void* fill);
 
 // UI::UserInterface (block E's class, still a struct): the pending-event array
 // at +0x48 {data, size, capacity} (runtime/types/ui/UserInterface.h,
@@ -255,7 +254,7 @@ void ButtonElement::Update(const System::Time& time, UserInterface* ui,
     if (state.buttonPressed != 0) {
         const uint32_t f = _flags;
         if ((f & kFlagHover) != 0 && (f & kFlagPressStarted) != 0)
-            RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
+            static_cast<UI::UserInterface*>(ui)->Play(4);
     }
 
     bool fire = false;
@@ -272,7 +271,7 @@ void ButtonElement::Update(const System::Time& time, UserInterface* ui,
     StoreFlags(this, _flags & ~kFlagPressStarted);
     StoreFlags(this, _flags |  kElementFlagWasActivated);
 
-    Event ev;
+    ::Event ev;                                // this file's record, not UI::Event
     ev.dialog    = *reinterpret_cast<void* const*>(dialog);
     ev.element   = this;
     ev.kind      = kEventActivated;
@@ -282,8 +281,8 @@ void ButtonElement::Update(const System::Time& time, UserInterface* ui,
     ev.index     = 0;
     ev.tail      = 0;
     uint8_t* u = reinterpret_cast<uint8_t*>(ui);
-    RtAddr<EventPushFn>(0x180033690ull)(u + kUiEvents, I32(u, kUiEventCount) + 1, &ev);
-    RtAddr<PlayFn>(0x1801223d0ull)(ui, 5);
+    rtcoll::RtColl_ArraySetSizeFill_180033690(u + kUiEvents, I32(u, kUiEventCount) + 1, &ev);
+    static_cast<UI::UserInterface*>(ui)->Play(5);
 }
 
 // ============================================================================

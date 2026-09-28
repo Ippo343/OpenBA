@@ -84,15 +84,14 @@ const uint8_t* VideoDevice() {
     return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
 }
 
-using IsDerivedFromFn   = bool  (*)(const void* self, uint32_t typeId);
 
 // `CMOVNZ`: the child on a passed type test, NULL on a failed one — and retail
 // then dereferences the NULL (see ComputeSize).
 UI::Element* AsClipRegion(UI::Element* p) {
-    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, UI::ClipRegionElement::TypeId()) ? p : nullptr;
+    return reinterpret_cast<const Object::Base*>(p)->IsDerivedFrom(UI::ClipRegionElement::TypeId()) ? p : nullptr;
 }
 UI::ScrollElement* AsScroll(UI::Element* p) {
-    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, UI::ScrollElement::TypeId())
+    return reinterpret_cast<const Object::Base*>(p)->IsDerivedFrom(UI::ScrollElement::TypeId())
                ? reinterpret_cast<UI::ScrollElement*>(p)             // B.3.6 bridge
                : nullptr;
 }

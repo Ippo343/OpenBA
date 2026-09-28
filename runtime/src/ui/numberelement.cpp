@@ -41,12 +41,8 @@ using namespace rtuielem;
 
 namespace {
 
-using MemFreeFn = void (*)(void* p);
-// `?Format@String@System@@SA?AV12@PEBDZZ` — hidden return slot first.
-using FormatIntFn    = void* (*)(void* ret, const char* fmt, int64_t v);
-using FormatDoubleFn = void* (*)(void* ret, const char* fmt, double v);
 
-void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // The inlined String::operator= and the two releases, retail's asymmetric
 // shape (see widget_common.h, which these mirror).
@@ -105,11 +101,13 @@ void NumberElement::CacheText() {
     void* tmp = nullptr;
     if (_mode == 0) {
         const char* fmt = (_showSign != 0) ? "%+i" : "%i";
-        RtAddr<FormatIntFn>(0x1800c9730ull)(&tmp, fmt, _intValue);
+        // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730): retslot = `tmp`.
+        new (static_cast<void*>(&tmp)) System::String(System::String::Format(fmt, _intValue));
         AssignString(_cachedText, static_cast<char*>(tmp));
     } else {
         const char* fmt = (_showSign != 0) ? "%+.2f" : "%.2f";
-        RtAddr<FormatDoubleFn>(0x1800c9730ull)(&tmp, fmt, static_cast<double>(_floatValue));
+        new (static_cast<void*>(&tmp)) System::String(
+            System::String::Format(fmt, static_cast<double>(_floatValue)));
         AssignString(_cachedText, static_cast<char*>(tmp));
     }
     ReleaseStringLocal(&tmp);

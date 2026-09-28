@@ -133,9 +133,6 @@
 
 namespace {
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
 // ---------------------------------------------------------------------------
 // Shared field offsets. Element's come from runtime/types/ui/Element.h (the
 // layout authority); the rest are this file's own, each cited by the
@@ -227,10 +224,9 @@ void* InputDeviceSingleton() {            // 0x1801fe770
 //   0x180076900  stride 8, zero-then-assign   (kSpec_Fill8Z)
 //   0x180023830  stride 4                     (kSpec_Fill4)
 //   0x180024fe0  stride 8
-using ArrayGrowFn = void (*)(void* array, int32_t newSize, const void* value);
-void ArrayGrow8Z(void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x180076900ull)(a, n, v); }
-void ArrayGrow4 (void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x180023830ull)(a, n, v); }
-void ArrayGrow8 (void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x180024fe0ull)(a, n, v); }
+void ArrayGrow8Z(void* a, int32_t n, const void* v) { rtcoll::RtColl_ArraySetSizeFill_180076900(a, n, v); }
+void ArrayGrow4 (void* a, int32_t n, const void* v) { rtcoll::RtColl_ArraySetSizeFill_180023830(a, n, v); }
+void ArrayGrow8 (void* a, int32_t n, const void* v) { rtcoll::RtColl_ArraySetSizeFill_180024fe0(a, n, v); }
 
 }  // namespace
 

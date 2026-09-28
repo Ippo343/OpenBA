@@ -51,7 +51,6 @@ double SecondsPerTick() {
     return ::System::Timer::_secondsPerTick;
 }
 
-using ArrayDtorFn     = void* (*)(void* array);
 
 }  // namespace
 
@@ -137,7 +136,7 @@ void AnimatedImageElement::Update(const System::Time& time, UserInterface* ui,
 // (ImageElement) restamp and ~Element -- the compiler's chain.
 namespace UI {
 AnimatedImageElement::~AnimatedImageElement() {
-    RtAddr<ArrayDtorFn>(0x180037310ull)(&_frames);
+    rtcoll::RtColl_ArrayDtor_180037310(&_frames);
 }
 }  // namespace UI
 

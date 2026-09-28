@@ -76,7 +76,6 @@ struct WidgetEvent {
 };
 static_assert(sizeof(WidgetEvent) == 0x30, "");
 
-using SetValueFn = void (*)(void* self, int32_t v);
 
 }  // namespace
 
@@ -181,14 +180,14 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     const uint32_t kButtonTypeId     = UI::ButtonElement::TypeId();       // retail [0x1801fa938]
 
     void* edit = _children.GetData()[0];
-    if (!RtAddr<IsDerivedFromFn>(0x1800c0390ull)(edit, kNumberEditTypeId)) return;
+    if (!reinterpret_cast<const Object::Base*>(edit)->IsDerivedFrom(kNumberEditTypeId)) return;
     if (edit == nullptr) return;
 
     // The "up" button is enabled only while the value is below the maximum.
     // `up` may be null (a failed IsDerivedFrom) and is dereferenced anyway —
     // retail's unguarded deref (`XOR EDI,EDI; CMOVNZ RDI,RBX`), kept.
     Element* upRaw = _children.GetData()[1];
-    Element* up = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(upRaw, kButtonTypeId)
+    Element* up = reinterpret_cast<const Object::Base*>(upRaw)->IsDerivedFrom(kButtonTypeId)
                   ? upRaw : nullptr;
     {
         const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
@@ -198,7 +197,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
 
     // ... and the "down" button only while it is above the minimum.
     Element* downRaw = _children.GetData()[2];
-    Element* down = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(downRaw, kButtonTypeId)
+    Element* down = reinterpret_cast<const Object::Base*>(downRaw)->IsDerivedFrom(kButtonTypeId)
                     ? downRaw : nullptr;
     {
         const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
@@ -218,8 +217,8 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
 
     const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
         static_cast<const char*>(PTR(edit, kNeText)));
-    // ?SetValue@NumberEditElement@ — block C3's class, a door by address.
-    RtAddr<SetValueFn>(0x1800d4bb0ull)(edit, step + v);
+    // ?SetValue@NumberEditElement@UI@@ (0x1800d4bb0).
+    static_cast<NumberEditElement*>(edit)->SetValue(step + v);
 
     WidgetEvent ev;
     ev.dialog    = dialog->Get();
@@ -231,7 +230,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     ev.value     = 0;
     ev.tail      = 0;
     // UserInterface's event array (block E's class): raw offsets, by address.
-    RtAddr<ArraySetSizeFillFn>(0x180033690ull)(
+    rtcoll::RtColl_ArraySetSizeFill_180033690(
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 

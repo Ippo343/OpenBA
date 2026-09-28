@@ -49,7 +49,6 @@
 
 namespace {
 
-using ArrayDtorFn = void (*)(void* hdr);
 
 // System::String is ONE char* (runtime/types/system/String.h): the member
 // fields are spelled `char*`, so the Font/SpriteContext calls see them as the
@@ -72,7 +71,7 @@ namespace UI {
 TextElement::~TextElement() {
     System::StringPrivateAccess::Release(
         *reinterpret_cast<System::String*>(&_cachedText));
-    rtuielem::RtAddr<ArrayDtorFn>(0x180010ab0ull)(&_params);
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_params);
 }
 
 // slot 4 — 0x18011f060

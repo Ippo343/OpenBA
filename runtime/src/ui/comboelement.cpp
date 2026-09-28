@@ -33,6 +33,9 @@
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/ListElement.h"   // B.3.9 TI-UI: X::TypeId()
 #include "../../types/ui/TextElement.h"
+#include "../../types/ui/UserInterface.h"
+#include "../../types/system/String.h"
+#include "../../types/collection/Collection.h"
 #include <new>
 
 using namespace rtuielem;
@@ -65,16 +68,6 @@ constexpr uint32_t kFlagPressStarted = 0x00200000u;
 
 // ENDGAME B.3.9 TI-UI: the two type ids Update tests against are
 // `UI::ListElement::TypeId()` / `UI::TextElement::TypeId()`, read at the use.
-
-using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
-using StringAssignFn   = void* (*)(void* dst, const void* src);
-using CacheTextFn      = void  (*)(void* textElement);
-using ListAddItemFn    = void  (*)(void* list, void** item, int flags);
-using OperatorNewFn    = void* (*)(uint64_t size);
-using SetUpperLeftFn   = void  (*)(void* dlgInstance, int x, int y, bool centre);
-using DynArrayPushFn   = void  (*)(void* array, int newSize, const void* fill);
-using CloseDialogFn    = void  (*)(void* ui, void** dlgInstance);
-using ArrayDtorFn      = void* (*)(void* array);
 
 }  // namespace
 
@@ -136,14 +129,13 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         alignas(16) uint8_t dialogBuf[kDialogSize];
         Dialog* const stackDialog = ::new (static_cast<void*>(dialogBuf)) Dialog();   // ??0Dialog
 
-        const auto isDerived = RtAddr<IsDerivedFromFn>(0x1800c0390ull);
-
         Object::InternalPtr<Element> listSlot;
         Object::InternalPtr<Element>* made =
             reinterpret_cast<const ElementDescription*>(_listDesc)       // B.3.6 bridge
                 ->CreateInstance(&listSlot, stackDialog);
         void* madeList = *reinterpret_cast<void**>(made);
-        void* list = isDerived(madeList, UI::ListElement::TypeId()) ? madeList : nullptr;
+        void* list = reinterpret_cast<const Object::Base*>(madeList)          // B.3.x bridge
+                         ->IsDerivedFrom(UI::ListElement::TypeId()) ? madeList : nullptr;
 
         const int32_t count = _strings._size;
         for (int32_t i = 0; i < count; ++i) {
@@ -152,14 +144,15 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
                 reinterpret_cast<const ElementDescription*>(_itemDesc)   // B.3.6 bridge
                     ->CreateInstance(&itemSlot, stackDialog);
             void* madeItemRaw = *reinterpret_cast<void**>(madeItem);
-            void* item = isDerived(madeItemRaw, UI::TextElement::TypeId()) ? madeItemRaw : nullptr;
+            void* item = reinterpret_cast<const Object::Base*>(madeItemRaw)   // B.3.x bridge
+                             ->IsDerivedFrom(UI::TextElement::TypeId()) ? madeItemRaw : nullptr;
 
             const uint8_t* strings = reinterpret_cast<const uint8_t*>(_strings._data);
             if (I32(item, kTextParamCount) > 0) {
                 rtuielem::SetNeedsSizeCalc(item);
-                RtAddr<StringAssignFn>(0x1800c9810ull)(P(item, kTextParams),
-                                                       strings + static_cast<int64_t>(i) * 8);
-                RtAddr<CacheTextFn>(0x18011ec10ull)(item);
+                *static_cast<System::String*>(P(item, kTextParams)) =        // 0x1800c9810
+                    *reinterpret_cast<const System::String*>(strings + static_cast<int64_t>(i) * 8);
+                static_cast<TextElement*>(item)->CacheText();                 // 0x18011ec10
             }
 
             const uint8_t* sp = reinterpret_cast<const uint8_t*>(_sprites._data) +
@@ -175,7 +168,8 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
             __builtin_memcpy(static_cast<uint8_t*>(item) + kTextSprite + 8, &hi, 8);
 
             void* tmp = item;
-            RtAddr<ListAddItemFn>(0x1800d44b0ull)(list, &tmp, 0);
+            static_cast<ListElement*>(list)->AddItem(                         // 0x1800d44b0
+                reinterpret_cast<Object::InternalPtr<Element>*>(&tmp), nullptr);   // B.3.x bridge
         }
 
         const int32_t cur = _currentItem;
@@ -183,7 +177,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         else                                        I32(list, kListSelected) = cur;
         I32(list, kElemAlignment) = 0;
 
-        void* combo = RtAddr<OperatorNewFn>(0x180074770ull)(kDialogSize);
+        void* combo = RtUi_ComboDialog_OperatorNew(kDialogSize);   // ??2ComboDialog 0x180074770
         void* made2 = nullptr;
         if (combo != nullptr) {
             // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0ComboDialog, the real ctor.
@@ -193,13 +187,13 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         }
         _openDialog = made2;
 
-        RtAddr<SetUpperLeftFn>(0x180114a60ull)(made2, _layoutLeft, _layoutBottom, false);
+        static_cast<DialogInstance*>(made2)->SetUpperLeft(_layoutLeft, _layoutBottom, false);   // 0x180114a60
         U32(_openDialog, kDlgInstFlags) |= 2u;
 
         void* pushed = _openDialog;
         static_cast<DialogInstance*>(pushed)->OnOpened();              // DialogInstance slot 4
         uint8_t* u = reinterpret_cast<uint8_t*>(ui);
-        RtAddr<DynArrayPushFn>(0x18007a0d0ull)(u + kUiDialogs,
+        rtcoll::RtColl_ArraySetSizeFill_18007a0d0(u + kUiDialogs,
                                                I32(u, kUiDialogCount) + 1, &pushed);
 
         stackDialog->UI::Dialog::~Dialog();                          // ??1Dialog
@@ -229,11 +223,12 @@ ComboElement::~ComboElement() {
     void* open = _openDialog;
     if (open != nullptr) {
         void* slot = open;
-        RtAddr<CloseDialogFn>(0x180120f20ull)(Pc(open, 0x10), &slot);
+        static_cast<UserInterface*>(Pc(open, 0x10))->CloseDialog(          // 0x180120f20
+            reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&slot));   // B.3.x bridge
     }
-    RtAddr<ArrayDtorFn>(0x180024aa0ull)(self + offsetof(ComboElement, _userData));
-    RtAddr<ArrayDtorFn>(0x180037310ull)(self + offsetof(ComboElement, _sprites));
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(self + offsetof(ComboElement, _strings));
+    rtcoll::RtColl_ArrayDtor_180024aa0(self + offsetof(ComboElement, _userData));
+    rtcoll::RtColl_ArrayDtor_180037310(self + offsetof(ComboElement, _sprites));
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(self + offsetof(ComboElement, _strings));
 }
 }  // namespace UI
 

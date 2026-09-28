@@ -48,6 +48,8 @@
 #include "../../types/input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
 #include "../../types/system/String.h"
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 using namespace rtuielem;
 
@@ -75,9 +77,6 @@ constexpr int kUiEventCount = 0x50;
 
 constexpr int32_t kEventEditFinished = 0x15;
 
-// RULE B6-5: namespace-scope atomic slots, never a first-call static.
-std::atomic<void*> g_memFreeSlot{nullptr};
-
 // ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
 void** InputDeviceSlot() {
     return reinterpret_cast<void**>(&::Input::Device::_singleton);
@@ -90,22 +89,12 @@ double SecondsPerTick() {
     return ::System::Timer::_secondsPerTick;
 }
 
-using MemFreeFn     = void  (*)(void* p);
-using EventPushFn   = void  (*)(void* array, int newSize, const void* fill);
-// System::String, reached by address.
-using StrAppendCharFn = void* (*)(void* self, void* tmpOut, char c);
-using StrRemoveAtFn   = void** (*)(void* self, void** out, int index);
-using StrAssignFn     = void* (*)(void* self, const void* other);
-using StrAssignCStrFn = void* (*)(void* self, const char* s);
-using StrSetLengthFn  = void* (*)(void* self, int n);
-using StrInsertAtFn   = void** (*)(void* self, void** out, int index, void* const* str);
 using MemcpyFn        = void* (*)(void* dst, const void* src, uint64_t n);
-using SelectCharFn    = uint8_t (*)(const void* self, int keyIndex);
 
-void MemFree(void* p) {
-    reinterpret_cast<MemFreeFn>(AtomicExport(
-        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
-}
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
+
+// A System::String held in a raw slot, as the member calls below need it.
+System::String& Str(void* slot) { return *static_cast<System::String*>(slot); }   // B.3.x bridge
 
 struct Event {
     void*    dialog;
@@ -174,7 +163,7 @@ void* BuildMask(int length) {
     void* masked = nullptr;
     for (int i = 0; i < length; ++i) {
         void* tmp = nullptr;
-        RtAddr<StrAppendCharFn>(0x1800c89e0ull)(&masked, &tmp, '*');
+        new (static_cast<void*>(&tmp)) System::String(Str(&masked) += '*');   // 0x1800c89e0, retslot = &tmp
         ReleaseString(&tmp);
     }
     return masked;
@@ -285,7 +274,7 @@ void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
         // `System::String::Set` copies them either way.
         void* caret = nullptr;
         static const char kCaretText[] = "|";
-        RtAddr<StrAssignCStrFn>(0x1800c95d0ull)(&caret, kCaretText);
+        Str(&caret).Set(kCaretText);                                    // 0x1800c95d0
 
         Font* f = _font;
         const int y = _layoutTop - f->_baseLine + f->_lineHeight;
@@ -365,7 +354,7 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         ev.y         = st.mouseY;
         ev.index     = 0;
         ev.tail      = 0;
-        RtAddr<EventPushFn>(0x180033690ull)(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
+        rtcoll::RtColl_ArraySetSizeFill_180033690(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
                                             I32(ui, kUiEventCount) + 1, &ev);
     }
 
@@ -392,13 +381,11 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
     if (dev[kKeyEnd]  != 0) _caret = StrLen(_text);
 
     // ---- backspace / delete ----------------------------------------------
-    const auto removeAt = RtAddr<StrRemoveAtFn>(0x1800c86b0ull);
-    const auto assign   = RtAddr<StrAssignFn>(0x1800c9810ull);
-
+    // System::String::RemoveAt (0x1800c86b0, retslot) and operator= (0x1800c9810).
     if ((dev[kKeyBack] != 0 || dev[kKeyBack + 2] != 0) && _caret > 0) {
         void* tmp = nullptr;
-        void** ret = removeAt(&_text, &tmp, _caret - 1);
-        assign(&_text, ret);
+        new (static_cast<void*>(&tmp)) System::String(Str(&_text).RemoveAt(_caret - 1));
+        Str(&_text) = Str(&tmp);
         ReleaseString(&tmp);
         _caret -= 1;
         SetNeedsSizeCalc();
@@ -407,8 +394,8 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
     if (dev[kKeyDelete] != 0 || dev[kKeyDelete + 2] != 0) {
         if (_caret < StrLen(_text)) {
             void* tmp = nullptr;
-            void** ret = removeAt(&_text, &tmp, _caret);
-            assign(&_text, ret);
+            new (static_cast<void*>(&tmp)) System::String(Str(&_text).RemoveAt(_caret));
+            Str(&_text) = Str(&tmp);
             ReleaseString(&tmp);
             SetNeedsSizeCalc();
         }
@@ -417,13 +404,11 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
     // ---- character insertion ----------------------------------------------
     // `?SelectCharacter@` (0x1800cfd40) maps a key index to the character it
     // produces under the current modifiers, or 0 for "not a character key".
-    // Its body is element_bodies_b5.cpp's door (declared on the class,
-    // undefined), reached by address.
     for (int k = 0; k < kKeyCount; ++k) {
         const int off = kKeyBase + k * kKeyStride;
         if (dev[off] == 0 && dev[off + 2] == 0) continue;
 
-        const uint8_t ch = RtAddr<SelectCharFn>(0x1800cfd40ull)(this, k);
+        const uint8_t ch = static_cast<uint8_t>(SelectCharacter(k));
         if (ch == 0) continue;
 
         if (StrLen(_text) >= _maxLength) continue;
@@ -455,7 +440,7 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         do { ++n; ++idx; } while (buf[idx] != 0);
 
         void* one = nullptr;
-        RtAddr<StrSetLengthFn>(0x1800c8220ull)(&one, n);
+        System::StringPrivateAccess::SetLength(Str(&one), n);         // 0x1800c8220
 
         const int cap = n + 1;
         int srcLen = 0;
@@ -469,7 +454,9 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         if (srcLen > cap) static_cast<char*>(one)[idx] = 0;
 
         void* ins = nullptr;
-        void** ret = RtAddr<StrInsertAtFn>(0x1800c8510ull)(&_text, &ins, _caret, &one);
+        new (static_cast<void*>(&ins)) System::String(                // 0x1800c8510, retslot = &ins
+            Str(&_text).InsertAt(_caret, Str(&one)));
+        void** ret = &ins;
         AssignStringInline(reinterpret_cast<void**>(&_text), ret);
         ReleaseString(&ins);
         ReleaseString(&one);

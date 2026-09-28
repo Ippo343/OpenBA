@@ -35,6 +35,7 @@
 
 #include "widget_common.h"
 #include "../../types/ui/TabElement.h"
+#include "../../types/ui/SpriteContext.h"
 
 using namespace rtui;
 
@@ -226,15 +227,13 @@ void TabElement::Draw(SpriteContext& context, uint8_t alpha) const {
     const uint32_t c = _color;
 
     // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeLeft,
-                                         bl, y0, SpriteW(_edgeLeft) + bl, y1, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeLeft, bl, y0, SpriteW(_edgeLeft) + bl, y1, c);
 
     const int32_t rw = SpriteW(_edgeRight);
     const int32_t lw = SpriteW(_edgeLeft);
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeMiddle, bl + lw, y0, br - rw, y1, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeMiddle, bl + lw, y0, br - rw, y1, c);
 
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeRight,
-                                         br - SpriteW(_edgeRight), y0, br, y1, c);
+    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeRight, br - SpriteW(_edgeRight), y0, br, y1, c);
 
     _children.GetData()[GetContainerIndex(_activeTab)]->Draw(context, alpha);
 }

@@ -78,6 +78,11 @@
 #include "../../types/ui/DocumentTextElement.h"
 #include "../../types/ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "../../types/ui/SpriteContext.h"
+#include "../../types/ui/Font.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 using namespace rtuielem;
 
@@ -108,26 +113,11 @@ constexpr int kFontUnderlineTrim = 0x5c;
 
 constexpr int32_t kEventActivated = 0x12;
 
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-std::atomic<void*> g_memFree{nullptr};
-
 double SecondsPerTick() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
     return ::System::Timer::_secondsPerTick;
 }
 
-using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
-using ClearArrayFn    = void* (*)(void* array);
-using SubStringFn     = void* (*)(const void* str, void* out, int start, int length);
-using MemFreeFn       = void  (*)(void* p);
-using AddFontFn       = void (*)(void* ctx, void* font, const void* str, int wrap,
-                                 int a, int b, int c, int x, int y, uint32_t color);
-using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, uint32_t color);
-using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
-                                 int l, int t, int r, int b, uint32_t color);
-using CaptureDrawFn   = void (*)(void* capture, void* ctx, int x, int y);
-using ArrayDtorFn       = void* (*)(void* array);
-using EventPushFn       = void  (*)(void* array, int newSize, const void* fill);
 
 struct Event {
     void*    dialog;
@@ -153,8 +143,7 @@ void ReleaseString(void** slot) {
     --*rc;
     if (*rc == 0) {
         *slot = s - 8;
-        reinterpret_cast<MemFreeFn>(
-            AtomicExport(g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(*slot);
+        System::MemoryAllocator::MemFree(*slot);
     } else {
         *slot = nullptr;
     }
@@ -205,8 +194,8 @@ namespace UI {
 void DocumentTextElement::ComputeSize() {
     if (((_flags >> 27) & 1u) == 0) return;
 
-    RtAddr<ClearArrayFn>(0x18003d1c0ull)(&_itemsData);
-    RtAddr<ClearArrayFn>(0x18003d430ull)(&_linksData);
+    rtcoll::RtColl_ArraySetSize_18003d1c0(&_itemsData);
+    rtcoll::RtColl_ArraySetSize_18003d430(&_linksData);
 
     if (_layoutWidth < _wrapWidth)
         _layoutWidth = _wrapWidth;
@@ -244,16 +233,8 @@ void DocumentTextElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t
 //                 type-tested, and given its own Draw. A failed type test
 //                 yields null and retail calls through it.
 void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    void* const ctx = &context;
-
     if (_border != nullptr)
         reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
-
-    // UI::SpriteContext (block D's class) and System::String — doors by address.
-    const auto addFont   = RtAddr<AddFontFn>(0x18011ccb0ull);
-    const auto addPt     = RtAddr<AddSpritePtFn>(0x18011cf00ull);
-    const auto addRect   = RtAddr<AddSpriteRectFn>(0x18011d3c0ull);
-    const auto subString = RtAddr<SubStringFn>(0x1800c9230ull);
 
     void* const* const fonts  = static_cast<void* const*>(_fontsData);
     const int32_t count = _itemsCount;
@@ -265,11 +246,13 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
 
         if (kind == 0) {
             void* tmp = nullptr;
-            subString(&_sourceText, &tmp, item->first, item->last);
+            new (static_cast<void*>(&tmp)) System::String(                 // 0x1800c9230, retslot
+                reinterpret_cast<const System::String*>(&_sourceText)->SubString(item->first, item->last));
 
             void* font = static_cast<void* const*>(_fontsData)[item->index];
-            addFont(ctx, font, &tmp, 0, 0, 0, -1,
-                    item->x + L, item->y + T, static_cast<uint32_t>(item->color));
+            context.AddFont(Object::ExternalPtr<UI::Font>(static_cast<UI::Font*>(font)),   // 0x18011ccb0
+                            *reinterpret_cast<const System::String*>(&tmp), false, 0, 0, -1,
+                            item->x + L, item->y + T, static_cast<uint32_t>(item->color));
 
             const uint8_t underline = item->byte21;
             if (underline == 1 || underline == 2) {
@@ -280,21 +263,22 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
                 }
                 const int x = item->x + L;
                 const int y = item->y + T;
-                addRect(ctx, &_underlineSprite, x, y + 1, width + x, y + 2,
-                        static_cast<uint32_t>(item->color));
+                context.AddSprite(_underlineSprite, x, y + 1, width + x, y + 2,   // 0x18011d3c0
+                                  static_cast<uint32_t>(item->color));
             }
             ReleaseString(&tmp);
         } else if (kind == 1) {
             struct { void* sheet; int32_t index; int32_t pad; } sprite;
             sprite.sheet = static_cast<void* const*>(_sheetsData)[item->index];
             sprite.index = item->first;
-            addPt(ctx, &sprite, L + item->x, T + item->y, 0xffffffffu);
+            context.AddSprite(*reinterpret_cast<const UI::Sprite*>(&sprite),   // 0x18011cf00
+                              L + item->x, T + item->y, 0xffffffffu);
         } else if (kind == 2) {
             void* obj = static_cast<void* const*>(Pc(_resourceList, 0x20))[item->index];
-            void* capture = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(obj, UI::SpriteCapture::TypeId())
+            void* capture = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(UI::SpriteCapture::TypeId())
                                 ? obj : nullptr;
-            // UI::SpriteCapture::Draw (block D's class) — a door by address.
-            RtAddr<CaptureDrawFn>(0x1800d9230ull)(capture, ctx, L + item->x, T + item->y);
+            // ?Draw@SpriteCapture@UI@@ (0x1800d9230).
+            static_cast<const UI::SpriteCapture*>(capture)->Draw(context, L + item->x, T + item->y);
         }
     }
 }
@@ -397,7 +381,7 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
             ev.index     = li;
             ev.tail      = 0;
             // UserInterface's event array (block E's class): raw offsets, by address.
-            RtAddr<EventPushFn>(0x180033690ull)(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
+            rtcoll::RtColl_ArraySetSizeFill_180033690(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
                                                 I32(ui, kUiEventCount) + 1, &ev);
             PlayInline(ui, kUiClickSound);
         }
@@ -413,12 +397,12 @@ DocumentTextElement::~DocumentTextElement() {
     ReleaseString(reinterpret_cast<void**>(self + 0x198));
     ReleaseString(reinterpret_cast<void**>(self + 0x168));
 
-    RtAddr<ArrayDtorFn>(0x18003e310ull)(self + 0x158);
-    RtAddr<ArrayDtorFn>(0x18003e0c0ull)(self + 0x148);
-    RtAddr<ArrayDtorFn>(0x18003db40ull)(self + 0x130);
-    RtAddr<ArrayDtorFn>(0x18003da00ull)(self + 0x120);
-    RtAddr<ArrayDtorFn>(0x18003d8c0ull)(self + 0x110);
-    RtAddr<ArrayDtorFn>(0x180037310ull)(self + 0x0e8);
+    rtcoll::RtColl_ArrayDtorElem_18003e310(self + 0x158);
+    rtcoll::RtColl_ArrayDtor_18003e0c0(self + 0x148);
+    rtcoll::RtColl_ArrayDtor_18003db40(self + 0x130);
+    rtcoll::RtColl_ArrayDtor_18003da00(self + 0x120);
+    rtcoll::RtColl_ArrayDtor_18003d8c0(self + 0x110);
+    rtcoll::RtColl_ArrayDtor_180037310(self + 0x0e8);
 }
 
 // ?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ 0x18003bf40 --

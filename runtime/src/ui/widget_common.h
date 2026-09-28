@@ -38,6 +38,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../../types/ui/Element.h"     // B3X W0: InlineGetPaddedSize calls ComputeSize by name
+#include "../../types/system/MemoryAllocator.h"   // B3R RT-UI: MemFree, direct
 
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h>; PLAN
 // §4.1 keeps that out of runtime/src. Declared here exactly as ~30 sibling
@@ -169,7 +170,7 @@ using AddFontFn    = void (*)(void* ctx, void* font, const void* str, uint8_t wr
                               int32_t a, int32_t justify, int32_t width,
                               int32_t x, int32_t y, uint32_t c);
 
-inline void MemFree(void* p)        { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+inline void MemFree(void* p)        { System::MemoryAllocator::MemFree(p); }
 
 // ---------------------------------------------------------------------------
 // System::String release, inlined by every one of these bodies that owns one.

@@ -59,7 +59,7 @@ void RibbonElement::ComputeSize() {
     if ((_flags & kFlagNeedsSizeCalc) == 0) return;
 
     if (_extentsCount != _children.GetSize())
-        RtAddr<ArraySetSizeFn>(0x18002fea0ull)(&_extentsData, _children.GetSize());
+        rtcoll::RtColl_ArraySetSize_18002fea0(&_extentsData, _children.GetSize());
 
     int32_t maxW = 0, maxH = 0, sumW = 0, sumH = 0, visible = 0;
 
@@ -193,7 +193,7 @@ void RibbonElement::Draw(SpriteContext& context, uint8_t alpha) const {
 // retired door (ENDGAME B.3.9 UI-B): the extent Array through 0x18001c750. The
 // restamp and the tail into ~Element are the compiler's.
 RibbonElement::~RibbonElement() {
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(B(this, kExtents));
+    rtcoll::RtColl_ArrayDtor_18001c750(B(this, kExtents));
 }
 
 // ?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ 0x1800447d0 --

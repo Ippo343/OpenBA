@@ -121,7 +121,7 @@ void RadioElement::Update(const System::Time& time, UserInterface* ui,
     ev.mouseY    = state.mouseY;
     ev.value     = value;
     ev.tail      = 0;
-    RtAddr<ArraySetSizeFillFn>(0x180033690ull)(
+    rtcoll::RtColl_ArraySetSizeFill_180033690(
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 

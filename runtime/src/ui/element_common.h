@@ -44,6 +44,7 @@
 // helpers below dispatch slots 4/5 as member calls instead of raw slot reads.
 #include "../../types/ui/Element.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/system/MemoryAllocator.h"   // B3R RT-UI: MemAlloc / MemFree, direct
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — that header drags in <windows.h>, which PLAN.md §4.1 keeps out of

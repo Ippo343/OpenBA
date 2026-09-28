@@ -26,15 +26,13 @@
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/BorderElement.h"
+#include "../../types/ui/SpriteContext.h"
 
 using namespace rtuielem;
 
 namespace {
 
 // UI::SpriteContext (block D's class), reached by address.
-using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, uint32_t color);
-using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
-                                 int l, int t, int r, int b, uint32_t color);
 
 }  // namespace
 
@@ -120,37 +118,34 @@ void BorderElement::Draw(SpriteContext& context, uint8_t alpha) const {
     auto R = [&] { return _layoutRight; };
     auto B = [&] { return _layoutBottom; };
 
-    void* ctx = &context;
-    const auto pt   = RtAddr<AddSpritePtFn>(0x18011cf00ull);
-    const auto rect = RtAddr<AddSpriteRectFn>(0x18011d3c0ull);
+    // ?AddSprite@SpriteContext@UI@@ point (0x18011cf00) and rect (0x18011d3c0).
+    context.AddSprite(_topLeft, L(), T(), c);                                         // 180110469
 
-    pt(ctx, &_topLeft, L(), T(), c);                                         // 180110469
-
-    rect(ctx, &_top,                                                         // 18011050d
+    context.AddSprite(_top,                                                         // 18011050d
          L() + SpriteW(&_topLeft), T(),
          R() - SpriteW(&_topRight), T() + SpriteH(&_top), c);
 
-    pt(ctx, &_topRight, R() - SpriteW(&_topRight), T(), c);                  // 180110545
+    context.AddSprite(_topRight, R() - SpriteW(&_topRight), T(), c);                  // 180110545
 
-    rect(ctx, &_left,                                                        // 1801106b8
+    context.AddSprite(_left,                                                        // 1801106b8
          L(), T() + SpriteH(&_topLeft),
          L() + SpriteW(&_left), B() - SpriteH(&_bottomLeft), c);
 
-    rect(ctx, &_centre,                                                      // 1801106b8 (2nd)
+    context.AddSprite(_centre,                                                      // 1801106b8 (2nd)
          L() + SpriteW(&_left), T() + SpriteH(&_top),
          R() - SpriteW(&_right), B() - SpriteH(&_bottom), c);
 
-    rect(ctx, &_right,                                                       // 18011074e
+    context.AddSprite(_right,                                                       // 18011074e
          R() - SpriteW(&_right), T() + SpriteH(&_topRight),
          R(), B() - SpriteH(&_bottomLeft), c);
 
-    pt(ctx, &_bottomLeft, L(), B() - SpriteH(&_bottomLeft), c);              // 180110786
+    context.AddSprite(_bottomLeft, L(), B() - SpriteH(&_bottomLeft), c);              // 180110786
 
-    rect(ctx, &_bottom,                                                      // 180110826
+    context.AddSprite(_bottom,                                                      // 180110826
          L() + SpriteW(&_bottomLeft), B() - SpriteH(&_bottom),
          R() - SpriteW(&_bottomRight), B(), c);
 
-    pt(ctx, &_bottomRight,                                                   // 180110877
+    context.AddSprite(_bottomRight,                                                   // 180110877
        R() - SpriteW(&_bottomRight), B() - SpriteH(&_bottomRight), c);
 }
 

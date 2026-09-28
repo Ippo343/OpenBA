@@ -67,7 +67,6 @@ constexpr int kGridExtents  = 0xC8;   // Array<int32>::_data
 
 // `?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z` 0x1800d3f70 —
 // declared on the class, body still element_bodies_b5.cpp's door.
-using DrawHighlightFn = void (*)(const void* self, void* ctx, int32_t index, uint32_t color);
 
 // `?OnElementEvent@DialogInstance@UI@@` — the DialogInstance vtable's slot 8
 // (+0x40), called by name in Update. Seven arguments after `this`, read
@@ -86,7 +85,7 @@ namespace UI {
 void ListElement::ComputeSize() {
     if ((_flags & kFlagNeedsSizeCalc) == 0) return;
     Element* content = _children[1];
-    RtAddr<GetPaddedSizeFn>(0x180115f10ull)(content, &_layoutWidth, &_layoutHeight);
+    content->GetPaddedSize(_layoutWidth, _layoutHeight);             // 0x180115f10
     _flags &= ~kFlagNeedsSizeCalc;
 }
 
@@ -139,8 +138,8 @@ void ListElement::Draw(SpriteContext& context, uint8_t alpha) const {
     if (back != nullptr && (back->_flags & kFlagHidden) == 0)
         back->Draw(context, alpha);
 
-    RtAddr<DrawHighlightFn>(0x1800d3f70ull)(this, &context, _hoverIndex, _hoverColor);
-    RtAddr<DrawHighlightFn>(0x1800d3f70ull)(this, &context, _selectedIndex, _selectColor);
+    DrawHighlight(context, _hoverIndex, _hoverColor);                 // 0x1800d3f70
+    DrawHighlight(context, _selectedIndex, _selectColor);
 
     Element* content = _children[1];
     if (content != nullptr && (content->_flags & kFlagHidden) == 0)
@@ -237,7 +236,7 @@ void ListElement::Update(const System::Time& time, UserInterface* ui,
 // (frees and zeroes the header; the compiler's `_userData.~Array()` is then a
 // no-op). The restamp and the tail into ~Element are the compiler's.
 ListElement::~ListElement() {
-    RtAddr<ArrayDtorFn>(0x180024aa0ull)(&_userData);
+    rtcoll::RtColl_ArrayDtor_180024aa0(&_userData);
 }
 
 // ?CreateNewObject@ListElement@UI@@SAPEAVBase@Object@@XZ 0x180045080 --

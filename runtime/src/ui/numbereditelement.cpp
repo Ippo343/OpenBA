@@ -35,13 +35,8 @@ using namespace rtuielem;
 namespace {
 
 using ToIntegerFn = int32_t (*)(const char* s);
-using MemFreeFn = void (*)(void* p);
-// `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns a
-// System::String BY VALUE, so the first argument is the HIDDEN RETURN SLOT
-// (reference_hidden_retslot_wild_write.md).
-using FormatIntFn = void* (*)(void* ret, const char* fmt, int64_t a);
 
-void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // The inlined String::operator= (release old with retail's asymmetry, store,
 // addref) and the release of the caller's temporary.
@@ -95,7 +90,9 @@ void NumberEditElement::FinalizeText() {
     }
 
     void* tmp = nullptr;
-    RtAddr<FormatIntFn>(0x1800c9730ull)(&tmp, "%i", clamped);
+    // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns BY VALUE:
+    // its hidden return slot is `tmp`.
+    new (static_cast<void*>(&tmp)) System::String(System::String::Format("%i", clamped));
     AssignString(_text, static_cast<char*>(tmp));
     ReleaseStringLocal(&tmp);
 }

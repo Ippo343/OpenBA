@@ -56,7 +56,6 @@ namespace {
 
 // `?GetRowHeight@` (0x18011e090) / `?GetColumnWidth@` (0x18011e1a0) — declared
 // on the class, bodies still element_bodies_b5.cpp's doors (fragment pass).
-using ExtentFn = int32_t (*)(void* self, int32_t index);
 
 }  // namespace
 
@@ -81,7 +80,7 @@ void TableElement::ComputeSize() {
     bool first = true;
     for (int32_t c = 0; c < _columnCount; ++c) {
         int32_t* cols = _columnSizes._data;                                 // loaded BEFORE the call
-        cols[c] = RtAddr<ExtentFn>(0x18011e1a0ull)(this, c);                // GetColumnWidth
+        cols[c] = GetColumnWidth(c);                                        // 0x18011e1a0
         cols = _columnSizes._data;                                          // re-read
         _layoutWidth = _layoutWidth + cols[c];
         if (cols[c] != 0) {
@@ -93,7 +92,7 @@ void TableElement::ComputeSize() {
     first = true;
     for (int32_t r = 0; r < _rowCount; ++r) {
         int32_t* rows = _rowSizes._data;                                    // loaded BEFORE the call
-        rows[r] = RtAddr<ExtentFn>(0x18011e090ull)(this, r);                // GetRowHeight
+        rows[r] = GetRowHeight(r);                                          // 0x18011e090
         rows = _rowSizes._data;                                             // re-read
         _layoutHeight = rows[r] + _layoutHeight;
         if (rows[r] != 0) {
@@ -187,8 +186,8 @@ void TableElement::Draw(SpriteContext& context, uint8_t alpha) const {
 // ~Arrays afterwards are no-ops). The restamp and the tail into ~Element are
 // the compiler's.
 TableElement::~TableElement() {
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(&_columnSizes);
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(&_rowSizes);
+    rtcoll::RtColl_ArrayDtor_18001c750(&_columnSizes);
+    rtcoll::RtColl_ArrayDtor_18001c750(&_rowSizes);
 }
 
 // ?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ 0x1800793c0 --

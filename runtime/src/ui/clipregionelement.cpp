@@ -32,6 +32,7 @@
 // ENDGAME B.3.5 block VC: `Video::Viewport`, which replaces this file's local
 // duplicate of its four fields (RULE B5-2's duplicate-view collapse).
 #include "../../types/video/Context.h"
+#include "../../types/ui/SpriteContext.h"
 
 using namespace rtuielem;
 
@@ -49,7 +50,6 @@ constexpr int kUiClipBottom = 0x108;
 // UI::SpriteContext::SetScissor(ctx, Viewport& out, const Viewport& in) —
 // returns the PREVIOUS scissor by value through the hidden slot in RDX.
 // Block D's class, reached by address.
-using SetScissorFn      = void* (*)(void* ctx, void* outOld, const void* in);
 
 // ENDGAME B.3.5 block VC: the REAL `Video::Viewport` (runtime/types/video/
 // Context.h), field-identical to the local duplicate this file once had.
@@ -131,10 +131,9 @@ void ClipRegionElement::Draw(SpriteContext& context, uint8_t alpha) const {
     rect.width  = (_layoutRight  - rect.x) + 1;
     rect.height = (_layoutBottom - rect.y) + 1;
 
-    void* ctx = &context;
-    Viewport saved;
-    const auto setScissor = RtAddr<SetScissorFn>(0x18011d050ull);
-    setScissor(ctx, &saved, &rect);
+    // ?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z (0x18011d050):
+    // RETSLOT, the previous scissor returned into `saved`.
+    Viewport saved = context.SetScissor(rect);
 
     const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {
@@ -144,7 +143,7 @@ void ClipRegionElement::Draw(SpriteContext& context, uint8_t alpha) const {
         child->Draw(context, alpha);
     }
 
-    setScissor(ctx, &rect, &saved);
+    rect = context.SetScissor(saved);         // the retslot is `rect` again
 }
 
 // ============================================================================

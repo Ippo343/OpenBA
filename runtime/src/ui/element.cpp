@@ -123,15 +123,6 @@
 // standalone/resolve.h) and `rtuielem::AtomicExport`, the B6-5 door cache.
 #include "element_common.h"
 
-// ----------------------------------------------------------------------------
-// ResolveExport, forward-declared rather than pulled in from
-// standalone/resolve.h — same reasoning rt_port.h gives for declaring
-// RegisterRuntimeExport locally: resolve.h drags in <windows.h>, and PLAN §4.1
-// requires runtime/src/ to stay platform-neutral. This declaration must stay
-// byte-identical to resolve.h's; the linker checks it against it.
-// ----------------------------------------------------------------------------
-void*     ResolveExport(const char* mangled_name);
-
 // ENDGAME B.3.6 block A: `UI::Element` is the REAL class now (Element.h), so
 // every door below receives a typed `Element*` and delegates with a QUALIFIED
 // non-virtual call (`self->UI::Element::M(…)`): a live Element wears the MINTED
@@ -143,34 +134,6 @@ using ::UIString;   // runtime/types/ui/String.h
 namespace {
 
 constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in the header
-
-// ============================================================================
-// Mangled names.
-//
-// The registrations at the bottom of this file deliberately repeat each name as
-// its own string literal instead of using these constants:
-// tools/runtime_census.py cannot see through a NAMED CONSTANT and would
-// under-count the lane, which is how Wave 3's Object count stood at 21/41 when
-// it was really 27/41 (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-const char* const kAddChild     = "?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z";
-const char* const kChild        = "?Child@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@H@Z";
-const char* const kChildCount   = "?ChildCount@Element@UI@@QEBAHXZ";
-const char* const kFindElement  = "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z";
-const char* const kFindElemType = "?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z";
-const char* const kGetAligned   = "?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z";
-const char* const kGetPadded    = "?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z";
-const char* const kGetUserData  = "?GetUserData@Element@UI@@QEAAPEAVBase@Object@@XZ";
-const char* const kHide         = "?Hide@Element@UI@@QEAAX_N@Z";
-const char* const kSetElementId = "?SetElementId@Element@UI@@QEAAXH@Z";
-const char* const kSetFlags     = "?SetFlagsOnOff@Element@UI@@QEAAXII@Z";
-const char* const kSetNeedsCalc = "?SetNeedsSizeCalc@Element@UI@@QEAAXXZ";
-const char* const kSetPadding   = "?SetPadding@Element@UI@@QEAAXHHHH@Z";
-const char* const kSetToolTip   = "?SetToolTip@Element@UI@@QEAAXVString@2@@Z";
-const char* const kSetUserData  = "?SetUserData@Element@UI@@QEAAXPEAVBase@Object@@@Z";
-const char* const kSetOffsets   = "?SetOffsets@ContainerElement@UI@@QEAAXHH@Z";
-// WAVE 9 LANE UIC
-const char* const kAdjustUL     = "?AdjustUpperLeft@Element@UI@@QEAAXHH@Z";
 
 // ============================================================================
 // Dependencies this lane CALLS rather than reimplements.
@@ -205,34 +168,11 @@ const char* const kAdjustUL     = "?AdjustUpperLeft@Element@UI@@QEAAXHH@Z";
 // profilers (reference_rtoriginal_is_getprocaddress.md).
 // ============================================================================
 
-// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) — the static,
-// null-safe free the String release path calls. Resolved by name, so the
-// allocator port is what runs.
-//
-// B.3.6 (RULE B6-5): the MEMBER bodies below reach it through a namespace-
-// scope std::atomic slot (`rtuielem::AtomicExport`) rather than a function-
-// local static, because UI is constructed on the loader thread while the main
-// thread draws. (ENDGAME B.3.9 UI-D: the static-cached `MemFree()` went with
-// the ctor / dtor doors; ~Element uses the atomic slot too.)
-using MemFreeFn = void (*)(void*);
-std::atomic<void*> g_memFreeSlot{nullptr};
-MemFreeFn MemFreeAtomic() {
-    return reinterpret_cast<MemFreeFn>(rtuielem::AtomicExport(
-        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-}
-
-// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z (0x1800c0390) — ContainerElement::
-// SetOffsets' type test. NOTE for whoever reads a crash log: this is the
-// function standalone/main.cpp:518's crash handler recognises by the offset
-// +0xC0390, because retail calls it on a possibly-null child (see SetOffsets).
-// B6-5 (fragment pass F2): an atomic retry-a-miss slot, not a first-call
-// static — ContainerElement::SetOffsets, a member, is its caller.
-using IsDerivedFromFn = bool (*)(const void*, uint32_t);
-std::atomic<void*> g_isDerivedFromSlot{nullptr};
-IsDerivedFromFn BaseIsDerivedFromFn() {
-    return reinterpret_cast<IsDerivedFromFn>(rtuielem::AtomicExport(
-        g_isDerivedFromSlot, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-}
+// B3R RT-UI: `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0) and
+// `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390) are called directly.
+// NOTE for whoever reads a crash log: 0x1800c0390 is the function
+// standalone/main.cpp's crash handler recognises by the offset +0xC0390,
+// because retail calls it on a possibly-null child (see SetOffsets).
 
 // The static 17-argument overload the member GetAlignedPosition forwards to:
 //   ?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z
@@ -608,8 +548,7 @@ void AssignStringField(void*& field, char* incoming) {
         if (previous) {
             if (--RtSystem::StringRefCount(previous) == 0) {
                 field = previous - 8;
-                MemFreeFn freeFn = MemFreeAtomic();
-                if (freeFn) freeFn(field);
+                System::MemoryAllocator::MemFree(field);
             } else {
                 field = nullptr;
             }
@@ -753,8 +692,7 @@ void Element::ReleaseFields() {
     if (char* p = reinterpret_cast<char*>(_toolTipString)) {
         if (--RtSystem::StringRefCount(p) == 0) {
             _toolTipString = p - 8;
-            MemFreeFn freeFn = MemFreeAtomic();
-            if (freeFn) freeFn(_toolTipString);
+            System::MemoryAllocator::MemFree(_toolTipString);
         } else {
             _toolTipString = nullptr;
         }
@@ -762,8 +700,7 @@ void Element::ReleaseFields() {
     if (char* p = reinterpret_cast<char*>(_name)) {
         if (--RtSystem::StringRefCount(p) == 0) {
             _name = p - 8;
-            MemFreeFn freeFn = MemFreeAtomic();
-            if (freeFn) freeFn(_name);
+            System::MemoryAllocator::MemFree(_name);
         } else {
             _name = nullptr;
         }
@@ -777,21 +714,22 @@ void Element::ReleaseFields() {
 // read are documented at the door `RtUi_ContainerElement_SetOffsets` below).
 void ContainerElement::SetOffsets(int32_t x, int32_t y) {
 
-    IsDerivedFromFn isA = BaseIsDerivedFromFn();
-
     Element* child0 = _children.GetData()[0];
-    Element* clip = (isA && isA(child0, UI::ClipRegionElement::TypeId())) ? child0 : nullptr;
+    Element* clip = reinterpret_cast<const Object::Base*>(child0)          // B.3.x bridge
+                        ->IsDerivedFrom(UI::ClipRegionElement::TypeId()) ? child0 : nullptr;
     uint8_t* clipBytes = reinterpret_cast<uint8_t*>(clip);
     *reinterpret_cast<int32_t*>(clipBytes + 0xd0) = x;
     *reinterpret_cast<int32_t*>(clipBytes + 0xd4) = y;
 
     Element* child1 = _children.GetData()[1];
     Element* vscroll = nullptr;
-    if (child1 && isA && isA(child1, UI::ScrollElement::TypeId())) vscroll = child1;
+    if (child1 && reinterpret_cast<const Object::Base*>(child1)->IsDerivedFrom(UI::ScrollElement::TypeId()))
+        vscroll = child1;
 
     Element* child2 = _children.GetData()[2];
     Element* hscroll = nullptr;
-    if (child2 && isA && isA(child2, UI::ScrollElement::TypeId())) hscroll = child2;
+    if (child2 && reinterpret_cast<const Object::Base*>(child2)->IsDerivedFrom(UI::ScrollElement::TypeId()))
+        hscroll = child2;
 
     if (vscroll) {
         *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(vscroll) + 0x160) =
