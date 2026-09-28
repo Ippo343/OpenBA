@@ -82,9 +82,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/system/String.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
 
 namespace RtSystem { void RtString_SetLength(String* self, int len); }
 
@@ -93,20 +91,8 @@ namespace {
 // The allocator boundary. The open-coded
 // `EnterCriticalSection(*0x1801fc718 + 0x640) / Allocate / LeaveCriticalSection`
 // at 0x180029c8b..0x180029cba IS `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`
-// (0x1800c7a50) — lane Q proved that composition instruction for instruction and
-// message_callbacks.cpp:91 records it. RETRY a null rather than cache one.
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
-void MemFree(void* p) {   // the null test lives inside 0x1800c7ad0
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
+// (0x1800c7a50) -- lane Q proved that composition instruction for instruction.
+// B3R RT-IO: called by name, System::MemoryAllocator::MemAlloc / MemFree.
 
 // B3X W0: the three ReaderWriter calls below go by name; `ser->readerWriter`
 // is the rt::io POD view of the object.
@@ -540,7 +526,7 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
 
         // ---- WIDE: read UTF-16 units into a temporary and transcode --------
         const uint64_t bytes = static_cast<uint64_t>(len) * 2;     // ADD RBX,RBX
-        uint8_t* const tmp = static_cast<uint8_t*>(MemAlloc(bytes, 4));
+        uint8_t* const tmp = static_cast<uint8_t*>(::System::MemoryAllocator::MemAlloc(bytes, 4));
 
         Rw(ser->readerWriter)->SerializeUShortArray(
             static_cast<int32_t>(len),
@@ -582,7 +568,7 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
             }
         }
 
-        MemFree(tmp);                                              // 0x180029e14
+        ::System::MemoryAllocator::MemFree(tmp);                   // 0x180029e14
     }
 }
 

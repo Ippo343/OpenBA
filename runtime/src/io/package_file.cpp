@@ -316,18 +316,6 @@ constexpr size_t kPackageFileSize = 0xF0;
 // stores are `IO::PackageFile`'s real constructor (PackageFile.h), in the same
 // order, and the vptrs are the compiler's.
 
-// ---- oracle typedefs ------------------------------------------------------
-typedef void*    (*CtorFn)(void*);
-typedef void*    (*ConstructFn)(void*);
-typedef uint32_t (*U32ThisFn)(const void*);
-typedef int32_t  (*I32ThisFn)(const void*);
-typedef bool     (*BoolThisFn)(const void*);
-typedef const char* (*CStrThisFn)(const void*);
-typedef uint32_t (*U32ThisIntFn)(const void*, int);
-typedef String*  (*StrGetterFn)(const void*, String*);
-typedef uint32_t (*U32VoidFn)();
-typedef int32_t  (*I32ThisFilenameFn)(void*, const void*);
-
 // ENDGAME B.3.1 step 2: the shared "null the slot, AddRef if non-null" body the
 // three String getters used to hand-roll is exactly `System::String`'s copy
 // ctor (0x180006cb0, `Adopt` in string.cpp) -- null-then-AddRef, no freeing
@@ -405,40 +393,25 @@ extern "C" String* RtIo_PackageFile_GetDescription(const PackageFileView* self, 
 // ============================================================================
 // The scalar field reads. Each is one MOV; the offset IS the function.
 // ============================================================================
-// Each door delegates to the like-named member. The third macro argument used
-// to be the POD FIELD; it is the MEMBER NAME now, because the offset is spelled
-// once, in the member body, and nowhere else.
-#define RT_PKG2_SCALAR_GETTER(FN, SITE, MEMBER, TYPE, ORACLE_FN, MANGLED)      \
+// Each door delegates to the like-named member. The second macro argument is
+// the MEMBER NAME, because the offset is spelled once, in the member body, and
+// nowhere else. (B3R RT-IO: the three discarded arguments -- label, oracle
+// typedef, mangled name -- are gone.)
+#define RT_PKG2_SCALAR_GETTER(FN, MEMBER, TYPE)                                 \
     extern "C" TYPE FN(const PackageFileView* self) {                          \
         return static_cast<TYPE>(                                              \
             reinterpret_cast<const IO::PackageFile*>(self)                     \
                 ->IO::PackageFile::MEMBER());                                  \
     }
 
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetVersion, "IO::PackageFile::GetVersion",
-                      GetVersion, int32_t, I32ThisFn,
-                      "?GetVersion@PackageFile@IO@@QEBAHXZ")            // +0x68
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetUserVersion, "IO::PackageFile::GetUserVersion",
-                      GetUserVersion, int32_t, I32ThisFn,
-                      "?GetUserVersion@PackageFile@IO@@QEBAHXZ")        // +0x6C
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPlatform, "IO::PackageFile::GetPlatform",
-                      GetPlatform, int32_t, I32ThisFn,
-                      "?GetPlatform@PackageFile@IO@@QEBAHXZ")           // +0x74
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPriority, "IO::PackageFile::GetPriority",
-                      GetPriority, int32_t, I32ThisFn,
-                      "?GetPriority@PackageFile@IO@@QEBAHXZ")           // +0x70
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetFileCount, "IO::PackageFile::GetFileCount",
-                      GetFileCount, int32_t, I32ThisFn,
-                      "?GetFileCount@PackageFile@IO@@QEBAHXZ")          // +0xB8
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetCRC, "IO::PackageFile::GetCRC",
-                      GetCRC, uint32_t, U32ThisFn,
-                      "?GetCRC@PackageFile@IO@@QEBAIXZ")                // +0xA8
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconWidth, "IO::PackageFile::GetIconWidth",
-                      GetIconWidth, int32_t, I32ThisFn,
-                      "?GetIconWidth@PackageFile@IO@@QEBAHXZ")          // +0x78
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, "IO::PackageFile::GetIconHeight",
-                      GetIconHeight, int32_t, I32ThisFn,
-                      "?GetIconHeight@PackageFile@IO@@QEBAHXZ")         // +0x7C
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetVersion, GetVersion, int32_t)            // +0x68
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetUserVersion, GetUserVersion, int32_t)        // +0x6C
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPlatform, GetPlatform, int32_t)           // +0x74
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPriority, GetPriority, int32_t)           // +0x70
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetFileCount, GetFileCount, int32_t)          // +0xB8
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetCRC, GetCRC, uint32_t)                // +0xA8
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconWidth, GetIconWidth, int32_t)          // +0x78
+RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, GetIconHeight, int32_t)         // +0x7C
 
 #undef RT_PKG2_SCALAR_GETTER
 
