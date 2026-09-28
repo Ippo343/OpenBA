@@ -153,5 +153,4 @@ void* NaturalResourceDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) NaturalResourceDescription());
 }
 
-DEFINE_EXE_VTABLE(NaturalResourceDescription, "_ZTV26NaturalResourceDescription")
 DEFINE_EXE_TYPE(NaturalResourceDescription, "Description")

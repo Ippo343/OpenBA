@@ -87,5 +87,4 @@ void* CreateRoadDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreateRoadDescription());
 }
 
-DEFINE_EXE_VTABLE(CreateRoadDescription, "_ZTV21CreateRoadDescription")
 DEFINE_EXE_TYPE(CreateRoadDescription, "Description")

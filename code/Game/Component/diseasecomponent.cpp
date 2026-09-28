@@ -976,5 +976,4 @@ void* DiseaseComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DiseaseComponent());
 }
 
-DEFINE_EXE_VTABLE(DiseaseComponent, "_ZTV16DiseaseComponent")
 DEFINE_EXE_TYPE(DiseaseComponent, "Component")

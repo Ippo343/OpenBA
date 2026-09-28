@@ -59,5 +59,4 @@ void* QuarryComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) QuarryComponent());
 }
 
-DEFINE_EXE_VTABLE(QuarryComponent, "_ZTV15QuarryComponent")
 DEFINE_EXE_TYPE(QuarryComponent, "Component")

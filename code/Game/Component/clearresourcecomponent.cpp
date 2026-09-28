@@ -78,5 +78,4 @@ void ClearResourceComponent::Persist(void* stream) {
     { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
 }
 
-DEFINE_EXE_VTABLE(ClearResourceComponent, "_ZTV22ClearResourceComponent")
 DEFINE_EXE_TYPE(ClearResourceComponent, "ControllerComponent")

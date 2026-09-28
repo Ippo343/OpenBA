@@ -193,5 +193,4 @@ void MarketLocationComponent::OnRemove() {
     s_fn_ListEraseByValue((void*)(worldMgr + 0x10), &entityPtr);
 }
 
-DEFINE_EXE_VTABLE(MarketLocationComponent, "_ZTV23MarketLocationComponent")
 DEFINE_EXE_TYPE(MarketLocationComponent, "ControllerComponent")

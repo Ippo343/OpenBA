@@ -111,5 +111,4 @@ void* HerbalistDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HerbalistDescription());
 }
 
-DEFINE_EXE_VTABLE(HerbalistDescription, "_ZTV20HerbalistDescription")
 DEFINE_EXE_TYPE(HerbalistDescription, "Description")

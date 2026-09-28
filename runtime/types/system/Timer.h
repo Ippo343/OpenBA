@@ -123,11 +123,11 @@ public:
     // ---- the five statics (`0…A`: PRIVATE STATIC DATA in retail) ----------
     // ENDGAME B.3.9 SYS (B39_RULES D7): class statics, defined in timer.cpp
     // with retail's constant initialisers (Timer::Startup's two stores) or
-    // zero (the three PlatformStartup writes). RtSystemPortInit redirects the
-    // five minted rows onto them TOGETHER, so the name door, the address door
-    // and these members are the same bytes. Read every frame on the main
-    // thread and by the loader thread: plain statics, no lazy init, no lock.
-    // PUBLIC while foreign readers remain (they reach the doors today).
+    // zero (the three PlatformStartup writes). The five minted rows are
+    // RETIRED (ENDGAME B.3.9 close): every reader names these members; no
+    // name or address door is left. Read every frame on the main thread and
+    // by the loader thread: plain statics, no lazy init, no lock. PUBLIC
+    // because foreign readers (engine, graphics, UI, audio) read them directly.
     static int64_t _ticksPerSecond;         // ?_ticksPerSecond@Timer@System@@0_JA       0x1801fe720
     static double  _secondsPerTick;         // ?_secondsPerTick@Timer@System@@0NA        0x1801fe728
     static int64_t _systemTicksPerSecond;   // ?_systemTicksPerSecond@Timer@System@@0_JA 0x1801fe730

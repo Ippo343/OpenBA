@@ -656,5 +656,4 @@ void* DragPlacementTool::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DragPlacementTool());
 }
 
-DEFINE_EXE_VTABLE(DragPlacementTool, "_ZTV17DragPlacementTool")
 DEFINE_EXE_TYPE(DragPlacementTool, "DragTool")

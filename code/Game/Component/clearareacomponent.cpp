@@ -171,7 +171,6 @@ void ClearAreaComponent::Persist(void* stream) {
     scope.Serialize(*reinterpret_cast<int*>(&clearState), nullptr);
 }
 
-DEFINE_EXE_VTABLE(ClearAreaComponent, "_ZTV18ClearAreaComponent")
 DEFINE_EXE_TYPE(ClearAreaComponent, "ControllerComponent")
 
 // Harness probe: does this building entity carry a live ClearAreaComponent? Scans the

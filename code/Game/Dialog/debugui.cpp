@@ -1595,6 +1595,5 @@ void* DebugUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DebugUI());
 }
 
-DEFINE_EXE_VTABLE(DebugUI, "_ZTV7DebugUI")
 DEFINE_EXE_TYPE(DebugUI, "DialogController")
 

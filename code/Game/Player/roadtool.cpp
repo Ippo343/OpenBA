@@ -531,5 +531,4 @@ void* RoadTool::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RoadTool());
 }
 
-DEFINE_EXE_VTABLE(RoadTool, "_ZTV8RoadTool")
 DEFINE_EXE_TYPE(RoadTool, "DragTool")

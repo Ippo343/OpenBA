@@ -130,5 +130,4 @@ void* EventPopupDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) EventPopupDialog());
 }
 
-DEFINE_EXE_VTABLE(EventPopupDialog, "_ZTV16EventPopupDialog")
 DEFINE_EXE_TYPE(EventPopupDialog, "UI::DialogInstance")

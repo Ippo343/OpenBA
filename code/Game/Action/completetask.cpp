@@ -260,6 +260,5 @@ void* CompleteTask::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CompleteTask());
 }
 
-DEFINE_EXE_VTABLE(CompleteTask, "_ZTV12CompleteTask")
 
 DEFINE_EXE_TYPE(CompleteTask, "Action")

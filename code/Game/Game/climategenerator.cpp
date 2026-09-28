@@ -148,6 +148,5 @@ void* ClimateGenerator::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) ClimateGenerator());
 }
 
-DEFINE_EXE_VTABLE(ClimateGenerator, "_ZTV16ClimateGenerator")
 
 DEFINE_EXE_TYPE(ClimateGenerator, "Object::External")

@@ -961,7 +961,6 @@ void* HerbalistWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HerbalistWork());
 }
 
-DEFINE_EXE_VTABLE(HerbalistWork, "_ZTV13HerbalistWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

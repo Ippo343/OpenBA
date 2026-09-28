@@ -508,5 +508,4 @@ void CemeteryComponent::OnRemove() {
     }
 }
 
-DEFINE_EXE_VTABLE(CemeteryComponent, "_ZTV17CemeteryComponent")
 DEFINE_EXE_TYPE(CemeteryComponent, "ControllerComponent")

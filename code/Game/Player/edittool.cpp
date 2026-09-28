@@ -1003,5 +1003,4 @@ void* EditTool::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) EditTool());
 }
 
-DEFINE_EXE_VTABLE(EditTool, "_ZTV8EditTool")
 DEFINE_EXE_TYPE(EditTool, "Tool")

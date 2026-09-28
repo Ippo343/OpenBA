@@ -93,5 +93,4 @@ uintptr_t* FishingComponent::CreateWork(uintptr_t* out) { return FishingComponen
 // OnExitProducing and ProduceTick live in fishingcomponent_produce.cpp with the
 // coverage helpers they share.
 
-DEFINE_EXE_VTABLE(FishingComponent, "_ZTV16FishingComponent")
 DEFINE_EXE_TYPE(FishingComponent, "ResourceProduceComponent")

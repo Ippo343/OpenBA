@@ -151,5 +151,4 @@ void* PickingDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PickingDescription());
 }
 
-DEFINE_EXE_VTABLE(PickingDescription, "_ZTV18PickingDescription")
 DEFINE_EXE_TYPE(PickingDescription, "Description")

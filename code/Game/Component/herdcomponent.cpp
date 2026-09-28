@@ -1078,5 +1078,4 @@ void* HerdComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HerdComponent());
 }
 
-DEFINE_EXE_VTABLE(HerdComponent, "_ZTV13HerdComponent")
 DEFINE_EXE_TYPE(HerdComponent, "Component")

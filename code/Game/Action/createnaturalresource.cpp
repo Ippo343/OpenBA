@@ -366,6 +366,5 @@ void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreateNaturalResource());
 }
 
-DEFINE_EXE_VTABLE(CreateNaturalResource, "_ZTV21CreateNaturalResource")
 
 DEFINE_EXE_TYPE(CreateNaturalResource, "Action")

@@ -101,13 +101,11 @@ extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*)
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceFrequency(int64_t*);
 
 // ENDGAME B.3.9 SYS (B39_RULES D7): THE FIVE ARE CLASS STATICS NOW, and the
-// B.3.4b paragraph above is history. RtSystemPortInit (rt_system_port.cpp)
-// redirects the five minted rows onto these five definitions, together, before
-// the mint runs: from then on the name door, the address door (engine_funcs'
-// g_Timer_*, MainLoop.h's by-address reads) and `System::Timer::_x` are ONE
-// cell each, so there is nothing left to publish. The two constants are the
-// mint's `kInit` seeds byte for byte (1000000 and 1.0/1000000.0), which the
-// redirect checks.
+// B.3.4b paragraph above is history. SYS first redirected the five minted rows
+// onto these definitions; the B.3.9 close converted the last by-address readers
+// and RETIRED the rows (tools/rt_mint_retired/close.txt), so `System::Timer::_x`
+// is the only cell. The two constants are the retired rows' `kInit` seeds byte
+// for byte (1000000 and 1.0/1000000.0: retail Timer::Startup's two stores).
 
 // ?_ticksPerSecond@Timer@System@@0_JA   retail 0x1801fe720
 // ?_secondsPerTick@Timer@System@@0NA    retail 0x1801fe728

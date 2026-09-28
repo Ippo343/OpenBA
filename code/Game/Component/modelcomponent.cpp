@@ -524,5 +524,4 @@ void* ModelComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ModelComponent());
 }
 
-DEFINE_EXE_VTABLE(ModelComponent, "_ZTV14ModelComponent")
 DEFINE_EXE_TYPE(ModelComponent, "Component")

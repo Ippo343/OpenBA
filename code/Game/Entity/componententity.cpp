@@ -832,5 +832,4 @@ void* ComponentEntity::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ComponentEntity());
 }
 
-DEFINE_EXE_VTABLE(ComponentEntity, "_ZTV15ComponentEntity")
 DEFINE_EXE_TYPE(ComponentEntity, "Object::Internal")

@@ -6,6 +6,9 @@ runtime/ standalone/ engine/ code/Game/ dx11/ tests/unit/, plus the tool / build
 COORD_FILES), assigns each to exactly ONE owner by the rules below (first match wins) and prints
 the per-owner lists as markdown. --check only verifies: 0 unassigned, 0 assigned twice.
 The rules ARE the file map; B39_FILEMAP.md section 1 is this script's output pasted verbatim.
+
+HISTORICAL since the B.3.9 close: several COORD_FILES below (the cutover manifest, the tag file,
+the deleted mint paths) no longer exist; the script still runs, it just names them.
 """
 import subprocess, sys, re, collections, os
 

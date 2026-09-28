@@ -373,6 +373,5 @@ void* EventLogUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) EventLogUI());
 }
 
-DEFINE_EXE_VTABLE(EventLogUI, "_ZTV10EventLogUI")
 DEFINE_EXE_TYPE(EventLogUI, "UI::DialogController")
 

@@ -196,13 +196,12 @@ bool IsDerivedFromOrTrust(void* obj, uint32_t typeId) {
     return obj != nullptr;
 }
 
-bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName) {
-    if (typeId == 0 || typeId == 0xFFFFFFFF || !ancestorName || !*ancestorName)
+bool IsTypeDerivedFrom(uint32_t typeId, uint32_t ancestorId) {
+    if (typeId == 0 || typeId == 0xFFFFFFFF || ancestorId == 0 || ancestorId == 0xFFFFFFFF)
         return false;
     const Factory* factory = Factory::Get();
-    if (!factory || !factory->IsTypeValid(typeId)) return false;
-    const uint32_t ancestorId = factory->GetTypeIdFromName(ancestorName, /*existingOnly=*/true);
-    if (ancestorId == 0) return false;
+    if (!factory || !factory->IsTypeValid(typeId) || !factory->IsTypeValid(ancestorId))
+        return false;
     return factory->IsDerivedFrom(typeId, ancestorId);
 }
 

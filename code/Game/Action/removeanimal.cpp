@@ -257,6 +257,5 @@ void* RemoveAnimal::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RemoveAnimal());
 }
 
-DEFINE_EXE_VTABLE(RemoveAnimal, "_ZTV12RemoveAnimal")
 
 DEFINE_EXE_TYPE(RemoveAnimal, "Action")

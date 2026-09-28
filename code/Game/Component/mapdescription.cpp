@@ -103,5 +103,4 @@ void* MapDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MapDescription());
 }
 
-DEFINE_EXE_VTABLE(MapDescription, "_ZTV14MapDescription")
 DEFINE_EXE_TYPE(MapDescription, "Description")

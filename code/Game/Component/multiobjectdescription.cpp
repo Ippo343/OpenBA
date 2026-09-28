@@ -70,5 +70,4 @@ void* MultiObjectDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MultiObjectDescription());
 }
 
-DEFINE_EXE_VTABLE(MultiObjectDescription, "_ZTV22MultiObjectDescription")
 DEFINE_EXE_TYPE(MultiObjectDescription, "Description")

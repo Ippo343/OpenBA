@@ -356,5 +356,4 @@ void* ControlUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ControlUI());
 }
 
-DEFINE_EXE_VTABLE(ControlUI, "_ZTV9ControlUI")
 DEFINE_EXE_TYPE(ControlUI, "UI::DialogController")

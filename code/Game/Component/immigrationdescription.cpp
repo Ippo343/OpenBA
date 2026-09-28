@@ -143,5 +143,4 @@ void* ImmigrationDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ImmigrationDescription());
 }
 
-DEFINE_EXE_VTABLE(ImmigrationDescription, "_ZTV22ImmigrationDescription")
 DEFINE_EXE_TYPE(ImmigrationDescription, "Description")

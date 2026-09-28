@@ -526,7 +526,7 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
 
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         bool isController =
-            ::Object::IsTypeDerivedFromByName(tid, "ControllerComponent");
+            ::Object::IsTypeDerivedFrom(tid, ControllerComponent::TypeId());
         // Slots 16/17 exist only on ControllerComponent's table (18 slots); a plain
         // Component has 16 (B38_RULES §2.1). Retail's linker (the 0x14012b6a0 port above)
         // asks IsDerivedFrom first; this lazy copy called
@@ -781,5 +781,4 @@ void* StateMachineComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StateMachineComponent());
 }
 
-DEFINE_EXE_VTABLE(StateMachineComponent, "_ZTV21StateMachineComponent")
 DEFINE_EXE_TYPE(StateMachineComponent, "Component")

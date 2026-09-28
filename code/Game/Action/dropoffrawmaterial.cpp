@@ -356,6 +356,5 @@ void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DropOffRawMaterial());
 }
 
-DEFINE_EXE_VTABLE(DropOffRawMaterial, "_ZTV18DropOffRawMaterial")
 
 DEFINE_EXE_TYPE(DropOffRawMaterial, "Action")

@@ -607,5 +607,4 @@ void TradeComponent::Command(int /*command*/) {
     fflush(stderr);
 }
 
-DEFINE_EXE_VTABLE(TradeComponent, "_ZTV14TradeComponent")
 DEFINE_EXE_TYPE(TradeComponent, "ControllerComponent")

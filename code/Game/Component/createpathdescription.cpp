@@ -71,5 +71,4 @@ void* CreatePathDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreatePathDescription());
 }
 
-DEFINE_EXE_VTABLE(CreatePathDescription, "_ZTV21CreatePathDescription")
 DEFINE_EXE_TYPE(CreatePathDescription, "Description")

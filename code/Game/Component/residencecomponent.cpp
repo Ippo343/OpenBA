@@ -579,5 +579,4 @@ void ResidenceComponent::OnRemove() {
     ResidenceComponent_OnCreate(this);
 }
 
-DEFINE_EXE_VTABLE(ResidenceComponent, "_ZTV18ResidenceComponent")
 DEFINE_EXE_TYPE(ResidenceComponent, "ControllerComponent")

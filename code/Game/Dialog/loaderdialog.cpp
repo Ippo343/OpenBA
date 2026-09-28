@@ -81,7 +81,6 @@ void* LoaderDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) LoaderDialog());
 }
 
-DEFINE_EXE_VTABLE(LoaderDialog, "_ZTV12LoaderDialog")
 
 // Public entry called from SplashDLT::CreateDialog (standalone/splash_loop_stubs.cpp):
 // alloc, ctor, wrap the result in the caller's IBP.

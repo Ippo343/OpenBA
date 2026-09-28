@@ -282,5 +282,4 @@ void* FruitComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FruitComponent());
 }
 
-DEFINE_EXE_VTABLE(FruitComponent, "_ZTV14FruitComponent")
 DEFINE_EXE_TYPE(FruitComponent, "Component")

@@ -305,5 +305,4 @@ void* InteractComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) InteractComponent());
 }
 
-DEFINE_EXE_VTABLE(InteractComponent, "_ZTV17InteractComponent")
 DEFINE_EXE_TYPE(InteractComponent, "Component")

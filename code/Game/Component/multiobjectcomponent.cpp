@@ -325,5 +325,4 @@ void MultiObjectComponent::OnEvent(int eventId) {
     }
 }
 
-DEFINE_EXE_VTABLE(MultiObjectComponent, "_ZTV20MultiObjectComponent")
 DEFINE_EXE_TYPE(MultiObjectComponent, "ControllerComponent")

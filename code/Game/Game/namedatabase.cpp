@@ -162,6 +162,5 @@ void* NameDatabase::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) NameDatabase());
 }
 
-DEFINE_EXE_VTABLE(NameDatabase, "_ZTV12NameDatabase")
 
 DEFINE_EXE_TYPE_EXT(NameDatabase, "Object::External", "ndb")

@@ -132,7 +132,6 @@ void* Scenario::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) Scenario());
 }
 
-DEFINE_EXE_VTABLE(Scenario, "_ZTV8Scenario")
 
 // Parent string matches the original Scenario_RegisterType (0x14014cd10)
 // exactly, leading "::" included; Factory::Startup resolves the parent by

@@ -64,7 +64,6 @@ std::atomic<bool> s_frustumWarned{false};
 std::atomic<bool> s_itemDrawLogged{false};
 }  // namespace
 
-DEFINE_EXE_VTABLE(WorldGeometry, "_ZTV13WorldGeometry")
 
 // ============================================================
 // Slot +0x00 — destructor (B38 D9 #12)

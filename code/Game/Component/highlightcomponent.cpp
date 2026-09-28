@@ -128,5 +128,4 @@ void* HighlightComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HighlightComponent());
 }
 
-DEFINE_EXE_VTABLE(HighlightComponent, "_ZTV18HighlightComponent")
 DEFINE_EXE_TYPE(HighlightComponent, "Component")

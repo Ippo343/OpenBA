@@ -301,6 +301,5 @@ void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RemoveNaturalResource());
 }
 
-DEFINE_EXE_VTABLE(RemoveNaturalResource, "_ZTV21RemoveNaturalResource")
 
 DEFINE_EXE_TYPE(RemoveNaturalResource, "Action")

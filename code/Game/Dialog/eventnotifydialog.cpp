@@ -986,7 +986,6 @@ void* EventNotifyDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) EventNotifyDialog());
 }
 
-DEFINE_EXE_VTABLE(EventNotifyDialog, "_ZTV17EventNotifyDialog")
 DEFINE_EXE_TYPE(EventNotifyDialog, "UI::DialogInstance")
 
 // The ctor DOOR, reached by address: reg_code_lane2.cpp registers it at

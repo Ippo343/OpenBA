@@ -1275,7 +1275,6 @@ void* ConsumeProduce::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ConsumeProduce());
 }
 
-DEFINE_EXE_VTABLE(ConsumeProduce, "_ZTV14ConsumeProduce")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

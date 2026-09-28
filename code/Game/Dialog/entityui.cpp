@@ -844,7 +844,6 @@ void* EntityUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) EntityUI());
 }
 
-DEFINE_EXE_VTABLE(EntityUI, "_ZTV8EntityUI")
 DEFINE_EXE_TYPE(EntityUI, "UI::DialogController")
 
 // (original comment header retained below)

@@ -1,6 +1,9 @@
 # Conflict in runtime/src/object/deleting_dtor.cpp (DELETE-ONLY file): result = THEIRS (MERGE_HEAD) minus
 # every row / wrapper / registration OURS (HEAD) no longer has. Structural, never line-matching.
 import subprocess,re,sys
+# HISTORICAL since ENDGAME B.3.9 OBJ W3: deleting_dtor.cpp is deleted, so no merge can conflict in it.
+# mergegate.sh no longer calls this script (B.3.9 close); kept as the record of how the conflicts were resolved.
+sys.exit("resolve_deldtor.py is HISTORICAL: runtime/src/object/deleting_dtor.cpp no longer exists")
 P='runtime/src/object/deleting_dtor.cpp'
 def show(ref): return subprocess.run(['git','show',f'{ref}:{P}'],capture_output=True,check=True).stdout.decode('utf-8','surrogateescape')
 ours=show('HEAD'); theirs=show('MERGE_HEAD')

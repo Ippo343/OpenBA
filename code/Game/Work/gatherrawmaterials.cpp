@@ -990,7 +990,6 @@ void* GatherRawMaterials::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) GatherRawMaterials());
 }
 
-DEFINE_EXE_VTABLE(GatherRawMaterials, "_ZTV18GatherRawMaterials")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

@@ -267,5 +267,4 @@ void       ConsumeProduceComponent::Startup() {
 }
 uintptr_t* ConsumeProduceComponent::CreateWork(uintptr_t* out) { return ConsumeProduceComponent_CreateWork(this, out); }  // [18] 0x140118d00
 
-DEFINE_EXE_VTABLE(ConsumeProduceComponent, "_ZTV23ConsumeProduceComponent")
 DEFINE_EXE_TYPE(ConsumeProduceComponent, "ResourceProduceComponent")

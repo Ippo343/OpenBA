@@ -176,5 +176,4 @@ void* AbsorbResourceComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AbsorbResourceComponent());
 }
 
-DEFINE_EXE_VTABLE(AbsorbResourceComponent, "_ZTV23AbsorbResourceComponent")
 DEFINE_EXE_TYPE(AbsorbResourceComponent, "ControllerComponent")

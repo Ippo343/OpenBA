@@ -66,7 +66,6 @@ inline uint8_t SettingsByte(int off) {
 }
 }  // namespace
 
-DEFINE_EXE_VTABLE(WeatherParticleGeometry, "_ZTV23WeatherParticleGeometry")
 
 // ============================================================
 // Particle-array (re)alloc — port of FUN_140025090 (stride 0x24).

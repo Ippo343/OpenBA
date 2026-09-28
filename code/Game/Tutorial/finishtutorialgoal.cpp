@@ -93,5 +93,4 @@ void* FinishTutorialGoal::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) FinishTutorialGoal());
 }
 
-DEFINE_EXE_VTABLE(FinishTutorialGoal, "_ZTV18FinishTutorialGoal")
 DEFINE_EXE_TYPE(FinishTutorialGoal, "Achievement::Goal")

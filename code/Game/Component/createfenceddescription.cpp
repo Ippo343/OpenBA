@@ -112,5 +112,4 @@ void* CreateFencedDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreateFencedDescription());
 }
 
-DEFINE_EXE_VTABLE(CreateFencedDescription, "_ZTV23CreateFencedDescription")
 DEFINE_EXE_TYPE(CreateFencedDescription, "Description")

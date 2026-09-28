@@ -519,5 +519,4 @@ void* RemovalTool::CreateInPlaceObject(void* storage) {
 // reflected create, by its old name.
 extern "C" void* RemovalTool_Factory_SA(void) { return RemovalTool::CreateNewObject(); }
 
-DEFINE_EXE_VTABLE(RemovalTool, "_ZTV11RemovalTool")
 DEFINE_EXE_TYPE(RemovalTool, "DragTool")

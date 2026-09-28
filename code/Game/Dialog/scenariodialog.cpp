@@ -603,7 +603,6 @@ void* ScenarioDialog::CreateInPlaceObject(void* storage) {
 // The reflection record stays at the TU position of the UI_DIALOG_STUB row it
 // replaces (ui_dialog_stub_factories.cpp, B38 D4). Nothing reads 0x14015d2d0
 // back by address any more, so its registration (reg_nullsweep.cpp) is gone.
-DEFINE_EXE_VTABLE(ScenarioDialog, "_ZTV14ScenarioDialog")
 
 // The ctor DOOR, bound by name in engine_funcs.cpp (fn_ScenarioDialog_Ctor).
 void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,

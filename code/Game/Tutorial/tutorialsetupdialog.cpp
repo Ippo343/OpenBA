@@ -223,6 +223,5 @@ void* TutorialSetupDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialSetupDialog());
 }
 
-DEFINE_EXE_VTABLE(TutorialSetupDialog, "_ZTV19TutorialSetupDialog")
 // DEFINE_EXE_TYPE(TutorialSetupDialog, "TutorialSetup") stays where its
 // REGISTER_TYPE was — tutorial_dialog_vtables.cpp (B38_RULES B8-7).

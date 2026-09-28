@@ -204,6 +204,5 @@ void* StorageCapacityUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StorageCapacityUI());
 }
 
-DEFINE_EXE_VTABLE(StorageCapacityUI, "_ZTV17StorageCapacityUI")
 DEFINE_EXE_TYPE(StorageCapacityUI, "UI::DialogController")
 

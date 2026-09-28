@@ -167,7 +167,7 @@
 #include "../../types/graphics/AnimationGroup.h"
 #include "../../types/graphics/Particle.h"
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "../object/deleting_dtor_internal.h"   // rtcoll::MemAlloc
+#include "../../types/collection/Collection.h"   // rtcoll::MemAlloc
 
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
@@ -813,7 +813,7 @@ bool ParticleSystem::Serialize(void* streamv) {
     // 0x40a00000. Transcribed as a memcpy so the width and the bits both match.
     //
     // The allocation goes through `rtcoll::MemAlloc` (array.cpp's accessor,
-    // declared in deleting_dtor_internal.h), which IS retail's
+    // declared in types/collection/Collection.h), which IS retail's
     // Enter/Allocate(0x18, align 8)/Leave triple on the same singleton, rather
     // than re-opening address doors onto 0x1801fc718+0x640 / 0x18014b390 /
     // 0x1800c6e60 / 0x18014b388 that array.cpp already owns.

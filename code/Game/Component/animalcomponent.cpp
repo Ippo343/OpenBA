@@ -882,5 +882,4 @@ void* AnimalComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AnimalComponent());
 }
 
-DEFINE_EXE_VTABLE(AnimalComponent, "_ZTV15AnimalComponent")
 DEFINE_EXE_TYPE(AnimalComponent, "Component")

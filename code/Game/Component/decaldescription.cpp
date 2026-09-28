@@ -162,5 +162,4 @@ void* DecalDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DecalDescription());
 }
 
-DEFINE_EXE_VTABLE(DecalDescription, "_ZTV16DecalDescription")
 DEFINE_EXE_TYPE(DecalDescription, "Description")

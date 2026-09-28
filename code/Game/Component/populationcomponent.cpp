@@ -629,5 +629,4 @@ void* PopulationComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PopulationComponent());
 }
 
-DEFINE_EXE_VTABLE(PopulationComponent, "_ZTV19PopulationComponent")
 DEFINE_EXE_TYPE(PopulationComponent, "Component")

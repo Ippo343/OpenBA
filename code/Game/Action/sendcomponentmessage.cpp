@@ -292,6 +292,5 @@ void* SendComponentMessage::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) SendComponentMessage());
 }
 
-DEFINE_EXE_VTABLE(SendComponentMessage, "_ZTV20SendComponentMessage")
 
 DEFINE_EXE_TYPE(SendComponentMessage, "Action")

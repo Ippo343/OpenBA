@@ -539,5 +539,4 @@ void* MapComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MapComponent());
 }
 
-DEFINE_EXE_VTABLE(MapComponent, "_ZTV12MapComponent")
 DEFINE_EXE_TYPE(MapComponent, "Component")

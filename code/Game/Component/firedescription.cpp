@@ -107,5 +107,4 @@ void* FireDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FireDescription());
 }
 
-DEFINE_EXE_VTABLE(FireDescription, "_ZTV15FireDescription")
 DEFINE_EXE_TYPE(FireDescription, "Description")

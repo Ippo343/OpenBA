@@ -133,8 +133,8 @@ struct UpdateLoop;   // defined by lane A in runtime/types/engine/UpdateLoop.h
 // this namespace is an export (rt_export_addrs.inc, re-checked at the B.3.7
 // close) -- only the two device-slot OFFSETS below are not addresses at all.
 namespace MainLoopAddr {
-    constexpr uintptr_t Singleton           = 0x1801fe750;  // ord 4813 (DATA)
-
+    // (`Singleton` 0x1801fe750, ord 4813 DATA, is `Engine::MainLoop::_singleton`,
+    // the class static; its constant went with the mint row, ENDGAME B.3.9 close.)
     constexpr uintptr_t Ctor                = 0x1800dd6b0;  // ord 263
     constexpr uintptr_t Dtor                = 0x1800dd640;  // ord 627
     constexpr uintptr_t Run                 = 0x1800dd3c0;  // ord 3601
@@ -185,13 +185,12 @@ namespace MainLoopAddr {
 
     // Video::Device::SetVideoErrorFuncs(err, restart) — the name is the
     // profile build's (0x1800fd860); retail inlines it to two stores at
-    // Device +0x50 / +0x58.
-    constexpr uintptr_t VideoDeviceSingleton = 0x1801fe7a8;
+    // Device +0x50 / +0x58 of `Video::Device::_singleton` (the class static).
     constexpr uintptr_t DeviceErrorFuncSlot   = 0x50;
     constexpr uintptr_t DeviceRestartFuncSlot = 0x58;
 
-    // System::Timer statics the ctor's inlined SecondsToTicks reads.
-    constexpr uintptr_t SecondsPerTick        = 0x1801fe728;  // double
+    // Constants the ctor's inlined SecondsToTicks reads (the Timer static it
+    // also reads, `_secondsPerTick` 0x1801fe728, is `System::Timer`'s class static).
     constexpr uintptr_t OneOverSixty          = 0x1801616a8;  // (double)(1.0f/60.0f)
     constexpr uintptr_t OneOverFifteen        = 0x1801616b0;  // (double)(1.0f/15.0f)
 }
@@ -293,9 +292,8 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static MainLoop* Get();                                        // 0x180031570
     // ?_singleton@MainLoop@Engine@@1PEAV12@EA (0x1801fe750) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
-    // The namespace's *PortInit redirects the minted storage row onto it, so
-    // the name door, the address door and this member are the same bytes.
-    // PUBLIC while foreign readers still reach the row through the doors.
+    // Its minted storage row is RETIRED (ENDGAME B.3.9 close): no name or
+    // address door is left. PUBLIC: foreign readers name it directly.
     static MainLoop* _singleton;
     bool IsRunning(const UpdateLoop* loop) const;                  // 0x1800314b0
     System::Time GetDeltaTime() const;                             // 0x1800314f0  retslot

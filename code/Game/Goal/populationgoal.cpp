@@ -106,5 +106,4 @@ void* PopulationGoal::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) PopulationGoal());
 }
 
-DEFINE_EXE_VTABLE(PopulationGoal, "_ZTV14PopulationGoal")
 DEFINE_EXE_TYPE(PopulationGoal, "Achievement::Goal")

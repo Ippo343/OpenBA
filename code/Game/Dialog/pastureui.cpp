@@ -438,5 +438,4 @@ void* PastureUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PastureUI());
 }
 
-DEFINE_EXE_VTABLE(PastureUI, "_ZTV9PastureUI")
 DEFINE_EXE_TYPE(PastureUI, "SelectResourceUI")

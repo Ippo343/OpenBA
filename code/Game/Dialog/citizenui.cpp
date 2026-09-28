@@ -776,6 +776,5 @@ void* CitizenUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CitizenUI());
 }
 
-DEFINE_EXE_VTABLE(CitizenUI, "_ZTV9CitizenUI")
 DEFINE_EXE_TYPE(CitizenUI, "UI::DialogController")
 

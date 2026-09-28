@@ -194,5 +194,4 @@ void* TutorialImageInputKey::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialImageInputKey());
 }
 
-DEFINE_EXE_VTABLE(TutorialImageInputKey, "_ZTV21TutorialImageInputKey")
 DEFINE_EXE_TYPE(TutorialImageInputKey, "TutorialImage")

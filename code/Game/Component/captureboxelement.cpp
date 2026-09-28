@@ -91,5 +91,4 @@ void* CaptureBoxElement::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CaptureBoxElement());
 }
 
-DEFINE_EXE_VTABLE(CaptureBoxElement, "_ZTV17CaptureBoxElement")
 DEFINE_EXE_TYPE(CaptureBoxElement, "Element")

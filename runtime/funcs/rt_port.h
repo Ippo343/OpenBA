@@ -49,10 +49,8 @@ void  RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
 // port of it into the DLL — a port bypassing a port inside runtime/. See
 // tools/port_bypass_audit.py.
 void* ResolveExport(const char* mangled_name);
-// B.3.9 (D7): give a minted storage row a C++ home. Call from a *PortInit();
-// contract and seeding rule in standalone/rt_data_mint.h / rt_mint_redirect.h.
-// Byte-identical to the declaration in standalone/rt_data_mint.h.
-void  RtMintRedirectStorage(const char* symbol, void* cell);
+// (RtMintRedirectStorage, B.3.9 D7's storage redirect, is deleted: ENDGAME
+// B.3.9 close retired its last rows. A class static is simply the cell.)
 
 // ---- Resolve-and-cache that NEVER caches a null ----------------------------
 //

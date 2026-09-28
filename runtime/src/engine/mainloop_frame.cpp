@@ -245,6 +245,7 @@
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: _quitRequested
 #include "../../types/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
 #include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
+#include "../../types/system/Timer.h"              // ENDGAME B.3.9 close: Timer's class statics
 #include "mainloop_internal.h"
 #include <atomic>
 
@@ -283,12 +284,11 @@ using RtEngine::MainLoop;
 namespace rtmainloop {
 
 int64_t CurrentTimeTicksViaGlobals() {
-    static int64_t* initialTick = reinterpret_cast<int64_t*>(
-        ResolveAddr(Module::Runtime, 0x1801fe738));   // _systemInitialTick
-    static int64_t* ticksPerSec = reinterpret_cast<int64_t*>(
-        ResolveAddr(Module::Runtime, 0x1801fe720));   // _ticksPerSecond
-    static int64_t* sysTicksPerSec = reinterpret_cast<int64_t*>(
-        ResolveAddr(Module::Runtime, 0x1801fe730));   // _systemTicksPerSecond
+    // ENDGAME B.3.9 close (D7): the Timer class statics (retail 0x1801fe738 /
+    // 0x1801fe720 / 0x1801fe730), not three cached by-address doors.
+    const int64_t* initialTick    = &::System::Timer::_systemInitialTick;
+    const int64_t* ticksPerSec    = &::System::Timer::_ticksPerSecond;
+    const int64_t* sysTicksPerSec = &::System::Timer::_systemTicksPerSecond;
 
     int64_t now = 0;
     QueryPerformanceCounter(&now);
@@ -298,10 +298,10 @@ int64_t CurrentTimeTicksViaGlobals() {
     // has not run, which is an ordering defect upstream and must not be papered
     // over. The guard exists ONLY to turn a #DE into a message that names the
     // cause; it is not a fallback.
-    if (!initialTick || !ticksPerSec || !sysTicksPerSec || *sysTicksPerSec == 0) {
+    if (*sysTicksPerSec == 0) {
         printf("[RtMainLoop] FATAL: Timer globals not initialised "
                     "(_systemTicksPerSecond=%lld) -- PlatformStartup has not run\n",
-                    sysTicksPerSec ? (long long)*sysTicksPerSec : 0);
+                    (long long)*sysTicksPerSec);
         return 0;
     }
     return (now - *initialTick) * *ticksPerSec / *sysTicksPerSec;
@@ -330,10 +330,6 @@ static_assert(offsetof(Engine::Engine, _inputDevice) == 0x6e0, "Frame reads +0x6
 static_assert(offsetof(Engine::Engine, _audioDevice) == 0x6d0, "Frame reads +0x6d0");
 static_assert(offsetof(Engine::Engine, _application) == 0x690, "Frame reads +0x690");
 static_assert(offsetof(Application::Application, _quitRequested) == 0x28, "Frame tests +0x28");
-
-// System::Timer::_secondsPerTick (0x1801fe728, unexported address door), in a
-// namespace-scope atomic slot (B6-5) instead of a function-local static.
-std::atomic<void*> g_secondsPerTick{nullptr};
 
 // Video::Context — the four floats and the dirty bit Frame's tail writes.
 constexpr uint32_t kContextTimeVec4    = 0x3c8;
@@ -365,10 +361,8 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // our body is used rather than the DLL's.  NOT ported -> BY NAME where a
     // name exists, so the miss at cutover prints [RtUnresolved] and is counted
     // instead of being a silent null; BY ADDRESS only where there is no name.
-    const double* secondsPerTick = static_cast<const double*>(
-        rtengine::AtomicResolve(g_secondsPerTick, [] {
-            return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe728));
-        }));
+    // ENDGAME B.3.9 close (D7): Timer::_secondsPerTick is the class static.
+    const double* secondsPerTick = &::System::Timer::_secondsPerTick;
 
     // --- 0x1800dd119..0x1800dd14a : advance the accumulator -----------------
     const int64_t now = rtmainloop::CurrentTimeTicksViaGlobals();

@@ -27,13 +27,6 @@
 // registered below; only the vtable address 0x14015f5a0 stays unregistered (see the
 // RESOLVED note).
 extern "C" void* ToolUI_OpenToolDialog_ff9e0(void*, void*, uint64_t);  // 0x1400ff9e0
-extern "C" uintptr_t ToolUI_ChildDialogVtable();   // the compiler's UI::DialogInstance table (B.3.8 CB4)
-
-// engine_funcs global (engine_funcs.h:1464). Declared here to avoid pulling the full
-// engine_funcs.h into this lightweight registration TU. Set directly (not via the
-// address registry) so the ToolbarDialog path has a valid child vtable without
-// poisoning the menu's separate g_MainMenuDialog_BuildIdVtable global.
-extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 
 // ============================================================================
 // RESOLVED (the "non-address-registration way to give ONLY the tool dialog this
@@ -57,10 +50,8 @@ extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 // DialogInstance vtable -> no crash) while the placement/drag tool dialogs work via
 // the static array.
 //
-// We DO populate the engine_funcs global g_ToolUI_ChildDialog_Vtable here (direct
-// assignment, NOT via the address registry) so the future ToolbarDialog path has a
-// valid vtable. This global is SEPARATE from g_MainMenuDialog_BuildIdVtable, so
-// setting it does not affect the menu.
+// (The engine_funcs global g_ToolUI_ChildDialog_Vtable this function used to fill
+// by direct assignment is deleted, ENDGAME B.3.9 close: it had no reader.)
 //
 // The gap metric will continue to count 0x14015f5a0 as unregistered. That is correct
 // and intentional: it is a shared MENU vtable we specifically do not want the
@@ -70,11 +61,4 @@ void RegisterPlayerToolUIBatch() {
     // Register ONLY the OpenToolDialog helper. dragtool.cpp / placementtool.cpp resolve
     // g_fn_OpenToolDialog = ResolveAddr(Exe, 0x1400ff9e0) -> this reimpl.
     RegisterExeAddr(0x1400ff9e0, reinterpret_cast<uintptr_t>(&ToolUI_OpenToolDialog_ff9e0));
-
-    // Give the (gated-off) ToolbarDialog path a valid child vtable WITHOUT registering
-    // 0x14015f5a0 in the address registry (which would poison the menu). Direct global
-    // assignment — separate from g_MainMenuDialog_BuildIdVtable.
-    // ENDGAME B.3.8 CB4: the compiler's UI::DialogInstance table (the slot-copy
-    // array g_ToolUI_ChildDialog_Vtable_Standalone is gone).
-    g_ToolUI_ChildDialog_Vtable = ToolUI_ChildDialogVtable();
 }

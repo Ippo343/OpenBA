@@ -115,5 +115,4 @@ void* TutorialSetupCamera::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialSetupCamera());
 }
 
-DEFINE_EXE_VTABLE(TutorialSetupCamera, "_ZTV19TutorialSetupCamera")
 DEFINE_EXE_TYPE(TutorialSetupCamera, "TutorialSetup")

@@ -68,5 +68,4 @@ void* StorageDisplayDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StorageDisplayDescription());
 }
 
-DEFINE_EXE_VTABLE(StorageDisplayDescription, "_ZTV25StorageDisplayDescription")
 DEFINE_EXE_TYPE(StorageDisplayDescription, "Description")

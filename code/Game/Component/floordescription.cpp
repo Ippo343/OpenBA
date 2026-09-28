@@ -88,5 +88,4 @@ void* FloorDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FloorDescription());
 }
 
-DEFINE_EXE_VTABLE(FloorDescription, "_ZTV16FloorDescription")
 DEFINE_EXE_TYPE(FloorDescription, "Description")

@@ -39,8 +39,6 @@ public:
     // also reached by address through the Reimpl_GeometryChunkUpdate door).
     void RebuildDirtyChunks();
 
-    // The table's compiler address (DEFINE_EXE_VTABLE's shape; unreflected).
-    static const void* Vtable();
 
 protected:
     ~WorldGeometry();                                                 // body 0x1400aed50

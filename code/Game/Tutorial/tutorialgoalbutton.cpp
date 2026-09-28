@@ -147,5 +147,4 @@ void* TutorialGoalButton::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialGoalButton());
 }
 
-DEFINE_EXE_VTABLE(TutorialGoalButton, "_ZTV18TutorialGoalButton")
 DEFINE_EXE_TYPE(TutorialGoalButton, "TutorialGoal")

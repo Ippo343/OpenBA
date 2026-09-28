@@ -222,7 +222,6 @@ void* AutoSaveDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) AutoSaveDialog());
 }
 
-DEFINE_EXE_VTABLE(AutoSaveDialog, "_ZTV14AutoSaveDialog")
 DEFINE_EXE_TYPE(AutoSaveDialog, "UI::DialogInstance")
 
 // The ctor DOOR, reached by address: reg_code_lane2.cpp registers it at

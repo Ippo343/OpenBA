@@ -125,7 +125,6 @@ void* TutorialGoalDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialGoalDialog());
 }
 
-DEFINE_EXE_VTABLE(TutorialGoalDialog, "_ZTV18TutorialGoalDialog")
 // DEFINE_EXE_TYPE(TutorialGoalDialog, "TutorialGoal") stays where its
 // REGISTER_TYPE was — tutorial_dialog_vtables.cpp — so the registration order
 // is unchanged (B38_RULES B8-7).

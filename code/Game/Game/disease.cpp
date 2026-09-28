@@ -100,6 +100,5 @@ void* Disease::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) Disease());
 }
 
-DEFINE_EXE_VTABLE(Disease, "_ZTV7Disease")
 
 DEFINE_EXE_TYPE(Disease, "Object::External")

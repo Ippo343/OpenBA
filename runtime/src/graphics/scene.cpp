@@ -163,23 +163,8 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-// ============================================================================
-// Mangled names for the diff-oracle calls. The registrations at the bottom of
-// this file deliberately repeat each name as its own literal instead of using
-// these constants: tools/runtime_census.py cannot see through a NAMED CONSTANT
-// and would under-count the lane, which is how Wave 3's Object count stood at
-// 21/41 when it was really 27/41
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-const char* const kGeoClean     = "?Clean@Geometry@Graphics@@UEAA_NXZ";
-const char* const kGeoGetSub    = "?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z";
-const char* const kGeoGetXform  = "?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ";
-const char* const kGeoGetInst   = "?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z";
-const char* const kGeoSetShared = "?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z";
-const char* const kGeoSetBounds = "?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z";
-const char* const kGeoSetXform  = "?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z";
-const char* const kSceneCtor    = "??0Scene@Graphics@@QEAA@XZ";
-const char* const kSceneDtor    = "??1Scene@Graphics@@QEAA@XZ";
+// (The nine mangled-name constants of the retired diff-oracle calls -- kGeoClean
+// ... kSceneDtor -- had no reader and are deleted, ENDGAME B.3.9 close.)
 
 // ============================================================================
 // The float constants retail loads from .rdata, verified by reading the BYTES

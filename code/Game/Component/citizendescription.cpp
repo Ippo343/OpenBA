@@ -257,5 +257,4 @@ void* CitizenDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CitizenDescription());
 }
 
-DEFINE_EXE_VTABLE(CitizenDescription, "_ZTV18CitizenDescription")
 DEFINE_EXE_TYPE(CitizenDescription, "Description")

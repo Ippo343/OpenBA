@@ -213,5 +213,4 @@ void* UIDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) UIDescription());
 }
 
-DEFINE_EXE_VTABLE(UIDescription, "_ZTV13UIDescription")
 DEFINE_EXE_TYPE(UIDescription, "Description")

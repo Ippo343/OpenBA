@@ -223,9 +223,6 @@ struct Xa2BufferWma {       // XAUDIO2_BUFFER_WMA
 static_assert(offsetof(Xa2BufferWma, packetCount) == 0x08,
               "XAUDIO2_BUFFER_WMA::PacketCount @ +0x08");
 
-using VoidThisFn  = void  (*)(void*);
-using CtorFn      = void* (*)(void*);
-using OpenFn      = bool  (*)(void*, const System::Filename*);
 using ReadFileFn  = bool  (*)(void*, FileInfo*, int, void*);
 using CloseFileFn = void  (*)(void*, FileInfo*);
 using GetStateFn  = void  (*)(void* voice, Xa2VoiceState* out);

@@ -74,5 +74,4 @@ void* ZoneDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ZoneDescription());
 }
 
-DEFINE_EXE_VTABLE(ZoneDescription, "_ZTV15ZoneDescription")
 DEFINE_EXE_TYPE(ZoneDescription, "Description")

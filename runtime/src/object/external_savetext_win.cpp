@@ -127,8 +127,6 @@ namespace {
 // name; reference_aeaa_is_private_not_unexported.md).
 // ---------------------------------------------------------------------------
 
-// `?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z` (0x1800aa8f0).
-using FsCreateFn = bool (*)(RtIo::TextFileStream* self, const Filename* path);
 
 // `?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z` (0x1800accc0).
 using CloseFileFn = void (*)(RtIO::FileSystem* self, RtIO::FileInfo* fi);

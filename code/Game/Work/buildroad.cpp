@@ -519,7 +519,6 @@ void* BuildRoad::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BuildRoad());
 }
 
-DEFINE_EXE_VTABLE(BuildRoad, "_ZTV9BuildRoad")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

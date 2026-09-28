@@ -97,5 +97,4 @@ void* DiseaseDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DiseaseDescription());
 }
 
-DEFINE_EXE_VTABLE(DiseaseDescription, "_ZTV18DiseaseDescription")
 DEFINE_EXE_TYPE(DiseaseDescription, "Description")

@@ -461,5 +461,4 @@ void* RawMaterialComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RawMaterialComponent());
 }
 
-DEFINE_EXE_VTABLE(RawMaterialComponent, "_ZTV20RawMaterialComponent")
 DEFINE_EXE_TYPE(RawMaterialComponent, "Component")

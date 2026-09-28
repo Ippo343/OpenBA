@@ -307,5 +307,4 @@ void* FinishTutorialInstance::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) FinishTutorialInstance());
 }
 
-DEFINE_EXE_VTABLE(FinishTutorialInstance, "_ZTV22FinishTutorialInstance")
 DEFINE_EXE_TYPE(FinishTutorialInstance, "Achievement::GoalInstance")

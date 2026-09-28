@@ -995,7 +995,6 @@ void* MainMenuDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) MainMenuDialog());
 }
 
-DEFINE_EXE_VTABLE(MainMenuDialog, "_ZTV14MainMenuDialog")
 
 // Public entry called from MenuDLT::CreateDialog (standalone/menudialogloopt_stubs.cpp).
 // The loop's dialog resource (+0x30) is always loaded by then; a loop without one

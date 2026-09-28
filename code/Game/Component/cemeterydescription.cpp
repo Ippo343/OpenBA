@@ -79,5 +79,4 @@ void* CemeteryDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CemeteryDescription());
 }
 
-DEFINE_EXE_VTABLE(CemeteryDescription, "_ZTV19CemeteryDescription")
 DEFINE_EXE_TYPE(CemeteryDescription, "Description")

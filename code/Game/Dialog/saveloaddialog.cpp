@@ -1259,7 +1259,6 @@ void* SaveLoadDialog::CreateInPlaceObject(void* storage) {
 
 // The reflection record stays at the TU position of the UI_DIALOG_STUB row it
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
-DEFINE_EXE_VTABLE(SaveLoadDialog, "_ZTV14SaveLoadDialog")
 
 // The ctor DOOR, reached by address: fn_SaveLoadDialog_Ctor (engine_funcs.cpp)
 // resolves 0x1400b8270. Retail's ctor caller path lands in OnOpened via the UI

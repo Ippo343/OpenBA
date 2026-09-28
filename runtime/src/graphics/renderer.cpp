@@ -71,6 +71,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
 #include "../collection/array_internal.h"
 
 using RtGraphics::Camera;
@@ -252,9 +253,8 @@ void RtArraySetSizeTexturePairs(MaterialInstance* self, uint32_t newSize,
 // folding it would bake the DX11 backend into a Runtime file that PLAN §4.1
 // decision 1 wants portable to a second backend.
 bool RtVideoDeviceUsesZeroToOneDepth() {
-    static void** singletonSlot =
-        reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
-    void* device = *singletonSlot;
+    // ENDGAME B.3.9 close (D7): the class static, read fresh (no cached door).
+    void* device = ::Video::Device::_singleton;
     void* iface = *reinterpret_cast<void**>(static_cast<char*>(device) + 0x100);
     void** vtable = *reinterpret_cast<void***>(iface);
     using Fn = bool (*)(void*);

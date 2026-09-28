@@ -396,6 +396,5 @@ void* PerformWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PerformWork());
 }
 
-DEFINE_EXE_VTABLE(PerformWork, "_ZTV11PerformWork")
 
 DEFINE_EXE_TYPE(PerformWork, "Action")

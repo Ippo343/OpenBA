@@ -639,5 +639,4 @@ void* TutorialGoalCount::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialGoalCount());
 }
 
-DEFINE_EXE_VTABLE(TutorialGoalCount, "_ZTV17TutorialGoalCount")
 DEFINE_EXE_TYPE(TutorialGoalCount, "TutorialGoal")

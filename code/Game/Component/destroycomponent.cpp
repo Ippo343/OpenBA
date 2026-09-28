@@ -110,5 +110,4 @@ void DestroyComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/,
     if (message == 0) ++field54;
 }
 
-DEFINE_EXE_VTABLE(DestroyComponent, "_ZTV16DestroyComponent")
 DEFINE_EXE_TYPE(DestroyComponent, "ControllerComponent")

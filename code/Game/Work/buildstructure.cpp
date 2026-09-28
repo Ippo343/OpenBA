@@ -819,7 +819,6 @@ void* BuildStructure::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BuildStructure());
 }
 
-DEFINE_EXE_VTABLE(BuildStructure, "_ZTV14BuildStructure")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

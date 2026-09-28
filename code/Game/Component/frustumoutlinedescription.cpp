@@ -174,5 +174,4 @@ void* FrustumOutlineDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FrustumOutlineDescription());
 }
 
-DEFINE_EXE_VTABLE(FrustumOutlineDescription, "_ZTV25FrustumOutlineDescription")
 DEFINE_EXE_TYPE(FrustumOutlineDescription, "ElementDescription")

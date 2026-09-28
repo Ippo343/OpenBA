@@ -132,40 +132,12 @@ endef
 $(foreach src,$(UNIT_SRCS),$(eval $(call UNIT_OBJ_RULE,$(src))))
 -include $(UNIT_OBJECTS:.o=.d)
 
-# WAVE 26 LANE ATTEND: gate the build on standalone/cutover_manifest.inc, which
-# is a GENERATED file that nothing regenerated.
-#
-# It shipped FOURTEEN REQUIRED ROWS SHORT -- every one of Wave 25 lane DATA's --
-# through cutover attempt 26 and into Wave 26. `tools/cutover_manifest.py
-# --check` existed the whole time, answers in a second, and says STALE; the
-# integrator queue even carried a written instruction to re-derive rather than
-# trust the numbers. None of that fired, because a detector only helps someone
-# who runs it, and the staleness was MASKED: the blanket mint switch of the day
-# published the 14 missing rows anyway, so cutover attempt 26 booted deep
-# and `published 44, withheld 1` READ AS CONFIRMATION. The number matched its
-# prediction BECAUSE it was stale -- 44 was the pre-DATA count.
-#
-# So the fix is not another detector, it is wiring the existing one to something
-# that runs by itself. `--gate` (not `--check`) is used deliberately: `--check`
-# is content-exact and part of that content is a tree-wide by-name DOOR COUNT,
-# so any lane adding one ResolveExport() makes it "stale" (measured: merging
-# lane FACTORY moved two counts by one, with every row and disposition
-# identical). A gate that fails a six-lane wave over a cosmetic count is a gate
-# that gets commented out. `--gate` fails on the ROW SET, the DISPOSITIONS,
-# an unminted REQUIRED row and an undeclared scope -- the fields the process
-# acts on -- and only WARNs on a moved count.
-#
-# Its three positive controls, and they must be re-run if it is touched
-# (a screen looking for the ABSENCE of a shape must be handed one):
-#   delete a REQUIRED row from the .inc  -> GATE FAIL  (this is the Wave 25 defect)
-#   flip one row's disposition           -> GATE FAIL
-#   change only a door count             -> GATE WARN, exit 0
-.PHONY: check-cutover-manifest
-check-cutover-manifest:
-	@$(PYTHON) tools/cutover_manifest.py --gate
+# (check-cutover-manifest, the Wave 26 gate on standalone/cutover_manifest.inc,
+# is deleted: ENDGAME B.3.9 close retired the manifest with its last rows --
+# the mint registers its two remaining storage rows unconditionally.)
 
 standalone: SA_CXXFLAGS += -O3 -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL_RELEASE) $(STRIP_LOGS_FLAGS)
-standalone: check-log-strip check-cutover-manifest $(SA_TARGET)
+standalone: check-log-strip $(SA_TARGET)
 
 # WAVE 25 INTEGRATION: standalone-debug now runs check-log-strip too.
 #
@@ -185,7 +157,7 @@ standalone: check-log-strip check-cutover-manifest $(SA_TARGET)
 # The guard is a fast source scan, so the cost here is negligible and it now
 # fails in the lane that wrote the line rather than in the wave that needs it.
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
-standalone-debug: check-log-strip check-cutover-manifest $(SA_TARGET)
+standalone-debug: check-log-strip $(SA_TARGET)
 
 # Fast-debug build: -Og with EVERYTHING else identical to standalone-debug —
 # logs kept (no STRIP_LOGS), _DEBUG on, CheckPtr left real. Own object dir so a
@@ -222,7 +194,7 @@ PERF_EXTRA ?=
 # default-on (standalone/perf_experimental.h); =0 leaves them compiled but default-off.
 # Runtime kill-switch either way: BANISHED_PERF_EXPERIMENTAL=0.
 PERF_EXPERIMENTAL ?= 1
-standalone-perf: check-log-strip check-cutover-manifest
+standalone-perf: check-log-strip
 standalone-perf:
 	$(MAKE) SA_BUILD_DIR=$(SA_PERF_DIR) \
 	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL) $(STRIP_LOGS_FLAGS) $(PERF_EXTRA)" \

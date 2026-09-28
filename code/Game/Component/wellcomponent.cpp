@@ -464,5 +464,4 @@ void* WellComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) WellComponent());
 }
 
-DEFINE_EXE_VTABLE(WellComponent, "_ZTV13WellComponent")
 DEFINE_EXE_TYPE(WellComponent, "ControllerComponent")

@@ -76,5 +76,4 @@ void* PastureDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PastureDescription());
 }
 
-DEFINE_EXE_VTABLE(PastureDescription, "_ZTV18PastureDescription")
 DEFINE_EXE_TYPE(PastureDescription, "Description")

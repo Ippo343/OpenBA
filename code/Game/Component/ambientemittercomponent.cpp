@@ -348,5 +348,4 @@ void* AmbientEmitterComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AmbientEmitterComponent());
 }
 
-DEFINE_EXE_VTABLE(AmbientEmitterComponent, "_ZTV23AmbientEmitterComponent")
 DEFINE_EXE_TYPE(AmbientEmitterComponent, "Component")

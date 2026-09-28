@@ -1,0 +1,19 @@
+# ENDGAME B.3 step 9 -- the rows the CLOSE owner retired (B39_RULES.md D3 / D7), branch b39-close.
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA   CLOSE   class static Object::BaseTypeInfo::_firstTypeInfo (DEFINE_TYPE records head-insert at CRT init); the mint's chain splice, its redirect call in RtDataMintInit and its KNOWN_CTORS entry deleted; RunFactorySelfTest walks the class static since RF
+
+# Proof for the storage rows below: the by-address readers the SS1 sweep missed (renderer.cpp,
+# spritecontext_flush.cpp, mainloop_frame.cpp x4, wave27_lane_gfxbig.cpp) read the class statics
+# now; the MainLoopAddr constants are deleted; the last reader of each row was its owner's
+# RtMintRedirectStorage call, deleted with this line. Timer's five go TOGETHER with their two
+# EXTRA_INIT seeds (the class statics' constant initialisers are the same bytes).
+
+?_singleton@MainLoop@Engine@@1PEAV12@EA        CLOSE   class static Engine::MainLoop::_singleton; MainLoopAddr::Singleton + the rt_engine_port.cpp redirect deleted
+?_singleton@Device@Video@@0PEAV12@EA           CLOSE   class static Video::Device::_singleton; renderer.cpp / spritecontext_flush.cpp doors, MainLoopAddr::VideoDeviceSingleton + the rt_video_port.cpp redirect deleted
+?_ticksPerSecond@Timer@System@@0_JA            CLOSE   class static System::Timer::_ticksPerSecond; mainloop_frame.cpp door + redirect + EXTRA_INIT seed deleted
+?_secondsPerTick@Timer@System@@0NA             CLOSE   class static System::Timer::_secondsPerTick; mainloop_frame.cpp / wave27_lane_gfxbig.cpp doors, MainLoopAddr::SecondsPerTick + redirect + EXTRA_INIT seed deleted
+?_systemTicksPerSecond@Timer@System@@0_JA      CLOSE   class static System::Timer::_systemTicksPerSecond; mainloop_frame.cpp door + redirect deleted
+?_systemInitialTick@Timer@System@@0_JA         CLOSE   class static System::Timer::_systemInitialTick; mainloop_frame.cpp door + redirect deleted
+?_systemSecondsPerTick@Timer@System@@0NA       CLOSE   class static System::Timer::_systemSecondsPerTick; its last reader was the redirect, deleted

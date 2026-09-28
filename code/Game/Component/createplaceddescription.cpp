@@ -197,5 +197,4 @@ void* CreatePlacedDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreatePlacedDescription());
 }
 
-DEFINE_EXE_VTABLE(CreatePlacedDescription, "_ZTV23CreatePlacedDescription")
 DEFINE_EXE_TYPE(CreatePlacedDescription, "Description")

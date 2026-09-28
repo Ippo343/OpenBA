@@ -32,7 +32,6 @@ public:
     void AddDrawItems(const Graphics::Scene& scene,
                       Graphics::Renderer& renderer) const override;   // [3] 0x1400d30b0
 
-    static const void* Vtable();
 
 protected:
     ~WeatherParticleGeometry();                                       // body 0x1400d3c10

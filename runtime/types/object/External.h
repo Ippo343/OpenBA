@@ -728,7 +728,7 @@ protected:
     ~CompiledExternal();     // 0x1800bb980
 };
 static_assert(sizeof(CompiledExternal) == 0x20,
-              "RT_DELDTOR(0x18000b7e0, 0x1800bb980, 0x020, \"Object::CompiledExternal\")");
+              "Object::CompiledExternal is 0x20 bytes -- the element size of its deleting dtor 0x18000b7e0");
 
 // ============================================================
 // Object::ExternalList — an External whose payload is an array of External*.
@@ -814,7 +814,7 @@ public:
     int32_t    _pad2c;      // +0x2c — NOT PINNED; probably Array<T>::_capacity
 };
 static_assert(sizeof(ExternalList) == 0x30,
-              "RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, \"Object::ExternalList\")");
+              "Object::ExternalList is 0x30 bytes -- the element size of its deleting dtor 0x180007800");
 static_assert(offsetof(ExternalList, _resources) == offsetof(RtObject::ExternalList, _resources), "alias _resources");
 static_assert(offsetof(ExternalList, _count)     == offsetof(RtObject::ExternalList, _count),     "alias _count");
 static_assert(offsetof(ExternalList, _resources) == 0x20, "ExternalList::_resources @ +0x20");

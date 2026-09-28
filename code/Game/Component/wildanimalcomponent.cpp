@@ -226,5 +226,4 @@ void* WildAnimalComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) WildAnimalComponent());
 }
 
-DEFINE_EXE_VTABLE(WildAnimalComponent, "_ZTV19WildAnimalComponent")
 DEFINE_EXE_TYPE(WildAnimalComponent, "Component")

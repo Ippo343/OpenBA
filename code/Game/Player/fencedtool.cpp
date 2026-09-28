@@ -939,5 +939,4 @@ void* FencedTool::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FencedTool());
 }
 
-DEFINE_EXE_VTABLE(FencedTool, "_ZTV10FencedTool")
 DEFINE_EXE_TYPE(FencedTool, "DragTool")

@@ -465,7 +465,6 @@ void* StorageComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StorageComponent());
 }
 
-DEFINE_EXE_VTABLE(StorageComponent, "_ZTV16StorageComponent")
 DEFINE_EXE_TYPE(StorageComponent, "Component")
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.

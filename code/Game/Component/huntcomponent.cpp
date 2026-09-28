@@ -190,5 +190,4 @@ void* HuntComponent::CreateInPlaceObject(void* storage) {
 
 uintptr_t* HuntComponent::CreateWork(uintptr_t* out) { return HuntComponent_CreateWork(this, out); }  // [18] 0x1401226a0
 
-DEFINE_EXE_VTABLE(HuntComponent, "_ZTV13HuntComponent")
 DEFINE_EXE_TYPE(HuntComponent, "ResourceProduceComponent")

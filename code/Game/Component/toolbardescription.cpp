@@ -241,5 +241,4 @@ extern "C" void RegisterToolbarDescriptionStringArrayResize() {
     RegisterExeAddr(0x140028860, reinterpret_cast<uintptr_t>(&ToolbarDescription_StringArrayResize));
 }
 
-DEFINE_EXE_VTABLE(ToolbarDescription, "_ZTV18ToolbarDescription")
 DEFINE_EXE_TYPE(ToolbarDescription, "Description")

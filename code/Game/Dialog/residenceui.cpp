@@ -614,7 +614,6 @@ void* ResidenceUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ResidenceUI());
 }
 
-DEFINE_EXE_VTABLE(ResidenceUI, "_ZTV11ResidenceUI")
 DEFINE_EXE_TYPE(ResidenceUI, "UI::DialogController")
 
 // ============================================================

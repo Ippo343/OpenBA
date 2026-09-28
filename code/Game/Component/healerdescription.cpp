@@ -67,5 +67,4 @@ void* HealerDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HealerDescription());
 }
 
-DEFINE_EXE_VTABLE(HealerDescription, "_ZTV17HealerDescription")
 DEFINE_EXE_TYPE(HealerDescription, "Description")

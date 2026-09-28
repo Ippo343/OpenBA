@@ -543,5 +543,4 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
     }
 }
 
-DEFINE_EXE_VTABLE(CropFieldComponent, "_ZTV18CropFieldComponent")
 DEFINE_EXE_TYPE(CropFieldComponent, "ControllerComponent")

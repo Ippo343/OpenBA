@@ -121,5 +121,4 @@ void* CaptureBoxDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CaptureBoxDescription());
 }
 
-DEFINE_EXE_VTABLE(CaptureBoxDescription, "_ZTV21CaptureBoxDescription")
 DEFINE_EXE_TYPE(CaptureBoxDescription, "ElementDescription")

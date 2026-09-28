@@ -74,5 +74,4 @@ void MarketComponent::Persist(void* stream) {
 
 // [18] 0x14004ea40 MarketComponent::CreateWork lives in resourceproduce_creatework.cpp.
 
-DEFINE_EXE_VTABLE(MarketComponent, "_ZTV15MarketComponent")
 DEFINE_EXE_TYPE(MarketComponent, "ResourceProduceComponent")

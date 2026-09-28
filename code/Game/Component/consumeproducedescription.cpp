@@ -188,5 +188,4 @@ void* ConsumeProduceDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ConsumeProduceDescription());
 }
 
-DEFINE_EXE_VTABLE(ConsumeProduceDescription, "_ZTV25ConsumeProduceDescription")
 DEFINE_EXE_TYPE(ConsumeProduceDescription, "Description")

@@ -321,5 +321,4 @@ void* TutorialSetupRestrictPlayer::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialSetupRestrictPlayer());
 }
 
-DEFINE_EXE_VTABLE(TutorialSetupRestrictPlayer, "_ZTV27TutorialSetupRestrictPlayer")
 DEFINE_EXE_TYPE(TutorialSetupRestrictPlayer, "TutorialSetup")

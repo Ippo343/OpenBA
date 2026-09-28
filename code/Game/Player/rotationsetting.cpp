@@ -52,5 +52,4 @@ void* RotationSetting::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RotationSetting());
 }
 
-DEFINE_EXE_VTABLE(RotationSetting, "_ZTV15RotationSetting")
 DEFINE_EXE_TYPE(RotationSetting, "ToolSetting")

@@ -76,5 +76,4 @@ void* AutoPickupDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AutoPickupDescription());
 }
 
-DEFINE_EXE_VTABLE(AutoPickupDescription, "_ZTV21AutoPickupDescription")
 DEFINE_EXE_TYPE(AutoPickupDescription, "Description")

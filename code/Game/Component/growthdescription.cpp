@@ -126,5 +126,4 @@ void* GrowthDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) GrowthDescription());
 }
 
-DEFINE_EXE_VTABLE(GrowthDescription, "_ZTV17GrowthDescription")
 DEFINE_EXE_TYPE(GrowthDescription, "Description")

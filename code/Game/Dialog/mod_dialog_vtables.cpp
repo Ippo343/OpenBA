@@ -185,7 +185,6 @@ void* ModDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) ModDialog());
 }
 
-DEFINE_EXE_VTABLE(ModDialog, "_ZTV9ModDialog")
 
 // ===========================================================================
 // ModDetailsDialog — construction / destruction / reflection
@@ -224,7 +223,6 @@ void* ModDetailsDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) ModDetailsDialog());
 }
 
-DEFINE_EXE_VTABLE(ModDetailsDialog, "_ZTV16ModDetailsDialog")
 
 // The ModDialog ctor DOOR (registered by reg_mods.cpp at 0x140070030).
 extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,

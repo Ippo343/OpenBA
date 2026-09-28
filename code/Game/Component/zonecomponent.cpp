@@ -365,5 +365,4 @@ void* ZoneComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ZoneComponent());
 }
 
-DEFINE_EXE_VTABLE(ZoneComponent, "_ZTV13ZoneComponent")
 DEFINE_EXE_TYPE(ZoneComponent, "Component")

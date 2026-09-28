@@ -1008,6 +1008,5 @@ void* WorkPlaceUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) WorkPlaceUI());
 }
 
-DEFINE_EXE_VTABLE(WorkPlaceUI, "_ZTV11WorkPlaceUI")
 DEFINE_EXE_TYPE(WorkPlaceUI, "UI::DialogController")
 

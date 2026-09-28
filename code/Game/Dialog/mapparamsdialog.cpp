@@ -393,4 +393,3 @@ void* MapParamsDialog::CreateInPlaceObject(void* storage) {
 
 // The reflection record stays at the TU position of the UI_DIALOG_STUB row it
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
-DEFINE_EXE_VTABLE(MapParamsDialog, "_ZTV15MapParamsDialog")

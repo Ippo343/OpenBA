@@ -214,5 +214,4 @@ void* NaturalResourceComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) NaturalResourceComponent());
 }
 
-DEFINE_EXE_VTABLE(NaturalResourceComponent, "_ZTV24NaturalResourceComponent")
 DEFINE_EXE_TYPE(NaturalResourceComponent, "Component")

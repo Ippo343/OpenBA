@@ -70,5 +70,4 @@ void* TrackerDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TrackerDescription());
 }
 
-DEFINE_EXE_VTABLE(TrackerDescription, "_ZTV18TrackerDescription")
 DEFINE_EXE_TYPE(TrackerDescription, "Description")

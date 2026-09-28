@@ -80,5 +80,4 @@ void* HuntDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HuntDescription());
 }
 
-DEFINE_EXE_VTABLE(HuntDescription, "_ZTV15HuntDescription")
 DEFINE_EXE_TYPE(HuntDescription, "Description")

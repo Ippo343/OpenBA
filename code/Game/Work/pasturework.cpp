@@ -1028,7 +1028,6 @@ void* PastureWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PastureWork());
 }
 
-DEFINE_EXE_VTABLE(PastureWork, "_ZTV11PastureWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

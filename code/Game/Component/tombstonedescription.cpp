@@ -79,5 +79,4 @@ void* TombstoneDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TombstoneDescription());
 }
 
-DEFINE_EXE_VTABLE(TombstoneDescription, "_ZTV20TombstoneDescription")
 DEFINE_EXE_TYPE(TombstoneDescription, "Description")

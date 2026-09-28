@@ -232,5 +232,4 @@ void* FrustumOutlineElement::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FrustumOutlineElement());
 }
 
-DEFINE_EXE_VTABLE(FrustumOutlineElement, "_ZTV21FrustumOutlineElement")
 DEFINE_EXE_TYPE(FrustumOutlineElement, "Element")

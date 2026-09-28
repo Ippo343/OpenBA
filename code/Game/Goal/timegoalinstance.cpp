@@ -130,5 +130,4 @@ void* TimeGoalInstance::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TimeGoalInstance());
 }
 
-DEFINE_EXE_VTABLE(TimeGoalInstance, "_ZTV16TimeGoalInstance")
 DEFINE_EXE_TYPE(TimeGoalInstance, "Achievement::GoalInstance")

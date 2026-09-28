@@ -1012,7 +1012,6 @@ void* NewGameDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) NewGameDialog());
 }
 
-DEFINE_EXE_VTABLE(NewGameDialog, "_ZTV13NewGameDialog")
 
 // The ctor DOOR, reached by address: fn_NewGameDialog_Ctor (engine_funcs.cpp)
 // resolves 0x140071040. Signature matches fn_NewGameDialog_Ctor_t

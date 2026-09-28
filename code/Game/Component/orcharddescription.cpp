@@ -85,5 +85,4 @@ void* OrchardDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) OrchardDescription());
 }
 
-DEFINE_EXE_VTABLE(OrchardDescription, "_ZTV18OrchardDescription")
 DEFINE_EXE_TYPE(OrchardDescription, "Description")

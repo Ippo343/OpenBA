@@ -93,5 +93,4 @@ void* TornadoDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TornadoDescription());
 }
 
-DEFINE_EXE_VTABLE(TornadoDescription, "_ZTV18TornadoDescription")
 DEFINE_EXE_TYPE(TornadoDescription, "Description")

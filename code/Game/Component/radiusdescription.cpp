@@ -87,5 +87,4 @@ void* RadiusDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RadiusDescription());
 }
 
-DEFINE_EXE_VTABLE(RadiusDescription, "_ZTV17RadiusDescription")
 DEFINE_EXE_TYPE(RadiusDescription, "Description")

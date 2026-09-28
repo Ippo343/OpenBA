@@ -630,5 +630,4 @@ void* SpawnComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) SpawnComponent());
 }
 
-DEFINE_EXE_VTABLE(SpawnComponent, "_ZTV14SpawnComponent")
 DEFINE_EXE_TYPE(SpawnComponent, "Component")

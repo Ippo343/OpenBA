@@ -86,5 +86,4 @@ void* AnimAudioEvent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AnimAudioEvent());
 }
 
-DEFINE_EXE_VTABLE(AnimAudioEvent, "_ZTV14AnimAudioEvent")
 DEFINE_EXE_TYPE(AnimAudioEvent, "Graphics::AnimationEvent")

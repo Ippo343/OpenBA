@@ -129,5 +129,4 @@ void* CreateRemovalDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreateRemovalDescription());
 }
 
-DEFINE_EXE_VTABLE(CreateRemovalDescription, "_ZTV24CreateRemovalDescription")
 DEFINE_EXE_TYPE(CreateRemovalDescription, "Description")

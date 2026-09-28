@@ -173,5 +173,4 @@ void* ParticleDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ParticleDescription());
 }
 
-DEFINE_EXE_VTABLE(ParticleDescription, "_ZTV19ParticleDescription")
 DEFINE_EXE_TYPE(ParticleDescription, "Description")

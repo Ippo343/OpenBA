@@ -241,7 +241,6 @@ void* BuildingGoal::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) BuildingGoal());
 }
 
-DEFINE_EXE_VTABLE(BuildingGoal, "_ZTV12BuildingGoal")
 DEFINE_EXE_TYPE(BuildingGoal, "Achievement::Goal")
 
 // ============================================================

@@ -446,5 +446,4 @@ void* AmbientEnvironmentComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AmbientEnvironmentComponent());
 }
 
-DEFINE_EXE_VTABLE(AmbientEnvironmentComponent, "_ZTV27AmbientEnvironmentComponent")
 DEFINE_EXE_TYPE(AmbientEnvironmentComponent, "Component")

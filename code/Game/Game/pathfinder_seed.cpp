@@ -50,7 +50,6 @@ static pf_fn_MemFree_t s_fn_MemFree    = nullptr;
 
 } // namespace
 
-DEFINE_EXE_VTABLE(PathfinderThread, "_ZTV16PathfinderThread")
 
 // --- Pathfinder System::Thread vtable (2 slots) ------------------------------------------
 // The pathfinder is a System::Thread subclass; its real vtable (0x14015ef18) is

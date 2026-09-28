@@ -815,5 +815,4 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
     }
 }
 
-DEFINE_EXE_VTABLE(OrchardComponent, "_ZTV16OrchardComponent")
 DEFINE_EXE_TYPE(OrchardComponent, "ControllerComponent")

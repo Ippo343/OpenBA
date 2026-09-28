@@ -97,7 +97,6 @@ void* BuildRequirementUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BuildRequirementUI());
 }
 
-DEFINE_EXE_VTABLE(BuildRequirementUI, "_ZTV18BuildRequirementUI")
 DEFINE_EXE_TYPE(BuildRequirementUI, "UI::DialogController")
 
 // ---- HotKeyToolTipUI: the slot body and its standalone guard live in hotkeytooltipui.cpp.
@@ -125,7 +124,6 @@ void* HotKeyToolTipUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HotKeyToolTipUI());
 }
 
-DEFINE_EXE_VTABLE(HotKeyToolTipUI, "_ZTV15HotKeyToolTipUI")
 DEFINE_EXE_TYPE(HotKeyToolTipUI, "UI::DialogController")
 
 // ---- AttendanceUI: the slot bodies and their standalone guards live in attendanceui.cpp.
@@ -153,7 +151,6 @@ void* AttendanceUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AttendanceUI());
 }
 
-DEFINE_EXE_VTABLE(AttendanceUI, "_ZTV12AttendanceUI")
 DEFINE_EXE_TYPE(AttendanceUI, "UI::DialogController")
 
 // ---- DialogController family ------------------------------------------------
@@ -182,7 +179,6 @@ void* CemeteryUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CemeteryUI());
 }
 
-DEFINE_EXE_VTABLE(CemeteryUI, "_ZTV10CemeteryUI")
 DEFINE_EXE_TYPE(CemeteryUI, "UI::DialogController")
 // ---- ConsumeProduceUI: the slot bodies and their standalone guards live in consumeproduceui.cpp.
 
@@ -209,7 +205,6 @@ void* ConsumeProduceUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ConsumeProduceUI());
 }
 
-DEFINE_EXE_VTABLE(ConsumeProduceUI, "_ZTV16ConsumeProduceUI")
 DEFINE_EXE_TYPE(ConsumeProduceUI, "UI::DialogController")
 // ControlUI: PROMOTED to a real per-class standalone vtable in
 // code/Game/Dialog/controlui.cpp (wires Slot4/7/8/9 so the generic
@@ -257,7 +252,6 @@ void* HelpUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HelpUI());
 }
 
-DEFINE_EXE_VTABLE(HelpUI, "_ZTV6HelpUI")
 DEFINE_EXE_TYPE(HelpUI, "UI::DialogController")
 // HotKeyToolTipUI promoted to a real Slot4 reimpl above (was a no-op stub).
 // ---- ImmigrationUI: the slot bodies and their standalone guards live in immigrationui.cpp.
@@ -287,7 +281,6 @@ void* ImmigrationUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ImmigrationUI());
 }
 
-DEFINE_EXE_VTABLE(ImmigrationUI, "_ZTV13ImmigrationUI")
 DEFINE_EXE_TYPE(ImmigrationUI, "UI::DialogController")
 // ---- MapUI: the slot bodies and their standalone guards live in mapui.cpp.
 
@@ -315,7 +308,6 @@ void* MapUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MapUI());
 }
 
-DEFINE_EXE_VTABLE(MapUI, "_ZTV5MapUI")
 DEFINE_EXE_TYPE(MapUI, "UI::DialogController")
 // ---- ModBrowseUI / NoiseUI: ENDGAME B.3.8 PNL — the real classes -------------
 // Until B.3.8 these two were UI_DIALOG_STUB rows: the reflected factory built a
@@ -357,7 +349,6 @@ void* ModBrowseUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ModBrowseUI());
 }
 
-DEFINE_EXE_VTABLE(ModBrowseUI, "_ZTV11ModBrowseUI")
 DEFINE_EXE_TYPE(ModBrowseUI, "UI::DialogController")
 
 // [0] 0x140012da0: ~NoiseUI (restamp, ~DialogController, ~Internal — the
@@ -382,7 +373,6 @@ void* NoiseUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) NoiseUI());
 }
 
-DEFINE_EXE_VTABLE(NoiseUI, "_ZTV7NoiseUI")
 DEFINE_EXE_TYPE(NoiseUI, "UI::DialogController")
 // ---- PageToggleUI: the slot bodies and their standalone guards live in pagetoggleui.cpp.
 
@@ -411,7 +401,6 @@ void* PageToggleUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PageToggleUI());
 }
 
-DEFINE_EXE_VTABLE(PageToggleUI, "_ZTV12PageToggleUI")
 DEFINE_EXE_TYPE(PageToggleUI, "UI::DialogController")
 
 // ---- ProductionUI: the slot bodies and their standalone guards live in productionui.cpp.
@@ -440,7 +429,6 @@ void* ProductionUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ProductionUI());
 }
 
-DEFINE_EXE_VTABLE(ProductionUI, "_ZTV12ProductionUI")
 DEFINE_EXE_TYPE(ProductionUI, "UI::DialogController")
 // ---- ProfessionUI: the slot bodies and their standalone guards live in professionui.cpp.
 
@@ -469,7 +457,6 @@ void* ProfessionUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ProfessionUI());
 }
 
-DEFINE_EXE_VTABLE(ProfessionUI, "_ZTV12ProfessionUI")
 DEFINE_EXE_TYPE(ProfessionUI, "UI::DialogController")
 // ---- RadiusUI: PROMOTED to the real reimpl (2026-08-15) ---------------------
 // Moved to code/Game/Dialog/radiusui_promote.cpp, which carries the REGISTER_TYPE
@@ -505,7 +492,6 @@ void* ResourceLimitUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ResourceLimitUI());
 }
 
-DEFINE_EXE_VTABLE(ResourceLimitUI, "_ZTV15ResourceLimitUI")
 DEFINE_EXE_TYPE(ResourceLimitUI, "UI::DialogController")
 // ---- SpriteCaptureUI: ENDGAME B.3.8 PNL — the real class --------------------
 // Was a UI_DIALOG_STUB row (48-slot all-nop object, the only registration of
@@ -545,7 +531,6 @@ void* SpriteCaptureUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) SpriteCaptureUI());
 }
 
-DEFINE_EXE_VTABLE(SpriteCaptureUI, "_ZTV15SpriteCaptureUI")
 DEFINE_EXE_TYPE(SpriteCaptureUI, "UI::DialogController")
 // ---- StatusBarUI: PROMOTED to real SA vtable (statusbarui.cpp) — the toolbar
 //      "town status" utility dialog (group 4, next to Map) now renders the town
@@ -598,7 +583,6 @@ void* TitleDescToolTipUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TitleDescToolTipUI());
 }
 
-DEFINE_EXE_VTABLE(TitleDescToolTipUI, "_ZTV18TitleDescToolTipUI")
 DEFINE_EXE_TYPE(TitleDescToolTipUI, "UI::DialogController")
 // ---- ToolUI: the slot bodies and their standalone guards live in toolui.cpp.
 
@@ -627,7 +611,6 @@ void* ToolUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ToolUI());
 }
 
-DEFINE_EXE_VTABLE(ToolUI, "_ZTV6ToolUI")
 DEFINE_EXE_TYPE(ToolUI, "UI::DialogController")
 // ---- TownHallUI: PROMOTED to real SA vtable (townhallui.cpp) — the town-hall
 //      General statistics / Professions / Production / Inventory / Graph /
@@ -663,7 +646,6 @@ void* TradeUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TradeUI());
 }
 
-DEFINE_EXE_VTABLE(TradeUI, "_ZTV7TradeUI")
 DEFINE_EXE_TYPE(TradeUI, "UI::DialogController")
 // UpgradeUI: PROMOTED to a real per-class standalone vtable in
 // code/Game/Dialog/upgradeui.cpp (wires Slot4/8/9 — the wood→stone upgrade
@@ -701,7 +683,6 @@ void* BuildUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BuildUI());
 }
 
-DEFINE_EXE_VTABLE(BuildUI, "_ZTV7BuildUI")
 DEFINE_EXE_TYPE(BuildUI, "UI::DialogController")
 // ---- ResidenceUI: PROMOTED to real SA vtable (residenceui.cpp) — a house panel now
 //      lists its residents (name/gender/age/profession) from the ResidenceComponent

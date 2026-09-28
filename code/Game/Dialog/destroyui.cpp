@@ -603,5 +603,4 @@ void* DestroyUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DestroyUI());
 }
 
-DEFINE_EXE_VTABLE(DestroyUI, "_ZTV9DestroyUI")
 DEFINE_EXE_TYPE(DestroyUI, "UI::DialogController")

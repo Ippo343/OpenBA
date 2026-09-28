@@ -74,8 +74,8 @@ unexported leaves, `Video::ShaderProgram`'s blob-array serializer helper
   `Device`, `Configuration`, `RenderBuffer`, `IndexBuffer`, `VertexBuffer`,
   `ConstantBuffer`, `Viewport` and `Context` and is what enforces it.
 - **No virtual destructor.** Slot 0 of every polymorphic class is
-  `DeletingDtor(unsigned)`, whose body is a table row in
-  `runtime/src/object/deleting_dtor.cpp`. `~Class()` is non-virtual and in no
+  `DeletingDtor(unsigned)`, the class's own member (ENDGAME B.3.9 deleted the
+  `RT_DELDTOR` table that used to hold its body). `~Class()` is non-virtual and in no
   slot, so a door calls it as a QUALIFIED non-virtual
   `p->Video::C::~C()` — never through slot 0, which would re-enter.
 - **The Device lock is byte-faithful** (RULE B5-6): an opaque `uint8_t lock[0x28]`

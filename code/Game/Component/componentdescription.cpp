@@ -206,7 +206,6 @@ void* ComponentDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ComponentDescription());
 }
 
-DEFINE_EXE_VTABLE(ComponentDescription, "_ZTV20ComponentDescription")
 DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.

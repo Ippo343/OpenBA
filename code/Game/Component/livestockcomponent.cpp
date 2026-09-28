@@ -209,5 +209,4 @@ void* LivestockComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) LivestockComponent());
 }
 
-DEFINE_EXE_VTABLE(LivestockComponent, "_ZTV18LivestockComponent")
 DEFINE_EXE_TYPE(LivestockComponent, "Component")

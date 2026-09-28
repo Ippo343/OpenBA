@@ -132,5 +132,4 @@ void* AmbientEmitterDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AmbientEmitterDescription());
 }
 
-DEFINE_EXE_VTABLE(AmbientEmitterDescription, "_ZTV25AmbientEmitterDescription")
 DEFINE_EXE_TYPE(AmbientEmitterDescription, "Description")

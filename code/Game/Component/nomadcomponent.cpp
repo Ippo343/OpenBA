@@ -571,5 +571,4 @@ void NomadComponent::OnRemove() {
            &entityIBP);
 }
 
-DEFINE_EXE_VTABLE(NomadComponent, "_ZTV14NomadComponent")
 DEFINE_EXE_TYPE(NomadComponent, "ControllerComponent")

@@ -541,5 +541,4 @@ void PastureComponent::OnEvent(int msgId) {
 // [13] 0x140127dd0 CommandMask / [14] 0x140127a60 Command / [15] 0x140127720 OnMessage
 // live in pasturecomponent_states.cpp next to their helpers.
 
-DEFINE_EXE_VTABLE(PastureComponent, "_ZTV16PastureComponent")
 DEFINE_EXE_TYPE(PastureComponent, "ControllerComponent")

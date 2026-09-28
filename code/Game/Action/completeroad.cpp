@@ -141,6 +141,5 @@ void* CompleteRoad::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CompleteRoad());
 }
 
-DEFINE_EXE_VTABLE(CompleteRoad, "_ZTV12CompleteRoad")
 
 DEFINE_EXE_TYPE(CompleteRoad, "Action")

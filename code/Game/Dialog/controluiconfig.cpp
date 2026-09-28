@@ -104,6 +104,5 @@ void* ControlUIConfig::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ControlUIConfig());
 }
 
-DEFINE_EXE_VTABLE(ControlUIConfig, "_ZTV15ControlUIConfig")
 
 DEFINE_EXE_TYPE(ControlUIConfig, "UI::DialogControllerConfig")

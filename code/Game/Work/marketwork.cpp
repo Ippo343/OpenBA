@@ -1816,7 +1816,6 @@ void* MarketWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MarketWork());
 }
 
-DEFINE_EXE_VTABLE(MarketWork, "_ZTV10MarketWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

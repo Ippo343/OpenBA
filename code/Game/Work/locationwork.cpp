@@ -495,7 +495,6 @@ void* LocationWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) LocationWork());
 }
 
-DEFINE_EXE_VTABLE(LocationWork, "_ZTV12LocationWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

@@ -84,7 +84,7 @@ if [ "$MODE" != resaveonly ]; then
     grep -qE ' 0 failures' "$OUT/build_unit.log" || bad "unit failures"
   fi
   say "dispatch: $(python tools/dispatch_slot_map.py --check 2>&1 | tail -1)"
-  say "manifest: $(python tools/cutover_manifest.py --gate 2>&1 | tail -1)"
+  # (manifest: tools/cutover_manifest.py was deleted by the B.3.9 close -- no gate step left.)
   say "mintgen: $(python tools/rt_mint_gen.py --check 2>&1 | tail -1)"
 fi
 

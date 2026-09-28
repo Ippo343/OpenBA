@@ -807,7 +807,6 @@ void* HuntWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HuntWork());
 }
 
-DEFINE_EXE_VTABLE(HuntWork, "_ZTV8HuntWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

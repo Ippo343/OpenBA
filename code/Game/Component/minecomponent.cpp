@@ -55,5 +55,4 @@ void* MineComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MineComponent());
 }
 
-DEFINE_EXE_VTABLE(MineComponent, "_ZTV13MineComponent")
 DEFINE_EXE_TYPE(MineComponent, "Component")

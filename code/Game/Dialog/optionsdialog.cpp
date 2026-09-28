@@ -1678,7 +1678,6 @@ void* OptionsDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) OptionsDialog());
 }
 
-DEFINE_EXE_VTABLE(OptionsDialog, "_ZTV13OptionsDialog")
 
 // The ctor DOOR, reached by address: fn_OptionsDialog_Ctor (engine_funcs.cpp)
 // resolves 0x140075150. Signature matches fn_OptionsDialog_Ctor_t.
