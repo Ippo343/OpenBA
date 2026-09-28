@@ -699,7 +699,11 @@ def main():
     args = ap.parse_args()
 
     pe = pefile.PE(args.dll)
-    write_export_addrs(pe)
+    # --check writes no file (B3R W0-SM): it used to rewrite rt_export_addrs.inc
+    # here, before the check branch, which is why every kit script ended with a
+    # `git checkout` of it.
+    if not args.check:
+        write_export_addrs(pe)
     if args.export_addrs_only:
         return 0
     ib = pe.OPTIONAL_HEADER.ImageBase
