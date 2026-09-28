@@ -1,12 +1,13 @@
 #pragma once
-// code/Game/Player/exe_bodies.h -- the exe bodies DEFINED in code/Game/Player/ that the registry
-// reaches by retail address (B3R_RULES R5, block W0-P0c).
+// code/Game/Player/exe_bodies.h -- declarations of the exe bodies DEFINED in
+// code/Game/Player/ (ENDGAME B.3R, block W0-P0c, B3R_RULES R5).
 //
-// One declaration per body, copied from its DEFINITION (linkage included),
-// grouped by defining file; the retail address(es) the body is registered
-// under are the trailing comment. The defining .cpp includes this header so
-// the compiler checks each pair. Readers call these by name (W1); nothing
-// here changes what runs. Making them members is B.4's work.
+// Every body the registry reaches by retail address, declared once, copied
+// from its DEFINITION (linkage included), grouped by defining file; the
+// retail address(es) it is registered under are the trailing comment. The
+// defining .cpp includes this header so the compiler checks each pair.
+// Readers call these by name (W1); nothing here changes what runs. Making
+// them members is B.4's work.
 
 #include <cstdint>
 

@@ -54,6 +54,7 @@
 #include "Component/WorkComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // Helpers

@@ -37,6 +37,7 @@
 #include <cstddef>
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Dialog/exe_bodies.h"
 
 // StorageUI::Startup is the per-frame content refresh (driven via the +0x40
 // W_OnUpdate hack in standalone). Its _DEBUG bring-up logs used to fire every

@@ -22,6 +22,7 @@
 #include <cstring>
 #include <new>
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Game/exe_bodies.h"
 
 extern "C" void* Game_Ctor(void* self) {
     // Zero the entire 0xe0-byte struct, including the regions where the

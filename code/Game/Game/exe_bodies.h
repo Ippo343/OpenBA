@@ -1,22 +1,28 @@
 #pragma once
-// code/Game/Game/exe_bodies.h -- the exe bodies DEFINED in code/Game/Game/ that the registry
-// reaches by retail address (B3R_RULES R5, block W0-P0c).
+// code/Game/Game/exe_bodies.h -- declarations of the exe bodies DEFINED in
+// code/Game/Game/ (ENDGAME B.3R, block W0-P0c, B3R_RULES R5).
 //
-// One declaration per body, copied from its DEFINITION (linkage included),
-// grouped by defining file; the retail address(es) the body is registered
-// under are the trailing comment. The defining .cpp includes this header so
-// the compiler checks each pair. Readers call these by name (W1); nothing
-// here changes what runs. Making them members is B.4's work.
+// Every body the registry reaches by retail address, declared once, copied
+// from its DEFINITION (linkage included), grouped by defining file; the
+// retail address(es) it is registered under are the trailing comment. The
+// defining .cpp includes this header so the compiler checks each pair.
+// Readers call these by name (W1); nothing here changes what runs. Making
+// them members is B.4's work.
+//
+// Also here: the declarations and inline bodies of this module that lived in
+// engine/funcs/engine_funcs.h, moved verbatim with their comments (that
+// header includes this one, so none of its includers changes).
 //
 // Declared in another header already (not redeclared here):
-//   Game::RegisterDefaultInputBindings       0x1400992f0  (code/Game/Game/inputbindings.h)
+//   Game::RegisterDefaultInputBindings     0x1400992f0  (code/Game/Game/inputbindings.h)
 //
 // Internal linkage in the defining file (static / anonymous namespace):
 // not declared -- that would change linkage, which this step does not do.
-//   ResizeStride0x10                         0x140017640  (citizenlist_serialize.cpp:339, anonymous namespace)
-//   ResizeStride0x20                         0x1400177c0  (citizenlist_serialize.cpp:350, anonymous namespace)
+//   ResizeStride0x10                       0x140017640  (citizenlist_serialize.cpp:339, anonymous namespace)
+//   ResizeStride0x20                       0x1400177c0  (citizenlist_serialize.cpp:350, anonymous namespace)
 
 #include <cstdint>
+#include "engine_funcs.h"   // the globals the moved inline bodies still read
 
 // ---- citizen_names.cpp
 extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng, int minLen, int maxLen);  // 0x1400a4b30
@@ -30,6 +36,32 @@ extern "C" void CitizenList_PostLoad_8f580(void* self);  // 0x14008f580
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580
 extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr);  // 0x140095750
 extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr, void* titleStr, void* extraStr);  // 0x140094e00
+
+// ---- game.cpp
+// --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
+// Iterates ExternalFactory for entities with ComponentDescription (DAT_1401c7318),
+// finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
+// removes matching entity via Game_RemoveEntity.
+void Game_TriggerDisasterByType_Impl(int disasterType);
+
+// --- Game_SpawnResources (0x140091660) — REIMPLEMENTED inline ---
+// Spawns 'count' resources into citizen storage buildings.
+// Phase 1: builds array of entity pointers whose NaturalResourceComponent flags match resourceFlag.
+// Phase 2: round-robin distributes items across citizens' StorageComponents.
+// param_1 = Game object (longlong*), param_2 = resourceFlag bitmask, param_3 = total count to spawn.
+//
+// Structure offsets on param_1 (Game object):
+//   +0x110 (param_1[0x22]) = entity array ptr (raw pointers)
+//   +0x118 (param_1[0x23]) = entity count
+//   +0x000 (param_1[0])    = citizen InternalBasePtr array
+//   +0x008 (param_1[1])    = citizen count
+//
+// Entities (phase 1) are raw pointers with components at +0x28 (array) / +0x30 (count).
+// Citizens (phase 2) are InternalBasePtr entries with components at +0x30 (IBP array) / +0x38 (count).
+//
+// Calls original exe functions StorageComponent_impl_cd80 (0x14012cd80) for CanAdd
+// and FUN_14012d000 (0x14012d000) for AddItem, via resolved function pointers.
+void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count);
 
 // ---- game_leaf_helpers.cpp
 void Game_DestroyStringArray18(void* arrayHeader);  // 0x14001b030
@@ -140,5 +172,111 @@ extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount);  // 0x14001
 // ---- weather_sim.cpp
 extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time);  // 0x1400944e0
 
+// ---- worldgen_f390_shims.cpp
+// System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
+// extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
+// the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
+// reused by callers that need the tolerance-range primitive.
+extern "C" float fn_Random_RandFloatTol(void* self);
+
 // ---- worldsetup_reload.cpp
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState, void* scenarioIdx, void* retvalIbpPtr);  // 0x1400b49f0
+
+// ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
+
+// SetEngineNextLoop — sets next loop on the MainLoop engine singleton
+// FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr
+// Called when self->m_loaderLoop1 (+0xE0) is null (use engine at +0xE8).
+// REPLACED: was fn_SetEngineNextLoop (ResolveAddr(Module::Exe, 0x140097fb0))
+// Now inline C++ — calls runtime UI functions (SetCursor, SetFullscreenFade).
+inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
+    void* ui = *(void**)(enginePtr + 0x98);
+    // Set cursor to default (cursor ptr from KeyMap singleton+0x38)
+    uint64_t cursorVal = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+    reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
+        ::Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
+    // Fade to black (fadeIn=true, color=0xFF000000=opaque black, reverse=false)
+    reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
+    // Store next loop pointer at engine+0xC8
+    *(void**)(enginePtr + 0xC8) = loaderLoop;
+}
+
+// SetDialogLoaderNextLoop — FUN_14009a8f0 — NOW REIMPLEMENTED INLINE
+// Sets fullscreen fade on DialogLoaderLoopT's UI (+0x40), stores next loop at +0xb68.
+// Old typedef kept for reference:
+// typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
+// extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
+inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop) {
+    reinterpret_cast<UI::UserInterface*>(dialogLoaderLoop + 0x40)->SetFullscreenFade(  // B.3.6 bridge
+        true, 0xFF000000, false);
+    *(void**)(dialogLoaderLoop + 0xb68) = loaderLoop;
+}
+
+// GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
+// Creates a Random, generates rand 0-11, formats "Dialog/Loading.rsc:gameLoad%i".
+// Old typedef kept for reference:
+// typedef void* (*fn_GetLoadingSoundString_t)(uint64_t unused, void* retStr,
+//                                              uint64_t unused2, uint64_t unused3);
+// extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
+inline void* GetLoadingSoundString(void* retStr) {
+    uint8_t rng[2520];  // System::Random is large (~2512 bytes)
+    fn_Random_Default_Ctor(rng);
+    // B.3.4b bridge: the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
+    // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and
+    // Rand(int,int). The ctor door above STAYS (B.3.4b keeps ctor/dtor doors).
+    uint32_t variant = reinterpret_cast<System::Random*>(rng)->Rand(12u);
+    // BANISHED_MENU_SCENE pins every random front-end pick, this one included:
+    // the loading image it selects stays resident and is numbered into the
+    // save's reference table, so an unpinned pick shifts every reference id
+    // after "Dialog\Loading.rsc:gameLoadN" (tools/resave_gate/).
+    if (Opt().menuScene >= 0)
+        variant = static_cast<unsigned>(Opt().menuScene) % 12u;
+    // ?Format@String@System@@SA?AV12@PEBDZZ  retail 0x1800c9730
+    *reinterpret_cast<System::String*>(retStr) =
+        System::String::Format("Dialog/Loading.rsc:gameLoad%i", variant);
+    return retStr;
+}
+
+// --- Game_RemoveEntity (0x140091a20) — adds entity to pending-removal list ---
+// Adds an entity pointer to the game's removal queue at gameWorld+0x120/0x128/0x12c.
+// Uses standard dynamic array grow pattern (triple capacity on first realloc).
+// param_1 = gameWorld ptr (from g_pGameWorldSingleton + offset), param_2 = entity ptr
+// REIMPLEMENTED inline from Ghidra decompilation.
+inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
+    uintptr_t gw = (uintptr_t)gameWorldPtr;
+    uintptr_t entity = (uintptr_t)entityPtr;
+
+    // Check if entity is already in the removal queue
+    int count = *(int*)(gw + 0x128);
+    uintptr_t* arr = *(uintptr_t**)(gw + 0x120);
+    for (int i = 0; i < count; i++) {
+        if (arr[i] == entity) return;  // already queued
+    }
+
+    // Dynamic array push
+    int newCount = count + 1;
+    if (newCount != count) {
+        uintptr_t* oldArr = arr;
+        *(int*)(gw + 0x128) = newCount;
+        int capacity = *(int*)(gw + 0x12c);
+        if (capacity < newCount) {
+            // Grow: triple capacity if non-empty, else use newCount
+            capacity = (count != 0) ? newCount * 3 : newCount;
+            *(int*)(gw + 0x12c) = capacity;
+            void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)capacity * 8, 8);
+            *(void**)(gw + 0x120) = newBuf;
+        }
+        uintptr_t* newArr = *(uintptr_t**)(gw + 0x120);
+        int copyStart = (oldArr == newArr) ? count : 0;
+        for (int i = copyStart; i < newCount; i++) {
+            if (i < count) {
+                newArr[i] = oldArr[i];  // copy existing
+            } else {
+                newArr[i] = entity;     // append new
+            }
+        }
+        if (oldArr != newArr) {
+            fn_MemFreeStatic(oldArr);
+        }
+    }
+}

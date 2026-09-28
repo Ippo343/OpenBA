@@ -33,6 +33,7 @@
 #include "Component/MultiObjectComponent.h"
 #include "Component/FireComponent.h"
 #include "Component/StorageLocationComponent.h"
+#include "Entity/exe_bodies.h"
 
 namespace {
 inline void FindByTypeId(void* entity, void* retval, uint32_t typeId) {
