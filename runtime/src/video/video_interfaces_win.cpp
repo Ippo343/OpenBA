@@ -290,12 +290,3 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
     self->Video::Device::InitializeInterfaces();
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtVideoInterfacesRegister() {
-    int n = 0;
-
-    printf("[LaneEVM] rev=EVM-r1 interfaces registered=%d\n", n);
-    return n;
-}

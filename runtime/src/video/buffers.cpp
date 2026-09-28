@@ -1006,12 +1006,12 @@ bool Video_VertexBuffer_Set(VertexBuffer* self, int sizeBytes, int offsetBytes, 
 int RtVideoBuffersRegister() {
     int n = 0;
 
+    // B3R W2-RT: the two address rows (0x1800f3490, 0x1800f55f0) had no
+    // reader and went; the names stay while engine_funcs.cpp reads them.
     RegisterRuntimeExport("??0IndexBuffer@Video@@QEAA@XZ", (void*)&Video_IndexBuffer_Ctor);
-    RegisterRuntimeAddr(0x1800f3490, (void*)&Video_IndexBuffer_Ctor);
     n++;
 
     RegisterRuntimeExport("??0VertexBuffer@Video@@QEAA@XZ", (void*)&Video_VertexBuffer_Ctor);
-    RegisterRuntimeAddr(0x1800f55f0, (void*)&Video_VertexBuffer_Ctor);
     n++;
 
     // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — HELD BACK, see above.

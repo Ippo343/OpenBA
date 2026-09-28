@@ -784,10 +784,8 @@ extern "C" void RtVideo_Device_Shutdown(Device* self) {
 }
 
 // ============================================================================
-// Registration
-//
-// Every mangled name was checked against the shipped export directory with
-// pefile BEFORE any body was written:
+// Retail names and addresses of this file's exported bodies (checked against
+// the shipped export directory with pefile before any body was written):
 //
 //   ?PlatformStartup@Device@Video@@AEAA_NXZ          0x1800f8260  ord 3405
 //   ?Startup@Device@Video@@QEAA_NXZ                  0x1800f7270  ord 4091
@@ -800,22 +798,12 @@ extern "C" void RtVideo_Device_Shutdown(Device* self) {
 //   ?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z
 //                                                    0x1800f7540  ord 2559
 //
-// Note `?PlatformShutdown@…AEAAXXZ`, NOT `_NXZ`: it returns void. The `_N`
-// spelling does not exist in the DLL and would resolve NULL in silence
-// (reference_resolveexport_phantom_names.md).
-//
-// BOTH DOORS for all nine. The address doors matter for the two thunks in
-// particular: anything that resolved 0x1800f7270 by address would otherwise
-// reach the DLL while the name door reached us, which is the split this lane
-// found in the Video::Context lifecycle.
-//
-// The seven Array helpers get ADDRESS DOORS ONLY — none is exported (checked
-// against the retail directory and against Runtime-x64-profile.dll's 5,182
-// names), so `RegisterRuntimeExport` has nothing to register under.
+// Run identity. B3R W2-RT: this was RtVideoDeviceStartupRegister(), which
+// registered nothing any more. The one line it printed is kept, printed from
+// this translation unit (its __DATE__ / __TIME__ are this file's), and
+// RtVideoPortInit() calls it where it called the register function.
 // ============================================================================
-int RtVideoDeviceStartupRegister() {
-    int n = 0;
-
+void RtVideoDeviceStartupIdentity() {
     // ---- RUN IDENTITY -----------------------------------------------------
     // Four lanes independently found that the on-disk md5 says which exe is ON
     // DISK, not which one RAN: six lanes deploy to one game directory and a
@@ -830,6 +818,4 @@ int RtVideoDeviceStartupRegister() {
     // after is necessary but not sufficient, because it cannot see a swap that
     // happened and was undone.
     printf("[LaneVID2] identity: device_startup.cpp built " __DATE__ " " __TIME__ "\n");
-
-    return n;
 }
