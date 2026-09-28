@@ -20,9 +20,50 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **NORMAL-VIRTUAL CUTOVER CLOSED (2026-09-28) — ENDGAME B.1 decision 2 is finished:** every class whose
+  retail slot 0 is a deleting destructor declares `virtual ~T()` — **449 classes** under five roots
+  (`Object::Base` 414, `Graphics::Geometry` 13, `IO::Stream` 9, `Engine::UpdateLoop` 9, `IO::ReaderWriter`
+  4); deletion is `delete p`, `Object::Destroy` is `delete`, `Destruct` / `Reconstruct` call `this->~T()`;
+  each root defines ONE class-scope `operator delete` (the global one is the C runtime's `free()`), the 41
+  declared-but-undefined in-class ones are defined; the 127 dead vector arms are gone. GCC spends two slots
+  on the destructor, so retail slot N >= 1 is compiler slot N + 1 — and **nothing in product code reads a
+  flipping class's table by literal index** (~950 reads became by-name calls; `runtime/types/object/VSlot.h`
+  for the few diagnostics that must look into a table). **Still on `DeletingDtor`, by decision: the twelve
+  `Video::*Data` classes** (every live object wears dx11's table in retail order; they flip with the dx11
+  seam). Exempt because retail has no destructor slot: the Thread family, `IO::Encoding`, the Controller
+  interface, `PlatformChannel`, `IPathInfo`. Rule sheet `endgame_b/B3X_RULES.md` (X1-X6, run §7,
+  corrections §8, left §9), kit and documents `endgame_b/b3x_session/` (five INVENTORY files, W0_AUDIT,
+  W1_TESTS_DONE, GATE_TABLE, CLOSE_NUMBERS, ACCEPTANCE, `classes.py`, `flip.py`, `partc.py`,
+  `acceptance.sh`, the gate scripts). Plan for the next step (the registry teardown):
+  `endgame_b/NEXT_SESSION.md`.
+  **Shape.** Block 0 (five read-only inventories) → the rule sheet → W0 "by name first": seven blocks
+  converted every slot-index read while nothing had shifted, then an independent audit (five reads no
+  inventory had; 1,114 remaining sites classified; 0 wrong-root casts) → W1: one scripted flip, gated alone
+  before the tests were rewritten, then the tests on top of it → one merge. **10 gated merges, 0
+  problems**; on every one: new game `calls=5683 openFileFail=0`, tutorial `5773/12`, typetable == baseline
+  (`b983f144`), resave 5/5 == golden, 0 new warnings. No behaviour change came from the flip itself.
+  **Numbers** (`b3x_session/CLOSE_NUMBERS.md`): 959 files, +8,880 / −13,167 lines; unit 914 → **919**, 0
+  failures (1,197 slot checks write RETAIL numbers through `tests/unit/slot_check.h`; the type decides the
+  shift); B.4 cast metric **29,870 → 29,159**; bridge markers 6,116 → 6,397 (W0's casts on `void*`
+  receivers); PORT GAP 165 → 149.
+  **Behaviour changes, each titled:** SpriteCaptureUI appends the `".rsc"` literal (owed from B.3.9).
+  Signatures corrected from retail's call sites: `Action::Enter(stack, time)`, `Work::Validate()`,
+  `Work::Execute(citizen, context)`, `Work::Slot12(version)`; five call sites pass what retail passes where
+  the raw call left a register unset.
+  **Found on the way:** `partc.py` saw 190 of 1,205 runtime rows and a tenth of the tests; NEXT_SESSION's
+  exempt list was partly wrong; Geometry objects were deleted through a cast to `Object::Base` (another
+  root); `UI::DialogInstance::Update` passes `_dialog` to `Contains` where retail passes `_ui`
+  (pre-existing, left for its own commit).
+  **Step close:** RUN 2026-09-28 on `0419d0ce`: Mods / Quit / Options / Achievements exit 0; GoalDialog
+  opens; tool routes exit 0; in-game save `SAVE OPERATION COMPLETE`; `sa-stress` exit 0 (update 1.73
+  ms/frame, recorded, not chased); true release compile exit 0 (1,094 files) then `make clean`; clean
+  rebuild exit 0, 0 new warnings, unit 919 / 0; gate on the clean-built exe 0 problems; stub set 0 new / 0
+  gone; tutorial census citizen=16 herd=16; forced device loss COMPLETE with an empty crash log (killed at
+  its time limit, as before — device-lost stays deferred). `acceptance.sh` at target on every line.
+  Nothing owed.
 - **B.3.9 CLOSED (2026-09-27) — B.3 is closed:** the migration scaffolding is gone. **The mint holds 0 vtables and
   0 `BaseTypeInfo`** (152 / 104 / 48 → 0 / 0 / 2): every Runtime class is a real C++ class with its COMPILER
-  vtable, a concrete `DeletingDtor(unsigned)` with retail's arms, a protected non-virtual dtor holding the old
+  vtable, a concrete `DeletingDtor(unsigned)` with retail's arms (a `virtual ~T()` since the cutover above), a protected non-virtual dtor holding the old
   `??1` door's body and a real ctor holding the `??0` door's; every type record — the 104 Runtime ones and the
   310 exe ones — is a `DEFINE_TYPE` class static built at static init (chain **414**, ids identical,
   `b39_session/TYPETABLE_414.txt`). **Deleted:** the `RT_DELDTOR` table (135 rows) and its machinery; the three

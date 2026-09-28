@@ -163,3 +163,30 @@ device-lost is deferred).
 0 `DeletingDtor` declarations outside X1's list; 0 `DeletingDtor(0)` / `(1)` calls outside it;
 `Object::Destroy` is `delete`; every slot-index row of the inventories converted or on an exempt table;
 the tests pin the new order; the gate passes; `stepclose.sh`.
+
+## 7. The step as run (2026-09-27 / 28)
+
+Block 0: five read-only inventories in parallel → this sheet → **W0**: seven blocks on worktrees (T0, R-UI,
+R-GFX, R-IO, R-REST, G-A, G-B), each merged and gated → an independent AUDIT of what was left → **W1**: one
+owner, `flip.py` + the hand cases, gated ALONE on a detached checkout before the tests existed → a second
+owner rewrote the tests on top of that branch → one merge → the close. 10 gated merges, 0 problems, no
+re-run, no re-cut baseline (`b3x_session/GATE_TABLE.md`, `CLOSE_NUMBERS.md`).
+
+## 8. Corrections to this sheet
+- X1: the state-machine "handler tables" have no class; nothing to exempt.
+- X3: two reads could not become calls by name and take the slot from the member instead
+  (`dialog.cpp:1646` `Contains`, `wave28_lane_gfxbody.cpp:1174` `AnimationEvent::Construct`): their
+  headers disagree with retail, and the fix is a behaviour / signature change of its own (NEXT_SESSION §0).
+- X4: the body of `IO::ReaderWriter`'s pure destructor is out of line (a link collision, CLOSE_NUMBERS §3);
+  `Graphics::Light`, `Object::ExtensionCompiler`, `Object::ExternalCompiler` declare no destructor of their
+  own slot 0 and keep their protected ones; in-class `operator new` declarations nothing references stay
+  undefined.
+- X5: no vector-arm test was retired — 41 became `delete[]` of `new T[n]` (braced initialisers where the
+  class has no default constructor).
+- §4: `runtime/types/engine` and the other per-namespace type headers belonged to the block of their
+  namespace's `runtime/src` directory.
+
+## 9. Deliberately left
+The twelve `Video::*Data` classes and the dx11 seam (carry-over 6); the two header / argument divergences
+of §8; `Video::DeviceData::Slot4`'s missing bool; dead `statemachine.cpp` helpers and `factory_vtbl`; four
+shapes `partc.py` does not see. All listed in `NEXT_SESSION.md` §0 and §2.

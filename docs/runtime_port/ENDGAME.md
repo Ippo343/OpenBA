@@ -164,7 +164,7 @@ docs/runtime_port/endgame_c/FLAGS.md (historical).]`
    offset, 29 classes not 56; step 8 embeds it by value (D6).]` **When the last hand-built array is gone**, one mechanical pass may
    replace `DeletingDtor` with `virtual ~T()` and `Destroy` with `delete`; that is the
    "normal virtual cutover" and it changes nothing observable because by then every vtable
-   is compiler-generated and every delete goes through the helper.
+   is compiler-generated and every delete goes through the helper. `[DONE 2026-09-28, endgame_b/B3X_RULES.md: 449 classes; the premise held for dispatch BY NAME only, so every read of a table by index was converted first; the twelve Video::*Data classes stay on DeletingDtor until the dx11 seam goes.]`
 
 3. **Templates instead of per-instantiation bodies.** Retail monomorphised
    `Collection::Array<T>`, `Set<K,V>`, `LinkedList<T>` and the port mirrored it as one C
