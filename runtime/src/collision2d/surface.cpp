@@ -96,14 +96,15 @@ bool Surface::Serialize(void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    using ScalarFn = void (*)(ReaderWriter*, uint32_t*, const char*);
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_f20, nullptr);
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_f28, nullptr);
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_f24, nullptr);
+    // The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+    // interchangeable (Serializer.h); SerializeUInt is +0x98.
+    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+    rwc->SerializeUInt(_f20, nullptr);
+    rwc->SerializeUInt(_f28, nullptr);
+    rwc->SerializeUInt(_f24, nullptr);
 
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        rwc->DeletingDtor(1);
     }
     return true;
 }

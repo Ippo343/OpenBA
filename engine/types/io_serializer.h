@@ -61,26 +61,12 @@ namespace io {
 //   +0xB8  Serialize(uchar& v, name)
 //   +0xC8  SerializeBytes(int size, void* ptr, name)
 //
-// (Offsets in bytes. Slot index = offset/8.)
+// (Offsets in bytes, RETAIL order. These are IO::ReaderWriter's slots; the
+// class and its by-name members are runtime/types/io/Serializer.h. B3X W0
+// deleted the `enc_vtbl` byte-offset constants that stood here: no user.)
 struct Encoding {
     void** vtable;   // +0x00
 };
-
-// Encoding vtable slot offsets (bytes). Used by the Serializer forwarders.
-namespace enc_vtbl {
-    constexpr int kDtor            = 0x00;
-    constexpr int kGetVersion      = 0x08;
-    constexpr int kSerializeIntArr = 0x48;  // (count, int*,    name)
-    constexpr int kSerializeU16Arr = 0x50;  // (count, ushort*, name)
-    constexpr int kSerializeI16Arr = 0x58;  // (count, short*,  name)
-    constexpr int kSerializeU8Arr  = 0x60;  // (count, uchar*,  name)
-    constexpr int kSerializeBool   = 0x78;  // (bool&,  name)
-    constexpr int kSerializeFloat  = 0x80;  // (float&, name)
-    constexpr int kSerializeUInt   = 0x98;  // (uint&,  name)
-    constexpr int kSerializeInt    = 0xA0;  // (int&,   name)
-    constexpr int kSerializeUChar  = 0xB8;  // (uchar&, name)
-    constexpr int kSerializeBytes  = 0xC8;  // (size, void*, name)
-}
 
 // ----------------------------------------------------------------------------
 // IO::Stream  (abstract base; concrete = MemoryStream / CompressedMemoryStream /

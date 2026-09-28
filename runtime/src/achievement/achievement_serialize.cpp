@@ -122,11 +122,16 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
     return rw;
 }
 
+// The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable (Serializer.h); the members are called by name on the class.
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 // `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+    AsRw(rw)->DeletingDtor(1);
 }
 
 // ---- the unexported internals, by address ---------------------------------
@@ -189,8 +194,7 @@ bool Achievement::Serialize(void* streamv) {
     _spriteName.Serialize(&ser);                                    // +0x40
 
     int count = _goals.GetSize();                                   // +0x50
-    using IntFn = void (*)(ReaderWriter*, int*, const char*);
-    reinterpret_cast<IntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
+    AsRw(rw)->SerializeInt(count, nullptr);                         // +0xA0
 
     if (stream->direction == rt::io::kDirectionReading) {
         _goals.SetSize(count);   // 0x180005110 — `GoalArray` names kSpec_U64Zero
@@ -226,8 +230,7 @@ void AchievementManager::Persist(IO::Stream& streamRef) {
         RemoveAll();
 
     int count = _instances.GetSize();
-    using IntFn = void (*)(ReaderWriter*, int*, const char*);
-    reinterpret_cast<IntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
+    AsRw(rw)->SerializeInt(count, nullptr);                         // +0xA0
 
     if (stream->direction == rt::io::kDirectionReading)
         _instances.SetSize(count);

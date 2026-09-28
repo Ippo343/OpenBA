@@ -700,13 +700,11 @@ void Scene::Serialize(void* serializer) {
     void* rw = factory(st->encoding, &local, nullptr);
     local.readerWriter = static_cast<rt::io::ReaderWriter*>(rw);
 
-    void** rwVtable = *reinterpret_cast<void***>(rw);
+    IO::ReaderWriter* rwc = static_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
 
-    // kScalarInt (+0xa0) -- (int& value, const char* name)
+    // SerializeInt (+0xa0) -- (int& value, const char* name)
     int32_t count = effects.GetSize();
-    using ScalarIntFn = void (*)(void*, int32_t*, const char*);
-    reinterpret_cast<ScalarIntFn>(rwVtable[rt::io::rw_vtbl::kScalarInt / 8])(
-        rw, &count, nullptr);
+    rwc->SerializeInt(count, nullptr);
 
     // Reading only: grow the array to the count just read. Retail's JNZ at
     // 0x1800e00c0 skips this when writing, so saving never reallocates.
@@ -718,14 +716,11 @@ void Scene::Serialize(void* serializer) {
     // the function-local first-call cache that resolved it by address is gone).
     RtAudio_Scene_SerializeEffectSlots(&local, count, effects.GetData());
 
-    // kArrayBool (+0x20) -- (int n, bool* data, const char* name), n == 5.
-    using ArrayBoolFn = void (*)(void*, int32_t, void*, const char*);
-    reinterpret_cast<ArrayBoolFn>(rwVtable[rt::io::rw_vtbl::kArrayBool / 8])(
-        rw, 5, paused, nullptr);
+    // SerializeBoolArray (+0x20) -- (int n, bool* data, const char* name), n == 5.
+    rwc->SerializeBoolArray(5, reinterpret_cast<bool*>(paused), nullptr);   // B.3.x bridge
 
     if (rw) {
-        using DtorFn = void (*)(void*, uint32_t);
-        reinterpret_cast<DtorFn>(rwVtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rwc->DeletingDtor(1);
     }
 }
 

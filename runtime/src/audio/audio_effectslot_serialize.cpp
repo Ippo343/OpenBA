@@ -108,18 +108,14 @@ extern "C" void RtObject_ExternalPtrSerialize_SoundEffect(void** self,
 
 namespace {
 
-// A ReaderWriter slot call, `(rw, <args>)`. Retail loads the vtable fresh from
-// `ser->readerWriter` on EVERY field (`MOV RCX,[RDI+8] / MOV RAX,[RCX]`), so
-// the reload is transcribed rather than hoisted.
-inline void** RwVTable(rt::io::ReaderWriter* rw) {
-    return *reinterpret_cast<void***>(rw);
+// A ReaderWriter member call, by name on the real class. Retail loads the
+// ReaderWriter fresh from `ser->readerWriter` on EVERY field
+// (`MOV RCX,[RDI+8] / MOV RAX,[RCX]`), so the reload is transcribed rather
+// than hoisted. The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are
+// asserted interchangeable (Serializer.h).
+inline IO::ReaderWriter* Rw(rt::io::Serializer* ser) {
+    return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter);   // B.3.x bridge
 }
-
-using ArrayFloatFn  = void (*)(void* rw, int32_t n, float* p, const char* name);
-using ScalarFloatFn = void (*)(void* rw, float*   v, const char* name);
-using ScalarUIntFn  = void (*)(void* rw, uint32_t* v, const char* name);
-using ScalarInt64Fn = void (*)(void* rw, int64_t* v, const char* name);
-using ScalarIntFn   = void (*)(void* rw, int32_t* v, const char* name);
 
 }  // namespace
 
@@ -136,11 +132,7 @@ extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) 
     // read once, into it, and never again (0x180051e0a).
     int32_t count = arr->GetSize();
 
-    {   // kScalarInt (+0xa0)
-        rt::io::ReaderWriter* rw = ser->readerWriter;
-        reinterpret_cast<ScalarIntFn>(
-            RwVTable(rw)[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
-    }
+    Rw(ser)->SerializeInt(count, nullptr);                    // +0xa0
 
     // READING ONLY (0x180051e2f `CMP dword [stream+8],0 / JNE`).
     // ENDGAME B.3.2 step 2 — the 0x180052330 by-address forwarder is GONE:
@@ -156,13 +148,8 @@ extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) 
     EmitterInstance* e = arr->GetData();  // 0x180051e45
 
     for (int32_t i = 0; i < count; ++i, ++e) {                 // 0x180051e53
-        rt::io::ReaderWriter* rw = ser->readerWriter;
-        reinterpret_cast<ArrayFloatFn>(
-            RwVTable(rw)[rt::io::rw_vtbl::kArrayFloat / 8])(rw, 3, &e->x, nullptr);
-
-        rw = ser->readerWriter;
-        reinterpret_cast<ScalarFloatFn>(
-            RwVTable(rw)[rt::io::rw_vtbl::kScalarFloat / 8])(rw, &e->volume, nullptr);
+        Rw(ser)->SerializeFloatArray(3, &e->x, nullptr);      // +0x28
+        Rw(ser)->SerializeFloat(e->volume, nullptr);          // +0x80
     }
 }
 
@@ -181,30 +168,18 @@ extern "C" void RtAudio_Scene_SerializeEffectSlots(void* serv, int32_t count,
     EffectSlot* s = static_cast<EffectSlot*>(datav);
 
     do {
-        rt::io::ReaderWriter* rw = ser->readerWriter;
-        reinterpret_cast<ArrayFloatFn>(                        // 0x180052672
-            RwVTable(rw)[rt::io::rw_vtbl::kArrayFloat / 8])(rw, 3, &s->posX, nullptr);
-
-        rw = ser->readerWriter;
-        reinterpret_cast<ScalarUIntFn>(                        // 0x180052683
-            RwVTable(rw)[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &s->soundType, nullptr);
+        Rw(ser)->SerializeFloatArray(3, &s->posX, nullptr);   // 0x180052672 +0x28
+        Rw(ser)->SerializeUInt(s->soundType, nullptr);        // 0x180052683 +0x98
 
         // 0x18005268f — the ExternalPtr<SoundEffect> at +0x10, `(this, ser)`.
         RtObject_ExternalPtrSerialize_SoundEffect(
             reinterpret_cast<void**>(&s->soundEffectRef), ser);
 
-        rw = ser->readerWriter;
-        reinterpret_cast<ScalarInt64Fn>(                       // 0x1800526a2
-            RwVTable(rw)[rt::io::rw_vtbl::kScalarInt64 / 8])(rw, &s->startTime, nullptr);
+        Rw(ser)->SerializeInt64(s->startTime, nullptr);       // 0x1800526a2 +0x90
 
         // +0x20 `channelHandle` is SKIPPED; see the banner.
-        rw = ser->readerWriter;
-        reinterpret_cast<ScalarUIntFn>(                        // 0x1800526b6
-            RwVTable(rw)[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &s->idTag, nullptr);
-
-        rw = ser->readerWriter;
-        reinterpret_cast<ScalarFloatFn>(                       // 0x1800526ca
-            RwVTable(rw)[rt::io::rw_vtbl::kScalarFloat / 8])(rw, &s->baseVolume, nullptr);
+        Rw(ser)->SerializeUInt(s->idTag, nullptr);            // 0x1800526b6 +0x98
+        Rw(ser)->SerializeFloat(s->baseVolume, nullptr);      // 0x1800526ca +0x80
 
         // 0x1800526d7 — the inner array at +0x30, `(arr, ser)`.
         RtAudio_Scene_SerializeEmitterInstances(&s->positions, ser);

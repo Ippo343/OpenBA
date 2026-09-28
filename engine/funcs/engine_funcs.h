@@ -393,7 +393,7 @@ extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 
 // FindComponentByTypeId(entity, typeId) — searches entity component array
 // Reimplemented from FUN_1400c3680: iterates entity+0x30 array (count at +0x38),
-// calls GetTypeId() via vtable[2] (offset 0x10) on each component, returns first match.
+// calls Object::Base::Type() (retail slot 2, +0x10) on each component, returns first match.
 // Original used hidden return pointer (InternalBasePtr); this inline returns void* directly.
 inline void* FindComponentByTypeId(void* entity, int typeId) {
     if (!entity) return nullptr;
@@ -404,10 +404,9 @@ inline void* FindComponentByTypeId(void* entity, int typeId) {
         void* compPtr = *(void**)(arr + (uintptr_t)i * 8);  // InternalBasePtr value = Internal*
         if (!compPtr) continue;
         // CheckPtr validates the pointer; for our purposes we just null-check above.
-        // GetTypeId: vtable[2] at offset 0x10
-        void** vtable = *(void***)compPtr;
-        typedef int (*GetTypeId_t)(void*);
-        int id = ((GetTypeId_t)vtable[2])(compPtr);
+        // Object::Base::Type() (retail slot 2, +0x10), by name on the real class.
+        int id = static_cast<int>(
+            static_cast<const ::Object::Base*>(compPtr)->Type());   // B.3.x bridge
         if (id == typeId) {
             return compPtr;
         }

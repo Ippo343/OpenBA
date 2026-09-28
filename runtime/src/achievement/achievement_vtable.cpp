@@ -201,11 +201,16 @@ ReaderWriter* MakeCodecVersioned(Stream* stream, Serializer* ser, int version) {
     return rw;
 }
 
+// The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable (Serializer.h); the members are called by name on the class.
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 // `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+    AsRw(rw)->DeletingDtor(1);
 }
 
 // Two unexported template instantiations reached by ADDRESS (no mangled name
@@ -283,15 +288,11 @@ void AchievementInstance::Persist(void* streamv) {
     Serializer outer;
     ReaderWriter* rwOuter = MakeCodecVersioned(stream, &outer, 1);
 
-    using VersionFn = int  (*)(ReaderWriter*);
-    using SkipFn    = void (*)(ReaderWriter*);
-    const int version = reinterpret_cast<VersionFn>(
-        rwOuter->vtable[rt::io::rw_vtbl::kGetVersion / 8])(rwOuter);
+    const int version = AsRw(rwOuter)->GetVersion();
 
     if (version == 0) {
         // Absent in this stream's format: skip, destroy only the outer codec.
-        reinterpret_cast<SkipFn>(
-            rwOuter->vtable[rt::io::rw_vtbl::kSkip / 8])(rwOuter);
+        AsRw(rwOuter)->Skip();
         DestroyCodec(rwOuter);
         return;
     }
@@ -304,9 +305,7 @@ void AchievementInstance::Persist(void* streamv) {
     ReaderWriter* rwInner = MakeCodecVersioned(stream, &inner, 0);
 
     int count = _goalList._goals.GetSize();                         // +0x18
-    using IntFn = void (*)(ReaderWriter*, int*, const char*);
-    reinterpret_cast<IntFn>(rwInner->vtable[rt::io::rw_vtbl::kScalarInt / 8])(
-        rwInner, &count, nullptr);
+    AsRw(rwInner)->SerializeInt(count, nullptr);                    // +0xA0
 
     if (stream->direction == rt::io::kDirectionReading) {
         // retail 0x180009d70 — `_goals` names kSpec_PtrZero in its type.
