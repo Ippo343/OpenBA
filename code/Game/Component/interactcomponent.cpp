@@ -15,7 +15,7 @@
 #include "Component/MultiObjectComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
@@ -24,46 +24,10 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-
-// IsDerivedFrom -- dispatch slot
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// InternalBasePtr::Ctor(retbuf, rawPtr)
-typedef void (*fn_IBP_Ctor_t)(void* retbuf, void* rawPtr);
-static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
-
-// FUN_1400032e0 -- dynamic array resize for IBP arrays
-// 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into
-// the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-
-// FUN_140004740 -- FindComponent (MultiObject)
-typedef void (*fn_FindMultiObjComp_t)(uintptr_t entity, void* retBuf);
-static fn_FindMultiObjComp_t s_fn_FindMultiObjComp = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    uintptr_t slot;
-
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
-        reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Ctor));
-
-    s_fn_FindMultiObjComp = reinterpret_cast<fn_FindMultiObjComp_t>(
-        ResolveAddr(Module::Exe, 0x140004740));
-
-    s_helpersResolved = true;
-}
+// Helpers, called by name (B3R): Object::Base::IsDerivedFrom (import slot 0x140152a98),
+// InteractComponent_FindWorkplaceComponent (0x140004740, below). 0x1400032e0 was
+// Collection::Array<void*>::SetSize(n) monomorphised into the exe (ENDGAME B.3.2 step 2)
+// — converted at its call site below.
 
 // ============================================================
 // InteractComponent::Shutdown (vtable slot [3], 0x140123340)
@@ -95,7 +59,6 @@ static inline bool SerializerIsLoading(void* serializer) {
 // ============================================================
 // Shared callee: also used from buildcomponent.cpp (BuildComponent::Draw).
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
-    EnsureHelpers();
     const uint32_t tidWorkplace = MultiObjectComponent::TypeId();   // cell 0x1401c7ac0 (D5)
 
     void* found = nullptr;
@@ -108,13 +71,13 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == tidWorkplace) {
                 void* c = (void*)*slot;
-                if (s_fn_IsDerivedFrom_dispatch && s_fn_IsDerivedFrom_dispatch(c, tidWorkplace))
+                if (reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(tidWorkplace))   // B.3.x bridge
                     found = c;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retBuf) ::Object::InternalBasePtr(
+    new (retBuf) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
@@ -125,19 +88,6 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
 // owner's MultiObject children. For each child's MapComponent (DAT_1401c7900),
 // scan its job hosts for an InteractComponent and append it to the +0x28 list.
 // Faithful port of the Ghidra decompilation.
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void InteractComponent_InitFuncs() {
-    EnsureHelpers();
-
-#ifdef _DEBUG
-    printf("[InteractComponent] Funcs resolved: "
-           "FindWorkplace=%p\n",
-           (void*)s_fn_FindMultiObjComp);
-#endif
-}
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — InteractComponent as a REAL class (InteractComponent.h).
@@ -166,8 +116,6 @@ InteractComponent::InteractComponent() : field28(nullptr), field30(nullptr) {
 
 // [3] 0x140123340 — the use-location IBP array (+0x28/+0x30) round-trips here.
 void InteractComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     // Call base Component_Serialize
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
@@ -206,11 +154,10 @@ void InteractComponent::Persist(void* stream) {
         // Validate with IsDerivedFrom
         void* ptr = *reinterpret_cast<void**>(element);
         if (ptr != nullptr) {
-            if (s_fn_IsDerivedFrom_dispatch) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(ptr, InteractComponent::TypeId());
-                if (!valid) {
-                    *reinterpret_cast<uint64_t*>(element) = 0;
-                }
+            bool valid = reinterpret_cast<const Object::Base*>(ptr)->IsDerivedFrom(
+                InteractComponent::TypeId());   // B.3.x bridge (slot 0x140152a98)
+            if (!valid) {
+                *reinterpret_cast<uint64_t*>(element) = 0;
             }
         }
     }
@@ -220,15 +167,14 @@ void InteractComponent::Persist(void* stream) {
 }
 // [6] 0x140123110
 void InteractComponent::OnAdded() {
-    EnsureHelpers();
     uintptr_t selfA = (uintptr_t)this;
 
     int64_t multiBuf = 0;
-    if (s_fn_FindMultiObjComp) s_fn_FindMultiObjComp(*(uintptr_t*)(selfA + 0x10), &multiBuf);
+    InteractComponent_FindWorkplaceComponent(*(uintptr_t*)(selfA + 0x10), &multiBuf);   // 0x140004740
     if (multiBuf == 0) return;
 
     // Clear the existing use-location array
-    fn_MemFreeStatic(*(void**)(selfA + 0x28));
+    System::MemoryAllocator::MemFree(*(void**)(selfA + 0x28));
     *(int64_t*)(selfA + 0x28) = 0;
     *(int64_t*)(selfA + 0x30) = 0;
 
@@ -246,15 +192,15 @@ void InteractComponent::OnAdded() {
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == InteractComponent::TypeId()) {
                 void* c = (void*)*slot;
-                if (s_fn_IsDerivedFrom_dispatch &&
-                    s_fn_IsDerivedFrom_dispatch(c, InteractComponent::TypeId()))
+                if (reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(
+                        InteractComponent::TypeId()))   // B.3.x bridge (slot 0x140152a98)
                     interact = c;
                 break;
             }
         }
 
         int64_t interactIbp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&interactIbp) ::Object::InternalBasePtr(
+        new (&interactIbp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
         if (interactIbp != 0) {
             // Append interactIbp to the use-location array at +0x28 (count +0x30, cap +0x34)
@@ -266,8 +212,7 @@ void InteractComponent::OnAdded() {
                 if (*(int*)(selfA + 0x34) < (int)newCount) {
                     *(uint32_t*)(selfA + 0x34) = newCount;
                     if (oldCount != 0) *(uint32_t*)(selfA + 0x34) = newCount * 3;
-                    void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                                           (uint64_t)((int64_t)*(int*)(selfA + 0x34) << 3), 8);
+                    void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)(selfA + 0x34) << 3), 8);
                     *(void**)(selfA + 0x28) = nb;
                 }
                 int start = (oldBuf == *(void**)(selfA + 0x28)) ? (int)oldCount : 0;
@@ -280,7 +225,7 @@ void InteractComponent::OnAdded() {
                         *dst = (i < (int)oldCount) ? oldArr[i] : interactIbp;
                     }
                 }
-                if (oldBuf != *(void**)(selfA + 0x28)) fn_MemFreeStatic(oldBuf);
+                if (oldBuf != *(void**)(selfA + 0x28)) System::MemoryAllocator::MemFree(oldBuf);
             }
         }
     }

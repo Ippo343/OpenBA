@@ -22,6 +22,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <new>
 
@@ -49,7 +50,7 @@ HerbalistDescription::HerbalistDescription()
 // dtor (slot 0 0x140006cf0 minus the stamps): frees the External* array buffer (entries are non-owning).
 // The compiler then chains ~Description -> ~External.
 HerbalistDescription::~HerbalistDescription() {
-    if (_herbs && fn_MemFreeStatic) fn_MemFreeStatic(_herbs);
+    if (_herbs) System::MemoryAllocator::MemFree(_herbs);
     _herbs = nullptr;
 }
 
@@ -59,8 +60,8 @@ bool HerbalistDescription::Serialize(void* stream) {
     // External*-array @ +0x20 (count @ +0x28, stride 8)
     ser.Serialize(_herbCount, nullptr);
     int n = _herbCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * 8, 8);
+    if (SerStreamErr(ser) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
+        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
         _herbs = buf;
         _herbCap = n;
         if (buf) for (int i = 0; i < n; ++i) static_cast<void**>(buf)[i] = nullptr;

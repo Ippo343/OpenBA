@@ -38,6 +38,8 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x14000bf40)
 #include "system/String.h"
 #include "math/Math.h"
 #include "io/Stream.h"
@@ -59,14 +61,14 @@ void AppendNode(void* header, const uint32_t src[6]) {
     if (cap < newCount) {
         int newCap = (count != 0) ? newCount * 3 : newCount;  // matches exe growth
         *(int32_t*)(h + 0xc) = newCap;
-        void* nb = (fn_MemAlloc && g_pMemAllocSingleton)
-                   ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 0x18, 4)
+        void* nb = (System::MemoryAllocator::_singleton)
+                   ? System::MemoryAllocator::MemAlloc((uint64_t)newCap * 0x18, 4)
                    : nullptr;
         if (oldBuf && nb && count > 0) {
             memcpy(nb, oldBuf, (size_t)count * 0x18);
         }
         *(void**)h = nb;
-        if (oldBuf && oldBuf != nb && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+        if (oldBuf && oldBuf != nb) System::MemoryAllocator::MemFree(oldBuf);
     }
     *(int32_t*)(h + 8) = newCount;
     uint8_t* buf = *(uint8_t**)h;
@@ -86,9 +88,9 @@ InteractDescription::InteractDescription()
 // dtor (slot 0 0x140035280 minus the stamps): frees the three node arrays (FUN_140035280).
 // The compiler then chains ~Description -> ~External.
 InteractDescription::~InteractDescription() {
-    if (fn_MemFreeStatic) {
+    {
         for (NodeArray* a : {&_useNodes, &_buildNodes, &_createNodes}) {
-            fn_MemFreeStatic(a->data);
+            System::MemoryAllocator::MemFree(a->data);
             a->data = nullptr;
         }
     }
@@ -96,10 +98,9 @@ InteractDescription::~InteractDescription() {
 
 // [5] 0x140123500: stream order as retail.
 bool InteractDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // ---- stream-accurate: single ExternalPtr (+0x20) ----
-    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
     
     // ---- post-load build (load only; reads from the resolved external) ----
     // Direction flag: retail tests *(int*)(stream + 8) == 0 (FUN_140123500 reads

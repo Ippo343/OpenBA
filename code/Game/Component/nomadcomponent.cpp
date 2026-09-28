@@ -12,7 +12,8 @@
 #include "Component/nomadcomponent_funcs.h"
 #include "Dialog/EntityUI.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Dialog/exe_bodies.h"   // Toolbar_ShowGroup_Impl
+#include "Player/exe_bodies.h"   // PlayerTrade_BSTFindRemove_2c690
 #include "math/Math.h"
 #include "ui/UserInterface.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -29,218 +30,9 @@
 #include "object/TypeInfo.h"   // ENDGAME B.3.9 SS2: Object::Factory::_singleton
 #include "Component/exe_bodies.h"
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// IsDerivedFrom
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// FUN_140103480 — register with nomad list
-typedef void (*fn_RegisterNomad_t)(void* nomadList, void* ibp);
-static fn_RegisterNomad_t s_fn_RegisterNomad = nullptr;
-
-static void** s_pGameState = nullptr;
-
-static bool s_initialized = false;
-
-
-// ============================================================
-// NomadComponent::OnCreate (0x14004fd20)
-// ============================================================
-// Registers owner entity with game state nomad list at +0x120.
-
-void NomadComponent_OnCreate(NomadComponent* self) {
-    if (!s_pGameState || !*s_pGameState || !s_fn_RegisterNomad) return;
-
-    // Create IBP from owner (copy the owner pointer)
-    uintptr_t localIBP[4] = {0};
-    localIBP[0] = *(uintptr_t*)((uintptr_t)self + 0x10);
-
-    void* nomadList = *(void**)((uintptr_t)*s_pGameState + 0x120);
-    s_fn_RegisterNomad(nomadList, localIBP);
-}
-
-// ============================================================
-// Reimpl of FUN_140102b60 (Component reg wave B) — controller rebuild.
-// NOT nomad-specific (Ghidra mislabels it): this rebuilds the controller object at
-// self+0x28 from a setting-keyed std::map of controller descriptors at self+0x10.
-// Called by NomadComp_FUN_140103480 (and other controller-attach paths) whenever the
-// active setting key (self+0x20, taken from self+0x88 when the self+0x80 flag is set)
-// changes. Steps (1:1 with the decompile / disassembly):
-//   1. Resolve the effective key (param2, or self+0x88 if flagged); if unchanged and a
-//      controller already exists, do nothing.
-//   2. Tear down the old controller (vtable+0x28 cleanup, then DeletePtr) at self+0x28.
-//   3. In-order walk the map (root self+0x10) matching descriptor keys against the
-//      component list at self+0x20 (vtable+0x10 GetType), recording the last match key.
-//   4. Lower-bound the map for that key -> node.
-//   5. Factory::CreateObject(node->key2) validated IsDerivedFrom(DWORD_1401c6eb8) ->
-//      IBP -> self+0x28.
-//   6. If node has no cached setting (node+0x10==0), pull it from the controller's
-//      vtable+0x58 accessor, CreateObject(setting type) validated against
-//      TypeInfo_ToolSetting (DAT_1401c6ef0) -> IBP -> node+0x10.
-//   7. Wire ctrl->owner(+0x10)=self, ctrl->key(+0x20)=self+0x20, ctrl->setting(+0x18)=
-//      node+0x10, then vtable+0x20 Startup.
-// Closure-safe: all callees are engine externals (CheckPtr/CreateObject/IsDerivedFrom/
-// IBP ctor+dtor) + virtual slots. Map-node layout (uint* index -> byte off):
-//   *node=+0 key, node[2]=+8 key2, node[4]=+0x10 setting-IBP, node[6]=+0x18 parent,
-//   node[8]=+0x20 right, node[10]=+0x28 left.  INTRICATE — lead must Ghidra-verify.
-// ============================================================
-typedef void* (*fn_b60_CreateObject_t)(void* factory, uint32_t typeId);
-typedef bool  (*fn_b60_IsDerived_t)(void* obj, uint32_t typeId);
-typedef void  (*fn_b60_IBPCtor_t)(void* dst, void* src);
-typedef void  (*fn_b60_DeletePtr_t)(void* ibp);
-static fn_b60_CreateObject_t s_b60_CreateObject = nullptr; // slot 0x140152778
-static fn_b60_IsDerived_t    s_b60_IsDerived = nullptr;    // slot 0x140152a98
-static fn_b60_IBPCtor_t      s_b60_IBPCtor = nullptr;      // slot 0x140152a90
-static fn_b60_DeletePtr_t    s_b60_DeletePtr = nullptr;    // slot 0x140151ab8
-// The two validation ids are read BY CELL (ENDGAME B.3.9 RF): DWORD_1401c6eb8 is
-// Tool's cell (Tool::TypeId()), DAT_1401c6ef0 ToolSetting's (ToolSetting::TypeId()).
-static bool s_b60Resolved = false;
-static void EnsureB60() {
-    if (s_b60Resolved) return;
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152778);
-    if (slot) s_b60_CreateObject = *reinterpret_cast<fn_b60_CreateObject_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_b60_IsDerived = *reinterpret_cast<fn_b60_IsDerived_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a90);
-    if (slot) s_b60_IBPCtor = *reinterpret_cast<fn_b60_IBPCtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151ab8);
-    if (slot) s_b60_DeletePtr = *reinterpret_cast<fn_b60_DeletePtr_t*>(slot);
-    s_b60Resolved = true;
-}
-
-void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
-    EnsureB60();
-    uint8_t* self = reinterpret_cast<uint8_t*>(param_1);
-
-    int64_t key = param_2;
-    if (*reinterpret_cast<char*>(self + 0x80) != '\0' && param_2 != 0) {
-        key = *reinterpret_cast<int64_t*>(self + 0x88);
-    }
-
-    if (*reinterpret_cast<int64_t*>(self + 0x20) == key &&
-        *reinterpret_cast<int64_t*>(self + 0x28) != 0 && key != 0) {
-        return;  // unchanged and controller present
-    }
-
-    *reinterpret_cast<int64_t*>(self + 0x20) = key;
-
-    // Tear down existing controller IBP
-    if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
-        int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-        reinterpret_cast<Tool*>(ctrl)->Shutdown();   // B.3.x bridge (slot 5)
-        if (s_b60_DeletePtr) s_b60_DeletePtr(self + 0x28);
-    }
-
-    // --- In-order walk the map, matching descriptor keys against the component list ---
-    uint32_t matchKey = 0;
-    uint32_t* node = *reinterpret_cast<uint32_t**>(self + 0x10);  // root
-    if (node != nullptr) {
-        // descend to leftmost
-        uint32_t* cur;
-        do { cur = node; node = *reinterpret_cast<uint32_t**>(cur + 8); } while (node != nullptr);
-        node = cur;
-        while (node != nullptr) {
-            int64_t list = *reinterpret_cast<int64_t*>(self + 0x20);
-            if (list != 0) {
-                uint32_t nodeKey = *node;
-                int cnt = *reinterpret_cast<int*>(list + 0x30);
-                int64_t arr = *reinterpret_cast<int64_t*>(list + 0x28);
-                for (int i = 0; i < cnt; i++) {
-                    void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
-                    uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-                    if (tid == nodeKey) {
-                        if (*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8) != 0)
-                            matchKey = *node;
-                        break;
-                    }
-                }
-            }
-            if (node == nullptr) break;
-            // in-order successor
-            uint32_t* right = *reinterpret_cast<uint32_t**>(node + 10);
-            if (right == nullptr) {
-                uint32_t* parent = *reinterpret_cast<uint32_t**>(node + 6);
-                while (parent != nullptr &&
-                       *reinterpret_cast<uint32_t**>(parent + 10) == node) {
-                    node = parent;
-                    parent = *reinterpret_cast<uint32_t**>(node + 6);
-                }
-                node = parent;
-            } else {
-                uint32_t* d = right;
-                while (d != nullptr) { right = d; d = *reinterpret_cast<uint32_t**>(d + 8); }
-                node = right;
-            }
-        }
-    }
-
-    // --- Lower-bound the map for matchKey ---
-    uint32_t* found = nullptr;
-    {
-        uint32_t* n = *reinterpret_cast<uint32_t**>(self + 0x10);
-        while (n != nullptr) {
-            if (matchKey < *n) {
-                n = *reinterpret_cast<uint32_t**>(n + 8);   // go left
-            } else {
-                found = n;
-                if (matchKey <= *n) break;
-                n = *reinterpret_cast<uint32_t**>(n + 10);  // go right
-            }
-        }
-    }
-    if (found == nullptr) return;  // defensive (orig assumes a node)
-
-    void* factory = ::Object::Factory::_singleton;   // retail: **[0x140152760]
-
-    // --- CreateObject(node->key2) validated against controller type ---
-    void* obj = (factory && s_b60_CreateObject) ? s_b60_CreateObject(factory, found[2]) : nullptr;
-    void* ctrlObj = nullptr;
-    if (obj && s_b60_IsDerived &&
-        s_b60_IsDerived(obj, Tool::TypeId())) {                  // cell 0x1401c6eb8
-        ctrlObj = obj;
-    }
-    int64_t ibpA = 0;
-    if (s_b60_IBPCtor) s_b60_IBPCtor(&ibpA, ctrlObj);
-    *reinterpret_cast<int64_t*>(self + 0x28) = ibpA;
-
-    // --- Build the cached setting (node+0x10) if absent ---
-    if (*reinterpret_cast<int64_t*>(found + 4) == 0) {
-        int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-        int* probe = reinterpret_cast<int*>(
-            reinterpret_cast<Tool*>(ctrl)->GetSettingType(
-                reinterpret_cast<Object::Type*>(&ibpA)));   // B.3.x bridge (slot 11, retslot)
-        if (probe && *probe != 0) {
-            ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-            uint32_t* setRef = reinterpret_cast<uint32_t*>(
-                reinterpret_cast<Tool*>(ctrl)->GetSettingType(
-                    reinterpret_cast<Object::Type*>(&ibpA)));   // B.3.x bridge (slot 11, retslot)
-            void* setObj = (factory && s_b60_CreateObject)
-                               ? s_b60_CreateObject(factory, *setRef) : nullptr;
-            void* setValidated = nullptr;
-            if (setObj && s_b60_IsDerived &&
-                s_b60_IsDerived(setObj, ToolSetting::TypeId())) {   // cell 0x1401c6ef0
-                setValidated = setObj;
-            }
-            int64_t ibpB = 0;
-            if (s_b60_IBPCtor) s_b60_IBPCtor(&ibpB, setValidated);
-            *reinterpret_cast<int64_t*>(found + 4) = ibpB;
-        }
-    }
-
-    // --- Wire the controller and start it ---
-    int64_t setting = *reinterpret_cast<int64_t*>(found + 4);
-    int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-    int64_t keyVal = *reinterpret_cast<int64_t*>(self + 0x20);
-    *reinterpret_cast<int64_t*>(ctrl + 0x10) = param_1;
-    *reinterpret_cast<int64_t*>(ctrl + 0x20) = keyVal;
-    *reinterpret_cast<int64_t*>(ctrl + 0x18) = setting;
-    ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-    reinterpret_cast<Tool*>(ctrl)->Startup();   // B.3.x bridge (slot 4)
-}
+// Helpers, called by name (B3R): Object::Base::IsDerivedFrom (import slot 0x140152a98),
+// NomadComp_FUN_140103480 (0x140103480, below), Toolbar_ShowGroup_Impl (0x140102b60),
+// PlayerTrade_BSTFindRemove_2c690 (0x14002c690).
 
 // ============================================================
 // Reimpl of FUN_140103480 (Component reg wave "people")
@@ -275,8 +67,7 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 // The fault address was stale-register garbage, not a resolve failure. (Same trap family
 // as reference_byvalue_return_hidden_rdx.)
 // The slot is Tool [10] IsSelected(uint64_t* entityRef) (Player/Tool.h), called by name below.
-typedef void  (*fn_FUN_140102b60_t)(int64_t self, int v);  // 0x140102b60
-typedef void  (*fn_TradeWork_c690_t)(int64_t* listBase, void* ibp); // 0x14002c690
+// 0x140102b60 is Toolbar_ShowGroup_Impl, 0x14002c690 PlayerTrade_BSTFindRemove_2c690.
 // slot 0x140151768 -- member, non-trivial return AND a THIRD argument Ghidra hides.
 // Retail 0x140103480 at 0x140103517: `MOV R8D,[0x1401c4f00]` (EntityUI) immediately
 // before `CALL [0x140151768]`. The mangled name confirms it: ...@Object@@I@Z -- the
@@ -284,49 +75,8 @@ typedef void  (*fn_TradeWork_c690_t)(int64_t* listBase, void* ibp); // 0x14002c6
 // passes whatever the previous call left in R8 as the filter, and GetController
 // returns nothing for a garbage id -- silently, with no crash and no log.
 // See reference_getcontroller_third_arg_is_a_type_filter.
-typedef void  (*fn_IBP_CtorFrom_t)(void* dst, void* src);  // slot 0x140152a90
-
-static fn_FUN_140102b60_t   s_fn_FUN_140102b60 = nullptr;
-static fn_TradeWork_c690_t  s_fn_TradeWork_c690 = nullptr;
-static fn_IBP_CtorFrom_t     s_fn_IBP_CtorFrom = nullptr;
-static bool s_fn3480Resolved = false;
-
-static void Ensure3480() {
-    if (s_fn3480Resolved) return;
-    s_fn_FUN_140102b60 = reinterpret_cast<fn_FUN_140102b60_t>(ResolveAddr(Module::Exe, 0x140102b60));
-    s_fn_TradeWork_c690 = reinterpret_cast<fn_TradeWork_c690_t>(ResolveAddr(Module::Exe, 0x14002c690));
-    // 0x1401c4f00 is the **EntityUI** type-id slot (registrar RegisterType_EntityUI), not
-    // PageToggleUI. It is not RegisterExeAddr'd, so this ResolveAddr always returned 0 and
-    // every `if (s_TypeId_PageToggleUI && ...)` guard below was permanently false — this
-    // whole "close the removed entity's open info dialog" path was silently dead code.
-    // Retail FUN_140103480 gates on that slot and then reads ctrl+0x30 (EntityUI's bound
-    // entity), which confirms the type. Resolve by value with a by-name fallback.
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a90);
-    if (slot) s_fn_IBP_CtorFrom = *reinterpret_cast<fn_IBP_CtorFrom_t*>(slot);
-
-    // By-name fallbacks. This function used to read ONLY the raw exe dispatch slots
-    // with no fallback of any kind, which is why it behaved differently from every
-    // other consumer of the same four functions: edittool.cpp:265 and
-    // placementtool.cpp:192 both fall back to the engine_funcs pointers and have
-    // therefore always worked. 0x140151ca0 (GetFirstDialog) is unregistered, so
-    // `if (!s_fn_GetFirstDialog) return;` below killed the whole walk -- meaning a
-    // prior wave's registration of 0x140151768 for exactly this path (see
-    // standalone/reg_unreg_lane2.cpp) never actually revived it; it stayed gated
-    // behind the slot in front of it. That slot, its typedef and its fallback are
-    // gone as of B.3.2: the walk is now a plain iteration of
-    // UI::UserInterface::_dialogs, which IS what 0x140151ca0 read (its whole body
-    // is `*retbuf = this->_dialogs._head`), so nothing can gate it shut again.
-    //
-    // Every one of these resolves to the same Runtime export the slot names, so a
-    // fallback cannot change WHICH function runs -- only whether one runs at all.
-    if (!s_fn_IBP_CtorFrom && fn_InternalBasePtr_Ctor)
-        s_fn_IBP_CtorFrom = reinterpret_cast<fn_IBP_CtorFrom_t>(fn_InternalBasePtr_Ctor);
-    s_fn3480Resolved = true;
-}
 
 void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
-    Ensure3480();
     uint8_t* self = reinterpret_cast<uint8_t*>(param_1);
 
     if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
@@ -343,20 +93,19 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
         // it coincided with the workplace/residence panels going inert, so it is gated
         // while that is confirmed: SetEditMode(pc, 0) tears down the live tool
         // controller at +0x28, which is what those panels' spinners hang off.
-        if (active != '\0' && s_fn_FUN_140102b60) {
+        if (active != '\0') {
             static int s_hits = 0;
             if (++s_hits <= 16) {
                 fprintf(stderr, "[NomadB60] entity-removed -> SetEditMode(pc,0) hit#%d self=%p\n",
                         s_hits, (void*)param_1);
                 fflush(stderr);
             }
-            s_fn_FUN_140102b60(param_1, 0);
+            Toolbar_ShowGroup_Impl(reinterpret_cast<void*>(param_1), 0);   // 0x140102b60
         }
     }
 
     int64_t entity = *reinterpret_cast<int64_t*>(param_2);
-    if (s_fn_TradeWork_c690)
-        s_fn_TradeWork_c690(reinterpret_cast<int64_t*>(self + 0x60), &entity);
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(self + 0x60), &entity);   // 0x14002c690
 
     UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x98);
@@ -402,7 +151,7 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                     EntityUI::TypeId()));   // DAT_1401c4f00
             void* found = nullptr;
             if (ctrlBuf[0] != nullptr) {
-                if (fn_IsDerivedFrom(ctrlBuf[0], EntityUI::TypeId()))
+                if (::Object::IsDerivedFromNullSafe(ctrlBuf[0], EntityUI::TypeId()))
                     found = ctrlBuf[0];
             }
             int64_t ibp = 0;
@@ -428,24 +177,6 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                         "the removed entity)\n", s_walks, visited, closed);
         fflush(stderr);
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void NomadComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_RegisterNomad = reinterpret_cast<fn_RegisterNomad_t>(
-        ResolveAddr(Module::Exe, 0x140103480));
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_initialized = true;
 }
 
 // ============================================================================
@@ -499,10 +230,6 @@ void* NomadComponent::CreateInPlaceObject(void* storage) {
 //   IBP at +0x28, Vector3 at +0x30, Vector3 at +0x3C, int at +0x50, Time at +0x48
 
 void NomadComponent::Persist(void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
-    // but never called anywhere, so every s_fn_* below stayed null and load silently
-    // skipped this component's fields.
-    NomadComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
@@ -525,8 +252,10 @@ void NomadComponent::Persist(void* stream) {
     // field (+8) of Description's record, whose only retail reader is Description's
     // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
     void* ibpVal = *(void**)(selfAddr + 0x28);
-    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d) {
-        if (!s_fn_IsDerivedFrom_d(ibpVal, ComponentEntity::TypeId())) {
+    if (ibpVal != nullptr) {
+        // slot 0x140152a98 = ?IsDerivedFrom@Base@Object@@QEBA_NI@Z
+        if (!reinterpret_cast<const Object::Base*>(ibpVal)->IsDerivedFrom(
+                ComponentEntity::TypeId())) {   // B.3.x bridge
             *(uintptr_t*)(selfAddr + 0x28) = 0;
         }
     }
@@ -552,14 +281,11 @@ void NomadComponent::Persist(void* stream) {
 // Retail, whole body:
 //     MOV RAX,[RCX+0x10]; MOV RCX,[0x1401c3dd8]; LEA RDX,[RSP+0x30]
 //     MOV RCX,[RCX+0x120]; MOV [RSP+0x30],RAX; CALL 0x140103480
-// Unguarded, as retail. The notify is resolved per call (no first-use cache:
-// B38 D7). NomadComponent_OnCreate above is the same body under the old slot name,
-// never installed; it stays for its registration's sake.
-typedef void (*fn_NomadRemovalNotify_t)(int64_t manager, void* entityIBP);   // 0x140103480
+// Unguarded, as retail. The notify is NomadComp_FUN_140103480, called by name.
 void NomadComponent::OnRemove() {
-    const auto notify = reinterpret_cast<fn_NomadRemovalNotify_t>(ResolveAddr(Module::Exe, 0x140103480));
     int64_t entityIBP = reinterpret_cast<int64_t>(_entity);
-    notify(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x120),
+    NomadComp_FUN_140103480(   // 0x140103480
+        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x120),
            &entityIBP);
 }
 

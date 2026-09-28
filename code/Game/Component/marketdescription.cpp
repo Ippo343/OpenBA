@@ -23,6 +23,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <new>
 
@@ -48,7 +49,7 @@ MarketDescription::MarketDescription()
 // dtor (slot 0 0x1400083d0 minus the stamps): frees the ratio array buffer.
 // The compiler then chains ~Description -> ~External.
 MarketDescription::~MarketDescription() {
-    if (_ratios && fn_MemFreeStatic) fn_MemFreeStatic(_ratios);
+    if (_ratios) System::MemoryAllocator::MemFree(_ratios);
     _ratios = nullptr;
 }
 
@@ -59,8 +60,8 @@ bool MarketDescription::Serialize(void* stream) {
     // array @ +0x28 (count @ +0x30, element stride 8: {enum @+0, float @+4})
     ser.Serialize(_ratioCount, nullptr);
     int n = _ratioCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * 8, 8);
+    if (SerStreamErr(ser) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
+        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
         _ratios = buf;
         _ratioCap = n;
         if (buf) for (int i = 0; i < n; ++i) static_cast<uint64_t*>(buf)[i] = 0;
