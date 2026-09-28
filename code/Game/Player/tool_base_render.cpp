@@ -71,6 +71,7 @@
 #include "graphics/Mesh.h"
 #include "graphics/Material.h"   // ENDGAME B.3.5 batch K1 — Graphics::MaterialInstance
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "Object/factory_registration.h"
 #include "Component/HighlightComponent.h"
@@ -339,7 +340,7 @@ void Impl_b930(int64_t self) {
     float oy = centerWorld[1];
 
     // Quaternion(0,0,0,uv) rotation + centre position -> Transform at self+0x100.
-    float uv = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uv = kRdata_14017214c;
     Math::Quaternion quat(0.0f, 0.0f, 0.0f, uv);
     std::memcpy(reinterpret_cast<void*>(self + 0x100), &quat, 16);
     *reinterpret_cast<float*>(self + 0x110) = ox;

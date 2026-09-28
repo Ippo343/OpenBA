@@ -22,6 +22,7 @@
 // Decompiled from Application-x64.exe; ABI/control-flow verified instruction-level.
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/Filename.h"
 #include "system/String.h"
 #include "object/TypeInfo.h"
@@ -240,7 +241,7 @@ extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
 
     int h = *reinterpret_cast<short*>(footprint + 0x2e);
     int w = *reinterpret_cast<short*>(footprint + 0x2c);
-    float uvScale = g_fUVScale ? *g_fUVScale : 0.0f;
+    float uvScale = kRdata_14017214c;
     int computed = static_cast<int>(
         (static_cast<float>(h * w) / static_cast<float>(divisor)) * static_cast<float>(baseCap) + uvScale);
 

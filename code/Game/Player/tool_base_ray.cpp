@@ -16,6 +16,7 @@
 #include "graphics/Camera.h"
 #include <new>
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "volume/Volume.h"
 #include "Game/exe_bodies.h"
@@ -83,7 +84,7 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
                                                 float* param_3, float* param_4,
                                                 float* param_5, float* param_6) {
     const uint32_t signMask = 0x80000000u;  // DAT_1401722c0
-    const float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;  // DAT_14017214c (=1.0)
+    const float uvScale = kRdata_14017214c;  // DAT_14017214c (=1.0)
 
     int width = *reinterpret_cast<int*>(param_1 + 0xc0);
 

@@ -261,7 +261,7 @@ float CF_Maturity(uintptr_t comp) {
     const int total = SlotCount(comp);
     if (total == 0) return 0.0f;
     CropFieldComponent_ValidateEntityRefs(comp);
-    const float cap = g_fUVScale ? *g_fUVScale : 1.0f;
+    const float cap = kRdata_14017214c;
     float sum = 0.0f;
     for (int i = 0; i < total; ++i) {
         uint8_t* s = SlotAt(comp, i);

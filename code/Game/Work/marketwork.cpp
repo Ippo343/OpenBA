@@ -25,6 +25,7 @@
 #include "Work/MarketWork.h"
 #include "Work/marketwork_funcs.h"
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -990,9 +991,8 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // The market capacity float from stage 1 is still live in XMM10 across all
     // of stage 2 in retail; here it becomes the denominator.
     // 0x1400f096b MOVSS XMM8,[0x14017214c] -- that .rdata single is byte-verified
-    // 1.0f (00 00 80 3F), so the project's usual `g_fUVScale ? *g_fUVScale : 1.0f`
-    // fallback is exact here rather than a guess.
-    const float kOne = g_fUVScale ? *g_fUVScale : 1.0f;
+    // 1.0f (00 00 80 3F): kRdata_14017214c.
+    const float kOne = kRdata_14017214c;
     const float invCapacity = kOne / capacity;            // 0x1400f0978 DIVSS XMM6,XMM10
     for (int r = 0; r < records.count; ++r) {
         const float want = *reinterpret_cast<float*>(descEntries + static_cast<int64_t>(r) * 8 + 4);

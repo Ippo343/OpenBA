@@ -20,6 +20,7 @@
 #include "Work/FishingWork.h"
 #include "Work/fishingwork_funcs.h"
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"      // B3R: Pf_EntityResolvePos_2e20
@@ -330,7 +331,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 // Build action parameters
                 uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
                 uintptr_t citizenRef = *(uintptr_t*)citizenIBP;
-                float uvScale = (*g_fUVScale / (float)terrainType) * *(float*)(fishingIBP + 0x54);
+                float uvScale = (kRdata_14017214c / (float)terrainType) * *(float*)(fishingIBP + 0x54);
                 uint32_t spotInfo = ((freeSpot | 0x800) << 4) | emptySlot;
 
                 WorkAct_FishWorkCtor_beae0(

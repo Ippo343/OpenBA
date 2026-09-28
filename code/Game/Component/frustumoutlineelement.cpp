@@ -20,6 +20,7 @@
 #include "ui/SpriteContext.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include "math/Math.h"
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
@@ -163,7 +164,7 @@ void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) cons
     FrustumOutline_ProjectCorners(pts);
 
     // Map the world-space ground corners to minimap pixel coordinates.
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;
     int   width   = *reinterpret_cast<int*>(e + 0xd0);
     int   height  = *reinterpret_cast<int*>(e + 0xd4);
     int*  gridPtr = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
