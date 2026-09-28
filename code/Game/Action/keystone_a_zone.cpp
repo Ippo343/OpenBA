@@ -258,8 +258,15 @@ LAB_clear:
 // signature mirrors the decompile:
 //   (longlong param_1, uint param_2, uint param_3, ulonglong param_4,
 //    undefined8 param_5, longlong param_6, byte param_7, byte param_8)
+// RETURNS THE PATH LENGTH (B3R Leftovers, read in retail): the body ends in a tail
+// JMP 0x1400a6e30 at 0x14009cf41 after restoring RBX/RBP/RSI/RDI/R14, so EAX at its
+// return is 0x1400a6e30's EAX -- set by its CALL 0x1400a6d50 at 0x1400a6edf and not
+// touched before the RET at 0x1400a6ef8 -- i.e. RoadTool_helper_6e30's int. Its
+// readers (Player/roadtool.cpp, roadtool_calcpath.cpp) use it as the path length.
+// param_5 is never read (retail overwrites its stack slot at 0x14009cf22 with
+// param_6 for the tail call).
 // ============================================================================
-void RoadTool_sub_ce00(int64_t param_1, uint param_2, uint param_3, uint64_t param_4,
+int RoadTool_sub_ce00(int64_t param_1, uint param_2, uint param_3, uint64_t param_4,
                        void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8) {
     int64_t pTVar1 = *reinterpret_cast<int64_t*>(param_1 + 0x68);
     uint64_t uVar2 = param_4;
@@ -285,7 +292,7 @@ void RoadTool_sub_ce00(int64_t param_1, uint param_2, uint param_3, uint64_t par
                          reinterpret_cast<void*>(static_cast<uint64_t>(param_7)),
                          reinterpret_cast<void*>(static_cast<uint64_t>(param_8)));
     // RoadTool_helper_6e30(self, param_3, param_4 & 0xffffffff, param_2, param_6, 0x800)
-    RoadTool_helper_6e30(*reinterpret_cast<int64_t*>(param_1 + 0x68),
+    return RoadTool_helper_6e30(*reinterpret_cast<int64_t*>(param_1 + 0x68),
                          param_3, param_4 & 0xffffffff,
                          reinterpret_cast<void*>(static_cast<uint64_t>(param_2)),
                          param_6, 0x800);

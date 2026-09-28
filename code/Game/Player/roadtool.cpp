@@ -22,7 +22,7 @@
 #include "Player/dragtool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
-#include "resolve.h"   // LEFT: the 0x14009ce00 door (see s_fn_RoadPathfind)
+#include "Action/exe_bodies.h"   // RoadTool_sub_ce00 (0x14009ce00), called by name
 #include "Player/exe_bodies.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
@@ -41,20 +41,14 @@ static uint32_t s_TypeId_CreateRoadDescription_v = 0;
 static const uint32_t* s_TypeId_CreateRoadDescription = nullptr;
 
 // ============================================================
-// Road pathfinding function (RoadTool_sub_ce00)
-// Used by CalcPath and CalcCost. Takes map data, flags, start/end cells,
-// output buffer, modifier flag, and direction flag.
-// Original: referenced internally from CalcPath/CalcCost
-//
-// LEFT (B3R W1): still read through the registry. The body, RoadTool_sub_ce00
-// (code/Game/Action/keystone_a_zone.cpp), is declared VOID while these readers use
-// the int it leaves in EAX (retail's body tail-calls 0x1400a6e30, whose int return
-// is the path length); a direct call cannot read it. The body's return type is the
-// Action owner's to settle.
+// Road pathfinding function (RoadTool_sub_ce00, 0x14009ce00, code/Game/Action/
+// keystone_a_zone.cpp), called by name (B3R Leftovers). Used by CalcPath and CalcCost.
+// Takes map data, flags, start/end cells, an unread stack argument, the output buffer,
+// modifier flag and direction flag; returns the path length (retail's EAX: the tail
+// call 0x1400a6e30's int). The door typedef passed the direction flag as `int`; the
+// body takes a byte and retail reads a byte (MOVZX at 0x14009cef1), so the calls pass
+// the same low byte.
 // ============================================================
-typedef int (*fn_RoadPathfind_t)(uint64_t mapData, uint32_t flags, uint32_t startCell,
-    uint64_t endCell, uint64_t stack_param, uint64_t outputBuffer, uint8_t modFlag, int dirFlag);
-static fn_RoadPathfind_t s_fn_RoadPathfind = nullptr;
 
 // (Four statics for 0x14009c960 / 0x1400acd90 / 0x1400af370 / 0x140026990 were never
 // resolved nor called -- dead readers, gone. 0x140101270 ScreenToCell is called by
@@ -64,13 +58,6 @@ static bool s_funcsResolved = false;
 
 static void ResolveRoadToolFuncs() {
     if (s_funcsResolved) return;
-
-    // Road A* (0x14009ce00). Shared by Draw and CalcCost; resolved here so CalcCost —
-    // which runs before ResolveRoadDrawFuncs is even declared — can reach it too.
-    if (!s_fn_RoadPathfind) {
-        s_fn_RoadPathfind = reinterpret_cast<fn_RoadPathfind_t>(
-            ResolveAddr(Module::Exe, 0x14009ce00));
-    }
 
     s_TypeId_CreateRoadDescription_v = CreateRoadDescription::TypeId();
     s_TypeId_CreateRoadDescription = &s_TypeId_CreateRoadDescription_v;
@@ -263,10 +250,8 @@ int RoadTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     // drag preview could never report a valid road or a cost.
     int pathBuf[2048];   // retail reserves 8184 bytes for the same buffer
     int pathLength = 0;
-    if (s_fn_RoadPathfind) {
-        pathLength = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xa17, sc, ec,
-                                       0, (uintptr_t)pathBuf, modifierFlag, 1);
-    }
+    pathLength = RoadTool_sub_ce00((int64_t)(uintptr_t)mapGrid, combinedFlags | 0xa17, sc, ec,
+                                   nullptr, (int64_t)(uintptr_t)pathBuf, modifierFlag, 1);
     if (pathLength != 0) {
         *outCostA  = pathLength;
         *outCostB  = pathLength;
@@ -311,8 +296,7 @@ static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
 }
 
 // Draw calls 0x140101270 PlayerRay_ScreenToCell_101270 and 0x1401008c0
-// PlayerTileRender_DrawOverlay_08c0 by name; the road A* door is resolved by
-// ResolveRoadToolFuncs (a second resolver of the same pointer is gone).
+// PlayerTileRender_DrawOverlay_08c0 by name, and the road A* RoadTool_sub_ce00 too.
 
 // ============================================================
 // RoadTool::Draw (vtable +0x40, Slot8)
@@ -341,10 +325,8 @@ void RoadTool::Draw(void* context, char param3) {
         int endNorm   = gridSize * (constrainEnd / gridSize) + constrainEnd % gridSize;
 
         int pathLen = 0;
-        if (s_fn_RoadPathfind) {
-            pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, 0xa17, (uint32_t)startNorm,
-                (uint32_t)endNorm, 0, (uintptr_t)pathBuf, modifierFlag, 1);
-        }
+        pathLen = RoadTool_sub_ce00((int64_t)(uintptr_t)mapGrid, 0xa17, (uint32_t)startNorm,
+            (uint32_t)endNorm, nullptr, (int64_t)(uintptr_t)pathBuf, modifierFlag, 1);
 
         // Build tile array from path results
         TileArray pathTiles;
@@ -408,18 +390,14 @@ void RoadTool::Draw(void* context, char param3) {
 
         if (valid) {
             // Try strict pathfinding first (mask: combinedFlags | 0xa17)
-            if (s_fn_RoadPathfind) {
-                pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xa17,
-                    sc, ec, 0, (uintptr_t)pathBuf, modifierFlag, 1);
-            }
+            pathLen = RoadTool_sub_ce00((int64_t)(uintptr_t)mapGrid, combinedFlags | 0xa17,
+                sc, ec, nullptr, (int64_t)(uintptr_t)pathBuf, modifierFlag, 1);
         }
 
         if (pathLen == 0) {
             // Fallback: relaxed pathfinding (mask: combinedFlags | 0xff7)
-            if (s_fn_RoadPathfind) {
-                pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xff7,
-                    sc, ec, 0, (uintptr_t)pathBuf, modifierFlag, 0);
-            }
+            pathLen = RoadTool_sub_ce00((int64_t)(uintptr_t)mapGrid, combinedFlags | 0xff7,
+                sc, ec, nullptr, (int64_t)(uintptr_t)pathBuf, modifierFlag, 0);
         }
 
         if (pathLen > 0) {

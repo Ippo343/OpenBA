@@ -368,8 +368,8 @@ int ForesterWork::Execute(void* entityIBP, void* /*context*/) {
             {
                 // Map invalidation for connectivity
                 // Retail 0x1400eb303: `MOV RCX,R15; CALL 0x14009c480` -- only RCX is set,
-                // so R9 is whatever the preceding RandTol calls left; pass 0.
-                Pf_ZoneRefresh_9c480(mapGrid, nullptr, nullptr, 0);
+                // and the body has no other parameter.
+                Pf_ZoneRefresh_9c480(mapGrid);
 
                 // Read fresh grid data after invalidation
                 uintptr_t gridData2 = *(uintptr_t*)(mapGrid + 0x20);

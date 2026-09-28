@@ -45,6 +45,7 @@
 #include "perf_experimental.h"
 #include <unordered_map>
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>
@@ -405,7 +406,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     }
 
     // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].
-    float unit = g_fUVScale ? *g_fUVScale : 1.0f;
+    float unit = kRdata_14017214c;
     void* weather = *reinterpret_cast<void**>(gw + 0x130);
     float f = 0.0f;
     if (weather) {

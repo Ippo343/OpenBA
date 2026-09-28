@@ -33,6 +33,7 @@
 // the autostart A/B test, so it is ported from disasm, not the muddled decompile).
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "volume/Volume.h"
 #include "Game/exe_bodies.h"
@@ -150,7 +151,7 @@ extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(uintptr_t param_1, floa
                                                          float* param_3) {
     const float halfScale = 0.5f;  // DAT_140172114
 
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;  // DAT_14017214c = 1.0f (the Scalar)
+    float uvScale = kRdata_14017214c;  // DAT_14017214c = 1.0f (the Scalar)
 
     // local_f8 = Vector4(param_2, uvScale)  ([RSP+0x70] in the original)
     Math::Vector4 v4(*reinterpret_cast<const Math::Vector3*>(param_2), uvScale);

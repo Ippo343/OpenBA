@@ -24,6 +24,7 @@
 // Port is 1:1 with the Ghidra decompile + disasm-verified — do NOT "improve".
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"
 #include <cstdint>
@@ -374,7 +375,7 @@ extern "C" int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
     int col = param_2 % mapSize;
     int r   = *reinterpret_cast<int*>(param_1 + 0x28);
 
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;
     uint32_t uv = *reinterpret_cast<uint32_t*>(&uvScale);
 
     return TradeWork_impl_0d80(highlightMgr,

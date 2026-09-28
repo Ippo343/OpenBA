@@ -26,7 +26,6 @@
 //
 
 #include "Work/HarvestArea.h"
-#include "Work/harvestarea_funcs.h"
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
@@ -66,12 +65,6 @@
 //   MemAlloc                                        System::MemoryAllocator::MemAlloc
 //   DAT_140172114 = 0.5f                            kRdata_140172114
 // 0x14000a590 (Array<uint8>::SetSize) is a GameColl::AsArray<GameColl::U8> member call.
-
-// B3R: resolves nothing. Kept only because cropfieldcomponent_states.cpp (another
-// block's file) still calls it; delete it with that call.
-bool HarvestArea_ResolveFuncs() {
-    return true;
-}
 
 
 // ============================================================

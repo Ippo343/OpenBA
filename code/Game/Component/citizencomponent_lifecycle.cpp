@@ -31,6 +31,7 @@
 // predicate is ProfessionPriorityOf below), not registered.
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include "system/String.h"
 #include <algorithm>
@@ -268,7 +269,7 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
 
     // 13. sprite/anim init on the AnimalComponent (+0x278)
     ActMv_SetAnimation_a1f0(*reinterpret_cast<void**>(p + 0x278), 0,
-                            g_fUVScale ? *g_fUVScale : 1.0f, 0.0f);
+                            kRdata_14017214c, 0.0f);
 }
 
 // [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,

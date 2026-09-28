@@ -65,8 +65,6 @@ using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 // 0x140002f90 WorkBase_FindComponent_2f90(entity, outIBP)       — MeshInstance.
 // 0x14012c3f0 CitizenComp_FUN_14012c3f0(mesh, flagIdx, value)  — MeshInstance set-state-flag.
 
-bool LocationWork_ResolveFuncs();   // code/Game/Work/locationwork.cpp
-
 // The town attendance registry: gameWorld+0xf0 is the town object, +0x60 its array
 // base and +0x68 the element count. Both state 2's enter (append) and the component's
 // vtable slot 7 (erase) operate on it, and helper_3db0 below walks it.
@@ -151,7 +149,6 @@ static char Attendance_State2Frame(void* selfP, void* /*sm*/, void* /*time*/) {
 // HerbalistComponent's slot 18: this is a state ENTER handler that happens to build a
 // LocationWork, not LocationWork's constructor (that is 0x1400efc60).
 static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
-    LocationWork_ResolveFuncs();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
 
     // 1. register in the town attendance list

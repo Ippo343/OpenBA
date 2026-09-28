@@ -512,7 +512,7 @@ void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
     int* grid = reinterpret_cast<int*>(gridp);
     int* out = reinterpret_cast<int*>(outResultp);
 
-    Pf_ZoneRefresh_9c480(grid, out, reinterpret_cast<void*>(flags), static_cast<int>(destCell));   // 0x14009c480
+    Pf_ZoneRefresh_9c480(grid);   // 0x14009c480 (RCX only)
 
     // Cell-record array base: *(grid + 0x20 int-units) == *(uintptr_t*)((char*)grid + 0x80).
     uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);

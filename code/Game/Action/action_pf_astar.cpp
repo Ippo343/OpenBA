@@ -972,10 +972,15 @@ LAB_1400a62f5:
 //   component, run-length sweeping each row span then probing N/S rows. Queue nodes
 //   allocated via 1a9b0 (stride 0x18: +0x00 cell, +0x08 next, +0x10 prev), recycled to
 //   the pool free-list. Queue head @ param_1[0x2c], tail @ param_1[0x2a], count +0x2e.
-//   param_2 = first cell, param_3 = label (short), param_4 = unused-seed slot.
+//   param_2 = first cell, param_3 = label (short).
+// THREE parameters (B3R Leftovers, read in retail): the entry spills R9D to its home slot
+// (0x14009c170, [RSP+0x78] after the prologue), but every read of that slot follows a
+// write (0x14009c365 / 0x14009c3e8, the neighbour cell handed to 0x14001a9b0 by address),
+// and R9D itself is overwritten at 0x14009c26f before any read. So Ghidra's param_4 is
+// the local local_res20 below, not an argument; its initial value is never read.
 // VERIFIED: index math (iVar13/iVar12 row bounds, the 0xe1fU walkable-class mask) and
 // the -10 region-label store offset cross-checked against disassembly.
-void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, int param_4) {
+void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3) {
     int64_t* plVar1;
     uint* puVar2;
     uint uVar3;
@@ -991,13 +996,12 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, 
     int iVar13;
     int64_t lVar14;
     uint32_t local_res10[4];
-    int local_res20[2];
+    int local_res20[2];   // written before each read (0x14009c365 / 0x14009c3e8)
 
 
 
     plVar1 = reinterpret_cast<int64_t*>(param_1 + 0x2a);
     local_res10[0] = param_2;
-    local_res20[0] = param_4;
     puVar5 = reinterpret_cast<uint64_t*>(Pf_NodePoolAlloc18_a9b0(reinterpret_cast<uintptr_t>(plVar1), local_res10));   // 0x14001a9b0
     if (*plVar1 == 0) {
         *reinterpret_cast<uint64_t**>(param_1 + 0x2c) = puVar5;

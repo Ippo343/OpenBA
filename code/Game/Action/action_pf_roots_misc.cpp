@@ -17,6 +17,7 @@
 //                queue-push, 0c2ea0 mark-removal; see loop-exit note below)
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos
 #include "math/Math.h"
 #include <cstdint>
@@ -253,7 +254,7 @@ int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* 
 // max touched +0x2438).
 int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float* param_3,
                                          void* param_4, int param_5, void* param_6) {
-    const float fUV = *g_fUVScale;      // g_fUVScale (1.0)
+    const float fUV = kRdata_14017214c;      // g_fUVScale (1.0)
     const float fNeg1 = C_neg1();       // DAT_140172280
     const float f2 = C_2();             // DAT_140172174
 

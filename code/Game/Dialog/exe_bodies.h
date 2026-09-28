@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include "engine_funcs.h"   // the globals the moved inline bodies still read
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 class MainMenuDialog;  // code/Game/Dialog/MainMenuDialog.h
 class TradeUI;         // code/Game/Dialog/TradeUI.h
@@ -186,6 +187,10 @@ extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count, void
 // ---- unreg_lane2_mapparamsdialog_ctor.cpp
 extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006bd80
 
+// ---- engine/funcs/engine_funcs.cpp (B3R Leftovers: declared here, copied from the
+// definition, so moddialog.cpp calls it by name; W2 moves the body into this module)
+void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* elementPtr);  // 0x140012a60
+
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 
 // ============================================================
@@ -215,7 +220,7 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
     if (dstArray == srcArray) return;
     uint64_t* dst = (uint64_t*)dstArray;
     uint64_t* src = (uint64_t*)srcArray;
-    fn_MemFreeStatic((void*)*dst);
+    System::MemoryAllocator::MemFree((void*)*dst);
     dst[1] = 0;
     dst[0] = 0;
     int count = (int)(uint32_t)src[1];  // low 32 bits of src[1]
@@ -223,7 +228,7 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
     if (count > 0) {
         // High word of dst[1]+4 = capacity (same as count on fresh alloc)
         *(int*)((uintptr_t)dst + 0xc) = count;
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 16, 8);
+        void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)count * 16, 8);
         *dst = (uint64_t)newBuf;
     }
     // Copy entries

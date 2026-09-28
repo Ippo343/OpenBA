@@ -25,6 +25,7 @@
 //   +0x48..0x58 float UV params (when modeFlag==0)
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"
@@ -146,7 +147,7 @@ inline void EmitVertex(int64_t lVar16, int64_t* poolRoot, int64_t* pool,
 // =================================================================================
 extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                                      int param_4, int param_5) {
-    const float fUV = (g_fUVScale ? *g_fUVScale : 1.0f);   // g_fUVScale (1.0f in retail)
+    const float fUV = kRdata_14017214c;   // g_fUVScale (1.0f in retail)
 
     int64_t lVar16 = (int64_t)param_2 * 0x60 + *reinterpret_cast<int64_t*>(param_1 + 0x1f0);
     int iVar24 = (*reinterpret_cast<int*>(lVar16 + 0x34) - *reinterpret_cast<int*>(lVar16 + 0x2c)) + 1; // width

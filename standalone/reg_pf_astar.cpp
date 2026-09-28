@@ -11,6 +11,7 @@
 //   Thread::Start, MemoryAllocator::MemAlloc (static).
 #include "resolve.h"
 #include <cstdint>
+#include "Action/exe_bodies.h"   // Pf_FloodFillRegion_9c170 (0x14009c170), declared from its definition
 
 // Group A — A* search/trace over the grid graph.
 extern uint64_t Pf_AstarCore_d040(int*, int, int);                          // 0x14001d040
@@ -31,7 +32,6 @@ extern void  Pf_EnqueueCmd1_a6a30(int64_t, int, void*, void*);             // 0x
 extern void  Pf_EnqueueCmd0_a6b20(int64_t, int, void*, void*);             // 0x1400a6b20
 extern int*  Pf_EnqueueTradeRoute_a6c10(int64_t, int*, void*, void*);       // 0x1400a6c10
 extern int*  Pf_AllocTradeSlot_a6240(int64_t, int*);                       // 0x1400a6240
-extern void  Pf_FloodFillRegion_9c170(int*, uint32_t, uint16_t, int);       // 0x14009c170
 
 void RegisterPfAstarBatch() {
     // Group A

@@ -23,6 +23,7 @@
 //   0x140053ca0  pasture/migration target picker (collect+random-pick cells)    [loop]
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
@@ -410,7 +411,7 @@ void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
         B = Math::Vector3(fVar11, fVar12, fVar2);
         A = Math::Vector3(B.x + fVar3, B.y + fVar4, B.z + fVar1);
         *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
-        float fVar10b = *g_fUVScale;  // g_fUVScale loaded here in the original
+        float fVar10b = kRdata_14017214c;  // g_fUVScale loaded here in the original
         lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
         *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = A.x;
         *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = A.y;

@@ -17,6 +17,7 @@
 #include "Component/DecalDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -326,7 +327,7 @@ void DecalComponent::OnAdded() {
     }
 
     // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;
     float uv[4] = {0.0f, 0.0f, uvScale, uvScale};
     int variantCount = *reinterpret_cast<int*>(dd + 0x40);
     if (variant < variantCount) {

@@ -626,7 +626,7 @@ LAB_14010ae8a:
                     int cellIdx = w * iVar13 + cc + (iVar30 - iVar27);
                     int64_t lv = static_cast<int64_t>(cellIdx);
                     if (*reinterpret_cast<uint8_t*>(CellArrayBase(piVar5) + 0x29 + lv * 0x30) < 3) {
-                        Pf_ZoneRefresh_9c480(piVar5, reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<uint32_t>(boxH))), nullptr, iVar27);
+                        Pf_ZoneRefresh_9c480(piVar5);   // 0x14009c480 (RCX only)
                         int64_t arrBase = CellArrayBase(piVar5);
                         uint32_t mNew = 1u << (*reinterpret_cast<uint8_t*>(arrBase + lv * 0x30 + 0x29) & 0x1f);
                         uint32_t mSrc = 1u << (*reinterpret_cast<uint8_t*>(arrBase + local_a8 + 0x29) & 0x1f);

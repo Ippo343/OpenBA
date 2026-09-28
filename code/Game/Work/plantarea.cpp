@@ -19,7 +19,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/PlantArea.h"
-#include "Work/plantarea_funcs.h"
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
@@ -56,12 +55,6 @@
 //   0x140002340  Reimpl_ExternalPtr_Serialize_StringTable
 //   0x14011b390  WorkLeaf_PlantArea_b390
 //   0x140172114  kRdata_140172114 (.rdata)
-
-// B3R: resolves nothing. Kept only because cropfieldcomponent_states.cpp (another
-// block's file) still calls it; delete it with that call.
-bool PlantArea_ResolveFuncs() {
-    return true;
-}
 
 
 // ============================================================

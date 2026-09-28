@@ -9,6 +9,7 @@
 // Each body is a literal port of the decompiled exe helper — no "improvements".
 
 #include "engine_funcs.h"
+#include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "Game/exe_bodies.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -67,7 +68,7 @@ float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int 
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
 
     const float halfCell = 0.5f;                 // DAT_140172114 (XMM7)
-    const float uvScaleConst = g_fUVScale ? *g_fUVScale : 1.0f;  // DAT_14017214c (XMM6)
+    const float uvScaleConst = kRdata_14017214c;  // DAT_14017214c (XMM6)
 
     float accum[3] = {0.0f, 0.0f, 0.0f};
 

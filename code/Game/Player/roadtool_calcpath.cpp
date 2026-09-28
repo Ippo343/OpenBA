@@ -13,7 +13,7 @@
 //   0x1400acd90  RoadTool_DecalStore           — record the road's decal by road type
 //   0x140026990  RoadTool_FindMapDescription   — find MapDescription on the descriptor
 //
-// Leaves reached through ResolveAddr (already registered elsewhere):
+// Leaves (every one is called by name since B3R; see the list below):
 //   0x14009ce00 road A* (keystone_a_zone)      0x1400af370 road-mesh rebuild (pf_road)
 //   0x1400e4b50 BuildRoad 8-arg ctor           0x1400f72e0 Work base ctor (reg_work_base)
 //   0x1400f88a0 work-scheduler insert          0x14001a4f0 AVL insert (reg_pf_avl)
@@ -28,7 +28,7 @@
 #include "Player/roadtool_funcs.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
-#include "resolve.h"   // LEFT: the 0x14009ce00 door (see EnsureCalcPathFuncs)
+#include "Action/exe_bodies.h"   // RoadTool_sub_ce00 (0x14009ce00), called by name
 #include "Player/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
@@ -54,16 +54,8 @@ namespace {
 //   0x140001bb0 / 0x1400021d0 Reimpl_Array_Resize_Stride08 / _Stride04
 //               (Game/exe_bodies.h)
 // (0x1400af370 was resolved here and never called: the dead reader is gone.)
-//
-// LEFT (B3R W1): the road A* 0x14009ce00 is still read through the registry. Its
-// body, RoadTool_sub_ce00 (code/Game/Action/keystone_a_zone.cpp), is declared VOID,
-// while this reader uses the int it leaves in EAX (retail's body tail-calls
-// 0x1400a6e30, whose int return is the path length). A direct call cannot read
-// that value; the body's return type is the Action owner's to settle.
-typedef int      (*fn_RoadAStar_t)(int64_t mapGrid, uint32_t mask, uint32_t startCell,
-                                   uint64_t endCell, uint64_t unused, int64_t outPath,
-                                   uint8_t modifier, uint8_t dirFlag);
-fn_RoadAStar_t       s_fn_RoadAStar      = nullptr;
+//   0x14009ce00 RoadTool_sub_ce00 (Action/exe_bodies.h) -- the road A*; returns the
+//               path length (B3R Leftovers)
 
 uint32_t s_tid_DecalDescription = 0;
 uint32_t s_tid_MapDescription   = 0;
@@ -71,8 +63,6 @@ bool     s_resolved             = false;
 
 void EnsureCalcPathFuncs() {
     if (s_resolved) return;
-    s_fn_RoadAStar       = (fn_RoadAStar_t)      ResolveAddr(Module::Exe, 0x14009ce00);
-
     // DAT_1401c75b8 / DAT_1401c7a18 are raw .rdata constants -> NULL in standalone, so
     // take the names from the live factory tree. Both verified against their RegisterType
     // DATA writers: 0x14014ee10 DecalDescription, 0x14014f390 MapDescription.
@@ -283,10 +273,8 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     // Run the road A* over the span (same call CalcCost makes, mask 0xa17).
     int pathBuf[2048];
     int pathLen = 0;
-    if (s_fn_RoadAStar) {
-        pathLen = s_fn_RoadAStar((int64_t)mapGrid, 0xa17, sc, (uint64_t)ec, 0,
-                                 (int64_t)pathBuf, modifierFlag, 1);
-    }
+    pathLen = RoadTool_sub_ce00((int64_t)mapGrid, 0xa17, sc, (uint64_t)ec, nullptr,
+                                (int64_t)pathBuf, modifierFlag, 1);
     if (pathLen == 0) {
         return false;
     }

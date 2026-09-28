@@ -310,7 +310,7 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
             (int)selfQ[4],         // priority
             reinterpret_cast<int64_t*>(&huntCompIBP3),         // hunt component IBP
             fallbackPos,           // fallback position (0,0,0)
-            *g_pAgeMultiplier,     // float param (roaming radius)
+            kRdata_140172198,     // float param (roaming radius)
             0);                    // char param (roaming mode)
     }
 
