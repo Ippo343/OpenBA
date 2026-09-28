@@ -26,6 +26,7 @@
 
 #include "Component/fruitcomponent_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -164,8 +165,8 @@ void FruitComponent::Update(void* time) {
     // leaves the fruit-bearing window.  month = (seasonSecs/3600)*12 - 7; clear if
     // (uint)month > 4.
     if (fruitFlag != 0) {
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
+        if (GameUpdateLoop::_singleton != nullptr) {
+            uintptr_t world = (uintptr_t)GameUpdateLoop::_singleton;
             void* seasonTime = (void*)(*(uintptr_t*)(world + 0x128) + 8);
             float seasonSecs = reinterpret_cast<const System::Time*>(seasonTime)->AsSeconds();   // B.3.4b bridge
             float secsPerYear   = kSecsPerYear;
@@ -179,8 +180,8 @@ void FruitComponent::Update(void* time) {
 
     // currentTemp = *(*(world+0x130)+0x18)
     float currentTemp = 0.0f;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t world = (uintptr_t)GameUpdateLoop::_singleton;
         currentTemp = *(float*)(*(uintptr_t*)(world + 0x130) + 0x18);
     }
 

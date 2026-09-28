@@ -20,6 +20,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "Component/CropFieldComponent.h"
 #include "Component/NaturalResourceDescription.h"
@@ -95,7 +96,7 @@ void PostNodeEvent(void* smc, int eventId) {
 }
 
 void Fire(int frame) {
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!el) return;
@@ -131,7 +132,7 @@ void Fire(int frame) {
         // player's combo pick would produce.
         if (*reinterpret_cast<uintptr_t*>(c + 0x50) == 0) {
             const uint32_t tidNatRes = NaturalResourceDescription::TypeId();
-            void* gw2 = *g_pGameWorldSingleton;
+            void* gw2 = GameUpdateLoop::_singleton;
             uintptr_t town = gw2 ? *reinterpret_cast<uintptr_t*>(
                 reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;
             void** types = town ? *reinterpret_cast<void***>(town + 0x120) : nullptr;

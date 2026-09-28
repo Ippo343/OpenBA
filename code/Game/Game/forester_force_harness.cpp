@@ -38,6 +38,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "resolve.h"
 #include "force_work.h"                     // generic ForceWork core (probes + drive)
@@ -128,7 +129,7 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     if (!ForceForesterEnvOn()) return false;
     void* lodge = g_pForceWorkBuilding;
     if (!lodge || !citizen) return false;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
+    if (GameUpdateLoop::_singleton == nullptr) return false;
 
     // Bind to the FIRST force-worked citizen only (single, observable subject).
     static void* s_owner = nullptr;

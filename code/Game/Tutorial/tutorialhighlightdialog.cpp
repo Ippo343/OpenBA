@@ -12,6 +12,7 @@
 #include "volume/Volume.h"
 #include "Tutorial/TutorialHighlightDialog.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
@@ -244,9 +245,9 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
     // Footprint centre through the same grid->world conversion the outline uses.
     int   g = 0;
     float centreWorld[3] = {0,0,0};
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         int* grid = *reinterpret_cast<int**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
         if (grid) {
             g = grid[0];
             float bias = static_cast<float>(g >> 1) - 0.5f;

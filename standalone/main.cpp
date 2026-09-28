@@ -675,17 +675,6 @@ static bool RunFactorySelfTest(const char* typeName,
                                const FieldCheck* fields, size_t fieldCount) {
     printf("\n[SelfTest %s] start\n", typeName);
 
-    // Refresh g_pMemAllocSingleton from System::MemoryAllocator::_singleton. The
-    // static is set by Engine::Engine::Engine; EngineFuncsInit ran before that
-    // and cached NULL. Without this refresh, factory MemAlloc returns NULL.
-    {
-        if (System::MemoryAllocator::_singleton && !g_pMemAllocSingleton) {
-            g_pMemAllocSingleton = System::MemoryAllocator::_singleton;
-            printf("[SelfTest %s]   refreshed g_pMemAllocSingleton = %p\n",
-                   typeName, g_pMemAllocSingleton);
-        }
-    }
-
     // ENDGAME B.3.9 RF: the chain head is the class static, not a by-address
     // read of ?_firstTypeInfo@ (0x1801fc6e0).
     const ::Object::BaseTypeInfo* match = nullptr;

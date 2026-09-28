@@ -16,6 +16,7 @@
 
 #include "Work/TendArea.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
@@ -96,7 +97,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
     }
 
     // Step 2: Get game world singletons
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     int* mapGrid = *(int**)(gameWorld + 0xf8);
     void* rng = *(void**)(gameWorld + 0xd8);
 

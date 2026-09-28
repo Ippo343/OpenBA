@@ -20,6 +20,7 @@
 #include "Tutorial/TutorialInstance.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Tutorial/exe_bodies.h"   // 0x1401001f0 / 0x1400e1db0
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -167,8 +168,8 @@ void FinishTutorialInstance::Startup() {
         std::fflush(stderr); } }
 
     // Step 7: Call FinishTutorialGoal_helper_01f0 (tutorial tree insert)
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
         void* treeRoot = *(void**)(gameWorld + 0x120);
 
         // Read tutorial external ID from tutDef->+0x20
@@ -191,8 +192,8 @@ void FinishTutorialInstance::Startup() {
     }
 
     // Step 8: OR game world flags at +0xd0 with 0x5f0
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
         *(uint32_t*)(gameWorld + 0xd0) |= 0x5f0;
     }
 }

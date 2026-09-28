@@ -20,6 +20,7 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <cstdio>
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -48,8 +49,8 @@
 // exists (and the list itself can be null if the help resources never loaded), so
 // return null rather than fault; every caller below treats null as "no topics".
 static void* GetHelpExternalList() {
-    if (!g_pGameWorldSingleton) return nullptr;
-    void* world = *g_pGameWorldSingleton;
+    if (!GameUpdateLoop::_singleton) return nullptr;
+    void* world = GameUpdateLoop::_singleton;
     if (!world) return nullptr;
     return *(void**)((uintptr_t)world + 0xa0);
 }
@@ -234,7 +235,7 @@ namespace helpui_sa {
     void Trace([[maybe_unused]] const char* slot, void* self) {
         static int n=0; if (n>=24) return; ++n;
         [[maybe_unused]] uintptr_t s=reinterpret_cast<uintptr_t>(self);
-        void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+        void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
         [[maybe_unused]] void* topics = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw)+0xa0) : nullptr;
         printf("[HelpUI] %s self=%p root(+0x20)=%p scroll=%p doc=%p combo=%p back=%p fwd=%p "
                "cont=%p page=%d hist=%d/%d topics=%p n=%d\n", slot, self,

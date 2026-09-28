@@ -12,6 +12,7 @@
 
 #include "Component/cropfieldcomponent_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -63,8 +64,8 @@
 // a ComponentEntity, or its build-state component link no longer matches, the
 // entry is reset to state 2 with null IBPs.
 void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t world = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t map = *(uintptr_t*)(world + 0xf8);
 
     int count = *(int*)(self + 0x60);
@@ -381,10 +382,10 @@ void CropFieldComponent::Command(int command) {
 // legitimately have no entity on the cell (msg 1 already tests that in retail too).
 void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, uint32_t /*arg1*/) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     const uintptr_t map = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     if (!map) return;
     const uintptr_t grid = *reinterpret_cast<uintptr_t*>(map + 0x80);
     const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x58);

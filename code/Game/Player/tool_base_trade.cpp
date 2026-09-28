@@ -30,6 +30,7 @@
 // Port is 1:1 with the decompile — do not "improve".
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
 #include <cstdint>
@@ -476,8 +477,8 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
     }
 
     // Add (flag set) or remove (flag clear) this entity in the world tracking BST.
-    void* worldBase = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        ? *g_pGameWorldSingleton : nullptr;
+    void* worldBase = (GameUpdateLoop::_singleton != nullptr)
+        ? GameUpdateLoop::_singleton : nullptr;
     if (!worldBase) return;
     int64_t treeObj = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(worldBase) + 0x120);
 

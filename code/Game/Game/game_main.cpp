@@ -22,6 +22,7 @@
 
 #include "game_main.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
@@ -42,6 +43,7 @@
 // safe after <windows.h> here.
 #include "video/Device.h"
 #include "Game/game.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/inputbindings.h"
 #include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP
 #include "Game/GameLoaderLoop.h"    // ENDGAME B.3.8 LOOP
@@ -57,10 +59,9 @@
 #include <cstdlib>
 #include <new>
 
-// Defined in standalone/address_registry.cpp. Publishes the live KeyMap*
-// into the fake exref chain at slot 0x140151738 so that triple-deref reads
-// (g_pInputConfigSingletonExref) reach the real KeyMap inside Input::Configuration.
-extern "C" void SetStandaloneKeyMap(void* keyMap);
+// The exe cell 0x1401c3de0 (B3R STORAGE): GameMain's settings block
+// (Game/exe_bodies.h).
+int32_t* g_gameSettings = nullptr;
 
 // Defined in standalone/menudialogloopt_stubs.cpp. Loads
 // Dialog/SpriteSheet.rsc + constructs the "White" / "SaveLoadEmpty" Sprites
@@ -424,9 +425,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
         // Stage 3: allocate + construct + destroy a MainLoop. (No Run yet —
         // that needs an UpdateLoop chain.)
         {
-            // The MemoryAllocator singleton was NULL when EngineFuncsInit cached
-            // g_pMemAllocSingleton (Engine ctor hadn't run yet). Read the class
-            // static fresh now.
+            // The MemoryAllocator singleton, set by the Engine ctor. (B3R STORAGE:
+            // every reader reads the class static live; the engine_funcs
+            // snapshot and the self-test's refresh of it are gone.)
             void* memAllocSingleton = System::MemoryAllocator::_singleton;
             printf("[GameMain] MemAllocSingleton (fresh) = %p\n", memAllocSingleton);
             (void)memAllocSingleton;   // B3R: its last reader was the MemAlloc door; the perf build strips the printf
@@ -455,21 +456,21 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     Game_Ctor(gameObj);
                     StallDebug::Mark("MainLoop ctor + Game ctor");
                     printf("[GameMain] Game_Ctor done; KeyMap singleton -> %p\n",
-                           g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+                           g_gameContainer);
                 }
 
-                // Wire the live Input::KeyMap into our fake exref chain so
-                // triple-deref reads of g_pInputConfigSingletonExref reach the real
-                // KeyMap. Engine::Startup constructed Input::Configuration at
-                // engine[0x6d8]; its first field is the KeyMap pointer
-                // (Input::Configuration::GetKeyMap is `return *(KeyMap**)this`).
+                // Engine::Startup constructed Input::Configuration at
+                // engine[0x6d8] (== Input::Configuration::_singleton); its first
+                // field is the KeyMap pointer. The KeyMap readers read
+                // Input::Configuration::_singleton->_keyMap (B3R STORAGE: the
+                // hand-built exref chain this used to fill is gone).
                 void* inputCfg = *reinterpret_cast<void**>(
                     reinterpret_cast<uintptr_t>(&engine) + 0x6d8);
                 void* keyMap = inputCfg ? *reinterpret_cast<void**>(inputCfg)
                                         : nullptr;
                 printf("[GameMain] InputConfig=%p  -> KeyMap=%p\n",
                        inputCfg, keyMap);
-                SetStandaloneKeyMap(keyMap);
+                (void)keyMap;   // the perf build strips the printf
 
                 // Populate KeyMap with default bindings (mirror of the original
                 // PlacementTool_Ctor's call to FUN_1400992f0). Must happen
@@ -510,9 +511,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     settings[9] = 0;            // LastMapSize
                     settings[10] = 1;           // LastClimate
                     *reinterpret_cast<int64_t*>(&settings[11]) = 1;  // LastStart + LastDisaster
-                    if (g_pGameSettingsPtr) {
-                        *g_pGameSettingsPtr = settings;
-                    }
+                    g_gameSettings = settings;
                     // Retail GameMain calls this immediately after the defaults
                     // (0x14004203d -> 0x140098b60): every field above is only a
                     // fallback for a key IO::Persistence does not have yet. Without
@@ -713,12 +712,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     // terrain / size / climate / start / disaster picks outlive
                     // the process.
                     GameSettings_Save(settings);
-                    if (g_pGameSettingsPtr) *g_pGameSettingsPtr = nullptr;
+                    g_gameSettings = nullptr;
                     System::MemoryAllocator::MemFree(settings);
                     printf("[GameMain] Settings freed.\n");
                 }
                 if (gameObj) {
-                    if (g_pKeyMapSingleton) *g_pKeyMapSingleton = nullptr;
+                    g_gameContainer = nullptr;
                     System::MemoryAllocator::MemFree(gameObj);
                     printf("[GameMain] Game freed.\n");
                 }

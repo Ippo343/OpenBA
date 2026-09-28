@@ -46,6 +46,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/StorageLocationDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/StorageLocationComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
@@ -156,7 +157,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                                        uint32_t param_7) {
     EnsureInit();
 
-    int* local_80 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int* local_80 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     *param_2 = 0;
     uint32_t local_98_flag = 0;       // low byte = "early-return" gate (set when a "B"-qualified hit found)
     int local_a8_best = 0x7fffffff;   // best cost so far

@@ -16,6 +16,7 @@
 #include "Component/LivestockComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -42,8 +43,8 @@
 // dimension at g_world+0xf8. Pure leaf (no exe sub-callees) -> closure-safe.
 void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY,
                                       short* outW, short* outH, int size) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    int* mapInfo = *reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    int* mapInfo = *reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int cell = *reinterpret_cast<int*>((uintptr_t)selfP + 0x28);
     int mapDim = *mapInfo;
     short half = static_cast<short>(size / 2);
@@ -115,8 +116,8 @@ void PastureComponent_Helper5ed0(void* entityRef) {
     uintptr_t fam = *(uintptr_t*)famIBP;
     uintptr_t model = *(uintptr_t*)(fam + 0x68);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    int mapW = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    int mapW = **(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int x = (int)(*(float*)(model + 0x158) + (float)(mapW >> 1));
     int y = (int)(*(float*)(model + 0x15c) + (float)(mapW >> 1));
     if (x < 0) x = 0;
@@ -348,14 +349,14 @@ void PastureComponent::OnRemove() {
 void PastureComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     int64_t posIbp = 0;
     WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(self + 0x10), &posIbp);
     if (!posIbp) return;
 
     int* map = *reinterpret_cast<int**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     if (!map) return;
     const int width = *map;
     const uintptr_t grid = *reinterpret_cast<uintptr_t*>(

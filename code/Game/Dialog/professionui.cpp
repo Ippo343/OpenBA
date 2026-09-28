@@ -34,6 +34,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -357,7 +358,7 @@ void ProfessionUI::OnOpened() {
     int colCount = *(int*)((uintptr_t)tableElem + 0xC4);
 
     // Get profession count from game world singleton
-    void* worldSingleton = *g_pGameWorldSingleton;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
     int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
 
@@ -622,7 +623,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     professionui_sa::Trace("Slot8", this);
     uintptr_t s = (uintptr_t)this;
 
-    void* worldSingleton = *g_pGameWorldSingleton;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     uintptr_t citizenMgr = *(uintptr_t*)((uintptr_t)worldSingleton + 0xF0);
     void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
     int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
@@ -847,9 +848,9 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
     if (current < desired) {
         uint64_t toAdd = (uint64_t)(uint32_t)(desired - current);
         do {
-            void* citizenList = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+            void* citizenList = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
             // Triple deref: world+0xB0 → profList, +0x20 → profArray, +idx*8 → profId
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xB0) + 0x20) + idx * 8);
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xB0) + 0x20) + idx * 8);
 
             // Request a worker slot
             uint64_t retBuf[2] = {0, 0};
@@ -891,8 +892,8 @@ next_iter:
     if (desired < current) {
         uint64_t toRemove = (uint64_t)(uint32_t)(current - desired);
         do {
-            void* citizenList = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xB0) + 0x20) + idx * 8);
+            void* citizenList = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xB0) + 0x20) + idx * 8);
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
@@ -919,7 +920,7 @@ next_iter:
 
 static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
 
     void* citizenList = *(void**)(game + 0xF0);
     uintptr_t citizenMgr = (uintptr_t)citizenList;
@@ -1028,7 +1029,7 @@ void ProfessionUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
                                   int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (!professionui_sa::IsSetUp(this)) return;
     professionui_sa::Trace("Slot9", this);
-    void* worldSingleton = *g_pGameWorldSingleton;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
     int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
 

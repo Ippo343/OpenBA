@@ -47,6 +47,7 @@
 #include "Component/coll_bridge.h"
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/EditTool.h"   // ENDGAME B.3.9 TR
 #include "Player/Tool.h"       // B.3.x W0: Tool::OnCancel by name
 #include "ui/DialogController.h"   // B.3.x W0: DialogController::OnCreated / OnOpened by name
@@ -112,7 +113,7 @@ void ToolbarDialog::CloseSubDialog() {
 // Speed singleton at gameWorld+0x120 (+0x34 = current speed value).
 static void ToolbarDialog_ChangeSpeed_Impl(void* self, int direction) {
     uintptr_t s = (uintptr_t)self;
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
     int32_t speedVal = *(int32_t*)(gameSys + 0x34);
     int32_t count = *(int32_t*)(s + 0x100);
@@ -181,7 +182,7 @@ void ToolbarDialog::OnClosed() {
 // ============================================================
 static void ToolbarDialog_UpdateButtons_Impl(void* self) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t entityList = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+    uintptr_t entityList = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
 
     int32_t itemCount = *(int32_t*)(s + 0xD8);
     if (itemCount <= 0) return;
@@ -559,7 +560,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     uintptr_t self = (uintptr_t)gameSubsys;
 
     // Get the UserInterface singleton: *(gameWorld + 0x98)
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
 
     // Step 1: Check if a dialog with this controller type is already open
@@ -757,7 +758,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
     // (This harness never walks the dialog LIST — it enumerates the _addDialogs
     // array at UI+0x28 below — so the old `!fn_UI_GetFirstDialog` half of this
     // guard tested a pointer the body does not use, and is gone.)
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) { printf("[HarnessDrive] gameWorld null\n"); return; }
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
     if (!ui) { printf("[HarnessDrive] UserInterface null\n"); return; }
@@ -872,7 +873,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
 extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     uintptr_t gs = (uintptr_t)gameSubsys;
     // Get UserInterface from gameWorld+0x98
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
     // Step 1: If there's an active tool controller at +0x28, close it via vtable[9]
     if (*(uintptr_t*)(gs + 0x28) != 0) {
@@ -1413,7 +1414,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
 
     // --- Step 10: Find current game speed in speed array ---
     int32_t speedIndex = 0;
-    uint64_t gameWorldAddr = (uintptr_t)*g_pGameWorldSingleton;
+    uint64_t gameWorldAddr = (uintptr_t)GameUpdateLoop::_singleton;
     int32_t currentSpeed = *(int32_t*)(*(uintptr_t*)(gameWorldAddr + 0x120) + 0x34);
     int32_t speedCount = *(int32_t*)(s + 0x100);
     int32_t* speedArr = *(int32_t**)(s + 0xF8);
@@ -1464,7 +1465,7 @@ void ToolbarDialog::OnUpdateLayout() {
     uintptr_t s = (uintptr_t)this;
 
     // Get game subsystem at gameWorld->+0x120
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
 
@@ -1598,7 +1599,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
     uintptr_t s = (uintptr_t)this;
 
     // Get game subsystem
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
 
     if (eventType == 0x12) {
@@ -1886,7 +1887,7 @@ void* ToolbarDialog::CreateInPlaceObject(void* storage) {
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
     uintptr_t tc = (uintptr_t)toolController;
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
 
     // === Section 1: Enable tracking on EntityPanel controller ===
     if (*(uintptr_t*)parentDialogPtr != 0) {

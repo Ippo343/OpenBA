@@ -24,7 +24,6 @@ void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
 // MemoryAllocator
 fn_MemAlloc_t fn_MemAlloc = nullptr;
 fn_MemFree_t fn_MemFree = nullptr;
-void* g_pMemAllocSingleton = nullptr;
 
 // Video::Device Lock/Unlock
 
@@ -63,13 +62,6 @@ fn_EntityTrackingSet_BST_Delete_t fn_EntityTrackingSet_BST_Delete = nullptr;
 fn_BridgeTool_SnapEndCell_t fn_BridgeTool_SnapEndCell = nullptr;
 fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath = nullptr;
 
-
-// ============================================================
-// Game Singletons (Phase A3)
-// ============================================================
-void** g_pGameWorldSingleton = nullptr;
-void** g_pKeyMapSingleton = nullptr;
-void** g_pInputConfigSingletonExref = nullptr;
 
 // ============================================================
 // Common Exe Functions (Phase A4) — type ID globals for reimplemented FindComponent
@@ -155,7 +147,6 @@ fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
 // fn_HelpUI_ArrayResize — now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
 // NewGameDialog support
-void** g_pNewGameSettings = nullptr;
 // fn_GenerateTownName — REMOVED, now reimplemented in newgamedialog.cpp
 fn_NameDB_GenerateName_t fn_NameDB_GenerateName = nullptr;
 fn_StartNewGame_t fn_StartNewGame = nullptr;
@@ -172,7 +163,6 @@ fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor = nullptr;
 fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
-int32_t** g_pGameSettingsPtr = nullptr;
 
 // StorageUI support
 // fn_StorageUI_SortItems — reimplemented as StorageUI_SortItems() in storageui.cpp
@@ -243,7 +233,6 @@ fn_SavedState_Ctor_t fn_SavedState_Ctor = nullptr;
 // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
 // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
 // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
-void** g_pGameSingleton = nullptr;
 // GroupRating helpers
 fn_GroupRating_Init_t fn_GroupRating_Init = nullptr;
 fn_GroupRating_Update_t fn_GroupRating_Update = nullptr;
@@ -519,7 +508,7 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
 //   new capacity = newCount * 3
 // Otherwise capacity = newCount (exact fit or shrink).
 //
-// Memory: fn_MemAlloc(g_pMemAllocSingleton, size, alignment) / fn_MemFreeStatic(ptr)
+// Memory: System::MemoryAllocator::MemAlloc(size, alignment) / MemFree(ptr)
 
 // ModDialog thumbnail array push (was ResolveAddr(Module::Exe, 0x140012a60), FUN_140012a60).
 // {ptr,count:i32,cap:i32} header at +0x00/+0x08/+0x0C, 0x58-byte (11 qword) elements.
@@ -541,7 +530,7 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
 
     if (*pCap < newCount) {
         *pCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        *pData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*pCap * kStride, 8);
+        *pData = System::MemoryAllocator::MemAlloc((uint64_t)*pCap * kStride, 8);
     }
 
     int startIdx = (oldData == *pData) ? oldCount : 0;
@@ -554,7 +543,7 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
     }
 
     if (oldData != *pData) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -608,7 +597,6 @@ bool EngineFuncsInit() {
     // (ENDGAME B.3.5, b35-K2: zero callers tree-wide). See engine_funcs.h.
 
     // MemoryAllocator
-    g_pMemAllocSingleton = System::MemoryAllocator::_singleton;   // NULL here: the Engine ctor has not run
     fn_MemAlloc = reinterpret_cast<fn_MemAlloc_t>(
         ResolveAddr(Module::Runtime, 0x1800c6e60));
 
@@ -662,16 +650,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400fb2d0));
 
 
-
-    // ================================================================
-    // Phase A3: Game Singletons
-    // ================================================================
-    g_pGameWorldSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-    g_pKeyMapSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3de8));
-    g_pInputConfigSingletonExref = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140151738));
 
     // ================================================================
     // Phase A4: FindComponent type IDs (resolved from exe .rdata)
@@ -823,7 +801,6 @@ bool EngineFuncsInit() {
     // fn_OptionsDialog_PopulateInputBindList — reimplemented
     // fn_OptionsDialog_OnInputBindClick — reimplemented
     // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call)
-    g_pGameSettingsPtr = reinterpret_cast<int32_t**>(ResolveAddr(Module::Exe, 0x1401c3de0));
 
     // --- StorageUI support ---
     // fn_StorageUI_SortItems — reimplemented in storageui.cpp as StorageUI_SortItems()
@@ -875,7 +852,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140070030));
 
     // --- NewGameDialog support ---
-    g_pNewGameSettings = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
     // fn_GenerateTownName — REIMPLEMENTED, now resolve inner helpers
     fn_NameDB_GenerateName = reinterpret_cast<fn_NameDB_GenerateName_t>(
         ResolveAddr(Module::Exe, 0x1400a4b30));
@@ -1018,8 +994,6 @@ bool EngineFuncsInit() {
     // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionButton — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
-    g_pGameSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
 
     // --- GroupRating helpers ---
     fn_GroupRating_Init = reinterpret_cast<fn_GroupRating_Init_t>(
@@ -1203,19 +1177,12 @@ bool EngineFuncsInit() {
 #ifdef _DEBUG
     printf("[EngineFuncs] Functions:\n");
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
-    printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
     printf("[EngineFuncs] UI infrastructure:\n");
     printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
     printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
     printf("[EngineFuncs] Phase A3 — Singletons:\n");
-    printf("  GameWorld                 = %p -> %p\n", (void*)g_pGameWorldSingleton,
-           g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
-    printf("  KeyMap (container)        = %p -> %p\n", (void*)g_pKeyMapSingleton,
-           g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
-    printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pInputConfigSingletonExref,
-           g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
 #endif
 

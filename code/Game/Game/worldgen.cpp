@@ -38,6 +38,7 @@
 // workflow (notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
@@ -271,8 +272,8 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
 // Null-checked only because our standalone can run worldgen from harnesses
 // before Load sets the singleton; retail's write is unguarded.
 static void wg_PublishLoadProgress(int stage) {
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->_loadProgress = stage;   // +0x24  B.3.8 bridge
+    if (GameUpdateLoop::_singleton != nullptr)
+        GameUpdateLoop::_singleton->_loadProgress = stage;   // +0x24
 }
 
 static void wg_HeightmapPipeline_f390(int32_t* hf) {

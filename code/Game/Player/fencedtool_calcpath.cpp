@@ -40,6 +40,7 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Player/exe_bodies.h"
 #include "Action/exe_bodies.h"
@@ -118,7 +119,7 @@ void SeatPickOwner_1290d0(void* pickComp, void** masterIBPSlot) {
     uintptr_t p = reinterpret_cast<uintptr_t>(pickComp);
     *reinterpret_cast<void**>(p + 0x30) = *masterIBPSlot;
     if (*reinterpret_cast<int32_t*>(p + 0x28) < 0) return;
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     void* scene = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x70) : nullptr;
     if (scene)
         reinterpret_cast<Picking::Scene*>(scene)->SetMeshUserData(*reinterpret_cast<uint32_t*>(p + 0x28),   // B.3.7 bridge
@@ -145,7 +146,7 @@ void CellWorldPos(int* mapGrid, int col, int row, float out[3]) {
 // ============================================================
 void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
                            int w, int h, int angleDeg, void** multiObjIBPSlot) {
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
 
@@ -306,7 +307,7 @@ void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
 // 0x1400dae00 — FencedTool::CalcPath (Slot13). Returns 1 on commit, 0 on abort.
 // ============================================================
 bool FencedTool::CalcPath(int startCell, int endCell) {
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw || !fencedDesc) {
         return 0;
     }

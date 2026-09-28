@@ -16,6 +16,7 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -131,7 +132,7 @@ void EventLogUI::OnOpened() {
 
     // Iterate notification button children, store in dynamic array at +0x70, set IDs
     int notifyCount = reinterpret_cast<const UI::Element*>(notifyContainer)->ChildCount();  // B.3.6 bridge
-    void* eventLogSingleton = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+    void* eventLogSingleton = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
 
     for (int i = 0; i < notifyCount; i++) {
         // Get child button element
@@ -174,7 +175,7 @@ void EventLogUI::OnUpdateLayout() {
     uintptr_t s = (uintptr_t)this;
 
     // Event log singleton: g_pGameWorldSingleton -> +0x138
-    uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+    uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
     int totalEvents = *(int*)(eventLog + 0x20);  // total event count
 
     int displayCount = *(int*)(s + 0x58);  // number of display rows
@@ -263,7 +264,7 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32
             void* ibp = (void*)(*(uintptr_t*)(s + 0x70) + (uintptr_t)btnIdx * 8);
             void* btnElem = *(void**)ibp;
             // Read button's flag from +0xD8 and write to event log singleton +0x10+btnIdx
-            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
             *(uint8_t*)(eventLog + 0x10 + btnIdx) = *(uint8_t*)((uintptr_t)btnElem + 0xD8);
         }
         return;
@@ -273,7 +274,7 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32
         {
             int rowIdx = id - 0x6C;
             // Get event log
-            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
             int totalEvents = *(int*)(eventLog + 0x20);
             int displayCount = *(int*)(s + 0x58);
             int scrollOffset = *(int*)(s + 0x48);
@@ -282,7 +283,7 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32
             uintptr_t entryArray = *(uintptr_t*)(eventLog + 0x18);
             int tileIdx = *(int*)(entryArray + 0x18 + (uintptr_t)eventIdx * 0x28);
             if (tileIdx >= 0) {
-                int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xF8);
+                int* mapGrid = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xF8);
                 int gridSize = *mapGrid;
                 float halfSize = (float)(gridSize >> 1) - 0.5f;
                 float inXY[3] = {
@@ -292,7 +293,7 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32
                 };
                 float outPos[3] = {};
                 Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
-                uintptr_t camTarget = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0xE0);
+                uintptr_t camTarget = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0xE0);
                 *(float*)(camTarget + 0x1C) = outPos[0];
                 *(float*)(camTarget + 0x20) = outPos[1];
                 *(float*)(camTarget + 0x24) = outPos[2];

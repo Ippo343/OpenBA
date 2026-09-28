@@ -24,6 +24,8 @@
 //   TileIndex         0x140095030  — entity -> map tile index (null entity => -1)
 
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "system/String.h"
@@ -176,7 +178,7 @@ static int EventLog_PopupIndex(int eventType) {
 // Game* (gw+0xF8). Null/stale entity or missing MapComponent => -1.
 static int EventLog_TileIndex(void* entityIBP) {
     if (!entityIBP || *(int64_t*)entityIBP == 0) return -1;
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return -1;
     int* game = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_game);   // B.3.8 bridge
     if (!game) return -1;
@@ -242,7 +244,7 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
                                   const char* const* extra, int nExtra,
                                   const char* /*traceTag*/) {
     if (!eventLog) return;
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
 
     // --- Build the display text ---
@@ -304,8 +306,8 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     // when the settings byte +0x17 ("pause on events") is set. Speed lives in
     // the EntityUI obj (gw+0x120)+0x34. Present in ALL THREE retail writers.
     if (eventType > 0xa && (eventType < 0xd || (unsigned)(eventType - 0x1e) < 2u)) {
-        if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
-            *((const char*)*g_pGameSettingsPtr + 0x17) != 0) {
+        if (g_gameSettings != nullptr &&
+            *((const char*)g_gameSettings + 0x17) != 0) {
             void* speedObj = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_entityUI;   // B.3.8 bridge
             if (speedObj) *(int32_t*)((uintptr_t)speedObj + 0x34) = 1;
         }
@@ -355,7 +357,7 @@ extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int seve
 
 // Convenience: add a location-less event to the live game's event log.
 extern "C" void EventLog_AddSimple(int eventType, int severity) {
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     void* eventLog = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_eventNotifier;   // B.3.8 bridge
     EventLog_AddEvent(eventLog, eventType, severity, nullptr);
@@ -383,7 +385,7 @@ extern "C" void EventLog_AddSimple(int eventType, int severity) {
 // `cur < 0` is false, so no spurious warning — safe to tick unconditionally.
 extern "C" void EventLog_CheckResourceShortages(void* townMgr, void* timeDelta) {
     if (!townMgr || !timeDelta) return;
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     void* eventLog = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_eventNotifier;   // B.3.8 bridge
     if (!eventLog) return;

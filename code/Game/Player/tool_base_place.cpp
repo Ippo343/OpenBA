@@ -18,6 +18,7 @@
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include "Player/exe_bodies.h"
@@ -63,7 +64,7 @@ void PlacementToolPlace_FlipVariant_d960(void* selfp) {
     int sceneObj = *reinterpret_cast<int*>(self + 0x60);
     if (sceneObj < 0) return;
 
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     void* scene = *reinterpret_cast<void**>(gameWorld + 0x60);
 
     if (scene) {

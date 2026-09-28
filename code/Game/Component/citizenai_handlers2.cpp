@@ -66,6 +66,8 @@
 #include "graphics/Mesh.h"
 #include "Component/Component.h"   // B.3.x W0: Component slots by name
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -140,7 +142,7 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
     int64_t cz = *self;
     int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
-    int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     int half = mapSize >> 1;
     int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(half));
     int cy = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) + static_cast<float>(half));
@@ -160,7 +162,7 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
 
     int64_t outBest = 0;
     int64_t* listpair = *reinterpret_cast<int64_t**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 4);
 
@@ -211,7 +213,7 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
     int64_t cz = *self;
     int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
     int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
-    int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     int half = mapSize >> 1;
     int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(half));
     int cy = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) + static_cast<float>(half));
@@ -230,7 +232,7 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
 
     int64_t outBest = 0;
     int64_t* listpair = *reinterpret_cast<int64_t**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 2);
 
@@ -255,7 +257,7 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                     // OR [mi+0x28 + 0xc8], 0x10   == set status-mask bit 4 at mi+0xf0
                     *reinterpret_cast<uint32_t*>(mi + 0xf0) |= 0x10;
                     uint32_t changed;
-                    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+                    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
                     if (*reinterpret_cast<int*>(mi + 0xf0) == 0) {
                         // mask empty -> remove from scene
                         if (-1 < *reinterpret_cast<int32_t*>(mi + 0x100)) {
@@ -269,7 +271,7 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                         changed = after ^ before;
                     } else {
                         // mask non-empty -> ensure in scene + run vtable+0x40 update
-                        int32_t* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+                        int32_t* settings = g_gameSettings;
                         if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
                             *reinterpret_cast<int32_t*>(mi + 0x100) < 0) {
                             uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))

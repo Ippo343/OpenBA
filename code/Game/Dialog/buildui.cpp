@@ -16,6 +16,7 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
@@ -78,7 +79,7 @@ static int CountOccupiedBuildTiles_Impl(void* smComp)
     // WorldGrid at gameWorld+0xF8
     // piVar3 = *(int**)(gameWorld + 0xF8)
     // *piVar3 = mapWidth (int), *(piVar3+0x20) = tile array base ptr
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     int* piVar3 = *(int**)((uintptr_t)gameWorld + 0xF8);
     int mapWidth = *piVar3;
     uintptr_t tileArrayBase = *(uintptr_t*)((uintptr_t)piVar3 + 0x20 * sizeof(int));

@@ -71,6 +71,7 @@
 #include "graphics/Mesh.h"
 #include "graphics/Material.h"   // ENDGAME B.3.5 batch K1 — Graphics::MaterialInstance
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "Object/factory_registration.h"
@@ -314,7 +315,7 @@ inline void RelVec(float* dst, const float* p, float ox, float oy) {
 //   self = HighlightComponent*.
 // ===========================================================================
 void Impl_b930(int64_t self) {
-    int64_t gw = reinterpret_cast<int64_t>(*g_pGameWorldSingleton);
+    int64_t gw = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton);
     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
 
     // Entity footprint rect (short fields at +0x28 x, +0x2a y, +0x2c w, +0x2e h).
@@ -498,7 +499,7 @@ void Impl_b930(int64_t self) {
 //   per-cell prebuilt mesh from the description table. self = HighlightComponent*.
 // ===========================================================================
 void Impl_c4a0(int64_t self) {
-    int64_t gw = reinterpret_cast<int64_t>(*g_pGameWorldSingleton);
+    int64_t gw = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton);
     void* scene = *reinterpret_cast<void**>(gw + 0x60);
 
     // Standalone: the HighlightComponent is created via COMPONENT_INERT_FACTORY

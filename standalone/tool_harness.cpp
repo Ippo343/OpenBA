@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"   // -Iruntime/types; the operator_fc60 probe
 #include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (pinpanel controller lookup)
 #include <cstdio>
@@ -414,7 +415,7 @@ void FireRoadTool(void* entityUI) {
     // Hardcoding a span just hits the start-town buildings and trees, so scan outward
     // from the valley centre for a clear horizontal run instead (same idea as the
     // PlacementTool harness's ring scan).
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
     uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
                                       reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
@@ -592,7 +593,7 @@ void FirePastureTool(void* entityUI) {
            *reinterpret_cast<void**>(t + 0x40), *reinterpret_cast<void**>(t + 0x48));
 
     // Scan outward from the valley centre for a clear 8x8 block (min size is 7).
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
     uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
                                       reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
@@ -815,7 +816,7 @@ void FireUtilityDialog() {
         return;
     }
 
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) { fprintf(stderr, "[ToolHarness] ERROR: gameWorld null\n"); return; }
     void* gameSys = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x120);
 
@@ -993,7 +994,7 @@ void*    s_pin_ctrl      = nullptr;  // EntityUI controller (its +0x28 = datasou
 uint64_t s_pin_entity    = 0;        // the marked-then-freed house entity ptr
 int      s_pin_fireFrame = 0;
 
-inline void* GetGW() { return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr; }
+inline void* GetGW() { return GameUpdateLoop::_singleton; }
 
 // Read component[0]'s type-id (best-effort, for identifying what we marked).
 uint32_t Comp0TypeId(uintptr_t entity) {
@@ -1396,11 +1397,11 @@ void FireHousePanel(void* entityUI) {
 //
 // Off by default; prints nothing unless selected.
 static void FireUIComponentCensus() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton == nullptr) {
         fprintf(stderr, "[UICompCensus] no GameWorld singleton\n");
         return;
     }
-    void* gw = *g_pGameWorldSingleton;
+    void* gw = GameUpdateLoop::_singleton;
     uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(gw) + 0xe8);
     uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
@@ -1504,8 +1505,8 @@ static void FireDlgSettingsRoute(void* entityUI) {
                         "(set BANISHED_LIVE_TOOLS=1)\n");
         return;
     }
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    void* gw = *g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    void* gw = GameUpdateLoop::_singleton;
     uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(gw) + 0xe8);
     uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
@@ -1609,9 +1610,9 @@ void FirePasturePanel(void* entityUI) {
     void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[PasturePanel] EditTool activation FAILED\n"); return; }
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     if (!gs) { fprintf(stderr, "[PasturePanel] no entity-list singleton\n"); return; }
     int n = *reinterpret_cast<int*>(gs + 0x98);
     uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
@@ -1624,7 +1625,7 @@ void FirePasturePanel(void* entityUI) {
     // uses, which finds the component on the entity regardless of build state — clicking
     // an unfinished pasture opens its panel in retail too.
     if (!pastureComp) {
-        void* gw = *g_pGameWorldSingleton;
+        void* gw = GameUpdateLoop::_singleton;
         uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
         uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
         int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
@@ -1747,7 +1748,7 @@ void FireOrchardPanel(void* entityUI) {
     void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[OrchardPanel] EditTool activation FAILED\n"); return; }
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) { fprintf(stderr, "[OrchardPanel] gameWorld null\n"); return; }
     uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!entityList) { fprintf(stderr, "[OrchardPanel] EntityList (gw+0xe8) null\n"); return; }
@@ -1857,7 +1858,7 @@ void FireTradePanel(void* entityUI) {
     // Find the trading post by scanning the entity list for a TradeComponent. The
     // raw .rdata type-id slot 0x1401c4b80 is unregistered in standalone, so match on
     // the component's own vtable+0x10 GetTypeId (same approach as trade_probe.cpp).
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) { fprintf(stderr, "[TradePanel] gameWorld null\n"); return; }
     uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!entityList) { fprintf(stderr, "[TradePanel] EntityList (gw+0xe8) null\n"); return; }
@@ -2607,7 +2608,7 @@ void FireBridgeTool(void* entityUI) {
            *reinterpret_cast<uint32_t*>(bridgeDesc + 0x30),
            *reinterpret_cast<int*>(bridgeDesc + 0x34));
 
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
     uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
                                       reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;

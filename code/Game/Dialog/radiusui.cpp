@@ -8,6 +8,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -101,7 +102,7 @@ void RadiusUI::OnOpened() {
     // Calculate center tile index from BuildComponent coordinates:
     // +0x28 = int16 baseX, +0x2a = int16 baseY
     // +0x2c = int16 sizeX, +0x2e = int16 sizeY
-    int gridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    int gridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
     int centerY = (int)*(int16_t*)(buildComp + 0x2a) + ((int)*(int16_t*)(buildComp + 0x2e) >> 1);
     int centerX = (int)*(int16_t*)(buildComp + 0x28) + ((int)*(int16_t*)(buildComp + 0x2c) >> 1);
     int tileIndex = centerY * gridSize + centerX;
@@ -126,7 +127,7 @@ void RadiusUI::OnOpened() {
 void RadiusUI::OnClosed() {
     if (this->data30 >= 0) {
         // Game/World singleton +0x110 = RadiusDisplayManager
-        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorld = GameUpdateLoop::_singleton;
         void* radiusMgr = *(void**)((uintptr_t)gameWorld + 0x110);
         // The door was named fn_RadiusDisplay_Remove; it is bound to 0x1400b0d00
         // DecalComponent_TerrainDecalRemove (B3R: the binding decides).

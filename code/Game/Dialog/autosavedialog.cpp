@@ -10,6 +10,7 @@
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include <cstdint>
@@ -47,9 +48,9 @@ void AutoSaveDialog::OnOpened() {
     StopTimer(0);
 
     // Autosave-interval setting: gs[1] = the Options 'Autosave' combo index (0..7).
-    if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr)
+    if (g_gameSettings == nullptr)
         return;
-    int speedSetting = *(*g_pGameSettingsPtr + 1);
+    int speedSetting = *(g_gameSettings + 1);
 
     // Autosave interval table, in MINUTES, read off retail's .rdata (2026-08-30).
     // The switch at 0x14005e130 picks one of these eight floats and multiplies by

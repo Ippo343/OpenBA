@@ -32,6 +32,8 @@
 #include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 CB: 0x1401c3f78 cell class
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"
 #include <cstdint>
@@ -194,7 +196,7 @@ static inline int64_t GetDescription(CitizenComponent* self) {
 void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
 
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    uint8_t* gameWorld = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gameWorld = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int64_t weatherData = *reinterpret_cast<int64_t*>(gameWorld + 0x130);
     int64_t desc = GetDescription(self);
 
@@ -837,7 +839,7 @@ LAB_140113873:
                     float deathChanceAtZeroHealth = *reinterpret_cast<float*>(desc + 0x68);
 
                     void* random = *reinterpret_cast<void**>(
-                        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
+                        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xD8);
                     float roll = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
 
                     float pMaternalDeath = (health / maxHealth) *
@@ -850,7 +852,7 @@ LAB_140113873:
                         // Post-partum recovery interval.
                         desc = GetDescription(self);
                         void* random2 = *reinterpret_cast<void**>(
-                            reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
+                            reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xD8);
                         float roll2 = reinterpret_cast<System::Random*>(random2)->RandFloat();   // B.3.4b bridge
                         float timerBase = *reinterpret_cast<float*>(desc + 0x5C);
                         float timerRange = *reinterpret_cast<float*>(desc + 0x60);
@@ -1002,7 +1004,7 @@ static uintptr_t LookupRegionByID(uintptr_t areaMap, int32_t regionId) {
 // ============================================================
 bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
     uintptr_t selfAddr = (uintptr_t)self;
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     uintptr_t gwAddr = (uintptr_t)gameWorld;
 
     // Read citizen's workplace reference (profession group key)
@@ -1080,7 +1082,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 
             // Look up this workplace's region (re-read areaMap fresh, matches original asm)
             int32_t otherRegionId = *(int32_t*)(otherStorageLocIBP + 0x28);
-            uintptr_t freshAreaMap = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x118);
+            uintptr_t freshAreaMap = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0x118);
             uintptr_t otherRegionDesc = LookupRegionByID(freshAreaMap, otherRegionId);
 
             // Null check on region lookup (original would crash)
@@ -1220,7 +1222,7 @@ static void* FindCompByTypeId(int64_t entity, uint32_t typeId) {
 // find a "partner" citizen within the description's age window (+0x48/+0x4c) and
 // matching family-id (+0x38), returning an InternalBasePtr (param_2) to it.
 void* CitizenComp_helper_fe40(int64_t self, void* outIBP) {
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     // The old door read the registered 8-byte cell 0x1401722b0 as a uint32_t: its low
     // dword (little-endian) of 0x7fffffffffffffff.
     uint32_t mask = static_cast<uint32_t>(kRdata_1401722b0);
@@ -1295,7 +1297,7 @@ void* CitizenComp_helper_ff80(int64_t self, void* outIBP);   // fwd (defined aft
 // free worker slots whose footprint footstep matches; scans the world workplace
 // red-black tree keyed by the citizen's residence id (+0x1f0).
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     *param_2 = 0;
     int64_t tree = *reinterpret_cast<int64_t*>(gw + 0xf0);
     uint64_t key = *reinterpret_cast<uint64_t*>(param_1 + 0x1f0);
@@ -1367,7 +1369,7 @@ int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
 // sorts via helper_02a0, then returns the first whose free-slot count exceeds the
 // workplace's current workers. Same scanning structure as sub_ffc0 plus a grow-array.
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int64_t tree = *reinterpret_cast<int64_t*>(gw + 0xf0);
     uint64_t key = *reinterpret_cast<uint64_t*>(param_1 + 0x1f0);
 
@@ -1486,7 +1488,7 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             *reinterpret_cast<uint32_t*>(param_1 + 0x1e) |= bit;
         }
         uint32_t changed;
-        uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+        uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
         // [STANDALONE GUARD D4] geometry (+0x28 == param_1[5]) vtable installed?
         // See the long note in the clear-branch below: both scene calls depend on it.
         const bool inited = (param_1[5] != 0);
@@ -1538,7 +1540,7 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             *reinterpret_cast<uint32_t*>(param_1 + 4) = after;
             changed = after ^ before;
         } else {
-            int32_t* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+            int32_t* settings = g_gameSettings;
             if (inited && settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
                 (int)param_1[0x20] < 0) {
                 uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
@@ -1567,7 +1569,7 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
 // terrain buildable grid.
 char CitizenComp_CanFindHousing(int64_t selfV) {
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
+    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
 
     auto tileBuildable = [&](int64_t res8) -> bool {
         // [STANDALONE GUARD] FUN_140004680 (position-component find on the workplace/
@@ -1577,7 +1579,7 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
         // BANISHED_FORCE_WORK harness setting +0x238 to a real building entity.
         if (res8 == 0) return false;
         int64_t base = *reinterpret_cast<int64_t*>(grid + 0x20);
-        int dim = **reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
+        int dim = **reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
         int16_t* p = reinterpret_cast<int16_t*>(res8);
         int64_t idx = (((int64_t)p[0x17] >> 1) + (int64_t)p[0x15]) * dim +
                       (((int64_t)p[0x16] >> 1) + (int64_t)p[0x14]);
@@ -1622,7 +1624,7 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
 // flag both parent + linked entity (+0x88 |= 0x100).
 void CitizenComp_helper_1b90(int64_t selfV) {
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
 
     int eligible = 0, mature = 0;
@@ -1819,7 +1821,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
         // 0x20-byte stride, count at +0xC).
         ActRm_StorageSubtract_d150(storeIBP, work, 1);
         int64_t worldGrid = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+            reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf0);
         {
             uint32_t idx = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(storeIBP), work);
             if (-1 < (int)idx) {
@@ -1897,7 +1899,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
     // ---- Faithful 1:1 port of the townMgr scan (0x140110e70) ----
     // townMgr = *(gameWorld+0xf0); registry array *(townMgr+0x20), count *(townMgr+0x28).
     // Citizen fairness pre-scan uses the citizen list *(townMgr+0xa0)/*(townMgr+0xa8).
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int64_t townMgr = *reinterpret_cast<int64_t*>(gw + 0xf0);
 
     // Component finder on an entry entity (comp list +0x30 array / +0x38 count,
@@ -2057,7 +2059,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
 // Returns nonzero if the candidate is a valid (reachable) workplace for the citizen.
 char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
 
     // CheckPtr on the citizen's home IBP (+0x278), read its entity (+0x68).
@@ -2089,7 +2091,7 @@ char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
 //   0->bit5, 1->bit6, 2->bit9, 3->bit13, 4->bit14.
 int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4) {
     (void)param_1;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     uint32_t rawMatTid = RawMaterialDescription::TypeId();
 
     // Category -> capability bit-shift of material flags (+0x5c).
@@ -2176,7 +2178,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
 // world's no-hunger debug bit (gameFlags>>3) is set.
 void CitizenComp_ConsumeFood(CitizenComponent* param_1) {
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
     float uv   = kRdata_14017214c;
     float c114 = kRdata_140172114;
@@ -2213,7 +2215,7 @@ void CitizenComp_ConsumeFood(CitizenComponent* param_1) {
 // workplace storage demand. Closure-safe: callees 0x140087fb0/0x140008090 registered.
 void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     float uv   = kRdata_14017214c;
     float c114 = kRdata_140172114;
     float c1a8 = kRdata_1401721a8;
@@ -2349,7 +2351,7 @@ bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
     AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(cp + 0x10), &bldgIBP);
     if (*reinterpret_cast<int*>(bldgIBP + 0x60) == 0) { g_sub40f0_exit = 2; return false; }
 
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
     int64_t posIBP = 0;
     WorkBase_FindComponent_2ed0(*reinterpret_cast<int64_t*>(cp + 0x10), &posIBP);
@@ -2397,7 +2399,7 @@ extern int g_sub40f0_exit, g_sub40f0_count, g_sub40f0_cap;
 int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, int64_t param_4) {
     g_sub1930_walked = g_sub1930_haveWpc = g_sub1930_profMatch =
         g_sub1930_reject40f0 = g_sub1930_accepted = 0;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
     int64_t srcWp = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(param_1) + 0x238);
     int bestCost = -1;
@@ -2784,7 +2786,7 @@ void CitizenComponent::Update(void* timeArg) {
     // owner entity (+0x10), and the GameWorld weather (+0x130). Bail until ready.
     if (*reinterpret_cast<void**>(p + 0x288) == nullptr) return;
     if (*reinterpret_cast<void**>(p + 0x10)  == nullptr) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     CitizenComponent_Update(this, reinterpret_cast<void*>(time));
 }

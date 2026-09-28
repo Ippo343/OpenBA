@@ -26,6 +26,7 @@
 #include "Component/firecomponent_funcs.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -105,8 +106,8 @@ void FireComponent::Update(void* time) {
 
     if (*pFireTimer == 0) {
         // ---- idle: roll for a new fire ----
-        const uintptr_t gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                           ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+        const uintptr_t gw = (GameUpdateLoop::_singleton != nullptr)
+                           ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
         if (!gw) return;
 
         // GameWorld+0xD0 is the debug / new-game flag word: bit0 zeroCost, bit1 noHunger,

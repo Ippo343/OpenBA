@@ -22,6 +22,7 @@
 #include "Work/PastureWork.h"
 #include "Work/pasturework_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
@@ -162,7 +163,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/) {
     //   bVar8 = table[lVar18 + 8] <= table[lVar18]
     // -------------------------------------------------------
     {
-        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
         int descIndex = *(int*)((uintptr_t)pvVar19 + 0x20);
         uintptr_t offset = (uintptr_t)descIndex * 0x20;
         uintptr_t tableBase = *(uintptr_t*)(*(uintptr_t*)(gameWorld + 0xf0) + 0x170);
@@ -180,7 +181,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/) {
     // Branch A: NOT at capacity (bVar8 == false) -> find empty slot, remove animal
     // -------------------------------------------------------
     if (!bVar8) {
-        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
         int* piVar4 = *(int**)(gameWorld + 0xf8);  // mapGrid
 
         // Get citizen position for pathfinding
@@ -735,12 +736,12 @@ PastureWork::PastureWork(void* entityIBP) : AutoPickupWork(), _field48(nullptr),
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     *reinterpret_cast<uint64_t*>(s + 0x10) = *reinterpret_cast<uint64_t*>(entityIBP);
     if (*reinterpret_cast<uint64_t*>(s + 0x10) != 0 &&
-        g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        GameUpdateLoop::_singleton != nullptr) {
         uintptr_t areaIBP[2] = {0};
         FloorComponent_FindResData(reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(s + 0x10)), areaIBP);
         if (areaIBP[0] != 0) {
             uintptr_t a = areaIBP[0];
-            uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+            uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
             int mapDim = **reinterpret_cast<int**>(gw + 0xf8);
             *reinterpret_cast<int32_t*>(s + 0x28) =
                 (((int)*reinterpret_cast<int16_t*>(a + 0x2e) >> 1) +

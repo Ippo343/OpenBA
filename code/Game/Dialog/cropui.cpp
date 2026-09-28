@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -59,7 +60,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
     int selectedIdx = -1;
 
     // Get resource type list from game world
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     uintptr_t scenarioPtr = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
     int numTypes = *(int*)(scenarioPtr + 0x128);
     uintptr_t typeArray = *(uintptr_t*)(scenarioPtr + 0x120);

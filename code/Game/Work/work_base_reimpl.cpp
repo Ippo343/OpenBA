@@ -14,6 +14,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"      // B3R: Pf_IsDstReachable_f810, Pf_ZoneRefresh_9c480
 #include "Component/exe_bodies.h"   // B3R: FloorComponent_FindResData
@@ -140,8 +141,8 @@ void Work::InitFromEntity(void* pEntityIBP) {
             if (r && *reinterpret_cast<uintptr_t*>(r) != 0) {
                 r = FloorComponent_FindResData(field_10, &tmp);
                 uintptr_t comp = *reinterpret_cast<uintptr_t*>(r);
-                if (comp && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+                if (comp && GameUpdateLoop::_singleton != nullptr) {
+                    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
                     int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
                     int mapSize = mapGrid ? *mapGrid : 0;
                     int16_t f2e = *reinterpret_cast<int16_t*>(comp + 0x2e);

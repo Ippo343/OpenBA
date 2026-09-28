@@ -24,6 +24,7 @@
 // name inside Volume.h's own static_asserts (Mesh.h -> Geometry.h -> Volume.h).
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -327,8 +328,8 @@ static void StartTown_PickMeshProbe(void* entity) {
 extern "C" void DecalComponent_MarkOwnerBuilt(void* entity);
 
 extern "C" void StartTown_RegisterRuntimeBuilding(void* entity) {
-    if (!entity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    void* game = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game;   // B.3.8 bridge
+    if (!entity || GameUpdateLoop::_singleton == nullptr) return;
+    void* game = GameUpdateLoop::_singleton->m_game;
     void* mapComp = FindComponentOnEntity(entity, MapComponent::TypeId());
     if (!game || !mapComp) {
         fprintf(stderr, "[Upgrade] RegisterRuntimeBuilding: SKIP entity=%p game=%p mapComp=%p\n",
@@ -409,10 +410,10 @@ static void* FindComponentOnEntity(void* entity, uint32_t typeId);
 // Returns the seated profession key (0 = not an employer, nothing done).
 static uint64_t StartTown_ActivateWorkplace(void* entity, bool registerNow,
                                             const char* logTag) {
-    if (!entity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (!entity || GameUpdateLoop::_singleton == nullptr) return 0;
     void* wpc = FindComponentOnEntity(entity, WorkPlaceComponent::TypeId());
     if (!wpc) return 0;
-    int64_t townMgr = reinterpret_cast<int64_t>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList);   // B.3.8 bridge
+    int64_t townMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);
     uint8_t* w = reinterpret_cast<uint8_t*>(wpc);
     void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
     uint64_t profKey = wpDesc
@@ -675,8 +676,8 @@ static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
 // Independent of live storage; only needs townMgr + the resolved templates.
 static void StartTown_SeedAvailableAgriculture(uint8_t* sc, void* game,
                                                int spawnX, int spawnY) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     uint8_t* townMgr = static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
     void*    rng     = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
     if (!townMgr) return;
@@ -1036,7 +1037,7 @@ static struct {
 // sees the wild food the trees' SpawnComponent seeded.
 static void StartTown_RecountGatherable() {
     if (!g_demoGatherer.valid) return;
-    void* gws = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gws = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     uint8_t* mapObj = gws ? static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gws)->m_game) : nullptr;   // B.3.8 bridge
     const int width = mapObj ? *(int32_t*)mapObj : 0;
     uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
@@ -1111,8 +1112,8 @@ static inline char ST_CanPathTo(int* grid, uint32_t mask, uint32_t destCell, int
 }
 
 static bool ST_SiteIsWorkable(int tx, int ty, int fw, int fh) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return true;
-    int* grid = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton == nullptr) return true;
+    int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
     if (!grid) return true;
     const int mapW = *grid;
     for (int yy = 0; yy < fh; ++yy) {
@@ -1588,8 +1589,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //
         // Reported unconditionally when non-zero, because a silent residue reads exactly
         // like a clean placement right up until something walks the cell.
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            uint8_t* mapObj = static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
+        if (GameUpdateLoop::_singleton != nullptr) {
+            uint8_t* mapObj = static_cast<uint8_t*>(GameUpdateLoop::_singleton->m_game);
             uint8_t* grid   = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
             const int mw    = mapObj ? *(int32_t*)mapObj : 0;
             const uint32_t tidNat = NaturalResourceComponent::TypeId();   // caller batch CB6: was a lazy cache
@@ -1639,9 +1640,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // building and the whole town renders as bare foundations (observed 2026-07-27
         // once BuildComponent's OnAdded slot was wired). Missing bracket = the real gap;
         // porting it retires the standalone guard that was briefly used instead.
-        const uintptr_t gwFlags = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+        const uintptr_t gwFlags = (GameUpdateLoop::_singleton != nullptr)
                                 ? reinterpret_cast<uintptr_t>(   // +0xd0  B.3.8 bridge
-                                      &reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_gameFlags)
+                                      &GameUpdateLoop::_singleton->m_gameFlags)
                                 : 0;
         if (gwFlags) *(uint32_t*)gwFlags |= 1u;
 
@@ -1741,8 +1742,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 uint32_t groupCount = modelDesc ? *(uint32_t*)((uint8_t*)modelDesc + 0x28) : 0;
                 if (groupArray && groupCount > 0) {
                     int variantIdx = 0;
-                    void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                              ? reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_random : nullptr;   // B.3.8 bridge
+                    void* rng = (GameUpdateLoop::_singleton != nullptr)
+                              ? GameUpdateLoop::_singleton->m_random : nullptr;
                     if (rng && groupCount > 1)
                         variantIdx = (int)reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(groupCount));   // B.3.4b bridge
                     int subCount = *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10);
@@ -2261,8 +2262,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 fprintf(stderr, "[startTown::tradingpost] BANISHED_BUILD_DEMO_TRADINGPOST set "
                         "but Template\\TradingPost.rsc did not resolve; nothing spawned\n");
             } else {
-                void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                         ? *g_pGameWorldSingleton : nullptr;
+                void* gw = (GameUpdateLoop::_singleton != nullptr)
+                         ? GameUpdateLoop::_singleton : nullptr;
                 void* worldGeom = gw ? reinterpret_cast<GameUpdateLoop*>(gw)->m_worldGeometry : nullptr;   // B.3.8 bridge
                 const int mapSize = game ? *(int32_t*)game : 0;
                 const int pathCount = worldGeom ? *(int32_t*)((uint8_t*)worldGeom + 0x1e8) : 0;
@@ -2986,8 +2987,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         gRadius = *(int32_t*)((uint8_t*)rd + 0x28);
                 }
 
-                void* gws = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                          ? *g_pGameWorldSingleton : nullptr;
+                void* gws = (GameUpdateLoop::_singleton != nullptr)
+                          ? GameUpdateLoop::_singleton : nullptr;
                 uint8_t* mapObj = gws ? static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gws)->m_game) : nullptr;   // B.3.8 bridge
                 const int width = mapObj ? *(int32_t*)mapObj : 0;
                 uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
@@ -3184,8 +3185,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     radius = *(int32_t*)((uint8_t*)rd + 0x28);
             }
 
-            void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                     ? *g_pGameWorldSingleton : nullptr;
+            void* gw = (GameUpdateLoop::_singleton != nullptr)
+                     ? GameUpdateLoop::_singleton : nullptr;
             uint8_t* mapObj = gw ? static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_game) : nullptr;   // B.3.8 bridge
             const int width = mapObj ? *(int32_t*)mapObj : 0;
             uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
@@ -3391,7 +3392,7 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
     if (frameNum < g_deferredLodge.fireFrame) return;
     g_deferredLodge.done = true;      // one shot either way — never retry into a half-state
 
-    void* gws = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton
+    void* gws = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton
                                                                  : nullptr;
     void* game = gws ? reinterpret_cast<GameUpdateLoop*>(gws)->m_game : nullptr;   // B.3.8 bridge
     void* gridPtr = gws ? reinterpret_cast<GameUpdateLoop*>(gws)->m_characterGrid : nullptr;   // B.3.8 bridge
@@ -3633,8 +3634,8 @@ static void StartTown_RegisterTownCitizens() {
     if (g_townCitizensRegistered) return;
     g_townCitizensRegistered = true;
     int64_t townMgr = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        townMgr = reinterpret_cast<int64_t>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList);   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton != nullptr)
+        townMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);
     auto alreadyListed = [&](void* c) -> bool {
         if (!townMgr) return false;
         int64_t* arr = *reinterpret_cast<int64_t**>(townMgr + 0xa0);
@@ -3680,8 +3681,8 @@ static void StartTown_RegisterTownCitizens() {
 // ProfessionList (gw+0xb0) being live (LoadProfessionList_Step2, default-on). Build-time
 // pass that reproduces what retail runs at runtime in FUN_140117080.
 static void StartTown_SeedLaborerProfessions() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    int64_t profList = reinterpret_cast<int64_t>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_professionList);   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    int64_t profList = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_professionList);
     if (!profList) return;
     uint64_t laborerKey = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uint8_t*>(profList) + 0x30);
@@ -3703,7 +3704,7 @@ static void StartTown_SeedLaborerProfessions() {
     // laborerKey. Visible symptom: the workplace panel's worker up-arrow permanently
     // greyed out, since it enables on laborerCount > 0. Retail has no such coupling —
     // FUN_140117080 seeds the default profession per citizen at spawn, housing or not.
-    void* citList = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList;   // B.3.8 bridge
+    void* citList = GameUpdateLoop::_singleton->m_citizenList;
     if (!citList) {
         fprintf(stderr, "[startTown::laborer] citizen list (gw+0xf0) null — cannot seed\n");
         fflush(stderr);
@@ -4054,8 +4055,8 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
 static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     if (g_foundingHouseIBPs.empty()) return;
     void* townMgr = nullptr;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        townMgr = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList;   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton != nullptr)
+        townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
 
     // AddItem: ActRm_StorageAdd_d000 (0x14012d000), called by name.
@@ -4269,8 +4270,8 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     // RandFloat/RandFloatTol draws inside the deferred init), so this only needs
     // to produce a plausible population.
     void* rng = nullptr;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        rng = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_random;   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton != nullptr)
+        rng = GameUpdateLoop::_singleton->m_random;
 
     // Collect each family's spawned citizen entities so the founding-housing pass
     // (below) can pair family f with one registered WoodHouse. Only used when
@@ -5458,8 +5459,8 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     // ========================================================================
     {
         void* townMgr = nullptr;
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-            townMgr = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList;   // B.3.8 bridge
+        if (GameUpdateLoop::_singleton != nullptr)
+            townMgr = GameUpdateLoop::_singleton->m_citizenList;
 
         const int rmCount = *(int32_t*)(sc + 0xa8);
         uint8_t* rmPool   = *(uint8_t**)(sc + 0xa0);

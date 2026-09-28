@@ -69,6 +69,7 @@
 // Trace: BANISHED_STORAGE_TRACE=1 prints [StorageSeed] lines.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"      // ActHunt_DynArraySetCount_3110, ActRm_StorageAdd_d000, ActRm_GetResourceCategory_88f90
 #include "Component/exe_bodies.h"   // StorageComponent_DynArrayResize
 #include "object/TypeInfo.h"                     // caller batch CB6: Object::Base::Type()
@@ -100,8 +101,8 @@ static uint32_t TidMapComponent()           { return MapComponent::TypeId(); }
 // ============================================================
 
 static inline void* TownMgr() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
-    return static_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList;   // +0xf0  B.3.8 bridge
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
 }
 
 // Slot 2. Every caller passes an element of an entity's component array or a

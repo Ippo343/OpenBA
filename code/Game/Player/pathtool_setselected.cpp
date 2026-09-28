@@ -32,6 +32,7 @@
 #include "Player/PathTool.h"
 #include "Component/HighlightComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -289,7 +290,7 @@ static void* PathSel_FindHighlight_7080(int64_t param_1, void* param_2) {
 // param_2 is an IBP whose inner (+0) is a CitizenAI; +0x238 = its workplace entity.
 // ============================================================
 static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
-    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int64_t workplace = *(int64_t*)(*(int64_t*)param_2 + 0x238);
     uint64_t posIBP = 0;
     // 🐞 MISNAMED-FINDER TRAP (6th instance). The disasm at 0x1400de629 calls
@@ -495,7 +496,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
     }
 
     // --- A*-route each pair, dedup cells/segments into the point/segment AVL trees. ---
-    int* map = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* map = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     void* pointTree = nullptr;  int pointCount = 0;
     void* segTree   = nullptr;  int segCount   = 0;
 

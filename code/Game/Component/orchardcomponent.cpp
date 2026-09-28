@@ -15,6 +15,7 @@
 #include "Component/FruitDescription.h"
 #include "Component/OrchardDescription.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "Game/exe_constants.h"  // kRdata_*
@@ -129,7 +130,7 @@ void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arr
 // Reimpl of FUN_140051830 (validate orchard entity refs against live world entities; clear stale)
 void OrchardComponent_ValidateRefs(void* selfV) {
     uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-    uintptr_t world = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
     if (!world) return;
     uintptr_t resMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
     int count = *reinterpret_cast<int*>(self + 0x58);
@@ -214,8 +215,8 @@ float OrchardComponent_GetGrowth(void* selfV) {
     const int count = *reinterpret_cast<int32_t*>(comp + 0x58);
     if (count <= 0) return 0.0f;
 
-    void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                      ? *g_pGameWorldSingleton : nullptr;
+    void* world = (GameUpdateLoop::_singleton != nullptr)
+                      ? GameUpdateLoop::_singleton : nullptr;
     if (!world) return 0.0f;
     uintptr_t map = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(world) + 0xf8);
     if (!map) return 0.0f;
@@ -370,7 +371,7 @@ void TraceCanCommand(int cmdId, int curState, int planted, int slotCount, bool h
         return;
     prev = k;
 
-    uintptr_t world = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
     uintptr_t cal   = world ? *reinterpret_cast<uintptr_t*>(world + 0x128) : 0;
     const int curYear = cal ? *reinterpret_cast<int32_t*>(cal) : -1;
 
@@ -541,7 +542,7 @@ uint32_t OrchardComponent::CommandMask(int cmdId) {
     }
     case 1: {
         if (curState != 10) break;
-        uintptr_t world = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+        uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
         uintptr_t cal   = world ? *reinterpret_cast<uintptr_t*>(world + 0x128) : 0;
         const int year  = cal ? *reinterpret_cast<int32_t*>(cal) : 0;
         if (*reinterpret_cast<int32_t*>(s + 0x4c) == year) break;
@@ -631,7 +632,7 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
     }
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
     const uintptr_t idx  = static_cast<uintptr_t>(slotIdx);
-    uintptr_t world = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
     if (!world) return;
 
     if (msgId == 0) {

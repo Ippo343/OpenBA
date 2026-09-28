@@ -27,6 +27,7 @@
 #include "resolve.h"
 #include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
@@ -61,7 +62,7 @@ void EnsureFns() {
     s_init = true;
 }
 
-inline uintptr_t GW()          { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+inline uintptr_t GW()          { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 inline int64_t   TownMgr()     { return *reinterpret_cast<int64_t*>(GW() + 0xf0); }
 inline int*      GameObj()     { return *reinterpret_cast<int**>(GW() + 0xf8); }
 inline int64_t   LaborerKey()  { return *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30); }
@@ -380,8 +381,7 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
     int before = -1, after = -1;
 
     if (!houseEntityIBP)              fail = "houseEntityIBP == 0";
-    else if (!g_pGameWorldSingleton)  fail = "g_pGameWorldSingleton pointer is null";
-    else if (!*g_pGameWorldSingleton) fail = "*g_pGameWorldSingleton == 0 (no GameWorld yet)";
+    else if (!GameUpdateLoop::_singleton) fail = "GameUpdateLoop::_singleton == 0 (no GameWorld yet)";
     else {
         townMgr = TownMgr();
         if (townMgr == 0)             fail = "townMgr (gameWorld+0xf0) == 0";
@@ -421,7 +421,7 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
 // ============================================================================
 extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count) {
     EnsureFns();
-    if (townMgr == 0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (townMgr == 0 || GameUpdateLoop::_singleton == nullptr) return 0;
     if (professionKey == 0) return 0;
     int64_t profKey = (int64_t)professionKey;
 
@@ -478,7 +478,7 @@ extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey
 // ============================================================================
 extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity, uint64_t professionKey, int count) {
     EnsureFns();
-    if (townMgr == 0 || availEntity == 0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (townMgr == 0 || availEntity == 0 || GameUpdateLoop::_singleton == nullptr) return 0;
     if (professionKey == 0) return 0;
     int64_t profKey = static_cast<int64_t>(professionKey);
 
@@ -630,7 +630,7 @@ extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64
 // census, the town-hall stats and every population system read.
 void CitizenComponent::OnAdded() {
     EnsureFns();
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     int64_t townMgr = TownMgr();
     if (townMgr == 0) return;
     int64_t ref[2] = { 0, 0 };

@@ -38,6 +38,7 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"      // B3R: ActCNR_FindComponent_c460
 #include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
 #include <cstdint>
@@ -120,10 +121,10 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
 //   DAT_1401c77e8 type-ID global                        [runtime-filled]
 // ============================================================
 long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    if (GameUpdateLoop::_singleton == nullptr) return 1;
 
     // grid = *(int**)((*g_pGameWorldSingleton) + 0xf8); mapW = *grid
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     if (!grid) return 1;
     int mapW = *grid;
 

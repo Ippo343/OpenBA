@@ -27,6 +27,8 @@
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -404,7 +406,7 @@ void NewGameDialog::OnOpened() {
     this->comboDisaster  = ::FindElement(this, "comboDisaster");
 
     // --- Cache ExternalList pointers from keymap singleton ---
-    void* keyMapData = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    void* keyMapData = (g_gameContainer);
     if (keyMapData) {
         this->mapGeneratorList     = *(void**)((uintptr_t)keyMapData + 0x18);
         this->climateGeneratorList = *(void**)((uintptr_t)keyMapData + 0x10);
@@ -451,7 +453,7 @@ void NewGameDialog::OnOpened() {
     // --- Restore saved combo selections from game settings ---
     // Standalone: g_pNewGameSettings (exe-data slot) may be NULL — skip the
     // whole restore block rather than dereferencing null.
-    void* settings = (g_pNewGameSettings ? *g_pNewGameSettings : nullptr);
+    void* settings = g_gameSettings;
     uintptr_t cfg = (uintptr_t)settings;
     if (settings) {
 
@@ -740,7 +742,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     void* nameStr = (void*)((uintptr_t)self->editName + 0xC8);
 
     // Save combo selections to game settings
-    void* settings = *g_pNewGameSettings;
+    void* settings = g_gameSettings;
     uintptr_t cfg = (uintptr_t)settings;
     *(uint32_t*)(cfg + 0x2c) = (uint32_t)condIdx;
     *(uint32_t*)(cfg + 0x20) = (uint32_t)terrainIdx;

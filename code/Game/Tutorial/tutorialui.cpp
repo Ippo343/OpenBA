@@ -11,6 +11,8 @@
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "save/SaveLoad.h"             // RtSave_SaveLoad_Dtor
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"               // RtSystem_Time_Ctor
@@ -96,7 +98,7 @@ void TutorialUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
 //   - Sets fullscreen fade to black and transitions back to main menu.
 void TutorialUI::QuitTutorial() {
     // Grab the engine singleton (DAT_1401c3dd8 = *g_pGameWorldSingleton)
-    uintptr_t eng = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t eng = (uintptr_t)GameUpdateLoop::_singleton;
 
     // Destroy and free the SaveLoad object stored at eng+0x140
     void* saveLoad = *(void**)(eng + 0x140);
@@ -146,7 +148,7 @@ void TutorialUI::QuitTutorial() {
     // FUN_140097fb0: SetCursor(null), SetFullscreenFade(black), store next loop at eng+0xC8.
     {
         void* ui = *(void**)(eng + 0x98);
-        uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+        uint64_t nullCursor = *(uint64_t*)((uintptr_t)(g_gameContainer) + 0x38);
         reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(
             Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(nullCursor)));  // B.3.6 bridge
         reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge

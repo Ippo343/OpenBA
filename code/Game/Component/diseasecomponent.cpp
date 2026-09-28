@@ -79,6 +79,8 @@
 #include "Component/diseasecomponent_funcs.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
@@ -142,7 +144,7 @@ static inline float SecsPerYear()   { return BitsF(kRdata_14017225c); }   // 360
 static inline float OneF()          { return kRdata_14017214c; }          // 1.0f (g_fUVScale)
 
 static inline void* GameWorld() {
-    return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    return GameUpdateLoop::_singleton;
 }
 static inline int64_t TimeFromSeconds(float secs) {
     int64_t t = 0;                              // Time ctor writes 8 BYTES
@@ -471,8 +473,11 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
         reinterpret_cast<System::String*>(entry + 0x08)->~String();   // B.3.1 bridge
     }
 
-    // Drop to 1x speed if the "pause on important events" setting is on.
-    if (g_pGameSettingsPtr && g_pGameSettingsPtr[0x17] != 0 && gw) {
+    // Drop to 1x speed if the settings' auto-slow byte (+0x17) is on. Retail
+    // 0x140048542: MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of
+    // the settings BLOCK (this read indexed the cell pointer, 0xb8 bytes past it).
+    if (g_gameSettings != nullptr &&
+        reinterpret_cast<const uint8_t*>(g_gameSettings)[0x17] != 0 && gw) {
         void* speedObj = *reinterpret_cast<void**>((uintptr_t)gw + 0x120);
         if (speedObj) *reinterpret_cast<int32_t*>((uintptr_t)speedObj + 0x34) = 1;
     }

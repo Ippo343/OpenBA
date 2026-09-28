@@ -72,6 +72,7 @@
 #include "Component/controller_state_table.h"
 #include "Component/TradeComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -175,7 +176,7 @@ extern "C" int TradeComponent_PickMerchantTier(void* selfV) {
     int idx = 0;
     for (int i = 0; i < count; ++i) {
         const int64_t townState = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
         const int pop = *reinterpret_cast<int*>(townState + 0xa8);
         if (pop >= 0 && pop < *reinterpret_cast<int*>(tiers + static_cast<int64_t>(i) * 0x14))
             return idx;
@@ -200,7 +201,7 @@ extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
     const int64_t rec = tiers + static_cast<int64_t>(tier) * 0x14;
 
     void* rng = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
     const float tol = fn_Random_RandFloatTol(rng);
     float seconds = (tol * *reinterpret_cast<float*>(rec + 8) +
                            *reinterpret_cast<float*>(rec + 4)) * 300.0f;
@@ -361,7 +362,7 @@ extern "C" char TradeCtrl_Event09_MerchantDocked(void* selfV, void* sm) {
     ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton
                                                                  : nullptr;
     if (gw) {
         void* eventLog = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x138);
@@ -485,7 +486,7 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
 
     // Publish the entity. The category is the template's own (template+0x20).
     int64_t regIBP = *reinterpret_cast<int64_t*>(comp + 0x80);
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (gw && desc) {
         void* tmpl = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x30);
         EntityList_RegisterEntity_Impl(
@@ -528,7 +529,7 @@ extern "C" char TradeCtrl_Teardown(void* selfV) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (gw) {
         CemeteryListErase_Reimpl(reinterpret_cast<void*>(
                         *reinterpret_cast<uintptr_t*>(

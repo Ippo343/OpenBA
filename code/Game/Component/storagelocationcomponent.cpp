@@ -15,6 +15,7 @@
 
 #include "Component/StorageLocationComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -80,9 +81,9 @@ static char StorageLoc_State2Enter(void* data, void* /*sm*/) {
 // Returns 0 for the same reason as State2Enter above (retail d1f0 zeroes AL too).
 static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
     if (!data) return 0;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
     void* townMgr = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf0);
     if (!townMgr) return 0;
     uint64_t entityRef = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(data) + 0x10);

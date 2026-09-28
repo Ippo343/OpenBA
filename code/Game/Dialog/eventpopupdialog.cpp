@@ -8,6 +8,7 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/EventPopupDialog.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -41,7 +42,7 @@ void EventPopupDialog::OnOpened() {
     // Get event entry from world event list
     // world->+0x138 -> event manager, +0x18 -> event array
     // Each entry is 0x28 bytes; event index at self+0xB8
-    void* world = *g_pGameWorldSingleton;
+    void* world = GameUpdateLoop::_singleton;
     uint8_t* eventMgr = *(uint8_t**)((uint8_t*)world + 0x138);
     uint8_t* eventArray = *(uint8_t**)(eventMgr + 0x18);
     int32_t eventIndex = *(int32_t*)(s + 0xB8);

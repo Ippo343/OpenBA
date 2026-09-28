@@ -17,6 +17,8 @@
 #include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "dialog_exe_helpers.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -98,8 +100,8 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     if (reinterpret_cast<const UI::UserInterface*>(ui)->PausesGame()) { AsBail("UI PausesGame", 1); return; }  // B.3.6 bridge
 
     // Not while GameWorld flag bit 10 is set.
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) { AsBail("no gameWorld", 0); return; }
-    uint32_t gwFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd0);
+    if (GameUpdateLoop::_singleton == nullptr) { AsBail("no gameWorld", 0); return; }
+    uint32_t gwFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd0);
     if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (long)gwFlags); return; }
 
     // Only when no operation is already in progress (Operation::None == 0).
@@ -114,8 +116,8 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(timeBuf));  // B.3.7 bridge
 
     // Screenshot sprite (16 bytes) copied from KeyMap+0xb8.
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
-    uintptr_t keymap = reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton);
+    if (g_gameContainer == nullptr) return;
+    uintptr_t keymap = reinterpret_cast<uintptr_t>(g_gameContainer);
     uint8_t spriteBuf[16];
     *reinterpret_cast<uint64_t*>(spriteBuf)     = *reinterpret_cast<uint64_t*>(keymap + 0xb8);
     *reinterpret_cast<uint64_t*>(spriteBuf + 8) = *reinterpret_cast<uint64_t*>(keymap + 0xc0);
@@ -161,10 +163,10 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
 // checking it (the type-check trips over the incomplete standalone factory tree - see
 // newgamedialog.cpp's original note). Idempotent: each slot is loaded at most once.
 void GameContainer_EnsureLists() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
+    if (g_gameContainer == nullptr) return;
     if (!::Object::ExternalFactory::_singleton) return;
 
-    char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
+    char* container = reinterpret_cast<char*>(g_gameContainer);
 
     struct Entry { size_t off; const char* path; };
     static const Entry kEntries[] = {

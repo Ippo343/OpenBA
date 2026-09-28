@@ -68,6 +68,11 @@ public:
 
     static const void* Vtable();
 
+    // The exe cell 0x1401c3dd8 (B3R STORAGE): the live loop. Load stores `this`
+    // (0x140096b35); both destructors clear it (0x140098030, 0x140019df7).
+    // Null outside a game. Defined in gameupdateloop.cpp.
+    static GameUpdateLoop* _singleton;
+
 public:
     // Construction parameters (stored by the ctor, used by Load)
     System::String m_saveName;      // +0x28  save file name

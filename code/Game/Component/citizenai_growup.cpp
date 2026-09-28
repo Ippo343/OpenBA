@@ -72,6 +72,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/WorkPlaceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
@@ -113,7 +114,7 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 static inline int64_t* ListPair() { return *reinterpret_cast<int64_t**>(GW() + 0xf0); }
 

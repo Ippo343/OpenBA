@@ -20,6 +20,7 @@
 // @140116fdb, helper_17a0 @14011181e, helper_1b90 @140111e73, OnRemove @140113f94.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"
 #include <cstdint>
@@ -38,7 +39,7 @@ extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int seve
 extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int severity,
                                                const char* strParam) {
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     // [STANDALONE GUARD] partial worlds can lack the event log; retail derefs unguarded.
     void* eventLog = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x138);

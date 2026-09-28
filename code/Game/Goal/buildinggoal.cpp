@@ -26,6 +26,7 @@
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // Game_DestroyStringArray18
 #include "system/String.h"
@@ -142,7 +143,7 @@ Achievement::Goal::GoalState BuildingGoal::CheckGoalState() const {
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Get world data
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t worldData = *(uintptr_t*)(gameWorld + 0xF0);
 
     int matchCount = 0;
@@ -250,8 +251,8 @@ DEFINE_EXE_TYPE(BuildingGoal, "Achievement::Goal")
 // BANISHED_GOAL_PROBE to a template name (default "Template\StorageBarn.rsc" —
 // the starting town builds one).
 extern "C" void BuildingGoal_Probe(const char* templateName) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t worldData = *reinterpret_cast<uintptr_t*>(gameWorld + 0xF0);
     if (!worldData) return;
 

@@ -41,6 +41,7 @@
 
 #include "BridgeTool.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"
 #include "collection/Collection.h"
 #include <cstdint>
@@ -50,7 +51,7 @@ namespace {
 
 // ---- map-grid accessors (see bridgetool_validate.cpp for the layout) --------
 inline uint32_t* MapGrid() {
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return nullptr;
     return *reinterpret_cast<uint32_t**>(reinterpret_cast<uintptr_t>(gameWorld) + 0xf8);
 }

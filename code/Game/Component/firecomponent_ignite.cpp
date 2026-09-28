@@ -41,6 +41,8 @@
 #include "Object/factory_registration.h"
 #include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -76,8 +78,8 @@
 namespace {
 
 inline uintptr_t GameWorld() {
-    return (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-         ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    return (GameUpdateLoop::_singleton != nullptr)
+         ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
 }
 
 inline int64_t MakeTime(float seconds) {
@@ -374,8 +376,11 @@ extern "C" void FireComponent_Ignite_610(void* self) {
         void* eventLog = *reinterpret_cast<void**>(gw + 0x138);
         uint64_t entityIbp = *reinterpret_cast<uint64_t*>(s + 0x10);
         if (eventLog) EventLog_AddEvent(eventLog, 0x1f, 3, &entityIbp);
-        // "pause the game on a disaster event" setting.
-        if (g_pGameSettingsPtr && g_pGameSettingsPtr[0x17] != 0) {
+        // The settings' auto-slow byte (+0x17). Retail 0x1400498e6:
+        // MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of the settings
+        // BLOCK (this read indexed the cell pointer, 0xb8 bytes past it).
+        if (g_gameSettings != nullptr &&
+            reinterpret_cast<const uint8_t*>(g_gameSettings)[0x17] != 0) {
             int64_t evt = *reinterpret_cast<int64_t*>(gw + 0x120);
             if (evt) *reinterpret_cast<uint32_t*>(evt + 0x34) = 1;
         }

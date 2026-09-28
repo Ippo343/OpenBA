@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include "engine_funcs.h"   // the globals the moved inline body still reads
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 
 // ---- find_ui_element_by_path.cpp
 extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, uint64_t* outDialog);  // 0x1400e1870
@@ -115,7 +116,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
     }
 
     // Get UI singleton
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) {
         *(uintptr_t*)ret = 0;
         return retval;

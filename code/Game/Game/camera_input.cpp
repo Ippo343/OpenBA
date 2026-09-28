@@ -31,6 +31,8 @@
 // All magic constants are taken verbatim from the exe .rdata (addresses noted).
 
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "options.h"
 #include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos
@@ -79,8 +81,8 @@ inline float clampf(float v, float lo, float hi) {
 
 // KeyMap accessors (the triple-deref exref pattern, same as inputbindings.cpp).
 inline void* CamKeyMap() {
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) return nullptr;
-    void* l2 = *(void**)*g_pInputConfigSingletonExref;
+    if (Input::Configuration::_singleton == nullptr) return nullptr;
+    void* l2 = Input::Configuration::_singleton;
     if (!l2) return nullptr;
     return *(void**)l2;
 }
@@ -100,8 +102,8 @@ inline bool ScreenSize(int& w, int& h) {
 
 // Game-settings byte at a given offset (DAT_1401c3de0 -> settings base).
 inline char SettingByte(int byteOffset) {
-    if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr) return 0;
-    return *((char*)(*g_pGameSettingsPtr) + byteOffset);
+    if (g_gameSettings == nullptr) return 0;
+    return *((char*)g_gameSettings + byteOffset);
 }
 
 } // namespace
@@ -114,13 +116,13 @@ inline char SettingByte(int byteOffset) {
 //   timeTicks = frame delta as System::Time ticks (int64)
 void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     if (!entityUI) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     void* keyMap = CamKeyMap();
     if (!keyMap) return;
 
     uint8_t* ui = (uint8_t*)entityUI;
-    uint8_t* pc = (uint8_t*)reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_playerController; // PlayerController   // B.3.8 bridge
+    uint8_t* pc = (uint8_t*)GameUpdateLoop::_singleton->m_playerController; // PlayerController
     if (!pc) return;
 
     int64_t timeObj = timeTicks;
@@ -217,7 +219,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
 
     // ── clamp focus to the (zoom-scaled) map bounds ──
     {
-        int* grid = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
+        int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
         if (grid) {
             float factor = clampf(1.0f - (*(float*)(pc + 0x30) - kClampBase) / kClampSpan, 0.0f, 1.0f);
             float halfExtent = (float)grid[0] * kHalf * factor;
@@ -228,7 +230,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
 
     // ── follow/center-on-entity smooth move (only when +0xa4 flag set) ──
     if (*(char*)(ui + 0xa4) != 0) {
-        int* grid = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
+        int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
         if (grid) {
             const int gw = grid[0];
             const float halfCell = (float)(gw >> 1) - kHalf;
@@ -272,8 +274,8 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
             // which is before the first camera tick of the world.
             else if (std::strncmp(e, "town", 4) == 0) {
                 int tx = 0, ty = 0;
-                if (StartTown_GetSpawnTile(&tx, &ty) && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                    void* game = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game;   // B.3.8 bridge
+                if (StartTown_GetSpawnTile(&tx, &ty) && GameUpdateLoop::_singleton != nullptr) {
+                    void* game = GameUpdateLoop::_singleton->m_game;
                     const int dim = game ? *(int32_t*)game : 0;
                     if (dim > 0) {
                         s_pinX = (float)tx - ((float)(dim >> 1) - 0.5f);
@@ -314,7 +316,7 @@ static void Camera_ApplyPreset(void* entityUI, int index, int64_t /*unused*/) {
     float* p = (float*)((uintptr_t)table + (uintptr_t)index * 0x1c);
     if (*(char*)(p + 6) == 0) return; // preset slot not set
 
-    uint8_t* pc = (uint8_t*)reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_playerController;   // B.3.8 bridge
+    uint8_t* pc = (uint8_t*)GameUpdateLoop::_singleton->m_playerController;
     if (!pc) return;
     *(float*)(pc + 0x30) = p[5]; // distance
     *(float*)(pc + 0x28) = p[3]; // yaw
@@ -332,14 +334,14 @@ static void Camera_ApplyPreset(void* entityUI, int index, int64_t /*unused*/) {
 // UpdateHotkeys — port of FUN_1400ff6e0 (pause toggle + camera presets)
 // ============================================================
 void Camera_UpdateHotkeys(void* entityUI, int /*inputFlag*/, int64_t timeTicks) {
-    if (!entityUI || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!entityUI || GameUpdateLoop::_singleton == nullptr) return;
     void* keyMap = CamKeyMap();
     if (!keyMap) return;
     uint8_t* ui = (uint8_t*)entityUI;
 
     // TogglePause (id 0x17) — unless the pause is locked (GameWorld+0xd0 bit 10).
     if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x17)) {  // B.3.7 bridge
-        uint32_t worldFlags = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_gameFlags;   // B.3.8 bridge
+        uint32_t worldFlags = GameUpdateLoop::_singleton->m_gameFlags;
         if (((worldFlags >> 10) & 1) == 0)
             *(char*)(ui + 0x30) = (*(char*)(ui + 0x30) == 0) ? 1 : 0;
     }

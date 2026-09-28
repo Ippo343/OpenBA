@@ -34,6 +34,7 @@
 // drives the front-end menu.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -112,7 +113,7 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
     Init();
     if (s_openFrame <= 0) return;
 
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
 

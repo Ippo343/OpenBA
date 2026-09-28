@@ -15,6 +15,7 @@
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/CreateRemovalDescription.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -99,7 +100,7 @@ void RemovalTool::Startup() {
 int RemovalTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
                           int* outCostB, int* outCostA, int* outLength) {
     // Get map grid size from GameWorld
-    int gridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    int gridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
 
     // Convert cell indices to (row, col) grid coordinates
     int startRow = startCell / gridSize;
@@ -130,7 +131,7 @@ int RemovalTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     uintptr_t descEntity = (uintptr_t)dialogPtr;
     if (*(char*)(descEntity + 0x80) != '\0') {
         // Constrained removal — verify selection matches the constrained area exactly
-        int cGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+        int cGridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
 
         int constrainStartCell = *(int*)(descEntity + 0x98);
         int constrainEndCell   = *(int*)(descEntity + 0x9c);
@@ -206,7 +207,7 @@ static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
 // Original: 0x140104050
 void RemovalTool::Draw(void* context, char param3) {
     uintptr_t descEntity = (uintptr_t)dialogPtr;
-    int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
 
     // ---- Phase 1: Constrained entity tiles ----
     if (*(char*)(descEntity + 0x80) != '\0') {
@@ -282,7 +283,7 @@ void RemovalTool::Draw(void* context, char param3) {
 
         // Build selection tile array with per-tile removability check
         TileArray selTiles;
-        mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+        mapGrid = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
 
         uintptr_t removalDesc = (uintptr_t)this->removalDesc;
 
@@ -318,7 +319,7 @@ void RemovalTool::Draw(void* context, char param3) {
 
                 if (!canRemove) {
                     // Additional checks from description flags
-                    mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+                    mapGrid = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
 
                     // Check road removal flag (+0x40 on removalDesc)
                     if (removalDesc && *(char*)(removalDesc + 0x40) != '\0') {

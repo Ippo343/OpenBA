@@ -28,6 +28,7 @@
                                           // Graphics::InterpolatedState<Transform>
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
@@ -165,7 +166,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
         }
     }
 
-    void*   settings  = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+    void*   settings  = g_gameSettings;
     int32_t scaleSet  = settings ? reinterpret_cast<int32_t*>(settings)[4] : 0; // settings+0x10
     fVar9 = fVar9 * static_cast<float>(scaleSet) * kScale01;
     float halfsize = fVar9 * kHalf;
@@ -248,7 +249,7 @@ void StatusIconGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
     int32_t activeMask = *reinterpret_cast<int32_t*>(g + 0xc8);
     if (activeMask == 0) return;
 
-    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+    void* settings = g_gameSettings;
     if (!settings || reinterpret_cast<uint8_t*>(settings)[0xc] == 0) return;
 
     void* sheet = *reinterpret_cast<void**>(g + 0xd0);

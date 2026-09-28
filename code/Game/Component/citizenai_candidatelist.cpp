@@ -24,6 +24,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -578,7 +579,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8);
     if (0 < count) {
         void* rng = *reinterpret_cast<void**>(
-            (uintptr_t)*g_pGameWorldSingleton + 0xd8);
+            (uintptr_t)GameUpdateLoop::_singleton + 0xd8);
         int64_t off = 0;
         int i = 0;
         do {

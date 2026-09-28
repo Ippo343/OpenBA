@@ -14,6 +14,7 @@
 
 #include "game.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/StorageComponent.h"   // ENDGAME B.3.9 TR
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 TR
@@ -37,19 +38,20 @@ extern "C" void* Game_Ctor(void* self) {
     ::new (&base[0x15]) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
     ::new (&base[0x17]) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
 
-    // Publish to global KeyMap singleton storage (DAT_1401c3de8).
-    if (g_pKeyMapSingleton) {
-        *g_pKeyMapSingleton = self;
-    }
+    // Publish the container (DAT_1401c3de8, 0x1400010f1).
+    g_gameContainer = self;
     return self;
 }
+
+// The exe cell 0x1401c3de8 (B3R STORAGE; game.h).
+void* g_gameContainer = nullptr;
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void Game_TriggerDisasterByType_Impl(int disasterType) {
     if (!::Object::ExternalFactory::_singleton) return;   // ENDGAME B.3.9 SS2 (merged)
 
     void* factory = ::Object::ExternalFactory::_singleton;
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
 

@@ -32,6 +32,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -111,7 +112,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     const bool actTick  = (s_openedAtFrame >= 0 && frameNum - s_openedAtFrame >= kSettleFrames);
     if (!openTick && !actTick) return;
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xf0);
     if (!townMgr) return;

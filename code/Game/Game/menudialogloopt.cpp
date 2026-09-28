@@ -37,6 +37,7 @@
 #include <new>                            // B.3.9 GFX: placement new
 #include "MenuScene.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -1238,11 +1239,11 @@ void MenuDialogLoopT_StopMusic(void* self) {
 // by value exactly as helper_9260 does (no SetSound call).
 void MenuDialogLoopT_BindUISounds(void* self) {
     if (!self) return;
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
+    if (g_gameContainer == nullptr) {
         printf("[MenuDLT::BindUISounds] KeyMap container not populated — UI silent\n");
         return;
     }
-    void* keyMap = *g_pKeyMapSingleton;
+    void* keyMap = g_gameContainer;
     void* ui = &Loop(self)->_ui;
 
     Field<void*>(ui, 0xa8) = Field<void*>(keyMap, 0x70);  // BeginDrag  (id 2)

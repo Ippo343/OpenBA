@@ -58,6 +58,7 @@
 
 #include "Component/AnimalComponent.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -90,8 +91,8 @@ inline uint64_t MakeIBP(void* obj) {
 }
 
 inline uintptr_t World() {
-    return (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-             ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    return (GameUpdateLoop::_singleton != nullptr)
+             ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
 }
 
 // Retail's world-coordinate -> cell clamp, repeated verbatim for both corners.

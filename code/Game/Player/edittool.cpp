@@ -22,6 +22,7 @@
 #include "Dialog/EntityUI.h"
 #include "Dialog/ToolUI.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "volume/Volume.h"
 #include "Player/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
@@ -154,7 +155,7 @@ static bool TryProjectEntityModelPos(uintptr_t entityObj, float* outX, float* ou
     float* pos = (float*)(modelComp + 0x158);
     float worldPos[3] = { pos[0], pos[1], pos[2] };
 
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t camHolder = *(uintptr_t*)(gameWorld + 0xe0);
     if (!camHolder) return false;
 
@@ -474,7 +475,7 @@ void EditTool::Update(void*, char) {
     reinterpret_cast<UI::DialogInstance*>(dialogPtr)->SetUpperLeft(scaledX, scaledY, true);  // B.3.6 bridge
 
     // If game world flag bit 10 is set and pageToggle controller exists, call helper
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uint32_t worldFlags = *(uint32_t*)(gameWorld + 0xd0);
     if (((worldFlags >> 10) & 1) != 0 && pageToggleIBP != 0) {
         PlayerTrade_EditTool_66800(static_cast<int64_t>(pageToggleIBP));
@@ -495,9 +496,9 @@ char EditTool::OnKey(char param2) {
         static int calls = 0;
         if (calls < 3) { calls++;
             printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p AtCell=%p "
-                   "keyExref=%p\n", calls, param2,
+                   "inputConfig=%p\n", calls, param2,
                    (void*)&PlayerRay_GetMouseRay_1005a0, (void*)&PlayerRay_TerrainMarch_aa530,
-                   (void*)&PlayerEdit_EntityAtCell_a0280, (void*)g_pInputConfigSingletonExref);
+                   (void*)&PlayerEdit_EntityAtCell_a0280, (void*)Input::Configuration::_singleton);
             fflush(stdout);
         }
     }
@@ -511,11 +512,10 @@ char EditTool::OnKey(char param2) {
         return 1;
     }
 
-    // Get KeyMap via triple deref of external reference
-    if (!g_pInputConfigSingletonExref) return 1;
-    uintptr_t keyMapExref = (uintptr_t)*g_pInputConfigSingletonExref;
-    uintptr_t keyMapPtr = *(uintptr_t*)keyMapExref;
-    uintptr_t keyMap = *(uintptr_t*)keyMapPtr;
+    // The KeyMap: Input::Configuration::_singleton->_keyMap (retail's triple
+    // deref of the import slot 0x140151738).
+    if (!Input::Configuration::_singleton) return 1;
+    uintptr_t keyMap = reinterpret_cast<uintptr_t>(Input::Configuration::_singleton->_keyMap);
 
     // Check KeyMap::Pressed(keyMap, 0, 5)
     bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
@@ -524,7 +524,7 @@ char EditTool::OnKey(char param2) {
     if (!pressed) return 1;
 
     // Get world data pointers
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xf8);
 
     // Compute camera ray from mouse position
@@ -812,7 +812,7 @@ static void DumpCitizenElemTree(void* elem, int depth, int* counter) {
 // real click uses: pick userData -> EditTool_SelectEntity -> CitizenUI dialog.
 extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
-    void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
+    void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x70);
     if (!scene) { printf("[EditSel] picking scene null\n"); return 0; }
 
     // Citizens register with low pick-ids (0..N). Probe the first several; the first
@@ -837,7 +837,7 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
 extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
 
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xf8);
     int* mapSize = *(int**)(gameWorld + 0xf8);
     int gridSize = (mapSize && *mapSize > 0) ? *mapSize : 256;

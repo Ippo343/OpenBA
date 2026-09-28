@@ -40,6 +40,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"
 #include "options.h"
@@ -87,7 +88,7 @@ void PanelHoldClick(int frameNum) {
     // and ask each DialogInstance for a controller of that type (GetController's third
     // argument is the controller TYPE id). The held panel is the only open dialog that
     // carries one.
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     UI::UserInterface* uiSingleton =
         gw ? *reinterpret_cast<UI::UserInterface**>(static_cast<uint8_t*>(gw) + 0x98) : nullptr;
     if (!uiSingleton) return;
@@ -179,7 +180,7 @@ extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
     if (s_done) PanelHoldClick(frameNum);
     if (s_at < 0 || s_done || !entityUI || frameNum < s_at) return;
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     const uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!el) return;

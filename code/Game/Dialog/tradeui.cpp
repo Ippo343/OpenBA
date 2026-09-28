@@ -34,6 +34,7 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "resolve.h"
@@ -387,7 +388,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
     fn_FindComponent_Storage((void*)entityPtr[0], &smPtr);
 
     // Get resource table from game world singleton (+0xf0 = resource manager)
-    void* resourceMgr = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
+    void* resourceMgr = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf0);
     int resourceCount = *(int*)((uintptr_t)resourceMgr + 0x118);
 
     // Clear sell data array at +0x30 (stride 0x20)
@@ -2500,7 +2501,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     uintptr_t s = (uintptr_t)self;
 
     // Get trade entity list from game world singleton (+0xF0)
-    uintptr_t tradeList = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+    uintptr_t tradeList = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
     int entityCount = *(int*)(tradeList + 0x118);
 
     // Clear display entries array at self+0x50

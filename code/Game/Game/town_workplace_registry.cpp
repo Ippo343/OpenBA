@@ -21,6 +21,7 @@
 #include "Component/exe_bodies.h" // ResidenceComponent_impl_7230, AttendanceComponent_GetJobHostComponent
 #include "Tutorial/exe_bodies.h"  // WorkComponent_CalcMaxWorkers
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()
 #include "Component/WorkPlaceComponent.h"   // caller batch CB6: TypeId()
@@ -159,7 +160,7 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
 // behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
 // ============================================================
 extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey) {
-    if (townMgr == 0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (townMgr == 0 || GameUpdateLoop::_singleton == nullptr) return;
 
     // BST search for the key (same walk as the reader below).
     uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);
@@ -174,7 +175,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
     uint32_t count = static_cast<uint32_t>(found[2]);        // +0x10 count (low dword)
     if (static_cast<int>(count) < 2) return;                 // 0/1 entries -> nothing to do
 
-    void* rng = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_random;   // B.3.8 bridge
+    void* rng = GameUpdateLoop::_singleton->m_random;
     if (!rng) return;
 
     for (int64_t i = 0; i < static_cast<int>(count); ++i) {

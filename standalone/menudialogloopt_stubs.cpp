@@ -29,6 +29,7 @@
 #include "address_registry.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
 #include "redzone_alloc.h"
@@ -83,8 +84,8 @@ namespace {
 //   +0x48 (idx 9)  — Cursor/Query.rsc:cursor
 //   +0x50 (idx 10) — Cursor/Place.rsc:cursor
 static void EnsureCursorsLoaded() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
-        printf("[CursorLoad] WARN: g_pKeyMapSingleton not populated, skipping\n");
+    if (g_gameContainer == nullptr) {
+        printf("[CursorLoad] WARN: g_gameContainer not populated, skipping\n");
         return;
     }
     if (!::Object::ExternalFactory::_singleton) {
@@ -92,7 +93,7 @@ static void EnsureCursorsLoaded() {
         return;
     }
 
-    void* keyMap = *g_pKeyMapSingleton;
+    void* keyMap = g_gameContainer;
     void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
@@ -136,8 +137,8 @@ static void EnsureCursorsLoaded() {
 //   +0x78 EndDrag  +0x80 PlacementMove  +0x88 PlacementThunk
 //   +0x90 PlacementError  +0x98 Warning
 static void EnsureUISoundsLoaded() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
-        printf("[UISoundLoad] WARN: g_pKeyMapSingleton not populated, skipping\n");
+    if (g_gameContainer == nullptr) {
+        printf("[UISoundLoad] WARN: g_gameContainer not populated, skipping\n");
         return;
     }
     if (!::Object::ExternalFactory::_singleton) {
@@ -145,7 +146,7 @@ static void EnsureUISoundsLoaded() {
         return;
     }
 
-    void* keyMap = *g_pKeyMapSingleton;
+    void* keyMap = g_gameContainer;
     void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
@@ -193,9 +194,9 @@ static void EnsureUISoundsLoaded() {
 // game_main.cpp can call it BEFORE MainLoop::Run starts (so SplashDLT's
 // fade triggers find a populated KeyMap+0xa8 too, not just MenuDLT).
 extern "C" void StandaloneEnsureSpriteSheetLoaded() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
+    if (g_gameContainer == nullptr) return;
     if (!::Object::ExternalFactory::_singleton) return;
-    void* keyMap = *g_pKeyMapSingleton;
+    void* keyMap = g_gameContainer;
     void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
@@ -378,7 +379,7 @@ void MenuDialogLoopT::Startup() {
     EnsureUISoundsLoaded();
 
     void* ui = &_ui;
-    void* keyMap = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    void* keyMap = (g_gameContainer);
     void* arrowCursor = keyMap
         ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)
         : nullptr;

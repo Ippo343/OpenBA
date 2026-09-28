@@ -20,6 +20,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "options.h"
 #include <cstdint>
@@ -139,7 +140,7 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
 }
 
 void FireForceStart(void* entityUI, int frameNum) {
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: gameWorld singleton null — cannot run\n", frameNum);
         return;

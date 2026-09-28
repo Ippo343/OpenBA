@@ -18,6 +18,7 @@
 // during the plant/tend/harvest runs.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/OrchardComponent.h"
 #include "options.h"
 #include <cstdint>
@@ -52,7 +53,7 @@ extern "C" void OrchardCutHarness_Tick(int frameNum) {
     if (!s_enabled || s_fired || frameNum < s_frame) return;
     s_fired = true;
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     uintptr_t entityList = gw ? *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8) : 0;
     uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
     const int n   = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;

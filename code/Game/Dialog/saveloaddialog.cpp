@@ -60,6 +60,8 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "ui/Dialogs.h"
 #include "system/String.h"
@@ -356,7 +358,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             } else {
                 // Corrupt save: show "Corrupt" text from string table
                 System::String corruptKey("Corrupt");
-                uintptr_t keyMapObj = (uintptr_t)*g_pKeyMapSingleton;
+                uintptr_t keyMapObj = (uintptr_t)g_gameContainer;
                 uint8_t uiStr[16] = {};
                 ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(keyMapObj + 0xD8))), corruptKey);  // B.3.6 bridge
                 System::String sysStr;
@@ -466,7 +468,7 @@ void SaveLoadDialog::OnOpened() {
     *(uint8_t*)(s + 0xBB) = 1;
 
     // --- Copy sprite from DAT_1401c3de8 + 0xB8 and set on SaveLoad singleton ---
-    uintptr_t keyMapObj = (uintptr_t)*g_pKeyMapSingleton;
+    uintptr_t keyMapObj = (uintptr_t)g_gameContainer;
     uint8_t spriteCopy[16];
     *(uint32_t*)(spriteCopy + 0)  = *(uint32_t*)(keyMapObj + 0xB8);
     *(uint32_t*)(spriteCopy + 4)  = *(uint32_t*)(keyMapObj + 0xBC);
@@ -970,7 +972,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(minTime));  // B.3.7 bridge
 
     // If game world is active, ask user to confirm leaving the current game
-    if (*g_pGameWorldSingleton != nullptr) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         int result = SaveLoad_ShowConfirmDialog(self, "Dialog/SaveLoad.rsc:confirmLoad");
         if (result != 2) return;
     }
@@ -981,7 +983,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     int modCount = *(int*)((uintptr_t)saveInfo + 0x50);
     printf("[SaveLoadDialog::DoLoad] selectedIdx=%d saveInfo=%p save-mod-count=%d gameWorld=%p\n",
            selectedIdx, saveInfo, modCount,
-           g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
+           GameUpdateLoop::_singleton);
     fflush(stdout);
     // The list CheckMod matches the save against is IO::Modification::_singleton.
     // Printed alongside so a non-zero CheckMod can be READ rather than guessed at.

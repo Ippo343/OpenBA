@@ -15,6 +15,7 @@
 #include "Component/GrowthDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
@@ -218,8 +219,8 @@ extern "C" void SpawnComponent_ReportDoSpawnCensus(const char* tag) {
 void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag) {
     uintptr_t self = (uintptr_t)selfP;
     ++g_doSpawn.calls;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) { ++g_doSpawn.noWorld; return; }
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) { ++g_doSpawn.noWorld; return; }
+    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
 
     int* grid = *(int**)(gw + 0xf8);
     void* random = *(void**)(gw + 0xd8);

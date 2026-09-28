@@ -14,6 +14,7 @@
 #include "Tutorial/TutorialGoalCount.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Tutorial/exe_bodies.h"
 #include "Goal/goal_exe_helpers.h"
 #include "object/TypeInfo.h"
@@ -229,7 +230,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     uint32_t mode = *(uint32_t*)(s + 0x20);
     int count = 0;
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton == nullptr) {
         goto compare;
     }
 
@@ -239,7 +240,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // --------------------------------------------------------
     case 0: {
         uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (worldData) {
             count = (int)TutBase_CountBuildingsByType(worldData, typePtr);
         }
@@ -253,7 +254,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // For each alive citizen (health >= deathThreshold && no death flag),
     // checks if their assigned profession matches the target type.
     case 1: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (!worldData) break;
         int citizenCount = *(int*)(worldData + 0xa8);
         uintptr_t citizenArray = *(uintptr_t*)(worldData + 0xa0);
@@ -293,7 +294,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // Case 2: Adult population count (worldData+0x28)
     // --------------------------------------------------------
     case 2: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (worldData) {
             count = *(int*)(worldData + 0x28);
         }
@@ -305,7 +306,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // --------------------------------------------------------
     case 3: {
         uintptr_t typePtr = ResolveTypePtr(s, TypeIdProfessionDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (worldData) {
             count = (int)TutBase_CountProfessionsByType(worldData, typePtr);
         }
@@ -332,7 +333,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // identified by its description pointer (correlate with the [TutRestrict]/[GoalRef]
     // lines, which print the resolved description for each Template/*.rsc).
     case 4: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (worldData) {
             count = *(int*)(worldData + 0x08);
 
@@ -344,7 +345,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // Case 5: Has trade posts (merchant list count > 0)
     // --------------------------------------------------------
     case 5: {
-        uintptr_t worldData2 = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+        uintptr_t worldData2 = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
         if (worldData2) {
             count = (*(int*)(worldData2 + 0xf0) > 0) ? 1 : 0;
         }
@@ -362,7 +363,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 6: {
         // Resolve profession type (re-resolved inside loop to match original)
         uintptr_t profType = ResolveTypePtr(s, TypeIdProfessionDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (!worldData) break;
 
         int profCount = (int)TutBase_CountProfessionsByType(worldData, profType);
@@ -374,7 +375,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
 
             // BST lookup at worldData+0x100 for this profession type
             // Re-read worldData each iteration (matches original)
-            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
             uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x100);
             uintptr_t* node = BSTFind(bstRoot, curProfType);
             if (!node) continue;
@@ -405,7 +406,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // finds their BuildingComponent, checks if type matches,
     // then sums from the BuildingComponent's storage map at +0x60.
     case 7: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (!worldData) break;
         int entityCount = *(int*)(worldData + 0x38);
         uintptr_t entityArray = *(uintptr_t*)(worldData + 0x30);
@@ -438,7 +439,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
             total += storageCount;
 
             // Re-read worldData for next iteration (may change)
-            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         }
         count = total;
         break;
@@ -450,7 +451,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // Iterates all entities, finds StorageComponent, sums all
     // item counts from the storage's item array.
     case 8: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (!worldData) break;
         int entityCount = *(int*)(worldData + 0x38);
         uintptr_t entityArray = *(uintptr_t*)(worldData + 0x30);
@@ -479,7 +480,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
             }
 
             // Re-read worldData for next iteration
-            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         }
         count = total;
         break;
@@ -523,7 +524,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 10: {
         // Get building description type
         uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         if (!worldData) break;
 
         int buildingCount = (int)TutBase_CountBuildingsByType(worldData, typePtr);
@@ -533,7 +534,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
             // Look up building type in BST at worldData+0x160
             // Need to re-resolve type each iteration (original code does this)
             uintptr_t curTypePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
-            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
             uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x160);
             uintptr_t* node = BSTFind(bstRoot, curTypePtr);
 

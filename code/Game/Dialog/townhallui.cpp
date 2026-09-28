@@ -15,6 +15,7 @@
 
 #include "ui/Panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "system/String.h"
 #include "system/Filename.h"
@@ -244,7 +245,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Get profession list from game singleton
-    uintptr_t profList = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0);
+    uintptr_t profList = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xb0);
 
     // Get template row (Child(0)) and its vtable clone function
     uint64_t childBuf[2] = {0, 0};
@@ -850,7 +851,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Cache game tick
-    self->cachedGameTick = *(int*)(*(uintptr_t*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0) + 0x150) + 8);
+    self->cachedGameTick = *(int*)(*(uintptr_t*)(*(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0) + 0x150) + 8);
 
     // Read combo selections
     int timeIdx = *(int*)(*(uintptr_t*)(s + 0x168) + 0x118);
@@ -915,7 +916,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     // Remove existing graphs
     reinterpret_cast<UI::GraphElement*>(*(void**)(s + 0x160))->RemoveGraphs();  // B.3.6 bridge
 
-    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+    uintptr_t gameData = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
     int currentTick = *(int*)(*(uintptr_t*)(gameData + 0x150) + 8);
     int maxVal = 0;
     int graphCount = 0;
@@ -989,7 +990,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
 // ============================================================
 void TownHallUI_UpdateGeneral(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+    uintptr_t gameData = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
 
     int totalCitizens = *(int*)(gameData + 0xa8);
     int adults = 0, students = 0, children = 0, familyCount = 0;
@@ -1035,11 +1036,11 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
     float clothedPct = (adults > 0) ? ((clothedSum / (float)adults) * 100.0f) : 0.0f;
 
     // Year
-    int year = **(int**)(*(uintptr_t*)g_pGameSingleton + 0x128);
+    int year = **(int**)(((uintptr_t)GameUpdateLoop::_singleton) + 0x128);
     reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x60))->SetValue(static_cast<int32_t>(year));  // B.3.6 bridge
 
     // Month
-    float seconds = reinterpret_cast<const System::Time*>((void*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0x128) + 8))->AsSeconds();   // B.3.4 bridge
+    float seconds = reinterpret_cast<const System::Time*>((void*)(*(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0x128) + 8))->AsSeconds();   // B.3.4 bridge
     int monthIdx = (int)((seconds / 3600.0f) * 12.0f);
     if (monthIdx > 11) monthIdx = 0;
 
@@ -1126,7 +1127,7 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
         reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x110))->SetParameter(0, fmtBuf);  // B.3.6 bridge
     }
 
-    int* timePtr = *(int**)(*(uintptr_t*)g_pGameSingleton + 0x128);
+    int* timePtr = *(int**)(((uintptr_t)GameUpdateLoop::_singleton) + 0x128);
     int currentYearTick = timePtr[0] * 0x30 - 0x30;
     float secs = reinterpret_cast<const System::Time*>((void*)(timePtr + 2))->AsSeconds();   // B.3.4 bridge
     uint32_t monthTick = (uint32_t)((secs / 3600.0f) * 48.0f);
@@ -1135,7 +1136,7 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
     int prevEnd = timePtr[0] * 0x30 - 0x31;
     int prevStart = (timePtr[0] - (int)yearSpan - 1) * 0x30;
 
-    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+    uintptr_t gameData = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
     uint32_t resIdx = 10;
     int prodCount = *(int*)(s + 0xf8);
 
@@ -1506,7 +1507,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 // and text from SelectDescription components.
 void TownHallUI_UpdateAgriculture(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+    uintptr_t gameData = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
 
     // Build temporary BST from entity list at gameData+0x120/+0x128
     // agriBST nodes: key=entityPtr, left=+0x10, right=+0x18, parent=+0x08
@@ -1649,8 +1650,8 @@ next_entity: ;
 // max worker slots, updates NumberEditElement values.
 void TownHallUI_UpdateInventory(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
-    uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0);
+    uintptr_t gameData = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
+    uintptr_t profListBase = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xb0);
     int profCount = *(int*)(profListBase + 0x28);
 
     // Phase 1: Zero counters and resize entity arrays for each profession
@@ -1812,7 +1813,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
 // agriculture table UI based on component types.
 void TownHallUI_UpdateAll(TownHallUI* self) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+    uintptr_t gameData = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
     uintptr_t* gdPtr = (uintptr_t*)gameData;
 
     // Phase 1: For each tracked entity (gameData+0x110/+0x118),
@@ -1930,7 +1931,7 @@ void TownHallUI_OnProfessionButton(TownHallUI* self, int index) {
 
     uint64_t entityPtr = *(uint64_t*)(*(uintptr_t*)(entryBase + 0x30) + (uintptr_t)cycleIdx * 8);
     uint64_t dialogInst = *(uint64_t*)(s + 0x18);
-    uintptr_t entityController = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0x120);
+    uintptr_t entityController = *(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0x120);
     Toolbar_CenterOnEntity_Impl((void*)entityController, &dialogInst, &entityPtr);
 }
 
@@ -1958,8 +1959,8 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
     if (current < desired) {
         int toAdd = desired - current;
         for (int i = 0; i < toAdd; i++) {
-            void* citizenList = *(void**)(*(uintptr_t*)g_pGameSingleton + 0xf0);
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0) + 0x20 + (uintptr_t)index * 8);
+            void* citizenList = *(void**)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xb0) + 0x20 + (uintptr_t)index * 8);
 
             uint64_t retBuf[2] = {0, 0};
             FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
@@ -1996,8 +1997,8 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
     if (desired < current) {
         int toRemove = current - desired;
         for (int i = 0; i < toRemove; i++) {
-            void* citizenList = *(void**)(*(uintptr_t*)g_pGameSingleton + 0xf0);
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0) + 0x20 + (uintptr_t)index * 8);
+            void* citizenList = *(void**)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf0);
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xb0) + 0x20 + (uintptr_t)index * 8);
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
         }
     }
@@ -2039,8 +2040,8 @@ bool Ready() {
 // the townMgr history/production record blocks (+0x150 / +0x170) that the graph
 // and production tabs index into.
 bool TownReady() {
-    if (!(g_pGameSingleton && *g_pGameSingleton)) return false;
-    uintptr_t gw = *(uintptr_t*)g_pGameSingleton;
+    if (!(GameUpdateLoop::_singleton != nullptr)) return false;
+    uintptr_t gw = ((uintptr_t)GameUpdateLoop::_singleton);
     uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);
     uintptr_t profList = *(uintptr_t*)(gw + 0xb0);
     if (!townMgr || !profList) return false;
@@ -2082,8 +2083,8 @@ void DiagPrint(const char* where, void* self) {
             self ? (Built(self) ? 1 : 0) : -1,
             Ready() ? 1 : 0, TownReady() ? 1 : 0,
             (::Object::ExternalFactory::_singleton) ? 1 : 0);
-    if (g_pGameSingleton && *g_pGameSingleton) {
-        uintptr_t gw = *(uintptr_t*)g_pGameSingleton;
+    if (GameUpdateLoop::_singleton != nullptr) {
+        uintptr_t gw = ((uintptr_t)GameUpdateLoop::_singleton);
         uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);
         uintptr_t profList = *(uintptr_t*)(gw + 0xb0);
         fprintf(stderr, "[TownHallSA]   gw=%p townMgr=%p profList=%p profCnt=%d clock=%p hist(+150)=%p prod(+170)=%p\n",
@@ -2098,9 +2099,8 @@ void DiagPrint(const char* where, void* self) {
             fprintf(stderr, "[TownHallSA]   citizens(+0xa8)=%d homes(+0x28)=%d\n",
                     *(int*)(townMgr + 0xa8), *(int*)(townMgr + 0x28));
     } else {
-        fprintf(stderr, "[TownHallSA]   g_pGameSingleton=%p (*=%p)\n",
-                (void*)g_pGameSingleton,
-                g_pGameSingleton ? *(void**)g_pGameSingleton : nullptr);
+        fprintf(stderr, "[TownHallSA]   GameUpdateLoop::_singleton=%p\n",
+                (void*)GameUpdateLoop::_singleton);
     }
     fflush(stderr);
 }
@@ -2235,7 +2235,7 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
         TownHallUI::OnUpdateLayout();
         return;
     }
-    uintptr_t gameSingleton = *(uintptr_t*)g_pGameSingleton;
+    uintptr_t gameSingleton = ((uintptr_t)GameUpdateLoop::_singleton);
     int currentTick = *(int*)(*(uintptr_t*)(*(uintptr_t*)(gameSingleton + 0xf0) + 0x150) + 8);
 
     if (this->cachedGameTick != currentTick) {
@@ -2256,7 +2256,7 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
 void TownHallUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
                                 int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (!townhallui_sa::Built(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
-    uintptr_t gameSingleton = *(uintptr_t*)g_pGameSingleton;
+    uintptr_t gameSingleton = ((uintptr_t)GameUpdateLoop::_singleton);
     int profCount = *(int*)(*(uintptr_t*)(gameSingleton + 0xb0) + 0x28);
 
     if (msg == 0x12) {

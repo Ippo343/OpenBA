@@ -40,6 +40,7 @@
 // ExternalPtr + an index, no owned heap String). Kept faithful.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/String.h"
 #include "resolve.h"
@@ -58,7 +59,7 @@ extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int sev
                                           void* entityIBP, void* nameStr);
 
 extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     void* eventLog = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_eventNotifier;   // B.3.8 bridge
     if (!eventLog) return;

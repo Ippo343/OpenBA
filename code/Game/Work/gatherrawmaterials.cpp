@@ -21,6 +21,7 @@
 #include "Work/GatherRawMaterials.h"
 #include "Work/gatherrawmaterials_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"          // B3R: bodies called by name
@@ -226,7 +227,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
     }
 
     // --- Get game world data ---
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     int* mapGrid = *(int**)(gameWorld + 0xf8);
     void* worldEntityList = *(void**)(gameWorld + 0xf0);
 
@@ -694,7 +695,7 @@ int GatherRawMaterials::Validate() {
 // Hidden return ptr: RCX=self, RDX=retbuf.
 // ============================================================
 void* GatherRawMaterials::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t something = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(something + 0x30);
     return retbuf;
@@ -804,5 +805,5 @@ extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
 // Execute-readiness gate for the force harness. B3R: every helper Execute and its pushed
 // action chain use is called by name, so only the game world is left to test.
 extern "C" bool GatherRawMaterials_DepsReady() {
-    return g_pGameWorldSingleton != nullptr;
+    return GameUpdateLoop::_singleton != nullptr;
 }

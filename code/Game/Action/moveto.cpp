@@ -29,6 +29,7 @@
 
 #include "MoveTo.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include "Action/exe_bodies.h"   // ActMv_*, Pf_SpatialProximityQuery_92260
 #include "Work/exe_bodies.h"     // WorkImpl_Sqrtf_132010
@@ -297,7 +298,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
     (void)time;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
-    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
 
     // Get character's current world position
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
@@ -530,7 +531,7 @@ void MoveTo::Enter(void*, void*) {
     // Query for nearby bridge entities
     float radius = kRdata_140172114;   // 0.5f search radius
     uintptr_t bridgeResult = 0;
-    void* bridgeMgr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x88);
+    void* bridgeMgr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x88);
     uintptr_t excludeEntity = *(uintptr_t*)(s + 0x28);
     uint8_t bridgeExclude[8];
     *(uintptr_t*)bridgeExclude = excludeEntity;

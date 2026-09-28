@@ -10,6 +10,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <cstdio>
 #include "Object/factory_registration.h"
 #include "system/String.h"
@@ -67,7 +68,7 @@ namespace immigrationui_sa {
     // TypeId_StateMachineComponent_FC) all have a ported TypeId() now, so the
     // EnsureGlobals() lazy-cache is dead; only the game-world singleton check stays.
     bool Ready() {
-        return g_pGameWorldSingleton && *g_pGameWorldSingleton;
+        return GameUpdateLoop::_singleton != nullptr;
     }
     // stderr, not stdout: the perf build strips printf, and the Immigrants wave's
     // harness runs (tools/stress_run.sh) only keep standalone_error.log.
@@ -194,7 +195,7 @@ void ImmigrationUI::OnUpdateLayout() {
     reinterpret_cast<UI::TextElement*>(*(uint64_t*)(s + 0x38))->SetParameter(0, countStr);  // B.3.6 bridge
 
     // Copy world name from worldSingleton+0x28, set as parameter 1
-    void* worldSingleton = *g_pGameWorldSingleton;
+    void* worldSingleton = GameUpdateLoop::_singleton;
     System::String worldNameStr(
         *reinterpret_cast<const System::String*>((uintptr_t)worldSingleton + 0x28));  // B.3.1 bridge
     reinterpret_cast<UI::TextElement*>(*(uint64_t*)(s + 0x38))->SetParameter(1, worldNameStr);  // B.3.6 bridge

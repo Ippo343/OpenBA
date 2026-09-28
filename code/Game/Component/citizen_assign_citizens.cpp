@@ -104,6 +104,7 @@
 // (+ its ctx) is the remaining dependency; until that caller is ported it stays dormant.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -295,10 +296,10 @@ extern bool g_wpcRosterOnly;
 // CitizenComponent_impl_43b0 (0x1400d43b0)
 // ===========================================================================
 extern "C" void CitizenAssignCitizens(void* ctxV) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     (void)ctxV;   // ctx (PathGraph) — its cache is subsumed by ComputeCost
 
-    uintptr_t gw  = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gw  = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t reg      = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
     uintptr_t townMgr  = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
     int32_t*  pathData = *reinterpret_cast<int32_t**>(gw + 0xf8);

@@ -40,6 +40,8 @@
 #include "Entity/entitylist_funcs.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
@@ -1109,7 +1111,7 @@ post_simulation:
     // Step 11: Set cursor
     TRACE("[GameUpdateLoop::Update] setting cursor (index=%d)...\n", cursorIndex);
     {
-        void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
+        void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x28 + (int64_t)cursorIndex * 8);
             reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetCursor(  // B.3.6 bridge
@@ -1173,7 +1175,7 @@ post_simulation:
     // Original asm at 0x1400966c1: triple deref from slot, dispatch call at 0x140151758
     // Match proven working pattern from dragtool/pathtool — no null guards (original has none).
     {
-        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
+        void* keyMap = Input::Configuration::_singleton->_keyMap;
 
         if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x21)) {  // B.3.7 bridge
             m_quickSavePressed = 1;
@@ -1248,7 +1250,7 @@ post_simulation:
     // popping in and out" report). Same place as the integrity check: before Clean,
     // after every component has had its per-frame say.
     SceneWatch_Census(m_graphicsScene);
-    if (g_pGameWorldSingleton) CitizenVitals_Tick(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton) CitizenVitals_Tick(GameUpdateLoop::_singleton);
 
     // Step 15: Graphics::Scene::Clean
     TRACE("[GameUpdateLoop::Update] calling Graphics::Scene::Clean...\n");
@@ -1390,7 +1392,7 @@ void GameUpdateLoop::Draw(float alpha) {
         // null — to render the terrain top-down into the minimap pixel arrays.
         if (*(int64_t*)(imageCapture + 8) == 0) {
             // Remove and re-add global objects for terrain update
-            void* gameWorld = *g_pGameWorldSingleton;
+            void* gameWorld = GameUpdateLoop::_singleton;
             void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
 
             Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
@@ -1670,7 +1672,7 @@ void GameUpdateLoop::Startup() {
 
     // Setup UI references (cursors, lists, etc.)
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
-    ApplyKeyMapToUI_Impl(*g_pKeyMapSingleton, m_userInterface);   // 0x140099260
+    ApplyKeyMapToUI_Impl(g_gameContainer, m_userInterface);   // 0x140099260
     // Report the OUTCOME. "SetupUIRefs done" printed identically for the whole time
     // 0x140099260 was unregistered and the call was a no-op; the fields it writes are
     // the only evidence it ran. uiScale 0 == never applied (edittool.cpp:674 reads it).
@@ -1686,7 +1688,7 @@ void GameUpdateLoop::Startup() {
     // Set default cursor
     TRACE("[GameUpdateLoop::Startup] setting default cursor...\n");
     {
-        void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
+        void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x30);
             reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetCursor(  // B.3.6 bridge
@@ -1984,7 +1986,7 @@ void GameUpdateLoop::Shutdown() {
     // Clear game flags (remove 0x100 bit)
     TRACE("[GameUpdateLoop::Shutdown] clearing game flags...\n");
     {
-        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorld = GameUpdateLoop::_singleton;
         uint32_t* flags = &static_cast<GameUpdateLoop*>(gameWorld)->m_gameFlags;   // B.3.8 bridge
         *flags = *flags & 0xFFFFFEFF;
     }
@@ -2057,7 +2059,7 @@ void GameUpdateLoop::Shutdown() {
     // Remove global scene objects
     TRACE("[GameUpdateLoop::Shutdown] removing global scene objects...\n");
     {
-        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorld = GameUpdateLoop::_singleton;
         void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
         Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
         gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
@@ -2252,7 +2254,7 @@ void GameUpdateLoop::Shutdown() {
 // this avoids taking a dependency on dispatch slot 0x140152940, which nothing else
 // in the tree registers.
 static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0.0f;
     uintptr_t playerCtrl = reinterpret_cast<uintptr_t>(
         static_cast<GameUpdateLoop*>(gw)->m_playerController);   // B.3.8 bridge
@@ -2359,8 +2361,13 @@ GameUpdateLoop::~GameUpdateLoop() {
     TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p)\n", (void*)this);
 
     // Step 2: Clear game world singleton
-    *g_pGameWorldSingleton = nullptr;
+    _singleton = nullptr;
 }
+
+// The exe cell 0x1401c3dd8 (B3R STORAGE; was the file-static
+// g_storage_GameWorldSingleton of standalone/address_registry.cpp, read through
+// g_pGameWorldSingleton / g_pGameSingleton).
+GameUpdateLoop* GameUpdateLoop::_singleton = nullptr;
 
 
 // ============================================================

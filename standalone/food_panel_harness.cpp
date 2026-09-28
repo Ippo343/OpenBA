@@ -31,6 +31,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"
 #include "Component/AttendanceComponent.h"
@@ -153,7 +154,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         return;
     }
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) { std::fprintf(stderr, "[FoodPanel] gameWorld null\n"); return; }
     uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     if (!el) { std::fprintf(stderr, "[FoodPanel] EntityList null\n"); return; }
@@ -338,7 +339,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             // unregistered workplace is invisible to BOTH finders, so a dead click
             // would otherwise be indistinguishable from a broken slot 9.
             int bucket = -1;
-            void* gw2 = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+            void* gw2 = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
             uintptr_t townMgr = gw2 ? *reinterpret_cast<uintptr_t*>(
                                     reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;
             if (townMgr && key) {
@@ -567,7 +568,7 @@ void FollowUp(int frameNum) {
     // key" vs "0 do" separates a broken finder from a town that simply has nobody
     // eligible, and those two have opposite fixes.
     if (queued == 0 && roster > 0) {
-        void* gw3 = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+        void* gw3 = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
         uintptr_t tm = gw3 ? *reinterpret_cast<uintptr_t*>(
                             reinterpret_cast<uintptr_t>(gw3) + 0xf0) : 0;
         if (tm) {

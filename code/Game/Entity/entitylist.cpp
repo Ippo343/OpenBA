@@ -31,6 +31,7 @@
 #include "Entity/componententity_funcs.h"
 #include "Entity/ComponentEntity.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Dialog/EntityUI.h"             // caller batch CB6: TypeId()
@@ -766,7 +767,7 @@ void EntityList_Update(EntityList* self, void* time) {
 // the standalone dialog holds only a weak ref, so we close explicitly. Fixes every
 // entity panel (pinned or not), not just ResidenceUI.
 static void EntityList_CloseDialogsForDyingEntities() {
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw)
         return;
     void* ui = reinterpret_cast<GameUpdateLoop*>(gw)->m_userInterface;   // B.3.8 bridge
@@ -825,7 +826,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
 // frame there is nothing dangling to follow. Reaches the tool the same way the tool tick
 // does: EntityUI == GameWorld+0x120, active-tool IBP at EntityUI+0x28 (EntityUI_ToolTick_SA).
 static void EntityList_ClearToolSelectionForDyingEntities() {
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     void* entityUI = reinterpret_cast<GameUpdateLoop*>(gw)->m_entityUI;   // B.3.8 bridge
     if (!entityUI) return;

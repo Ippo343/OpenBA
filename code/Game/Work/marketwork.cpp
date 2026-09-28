@@ -25,6 +25,7 @@
 #include "Work/MarketWork.h"
 #include "Work/marketwork_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"
 #include "system/Filename.h"
@@ -705,7 +706,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // because retail does, and because the value is load-bearing for stage 3/4
     // (it is the origin handed to the resource query and to FindPath).
     const uintptr_t terrain =
-        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     const uintptr_t citizen2 = *reinterpret_cast<uintptr_t*>(citizenHolder);
     const uintptr_t citizenAI = *reinterpret_cast<uintptr_t*>(citizen2 + 0x278);
     const uintptr_t pos = *reinterpret_cast<uintptr_t*>(citizenAI + 0x68);
@@ -767,7 +768,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // in the disassembly (MOV RBX,[R13+0x110] / CMP dword [R13+0x118],EDI).
     const int marketEntryCount = *reinterpret_cast<int32_t*>(marketStorageIBP[0] + 0x30);
     const uintptr_t town =
-        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
 
     int64_t treeDesc[2] = {0, 0};   // {root @+0x00, int32 nodeCount @+0x08}
     {
@@ -1085,7 +1086,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
                 weight += Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(*slot), 0);
             }
             void* rng = *reinterpret_cast<void**>(
-                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
             const uint32_t roll = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(weight));   // B.3.4b bridge
             float marketPos[3] = {0.0f, 0.0f, 0.0f};
             Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP[0]), marketPos, 0,
@@ -1372,7 +1373,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
             weight += Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(*slot), 0);
         }
         void* rng2 = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
         const uint32_t roll2 = reinterpret_cast<System::Random*>(rng2)->Rand(static_cast<uint32_t>(weight));   // B.3.4b bridge
         float marketPos2[3] = {0.0f, 0.0f, 0.0f};
         Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(mktInteract[0]), marketPos2, 0,

@@ -27,6 +27,7 @@
 #include "PlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Random
@@ -74,14 +75,14 @@ static inline float Rdata_140172248() {
 // Helper: get KeyMap object from external reference (triple deref)
 // ============================================================
 static inline void* GetKeyMap() {
-    return ***(void****)g_pInputConfigSingletonExref;
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // ============================================================
 // Helper: get GameWorld singleton pointer
 // ============================================================
 static inline uintptr_t GetGameWorld() {
-    return (uintptr_t)*g_pGameWorldSingleton;
+    return (uintptr_t)GameUpdateLoop::_singleton;
 }
 
 // ============================================================
@@ -798,7 +799,7 @@ void PlacementTool::Startup() {
     uint32_t meshCount = *(uint32_t*)(modelComp + 0x28);
 
     // Get game world's Random at +0xd8
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     void* rng = *(void**)(gameWorld + 0xd8);
 
     uint32_t variant = 0;

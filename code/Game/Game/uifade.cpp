@@ -17,6 +17,7 @@
 
 #include "Game/uifade.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include <cstdint>
 #include <cstdio>
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
@@ -63,7 +64,7 @@ bool EnsureFadeSprite(void* userInterface) {
         reinterpret_cast<uintptr_t>(userInterface) + UIOff::fadeSpriteSheet);
     if (existing) return true;
 
-    void* keyMap = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    void* keyMap = (g_gameContainer);
     if (!keyMap) return false;
 
     // Copy the 16-byte Sprite blob from KeyMap+0xA8 into a local buffer; the

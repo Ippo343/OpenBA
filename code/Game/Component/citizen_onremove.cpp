@@ -61,6 +61,7 @@
 // rather than a crash.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -224,7 +225,7 @@ void CitizenComponent::OnRemove() {
     }
 
     // ---- 6. profession list ---------------------------------------------------
-    uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+    uintptr_t gw = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
     if (gw) {
         int64_t professionRoot = *reinterpret_cast<int64_t*>(gw + 0xb0);
         int64_t defaultProfession = professionRoot

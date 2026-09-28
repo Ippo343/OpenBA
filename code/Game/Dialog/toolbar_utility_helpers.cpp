@@ -19,6 +19,7 @@
 
 #include "Player/exe_bodies.h"   // B3R: TradeWork_impl_4b40
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
@@ -63,7 +64,7 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
     // Init retBuf InternalBasePtr to null (matches the exe's leading IBP_Ctor).
     new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
     UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
         reinterpret_cast<uintptr_t>(gameWorld) + 0x98);

@@ -18,6 +18,7 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -79,7 +80,7 @@ namespace residenceui_sa {
 // B3R: the age multiplier is the .rdata constant kRdata_140172198 (5.0f); the
 // never-taken 1.0f fallback over g_pAgeMultiplier (EnsureGlobals) is gone.
 bool Ready() {
-    return g_pGameWorldSingleton && *g_pGameWorldSingleton;
+    return GameUpdateLoop::_singleton != nullptr;
 }
 
 
@@ -377,7 +378,7 @@ void ResidenceUI::OnUpdateLayout() {
                     bool builtProf = false;
                     if (age < oldAgeThreshold || jobEntity != 0) {
                         // Child (no job) -> ProfList+0x40; employed -> ProfList+0x48.
-                        void* world = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+                        void* world = GameUpdateLoop::_singleton;
                         uintptr_t profList = world ? *(uintptr_t*)((uintptr_t)world + 0xB0) : 0;
                         if (RUI_OkPtr(profList)) {
                             uintptr_t entry = *(uintptr_t*)(profList + (jobEntity == 0 ? 0x40 : 0x48));
@@ -507,7 +508,7 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
                 uint64_t parentDialog = *(uint64_t*)(s + 0x18);
 
                 // Center camera on this citizen via toolController (gameWorld+0x120)
-                void* toolController = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x120);
+                void* toolController = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x120);
                 Toolbar_CenterOnEntity_Impl(toolController, &parentDialog, &citizenBP);
                 return;
             }

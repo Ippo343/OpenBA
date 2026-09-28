@@ -40,6 +40,7 @@
 
 #include "Player/RemovalTool.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include <cstdint>
 #include "Component/CreateDragDescription.h"
@@ -466,7 +467,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
             // exact match — node found (key == param_2)
             // RemovalTool_helper_8d50(gameWorld+0x118, &res18, param_2)
             RemovalCalc_helper_8d50(
-                *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x118),
+                *reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x118),
                 reinterpret_cast<void**>(&res18), param_2);
             r13 = 1;  // bVar10 = true by default
             if (res18 != nullptr) {
@@ -491,7 +492,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
                     ebx = (uint8_t)*reinterpret_cast<uint32_t*>(bp + 0x64);  // ptr = *(uint*)(bp+100)
                     bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
                     res10 = *reinterpret_cast<uint32_t*>(bp + 0x68);
-                    ActCt_TaskCleanup_8e30(*reinterpret_cast<void**>((uintptr_t)*g_pGameWorldSingleton + 0x118),
+                    ActCt_TaskCleanup_8e30(*reinterpret_cast<void**>((uintptr_t)GameUpdateLoop::_singleton + 0x118),
                                            *reinterpret_cast<int*>((uintptr_t)res18 + 0x20));
                     r13 = (removeKind == 0xff) ? 1 : 0;  // bVar10 = (removeKind==0xff)
                 } else {
@@ -552,7 +553,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
             if (removeKind == 0xff) {
                 result = 0;
             } else {
-                Pf_RoadMeshRebuild_f370(*reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x110), param_1);
+                Pf_RoadMeshRebuild_f370(*reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x110), param_1);
                 result = 1;
             }
         } else {
@@ -693,7 +694,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
     InitTypeIds();
 
     // Decompile variable names preserved verbatim for offset-by-offset fidelity.
-    int* piVarDim = *reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* piVarDim = *reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int dim = *piVarDim;
 
     int64_t uVar13 = (int64_t)param_2 / dim;   // row of corner A
@@ -744,7 +745,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
         uVar22 = (int64_t)local_res18;
     }
 
-    uint32_t* puVar18 = *reinterpret_cast<uint32_t**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    uint32_t* puVar18 = *reinterpret_cast<uint32_t**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     uint32_t* local_a0 = puVar18;
     bool bVar5 = false;          // roadMeshDirty
     uint64_t uVar16ret = 0;
@@ -794,14 +795,14 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                         *reinterpret_cast<int16_t*>(local_b0 + 0x2a) = (int16_t)iVar24;
                         *reinterpret_cast<int64_t*>(local_b0 + 0x2c) = 0x10001;
                         int64_t local_70 = local_90;
-                        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>((uintptr_t)*g_pGameWorldSingleton + 0xe8),
+                        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>((uintptr_t)GameUpdateLoop::_singleton + 0xe8),
                                                        &local_70,
                                                        *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) + 0x20));
                         puVar18 = local_a0;
                     }
 
                     // ---- road removal (flag desc+0x40) ----
-                    int* piVar15 = *reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+                    int* piVar15 = *reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
                     if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(removalDesc) + 0x40) != 0) {
                         int cid = *piVar15 * iRow + iCol;
                         int64_t cl = (int64_t)cid * 0x30 + *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(piVar15) + 0x80);
@@ -840,7 +841,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                                 *reinterpret_cast<int16_t*>(local_98 + 0x2a) = (int16_t)iVar24;
                                 *reinterpret_cast<int64_t*>(local_98 + 0x2c) = 0x10001;
                                 int64_t local_78 = local_a8;
-                                EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>((uintptr_t)*g_pGameWorldSingleton + 0xe8),
+                                EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>((uintptr_t)GameUpdateLoop::_singleton + 0xe8),
                                                                &local_78,
                                                                *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) + 0x20));
                             }
@@ -853,7 +854,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                         if (*reinterpret_cast<int64_t*>(local_e8 + 0x28) ==
                             *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38)) {
                             local_e0 = local_e8;
-                            int64_t lst = *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0xe8);
+                            int64_t lst = *reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0xe8);
                             if ((*reinterpret_cast<uint32_t*>(local_e0 + 0x40) >> 10 & 1) == 0) {
                                 ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(local_e0));
                                 ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(lst + 0xd0),
@@ -907,7 +908,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                                 new (&local_d8) ::Object::InternalBasePtr(
                                     reinterpret_cast<RtObject::Internal*>(comp2));   // B.3.3 bridge
                                 if (local_d8 != 0) {
-                                    int* bn = *reinterpret_cast<int**>(*reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x118) + 0x30);
+                                    int* bn = *reinterpret_cast<int**>(*reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x118) + 0x30);
                                     int64_t local_c8 = 0;
                                     bool gotC8 = false;
                                     int key = *reinterpret_cast<int*>(local_d8 + 0x28);
@@ -928,7 +929,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                                     }
                                     if (local_c8 != 0) {
                                         RemovalCalc_CitizenAI_9ad0(
-                                            *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x118),
+                                            *reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x118),
                                             *reinterpret_cast<int*>(local_d8 + 0x28));
                                     }
                                 }
@@ -949,7 +950,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
         uVar16ret = 0;
         // Pf_RoadMeshRebuild_f370 is void; the door read a uint64_t nobody uses.
         if (bVar5)
-            Pf_RoadMeshRebuild_f370(*reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x110), puVar18);
+            Pf_RoadMeshRebuild_f370(*reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x110), puVar18);
     }
 
     // FIX(lead-verify): faithful CONCAT71 — roadMesh return in the upper bytes, low byte 1.

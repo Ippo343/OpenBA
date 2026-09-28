@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include "engine_funcs.h"   // the globals the moved inline bodies still read
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 // ---- citizen_names.cpp
@@ -74,6 +75,14 @@ void Game_WeatherDtor(void* self);  // 0x140093eb0
 // ---- game_settings_persist.cpp
 extern "C" void GameSettings_Load(int32_t* settings);  // 0x140098b60
 extern "C" void GameSettings_Save(int32_t* settings);  // 0x140098970
+
+// ---- game_main.cpp
+// The exe cell 0x1401c3de0 (B3R STORAGE): the 0x34-byte settings block GameMain
+// allocates and stores there (0x14004202e). Not a class in the tree, so a
+// namespace-scope pointer; was the file-static g_storage_GameSettingsPtr of
+// standalone/address_registry.cpp, read through g_pGameSettingsPtr /
+// g_pNewGameSettings. Null outside RunGameMain's settings lifetime.
+extern int32_t* g_gameSettings;
 
 // ---- gamegrid_serialize.cpp
 extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream);  // 0x14009f100
@@ -193,7 +202,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState, void
 inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
     void* ui = *(void**)(enginePtr + 0x98);
     // Set cursor to default (cursor ptr from KeyMap singleton+0x38)
-    uint64_t cursorVal = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+    uint64_t cursorVal = *(uint64_t*)((uintptr_t)(g_gameContainer) + 0x38);
     reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
         ::Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
     // Fade to black (fadeIn=true, color=0xFF000000=opaque black, reverse=false)

@@ -15,6 +15,7 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
@@ -256,7 +257,7 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         const void* param_6, float param_7) {
     // The exe global g_pGameWorldSingleton holds the gameWorld pointer value; in our
     // type system that value is *g_pGameWorldSingleton (engine_funcs declares it void**).
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     // DAT_140172248 == 0x447a0000 == 250.0f (read from Ghidra).
     const float DAT_140172248 = 250.0f;
 

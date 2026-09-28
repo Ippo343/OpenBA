@@ -13,6 +13,7 @@
 #include "Component/TerraformDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -230,8 +231,8 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
     const Math::Transform xform(*reinterpret_cast<const Math::Transform*>(
         reinterpret_cast<uintptr_t>(model) + 0x148));   // B.3.1 bridge
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     const uintptr_t terrainGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0x110);
     int* tileGrid = *reinterpret_cast<int**>(gameWorld + 0xF8);
     if (!terrainGrid || !tileGrid) { bail("gameWorld terrain/tile grid null"); return; }
@@ -322,9 +323,9 @@ void TerraformComponent_FootprintPass(TerraformComponent* self) {
 
     void* mapComp = TerraformFindComp(TF_FindMap, TerraformOwnerEntity(selfA));
     if (!mapComp) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     int* tileGrid = *reinterpret_cast<int**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF8);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF8);
     if (!tileGrid) return;
 
     const uintptr_t m = reinterpret_cast<uintptr_t>(mapComp);
@@ -444,8 +445,8 @@ void TerraformComponent::OnAdded() {}
 void TerraformComponent::OnRemove() {
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     float heightScale = TF_RdataF32(kRdata_140172230);
 

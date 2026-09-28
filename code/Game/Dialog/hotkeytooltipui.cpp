@@ -25,6 +25,7 @@
 // already used by optionsdialog.cpp in standalone.
 
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Dialog/HotKeyToolTipUI.h"
 #include "Object/factory_registration.h"
 #include "system/String.h"
@@ -52,8 +53,8 @@ namespace Game {
 // exref slot — identical to optionsdialog.cpp's GetActualKeyMap. Proven path:
 // SetStandaloneKeyMap publishes the Engine[+0x6d8] keymap into this chain.
 static void* GetActualKeyMap() {
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) return nullptr;
-    void* step2 = *(void**)*g_pInputConfigSingletonExref;
+    if (Input::Configuration::_singleton == nullptr) return nullptr;
+    void* step2 = Input::Configuration::_singleton;
     if (!step2) return nullptr;
     return *(void**)step2;
 }
@@ -61,8 +62,8 @@ static void* GetActualKeyMap() {
 // The Game container object (holds the keyNames StringTable at +0xD0). Single
 // deref of g_pKeyMapSingleton (the slot holds the container pointer).
 static void* GetKeyMapContainer() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return nullptr;
-    return *g_pKeyMapSingleton;
+    if (g_gameContainer == nullptr) return nullptr;
+    return g_gameContainer;
 }
 
 // Port of FUN_140099c20: build a UI::String for the (device,key) pair by

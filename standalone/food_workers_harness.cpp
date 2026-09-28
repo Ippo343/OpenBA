@@ -26,6 +26,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent (0x140002e10)
@@ -90,7 +91,7 @@ bool AlreadySeated(void* comp) {
 }
 
 void Fire(int frameNum) {
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         std::fprintf(stderr, "[FoodWorkers] frame=%d: gameWorld null — cannot run\n", frameNum);
         return;

@@ -12,6 +12,7 @@
 #include "Component/nomadcomponent_funcs.h"
 #include "Dialog/EntityUI.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/exe_bodies.h"   // Toolbar_ShowGroup_Impl
 #include "Player/exe_bodies.h"   // PlayerTrade_BSTFindRemove_2c690
 #include "math/Math.h"
@@ -108,7 +109,7 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(self + 0x60), &entity);   // 0x14002c690
 
     UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x98);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0x98);
     // HISTORY, kept because it cost two bugs. Retail reaches this list through
     // GetFirstDialog, which returns a struct BY VALUE, so the ABI passes a hidden
     // return-buffer pointer in RDX and the callee WRITES through it. Runtime-x64.dll
@@ -285,7 +286,7 @@ void NomadComponent::Persist(void* stream) {
 void NomadComponent::OnRemove() {
     int64_t entityIBP = reinterpret_cast<int64_t>(_entity);
     NomadComp_FUN_140103480(   // 0x140103480
-        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x120),
+        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x120),
            &entityIBP);
 }
 

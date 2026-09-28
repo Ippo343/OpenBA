@@ -14,6 +14,7 @@
 #include "Component/charactercomponent_funcs.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -240,7 +241,7 @@ void CharacterComponent::Startup() {
         }
 
         int64_t model = *reinterpret_cast<int64_t*>(p + 0x68);
-        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* gw = GameUpdateLoop::_singleton;
         void* charMgr = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x88)
                            : nullptr;
         if (model && charMgr) {
@@ -281,7 +282,7 @@ void CharacterComponent::OnRemove() {
 
     WorkBase_TaskListCleanup_c5400(p + 0x48);   // 0x1400c5400, the action-stack clear
 
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     int64_t charMgr = gw ? *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(gw) + 0x88)
                          : 0;
     int idx = *reinterpret_cast<int32_t*>(p + 0x40);

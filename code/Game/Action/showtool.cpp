@@ -21,6 +21,7 @@
 #include "graphics/Scene.h"
 #include "system/Value.h"       // System::Time, for Geometry::Update's argument
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActCt_HideTool_1176e0, ActCt_ShowToolOnEntity_1173b0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "math/Math.h"
@@ -214,8 +215,8 @@ static void ShowTool_ShowCarried(void* entityV) {
     }
 
     // Add the held-item geometry to the live Graphics::Scene (gameWorld+0x60).
-    void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0x60) : nullptr;
+    void* scene = (GameUpdateLoop::_singleton != nullptr)
+                ? *(void**)((uint8_t*)GameUpdateLoop::_singleton + 0x60) : nullptr;
     uint32_t objId = scene
                    ? reinterpret_cast<Graphics::Scene*>(scene)
                          ->AddObject(reinterpret_cast<Graphics::Geometry*>(e + 0xb8))   // B.3.5 bridge

@@ -21,6 +21,7 @@
 #include "Dialog/ui_panels.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -432,8 +433,8 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
     // (controller, Time&); the body ignores the Time arg. Idle cost is two flag
     // reads (+0x41/+0x4D, both 0 unless Slot9 armed a drag). Guard the KeyMap
     // exref + the Runtime fns the drag path dereferences unconditionally.
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref
-        || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (Input::Configuration::_singleton == nullptr
+        || GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t s = (uintptr_t)this;
 
     // --- Standalone drag-enable for entity / citizen info panels ---------------
@@ -466,7 +467,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
 
     // Pending drag: check mouse movement threshold
     if (*(char*)(s + 0x4D) != 0) {
-        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
+        void* keyMap = Input::Configuration::_singleton->_keyMap;
 
         // Get mouse X, scaled by dialog scale factor
         void* dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
@@ -506,7 +507,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
 
     // Active drag: move dialog to follow mouse
     if (*(char*)(s + 0x41) != 0 && *(char*)(s + 0x40) != 0) {
-        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
+        void* keyMap = Input::Configuration::_singleton->_keyMap;
 
         if (!*(uintptr_t*)(s + 0x18)) { /* dialog instance null, skip drag */ }
         else {
@@ -527,7 +528,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
         reinterpret_cast<UI::DialogInstance*>(*(void**)(s + 0x18))->SetUpperLeft(newX, newY, false);  // B.3.6 bridge
 
         // Update entity tracking BST with new position
-        uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
+        uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
         uintptr_t bstRoot = *(uintptr_t*)(worldObj + 0x50);
 
         // BST lookup by entity key (+0x30)
@@ -568,7 +569,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
                 reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
 
             EntityUI_SelectEntity_Impl(
-                *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120),
+                *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120),
                 entityBuf, newX, newY);
         }
 
@@ -644,11 +645,11 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
         // would otherwise hit the nulled-class-info AV (see ToolUI_DialogHasEntityUI).
         // On a dead entity the ref-drop is skipped — the EditTool tick's -1-sentinel
         // guard clears the stale tool refs next frame — and the dialog still closes.
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton &&
+        if (GameUpdateLoop::_singleton != nullptr &&
             ToolUI_DialogHasEntityUI(s) && SA_DialogEntityAlive((void*)s)) {
             void* ds = *(void**)(s + 0x28);
             if (ds && ::Object::IsDerivedFromNullSafe(ds, ComponentEntity::TypeId())) {
-                uintptr_t pc = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x120);
+                uintptr_t pc = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0x120);
                 if (pc) {
                     void* activeTool = *(void**)(pc + 0x28);
                     // ONLY an EditTool keeps a selected entity at +0x30. When a build
@@ -685,7 +686,7 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
         // the dialog-instance pointer behind the IBP at +0x18 (deref'd for its
         // UserInterface at +0x10). Range check matches CitUI_OkPtr (canonical Win64
         // user-space heap window).
-        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+        if (GameUpdateLoop::_singleton == nullptr)
             return;
         {
             uintptr_t di = *(uintptr_t*)(s + 0x18);
@@ -696,7 +697,7 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
         reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
 
         // Remove from entity tracking BST
-        uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
+        uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
         uintptr_t bstRoot = *(uintptr_t*)(worldObj + 0x50);
 
         uint64_t entityKey = *(uint64_t*)(s + 0x30);

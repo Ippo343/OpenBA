@@ -30,6 +30,7 @@
 
 #include "BridgeTool.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "address_registry.h"
 #include <cstdint>
 #include <cstdlib>
@@ -38,7 +39,7 @@
 namespace {
 
 inline uint32_t* MapGrid() {
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return nullptr;
     return *reinterpret_cast<uint32_t**>(reinterpret_cast<uintptr_t>(gameWorld) + 0xf8);
 }

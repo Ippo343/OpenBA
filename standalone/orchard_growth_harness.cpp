@@ -38,6 +38,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "options.h"
 #include <cstdint>
@@ -81,9 +82,9 @@ bool Enabled() {
 extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
     if (!Enabled()) return;
     if (frameNum < kStartFrame || (frameNum % kTickFrames) != 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
-    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
     uintptr_t entityList = *reinterpret_cast<uintptr_t*>(gw + 0xe8);
     if (!entityList) return;
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);

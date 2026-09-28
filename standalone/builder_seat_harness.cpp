@@ -31,6 +31,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -82,7 +83,7 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
     if (s_want <= 0 || s_fired) return;
     if (frameNum < s_settle) return;
 
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     uint8_t* townMgr = *reinterpret_cast<uint8_t**>(static_cast<uint8_t*>(gw) + 0xf0);
     uint8_t* profMgr = *reinterpret_cast<uint8_t**>(static_cast<uint8_t*>(gw) + 0xb0);

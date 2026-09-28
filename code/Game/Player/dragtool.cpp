@@ -16,6 +16,7 @@
 #include "Player/dragtool.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "Player/exe_bodies.h"
 #include <cstdint>
@@ -70,14 +71,14 @@ DEFINE_EXE_ABSTRACT_TYPE(DragTool, "Tool")
 static inline void* GetKeyMap() {
     // Triple deref: slot → External ptr → wrapped ptr → KeyMap object
     // Original asm: MOV RAX,[slot]; MOV R8,[RAX]; MOV R14,[R8]
-    return ***(void****)g_pInputConfigSingletonExref;
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // ============================================================
 // Helper: get UserInterface from GameWorld singleton
 // ============================================================
 static inline void* GetUserInterface() {
-    return *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x98);
+    return *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x98);
 }
 
 // ============================================================

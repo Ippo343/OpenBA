@@ -38,6 +38,7 @@
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/Component.h"          // B.3.x W0: Component slots by name
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "resolve.h"
 #include "Component/controller_state_table.h"
@@ -258,8 +259,8 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
     (void)sm;
 
     uint8_t instant = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        instant = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd0) & 1;
+    if (GameUpdateLoop::_singleton != nullptr)
+        instant = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd0) & 1;
 
     if (instant == 0) {
         // STAGED: reset every construction mesh to frame 0.
@@ -467,8 +468,8 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
     ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(bc + 0x10), 4);
 
     uintptr_t townMgr = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (GameUpdateLoop::_singleton != nullptr)
+        townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     uintptr_t selfIBP = 0;
     new (&selfIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
@@ -526,8 +527,8 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     uintptr_t storage = storageIBP;
 
     uintptr_t townMgr = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (GameUpdateLoop::_singleton != nullptr)
+        townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
 
     // (a) refund leftover storage slots to town stock (townMgr+0x170; entry idx*0x20+0xc).
     int slotCount = *reinterpret_cast<int32_t*>(storage + 0x30);

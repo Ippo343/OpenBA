@@ -27,6 +27,7 @@
 #include "options.h"
 #include <windows.h>
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Object/factory_registration.h"
 #include <atomic>
@@ -233,9 +234,9 @@ ComponentEntity::~ComponentEntity() {
     // each downstream guard was added. This is the correct layer: the refs die with
     // the entity, while it is still addressable. Same idea as the drain's
     // EntityList_ClearToolSelectionForDyingEntities, but retail-authored.
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
         if (townMgr) {
             void* entityIbp = nullptr;
             new (&entityIbp) ::Object::InternalBasePtr(

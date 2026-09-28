@@ -22,6 +22,7 @@
 
 #include "RemoveAnimal.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActHunt_* helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
@@ -101,7 +102,7 @@ int  RemoveAnimal::AbstractImpl(void* actionStack) {
     }
 
     // Get cleanup manager from game world singleton
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     void* cleanupMgr = *(void**)(gameWorld + 0xe8);
 
     if (entityRef != nullptr) {

@@ -103,6 +103,7 @@
 // Grep tags: [Disaster] [Fire] [Tornado] [Sick] [Infest]
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
@@ -194,8 +195,8 @@ void Init() {
 //   +0xF0 / +0xF8   DiseaseComponents (Game_InfectRandomCitizen, 0x14005fe10 —
 //                   MISNAMED in Ghidra: this registry is the CROP/livestock one)
 uintptr_t GameWorld() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
-    return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 }
 uintptr_t TownMgr() {
     uintptr_t gw = GameWorld();

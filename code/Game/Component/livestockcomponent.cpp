@@ -13,6 +13,7 @@
 #include "Component/LivestockDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
 #include "Game/exe_constants.h"     // kRdata_140172234
 #include <cstdint>
@@ -64,10 +65,10 @@ LivestockComponent::LivestockComponent() : data28(0), data30(0) {
 
 void LivestockComponent::OnAdded() {
     if (data28 != 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     if (!gs) return;
     uint64_t ibp = 0;
     new (&ibp) ::Object::InternalBasePtr(
@@ -89,9 +90,9 @@ void LivestockComponent::OnRemove() {
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
 
     if (data28 == 0) {
-        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+        if (GameUpdateLoop::_singleton == nullptr) return;
         uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
         if (gs) s_erase(reinterpret_cast<void*>(gs + 0x80), &ibp);
         return;
     }

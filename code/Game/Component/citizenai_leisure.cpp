@@ -64,6 +64,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/HappinessDescription.h"   // B.3.8 CB1a (TypeId)
@@ -116,7 +117,7 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 static inline void* Rng() { return *reinterpret_cast<void**>(GW() + 0xd8); }
 // Cell-array base lives at MapGrid+0x80 (Ghidra prints `piVar5 + 0x20` for int* piVar5;

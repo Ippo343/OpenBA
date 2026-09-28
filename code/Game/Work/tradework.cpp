@@ -19,6 +19,7 @@
 #include "Work/TradeWork.h"
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
@@ -193,7 +194,7 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
 
     int64_t selfA = reinterpret_cast<int64_t>(this);
     void* param2 = citizenIBP;                       // local_res10 (citizen IBP)
-    uint64_t gw = g_pGameWorldSingleton ? reinterpret_cast<uint64_t>(*g_pGameWorldSingleton) : 0;
+    uint64_t gw = GameUpdateLoop::_singleton ? reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton) : 0;
 
     int ret = 1;
     TWEntry* arrA = nullptr; uint32_t cntA = 0, capA = 0;   // import list (net > 0)  -> local_c8/local_c0

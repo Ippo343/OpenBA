@@ -75,6 +75,7 @@
 #include "Component/controller_state_table.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -188,7 +189,7 @@ void PostEventToDestination(uintptr_t boat, int eventId) {
 void DeleteBoatEntity(uintptr_t boat) {
     int64_t entIBP = *reinterpret_cast<int64_t*>(boat + 0x10);
     if (!entIBP) return;
-    void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     const uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(gw) + 0xe8);

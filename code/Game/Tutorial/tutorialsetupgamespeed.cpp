@@ -16,6 +16,7 @@
 
 #include "Tutorial/TutorialSetupGameSpeed.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -43,8 +44,8 @@ TutorialSetupGameSpeed::TutorialSetupGameSpeed() : speed(1), _field24(0), _pad25
 //   MOV byte [RAX+0x30],0           ;   controller->paused = 0
 //   skip: RET
 void TutorialSetupGameSpeed::Begin() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
 
     // game+0x120 = time/speed controller pointer
     uintptr_t timeCtrl = *(uintptr_t*)(game + 0x120);

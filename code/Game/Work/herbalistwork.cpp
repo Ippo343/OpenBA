@@ -16,6 +16,7 @@
 #include "Work/HerbalistWork.h"
 #include "Work/herbalistwork_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
@@ -229,7 +230,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     // Step 3: Check capacity — is material count at limit?
     // -------------------------------------------------------
     int materialIdx = *(int*)((uintptr_t)radiusComp + 0x30);
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
     uintptr_t resourceTable = *(uintptr_t*)(resourceTracker + 0x170);
     uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;

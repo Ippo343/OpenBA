@@ -30,6 +30,7 @@
 #include "Component/herdcomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // Pf_HerdStartMigration_122340, ActCNR_*, ActHunt_*, ActMv_*
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
@@ -114,8 +115,8 @@ static void* HerdFindComponent(int64_t entity, uint32_t typeId) {
 // true iff that tile falls inside the animal's recorded bounds rect (+0x38..+0x3e).
 // Closure: Entity_FindComponent_Family (0x1400012d0, registered) + CheckPtr (engine).
 char HerdComponent_Helper6b10(int64_t param_1) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
-    int* piMapDim = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (GameUpdateLoop::_singleton == nullptr) return 1;
+    int* piMapDim = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
 
     uint64_t ibp = 0;
     ActMv_FindComponentFamily_12d0(*(uintptr_t*)(param_1 + 0x10), &ibp);   // 0x1400012d0
@@ -296,9 +297,9 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
                        ? *(void**)(self + 0x18) : nullptr;
     if (!cfgObj) return;
     int64_t descr = *(int64_t*)((uintptr_t)cfgObj + 0x20);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    void* rng = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
-    int* mapDimPtr = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    void* rng = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
+    int* mapDimPtr = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     char altFlag = (reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0) ? 1 : 0;   // B.3.4b bridge
     const float spread = kRdata_140172220;   // 0x140172220
     const float half = kRdata_140172114;     // 0x140172114
@@ -377,7 +378,7 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         HerdComponent_Impl_e510((void*)wildRef, &selfRef);   // 0x14012e510
 
         {
-            void* entityList = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xe8);
+            void* entityList = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xe8);
             uint64_t regRef = entRef;
             EntityList_RegisterEntity_Impl(entityList, &regRef, *(int*)(descr + 0x20));   // 0x1400c48a0
         }
@@ -415,8 +416,8 @@ void HerdComponent_Helper1ad0(int64_t herdComp, void* animalIbp) {
     void* cfgObj = *(void**)(self + 0x18);
     void* cfg = (::Object::IsDerivedFromNullSafe(cfgObj, HerdDescription::TypeId())) ? cfgObj : nullptr;
     int spread = *(int*)((uintptr_t)cfg + 0x38);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    int mapDim = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    int mapDim = **(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
 
     int bx = *(int*)(self + 0x4c) % mapDim - (spread >> 1);
     int by = *(int*)(self + 0x4c) / mapDim - (spread >> 1);
@@ -488,8 +489,8 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
 
     Pf_HerdStartMigration_122340(reinterpret_cast<void*>(herdComp));   // 0x140122340
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !herdDesc) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr || !herdDesc) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     int* mapDimPtr = *(int**)(gw + 0xf8);
     void* rng = *(void**)(gw + 0xd8);
 
@@ -663,8 +664,8 @@ void HerdComponent_OnRemove(void* selfV) {
         }
     }
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
     if (!townMgr) return;
     uint64_t selfRef = 0;
@@ -681,7 +682,7 @@ static bool IsTileValid(HerdComponent* self) {
     int64_t entityRef = static_cast<int64_t>(self->data28);
     if (entityRef == 0) return false;
 
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     int mapWidth = **reinterpret_cast<int**>(
         reinterpret_cast<uintptr_t>(gameWorld) + 0xF8);
 
@@ -744,8 +745,8 @@ HerdComponent::HerdComponent()
 }
 
 void HerdComponent::OnAdded() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
     if (!townMgr) return;
 
@@ -876,7 +877,7 @@ void HerdComponent::Update(void* time) {
 
         if (done != 0) {
             // Migration complete -- randomize graze timer and switch back
-            void* world = *g_pGameWorldSingleton;
+            void* world = GameUpdateLoop::_singleton;
             void* random = *reinterpret_cast<void**>(
                 reinterpret_cast<uint8_t*>(world) + 0xD8);
 

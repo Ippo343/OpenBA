@@ -41,6 +41,8 @@
 // 0D70's tail.
 
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "system/String.h"
 #include "Tutorial/Tutorial.h"
@@ -94,8 +96,8 @@ void* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
 
 // One-line report of anything unresolved, instead of an EXEC-of-0.
 const char* MissingDependency(bool needSaveLoad) {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return "KeyMap/scenario-list singleton";
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return "GameWorld singleton";
+    if (g_gameContainer == nullptr) return "KeyMap/scenario-list singleton";
+    if (GameUpdateLoop::_singleton == nullptr) return "GameWorld singleton";
     if (!needSaveLoad) return nullptr;
     if (!::Save::SaveLoad::_singleton) return "SaveLoad singleton";
     if (!::IO::Persistence::_singleton) return "Persistence singleton";
@@ -139,7 +141,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     // The scenario list is the SAME one ScenarioDialog enumerates:
     // *(*g_pKeyMapSingleton + 8), resources at *(list + 0x20)[i].
     void* scenarioList = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 8);
+        reinterpret_cast<uintptr_t>(g_gameContainer) + 8);
     uintptr_t resArray = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(scenarioList) + 0x20);
     void* resource = *reinterpret_cast<void**>(resArray + static_cast<uintptr_t>(scenIdx) * 8);
@@ -271,7 +273,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
 
     // Publish on the GAME WORLD singleton: cursor + fullscreen fade on its UI
     // (+0x98), next loop at +0xC8. Retail has no controller test here.
-    SetEngineNextLoop(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton), pOuterLoop);
+    SetEngineNextLoop(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton), pOuterLoop);
 
     fprintf(stderr, "[TutNext] next-scenario loop chain queued (gameLoop=%p loader=%p)\n",
             (void*)pGameLoop, pOuterLoop);

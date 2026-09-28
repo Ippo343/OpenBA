@@ -15,6 +15,7 @@
 
 #include "inputbindings.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -110,15 +111,12 @@ void RegisterDefaultInputBindings() {
     // Resolve the actual KeyMap via the same triple-deref pattern the
     // original exe uses. See CLAUDE.md note about External reference
     // indirection levels.
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) {
-        printf("[InputBindings] FATAL: g_pInputConfigSingletonExref not initialized "
-               "(slot=%p, *slot=%p)\n",
-               (void*)g_pInputConfigSingletonExref,
-               g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
+    if (Input::Configuration::_singleton == nullptr) {
+        printf("[InputBindings] FATAL: Input::Configuration::_singleton not initialized\n");
         return;
     }
 
-    void* level2 = *(void**)*g_pInputConfigSingletonExref;
+    void* level2 = Input::Configuration::_singleton;
     if (!level2) {
         printf("[InputBindings] FATAL: KeyMap exref level-2 ptr is NULL\n");
         return;
@@ -163,7 +161,7 @@ void RegisterDefaultInputBindings() {
 // (0x140151488) is not populated in standalone — see the same pattern in
 // optionsdialog.cpp's LoadStringTable.
 void LoadInputNameTables() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
+    if (g_gameContainer == nullptr) {
         printf("[InputBindings] LoadInputNameTables: KeyMap container NULL\n");
         return;
     }
@@ -207,7 +205,7 @@ void LoadInputNameTables() {
         return ext;
     };
 
-    char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
+    char* container = reinterpret_cast<char*>(g_gameContainer);
 
     // Slot indexing: param_1[0x19] = byte offset 0x19 * 8 = 0xC8.
     *reinterpret_cast<void**>(container + 0xC8) =

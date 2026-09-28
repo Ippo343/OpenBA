@@ -24,6 +24,7 @@
 #include "Action/HuntAnimal.h"
 #include "Action/PickupStoredRawMaterial.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_6270, WorkLeaf_FreeStorageCapacity_116540
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
@@ -433,8 +434,8 @@ uint64_t WeightedRandomIndex_119470(int64_t param_1) {
                 float* w = *reinterpret_cast<float**>(param_1 + 0x58);
                 for (int k = 0; k < n; ++k) total += w[k];
             }
-            void* random = g_pGameWorldSingleton
-                ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8)
+            void* random = GameUpdateLoop::_singleton
+                ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8)
                 : nullptr;
             float r = random ? reinterpret_cast<System::Random*>(random)->RandFloat() : 0.0f;   // B.3.4b bridge
             result = 0;

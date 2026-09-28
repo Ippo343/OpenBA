@@ -16,6 +16,7 @@
 #include "Component/MapDescription.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -125,8 +126,8 @@ static void MapComponent_PaintMinimapRect(uint8_t* mc, bool clear) {
     // additionally has MapComponent::Draw's desc+0x30 gate.
     if (*(uint8_t*)((uint8_t*)desc + 0x32) == 0) return;
     if (!clear && *(uint8_t*)((uint8_t*)desc + 0x30) == 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* minimap = *(uint8_t**)((uintptr_t)*g_pGameWorldSingleton + 0x148);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uint8_t* minimap = *(uint8_t**)((uintptr_t)GameUpdateLoop::_singleton + 0x148);
     if (!minimap || !*(void**)(minimap + 0x28)) return;  // overlay array not built yet
     int width = *(int32_t*)(minimap + 4);
     int x = *(int16_t*)(mc + 0x28), y = *(int16_t*)(mc + 0x2a);
@@ -176,12 +177,12 @@ extern void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t pa
 
 extern "C" void MapComponent_ApplyOccupancy_41b0(void* mapCompV) {
     uint8_t* mc = reinterpret_cast<uint8_t*>(mapCompV);
-    if (!mc || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!mc || GameUpdateLoop::_singleton == nullptr) return;
     if ((*(uint32_t*)(mc + 0x20) >> 0x14) & 1) return;        // occupancy already written
     uint8_t* desc = *(uint8_t**)(mc + 0x18);
     if (!desc) return;
     if (desc[0x31] != 0) return;                              // description opts out
-    int* grid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* grid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     if (!grid) return;
 
     int64_t ownerIBP = *(int64_t*)(mc + 0x10);
@@ -227,8 +228,8 @@ extern "C" void MapComponent_DetachOccupancy_4750(void* selfV) {
     if (!self) return;
     uint32_t flags = *(uint32_t*)(self + 0x20);
     if (((flags >> 20) & 1) == 0) return;          // occupancy not written
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    void* game = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    void* game = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     if (!game) return;
 
     // Owner entity (comp+0x10 IBP value) — dee0 compares it against cell+0x00 for
@@ -397,8 +398,8 @@ void MapComponent::OnRemove() {
         uint8_t clearFlag = *(uint8_t*)((uintptr_t)building + 0x32);
         if (clearFlag != 0) {
             // Get terrain subsystem from game world singleton
-            if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+            if (GameUpdateLoop::_singleton != nullptr) {
+                uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
                 void* terrainPtr = *(void**)(gameWorld + 0x148);
                 if (terrainPtr) {
                     MapTerrainClear_Reimpl(terrainPtr, 0,   // 0x1400a4d30

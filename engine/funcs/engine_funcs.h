@@ -79,8 +79,7 @@ extern fn_MemAlloc_t fn_MemAlloc;
 typedef void (*fn_MemFree_t)(void* singleton, void* ptr);
 extern fn_MemFree_t fn_MemFree;
 
-// MemoryAllocator::_singleton
-extern void* g_pMemAllocSingleton;
+// MemoryAllocator::_singleton: read System::MemoryAllocator::_singleton live (B3R STORAGE).
 
 // ============================================================
 // Video::Device globals
@@ -227,20 +226,13 @@ extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
 // Game Singletons (Phase A3 — exe global pointers)
 // ============================================================
 
-// Game/World singleton — accessed by ~20 UI methods
-// Sub-fields: +0xB0 ProfessionList, +0xF0 CitizenList, +0xF8 WorldGrid,
-//             +0x100 ResourceTypeMap, +0x110 RadiusDisplayManager
-extern void** g_pGameWorldSingleton;  // DAT_1401c3dd8
+// DAT_1401c3dd8, the game world: GameUpdateLoop::_singleton
+// (code/Game/Game/GameUpdateLoop.h; B3R STORAGE).
 
-// Input::KeyMap singleton — used by HotKeyToolTipUI
-extern void** g_pKeyMapSingleton;     // DAT_1401c3de8 (container/manager object, NOT the KeyMap)
-// Exe import slot 0x140151738 = ?_singleton@Configuration@Input@@0PEAV12@EA
-// (B37_RULES 6.3 defect 3: this global was named g_pInputConfigSingletonExref until the
-// B.3.7 close). Triple deref yields the Input::KeyMap*:
-//   slot -> &Configuration::_singleton -> Configuration* -> +0x00 _keyMap.
-// Standalone registers the slot with a two-link chain ending in the KeyMap
-// (standalone/address_registry.cpp, g_StandaloneKeyMapMid).
-extern void** g_pInputConfigSingletonExref;
+// DAT_1401c3de8, the Game container (NOT the KeyMap): g_gameContainer
+// (code/Game/Game/game.h; B3R STORAGE).
+// Exe import slot 0x140151738 = ?_singleton@Configuration@Input@@0PEAV12@EA: the KeyMap
+// is Input::Configuration::_singleton->_keyMap (B3R STORAGE).
 
 
 // ============================================================
@@ -711,14 +703,9 @@ extern fn_ModDialog_Ctor_t fn_ModDialog_Ctor;  // 0x140070030
 // NewGameDialog support functions
 // ============================================================
 
-// Game settings pointer (DAT_1401c3de0 in exe .data section)
-// Allocated in GameMain, 0x34 bytes. Contains:
-//   +0x20: terrain generator combo index
-//   +0x24: terrain size combo index
-//   +0x28: climate combo index
-//   +0x2c: map condition/generator combo index
-//   +0x30: disaster combo index
-extern void** g_pNewGameSettings;  // DAT_1401c3de0
+// DAT_1401c3de0, GameMain's 0x34-byte settings block: g_gameSettings
+// (code/Game/Game/exe_bodies.h; B3R STORAGE). +0x20 terrain generator, +0x24 size,
+// +0x28 climate, +0x2c map condition, +0x30 disaster combo indices.
 
 // System::Random::Rand(uint) and ::RandFloat() — REMOVED, ENDGAME B.3.4b System
 // closing (0 CALLs). Callers use the members on System::Random (system/Value.h);
@@ -767,12 +754,10 @@ typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);  // kept for Populate
 
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 
-// OptionsDialog game settings global — DAT_1401c3de0 in exe
-// int[8] array: [0]=uiScale, [1]=autosaveInterval, [2]=statusIconDist,
-// [3]=statusIconEnabled, [4]=statusIconScale, [5]=edgeScroll,
-// [6]=autopause, [7]=lastTab
-// Byte offsets: +0x15=showCelsius, +0x16=showWeather, +0x17=autoslow
-extern int32_t** g_pGameSettingsPtr;  // DAT_1401c3de0 — pointer TO pointer to game settings
+// OptionsDialog reads g_gameSettings (DAT_1401c3de0; B3R STORAGE): int [0]=uiScale,
+// [1]=autosaveInterval, [2]=statusIconDist, [3]=statusIconEnabled, [4]=statusIconScale,
+// [5]=edgeScroll, [6]=autopause, [7]=lastTab; bytes +0x15 showCelsius, +0x16 showWeather,
+// +0x17 autoslow.
 
 // ============================================================
 // StorageUI support functions
@@ -990,11 +975,6 @@ typedef void (*fn_InventorySort_Desc_t)(void* items, int count, void* scratch1, 
 extern fn_InventorySort_Desc_t fn_InventorySort_Desc;  // FUN_140015500
 
 // fn_GoToEntity — now inline as Toolbar_CenterOnEntity_Impl (FUN_140103040)
-
-// Game singleton pointer: DAT_1401c3dd8 in exe .data section
-// Used by TownHallUI::OnCreate (+0xf0->+0x150->+8 = game time tick)
-// and OnRemove (+0xb0->+0x28 = profession count)
-extern void** g_pGameSingleton;  // 0x1401c3dd8
 
 // ============================================================
 // SpriteCaptureUI support functions

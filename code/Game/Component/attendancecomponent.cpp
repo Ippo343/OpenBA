@@ -16,6 +16,7 @@
 #include "Component/attendancecomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeNameById (pre-fault report)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -384,9 +385,9 @@ void AttendanceComponent::Persist(void* stream) {
 // [7] 0x1400443d0 — leave the town attendance registry (state 3's enter also calls
 // it through the vtable).
 void AttendanceComponent::OnRemove() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     const uintptr_t town = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     if (!town) return;
     int64_t selfIbp = 0;
     new (&selfIbp) ::Object::InternalBasePtr(

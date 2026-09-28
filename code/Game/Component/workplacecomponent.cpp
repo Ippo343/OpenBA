@@ -21,6 +21,8 @@
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -180,9 +182,9 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     //     scene node behind the `EXEC of <heap>` in Scene::Clean.
     if ((int)mesh[0x1e] == 0) {
         if ((int)*(uint32_t*)(mesh + 0x20) >= 0) {
-            if (g_pGameWorldSingleton)
+            if (GameUpdateLoop::_singleton)
                 reinterpret_cast<Graphics::Scene*>(
-                    *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60))
+                    *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60))
                     ->RemoveObject(*(uint32_t*)(mesh + 0x20));   // B.3.5 bridge
             *(uint32_t*)(mesh + 0x20) = 0xffffffff;
         }
@@ -191,11 +193,11 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
         *(uint32_t*)(mesh + 4) = new4;
         changed = new4 ^ old4;
     } else {
-        if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
-            ((uint8_t*)*g_pGameSettingsPtr)[0xc] != '\0' && (int)mesh[0x20] < 0) {
-            if (g_pGameWorldSingleton) {
+        if (g_gameSettings != nullptr &&
+            ((uint8_t*)g_gameSettings)[0xc] != '\0' && (int)mesh[0x20] < 0) {
+            if (GameUpdateLoop::_singleton) {
                 uint32_t id = reinterpret_cast<Graphics::Scene*>(
-                    *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60))
+                    *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60))
                     ->AddObject(reinterpret_cast<Graphics::Geometry*>(mesh + 5));   // B.3.5 bridge
                 *(uint32_t*)(mesh + 0x20) = id;
                 SceneWatch_Note(id, (void*)(mesh + 5), "WorkPlaceComponent carry-mesh");
@@ -528,9 +530,9 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t townMgr, void* ownerRefLoca
 
 
 
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {    if (!selfP || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {    if (!selfP || GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-    uintptr_t gw   = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t gw   = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
 
     uint64_t key = *reinterpret_cast<uint64_t*>(self + 0x48);
     uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
@@ -626,9 +628,9 @@ extern "C" void WorkPlaceComponent_EnterBuiltState(void* selfP) {
     uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
     uint64_t key = *reinterpret_cast<uint64_t*>(self + 0x48);
     if (key == 0) return;   // no profession (house / storage) -> nothing to register
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     if (!townMgr) return;
     int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
     ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, key);
@@ -685,9 +687,9 @@ extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* selfP) {
     *reinterpret_cast<uint64_t*>(self + 0x48) = natural;
     WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(selfP), true);
 
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton != nullptr) {
         uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
         if (townMgr) {
             int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
             ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, natural);
@@ -963,12 +965,12 @@ void WorkPlaceComponent::Persist(void* stream) {
 
 void WorkPlaceComponent::OnRemove() {
     uint64_t professionId = *(uint64_t*)(reinterpret_cast<uintptr_t>(this) + 0x48);
-    if (professionId != 0 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (professionId != 0 && GameUpdateLoop::_singleton != nullptr) {
         // Build InternalBasePtr for owner
         uint64_t ownerRef = *(uint64_t*)(reinterpret_cast<uintptr_t>(this) + 0x10);
 
         // Get BST root from game world +0xf0 -> +0x100
-        uintptr_t gameState = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uintptr_t gameState = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
         uint64_t* node = *(uint64_t**)(gameState + 0x100);
 
         bool found = false;

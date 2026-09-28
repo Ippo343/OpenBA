@@ -17,6 +17,7 @@
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
@@ -347,8 +348,8 @@ PopulationComponent::PopulationComponent()
 void PopulationComponent::Persist(void* stream) { PopulationComponent_Serialize_Real(this, stream); }   // [3] 0x1400544a0
 void PopulationComponent::Startup() {
     uint8_t* self = reinterpret_cast<uint8_t*>(this);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
 
     uint32_t tidPopDesc = PopulationDescription::TypeId();   // cell 0x1401c47c8 (D5)
     void* descObj = *reinterpret_cast<void**>(self + 0x18);
@@ -458,9 +459,9 @@ void PopulationComponent::Startup() {
 // for the row text. With slot 6 never installed the array stayed empty and the
 // combo had zero rows.
 void PopulationComponent::OnAdded() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     uint8_t* townMgr = *reinterpret_cast<uint8_t**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf0);
     if (!townMgr) return;
 
     uint64_t selfRef = 0;
@@ -479,9 +480,9 @@ void PopulationComponent::OnAdded() {
 // InternalBasePtr in the town array for the combo (and anything else walking it)
 // to dereference.
 void PopulationComponent::OnRemove() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     uint8_t* townMgr = *reinterpret_cast<uint8_t**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf0);
     if (!townMgr) return;
 
     uint64_t selfRef = 0;
@@ -529,8 +530,8 @@ void PopulationComponent::Update(void* timeV) {
     if (cellsToProcess <= 0) return;
 
     // Get terrain grid from game world global
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    void* gameWorld = *g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    void* gameWorld = GameUpdateLoop::_singleton;
     void* terrainGrid = *reinterpret_cast<void**>(
         reinterpret_cast<uint8_t*>(gameWorld) + 0xf8);
 

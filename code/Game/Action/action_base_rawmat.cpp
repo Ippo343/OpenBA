@@ -29,6 +29,7 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/exe_bodies.h"     // FloorComponent_FindResData
 #include "Game/exe_bodies.h"          // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"       // kRdata_140172114
@@ -371,7 +372,7 @@ void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
 // current array into +0x38 (d9d0) and reset the live array. Then upsert {key, value}:
 // if key present add value, else append (grow 3x on a non-first append). Leaf.
 void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
-    int gen = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
+    int gen = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x128);
     if (gen != *reinterpret_cast<int*>(self + 0x48)) {
         ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(self + 0x38),
                                reinterpret_cast<int64_t*>(self + 0x28));
@@ -467,7 +468,7 @@ void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
 // (RBX reloads to B after the 003f60 IBP resolve). All callees registered/exported.
 void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     void** self = reinterpret_cast<void**>(param_1 + 0x10);
-    int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     int mapWidth = *mapGrid;
     int col = cellIndex % mapWidth;   // EDI (remainder)
     int row = cellIndex / mapWidth;   // ESI (quotient)

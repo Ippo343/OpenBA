@@ -32,6 +32,9 @@
 // is kept here too so a later include change cannot break it silently.
 #include "video/Device.h"       // Video::Device, Video::Configuration
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "ui/UserInterface.h"
@@ -139,8 +142,8 @@ static inline void SetCheckState(void* elem, uint8_t val) {
 // Helper: get KeyMap container via single deref from 0x1401c3de8
 // Used for name table (+0xC8), string table (+0xD0), and fn_ApplyKeyMapToUI
 static inline void* GetKeyMapContainer() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return nullptr;
-    return *g_pKeyMapSingleton;
+    if (g_gameContainer == nullptr) return nullptr;
+    return g_gameContainer;
 }
 
 // ============================================================
@@ -181,16 +184,16 @@ extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface) {
         *(uint64_t*)&sprite[8] = *(uint64_t*)(km + 0xB0);
         reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFadeSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
     }
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-        *(float*)(ui + 0xDC) = (float)(*g_pGameSettingsPtr)[0] / 100.0f;
+    if (g_gameSettings != nullptr)
+        *(float*)(ui + 0xDC) = (float)g_gameSettings[0] / 100.0f;
 }
 
 // Helper: get actual KeyMap object via triple deref from exref at 0x140151738
 // [exref] -> [runtime global] -> [KeyMap ptr] = actual Input::KeyMap
 // Used for method calls (GetDeviceForId, GetInputForId, etc.)
 static inline void* GetActualKeyMap() {
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) return nullptr;
-    void* step2 = *(void**)*g_pInputConfigSingletonExref;
+    if (Input::Configuration::_singleton == nullptr) return nullptr;
+    void* step2 = Input::Configuration::_singleton;
     if (!step2) return nullptr;
     return *(void**)step2;
 }
@@ -713,7 +716,7 @@ void OptionsDialog::OnOpened() {
                 reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)i);  // B.3.6 bridge
             }
         }
-        int autoSaveIdx = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[1] : 0;
+        int autoSaveIdx = (g_gameSettings != nullptr) ? g_gameSettings[1] : 0;
         if (autoSaveIdx < 0) autoSaveIdx = 0;
         if (autoSaveIdx > 8) autoSaveIdx = 8;
         if (this->comboAutosave) reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->SetCurrentItem(autoSaveIdx);  // B.3.6 bridge
@@ -723,8 +726,8 @@ void OptionsDialog::OnOpened() {
     if (s_enableUIScaleSlider) {
         FIND_ELEMENT(this->sliderUIScale,"sliderUIScale");
         SetSliderRange(this->sliderUIScale, 75.0f, 150.0f);
-        if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-            SetSliderValue(this->sliderUIScale, (float)(*g_pGameSettingsPtr)[0]);
+        if (g_gameSettings != nullptr)
+            SetSliderValue(this->sliderUIScale, (float)g_gameSettings[0]);
     }
 
     // --- Gameplay settings checkboxes and sliders ---
@@ -738,8 +741,8 @@ void OptionsDialog::OnOpened() {
         FIND_ELEMENT(this->checkAutoslow,        "checkAutoslow");
         FIND_ELEMENT(this->checkAutopause,       "checkAutopause");
 
-        if (g_pGameSettingsPtr && *g_pGameSettingsPtr) {
-            int32_t* gs = *g_pGameSettingsPtr;
+        if (g_gameSettings != nullptr) {
+            int32_t* gs = g_gameSettings;
             SetCheckState(this->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
             SetCheckState(this->checkAutopause,  (uint8_t)gs[6]);
             SetCheckState(this->checkStatusIcon, (uint8_t)gs[3]);
@@ -766,7 +769,7 @@ void OptionsDialog::OnOpened() {
     if (s_enableTabRestore) {
         FIND_ELEMENT(this->tabOptions,"tabOptions");
         if (this->tabOptions) {
-            int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
+            int lastTab = (g_gameSettings != nullptr) ? g_gameSettings[7] : 0;
             // Clamp to valid range — options dialog has 4 tabs (0-3)
             if (lastTab < 0 || lastTab > 3) lastTab = 0;
             reinterpret_cast<UI::TabElement*>(this->tabOptions)->SetActiveTab(lastTab);  // B.3.6 bridge
@@ -822,8 +825,8 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
 // updates autosave timers on all open dialogs, persists settings,
 // applies key map to UI, and updates UI scale.
 static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
-    if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr) return;
-    int32_t* gs = *g_pGameSettingsPtr;
+    if (g_gameSettings == nullptr) return;
+    int32_t* gs = g_gameSettings;
 
     // UI scale slider -> gs[0]
     gs[0] = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderUIScale + 0x128);
@@ -905,7 +908,7 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     *(float*)((uintptr_t)userInterface + 0xDC) = (float)gs[0] / 100.0f;
 
     // Notify game world of settings change (virtual call at vtable+0x18)
-    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gameWorld = GameUpdateLoop::_singleton;
     if (gameWorld) {
         // System::Time::Time(0.0f)
         uint8_t timeVal[8] = {};
@@ -1101,12 +1104,12 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
         reinterpret_cast<IO::Persistence*>(persistence)->ReadSettings();   // B.3.4 bridge
 
     // Re-read game settings from persistence
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-        GameSettings_Load(*g_pGameSettingsPtr);   // 0x140098b60
+    if (g_gameSettings != nullptr)
+        GameSettings_Load(g_gameSettings);   // 0x140098b60
 
     // Restore last tab
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-        (*g_pGameSettingsPtr)[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+    if (g_gameSettings != nullptr)
+        g_gameSettings[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
 
     // Re-apply keymap config to UI
     void* keyMap = GetKeyMapContainer();

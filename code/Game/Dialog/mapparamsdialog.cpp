@@ -11,6 +11,7 @@
 #include "Object/factory_registration.h"
 #include <cstdio>
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -136,7 +137,7 @@ void MapParamsDialog::OnOpened() {
     }
 
     // --- Populate fields from game world ---
-    void* gameWorld = *g_pGameWorldSingleton;
+    void* gameWorld = GameUpdateLoop::_singleton;
     uintptr_t gw = (uintptr_t)gameWorld;
 
     // Set map name on editName: FUN_140011f90 copies System::String at gameWorld+0x28
@@ -251,7 +252,7 @@ void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element
     if (eventData == 1) {
         // buttonOk: save map name to game world (+0x28) and close
         // FUN_14006b690: operator=(gameWorld+0x28, editName+0xC8)
-        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorld = GameUpdateLoop::_singleton;
         // B.3.1 bridge: raw exe-struct SystemString fields, not owned here.
         System::String& gameWorldName = *reinterpret_cast<System::String*>((uintptr_t)gameWorld + 0x28);
 
@@ -294,7 +295,7 @@ void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element
             int nameLen = (divResult + finalAdj) * 2;
 
             // Get game random: *g_pGameWorldSingleton + 0xD8
-            void* gameWorld = *g_pGameWorldSingleton;
+            void* gameWorld = GameUpdateLoop::_singleton;
             void* random = *(void**)((uintptr_t)gameWorld + 0xD8);
 
             // GenerateTownName — reimpl of FUN_140099ac0

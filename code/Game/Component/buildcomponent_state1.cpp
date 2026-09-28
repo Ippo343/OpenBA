@@ -24,6 +24,7 @@
 // exe-internal helpers are resolved guarded; if one is unavailable the step is skipped.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
@@ -242,8 +243,8 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
     // register the site into the construction registry (townMgr+0xd0 / count +0xd8)
     uintptr_t townMgr = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (GameUpdateLoop::_singleton != nullptr)
+        townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
     uintptr_t siteIbp = 0;
     new (&siteIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
@@ -259,8 +260,8 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
     // instant-build flag: gw[0xd0] & 1
     uint8_t instant = 0;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        instant = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd0) & 1;
+    if (GameUpdateLoop::_singleton != nullptr)
+        instant = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd0) & 1;
 
     bool haveAll = BuildComponent_HaveAllMaterials(buildComp);
 
@@ -436,7 +437,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                 // and FindAvailableBuilding use). Seating stays deferred to State8Enter either
                 // way: seating at construction start would convert the idle Laborers that HAUL
                 // the raw materials into Builders before any hauling. Laborers haul; Builders build.
-                uintptr_t gwPtr = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+                uintptr_t gwPtr = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
                 uintptr_t profReg = gwPtr ? *reinterpret_cast<uintptr_t*>(gwPtr + 0xb0) : 0;
                 uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
                 if (builderMarker != 0)

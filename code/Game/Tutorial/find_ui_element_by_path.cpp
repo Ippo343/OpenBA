@@ -32,6 +32,7 @@
 // the two FindElement overloads and String::operator!= all take String const&.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"           // RegisterExeAddr (the 0x1400e1870 row stays: engine_funcs reads it)
 #include "address_registry.h"
 #include "system/String.h"
@@ -126,7 +127,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         return outElementIBP;
     }
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+    if (GameUpdateLoop::_singleton == nullptr) {
         return outElementIBP;
     }
     void* factory = ::Object::Factory::_singleton;
@@ -144,7 +145,7 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
             parts[1]._data, true);   // B.3.3 bridge
 
     UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
+        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x98);
     if (!ui) {
         return outElementIBP;
     }

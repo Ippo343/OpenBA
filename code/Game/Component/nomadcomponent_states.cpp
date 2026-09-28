@@ -33,6 +33,7 @@
 // 0x14004f420 .. 0x14004fb60 and 0x1400c49d0.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/CharacterComponent.h"
 #include "Component/ControllerComponent.h"
@@ -71,7 +72,7 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 uint32_t TidCharacter() { return CharacterComponent::TypeId(); }
 
 
-inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
+inline uint8_t* GW() { return (GameUpdateLoop::_singleton != nullptr) ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr; }
 inline void MakeIBP(void* dst, void* obj) { new (dst) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 

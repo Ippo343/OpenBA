@@ -36,6 +36,8 @@
 #include "graphics/Camera.h"    // ENDGAME B.3.5 batch K1 — Graphics::Renderer
 #include "graphics/Material.h"  // Graphics::MaterialInstance
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "resolve.h"
@@ -63,8 +65,8 @@ constexpr float kBoundLo  = -1024.0f;  // DAT_1401722ac (SetBounds min)
 constexpr float kUVScale  = 1.0f;      // g_fUVScale
 
 inline uint8_t SettingsByte(int off) {
-    if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr) return 0;
-    return reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[off];
+    if (g_gameSettings == nullptr) return 0;
+    return reinterpret_cast<const uint8_t*>(g_gameSettings)[off];
 }
 }  // namespace
 
@@ -204,8 +206,8 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
 
     float* particles = static_cast<float*>(self->_particles);      // +0xE0
     uint16_t* indices = static_cast<uint16_t*>(self->_indices);    // +0xD0
-    void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                    ? static_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_random   // B.3.8 bridge
+    void* rng = (GameUpdateLoop::_singleton != nullptr)
+                    ? GameUpdateLoop::_singleton->m_random
                     : nullptr;
 
     for (int i = 0; i < particleCount; ++i) {
@@ -373,8 +375,8 @@ extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
     // Add to the Graphics scene global object list (gameWorld+0x60).
     // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term is gone; the
     // two singleton tests are object tests and stay.
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        void* scene = static_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_graphicsScene;   // B.3.8 bridge
+    if (GameUpdateLoop::_singleton != nullptr) {
+        void* scene = GameUpdateLoop::_singleton->m_graphicsScene;
         if (scene)
             reinterpret_cast<Graphics::Scene*>(scene)->AddGlobalObject(
                 reinterpret_cast<Graphics::Geometry*>(geo));   // B.3.5 bridge

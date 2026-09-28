@@ -15,6 +15,7 @@
 #include "Player/PathTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 #include <cstdint>
@@ -41,7 +42,7 @@
 // Helper: get KeyMap from external reference
 // ============================================================
 static inline uint64_t GetKeyMap() {
-    return (uint64_t)***(void****)g_pInputConfigSingletonExref;
+    return (uint64_t)Input::Configuration::_singleton->_keyMap;
 }
 
 // 0x1400de950 — ~PathTool. After the leaf restamp (the compiler's), three
@@ -93,7 +94,7 @@ char PathTool::OnKey(char key) {
     if (!pressed) return 1;
 
     // Get map data pointer
-    uint64_t mapData = *(uint64_t*)(((uintptr_t)*g_pGameWorldSingleton) + 0xf8);
+    uint64_t mapData = *(uint64_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf8);
 
     // Compute mouse ray
     float rayOrigin[3] = {0};  // 12 bytes (vec3)
@@ -104,14 +105,14 @@ char PathTool::OnKey(char key) {
     // Raycast terrain
     distance[0] = 400.0f;
     uint64_t entityIBP = 0;
-    int* mapGrid = *(int**)(((uintptr_t)*g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid = *(int**)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf8);
     float outPos[4] = {0};
 
     // local_res18 is used for terrain height param: 400.0f
     float terrainParam[2] = {0};
     terrainParam[0] = 400.0f;  // 0x43c80000 as float
 
-    uint64_t mapSystem = *(uint64_t*)(((uintptr_t)*g_pGameWorldSingleton) + 0x110);
+    uint64_t mapSystem = *(uint64_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0x110);
     if (mapSystem) {
         bool hit = PlayerRay_TerrainMarch_aa530(mapSystem, (float*)rayDir, rayOrigin,
             terrainParam, outPos, distance) != 0;
@@ -136,7 +137,7 @@ char PathTool::OnKey(char key) {
     // Try picking scene intersection as well
     float hitNormal[3] = {0};
     float hitPos[3] = {0};
-    void* pickingScene = *(void**)(((uintptr_t)*g_pGameWorldSingleton) + 0x70);
+    void* pickingScene = *(void**)(((uintptr_t)GameUpdateLoop::_singleton) + 0x70);
     if (pickingScene) {
         // Picking::Scene::Intersect / GetUserData (import slots 0x140152428 /
         // 0x140152890), arguments in the door's positional order.
@@ -294,7 +295,7 @@ struct PathLineArray {
 //
 // Original: 0x1400dd3b0
 void PathTool::Draw(void* context, char) {
-    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int mapWidth = *mapGrid;
 
     // ---- Build tile array from point markers (+0x40, +0x48) ----

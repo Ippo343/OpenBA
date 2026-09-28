@@ -45,6 +45,7 @@
 #include "perf_experimental.h"
 #include <unordered_map>
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"
 #include <cstdint>
@@ -82,8 +83,8 @@ void EnsureResolved() {
 }
 
 inline void* WorldScene() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
-    return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
 }
 
 // Get the AmbientEmitterDescription from a component's +0x18, or null.
@@ -238,8 +239,8 @@ void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
     *reinterpret_cast<int*>(self + 0x30) = rw;
     *reinterpret_cast<int*>(self + 0x34) = rh;
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw   = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uint8_t* gw   = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     uint8_t* grid = *reinterpret_cast<uint8_t**>(gw + 0xf8);
     if (!grid) return;
     int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
@@ -312,11 +313,11 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
 
     EnsureResolved();
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
     if (!s_tidEnvDesc || !::System::MemoryAllocator::_singleton) return;
 
     uint8_t* self = reinterpret_cast<uint8_t*>(this);
-    uint8_t* gw   = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw   = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
 
     // Grid (Game object at gameWorld+0xf8): +0x00 width, +0x80 cells (stride 0x30).
     uint8_t* grid = *reinterpret_cast<uint8_t**>(gw + 0xf8);

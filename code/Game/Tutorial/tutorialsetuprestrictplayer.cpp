@@ -23,6 +23,7 @@
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -206,8 +207,8 @@ void TutorialSetupRestrictPlayer::Destruct() { this->~TutorialSetupRestrictPlaye
 void TutorialSetupRestrictPlayer::Begin() {
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     // Get map cell size from WorldGrid at +0xF8
     int32_t** gridPtr = reinterpret_cast<int32_t**>(gameWorld + 0xF8);
@@ -271,8 +272,8 @@ void TutorialSetupRestrictPlayer::Begin() {
 void TutorialSetupRestrictPlayer::End() {
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
 
     uintptr_t playerCtrl = *(uintptr_t*)(gameWorld + 0x120);
     if (!playerCtrl) return;

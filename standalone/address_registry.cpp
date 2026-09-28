@@ -15,38 +15,11 @@
 #include "address_registry.h"
 #include "engine_funcs.h"
 #include "Game/game.h"
+#include "Game/exe_bodies.h"      // B3R STORAGE: g_gameSettings (cell 0x1401c3de0)
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton (cell 0x1401c3dd8)
 #include "../runtime/src/io/serializer.h"  // RtSerializer_* reimpl forwarders (env-gated)
 #include <cstdio>
 #include <cstdint>
-
-// ============================================================
-// KeyMap exref (slot 0x140151738) — fake External wrapper for standalone.
-//
-// Original exe layout: the slot at 0x140151738 holds an Object::ExternalPtr
-// wrapper that, when triple-dereffed, yields the live Input::KeyMap pointer.
-// The Runtime DLL fills this slot during type-registration plumbing in the
-// real game. In standalone we never go through that machinery, so the slot
-// stays zero and ButtonElement::Update faults inside Input::KeyMap::Pressed.
-//
-// We fake it with a 2-link chain matching the disasm
-//   MOV RAX,[0x140151738] ; MOV R8,[RAX] ; MOV R14,[R8]
-// where R14 = KeyMap*. Three derefs total from the slot address.
-//
-// After Engine::Startup (which constructs Input::Configuration with its
-// embedded KeyMap), RunGameMain calls SetStandaloneKeyMap(km) to fill
-// g_StandaloneKeyMapPtr with the real pointer. Game::RegisterDefaultInputBindings
-// then walks the same triple-deref chain the original code uses.
-// ============================================================
-extern "C" {
-    // Level 3 — actual KeyMap*. Filled at runtime after Engine::Startup.
-    void* g_StandaloneKeyMapPtr = nullptr;
-    // Level 2 — points to level-3 storage (constant).
-    void* g_StandaloneKeyMapMid = &g_StandaloneKeyMapPtr;
-}
-
-extern "C" void SetStandaloneKeyMap(void* keyMap) {
-    g_StandaloneKeyMapPtr = keyMap;
-}
 
 // Per-class vtable registration entry points. Each lives next to its class's
 // reimplementation in code/Game/<Module>/<Class>.cpp.
@@ -1093,20 +1066,9 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140151410,
         (uintptr_t)ResolveExport("?IsA@Base@Object@@QEBA_NI@Z"));
 
-    // Input::KeyMap exref. Slot stores a level-1 pointer to a "level-2 cell"
-    // whose contents are the real KeyMap*. See the comment near
-    // g_StandaloneKeyMapPtr above for the reasoning.
-    //
-    // Order: ResolveAddr(0x140151738) -> &slot_storage (uintptr_t)
-    //        *(void**)slot_storage = (void*)&g_StandaloneKeyMapMid  -- level 1
-    //        *(void**)&g_StandaloneKeyMapMid = g_StandaloneKeyMapMid
-    //                                        = &g_StandaloneKeyMapPtr -- level 2
-    //        *(void**)&g_StandaloneKeyMapPtr = g_StandaloneKeyMapPtr
-    //                                        = KeyMap* -- level 3
-    // Triple deref from the slot address yields the KeyMap, matching the
-    // original exe's disasm.
-    RegisterDispatchSlot(0x140151738,
-        reinterpret_cast<uintptr_t>(&g_StandaloneKeyMapMid));
+    // (0x140151738 `?_singleton@Configuration@Input@@`: the hand-built two-link
+    // KeyMap chain and its row went at B3R STORAGE -- every reader reads
+    // Input::Configuration::_singleton->_keyMap.)
 
     // ----------------------------------------------------------------
     // IO::Serializer reimpl wrappers (runtime/src/io/serializer.cpp)
@@ -1141,13 +1103,11 @@ static void RegisterDispatchSlots() {
 // the vtable contents (pointing to our reimplemented virtual functions).
 // Type IDs are simple uint32_t globals used by FindComponent.
 
-// Singleton-pointer storage in .data/.bss. The original exe has 8-byte slots
-// for global object pointers (e.g. KeyMap, GameWorld, GameSettings) that get
-// written during Game_Ctor / engine boot. We reserve our own static storage
-// here and register its address; engine_funcs.cpp dereferences these slots.
-static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
-static void* g_storage_GameWorldSingleton = nullptr;    // 0x1401c3dd8
-static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
+// Singleton-pointer cells in .data/.bss. The original exe has 8-byte cells for
+// the Game container, the game world and the settings block. B3R STORAGE: each
+// is a named object owned by the code that writes it (g_gameContainer in
+// Game/game.h, GameUpdateLoop::_singleton, g_gameSettings in Game/exe_bodies.h);
+// the rows below register those objects' addresses until wave 2.
 
 // (The hand-built `Video::ImageBuffer` table registered at 0x14015c8c0 — slots
 // 1-8 returning null — went at ENDGAME B.3.9 EXA: the exe table is the class's
@@ -1155,9 +1115,9 @@ static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
 
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
-    RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
-    RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&g_storage_GameWorldSingleton));
-    RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_storage_GameSettingsPtr));
+    RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_gameContainer));   // B3R STORAGE
+    RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&GameUpdateLoop::_singleton));   // B3R STORAGE
+    RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_gameSettings));   // B3R STORAGE
 
     // ENDGAME B.3.9 EXA: the four loop vtable rows (MenuDialogLoopT 0x14015ed00,
     // GameLoadDialogLoopT 0x140158800, GameLoaderLoop 0x1401588d0, GameUpdateLoop

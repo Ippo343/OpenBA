@@ -54,6 +54,8 @@
 // `Volume::Rectangle`'s class name in Volume.h's own static_asserts.
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
@@ -203,15 +205,15 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
 
     // --- Game clock (seconds) — reads the sim clock at gameWorld+0x128 -> Time+8,
     //     exactly like the original helper_3810 / FUN_140093420. ---
-    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     void* timeObj = reinterpret_cast<GameUpdateLoop*>(gw)->m_dayCounter;   // B.3.8 bridge
     if (!timeObj) return;
     float sec = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
 
     // Weather-effects enabled setting (game settings byte 0x16).
-    uint8_t weatherSetting = (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-        ? reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[0x16] : 0;
+    uint8_t weatherSetting = (g_gameSettings != nullptr)
+        ? reinterpret_cast<const uint8_t*>(g_gameSettings)[0x16] : 0;
 
     // --- Part 1: tick + cull the active weather effects. For each live effect,
     //     run its particle Update (vtable +0x08); if it has faded out (intensity

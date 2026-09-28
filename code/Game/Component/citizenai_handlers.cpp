@@ -26,6 +26,7 @@
 
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
 #include "resolve.h"
@@ -169,8 +170,8 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     int64_t target = *reinterpret_cast<int64_t*>(*self + 0x258);
     if (target == 0) return false;
 
-    void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8)
+    void* rng = (GameUpdateLoop::_singleton != nullptr)
+                ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8)
                 : nullptr;
 
     if (*reinterpret_cast<int64_t*>(target + 0x250) != 0 &&
@@ -178,8 +179,8 @@ bool CitizenAI_State_Wander(int64_t param_1) {
         target = *reinterpret_cast<int64_t*>(target + 0x250);
     }
 
-    int* grid = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8)
+    int* grid = (GameUpdateLoop::_singleton != nullptr)
+                ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8)
                 : nullptr;
     if (!grid) return false;
 

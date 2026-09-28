@@ -87,6 +87,7 @@
 //   citizenai_* files resolve; see code/Game/Component/citizenai_gather.cpp:63)
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "system/String.h"
@@ -155,10 +156,10 @@ void EnsureTrackList(uint8_t* mp) {
 // ============================================================
 extern "C" void MusicPlayer_Update(void* musicPlayer) {
     if (!musicPlayer) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     uint8_t* mp = reinterpret_cast<uint8_t*>(musicPlayer);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
     void*    audioScene = reinterpret_cast<GameUpdateLoop*>(gw)->m_audioScene;   // B.3.8 bridge
 
     // --- Early-out: a track is still playing on our handle. -----------------

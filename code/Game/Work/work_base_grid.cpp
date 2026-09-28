@@ -10,6 +10,7 @@
 // against the Ghidra decompile.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Work/Work.h"   // B.3.x W0: the work tree payload by name
 #include <cstdint>
@@ -115,8 +116,8 @@ int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
     uintptr_t apComp = 0;
     WorkAcc_FindComponent_22520(*reinterpret_cast<uintptr_t*>(self + 0x10), &apComp);
     if (apComp == 0 || *reinterpret_cast<char*>(apComp + 0x28) == '\0') return 0;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
-    uintptr_t mgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x118);
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    uintptr_t mgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x118);
 
     int i = 0;
     if (*reinterpret_cast<int*>(apComp + 0x38) <= 0) return 0;

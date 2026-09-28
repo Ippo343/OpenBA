@@ -31,6 +31,7 @@
 #include "Action/RemoveNaturalResource.h"
 #include "Action/ShowTool.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "Game/exe_bodies.h"        // Reimpl_MapGetTerrainPos
 #include "math/Math.h"
@@ -133,7 +134,7 @@ float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
         void* cellIbp = FloorComponent_FindResData(reinterpret_cast<void*>(inner2), retbuf);   // 0x140004680
         int64_t node = cellIbp ? *reinterpret_cast<int64_t*>(cellIbp) : 0;
 
-        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* gw = GameUpdateLoop::_singleton;
         int32_t* mapPtr = gw ? *reinterpret_cast<int32_t**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
         int32_t width = mapPtr ? *mapPtr : 1;
 
