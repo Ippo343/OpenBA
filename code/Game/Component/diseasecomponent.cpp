@@ -472,8 +472,11 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
         reinterpret_cast<System::String*>(entry + 0x08)->~String();   // B.3.1 bridge
     }
 
-    // Drop to 1x speed if the "pause on important events" setting is on.
-    if (g_pGameSettingsPtr && g_pGameSettingsPtr[0x17] != 0 && gw) {
+    // Drop to 1x speed if the settings' auto-slow byte (+0x17) is on. Retail
+    // 0x140048542: MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of
+    // the settings BLOCK (this read indexed the cell pointer, 0xb8 bytes past it).
+    if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
+        reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[0x17] != 0 && gw) {
         void* speedObj = *reinterpret_cast<void**>((uintptr_t)gw + 0x120);
         if (speedObj) *reinterpret_cast<int32_t*>((uintptr_t)speedObj + 0x34) = 1;
     }
