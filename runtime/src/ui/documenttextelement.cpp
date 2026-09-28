@@ -76,6 +76,7 @@
 
 #include "element_common.h"
 #include "../../types/ui/DocumentTextElement.h"
+#include "../../types/ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 using namespace rtuielem;
@@ -109,7 +110,6 @@ constexpr int32_t kEventActivated = 0x12;
 
 // RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_captureTypeInfo{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
 const uint8_t* DocumentTextElementTypeInfo() {
@@ -117,11 +117,6 @@ const uint8_t* DocumentTextElementTypeInfo() {
         g_typeInfo, "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-uint32_t SpriteCaptureTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
-        g_captureTypeInfo, "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A"));
-    return p ? *p : 0u;
-}
 double SecondsPerTick() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
     return ::System::Timer::_secondsPerTick;
@@ -306,7 +301,7 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
             addPt(ctx, &sprite, L + item->x, T + item->y, 0xffffffffu);
         } else if (kind == 2) {
             void* obj = static_cast<void* const*>(Pc(_resourceList, 0x20))[item->index];
-            void* capture = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(obj, SpriteCaptureTypeId())
+            void* capture = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(obj, UI::SpriteCapture::TypeId())
                                 ? obj : nullptr;
             // UI::SpriteCapture::Draw (block D's class) — a door by address.
             RtAddr<CaptureDrawFn>(0x1800d9230ull)(capture, ctx, L + item->x, T + item->y);

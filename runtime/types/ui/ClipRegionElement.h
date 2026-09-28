@@ -95,8 +95,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180037f70
-    uint32_t    Type() const override;                            // [2] 0x180037f50
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180037f70, Type 0x180037f50, TypeId 0x180037f60, _TypeName 0x180037f30
+    //         _ParentTypeName 0x180037f40, CreateNewObject 0x180038060, CreateInPlaceObject 0x180038110
+    DECLARE_TYPE(ClipRegionElement)
+public:
     void ComputeSize() override;                                  // [4] 0x1800cbc60
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;            // [5] 0x1800cba00
@@ -118,9 +122,6 @@ public:
     ClipRegionElement(const ClipRegionElement& src);              // 0x180038220  not ported (door retired: no caller)
     ClipRegionElement& operator=(const ClipRegionElement& src);   // 0x1800382b0  not ported
 
-    static uint32_t TypeId();                                     // 0x180037f60  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180038060  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180038110  the class's own (B39 D2)
 
 protected:
     // `??1ClipRegionElement@UI@@UEAA@XZ` (0x1800cbe30). NON-VIRTUAL and EMPTY
@@ -129,9 +130,6 @@ protected:
     ~ClipRegionElement();
 
 private:
-    static const char* _TypeName();                               // 0x180037f30 -> "ClipRegionElement"
-    static const char* _ParentTypeName();                         // 0x180037f40 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801f9d68 (minted)
 
 public:
     int32_t _reqWidth;       // +0xc0  ctor 100. The viewport's own size: ComputeSize

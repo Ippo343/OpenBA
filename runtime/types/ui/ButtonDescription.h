@@ -100,8 +100,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180047e30
-    uint32_t    Type() const override;                            // [2] 0x180047e10
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180047e30, Type 0x180047e10, TypeId 0x180047e20, _TypeName 0x180047df0
+    //         _ParentTypeName 0x180047e00, CreateNewObject 0x180047f20, CreateInPlaceObject 0x180047fa0
+    DECLARE_TYPE(ButtonDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1801113d0
     // [4] Compile — Object::External's, inherited.
     bool        Serialize(void* stream) override;                 // [5] 0x1801113e0  (IO::Stream&)
@@ -126,9 +130,6 @@ public:
     ButtonDescription(const ButtonDescription& src);              // 0x180047ff0  not ported
     ButtonDescription& operator=(const ButtonDescription& src);   // 0x180048090  not ported
 
-    static uint32_t TypeId();                                     // 0x180047e20  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180047f20  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047fa0  the class's own (B39 D2)
 
 protected:
     // `??1ButtonDescription@UI@@UEAA@XZ` (0x180110bd0). NON-VIRTUAL and EMPTY
@@ -137,9 +138,6 @@ protected:
     ~ButtonDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180047df0 -> "ButtonDescription"
-    static const char* _ParentTypeName();                         // 0x180047e00 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fa900 (minted)
 
 public:
     // ---- the 0x38 bytes after ElementDescription — RtUI::ButtonDescription's

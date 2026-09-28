@@ -51,39 +51,10 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: namespace-scope atomic door caches, never a function-local static
-// inside a member (see buttondescription.cpp).
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_checkTypeInfo{nullptr};
-
-const uint8_t* CheckTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_checkTypeInfo, "?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
 
-uint32_t CheckDescription::Type() const { return TypeId(); }
-// ?TypeId@CheckDescription@UI@@SAIXZ 0x180048670 — the record's first dword.
-uint32_t CheckDescription::TypeId() {
-    const uint8_t* ti = CheckTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* CheckDescription::TypeName() const {
-    const uint8_t* ti = CheckTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t CheckDescription::GetFileVersion() const { return 0x1104; }
 
 // 0x1800488a0: null test (the DOOR's), base ctor, own two stores, return this.
@@ -199,3 +170,12 @@ int RtUiCheckDescriptionRegister() {
     RegisterRuntimeAddr(0x180048800ull, (void*)&UI::CheckDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::CheckDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@CheckDescription@UI@@ (0x1801fa970): name "CheckDescription", parent
+// "ButtonDescription" (retail ?_ParentTypeName@CheckDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::CheckDescription, "ButtonDescription", nullptr)

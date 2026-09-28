@@ -201,20 +201,9 @@ void* VideoDeviceSingleton() {            // 0x1801fe7a8
 void* InputDeviceSingleton() {            // 0x1801fe770
     return ::Input::Device::_singleton;
 }
-// 0x1801facb8 — the FIRST DWORD of `?_typeInfo@NumberElement@UI@@0VBaseTypeInfo
-// @Object@@A`, i.e. BaseTypeInfo::typeId, which is what retail loads with a
-// `MOV EDX,dword ptr [0x1801facb8]`. Reading the whole BaseTypeInfo would be
-// wrong; `IsDerivedFrom` takes an ID, not a reference
-// (runtime/src/achievement/achievement_manager.cpp records the same fact).
-// RULE B6-5: SliderElement::UpdateNumber reads it, so the cache is a
-// namespace-scope atomic, not a function-local static.
-std::atomic<void*> g_numberElementTypeInfo{nullptr};
-uint32_t NumberElementTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(rtuielem::AtomicExport(
-        g_numberElementTypeInfo, "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A"));
-    if (!ti) return 0;
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
+// 0x1801facb8 — the FIRST DWORD of NumberElement's `_typeInfo`, i.e. its
+// typeId, which is what retail loads with a `MOV EDX,dword ptr [0x1801facb8]`:
+// `UI::NumberElement::TypeId()` (ENDGAME B.3.9 TI-UI; no cache).
 
 // `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390) is `Object::Base::
 // IsDerivedFrom`, and `?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@
@@ -377,7 +366,7 @@ void SliderElement::UpdateNumber() {
     Element* first = *children;                                    // 1800d6c34  children[0]
     if (first == nullptr) return;                                  // 1800d6c3a
 
-    if (!first->IsDerivedFrom(NumberElementTypeId())) return;      // 1800d6c45 / 4c
+    if (!first->IsDerivedFrom(UI::NumberElement::TypeId())) return;      // 1800d6c45 / 4c
     NumberElement* child = static_cast<NumberElement*>(first);
     if (child == nullptr) return;                                  // 1800d6c51  retail's second test
 

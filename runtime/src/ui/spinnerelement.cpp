@@ -44,6 +44,8 @@
 
 #include "widget_common.h"
 #include "../../types/ui/SpinnerElement.h"
+#include "../../types/ui/ButtonElement.h"       // B.3.9 TI-UI: X::TypeId()
+#include "../../types/ui/NumberEditElement.h"
 
 using namespace rtui;
 
@@ -85,25 +87,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_numberEditTypeInfo{nullptr};
-std::atomic<void*> g_buttonTypeInfo{nullptr};
 
 const uint8_t* SpinnerTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
-// The two type ids the IsDerivedFrom calls pass, each the FIRST DWORD of the
-// named BaseTypeInfo static (0x1801fa190 and 0x1801fa938 in retail).
-uint32_t NumberEditTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
-        g_numberEditTypeInfo, "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A"));
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-uint32_t ButtonTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
-        g_buttonTypeInfo, "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A"));
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 
 using SetValueFn = void (*)(void* self, int32_t v);
@@ -219,8 +206,8 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     Object::InternalPtr<DialogInstance> slot = *dialog;
     Element::Update(time, ui, &slot, state);
 
-    const uint32_t kNumberEditTypeId = NumberEditTypeId();
-    const uint32_t kButtonTypeId     = ButtonTypeId();
+    const uint32_t kNumberEditTypeId = UI::NumberEditElement::TypeId();   // retail [0x1801fa190]
+    const uint32_t kButtonTypeId     = UI::ButtonElement::TypeId();       // retail [0x1801fa938]
 
     void* edit = _children.GetData()[0];
     if (!RtAddr<IsDerivedFromFn>(0x1800c0390ull)(edit, kNumberEditTypeId)) return;

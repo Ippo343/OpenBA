@@ -59,6 +59,7 @@
 #include <new>
 
 #include "element_common.h"
+#include "../../types/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
 #include "../../types/ui/ContainerElement.h"
 #include "../../types/ui/ScrollElement.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
@@ -79,22 +80,10 @@ constexpr int kClipOffX   = 0xd0;
 constexpr int kClipOffY   = 0xd4;
 
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_clipTypeInfo{nullptr};
-std::atomic<void*> g_scrollTypeInfo{nullptr};
 
 const uint8_t* ContainerElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-uint32_t ClipRegionTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
-        g_clipTypeInfo, "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A"));
-    return p ? *p : 0u;
-}
-uint32_t ScrollTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
-        g_scrollTypeInfo, "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A"));
-    return p ? *p : 0u;
 }
 const uint8_t* VideoDevice() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
@@ -106,10 +95,10 @@ using IsDerivedFromFn   = bool  (*)(const void* self, uint32_t typeId);
 // `CMOVNZ`: the child on a passed type test, NULL on a failed one — and retail
 // then dereferences the NULL (see ComputeSize).
 UI::Element* AsClipRegion(UI::Element* p) {
-    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, ClipRegionTypeId()) ? p : nullptr;
+    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, UI::ClipRegionElement::TypeId()) ? p : nullptr;
 }
 UI::ScrollElement* AsScroll(UI::Element* p) {
-    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, ScrollTypeId())
+    return RtAddr<IsDerivedFromFn>(0x1800c0390ull)(p, UI::ScrollElement::TypeId())
                ? reinterpret_cast<UI::ScrollElement*>(p)             // B.3.6 bridge
                : nullptr;
 }

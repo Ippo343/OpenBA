@@ -144,6 +144,9 @@
 #include "../../types/ui/ComboDialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/Element.h"   // ENDGAME B.3.6 closing pass: FindElementType
+#include "../../types/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
+#include "../../types/ui/ContainerElement.h"
+#include "../../types/ui/ListElement.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include <new>
 
@@ -292,37 +295,11 @@ void** FindElementType(void* self, void** out, uint32_t typeId) {
     return out;
 }
 
-// The three `?_typeInfo@…@0VBaseTypeInfo@Object@@A` statics the ComboDialog
-// ctor loads a type id out of. Retail reads the FIRST DWORD of the static
-// (`MOV R12D,dword ptr [0x1801fa120]`), which BaseTypeInfo.h calls `typeId`.
-//
-// *** AEAA / `0V…` MEANS PRIVATE, NOT UNEXPORTED. *** This DLL exports its
-// private members and all three ARE in the export table
-// (reference_aeaa_is_private_not_unexported.md), so they are resolved BY NAME
-// and there is no address door here to justify.
-uint32_t TypeIdOfStatic(const char* mangled, uint32_t* cache) {
-    if (*cache) return *cache;
-    if (const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveExport(mangled)))
-        *cache = *p;
-    return *cache;
-}
-
-uint32_t g_tidListElement       = 0;   // 0x1801fa120
-uint32_t g_tidClipRegionElement = 0;   // 0x1801f9d68
-uint32_t g_tidContainerElement  = 0;   // 0x1801f9dd8
-
-inline uint32_t TypeIdListElement() {
-    return TypeIdOfStatic("?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A",
-                          &g_tidListElement);
-}
-inline uint32_t TypeIdClipRegionElement() {
-    return TypeIdOfStatic("?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A",
-                          &g_tidClipRegionElement);
-}
-inline uint32_t TypeIdContainerElement() {
-    return TypeIdOfStatic("?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A",
-                          &g_tidContainerElement);
-}
+// The three type ids the ComboDialog ctor loads. Retail reads the FIRST DWORD
+// of each class's `_typeInfo` static (`MOV R12D,dword ptr [0x1801fa120]` for
+// ListElement; 0x1801f9d68 ClipRegionElement, 0x1801f9dd8 ContainerElement),
+// which is `X::TypeId()`. ENDGAME B.3.9 TI-UI: read at each use, as retail
+// does (the by-name lookup and its first-use cache are gone, B9-10).
 
 // `?_singleton@Device@Video@@0PEAV12@EA` (0x1801fe7a8) — an exported DATA
 // symbol, the CELL rather than the Device. Read through the port-aware data
@@ -630,7 +607,7 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
     // ---- 0x180111d91-0x180111e1e: find the ListElement --------------------
     // Re-reads the INCOMING InternalPtr (`MOV RDI,[R15]`, R15 == the R8 spilled
     // at entry), not the local copy handed to the base ctor.
-    const uint32_t tidList = TypeIdListElement();
+    const uint32_t tidList = UI::ListElement::TypeId();
     {
         void* const found = FindSelfOrUnderChildren(*rootPtr, tidList);
         // 0x180111e0e: CMOVNZ — null unless it really is a ListElement.
@@ -644,7 +621,7 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
     ::SetFlagsOnOff(cd->_list, kElementFlagToolTip16, 0);
 
     // ---- 0x180111e56-0x180111edb: find the ClipRegionElement --------------
-    const uint32_t tidClip = TypeIdClipRegionElement();
+    const uint32_t tidClip = UI::ClipRegionElement::TypeId();
     void* clipRegion = nullptr;
     {
         void* const found = FindSelfOrUnderChildren(*rootPtr, tidClip);
@@ -657,7 +634,7 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
     // lookups are separate in the shipped stream and hoisting them would be a
     // different instruction count for the same answer only if nothing in
     // between can change the tree, which is not something this port can claim.
-    const uint32_t tidContainer = TypeIdContainerElement();
+    const uint32_t tidContainer = UI::ContainerElement::TypeId();
     int32_t targetWidth = 0;
     int32_t targetHeight = 0;
     {

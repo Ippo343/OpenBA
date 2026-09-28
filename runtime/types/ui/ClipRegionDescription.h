@@ -79,8 +79,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180037990
-    uint32_t    Type() const override;                            // [2] 0x180037970
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180037990, Type 0x180037970, TypeId 0x180037980, _TypeName 0x180037950
+    //         _ParentTypeName 0x180037960, CreateNewObject 0x180037a80, CreateInPlaceObject 0x180037b80
+    DECLARE_TYPE(ClipRegionDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800cc0c0
     bool        Serialize(void* stream) override;                 // [5] 0x1800cc010
     Object::External* Reconstruct() override;                     // [6] 0x180037c30
@@ -93,9 +97,6 @@ public:
     ClipRegionDescription(const ClipRegionDescription& src);            // 0x180037da0  not ported
     ClipRegionDescription& operator=(const ClipRegionDescription& src); // 0x180037df0  not ported
 
-    static uint32_t TypeId();                                     // 0x180037980  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180037a80  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180037b80  the class's own (B39 D2)
 
 protected:
     // `??1ClipRegionDescription@UI@@UEAA@XZ` (0x1800cc0d0). NON-VIRTUAL and
@@ -104,9 +105,6 @@ protected:
     ~ClipRegionDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180037950 -> "ClipRegionDescription"
-    static const char* _ParentTypeName();                         // 0x180037960 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801f9d30 (minted)
 
 public:
     // RtUI::ClipRegionDescription's names, unchanged.

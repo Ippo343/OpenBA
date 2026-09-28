@@ -1,0 +1,16 @@
+# ENDGAME B.3 step 9 -- the type-info rows block TI-UI retired (B39_RULES.md D3, D6 W3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# Each class now carries DECLARE_TYPE + DEFINE_TYPE(UI::X, "<minted parent literal>", nullptr)
+# in its own TU; the class record is built at CRT init and is the only record of that name.
+
+# -- cluster 1: Button / Check / Combo / Border / ClipRegion --
+?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ButtonElement, "Element") in buttonelement.cpp; readers: own accessor slot gone, spinnerelement.cpp -> ButtonElement::TypeId()
+?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::CheckElement, "ButtonElement") in checkelement.cpp; readers: own accessor slot gone, widgets_input.cpp by-address 0x1801fa9a8 read -> CheckElement::TypeId()
+?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ButtonDescription, "ElementDescription") in buttondescription.cpp; readers: own accessor slot gone
+?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::CheckDescription, "ButtonDescription") in checkdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ComboElement, "ButtonElement") in comboelement.cpp; readers: own accessor slot gone
+?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ComboDescription, "ButtonDescription") in combodescription.cpp; readers: own accessor slot gone
+?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::BorderElement, "Element") in borderelement.cpp; readers: own accessor slot gone
+?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ClipRegionElement, "Element") in clipregionelement.cpp; readers: own accessor slot gone, combodialog_ctor / containerelement / element / listdescription -> ClipRegionElement::TypeId()
+?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::BorderDescription, "ElementDescription") in borderdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ClipRegionDescription, "ElementDescription") in clipregiondescription.cpp; readers: own accessor slot gone
