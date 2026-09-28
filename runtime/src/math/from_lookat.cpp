@@ -183,8 +183,3 @@ Math::Transform3 Math::Transform3::FromLookAt(const Vector3& position, const Vec
     std::memcpy(&ret->translation.z, &position.z, 4);
     return out;
 }
-
-int RtMathFromLookAtRegister() {
-    int n = 0;
-    return n;
-}

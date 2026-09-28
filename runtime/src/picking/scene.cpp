@@ -683,26 +683,5 @@ int RtPickingSceneRegister() {
     RegisterRuntimeExport("??1Scene@Picking@@QEAA@XZ", (void*)&RtPicking_Scene_Dtor); ++count;
     RegisterRuntimeAddr(0x180125890, (void*)&RtPicking_Scene_Dtor);
 
-    RegisterRuntimeExport("?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z", (void*)&RtPicking_Scene_AddMesh); ++count;
-    RegisterRuntimeAddr(0x1801252e0, (void*)&RtPicking_Scene_AddMesh);
-
-    RegisterRuntimeExport("?GetUserData@Scene@Picking@@QEBAPEAXI@Z", (void*)&RtPicking_Scene_GetUserData); ++count;
-    RegisterRuntimeAddr(0x1800722d0, (void*)&RtPicking_Scene_GetUserData);
-
-    RegisterRuntimeExport("?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z", (void*)&RtPicking_Scene_Intersect); ++count;
-    RegisterRuntimeAddr(0x1801246c0, (void*)&RtPicking_Scene_Intersect);
-
-    RegisterRuntimeExport("?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z", (void*)&RtPicking_Scene_SetMeshUserData); ++count;
-    RegisterRuntimeAddr(0x180125240, (void*)&RtPicking_Scene_SetMeshUserData);
-
-    RegisterRuntimeExport("?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z", (void*)&RtPicking_Scene_SetTransform); ++count;
-    RegisterRuntimeAddr(0x1800721b0, (void*)&RtPicking_Scene_SetTransform);
-
-    RegisterRuntimeExport("?RemoveMesh@Scene@Picking@@QEAAXI@Z", (void*)&RtPicking_Scene_RemoveMesh); ++count;
-    RegisterRuntimeAddr(0x180125290, (void*)&RtPicking_Scene_RemoveMesh);
-
-    RegisterRuntimeExport("?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z", (void*)&RtPicking_PickingMesh_Vertices); ++count;
-    RegisterRuntimeAddr(0x180071e10, (void*)&RtPicking_PickingMesh_Vertices);
-
     return count;
 }

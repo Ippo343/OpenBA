@@ -17,10 +17,6 @@ extern void RtMathTransformRegister();
 // Wave 9 lane P (runtime/src/math/wave9_lane_p.cpp): Quaternion::Lerp and
 // Transform::AsTransform3, the two Math exports waves 1-8 left on the DLL.
 extern int RtMathWave9LanePRegister();
-// Wave 9 lane GFXR (runtime/src/math/wave9_lane_gfxr.cpp): Matrix::Inverse,
-// the last Math export on the residue list and an unsatisfied door inside our
-// own Video::Context::SetCamera.
-extern int RtMathWave9LaneGfxrRegister();
 
 void RtMathPortInit() {
     // Volume's ports use the same RtLibm seam, so this must run before
@@ -29,44 +25,26 @@ void RtMathPortInit() {
 
     int n = 0;
     // Scalar
-    RegisterRuntimeExport("?Abs@Scalar@Math@@QEBA?AV12@XZ", (void*)&RtMath_Scalar_Abs); ++n;
-    RegisterRuntimeExport("?Lerp@Scalar@Math@@QEAA?AV12@AEBV12@0@Z", (void*)&RtMath_Scalar_Lerp); ++n;
     RegisterRuntimeExport("?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z", (void*)&RtMath_Scalar_Max); ++n;
 
     // Vector2
     RegisterRuntimeExport("??0Vector2@Math@@QEAA@XZ", (void*)&RtMath_Vector2_Ctor); ++n;
-    RegisterRuntimeExport("??0Vector2@Math@@QEAA@AEBVScalar@1@0@Z", (void*)&RtMath_Vector2_Ctor_ss); ++n;
-    RegisterRuntimeExport("??XVector2@Math@@QEAAXAEBV01@@Z", (void*)&RtMath_Vector2_MulAssign); ++n;
-    RegisterRuntimeExport("?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z", (void*)&RtMath_Vector2_Dot); ++n;
-    RegisterRuntimeExport("?Max@Vector2@Math@@QEBA?AV12@AEBV12@@Z", (void*)&RtMath_Vector2_Max); ++n;
-    RegisterRuntimeExport("?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z", (void*)&RtMath_Vector2_Min); ++n;
-    RegisterRuntimeExport("?Length@Vector2@Math@@QEBA?AVScalar@2@XZ", (void*)&RtMath_Vector2_Length); ++n;
-    RegisterRuntimeExport("?LengthSquared@Vector2@Math@@QEBA?AVScalar@2@XZ", (void*)&RtMath_Vector2_LengthSquared); ++n;
     RegisterRuntimeExport("?Normalize@Vector2@Math@@QEBA?AV12@XZ", (void*)&RtMath_Vector2_Normalize); ++n;
-    RegisterRuntimeExport("?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z", (void*)&RtMath_Vector2_NormalizeWithMag); ++n;
     RegisterRuntimeExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtMath_Vector2_Serialize); ++n;
 
     // Vector3
-    RegisterRuntimeExport("??0Vector3@Math@@QEAA@XZ", (void*)&RtMath_Vector3_Ctor); ++n;
     RegisterRuntimeExport("??0Vector3@Math@@QEAA@MMM@Z", (void*)&RtMath_Vector3_Ctor_fff); ++n;
     RegisterRuntimeExport("??0Vector3@Math@@QEAA@AEBVScalar@1@00@Z", (void*)&RtMath_Vector3_Ctor_sss); ++n;
     RegisterRuntimeExport("??0Vector3@Math@@QEAA@AEBVScalar@1@@Z", (void*)&RtMath_Vector3_Ctor_s); ++n;
-    RegisterRuntimeExport("?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z", (void*)&RtMath_Vector3_Cross); ++n;
     RegisterRuntimeExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z", (void*)&RtMath_Vector3_Dot); ++n;
     RegisterRuntimeExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z", (void*)&RtMath_Vector3_FromYawPitch); ++n;
     RegisterRuntimeExport("?Heading@Vector3@Math@@QEBAMXZ", (void*)&RtMath_Vector3_Heading); ++n;
     RegisterRuntimeExport("?Length@Vector3@Math@@QEBA?AVScalar@2@XZ", (void*)&RtMath_Vector3_Length); ++n;
-    RegisterRuntimeExport("?Lerp@Vector3@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z", (void*)&RtMath_Vector3_Lerp); ++n;
-    RegisterRuntimeExport("?Min@Vector3@Math@@QEBA?AV12@AEBV12@@Z", (void*)&RtMath_Vector3_Min); ++n;
     RegisterRuntimeExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ", (void*)&RtMath_Vector3_Normalize); ++n;
     RegisterRuntimeExport("?Normalize@Vector3@Math@@QEBA?AV12@AEAVScalar@2@@Z", (void*)&RtMath_Vector3_NormalizeWithMag); ++n;
-    RegisterRuntimeExport("??8Vector3@Math@@QEBA_NAEBV01@@Z", (void*)&RtMath_Vector3_Equals); ++n;
-    RegisterRuntimeExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtMath_Vector3_Serialize); ++n;
 
     // Vector4
     RegisterRuntimeExport("??0Vector4@Math@@QEAA@AEBVScalar@1@@Z", (void*)&RtMath_Vector4_Ctor_s); ++n;
-    RegisterRuntimeExport("??0Vector4@Math@@QEAA@AEBVVector3@1@AEBVScalar@1@@Z", (void*)&RtMath_Vector4_Ctor_v3s); ++n;
-    RegisterRuntimeExport("?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtMath_Vector4_Serialize); ++n;
 
     printf("[RtMathPortInit] Lane 1 (Scalar/Vector2/Vector3/Vector4): %d exports registered\n", n);
 
@@ -76,16 +54,4 @@ void RtMathPortInit() {
     const int n_mathwave9lanep = RtMathWave9LanePRegister();
     printf("[RtMathPortInit] Wave 9 lane P: %d exports registered (Quaternion::Lerp, "
            "Transform::AsTransform3)\n", n_mathwave9lanep);
-    // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
-    const int n_mathwave9lanegfxr = RtMathWave9LaneGfxrRegister();
-    printf("[RtMathPortInit] Wave 9 lane GFXR: %d exports registered (Matrix::Inverse)\n", n_mathwave9lanegfxr);
-
-    // BATCH 4 (Graphics render/cull/sun-camera cluster): Transform3::FromLookAt,
-    // runtime/src/math/from_lookat.cpp. Registered unconditionally.
-    {
-        extern int RtMathFromLookAtRegister();
-        // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
-        const int n_mathfromlookat = RtMathFromLookAtRegister();
-        printf("[RtMathPortInit] BATCH 4: %d exports registered (Transform3::FromLookAt)\n", n_mathfromlookat);
-    }
 }

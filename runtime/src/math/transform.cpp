@@ -937,16 +937,12 @@ Vector3* RtMath_Transform_MulVector3(const Transform* self, Vector3* ret, const 
 void RtMathTransformRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z", (void*)&RtMath_Transform_MulVector3); ++count;
-
-    RegisterRuntimeExport("??0Transform@Math@@QEAA@XZ", (void*)&RtMath_Transform_CtorDefault); ++count;
     RegisterRuntimeExport("??0Transform@Math@@QEAA@AEBV01@@Z", (void*)&RtMath_Transform_CtorCopy); ++count;
     RegisterRuntimeExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z", (void*)&RtMath_Transform_Assign); ++count;
     RegisterRuntimeExport("??0Transform3@Math@@QEAA@AEBV01@@Z", (void*)&RtMath_Transform3_CtorCopy); ++count;
     RegisterRuntimeExport("??0Transform2@Math@@QEAA@AEBVScalar@1@AEBVVector2@1@@Z", (void*)&RtMath_Transform2_Ctor); ++count;
     RegisterRuntimeExport("??DTransform2@Math@@QEBA?AV01@AEBV01@@Z", (void*)&RtMath_Transform2_MulTransform2); ++count;
     RegisterRuntimeExport("??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z", (void*)&RtMath_Transform2_MulVector2); ++count;
-    RegisterRuntimeExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ", (void*)&RtMath_Transform_AsMatrix); ++count;
     RegisterRuntimeExport("?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z", (void*)&RtMath_Transform2_FromYawOffset); ++count;
     RegisterRuntimeExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z", (void*)&RtMath_Transform_FromYawPitchOffset); ++count;
     RegisterRuntimeExport("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z", (void*)&RtMath_Matrix_CtorColumns); ++count;
@@ -955,15 +951,10 @@ void RtMathTransformRegister() {
     // caller reaches the port instead of walking past it into the DLL --
     // the defect tools/port_bypass_audit.py exists to catch.
     RegisterRuntimeAddr(0x18001e540, (void*)&RtMath_Matrix_CtorColumns);
-    RegisterRuntimeExport("?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z", (void*)&RtMath_Quaternion_Rotate); ++count;
-    RegisterRuntimeExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtMath_Transform_Serialize); ++count;
 
     // Bonus: dependencies of the above that are genuine Math:: exports in
     // their own right (not on the assigned list, but required internally by
     // Rotate/FromLookAt — see the comments on each definition).
-    RegisterRuntimeExport("??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z", (void*)&RtMath_Quaternion_MulQuaternion); ++count;
-    RegisterRuntimeExport("??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z", (void*)&RtMath_Quaternion_CtorBasis); ++count;
-    RegisterRuntimeExport("?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z", (void*)&RtMath_Transform_FromDirection); ++count;
 
     fprintf(stderr, "[RtMathTransform] registered %d functions (Matrix/Quaternion/Transform/Transform2/Transform3)\n", count);
 

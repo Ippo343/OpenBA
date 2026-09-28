@@ -131,15 +131,6 @@
 #include "../../funcs/rt_port.h"
 #include "scene_grid.h"
 
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — same reasoning scene.cpp gives (that header drags in <windows.h>, whose
-// `Rectangle` function and `near`/`far` macros collide with engine type and
-// member names). Must stay byte-identical to resolve.h's; the linker checks.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // Wave 9 lane Q's allocator boundary. These two ARE the Enter/Allocate/Leave
 // and Enter/Free/Leave triples retail inlines at every site below, reached
 // through the port-aware address door — see array.cpp's banner for the
@@ -396,12 +387,8 @@ void* EntryAssign(void* dstV, const void* srcV) {
 // call in 23,654, so a clean re-run is not an exoneration).
 //
 // The Transform3 the matrix comes from is Wave 9 lane P's ported
-// `Math::Transform::AsTransform3` — reached BY ADDRESS, which reaches the PORT
-// because ResolveAddr consults the registry first and lane P registered
-// 0x18001fcd0 under both doors. That is deliberate: routing our arithmetic
-// through the DLL's converter would make a divergence here unattributable.
+// `Math::Transform::AsTransform3`, the member, called by name (B3R).
 // `?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ` (0x18001fcd0).
-namespace { std::atomic<void*> g_asTransform3Slot{nullptr}; }
 
 void* BoxTransform(void* outV, const void* transformV, const void* inBoxV) {
     float* out = static_cast<float*>(outV);
@@ -410,16 +397,10 @@ void* BoxTransform(void* outV, const void* transformV, const void* inBoxV) {
     // Math::Transform3 AsTransform3(const Math::Transform&) — hidden return
     // slot in RDX, `this` in RCX.
     float m[12];
-    // RULE B6-5 (ENDGAME B.3.7 block B6): a namespace-scope atomic slot, not a
-    // function-local first-call cache — this body is reached from the Scene
-    // members and from runtime/src/graphics (a shared row, see below).
-    using AsT3Fn = void* (*)(const void*, void*);
-    void* p = g_asTransform3Slot.load(std::memory_order_acquire);
-    if (p == nullptr) {            // retry a miss, never cache a null
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x18001fcd0));
-        if (p != nullptr) g_asTransform3Slot.store(p, std::memory_order_release);
-    }
-    reinterpret_cast<AsT3Fn>(p)(transformV, m);
+    const Math::Transform3 t3 =
+        static_cast<const Math::Transform*>(transformV)->AsTransform3();   // 0x18001fcd0
+    static_assert(sizeof(t3) == sizeof(m), "Transform3 is the 12 floats of m");
+    std::memcpy(m, &t3, sizeof(m));
 
     const float ez = (b[5] - b[2]) * kHalf;
     const float ey = (b[4] - b[1]) * kHalf;
@@ -1184,26 +1165,10 @@ int RtPickingGridRegister() {
     int n = 0;
 
     // ---- the five the address-door census named --------------------------
-    RegisterRuntimeAddr(0x18007af70, (void*)&GridAdd);            ++n;
-    RegisterRuntimeAddr(0x1800724d0, (void*)&GridReindex);        ++n;
-    RegisterRuntimeAddr(0x180072950, (void*)&GridUnthread);       ++n;
-    RegisterRuntimeAddr(0x18007b390, (void*)&GridFreeEntry);      ++n;
-    RegisterRuntimeAddr(0x18007b6d0, (void*)&CellIterAdvance);    ++n;
 
     // ---- their transitive closure ----------------------------------------
-    RegisterRuntimeAddr(0x18007b210, (void*)&EntryAlloc);             ++n;
-    RegisterRuntimeAddr(0x180072730, (void*)&AddToCells);             ++n;
-    RegisterRuntimeAddr(0x180072b30, (void*)&FindOrCreateCell);       ++n;
-    RegisterRuntimeAddr(0x180072d10, (void*)&UnlinkEntryFromCell);    ++n;
-    RegisterRuntimeAddr(0x180072e70, (void*)&FreeEmptyCell);          ++n;
-    RegisterRuntimeAddr(0x1800738c0, (void*)&CellArraySetSize);       ++n;
-    RegisterRuntimeAddr(0x18007bc30, (void*)&EntryArraySetSize);      ++n;
-    RegisterRuntimeAddr(0x1800735c0, (void*)&EntryCopyConstruct);     ++n;
-    RegisterRuntimeAddr(0x18007b590, (void*)&EntryAssign);            ++n;
-    RegisterRuntimeAddr(0x180074100, (void*)&DestroyEntryTransforms); ++n;
     RegisterRuntimeAddr(0x18001b360, (void*)&TransformArrayAssign);   ++n;
     RegisterRuntimeAddr(0x18001c100, (void*)&ArrayDtorTransform);     ++n;
-    RegisterRuntimeAddr(0x180125bc0, (void*)&MeshBoundsXY);           ++n;
     RegisterRuntimeAddr(0x18001f470, (void*)&BoxTransform);           ++n;
 
     return n;

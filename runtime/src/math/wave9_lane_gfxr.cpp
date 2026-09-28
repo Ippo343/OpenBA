@@ -195,15 +195,3 @@ Math::Matrix Math::Matrix::Inverse() const {
 
     return out;
 }
-
-// ============================================================================
-// Registration. Called from RtMathPortInit().
-// ============================================================================
-int RtMathWave9LaneGfxrRegister() {
-    int count = 0;
-    // Retail's own entry point, so a by-ADDRESS door cannot walk past the port
-    // into the DLL (reference_bypassed_port_needs_a_source_checker.md). There
-    // is no such door in the tree today; this is the cheap half of stopping one
-    // from being written.
-    return count;
-}
