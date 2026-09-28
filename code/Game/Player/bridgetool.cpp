@@ -10,7 +10,7 @@
 //   Slot13 CalcPath (0x1400f9cd0) — build bridge segment entities along path
 //   Slot14 CalcCost (0x1400facf0) — validate path and return cost/length
 //
-// Helper functions (exe-internal, resolved at runtime):
+// Helper functions (exe-internal, called by name -- Player/exe_bodies.h):
 //   SnapEndCell   (0x1400fb710) — snaps end cell to same row or column as drag start
 //   ValidatePath  (0x1400fb2d0) — validates path and returns bridge body length
 //
@@ -20,7 +20,8 @@
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/CreateBridgeDescription.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -36,14 +37,14 @@
 //   +0x30: int    componentCount  — number of components
 //
 // Each component has a vtable with GetTypeId at +0x10 (returns uint32_t).
-// After finding a match by type ID, fn_IsDerivedFrom confirms the cast.
+// After finding a match by type ID, IsDerivedFrom confirms the cast.
 //
 // Original: 0x1400fb7a0
 void BridgeTool::Startup() {
     uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
-    if (!entity || !fn_IsDerivedFrom) {
+    if (!entity) {
         bridgeDesc = nullptr;
         return;
     }
@@ -61,7 +62,7 @@ void BridgeTool::Startup() {
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom before casting
-            if (fn_IsDerivedFrom(comp, targetTypeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
                 result = comp;
             }
             break;
@@ -103,13 +104,12 @@ int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     }
 
     // Snap end cell to same row or column as drag start
-    if (!fn_BridgeTool_SnapEndCell) return 3;
-    int snappedEnd = fn_BridgeTool_SnapEndCell(this, endCell);
+    int snappedEnd = BridgeTool_SnapEndCell_Impl(this, endCell);   // 0x1400fb710
 
     // Validate the bridge path
-    if (!fn_BridgeTool_ValidatePath) return 3;
     int bridgeLength = 0;
-    int valid = fn_BridgeTool_ValidatePath(this, startCell, snappedEnd, &bridgeLength);
+    int valid = static_cast<int>(
+        BridgeTool_ValidatePath_Impl(this, startCell, snappedEnd, &bridgeLength));   // 0x1400fb2d0
 
     // Diagnostics: confirm the two helpers are bound to the ports (they resolved to 0 before
     // reg_player_bridge.cpp existed, which made every drag return 3 = invalid). Logs the
@@ -127,7 +127,7 @@ int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
                     "  (Snap=%p Validate=%p desc=%p body=%08x approach=%08x req=%08x "
                     "neigh=%08x radius=%d)\n",
                     startCell, endCell, snappedEnd, valid, bridgeLength,
-                    (void*)fn_BridgeTool_SnapEndCell, (void*)fn_BridgeTool_ValidatePath,
+                    (void*)&BridgeTool_SnapEndCell_Impl, (void*)&BridgeTool_ValidatePath_Impl,
                     (void*)d,
                     d ? *(uint32_t*)(d + 0x20) : 0, d ? *(uint32_t*)(d + 0x24) : 0,
                     d ? *(uint32_t*)(d + 0x2c) : 0, d ? *(uint32_t*)(d + 0x30) : 0,
