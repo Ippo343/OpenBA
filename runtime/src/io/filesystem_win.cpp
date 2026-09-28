@@ -117,26 +117,13 @@ bool SameFilenameText(const Filename* a, const Filename* b) {
 // runs; it changes what happens when one of them IS ported, and what the
 // cutover failure looks like if none ever is.
 // ENDGAME B.3.4a closing: the body moved verbatim into
-// `IO::FileSystem::GetSaveDirectory()` at the bottom of this file. The door
-// keeps its name and BOTH registrations and delegates, exactly as
-// `RtIo_FileSystem_GetDataDirectory` does (filesystem.cpp, commit cd4e8921).
-//
-// The return is BY VALUE, so `ret` IS retail's hidden return slot (RDX) and the
-// member's by-value return fills it through the same ABI — one construction,
-// exactly as before. No qualified `IO::` call is needed: `IO::FileSystem` has
-// no vtable at all (runtime/types/io/FileSystem.h), so B34_BRIEFS §A.1's
-// re-entry hazard cannot arise.
+// `IO::FileSystem::GetSaveDirectory()` at the bottom of this file.
 //
 // `ComputeSaveDirectory(Filename*)`'s two placement-news become the member's
 // two `return` statements. That is the SAME construction into the SAME slot:
 // a by-value return with a hidden return slot constructs in place. The early
 // return on `hr != S_OK` is retail's `*(longlong*)in_RDX = 0`, i.e. the default
 // ctor, and stays the first arm.
-Filename* RtIo_FileSystem_GetSaveDirectory(const void* fsVoid, Filename* ret) {
-    new (ret) System::Filename(
-        reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetSaveDirectory());
-    return ret;
-}
 
 }  // namespace RtIO
 

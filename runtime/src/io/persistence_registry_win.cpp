@@ -339,31 +339,6 @@ uint64_t DigestMap(const void* root, uint32_t* countOut, const char** firstKeyOu
 
 }  // namespace
 
-// ============================================================================
-// ??0Registry@IO@@QEAA@PEBD@Z                              retail 0x1800b9500
-// ----------------------------------------------------------------------------
-// ENDGAME B.3.4 PACKAGE+FS commit 1 — the body is now
-// `IO::Registry::Registry(const char*)` (below). The door keeps its name, its
-// by-name AND by-address registration, and DELEGATES.
-//
-// It delegates by PLACEMENT-NEW rather than by a member call, because a
-// constructor is not callable on an already-live object: the door's contract is
-// "turn these 0x18 uninitialised bytes into a Registry", which is exactly what
-// placement-new into the caller's storage is. Nothing is allocated and nothing
-// moves — `IO::Registry` is layout-identical to the `RtIo::Registry` POD the
-// door's signature names (both `static_assert`ed in runtime/types/io/Registry.h)
-// — so the object the caller sees is byte-for-byte the one retail's ctor built.
-//
-// No qualified `IO::Registry::` call and no recursion hazard here: B34_BRIEFS
-// §A.1's rule is about POLYMORPHIC receivers whose live instances wear a MINTED
-// table resolving back to these doors. `IO::Registry` has no vtable at all
-// (Registry.h's banner), so there is nothing to dispatch through.
-// ============================================================================
-extern "C" Registry* RtIo_Registry_Ctor(Registry* self, const char* subKey) {
-    ::new (static_cast<void*>(self)) IO::Registry(subKey);
-    return self;   // 0x1800b9747: MOV RAX,RDI
-}
-
 namespace IO {
 
 // ---------------------------------------------------------------------------
@@ -444,18 +419,6 @@ Registry::Registry(const char* subKey) {
 
 // ============================================================================
 // ?ReadSettings@Persistence@IO@@QEAAXXZ                    retail 0x1800b84b0
-// ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 6: the body is now
-// `IO::Persistence::ReadSettings()`, below. The door keeps its name, its
-// `extern "C"` linkage and both registration lines, and delegates. No qualified
-// `IO::` call is needed: `IO::Persistence` has no vtable of its own -- the vptr
-// at +0x10 is the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
-    reinterpret_cast<IO::Persistence*>(self)->ReadSettings();
-}
-
-// ============================================================================
 // `IO::Persistence::ReadSettings` -- the member body
 // ============================================================================
 // Defined in `namespace IO` because a member of `IO::X` must appear in a

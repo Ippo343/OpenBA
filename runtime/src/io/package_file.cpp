@@ -335,60 +335,16 @@ constexpr size_t kPackageFileSize = 0xF0;
 // FACTREST replay, Construct, Reconstruct -- build the class directly now) and
 // the ?Construct@ slot door are gone.
 // ============================================================================
-// The reflection triple. All three read the exported BaseTypeInfo at
-// 0x1801f9ac8 — ?Type@ and ?TypeId@ are the SAME two instructions at two
-// addresses (the virtual and the static spelling), which is why they share a
-// body here and are still registered separately.
-// ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 3: every body below is now a member of the
-// real `IO::PackageFile` (runtime/types/io/PackageFile.h); these doors keep
-// their names and both registrations and delegate.
+// ENDGAME B.3.4 PACKAGE+FS commit 3: every body below is a member of the real
+// `IO::PackageFile` (runtime/types/io/PackageFile.h). The remaining doors
+// delegate with a QUALIFIED `IO::PackageFile::` call, written so a reader never
+// has to check which members are virtual.
 //
-// *** THE QUALIFIED `IO::PackageFile::` IS LOAD-BEARING ON THE EIGHT VIRTUAL
-// *** SLOTS AND IS NOT DECORATION. *** A live PackageFile in this build wears
-// the MINTED `??_7PackageFile@IO@@6B@`, whose nine rows resolve back to THESE
-// VERY DOORS. A plain virtual call in a door would dispatch through that minted
-// table straight back into itself -- infinite recursion, not delegation. The
-// qualification suppresses virtual dispatch (B34_BRIEFS section A.1, and
-// serialize_family.cpp / encoding.cpp established the pattern in blocks 1-2).
-// The non-virtual members below do not need it and carry it anyway, so that a
-// reader never has to check which is which.
-extern "C" uint32_t RtIo_PackageFile_TypeId() {
-    return IO::PackageFile::TypeId();
-}
-
-// ============================================================================
 // ENDGAME B.3.9 IO: the seven slot doors (Type, TypeName, GetFileVersion,
 // Compile, Serialize, Reconstruct, Destruct) and Construct's are gone with the
-// minted ??_7PackageFile row, their only reader. ?TypeId@ is a static, not a
-// slot, and keeps its door.
-// ============================================================================
-// The three String getters. `self->name/author/description` are RtSystem::String
-// MEMBERS of the not-yet-converted PackageFileView, reached through the one
-// transitional bridge (pod_bridge.h); `ret` is the raw hidden return slot, so
-// the copy ctor is constructed into it -- see the note above.
-// ============================================================================
-// The three getters return `System::String` BY VALUE, so retail's ABI puts the
-// hidden return slot in RDX and the door's `ret` IS that slot. The member's
-// by-value return fills it through the same ABI, so the door constructs the
-// member's result into it -- one AddRef and one release, exactly as before.
-extern "C" String* RtIo_PackageFile_GetName(const PackageFileView* self, String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetName());
-    return ret;
-}
-
-extern "C" String* RtIo_PackageFile_GetAuthor(const PackageFileView* self, String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetAuthor());
-    return ret;
-}
-
-extern "C" String* RtIo_PackageFile_GetDescription(const PackageFileView* self, String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetDescription());
-    return ret;
-}
+// minted ??_7PackageFile row, their only reader. B3R RT-IO: the ?TypeId@ door
+// and the three String-getter doors (GetName / GetAuthor / GetDescription)
+// went with their last registrations; the members stand.
 
 // ============================================================================
 // The scalar field reads. Each is one MOV; the offset IS the function.
@@ -418,13 +374,11 @@ RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, GetIconHeight, int32_t)   
 // 0x1800254f0 is `MOVZX EAX,byte ptr [RCX+0xac]` — a ZERO extension of the
 // byte, not a sign extension and not a dword read. The field is the same one
 // LoadPackages' index pass tests, so a wrong width here would change package
-// precedence, not just a returned bool.
-extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
-    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::CanOverride();
-}
+// precedence, not just a returned bool. (`IO::PackageFile::CanOverride`, below.)
 
 // ============================================================================
-// The two index-taking entry accessors.
+// The two index-taking entry accessors (`IO::PackageFile::GetFileSize` /
+// `GetFileOffset`, below).
 // ============================================================================
 //   1800254a0  MOV RAX,qword ptr [RCX+0xb0]
 //   1800254a7  MOVSXD R8,EDX          <- SIGN extension of the int index
@@ -437,21 +391,6 @@ extern "C" bool RtIo_PackageFile_CanOverride(const PackageFileView* self) {
 // written as int64 here because that is what the instruction says. There is no
 // bounds check in either body, and none is added — the caller bounds it with
 // GetFileCount, and a guard here would skip work rather than restore it.
-extern "C" uint32_t RtIo_PackageFile_GetFileSize(const PackageFileView* self, int index) {
-    const uint32_t ours =
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileSize(index);
-    // the raw DLL door, not bare the raw DLL door: the sweep probe calls this once
-    // per FILE in every package — tens of thousands of times — and the raw DLL door
-    // is GetProcAddress under the loader lock on every call
-    // (reference_rtoriginal_is_getprocaddress.md). Both reach the shipped body;
-    // only one of them does it without a syscall per entry.
-    return ours;
-}
-
-extern "C" uint32_t RtIo_PackageFile_GetFileOffset(const PackageFileView* self, int index) {
-    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileOffset(index);
-}
-
 
 }  // namespace RtIO
 

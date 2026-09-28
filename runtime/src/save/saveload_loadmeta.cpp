@@ -419,31 +419,3 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     cmsObj->IO::CompressedMemoryStream::~CompressedMemoryStream();   // flags 0: no free of the stack object
 
 }
-
-// ============================================================================
-// Registration — BOTH doors.
-// ----------------------------------------------------------------------------
-// The mangled name is a SINGLE STRING LITERAL on ONE line: tools/runtime_census.py
-// matches `RegisterRuntimeExport("<literal>"` and can see through neither a
-// named constant nor a line break, and both blind spots have already produced a
-// silent under-count of live ports in this project.
-//
-// The paired RegisterRuntimeAddr is not decoration. A name path that is later
-// mistyped or removed sends the call straight back to the DLL with no
-// diagnostic whatsoever — this project's single most repeated failure mode — and
-// a second door costs one line. It does NOT get its own `++n`: `n` counts ported
-// FUNCTIONS, and this is a second door onto one function.
-// ============================================================================
-// The registered door: retail's references arrive as the pointers the
-// `LoadMetaDataFn`-shaped callers pass; `description` is the String's single
-// field (`const char**`), bridged to the class it overlays.
-extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
-                                             const char** description,
-                                             void**       pixels,
-                                             int*         width,
-                                             int*         height,
-                                             int*         version,
-                                             ModArray*    mods) {
-    self->Save::SaveLoad::LoadMetaData(*reinterpret_cast<System::String*>(description),   // B.3.7 bridge
-                                       pixels, *width, *height, *version, *mods);
-}

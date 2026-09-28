@@ -449,11 +449,7 @@ void RtSave_SaveLoad_Dtor(SaveLoad* self) {
 //
 // Oracle: FULL DIFF — a single load, no side effects.
 // ============================================================================
-// ENDGAME B.3.7 B2: the body is the inline member (SaveLoad.h); the
-// registered door delegates.
-Operation RtSave_SaveLoad_GetOperation(const SaveLoad* self) {
-    return self->Save::SaveLoad::GetOperation();
-}
+// ENDGAME B.3.7 B2: the body is the inline member (SaveLoad.h).
 
 // ============================================================================
 // Save::SaveLoad::GetSaveCount() const  retail 0x1800c3b80   ordinal 2885
@@ -462,9 +458,6 @@ Operation RtSave_SaveLoad_GetOperation(const SaveLoad* self) {
 // `return *(int*)(this + 0x58)` — the _size half of the Array<SaveInfo> at
 // +0x50. Oracle: FULL DIFF.
 // ============================================================================
-int RtSave_SaveLoad_GetSaveCount(const SaveLoad* self) {
-    return self->Save::SaveLoad::GetSaveCount();
-}
 
 // ============================================================================
 // Save::SaveLoad::GetSaveInfo(int) const  retail 0x1800c3b60  ordinal 2889
@@ -479,9 +472,6 @@ int RtSave_SaveLoad_GetSaveCount(const SaveLoad* self) {
 //
 // Oracle: FULL DIFF on the returned pointer.
 // ============================================================================
-const SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
-    return &self->Save::SaveLoad::GetSaveInfo(index);
-}
 
 // ============================================================================
 // Save::SaveLoad::GetAutoSaveName() const  retail 0x1800c1440   ordinal 2457
@@ -519,13 +509,6 @@ System::String Save::SaveLoad::GetAutoSaveName() const {
     System::String result;
     result.Set("Auto");
     return result;
-}
-
-// The registered door keeps retail's `(this, ret)` shape (B5-12): the member's
-// prvalue is placement-constructed straight into the caller's slot.
-String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
-    new (RtSystem::Sys(ret)) System::String(self->Save::SaveLoad::GetAutoSaveName());
-    return ret;
 }
 
 // Save::SaveLoad::GenerateSaveName() const  retail 0x1800c1250  ordinal 2401
@@ -607,14 +590,6 @@ System::String Save::SaveLoad::GenerateSaveName() const {
     return result;
 }
 
-// The registered door keeps retail's `(this, ret)` shape (B5-12). Placement-
-// constructing into `ret` does not read what was there — retail's
-// unconditional zero, not a release.
-const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char** ret) {
-    new (ret) System::String(self->Save::SaveLoad::GenerateSaveName());
-    return ret;
-}
-
 // ============================================================================
 // Save::SaveLoad::GetSaveState()        retail 0x1800c3b50   ordinal 2891
 // ?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ
@@ -624,9 +599,6 @@ const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char**
 // this returns whatever the allocator left there. Faithful.
 // Oracle: FULL DIFF.
 // ============================================================================
-SavedState* RtSave_SaveLoad_GetSaveState(SaveLoad* self) {
-    return self->Save::SaveLoad::GetSaveState();
-}
 
 // ============================================================================
 // Save::SaveLoad::SetOperation(Operation, int)  retail 0x1800c3c50  ordinal 3934
@@ -645,10 +617,6 @@ void Save::SaveLoad::SetOperation(Operation op, int index) {
     _elapsed           = zero;
 }
 
-void RtSave_SaveLoad_SetOperation(SaveLoad* self, Operation op, int index) {
-    self->Save::SaveLoad::SetOperation(op, index);
-}
-
 // ============================================================================
 // Save::SaveLoad::SetMinOperationTime(const Time&)  retail 0x1800c3c40  ord 3920
 // ?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
@@ -658,10 +626,6 @@ void RtSave_SaveLoad_SetOperation(SaveLoad* self, Operation op, int index) {
 // ============================================================================
 void Save::SaveLoad::SetMinOperationTime(const System::Time& time) {
     _minOperationTime = time._ticks;
-}
-
-void RtSave_SaveLoad_SetMinOperationTime(SaveLoad* self, const int64_t* time) {
-    self->Save::SaveLoad::SetMinOperationTime(*reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -682,9 +646,6 @@ void RtSave_SaveLoad_SetMinOperationTime(SaveLoad* self, const int64_t* time) {
 //
 // Oracle: SCRATCH-COPY DIFF.
 // ============================================================================
-void RtSave_SaveLoad_SetSaveSprite(SaveLoad* self, const RtSave::Sprite* sprite) {
-    self->Save::SaveLoad::SetSaveSprite(sprite);   // the Sprite's hidden pointer, as is
-}
 
 // ============================================================================
 // Save::SaveLoad::SetSaveName(const String&, int)  retail 0x1800c3bb0  ord 3953
@@ -723,10 +684,6 @@ void Save::SaveLoad::SetSaveName(const System::String& name, int mode) {
             *reinterpret_cast<int*>(name._data - 4) += 1;
     }
     _saveNameMode = mode;
-}
-
-void RtSave_SaveLoad_SetSaveName(SaveLoad* self, const String* name, int mode) {
-    self->Save::SaveLoad::SetSaveName(*RtSystem::Sys(name), mode);
 }
 
 // ============================================================================
@@ -840,10 +797,6 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     return ours;
 }
 
-int RtSave_SaveLoad_CheckMod(const SaveLoad* self, int saveIndex, int modIndex) {
-    return self->Save::SaveLoad::CheckMod(saveIndex, modIndex);
-}
-
 // ============================================================================
 // Save::SaveLoad::Update(const Time&)   retail 0x1800c2e40   ordinal 4501
 // ?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
@@ -893,10 +846,6 @@ void Save::SaveLoad::Update(const System::Time& delta) {
     case kOpDelete:       UpdateDelete();       break;
     default:              break;
     }
-}
-
-void RtSave_SaveLoad_Update(SaveLoad* self, const int64_t* delta) {
-    self->Save::SaveLoad::Update(*reinterpret_cast<const System::Time*>(delta));   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -977,10 +926,6 @@ void Save::SavedState::Store(IO::MemoryStream& stream) {
     std::memcpy(_data, src, _size);
 }
 
-void RtSave_SavedState_Store(SavedState* self, MemoryStream* stream) {
-    self->Save::SavedState::Store(*reinterpret_cast<IO::MemoryStream*>(stream));   // B.3.7 bridge
-}
-
 // ============================================================================
 // Save::SavedState::Retrieve(IO::MemoryStream&)  retail 0x1800c0e50  ord 3586
 // ?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z
@@ -1004,10 +949,6 @@ void Save::SavedState::Retrieve(IO::MemoryStream& stream) {
     // ENDGAME B.3.9 IO (W2, foreign site): ?Open@MemoryStream is the member.
     stream.Open(static_cast<int>(_size));
     std::memcpy(stream._data, _data, _size);
-}
-
-void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
-    self->Save::SavedState::Retrieve(*reinterpret_cast<IO::MemoryStream*>(stream));   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -1104,10 +1045,6 @@ Save::SaveLoad* Save::SaveLoad::Get() {
     // saveload_internal.h use.
     SaveLoad** slot = SaveLoadSingletonSlot();
     return slot ? *slot : nullptr;
-}
-
-SaveLoad* RtSave_SaveLoad_Get() {
-    return Save::SaveLoad::Get();
 }
 
 int RtSaveLoadRegister() {

@@ -99,15 +99,8 @@ const char kRtPersistSaveFilenameFormat[] = "%sSave\\%s.sav";
 // The whole body is four instructions:
 //   testb $1,0x18(rcx) ; je L ; xor eax,eax ; ret ; L: mov 0x88(rcx),eax ; ret
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 6: the six bodies in this file move onto the
-// real `IO::Persistence`, at the bottom of this file. Each door keeps its name,
-// its signature and both registration lines, and delegates. No qualified `IO::`
-// call is needed: `IO::Persistence` has no vtable of its own -- the vptr at
-// +0x10 is the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-int RtIo_Persistence_GetSaveCount(const void* self) {
-    return reinterpret_cast<const IO::Persistence*>(self)->GetSaveCount();
-}
+// ENDGAME B.3.4 PACKAGE+FS commit 6: the bodies in this file are members of the
+// real `IO::Persistence`, at the bottom of this file.
 
 // ============================================================================
 // SaveGameInfo IO::Persistence::GetSaveInfo(int index) const retail 0x1800b7bd0
@@ -123,10 +116,6 @@ int RtIo_Persistence_GetSaveCount(const void* self) {
 // unconditionally on the non-refused branch. Do not add one — this project's
 // rule is that an unguarded deref is load-bearing (CLAUDE.md).
 // ============================================================================
-void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
-    return reinterpret_cast<const IO::Persistence*>(self)->GetSaveInfo(
-        static_cast<SaveGameInfo*>(retval), index);
-}
 
 // ============================================================================
 // System::Filename IO::Persistence::GetSaveFilename(const String&) const
@@ -135,34 +124,15 @@ void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
 // (reference_aeaa_means_private_not_unexported.md). Also returns BY VALUE:
 // (this=RCX, hiddenSlot=RDX, const String& name=R8).
 // ============================================================================
-// The return is BY VALUE, so `retval` IS retail's hidden return slot; the
-// member's by-value result is CONSTRUCTED into it -- still exactly the one
-// `Filename(const String&)` (0x18000c780) the body always ran.
-void* RtIo_Persistence_GetSaveFilename(const void* self, void* retval, const void* nameRef) {
-    new (static_cast<System::Filename*>(retval)) System::Filename(
-        reinterpret_cast<const IO::Persistence*>(self)->GetSaveFilename(
-            *static_cast<const String*>(nameRef)));
-    return retval;
-}
 
 // ============================================================================
 // bool IO::Persistence::BeginDelete(const String& name)      retail 0x1800b7ab0
 // ============================================================================
-bool RtIo_Persistence_BeginDelete(void* self, const void* nameRef) {
-    return reinterpret_cast<IO::Persistence*>(self)->BeginDelete(
-        *static_cast<const String*>(nameRef));
-}
 
 // ============================================================================
 // bool IO::Persistence::BeginLoad(const String& name, int blockCount,
 //                                 const SaveBlock* blocks)   retail 0x1800b7970
 // ============================================================================
-bool RtIo_Persistence_BeginLoad(void* self, const void* nameRef,
-                                int blockCount, const void* blocks) {
-    return reinterpret_cast<IO::Persistence*>(self)->BeginLoad(
-        *static_cast<const String*>(nameRef), blockCount,
-        static_cast<const SaveBlock*>(blocks));
-}
 
 // ============================================================================
 // IO::Persistence::~Persistence()                            retail 0x1800b7fb0

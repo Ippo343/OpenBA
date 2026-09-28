@@ -451,17 +451,11 @@ bool TextEqual(const char* a, const char* b) {
 // ============================================================================
 // ENDGAME B.3.4 PACKAGE+FS commit 3: the body is now
 // `IO::PackageFile::ReadPackfile(const System::Filename&)`, at the bottom of
-// this file. The door keeps its name and both registrations and delegates.
-// Non-virtual (`QEAA`), so the qualification is for the reader, not dispatch.
+// this file. Non-virtual (`QEAA`).
 //
 // THIS IS ON THE PATH B34_BRIEFS section D BINDS. The move changed nothing but
 // field spellings: no lock, retry, loop bound, null check or reorder was added,
 // and nothing was removed.
-extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
-                                              const Filename* name) {
-    return reinterpret_cast<IO::PackageFile*>(self)
-               ->IO::PackageFile::ReadPackfile(*name);
-}
 
 }  // namespace RtIO
 

@@ -211,13 +211,3 @@ void Save::SavedState::Discard() {
     _size = 0;
     _data = nullptr;
 }
-
-// ============================================================================
-// The registered entry point.
-//
-// `this` in RCX, the hidden 0x10-byte return slot in RDX, the slot back in RAX
-// (B5-12: the door keeps retail's order and placement-news the prvalue).
-// ============================================================================
-SaveBlock* RtSave_SavedState_SetupLoad(SavedState* self, SaveBlock* ret) {
-    return new (ret) SaveBlock(self->Save::SavedState::SetupLoad());
-}

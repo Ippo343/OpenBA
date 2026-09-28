@@ -52,11 +52,9 @@ extern "C" {
 // EMITS 12 BYTES of stream (see runtime/types/io/Serializer.h) — it is not a
 // cheap wrapper construction.
 rt::io::Serializer* RtSerializer_Ctor(rt::io::Serializer* self, rt::io::Stream* stream, int version);
-void                RtSerializer_Dtor(rt::io::Serializer* self);
 
 // ---- accessors -------------------------------------------------------------
 int                     RtSerializer_GetVersion (rt::io::Serializer* self);
-const rt::io::Encoding* RtSerializer_GetEncoding(rt::io::Serializer* self);
 
 // ---- scalar forwarders (this, T&, name) ------------------------------------
 void RtSerializer_Serialize_Bool  (rt::io::Serializer* self, bool*     v, const char* name);
@@ -81,9 +79,6 @@ void RtSerializer_Serialize_UShortArr(rt::io::Serializer* self, int n, uint16_t*
 void RtSerializer_Serialize_IntArr   (rt::io::Serializer* self, int n, int32_t*  d, const char* name);
 void RtSerializer_Serialize_UIntArr  (rt::io::Serializer* self, int n, uint32_t* d, const char* name);
 void RtSerializer_Serialize_FloatArr (rt::io::Serializer* self, int n, float*    d, const char* name);
-
-// ---- raw -------------------------------------------------------------------
-void RtSerializer_SerializeBytes(rt::io::Serializer* self, int size, void* ptr, const char* name);
 
 } // extern "C"
 

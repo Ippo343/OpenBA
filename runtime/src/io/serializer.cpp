@@ -203,13 +203,6 @@ RT_SER_ARRAY(RtSerializer_Serialize_IntArr, int32_t)   // IO::Serializer::Serial
 RT_SER_ARRAY(RtSerializer_Serialize_UIntArr, uint32_t)   // IO::Serializer::Serialize(n,uint*)
 RT_SER_ARRAY(RtSerializer_Serialize_FloatArr, float)   // IO::Serializer::Serialize(n,float*)
 
-// ---- SerializeBytes --------------------------------------------------------
-// Its own retail name, not an overload: the payload is `void*`, which would
-// otherwise swallow every pointer argument.
-void RtSerializer_SerializeBytes(Serializer* self, int size, void* ptr, const char* name) {
-    Ser(self)->SerializeBytes(size, ptr, name);
-}
-
 // ============================================================================
 // GetVersion — FULL ORACLE
 // ============================================================================
@@ -231,11 +224,7 @@ int RtSerializer_GetVersion(Serializer* self) {
 // no dispatch, no side effect. It returns the Stream's IO::Encoding (the
 // policy object), NOT the Serializer's ReaderWriter. Diffing it is free.
 // The member returns a REFERENCE, because retail's mangling does
-// (`AEBVEncoding@2@`); the door keeps the pointer its callers already take. The
-// round trip emits no code.
-const Encoding* RtSerializer_GetEncoding(Serializer* self) {
-    return reinterpret_cast<const Encoding*>(&Ser(self)->GetEncoding());
-}
+// (`AEBVEncoding@2@`).
 
 // ============================================================================
 // GetDirection — FULL ORACLE       ENDGAME B.3.4 callers batch H
@@ -254,13 +243,6 @@ const Encoding* RtSerializer_GetEncoding(Serializer* self) {
 // Application-x64.exe 0x1400da960 and 0x1400ed3c5, both `MOV RAX,[RSP+ser];
 // CMP dword ptr [RAX + 0x8],0x0`), which is why they never showed up as calls.
 // The banner's line 91 is corrected in place above.
-//
-// The door returns `int32_t`, not the enum, because that is what every caller
-// that could reach this door already takes; the enum is the C++ spelling and
-// the ABI is EAX either way.
-int32_t RtSerializer_GetDirection(Serializer* self) {
-    return static_cast<int32_t>(Ser(self)->GetDirection());
-}
 
 // ============================================================================
 // ctor — SHADOW ORACLE (the original is NOT run; it would move the cursor)
@@ -331,13 +313,10 @@ Serializer* RtSerializer_Ctor(Serializer* self, Stream* stream, int version) {
 // Flag 1 means "also free the memory", so this DELETES the ReaderWriter, and
 // BinaryReader::~BinaryReader (0x1800a82f0) reads a further 4 bytes from the
 // stream on its way out. Running the original as an oracle would double-free
-// and double-read. Nothing here can be checked; the site exists so the run
-// reports an honest calls= count.
+// and double-read. The body is `IO::Serializer::~Serializer`
+// (serializer_class.cpp); B3R RT-IO deleted the door, which had no reader left.
 //
 // Note retail does NOT null self->readerWriter afterwards. Kept.
-void RtSerializer_Dtor(Serializer* self) {
-    Ser(self)->~Serializer();
-}
 
 } // extern "C"
 

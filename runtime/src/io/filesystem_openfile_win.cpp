@@ -315,10 +315,6 @@ extern "C" FileInfo* RtIo_PackageFile_GetFileInfo(const PackageFileView* self,
 // removed or reordered, and in particular NO lock, NO retry, NO positioned read
 // and NO null check was introduced on the open/read path. The two-loader race
 // LOADER_READ_SPIN.md describes has its own pending fix and it is not this one.
-extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
-                                                 const Filename* name) {
-    return reinterpret_cast<IO::FileSystem*>(self)->PlatformOpenFile(*fi, *name);
-}
 
 extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
                                          int32_t n, void* dst) {

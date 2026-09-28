@@ -272,18 +272,9 @@ namespace RtIo {
 // ENDGAME B.3.4 callers batch H. The WHOLE shipped body is
 // `MOV EAX,dword ptr [RCX + 0x8]; RET` — NON-virtual (there is no slot for it
 // in Stream's 7-slot table), const, and it reads `_direction` with no null
-// test, which the door reproduces. The member itself is stated inline on
-// `IO::Stream` (runtime/types/io/Stream.h); this is only its registered entry
-// point, put here beside `RtIo_Stream_GetSource` because this file is where
-// `IO::Stream`'s doors live.
-//
-// The door returns `int32_t` rather than the enum for the same reason
-// `RtSerializer_GetDirection` does: a by-address caller takes the raw dword,
-// and the ABI is EAX either way.
-extern "C" int32_t RtIo_Stream_GetDirection(const void* self) {
-    return static_cast<int32_t>(
-        reinterpret_cast<const IO::Stream*>(self)->GetDirection());
-}
+// test. The member is stated inline on `IO::Stream`
+// (runtime/types/io/Stream.h); B3R RT-IO deleted its registered door, which
+// had no reader left.
 
 // ===========================================================================
 // IO::VisitorStream — the null sink. Header §4.

@@ -243,25 +243,8 @@ bool SameText(const char* a, const char* b) {
 // GetModuleFileNameW on our own process is not a condition this port should
 // be inventing behaviour for.
 //
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
-// `IO::FileSystem::GetRootDirectory()`, at the bottom of this file. The door
-// keeps its name, its (self, hidden-return-slot) signature and both
-// registration lines, and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all, so B34_BRIEFS section A.1's re-entry
-// hazard cannot arise. `ret` IS retail's hidden return slot, so the member's
-// by-value result is CONSTRUCTED into it — one AddRef, exactly as before.
-Filename* RtIo_FileSystem_GetRootDirectory(FileSystem* self, Filename* ret) {
-    new (ret) System::Filename(
-        reinterpret_cast<IO::FileSystem*>(self)->GetRootDirectory());
-    return ret;
-}
-
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
-// `IO::FileSystem::SetupDirectories()`, at the bottom of this file. Same door
-// rules as above.
-void RtIo_FileSystem_SetupDirectories(FileSystem* self) {
-    reinterpret_cast<IO::FileSystem*>(self)->SetupDirectories();
-}
+// The body is the member `IO::FileSystem::GetRootDirectory()`, at the bottom of
+// this file, as is `IO::FileSystem::SetupDirectories()`.
 
 }  // namespace RtIO
 

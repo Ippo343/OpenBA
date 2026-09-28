@@ -511,10 +511,6 @@ bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) 
     return reinterpret_cast<const IO::FileSystem*>(fsVoid)->ExistsInPackfile(*path);
 }
 
-bool RtIo_FileSystem_PlatformExists(const void* fsVoid, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->PlatformExists(*path);
-}
-
 }  // namespace RtIO
 
 // ============================================================================
@@ -718,12 +714,6 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
     }
 
     // --- 0x1800adc13: ~dirAlias --------------------------------------------
-}
-
-void RtIo_FileSystem_FindFiles(const void* fs, const String* dir, const String* pattern,
-                               bool recursive, FilenameArray* out) {
-    reinterpret_cast<const IO::FileSystem*>(fs)->FindFiles(*dir, *pattern,
-                                                           recursive, out);
 }
 
 }  // namespace RtIO

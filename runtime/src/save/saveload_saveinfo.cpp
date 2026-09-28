@@ -151,11 +151,6 @@ int Save::SaveLoad::SaveInfo::Compare(const void* a, const void* b) {
     return SaveInfoCompareImpl(a, b);
 }
 
-// The registered address door (0x1800c3db0).
-extern "C" int RtSave_SaveInfo_Compare(const void* a, const void* b) {
-    return Save::SaveLoad::SaveInfo::Compare(a, b);
-}
-
 // ============================================================================
 // 0x1800c3de0 — SaveInfo::SetThumbnail(row, pixels, w, h)
 // ----------------------------------------------------------------------------
@@ -249,11 +244,6 @@ void Save::SaveLoad::SaveInfo::SetThumbnail(void* pixels, int32_t w, int32_t h) 
 
     // The Create arguments are verified by TRANSCRIPTION against the
     // immediates in the listing.
-}
-
-// The registered address door (0x1800c3de0): `(row, pixels, w, h)`.
-extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w, int h) {
-    row->Save::SaveLoad::SaveInfo::SetThumbnail(pixels, w, h);
 }
 
 // ============================================================================

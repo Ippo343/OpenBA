@@ -2001,38 +2001,3 @@ void Save::SaveLoad::OnVideoError() {
         *reinterpret_cast<void**>(img + 0x60) = nullptr;
     }
 }
-
-// ============================================================================
-// The registered entry points — one-line QUALIFIED delegations.
-// ============================================================================
-
-void RtSave_SaveLoad_UpdateDelete(SaveLoad* self) {
-    self->Save::SaveLoad::UpdateDelete();
-}
-
-void RtSave_SaveLoad_OnVideoRestart(SaveLoad* self) {
-    self->Save::SaveLoad::OnVideoRestart();
-}
-
-
-void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
-    self->Save::SaveLoad::UpdateLoadFromFile();
-}
-
-// UpdateLoad watches TWO objects, which none of its siblings do: the SaveLoad
-// itself and the IO::Modification HEADER. The header, not the mods array — the
-// array is heap memory whose extent changes with the mod count, and the body
-// declares it out of model the moment it can no longer predict it (see the
-// banner). Watching 0x18 covers _dirty (+0x00), _mods (+0x08) and _count
-// (+0x10): the flag this body writes, plus the two fields it must NOT.
-void RtSave_SaveLoad_UpdateLoad(SaveLoad* self) {
-    self->Save::SaveLoad::UpdateLoad();
-}
-
-void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
-    self->Save::SaveLoad::UpdateSave();
-}
-
-void RtSave_SaveLoad_UpdateList(SaveLoad* self) {
-    self->Save::SaveLoad::UpdateList();
-}

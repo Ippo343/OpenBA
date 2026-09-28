@@ -138,15 +138,6 @@ void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, 
     reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
 }
 
-// The return is BY VALUE, so `retval` IS retail's hidden return slot; the
-// member's by-value result is CONSTRUCTED into it -- one AddRef, exactly as the
-// String copy ctor at 0x180006cb0 does.
-void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
-    new (static_cast<System::String*>(retval)) System::String(
-        reinterpret_cast<const IO::Persistence*>(self)->GetSavePath());
-    return retval;
-}
-
 // ============================================================================
 // `IO::Persistence`'s member bodies for this file
 // ============================================================================

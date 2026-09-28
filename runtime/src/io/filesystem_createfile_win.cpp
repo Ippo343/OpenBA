@@ -285,17 +285,10 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
 // unexported literal, and a transcription of it is a guess no static check
 // could catch. The bytes are quoted so a reader can see the door was verified.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
-// `IO::FileSystem::PlatformCreateFile`, at the bottom of this file. Same door
-// rules as CreatePath above; this one is `AEAA` (private) in retail and keeps
-// its own registration pair, which is why the member is public
-// (runtime/types/io/FileSystem.h says so at the declaration).
-bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
-                                        const Filename* path) {
-    return reinterpret_cast<IO::FileSystem*>(self)->PlatformCreateFile(*info, *path);
-}
+// The body is the member `IO::FileSystem::PlatformCreateFile`, at the bottom of
+// this file (`AEAA`, private, in retail).
 
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the remaining four doors of this file,
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the remaining doors of this file,
 // gathered here so every one of them is a single delegating line and the
 // retail bodies are all in the one `namespace IO` block below. Each keeps its
 // name, its signature — `CreateFileW` keeps the (self, hidden-return-slot,
@@ -305,10 +298,6 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
 FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
                                       const Filename* path) {
     return reinterpret_cast<IO::FileSystem*>(self)->CreateFileW(ret, *path);
-}
-
-void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
-    reinterpret_cast<IO::FileSystem*>(self)->PlatformCloseFile(*info);
 }
 
 void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {

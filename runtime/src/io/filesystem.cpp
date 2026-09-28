@@ -96,14 +96,7 @@ static int StriCmpAscii(const char* a, const char* b) {
 // DIFF: full oracle. Read-only on both sides (PlatformExists stats a file,
 // no mutation).
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
-// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
-// both registrations and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->Exists(*path);
-}
+// The body is the member `IO::FileSystem::Exists`, at the bottom of this file.
 
 // ============================================================================
 // ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ  retail 0x180007bd0
@@ -153,16 +146,8 @@ Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
 //
 // DIFF: full oracle, same reasoning as GetDataDirectory.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
-// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
-// both registrations and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) {
-    new (ret) System::Filename(
-        reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetSourceDirectory());
-    return ret;
-}
+// The body is the member `IO::FileSystem::GetSourceDirectory`, at the bottom of
+// this file.
 
 // ============================================================================
 // ?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z    retail 0x1800ab050
@@ -185,14 +170,8 @@ Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) 
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
-// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
-// both registrations and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetPackfileId(*path);
-}
+// The body is the member `IO::FileSystem::GetPackfileId`, at the bottom of this
+// file.
 
 // ============================================================================
 // ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z   retail 0x1800aea10
@@ -206,14 +185,8 @@ uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path)
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 2: the body is now
-// `IO::Modification::Find(const RtSystem::Filename&)`, below. The door keeps
-// its name and both registrations and delegates. No qualified `IO::` call is
-// needed: `IO::Modification` has no vtable (Modification.h's banner), so
-// B34_BRIEFS §A.1's re-entry hazard cannot arise.
-int RtIo_Modification_Find(const void* modVoid, const Filename* path) {
-    return reinterpret_cast<const IO::Modification*>(modVoid)->Find(*path);
-}
+// The body is the member `IO::Modification::Find(const RtSystem::Filename&)`,
+// below.
 
 }  // namespace RtIO
 

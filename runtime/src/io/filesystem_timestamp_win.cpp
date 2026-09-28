@@ -101,23 +101,9 @@ using RtSystem::RtString_ReleaseInline;
 //
 //   (this, hidden return slot, path) — see the banner.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
-// `IO::FileSystem::GetFileTimeStamp`, below. The door keeps its name, its
-// (self, hidden return slot, path) signature and both registration lines, and
-// delegates. No qualified `IO::` call is needed: `IO::FileSystem` has no vtable
-// at all (runtime/types/io/FileSystem.h), so B34_BRIEFS section A.1's re-entry
-// hazard cannot arise.
-//
-// THE HIDDEN RETURN SLOT STAYS ON THE DOOR. The member returns the qword by
-// value (`System::DateTime` does not exist in this tree — FileSystem.h's
-// declaration comment says why one is not invented), and the door writes it
-// into RDX's slot and returns the slot in RAX, exactly as 0x1800ae334 does.
-uint64_t* RtIo_FileSystem_GetFileTimeStamp(const void* self,
-                                           uint64_t* ret,
-                                           const Filename* path) {
-    *ret = reinterpret_cast<const IO::FileSystem*>(self)->GetFileTimeStamp(*path);
-    return ret;
-}
+// The body is the member `IO::FileSystem::GetFileTimeStamp`, below. It returns
+// the qword by value (`System::DateTime` does not exist in this tree —
+// FileSystem.h's declaration comment says why one is not invented).
 
 }  // namespace RtIO
 

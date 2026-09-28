@@ -479,18 +479,9 @@ PackfileIndexNode* IndexFind(PackfileIndexNode* node, const char* key) {
 // What actually pins the field is the disassembly: `LEA RDX,[RCX+0x10]` at
 // 0x180007c2e. The oracle is a regression net, not the evidence.
 // ENDGAME B.3.4 PACKAGE+FS commit 5b: the three IO::FileSystem bodies in this
-// file move onto the class VERBATIM; the doors keep their names, their
-// `extern "C"` linkage, their signatures and every registration line, and
-// delegate in one line each. No qualified `IO::` call is needed: IO::FileSystem
-// has no vtable at all. This file is bound by B34_BRIEFS section D — nothing
-// added, removed or reordered on the package mount/unmount path.
-extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Filename* ret) {
-    // `ret` IS retail's hidden return slot, so the member's by-value result is
-    // CONSTRUCTED into it — one AddRef, exactly as the copy ctor at 0x1800067d0.
-    new (ret) System::Filename(
-        reinterpret_cast<const IO::FileSystem*>(self)->GetPackDirectory());
-    return ret;
-}
+// file are members of the class (GetPackDirectory, LoadPackages, ClosePackages).
+// This file is bound by B34_BRIEFS section D — nothing added, removed or
+// reordered on the package mount/unmount path.
 
 // ============================================================================
 // ?GetFileName@PackageFile@IO@@QEBA?AVFilename@System@@H@Z    retail 0x180025450
@@ -510,21 +501,12 @@ extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Fi
 //
 // ORACLE: full replay onto a scratch Filename, same reasoning as
 // GetPackDirectory. Pure; reads `this` and writes only the return slot.
-// ENDGAME B.3.4a closing: the body is now `IO::PackageFile::GetFileName(int)`,
-// defined in this file's `namespace IO` block below. The door keeps its name,
-// its `extern "C"` linkage, its signature and its registration, and delegates.
-// The qualified `IO::PackageFile::` is written for the reason the eight virtual
-// doors in package_file.cpp spell it: PackageFile IS polymorphic.
+// ENDGAME B.3.4a closing: the body is `IO::PackageFile::GetFileName(int)`,
+// defined in this file's `namespace IO` block below.
 //
 // Section D applies: nothing added, removed or reordered, and in particular no
 // bounds check -- retail has none and the caller (LOOP 3 below) bounds the index
 // with entryCount itself, so the unguarded read is load-bearing and stays.
-extern "C" Filename* RtIo_PackageFile_GetFileName(const PackageFileView* self,
-                                                  Filename* ret, int index) {
-    new (ret) System::Filename(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileName(index));
-    return ret;
-}
 
 // ============================================================================
 // ?ClosePackages@FileSystem@IO@@QEAAXXZ                      retail 0x1800abab0
@@ -601,10 +583,6 @@ static_assert(offsetof(PackfileIndexSet::Node, height) == offsetof(PackfileIndex
 
 extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
     reinterpret_cast<IO::FileSystem*>(self)->ClosePackages();
-}
-
-extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
-    reinterpret_cast<IO::FileSystem*>(self)->LoadPackages();
 }
 
 }  // namespace RtIO

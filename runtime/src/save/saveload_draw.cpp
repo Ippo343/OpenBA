@@ -833,11 +833,3 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // `if (data) free; zero` — so `sc` is simply destroyed at the closing brace
     // below, through the Collection allocator door its arrays were grown with.
 }
-
-// ============================================================================
-// 5. The export.
-// ============================================================================
-void RtSave_SaveLoad_Draw(SaveLoad* self, Context* ctx, void* material) {
-    self->Save::SaveLoad::Draw(*ctx, Object::ExternalPtr<Graphics::Material>(
-                                         static_cast<Graphics::Material*>(material)));
-}

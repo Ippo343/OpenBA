@@ -367,10 +367,6 @@ static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const Filename* key,
     n->w22 = 0;
     return n;
 }
-void* RtColl_SetNodeNew_180010570(void* set, const void* key, void* parent) {
-    return SetNodeNew(set, static_cast<const Filename*>(key),
-                      static_cast<ModSetNode*>(parent));
-}
 
 // The Set<Filename> instantiation whose node walk this file needs. Only
 // `DestroySubtree` is used from it, and that member touches nothing but `Node`,
@@ -616,9 +612,6 @@ void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
 
 // ?GetCount@Modification@IO@@QEBAHXZ   retail 0x18000da90
 //     MOV EAX,[RCX+0x10] ; RET
-int RtIo_Modification_GetCount(const void* selfv) {
-    return reinterpret_cast<const IO::Modification*>(selfv)->GetCount();
-}
 
 // ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z   retail 0x18000da80
 //     MOVSXD RAX,EDX ; SHL RAX,7 ; ADD RAX,[RCX+8] ; RET
@@ -628,9 +621,6 @@ int RtIo_Modification_GetCount(const void* selfv) {
 // (reference_ghidra_c_output_vs_disassembly.md), which would silently turn
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing.
-const void* RtIo_Modification_GetMod(const void* selfv, int index) {
-    return &reinterpret_cast<const IO::Modification*>(selfv)->GetModification(index);
-}
 
 // ?Enable@Modification@IO@@QEAAXH_N@Z   retail 0x1800aeab0
 //
@@ -641,9 +631,6 @@ const void* RtIo_Modification_GetMod(const void* selfv, int index) {
 // unconditionally — Enable(i, x) marks the list dirty even when x is what the
 // mod already held. Nothing in our tree depends on that, but a "no-op returns
 // early" tidy-up would be a real behaviour change to IsDirty.
-void RtIo_Modification_Enable(void* selfv, int index, bool value) {
-    reinterpret_cast<IO::Modification*>(selfv)->Enable(index, value);
-}
 
 // ?Swap@Modification@IO@@QEAAXHH@Z   retail 0x1800aeb20
 //
@@ -658,9 +645,6 @@ void RtIo_Modification_Enable(void* selfv, int index, bool value) {
 // touched, so Swap(i, i) is a complete no-op. `b` is sign-extended (MOVSXD
 // RBX,R8D) before the shift and `a` separately (MOVSXD RDI,EDX); both strides
 // are `<< 7`.
-void RtIo_Modification_Swap(void* selfv, int a, int b) {
-    reinterpret_cast<IO::Modification*>(selfv)->Swap(a, b);
-}
 
 // ?SaveList@Modification@IO@@QEAAXXZ   retail 0x1800b05f0
 //
