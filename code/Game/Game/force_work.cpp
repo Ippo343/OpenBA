@@ -138,7 +138,7 @@ bool CitizenStackIdle(void* citizen) {
 
 int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
                   const char* tag, int* driveCount, int traceMax) {
-    if (!work || !driveFn || !fn_InternalBasePtr_Ctor) return INT_MIN;
+    if (!work || !driveFn) return INT_MIN;
     if (!CitizenStackIdle(citizen)) return INT_MIN;
 
     int64_t citizenIBP = 0;

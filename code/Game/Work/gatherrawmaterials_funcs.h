@@ -6,4 +6,3 @@
 #include "Work/GatherRawMaterials.h"
 #include <cstdint>
 
-bool GatherRawMaterials_ResolveFuncs();

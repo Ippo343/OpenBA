@@ -761,11 +761,10 @@ namespace rtgfxd {
 RtGraphics::Camera* RtGraphics_Camera_CopyCtor(RtGraphics::Camera* self,
                                                const RtGraphics::Camera* src);  // 0x180017a70
 }  // namespace rtgfxd
-// The constructor door `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
-// (retail 0x1800fe960; the member above is declared and left undefined).
-// ---- graphics/renderer.cpp
-extern "C" RtGraphics::Camera* RtGraphics_Camera_Ctor(RtGraphics::Camera* self,
-                                                     const ::Frustum* frustum,
-                                                     const Math::Transform3* cameraToWorld,
-                                                     bool swapZUpToYUp);  // 0x1800fe960
 // ==== end B3R RT-VG ====
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+// ---- graphics/renderer.cpp
+extern "C" RtGraphics::Camera* RtGraphics_Camera_Ctor(RtGraphics::Camera* self, const ::Frustum* frustum, const Math::Transform3* cameraToWorld, bool swapZUpToYUp);  // 0x1800fe960
+extern "C" RtGraphics::Renderer* RtGraphics_Renderer_Ctor(RtGraphics::Renderer* self);  // 0x180105180
+extern "C" void RtGraphics_Renderer_Dtor(RtGraphics::Renderer* self);  // 0x1800180a0
+// ==== end B3R G-Game ====

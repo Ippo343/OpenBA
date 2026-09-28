@@ -54,8 +54,10 @@
 // `Volume::Rectangle`'s class name in Volume.h's own static_asserts.
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "resolve.h"
+#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "utility/PerlinNoise.h"            // RtUtility_PerlinNoise_Ctor / _Generate
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -94,21 +96,9 @@ const float kPerlinOctaves = 4.0f;             // DAT_140172194
 const float k1_12          = f32(0x3daaaaab);  // DAT_1401720e0 = 1/12
 const float kKfCount       = 48.0f;            // DAT_1401721e4
 
-// ComponentEntity_CopyCtor (0x1400c3720) — clone an entity from a template desc.
-typedef void* (*fn_EntityCopyCtor_t)(void* mem, void* templateDesc);
-// EntityList register (0x1400c48a0) — RCX=entityList(gameWorld+0xe8), RDX=IBP*, R8D=typeId.
-typedef void  (*fn_EntityRegister_t)(void* entityList, void* ibp, int typeId);
-fn_EntityCopyCtor_t     s_fnEntityCopyCtor     = nullptr;
-fn_EntityRegister_t     s_fnEntityRegister     = nullptr;
-bool s_simResolved = false;
-void EnsureSimResolved() {
-    if (s_simResolved) return;
-    s_simResolved = true;
-    s_fnEntityCopyCtor = reinterpret_cast<fn_EntityCopyCtor_t>(
-        ResolveAddr(Module::Exe, 0x1400c3720));
-    s_fnEntityRegister = reinterpret_cast<fn_EntityRegister_t>(
-        ResolveAddr(Module::Exe, 0x1400c48a0));
-}
+// Called by name (Entity/componententity_funcs.h): ComponentEntity_CtorFromDescription
+// (0x1400c3720, clone an entity from a template desc) and EntityList_RegisterEntity_Impl
+// (0x1400c48a0, RCX=entityList(gameWorld+0xe8), RDX=IBP*, R8D=typeId).
 
 // Part 6 ambient-audio entity spawn: clone the envRes+0x20 template
 // (an AmbientEnvironment carrier entity — biome wind/nature beds) and register it
@@ -118,20 +108,19 @@ void SpawnAmbientEntity(uint8_t* w, uint8_t* gw) {
     if (!envRes) return;
     void* templateDesc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(envRes) + 0x20);
     if (!templateDesc) return;
-    if (!s_fnEntityCopyCtor || !s_fnEntityRegister || !fn_MemAlloc ||
-        !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor)
+    if (!System::MemoryAllocator::_singleton)
         return;
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     if (!mem) return;
-    void* entity = s_fnEntityCopyCtor(mem, templateDesc);
+    void* entity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), templateDesc);   // 0x1400c3720
 
     void* ibp = nullptr;                                 // Object::InternalBasePtr (8 bytes)
     new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     int typeId = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(templateDesc) + 0x20);
     void* entityList = reinterpret_cast<GameUpdateLoop*>(gw)->m_entityList;   // B.3.8 bridge
     if (entityList)
-        s_fnEntityRegister(entityList, &ibp, typeId);
+        EntityList_RegisterEntity_Impl(entityList, &ibp, typeId);   // 0x1400c48a0
 
 }
 
@@ -144,17 +133,17 @@ void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
     void* rng = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
     if (!climate || !rng) return;
     uint8_t* c = reinterpret_cast<uint8_t*>(climate);
-    EnsureSimResolved();
 
     int kf = (int)((sec / kDayLen) * kKfCount);
     if (kf > 47) kf = 0;
 
     if (kf == 0 || kf == 0x18) {
-        if (fn_PerlinNoise_Ctor) {
+        {
             uint32_t s1 = reinterpret_cast<System::Random*>(rng)->Rand(0xffffffffu);   // B.3.4b bridge
             uint32_t s2 = reinterpret_cast<System::Random*>(rng)->Rand(0xffffffffu);   // B.3.4b bridge
             uint8_t pn[0x10];
-            fn_PerlinNoise_Ctor(pn, kPerlinPersist, kPerlinOctaves, (int)s2, (int)s1);
+            RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(pn),
+                                       kPerlinPersist, kPerlinOctaves, (int)s2, (int)s1);
             std::memcpy(w + 0x34, pn, 0x10);
         }
         float accInt = 0.0f, accType = 0.0f;
@@ -220,8 +209,6 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     if (!timeObj) return;
     float sec = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
 
-    EnsureSimResolved();
-
     // Weather-effects enabled setting (game settings byte 0x16).
     uint8_t weatherSetting = (g_pGameSettingsPtr && *g_pGameSettingsPtr)
         ? reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[0x16] : 0;
@@ -282,8 +269,8 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
             if (mean == 0.0f) mean = 50.0f;   // temperatureBase default
         }
         float perlin = 0.0f;
-        if (fn_PerlinNoise_Generate)
-            perlin = fn_PerlinNoise_Generate(w + 0x34, sec / kPerlinDiv, 0.0f);
+        perlin = RtUtility_PerlinNoise_Generate(
+            reinterpret_cast<const RtUtility::PerlinNoise*>(w + 0x34), sec / kPerlinDiv, 0.0f);
         float phase = ((sec - kKfSpan) / kDayLen) * k360 * kDeg2Rad;   // radians
         float temp = sinf(phase) * variation + mean;
         *reinterpret_cast<float*>(w + 0x18) = perlin * noiseAmp + temp;

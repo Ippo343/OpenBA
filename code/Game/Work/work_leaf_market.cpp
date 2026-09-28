@@ -26,6 +26,7 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -46,10 +47,10 @@ void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node) {
     uintptr_t n = reinterpret_cast<uintptr_t>(node);
     WorkLeaf_MarketTreeCleanup_2af40(ctx, *reinterpret_cast<void**>(n + 0x20)); // left
     WorkLeaf_MarketTreeCleanup_2af40(ctx, *reinterpret_cast<void**>(n + 0x28)); // right
-    if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(n + 0x08)); // data buffer
+    System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(n + 0x08)); // data buffer
     *reinterpret_cast<void**>(n + 0x08) = nullptr;
     *reinterpret_cast<void**>(n + 0x10) = nullptr;
-    if (fn_MemFreeStatic) fn_MemFreeStatic(node); // node
+    System::MemoryAllocator::MemFree(node); // node
 }
 
 // ============================================================
@@ -68,5 +69,5 @@ void WorkLeaf_TradeTreeCleanup_14b00(void* ctx, void* node) {
     uintptr_t n = reinterpret_cast<uintptr_t>(node);
     WorkLeaf_TradeTreeCleanup_14b00(ctx, *reinterpret_cast<void**>(n + 0x20)); // left
     WorkLeaf_TradeTreeCleanup_14b00(ctx, *reinterpret_cast<void**>(n + 0x28)); // right
-    if (fn_MemFreeStatic) fn_MemFreeStatic(node); // node
+    System::MemoryAllocator::MemFree(node); // node
 }

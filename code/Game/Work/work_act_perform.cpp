@@ -19,158 +19,62 @@
 //
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "math/Math.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name
+#include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
+#include "Game/exe_constants.h"     // B3R: kRdata_*
+#include "system/Value.h"           // B3R: RtSystem_Time_Ctor
+#include "object/Internal.h"
+#include <cstring>
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include "Component/FireComponent.h"   // ENDGAME B.3.9 D5
 
 // ============================================================
-// Sub-callee / dispatch-slot resolution (self-contained, s_wap_* prefix)
+// Sub-callees, called by name (B3R)
 // ============================================================
-// Engine base helpers (InternalBasePtr ctor/checkptr/deleteptr) come from engine_funcs.h.
-// NOTE: these two functions reach their base helpers via the .rdata dispatch slots that
-// the disassembly actually uses (CheckPtr=0x140152ab0, InternalBasePtr_Ctor=0x140152a90,
-// DeletePtr=0x140151ab8) — different slots than some sibling ports — so resolve those
-// slots directly and deref once, with engine_funcs fallbacks.
-
-// --- exe code sub-callees (0x1400xxxxx → ResolveAddr returns fn ptr directly) ---
-
-// Entity_impl_29a0 (0x1400c29a0): compute heading float toward path target (XMM0).
-typedef float  (*WAP_fn_Entity29a0_t)(float* worldPos, void* innerIbp);
-// FUN_1400c5400 (TaskListCleanup) — cancel pending work actions on the list.
-typedef void   (*WAP_fn_TaskListCleanup_t)(void* list);
-// FUN_1400c54e0 (TaskListAppend) — append an action IBP to the task list.
-typedef void   (*WAP_fn_TaskListAppend_t)(void* list, void* actionIBP);
-// Entity_FindComponent_Family (0x1400012d0) — member-style: RCX=entity, RDX=retIBP, ret RAX.
-typedef void*  (*WAP_fn_FindComponentFamily_t)(uintptr_t entity, void* retIBP);
-// Entity_FindComponent_Storage (0x140006270) — member-style: RCX=entity, RDX=retIBP.
-typedef void*  (*WAP_fn_FindComponentStorage_t)(uintptr_t entity, void* retIBP);
-// StorageComponent_QueryCount (0x14012cf10) — RCX=storageComp -> int (EAX).
-typedef int    (*WAP_fn_StorageQueryCount_t)(void* storageComp);
-
-// Action constructor / copy-constructor sub-callees. All return the constructed
-// object pointer in RAX (or null), passed straight to InternalBasePtr_Ctor.
-//   SendComponentMessage_Action_CopyCtor (0x1400cb1d0)
-typedef void*  (*WAP_fn_SendCompMsg_t)(void* self, void* entityInnerPtr, uint32_t* msgIdPtr, uint32_t p4, void* innerIbp, uint32_t p6);
-//   CompleteTask_Action_CopyCtor (0x1400c5da0)
-typedef void*  (*WAP_fn_CompleteTask_t)(void* self, uint32_t workId, void* entityInnerPtr, void* innerIbp, uint32_t p5);
-//   ShowTool_Action_Ctor (0x140042890): RCX=self, RDX=&entityInner, R8D=toolType.
-typedef void*  (*WAP_fn_ShowTool_t)(void* self, void* entityInnerPtr, int toolType);
-//   CompleteRoad_Action_CopyCtor (0x1400c59d0): RCX=self, EDX=p2(int), R8D=p3(int), R9B=p4(byte).
-typedef void*  (*WAP_fn_CompleteRoad_t)(void* self, int p2, int p3, uint8_t p4);
-//   ConsumeRawMaterial_Action_CopyCtor (0x1400c63b0): RCX=self, RDX=&entityInner, R8=p3(int64), R9B(byte).
-typedef void*  (*WAP_fn_ConsumeRawMaterial_t)(void* self, void* entityInnerPtr, int64_t p3, uint8_t p4);
-//   PickupStoredRawMaterial_Action_CopyCtor (0x1400ca520):
-//     RCX=self, RDX=&entityInner, R8=&srcInner, R9=p4(int64), [stack]=p5(int)=-1, [stack]=p6(byte)=1.
-typedef void*  (*WAP_fn_PickupStored_t)(void* self, void* entityInnerPtr, void* srcInnerPtr, int64_t p4, int p5, uint8_t p6);
-// PerformWork_Action_Ctor7 (0x1400c9720). Win64 ABI (verified via disassembly):
-//   RCX=self, RDX=&entityInner, XMM2=heading (3rd slot, float), R9D=actionType (4th slot, int),
-//   [stack]=time(int64), [stack]=byte, [stack]=int.
-typedef void*  (*WAP_fn_PerformWork7_t)(void* self, void* entityInnerPtr, float heading, int actionType, int64_t time, uint8_t p6, int p7);
-// MoveTo_Action_Ctor (0x1400c9170): RCX=self, RDX=familyIBP, R8D=pathType, R9D=p4,
-//   [stack]=float* dest, [stack]=int(0xe1f), [stack]=int(0), XMM?=speed (last positional float).
-typedef void*  (*WAP_fn_MoveTo_t)(void* self, void* familyIBP, int pathType, int p4, float* dest, int p6, int p7, float speed);
-
-// --- dispatch slots (deref once to get the runtime fn ptr) ---
-typedef void   (*WAP_fn_IbpCtor_t)(void* ibp, void* obj);     // 0x140152a90
-typedef void   (*WAP_fn_DeletePtr_t)(void* ibp);              // 0x140151ab8
-typedef void*  (*WAP_fn_MemAlloc_t)(uint64_t size, uint32_t align); // 0x140152b60
-typedef void*  (*WAP_fn_TimeCtor_t)(void* retval, float seconds);   // 0x140152b00
-// 0x1401512c0 — ?Normalize@Vector3@Math@@QEBA?AV12@XZ. Returns a NEW Vector3 BY VALUE,
-// so the Microsoft x64 ABI passes a hidden return-slot pointer in RDX (>=12 bytes) and
-// the retail call site loads it: `lea -0x41(%rbp),%rdx` at 0x1400bab2f, right before
-// `lea -0x29(%rbp),%rcx` and the call.
-//
-// ⚠ FIXED 2026-08-22. This typedef used to take ONE argument, so Normalize wrote its
-// three floats through whatever RDX happened to hold. work_base_actionctor.cpp carries
-// the identical function with the correct two-arg form AND a comment describing this
-// exact failure ("the organic herder's first-claim crash") — the fix simply never
-// reached this second copy, because this call site was unreachable: FireWork returned
-// early on found=0 for as long as no water source was ever registered. The moment the
-// well registration landed, the very first bucket run faulted inside Runtime's
-// Vector3::Normalize writing to a Runtime CODE address. See
-// reference_one_retail_fn_ported_twice_diverges and reference_byvalue_return_hidden_rdx.
-// B.3.1 step 2: the three Vector3 slots above (0x140152a30 ctor, 0x1401512c0
-// Normalize, 0x1401512d8 Heading) are now direct calls on Math::Vector3; the
-// typedefs and the hidden-RDX shape they encoded are gone with the DLL.
-
-static WAP_fn_Entity29a0_t          s_wap_Entity29a0      = nullptr;
-static WAP_fn_TaskListCleanup_t     s_wap_TaskCleanup     = nullptr;
-static WAP_fn_TaskListAppend_t      s_wap_TaskAppend      = nullptr;
-static WAP_fn_FindComponentFamily_t s_wap_FindFamily      = nullptr;
-static WAP_fn_FindComponentStorage_t s_wap_FindStorage    = nullptr;
-static WAP_fn_StorageQueryCount_t   s_wap_QueryCount      = nullptr;
-static WAP_fn_SendCompMsg_t         s_wap_SendCompMsg     = nullptr;
-static WAP_fn_CompleteTask_t        s_wap_CompleteTask    = nullptr;
-static WAP_fn_ShowTool_t            s_wap_ShowTool        = nullptr;
-static WAP_fn_CompleteRoad_t        s_wap_CompleteRoad    = nullptr;
-
-// Road-wave counter (standalone/road_probe.cpp): CompleteRoad actions actually built
-// and appended to a citizen task list.
-static WAP_fn_ConsumeRawMaterial_t  s_wap_ConsumeRaw      = nullptr;
-static WAP_fn_PickupStored_t        s_wap_PickupStored    = nullptr;
-static WAP_fn_PerformWork7_t        s_wap_PerformWork7    = nullptr;
-static WAP_fn_MoveTo_t              s_wap_MoveTo          = nullptr;
-
-static WAP_fn_IbpCtor_t             s_wap_IbpCtor         = nullptr;
-static WAP_fn_DeletePtr_t           s_wap_DeletePtr       = nullptr;
-static WAP_fn_MemAlloc_t            s_wap_MemAlloc        = nullptr;
-static WAP_fn_TimeCtor_t            s_wap_TimeCtor        = nullptr;
-
-// Inline-object vtables (exe .rdata) + .rdata float/dword constants.
+// Every exe sub-callee is one of our own bodies (Action/, Work/, Component/ exe_bodies.h):
+//   0x1400c29a0 Entity_impl_29a0 (heading, XMM0)      ActChild_Entity29a0_c29a0
+//   0x1400c5400 TaskListCleanup                       WorkBase_TaskListCleanup_c5400
+//   0x1400c54e0 TaskListAppend                        Pf_ActStackPush_54e0
+//   0x1400012d0 Entity_FindComponent_Family           ActMv_FindComponentFamily_12d0
+//   0x140006270 Entity_FindComponent_Storage          WorkBase_FindComponent_6270
+//   0x14012cf10 StorageComponent_QueryCount           CitizenComp_StorageComponent_QueryCount
+//   0x1400cb1d0 SendComponentMessage copy-ctor        Pf_SendComponentMessageCopyCtor_b1d0
+//   0x1400c5da0 CompleteTask copy-ctor                Pf_CompleteTaskCopyCtor_5da0
+//   0x140042890 ShowTool ctor (R8D=toolType)          ActChild_ShowToolCtor_42890
+//   0x1400c59d0 CompleteRoad copy-ctor                ActChild_CompleteRoadCopyCtor_c59d0
+//   0x1400c63b0 ConsumeRawMaterial copy-ctor (5 args) ActChild_ConsumeRawCopyCtor_c63b0
+//   0x1400ca520 PickupStoredRawMaterial copy-ctor     ActChild_PickupStoredCopyCtor_ca520
+//   0x1400c9720 PerformWork_Action_Ctor7              Pf_PerformWorkCtor7_9720
+//               (RCX=self, RDX=&entityInner, XMM2=heading, R9D=actionType, [stack]=time,
+//                byte, int -- verified via disassembly)
+//   0x1400c9170 MoveTo ctor                           Pf_MoveToCtor_9170
+// Dispatch slots:
+//   0x140152a90 InternalBasePtr ctor -> placement-new Object::InternalBasePtr
+//   0x140152b60 MemAlloc             -> System::MemoryAllocator::MemAlloc
+//   0x140152b00 System::Time(float)  -> RtSystem_Time_Ctor
+//   PORT GAP 0x140151ab8 InternalBasePtr::DeletePtr: the import slot is not filled; the
+//   fallback the reader took (the member Object::InternalBasePtr::DeletePtr) is the code.
+// 0x1401512c0 Normalize / 0x1401512d8 Heading / 0x140152a30 Vector3 ctor are direct
+// Math::Vector3 calls (B.3.1 step 2; see reference_byvalue_return_hidden_rdx).
+// .rdata (code/Game/Game/exe_constants.h): 0x140172124 = 0.75f (PerformWork Time #1),
+// 0x140172188 = 3.5f (ba9f0 MoveTo speed), 0x140172194 = 4.0f (bffd0 Ctor7 Time),
+// 0x140172280 = -1.0f (bffd0 MoveTo speed), 0x1401722a8 = -1000.0f (bffd0 Ctor7 heading).
 // 0x1401c41e0 = FireComponent (ENDGAME B.3.9 D5: read directly below).
-static const float*    s_wap_pf_172124    = nullptr; // 0x140172124 = 0.75f  (PerformWork Time #1)
-static const float*    s_wap_pf_172188    = nullptr; // 0x140172188 = 3.5f   (ba9f0 MoveTo speed)
-static const float*    s_wap_pf_172194    = nullptr; // 0x140172194 = 4.0f   (bffd0 PerformWork_Ctor7 Time)
-static const float*    s_wap_pf_172280    = nullptr; // 0x140172280 = -1.0f  (bffd0 MoveTo speed)
-static const float*    s_wap_pf_1722a8    = nullptr; // 0x1401722a8 = -1000.0f (bffd0 PerformWork_Ctor7 heading)
 
-static bool s_wap_resolved = false;
-
-static void ResolveAll() {
-    if (s_wap_resolved) return;
-    s_wap_resolved = true;
-
-    s_wap_Entity29a0   = reinterpret_cast<WAP_fn_Entity29a0_t>(ResolveAddr(Module::Exe, 0x1400c29a0));
-    s_wap_TaskCleanup  = reinterpret_cast<WAP_fn_TaskListCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_wap_TaskAppend   = reinterpret_cast<WAP_fn_TaskListAppend_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_wap_FindFamily   = reinterpret_cast<WAP_fn_FindComponentFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
-    s_wap_FindStorage  = reinterpret_cast<WAP_fn_FindComponentStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_wap_QueryCount   = reinterpret_cast<WAP_fn_StorageQueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    s_wap_SendCompMsg  = reinterpret_cast<WAP_fn_SendCompMsg_t>(ResolveAddr(Module::Exe, 0x1400cb1d0));
-    s_wap_CompleteTask = reinterpret_cast<WAP_fn_CompleteTask_t>(ResolveAddr(Module::Exe, 0x1400c5da0));
-    s_wap_ShowTool     = reinterpret_cast<WAP_fn_ShowTool_t>(ResolveAddr(Module::Exe, 0x140042890));
-    s_wap_CompleteRoad = reinterpret_cast<WAP_fn_CompleteRoad_t>(ResolveAddr(Module::Exe, 0x1400c59d0));
-    s_wap_ConsumeRaw   = reinterpret_cast<WAP_fn_ConsumeRawMaterial_t>(ResolveAddr(Module::Exe, 0x1400c63b0));
-    s_wap_PickupStored = reinterpret_cast<WAP_fn_PickupStored_t>(ResolveAddr(Module::Exe, 0x1400ca520));
-    s_wap_PerformWork7 = reinterpret_cast<WAP_fn_PerformWork7_t>(ResolveAddr(Module::Exe, 0x1400c9720));
-    s_wap_MoveTo       = reinterpret_cast<WAP_fn_MoveTo_t>(ResolveAddr(Module::Exe, 0x1400c9170));
-
-    // Dispatch slots — deref once to get the runtime fn ptr (with engine_funcs fallbacks).
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_wap_IbpCtor         = *reinterpret_cast<WAP_fn_IbpCtor_t*>(s);
-    if (!s_wap_IbpCtor) s_wap_IbpCtor = reinterpret_cast<WAP_fn_IbpCtor_t>(fn_InternalBasePtr_Ctor);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_wap_DeletePtr       = *reinterpret_cast<WAP_fn_DeletePtr_t*>(s);
-    if (!s_wap_DeletePtr) s_wap_DeletePtr = reinterpret_cast<WAP_fn_DeletePtr_t>(fn_InternalBasePtr_DeletePtr);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_wap_MemAlloc        = *reinterpret_cast<WAP_fn_MemAlloc_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wap_TimeCtor        = *reinterpret_cast<WAP_fn_TimeCtor_t*>(s);
-
-    s_wap_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
-    s_wap_pf_172188    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172188));
-    s_wap_pf_172194    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172194));
-    s_wap_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
-    s_wap_pf_1722a8    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401722a8));
-}
+static inline float WAP_RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 // Small idiom wrappers matching the disasm's call shapes.
 static inline void* WAP_Alloc(uint64_t size, uint32_t align) {
-    if (s_wap_MemAlloc) return s_wap_MemAlloc(size, align);
-    if (fn_MemAlloc && g_pMemAllocSingleton) return fn_MemAlloc(g_pMemAllocSingleton, size, align);
-    return nullptr;
+    return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
 }
-static inline void  WAP_IbpCtor(void* ibp, void* obj) { if (s_wap_IbpCtor) s_wap_IbpCtor(ibp, obj); }
-static inline void  WAP_Append(void* list, void* ibp) { if (s_wap_TaskAppend) s_wap_TaskAppend(list, ibp); }
+static inline void  WAP_IbpCtor(void* ibp, void* obj) {
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
+}
+static inline void  WAP_Append(void* list, void* ibp) { Pf_ActStackPush_54e0(static_cast<int64_t*>(list), ibp); }
 
 // Build an inline PerformWork action object into 'o' (0x48 alloc, already non-null).
 // Mirrors the repeated inline block at 0x1400babb1.. / 0x1400c0408.. etc.
@@ -199,13 +103,12 @@ static void WAP_BuildInlinePerformWork(void* o, uintptr_t entityInner, float hea
 void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
                                        float* pos3, float* pos4, float* pos5,
                                        int64_t* srcEntity6) {
-    ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400baa2f..0x1400baa53)
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);
-    if (s_wap_TaskCleanup) s_wap_TaskCleanup(list);
+    WorkBase_TaskListCleanup_c5400(list);
 
     uintptr_t ibpA = 0, ibpB = 0, ibpC = 0;
 
@@ -217,18 +120,18 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        if (s_wap_SendCompMsg) sm = s_wap_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
+        sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
     WAP_IbpCtor(&ibpA, sm);
     // 0x1400baad0: CMP [R15+0x10] — R15 = aiComp+0x48, so this is (aiComp+0x48)+0x10 = aiComp+0x58.
-    if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && s_wap_DeletePtr)
-        s_wap_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+    if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        reinterpret_cast< ::Object::InternalBasePtr*>(aiComp + 0x58)->DeletePtr();   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpA; // 0x1400baae5: MOV [R15+0x10],RAX
 
     // --- heading via Entity_impl_29a0(pos5, &{*param_6}) (0x1400baae9..0x1400bab02; XMM6) ---
     int64_t srcInner6 = srcEntity6 ? *srcEntity6 : 0; // 0x1400baaed: MOV RAX,[R13]; [RBP+0x7f]=RAX
     float headingA = 0.0f; // XMM6
-    if (s_wap_Entity29a0) headingA = s_wap_Entity29a0(pos5, &srcInner6);
+    headingA = ActChild_Entity29a0_c29a0(pos5, &srcInner6);
 
     // --- headingB via Vector3(pos4-pos3) → Normalize → Heading (0x1400bab05..0x1400bab46; XMM8) ---
     float headingB = 0.0f; // XMM8
@@ -239,7 +142,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         headingB = nv.Heading();
     }
 
-    float timeC = s_wap_pf_172124 ? *s_wap_pf_172124 : 0.0f; // XMM7 = DAT_140172124 = 0.75f
+    float timeC = kRdata_140172124; // XMM7 = DAT_140172124 = 0.75f
 
     // --- inline PerformWork #1: heading=headingA(XMM6), actionType=7, time=Time(0.75) (0x1400bab4a..) ---
     obj = WAP_Alloc(0x48, 8); // 0x1400bab4f: ECX=0x40+8=0x48
@@ -247,7 +150,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400bab6c: [R14]
         uint64_t timeVal = 0;
-        if (s_wap_TimeCtor) { void* t = s_wap_TimeCtor(&timeVal, timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
         WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x7, static_cast<int64_t>(timeVal)); // 0x2c=7
         pw1 = obj;
     }
@@ -259,7 +162,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     void* st1 = nullptr;
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
-        if (s_wap_ShowTool) st1 = s_wap_ShowTool(obj, &entityInner, ~0 /* 0x1400bac10: OR R8D,0xffffffff = -1 */);
+        st1 = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0 /* 0x1400bac10: OR R8D,0xffffffff = -1 */);
     }
     WAP_IbpCtor(&ibpA, st1);
     WAP_Append(list, &ibpA);
@@ -271,7 +174,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         uintptr_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400bac64: [R14]
-        if (s_wap_CompleteTask) ct = s_wap_CompleteTask(obj, workId, &entityInner, &innerIbp, 0); // EDX=R12D=workId, [RSP+0x20]=0
+        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, &entityInner, &innerIbp, 0); // EDX=R12D=workId, [RSP+0x20]=0
     }
     WAP_IbpCtor(&ibpB, ct);
     WAP_Append(list, &ibpB);
@@ -284,7 +187,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = FireComponent::TypeId(); // 0x1401c41e0
         uintptr_t entityInner = srcEntity6 ? static_cast<uintptr_t>(*srcEntity6) : 0; // 0x1400baccf: MOV RCX,[R13]
-        if (s_wap_SendCompMsg) sm2 = s_wap_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
+        sm2 = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
     }
     WAP_IbpCtor(&ibpC, sm2);
     WAP_Append(list, &ibpC);
@@ -295,14 +198,14 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
         uint64_t timeVal = 0;
-        if (s_wap_TimeCtor) { void* t = s_wap_TimeCtor(&timeVal, timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
         WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x6, static_cast<int64_t>(timeVal)); // 0x1400bad7d: 0x2c=6
         pw2 = obj;
     }
     WAP_IbpCtor(&ibpA, pw2);
     WAP_Append(list, &ibpA);
 
-    float speed = s_wap_pf_172188 ? *s_wap_pf_172188 : 0.0f; // XMM6 = DAT_140172188 = 3.5f
+    float speed = WAP_RdataF(kRdata_140172188); // XMM6 = DAT_140172188 = 3.5f
 
     // --- MoveTo #1 (Faster=4, dest=pos5) (0x1400badc3..0x1400bae5c) ---
     obj = WAP_Alloc(0x480, 8); // 0x1400badc8: ECX=0x480
@@ -311,9 +214,9 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
-        if (s_wap_FindFamily) familyIBP = s_wap_FindFamily(entityInner, &famRet); // 0x1400012d0
+        familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet); // 0x1400012d0
         // 0x1400bae37: LEA R8D,[R9+4] (R9=0) → pathType=4 (Faster); [RSP+0x28]=0xe1f; [RSP+0x30]=0; XMM=speed
-        if (s_wap_MoveTo) mv1 = s_wap_MoveTo(obj, familyIBP, 4, 0, pos5, 0xe1f, 0, speed);
+        mv1 = Pf_MoveToCtor_9170(obj, familyIBP, 4, 0, pos5, 0xe1f, 0, speed);
     }
     WAP_IbpCtor(&ibpA, mv1);
     WAP_Append(list, &ibpA);
@@ -324,7 +227,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
         uint64_t timeVal = 0;
-        if (s_wap_TimeCtor) { void* t = s_wap_TimeCtor(&timeVal, timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
         WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x7, static_cast<int64_t>(timeVal)); // 0x1400baebc: 0x2c=7, XMM8
         pw3 = obj;
     }
@@ -336,7 +239,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     void* st2 = nullptr;
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
-        if (s_wap_ShowTool) st2 = s_wap_ShowTool(obj, &entityInner, 8 /* 0x1400baf12: MOV R8D,8 (Barrow) */);
+        st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, 8 /* 0x1400baf12: MOV R8D,8 (Barrow) */);
     }
     WAP_IbpCtor(&ibpA, st2);
     WAP_Append(list, &ibpA);
@@ -347,7 +250,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
         uint64_t timeVal = 0;
-        if (s_wap_TimeCtor) { void* t = s_wap_TimeCtor(&timeVal, timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
         WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x6, static_cast<int64_t>(timeVal)); // 0x1400baf9d: 0x2c=6, XMM8
         pw4 = obj;
     }
@@ -361,9 +264,9 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
-        if (s_wap_FindFamily) familyIBP = s_wap_FindFamily(entityInner, &famRet);
+        familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet);
         // 0x1400bb041: LEA R8D,[R9+1] (R9=0) → pathType=1 (Slow); dest=pos3 ([RBP+0x67]); XMM6=speed
-        if (s_wap_MoveTo) mv2 = s_wap_MoveTo(obj, familyIBP, 1, 0, pos3, 0xe1f, 0, speed);
+        mv2 = Pf_MoveToCtor_9170(obj, familyIBP, 1, 0, pos3, 0xe1f, 0, speed);
     }
     WAP_IbpCtor(&ibpA, mv2);
     WAP_Append(list, &ibpA);
@@ -394,13 +297,12 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
                                    int roadP4, uint32_t completeRoadP5, uint8_t roadByte6,
                                    uint32_t completeTaskP7, int64_t consumeArg8, int loopCount9,
                                    float* pos10, int64_t* srcEntity11) {
-    ResolveAll();
 
     // list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400c0010..0x1400c0034)
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
     uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     void* list = reinterpret_cast<void*>(aiComp + 0x48);  // RSI = aiComp+0x48
-    if (s_wap_TaskCleanup) s_wap_TaskCleanup(list);
+    WorkBase_TaskListCleanup_c5400(list);
 
     uintptr_t ibpA = 0, ibpB = 0, ibpC = 0;
 
@@ -412,12 +314,12 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        if (s_wap_SendCompMsg) sm = s_wap_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
+        sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
     WAP_IbpCtor(&ibpA, sm);
     // 0x1400c00b1: CMP [RSI+0x10] — RSI = aiComp+0x48 → aiComp+0x58.
-    if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && s_wap_DeletePtr)
-        s_wap_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+    if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        reinterpret_cast< ::Object::InternalBasePtr*>(aiComp + 0x58)->DeletePtr();   // B.3.3 bridge
     *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpA; // 0x1400c00c6: MOV [RSI+0x10],RAX
 
     // --- CompleteTask (workId, p5=completeTaskP7) (0x1400c00ca..0x1400c012a) ---
@@ -428,7 +330,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         WAP_IbpCtor(&innerIbp, nullptr);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c00f0: [R14]
         // 0x1400c00f7: ECX=[RBP+0x67] (param_7) → [RSP+0x20]=p5 ; EDX=R15D=workId
-        if (s_wap_CompleteTask) ct = s_wap_CompleteTask(obj, workId, &entityInner, &innerIbp, completeTaskP7);
+        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, &entityInner, &innerIbp, completeTaskP7);
     }
     WAP_IbpCtor(&ibpB, ct);
     WAP_Append(list, &ibpB);
@@ -438,7 +340,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     void* cr = nullptr;
     if (obj) {
         // 0x1400c0146: R9D=byte[RBP+0x5f]=param_6 ; R8D=R12D=param_4 ; EDX=[RBP+0x57]=param_5
-        if (s_wap_CompleteRoad) cr = s_wap_CompleteRoad(obj, static_cast<int>(completeRoadP5), roadP4, roadByte6); // 0x1400c59d0
+        cr = ActChild_CompleteRoadCopyCtor_c59d0(obj, static_cast<int>(completeRoadP5), roadP4, roadByte6); // 0x1400c59d0
     }
     WAP_IbpCtor(&ibpA, cr);
     WAP_Append(list, &ibpA);
@@ -448,7 +350,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     void* st1 = nullptr;
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c018e: [R14]
-        if (s_wap_ShowTool) st1 = s_wap_ShowTool(obj, &entityInner, ~0 /* 0x1400c0195: OR R8D,0xffffffff = -1 */);
+        st1 = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0 /* 0x1400c0195: OR R8D,0xffffffff = -1 */);
     }
     WAP_IbpCtor(&ibpC, st1);
     WAP_Append(list, &ibpC);
@@ -466,8 +368,9 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         void* crm = nullptr;
         if (obj) {
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // 0x1400c01ed
-            // 0x1400c01f8: byte[RSP+0x20]=0 (p4) ; R8=[RBP+0x6f]=param_8 (p3) ; RDX=&entityInner
-            if (s_wap_ConsumeRaw) crm = s_wap_ConsumeRaw(obj, &entityInner, consumeArg8, 0); // 0x1400c63b0
+            // 0x1400c01f8: byte[RSP+0x20]=0 (p5, the FIFTH argument) ; R8=[RBP+0x6f]=param_8 (p3) ;
+            // RDX=&entityInner ; R9 not written (p4, unused by the body).
+            crm = ActChild_ConsumeRawCopyCtor_c63b0(obj, &entityInner, consumeArg8, 0, 0); // 0x1400c63b0
         }
         WAP_IbpCtor(&ibpA, crm);
         WAP_Append(list, &ibpA);
@@ -482,17 +385,17 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     void* pw = nullptr;
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c0245: [R14]
-        float timeF = s_wap_pf_172194 ? *s_wap_pf_172194 : 0.0f; // 0x1400c024c: XMM1=DAT_140172194=4.0f
+        float timeF = kRdata_140172194; // 0x1400c024c: XMM1=DAT_140172194=4.0f
         uint64_t timeVal = 0;
-        if (s_wap_TimeCtor) { void* t = s_wap_TimeCtor(&timeVal, timeF); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
-        float headingC = s_wap_pf_1722a8 ? *s_wap_pf_1722a8 : 0.0f; // 0x1400c0279: XMM2=DAT_1401722a8=-1000.0f
+        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeF); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+        float headingC = WAP_RdataF(kRdata_1401722a8); // 0x1400c0279: XMM2=DAT_1401722a8=-1000.0f
         // 0x1400c0273: R9D=0xa ; [RSP+0x30]=0xffffffff (p7=-1) ; byte[RSP+0x28]=1 (p6) ; [RSP+0x20]=time
-        if (s_wap_PerformWork7) pw = s_wap_PerformWork7(obj, &entityInner, headingC, 0xA, static_cast<int64_t>(timeVal), 1, -1);
+        pw = Pf_PerformWorkCtor7_9720(obj, &entityInner, headingC, 0xA, static_cast<int64_t>(timeVal), 1, -1);
     }
     WAP_IbpCtor(&ibpA, pw);
     WAP_Append(list, &ibpA);
 
-    float speed = s_wap_pf_172280 ? *s_wap_pf_172280 : 0.0f; // 0x1400c02c2: XMM8=DAT_140172280=-1.0f
+    float speed = kRdata_140172280; // 0x1400c02c2: XMM8=DAT_140172280=-1.0f
 
     // --- MoveTo #1 (Fast=2, dest=param_3) (0x1400c02ab..0x1400c0342) ---
     obj = WAP_Alloc(0x480, 8); // 0x1400c02b0: ECX=0x480
@@ -501,9 +404,9 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
         void* familyIBP = nullptr;
         uintptr_t famRet = 0;
-        if (s_wap_FindFamily) familyIBP = s_wap_FindFamily(entityInner, &famRet);
+        familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet);
         // 0x1400c031d: LEA R8D,[R9+2] (R9=0) → pathType=2 (Fast); dest=param_3 (R13 at entry); XMM8=speed
-        if (s_wap_MoveTo) mv1 = s_wap_MoveTo(obj, familyIBP, 2, 0, reinterpret_cast<float*>(roadP3), 0xe1f, 0, speed);
+        mv1 = Pf_MoveToCtor_9170(obj, familyIBP, 2, 0, reinterpret_cast<float*>(roadP3), 0xe1f, 0, speed);
     }
     WAP_IbpCtor(&ibpA, mv1);
     WAP_Append(list, &ibpA);
@@ -514,7 +417,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
         // 0x1400c0359: R13D=1 ; 0x1400c036b: R8D=R13D=1 (Axe)
-        if (s_wap_ShowTool) st2 = s_wap_ShowTool(obj, &entityInner, 1 /* Axe */);
+        st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, 1 /* Axe */);
     }
     WAP_IbpCtor(&ibpA, st2);
     WAP_Append(list, &ibpA);
@@ -524,9 +427,9 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         // heading via Entity_impl_29a0(param_10, &{*param_11}) (0x1400c03a2..0x1400c03be; XMM6)
         int64_t srcInner11 = srcEntity11 ? *srcEntity11 : 0; // 0x1400c03a9: MOV RAX,[R12]
         float headingP = 0.0f;
-        if (s_wap_Entity29a0) headingP = s_wap_Entity29a0(pos10, &srcInner11);
+        headingP = ActChild_Entity29a0_c29a0(pos10, &srcInner11);
 
-        float timeC = s_wap_pf_172124 ? *s_wap_pf_172124 : 0.0f; // 0x1400c03e2: XMM1=DAT_140172124=0.75f
+        float timeC = kRdata_140172124; // 0x1400c03e2: XMM1=DAT_140172124=0.75f
 
         // inline PerformWork A: heading=headingP(XMM6), actionType=7, time=Time(0.75) (0x1400c03c1..)
         obj = WAP_Alloc(0x48, 8); // 0x1400c03c6: ECX=0x40+8=0x48
@@ -534,7 +437,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         if (obj) {
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
             uint64_t timeVal = 0;
-            if (s_wap_TimeCtor) { void* t = s_wap_TimeCtor(&timeVal, timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+            { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
             WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x7, static_cast<int64_t>(timeVal)); // 0x1400c0430: 0x2c=7
             pwA = obj;
         }
@@ -549,7 +452,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c048a: [R14]
             // 0x1400c0491: byte[RSP+0x28]=1 (p6) ; [RSP+0x20]=0xffffffff (p5=-1) ; R9=[RBP+0x6f]=param_8 (p4) ;
             //   R8=&srcInner ; RDX=&entityInner.
-            if (s_wap_PickupStored) pickup = s_wap_PickupStored(obj, &entityInner, &srcInner, consumeArg8, -1, 1); // 0x1400ca520
+            pickup = ActChild_PickupStoredCopyCtor_ca520(obj, &entityInner, &srcInner, consumeArg8, -1, 1); // 0x1400ca520
         }
         WAP_IbpCtor(&ibpB, pickup);
         WAP_Append(list, &ibpB);
@@ -560,7 +463,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         if (obj) {
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
             uint64_t timeVal = 0;
-            if (s_wap_TimeCtor) { void* t = s_wap_TimeCtor(&timeVal, timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+            { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
             WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x6, static_cast<int64_t>(timeVal)); // 0x1400c053f: 0x2c=6
             pwB = obj;
         }
@@ -575,9 +478,9 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
             uintptr_t entObj = *reinterpret_cast<uintptr_t*>(citizenIBP);    // 0x1400c05a3: [R14]
             uintptr_t storRet = 0;
             void* storIbp = reinterpret_cast<void*>(&storRet);
-            if (s_wap_FindStorage) s_wap_FindStorage(*reinterpret_cast<uintptr_t*>(entObj + 0x10), &storRet); // 0x140006270 (local_78)
+            WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(entObj + 0x10), &storRet); // 0x140006270 (local_78)
             int count = 0;
-            if (s_wap_QueryCount) count = s_wap_QueryCount(reinterpret_cast<void*>(storRet)); // 0x14012cf10
+            count = CitizenComp_StorageComponent_QueryCount(static_cast<int64_t>(storRet)); // 0x14012cf10
             bool countPositive = (count > 0); // 0x1400c05d0: TEST EAX,EAX; SETG BL
 
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
@@ -585,9 +488,9 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
             if (countPositive) pathType = 4; // Faster
             void* familyIBP = nullptr;
             uintptr_t famRet = 0;
-            if (s_wap_FindFamily) familyIBP = s_wap_FindFamily(entityInner, &famRet);
+            familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet);
             // 0x1400c0631: R8D=R13D=pathType ; dest=[RBP+0x7f]=param_10 ; XMM8=speed ; [RSP+0x28]=0xe1f
-            if (s_wap_MoveTo) mv2 = s_wap_MoveTo(obj, familyIBP, pathType, 0, pos10, 0xe1f, 0, speed);
+            mv2 = Pf_MoveToCtor_9170(obj, familyIBP, pathType, 0, pos10, 0xe1f, 0, speed);
             (void)storIbp;
         }
         WAP_IbpCtor(&ibpA, mv2);

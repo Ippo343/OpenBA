@@ -14,7 +14,9 @@
 #include "Tutorial/TutorialGoalCount.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Tutorial/exe_bodies.h"
+#include "Goal/goal_exe_helpers.h"
+#include "object/TypeInfo.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -27,45 +29,17 @@
 #include "ui/SpinnerElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
-// Exe-internal helpers, resolved PER CALL (ENDGAME B.3.8, B6-5: the
-// Serialize leg runs on the loader thread and IsComplete on the main thread,
-// so there is no first-call cache any more — each accessor is one registry
-// lookup of an address registered at boot).
+// Exe-internal helpers, called by name:
+//   0x1400265b0 StatGoal_ResolveExternalPtr (Goal/goal_exe_helpers.h) -- resolve the
+//               External reference named by a String (lazy load)
+//   0x140092010 TutBase_CountBuildingsByType   -- world BST at +0x160, returns node[2]
+//   0x1400910a0 TutBase_CountProfessionsByType -- world BST at +0x100
+//   0x14012fbb0 WorkPlaceComponent_GetMaxWorkers -- available job slots of a
+//               WorkPlaceComponent (WorkComponent+0x30, lazily via 0x14012e5c0)
+//   0x140013920 TutBase_CastToSliderElement -- IsDerivedFrom SpinnerElement, else null
+//   0x1400e1870 FindUIElementByPath_Impl (find_ui_element_by_path.cpp)
+//   (Tutorial/exe_bodies.h)
 // ============================================================
-
-// FUN_1400265b0 — resolve External reference from String (lazy load)
-typedef void (*fn_ResolveExternalRef_t)(void* stringField);
-static fn_ResolveExternalRef_t ResolveExternalRefFn() {
-    return (fn_ResolveExternalRef_t)ResolveAddr(Module::Exe, 0x1400265b0);
-}
-
-// FUN_140092010 — count buildings of a type in world BST at +0x160
-// BST keyed by type pointer, returns node[2] (count).
-typedef uint32_t (*fn_CountBuildingsByType_t)(uintptr_t worldData, uintptr_t typePtr);
-static fn_CountBuildingsByType_t CountBuildingsByTypeFn() {
-    return (fn_CountBuildingsByType_t)ResolveAddr(Module::Exe, 0x140092010);
-}
-
-// FUN_1400910a0 — count professions of a type in world BST at +0x100
-typedef uint32_t (*fn_CountProfessionsByType_t)(uintptr_t worldData, uintptr_t typePtr);
-static fn_CountProfessionsByType_t CountProfessionsByTypeFn() {
-    return (fn_CountProfessionsByType_t)ResolveAddr(Module::Exe, 0x1400910a0);
-}
-
-// FUN_14012fbb0 — get work capacity (available job slots) for a WorkPlaceComponent.
-// Internally: finds WorkComponent on the parent entity via IBP at wpComp+0x10,
-// reads cached capacity at WorkComponent+0x30, lazily computes via FUN_14012e5c0 if 0.
-typedef int (*fn_GetWorkCapacity_t)(uintptr_t workplaceComp);
-static fn_GetWorkCapacity_t GetWorkCapacityFn() {
-    return (fn_GetWorkCapacity_t)ResolveAddr(Module::Exe, 0x14012fbb0);
-}
-
-// FUN_140013920 — cast element to SliderElement (returns null if wrong type)
-// IsDerivedFrom check against TypeId_SpinnerElement (0x140151cf0).
-typedef void* (*fn_CastToSliderElement_t)(void* element);
-static fn_CastToSliderElement_t CastToSliderElementFn() {
-    return (fn_CastToSliderElement_t)ResolveAddr(Module::Exe, 0x140013920);
-}
 
 // 0x1401c7318 is ComponentDescription's cell, 0x1401c5a98 is Profession's (Table 1).
 // Neither result is cached (matching the file's existing no-cache pattern for
@@ -140,12 +114,10 @@ static uintptr_t* TradeOrderBSTFind(uintptr_t root, uintptr_t key) {
 // self->_field40 and checks IsDerivedFrom against the given type ID.
 // Returns the type pointer if it matches, or 0 if not.
 static uintptr_t ResolveTypePtr(uintptr_t self, uint32_t* typeId) {
-    if (ResolveExternalRefFn()) {
-        ResolveExternalRefFn()((void*)(self + 0x30));
-    }
+    StatGoal_ResolveExternalPtr((void*)(self + 0x30));
     uintptr_t typePtr = *(uintptr_t*)(self + 0x40);
-    if (typePtr && fn_IsDerivedFrom && typeId) {
-        if (fn_IsDerivedFrom((void*)typePtr, *typeId)) {
+    if (typePtr && typeId) {
+        if (Object::IsDerivedFromNullSafe((void*)typePtr, *typeId)) {
             return typePtr;
         }
     }
@@ -198,8 +170,8 @@ bool TutorialGoalCount::Serialize(void* stream) {
 
     // If loading (serializer version == 0), resolve the external ref
     int version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    if (version == 0 && ResolveExternalRefFn()) {
-        ResolveExternalRefFn()((void*)(s + 0x30));
+    if (version == 0) {
+        StatGoal_ResolveExternalPtr((void*)(s + 0x30));
     }
 
     // Serialize greaterOrEqual (+0x28) as bool
@@ -268,8 +240,8 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 0: {
         uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (CountBuildingsByTypeFn() && worldData) {
-            count = (int)CountBuildingsByTypeFn()(worldData, typePtr);
+        if (worldData) {
+            count = (int)TutBase_CountBuildingsByType(worldData, typePtr);
         }
         break;
     }
@@ -334,8 +306,8 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 3: {
         uintptr_t typePtr = ResolveTypePtr(s, TypeIdProfessionDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (CountProfessionsByTypeFn() && worldData) {
-            count = (int)CountProfessionsByTypeFn()(worldData, typePtr);
+        if (worldData) {
+            count = (int)TutBase_CountProfessionsByType(worldData, typePtr);
         }
         break;
     }
@@ -391,9 +363,9 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
         // Resolve profession type (re-resolved inside loop to match original)
         uintptr_t profType = ResolveTypePtr(s, TypeIdProfessionDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (!worldData || !CountProfessionsByTypeFn()) break;
+        if (!worldData) break;
 
-        int profCount = (int)CountProfessionsByTypeFn()(worldData, profType);
+        int profCount = (int)TutBase_CountProfessionsByType(worldData, profType);
         int total = 0;
 
         for (int i = 0; i < profCount; i++) {
@@ -419,9 +391,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
             uintptr_t workplace = workplaceIBP;
             if (workplace && *(uint8_t*)(workplace + 0x50) != 0) {
                 // Get work capacity (available job slots)
-                if (GetWorkCapacityFn()) {
-                    total += GetWorkCapacityFn()(workplaceIBP);
-                }
+                total += WorkPlaceComponent_GetMaxWorkers(workplaceIBP);
             }
         }
         count = total;
@@ -522,16 +492,14 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // casts it to SpinnerElement, reads its value if not active.
     case 9: {
         // Find UI element by path
-        if (!fn_FindUIElementByPath) break;
         uintptr_t foundIBP[2] = {0, 0};  // InternalBasePtr buffer
-        fn_FindUIElementByPath(foundIBP, (void*)(s + 0x48), nullptr);
+        FindUIElementByPath_Impl(foundIBP, (void*)(s + 0x48), nullptr);   // 0x1400e1870
 
         uintptr_t element = foundIBP[0];
         if (!element) { break; }
 
         // Cast to SliderElement (checks IsDerivedFrom SliderElement type)
-        if (!CastToSliderElementFn()) { break; }
-        void* slider = CastToSliderElementFn()((void*)element);
+        void* slider = TutBase_CastToSliderElement((void*)element);
         uintptr_t sliderIBP = (uintptr_t)slider;
         if (!sliderIBP) { break; }
 
@@ -556,9 +524,9 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
         // Get building description type
         uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (!worldData || !CountBuildingsByTypeFn()) break;
+        if (!worldData) break;
 
-        int buildingCount = (int)CountBuildingsByTypeFn()(worldData, typePtr);
+        int buildingCount = (int)TutBase_CountBuildingsByType(worldData, typePtr);
         int occupied = 0;
 
         for (int i = 0; i < buildingCount; i++) {
@@ -575,9 +543,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
                 entityIBP = *(uintptr_t*)(node[1] + (uintptr_t)i * 8);
             } else {
                 // Not found — initialize empty IBP
-                if (fn_InternalBasePtr_Ctor) {
-                    new (&entityIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                }
+                new (&entityIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             }
 
             // CheckPtr and find BuildStateComponent

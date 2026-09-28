@@ -297,3 +297,8 @@ static_assert(offsetof(Engine, _noConfigure)        == 0x6f1, "Engine::_noConfig
 
 // B7-6: one definition per layout.
 namespace RtEngine { using Engine = ::Engine::Engine; }
+
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+extern "C" ::Engine::Engine* RtEngine_Engine_Ctor(::Engine::Engine* self, void* platformHandle);  // ??0Engine@0@QEAA@PEAX@Z
+extern "C" void RtEngine_Engine_Dtor(::Engine::Engine* self);  // ??1Engine@0@QEAA@XZ
+// ==== end B3R G-Game ====

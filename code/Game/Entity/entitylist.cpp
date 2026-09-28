@@ -31,8 +31,8 @@
 #include "Entity/componententity_funcs.h"
 #include "Entity/ComponentEntity.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "resolve.h"
 #include "Dialog/EntityUI.h"             // caller batch CB6: TypeId()
 #include "Player/EditTool.h"
 #include "Component/ModelComponent.h"
@@ -49,36 +49,8 @@
 #include <new>
 #include <new>
 #include "Entity/exe_bodies.h"
-
-// ============================================================
-// Resolved function pointers (exe-internal, resolved lazily)
-// ============================================================
-
-// EntityList::PreUpdate (0x1400c3bd0) — tree walk, process staging arrays
-typedef void (*fn_EntityList_PreUpdate_t)(EntityList* self);
-static fn_EntityList_PreUpdate_t s_fn_PreUpdate = nullptr;
-
-// EntityList::PostUpdate (0x1400c43d0) — post-update tree walk
-typedef void (*fn_EntityList_PostUpdate_t)(EntityList* self);
-static fn_EntityList_PostUpdate_t s_fn_PostUpdate = nullptr;
-
-// EntityList::PostUpdateStaging (0x1400c3ab0) — process post-update staging array
-typedef void (*fn_EntityList_PostUpdateStaging_t)(EntityList* self);
-static fn_EntityList_PostUpdateStaging_t s_fn_PostUpdateStaging = nullptr;
-
-// EntityList::RemoveEntity (0x1400c38e0) — remove entity from buckets + trees
-typedef void (*fn_EntityList_RemoveEntity_t)(EntityList* self, void* entityIBP);
-static fn_EntityList_RemoveEntity_t s_fn_RemoveEntity = nullptr;
-
-// EntityList::Serialize (0x1400c44a0) — save/load
-typedef void (*fn_EntityList_Serialize_t)(EntityList* self, void* stream);
-static fn_EntityList_Serialize_t s_fn_Serialize = nullptr;
-
-// EntityList::PostUpdateNodeHandler (0x1400c2c70) — per-entity post-update
-typedef void (*fn_PostUpdateNodeHandler_t)(int64_t entity);
-static fn_PostUpdateNodeHandler_t s_fn_PostUpdateNodeHandler = nullptr;
-
-static bool s_initialized = false;
+#include "Game/exe_bodies.h"   // BucketTree_Serialize_21ba0
+#include "Work/exe_bodies.h"   // WorkBST_RegisterWork_1a30, WorkBST_BSTRemove_a6e0
 
 // Forward declaration (non-static: address registered for standalone exe resolution)
 void EntityList_PostUpdateStaging(EntityList* self);
@@ -86,38 +58,6 @@ void EntityList_PostUpdateStaging(EntityList* self);
 // One-frame-deferred removal drain (relocated retail step-5 tail — see
 // EntityList_Update Step 0). Defined below EntityList_Update, used at its top.
 void EntityList_DrainRemovals(EntityList* self);
-
-// ============================================================
-// EntityList_InitFuncs — resolve all function pointers
-// ============================================================
-void EntityList_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_PreUpdate = reinterpret_cast<fn_EntityList_PreUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400c3bd0));
-    s_fn_PostUpdate = reinterpret_cast<fn_EntityList_PostUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400c43d0));
-    s_fn_PostUpdateStaging = reinterpret_cast<fn_EntityList_PostUpdateStaging_t>(
-        ResolveAddr(Module::Exe, 0x1400c3ab0));
-    s_fn_RemoveEntity = reinterpret_cast<fn_EntityList_RemoveEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400c38e0));
-    s_fn_Serialize = reinterpret_cast<fn_EntityList_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400c44a0));
-    s_fn_PostUpdateNodeHandler = reinterpret_cast<fn_PostUpdateNodeHandler_t>(
-        ResolveAddr(Module::Exe, 0x1400c2c70));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[EntityList] Function pointers resolved:\n");
-    printf("  PreUpdate          = %p\n", (void*)s_fn_PreUpdate);
-    printf("  PostUpdate         = %p\n", (void*)s_fn_PostUpdate);
-    printf("  PostUpdateStaging  = %p\n", (void*)s_fn_PostUpdateStaging);
-    printf("  RemoveEntity       = %p\n", (void*)s_fn_RemoveEntity);
-    printf("  Serialize          = %p\n", (void*)s_fn_Serialize);
-    printf("  PostUpdateNodeHdlr = %p\n", (void*)s_fn_PostUpdateNodeHandler);
-#endif
-}
 
 // ============================================================
 // EntityList::TreeNodeHandler (0x1400c2de0)
@@ -256,8 +196,8 @@ namespace {
 struct TreeHolder { EntityTreeNode* root; int64_t count; };
 
 EntityTreeNode* IBPTree_AllocNode(uint64_t key, EntityTreeNode* parent) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    EntityTreeNode* n = (EntityTreeNode*)fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+    if (!System::MemoryAllocator::_singleton) return nullptr;
+    EntityTreeNode* n = (EntityTreeNode*)System::MemoryAllocator::MemAlloc(0x28, 8);
     if (!n) return nullptr;
     n->entityIBP = key; n->parent = parent;
     n->left = nullptr; n->right = nullptr;
@@ -329,7 +269,7 @@ extern "C" void IBPTreeRemove_CppImpl(void* treeRootPtr, void* nodeV) {
         succ->left = node->left;
         succ->left->parent = succ;
     }
-    if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+    System::MemoryAllocator::MemFree(node);
 }
 
 // ============================================================
@@ -886,7 +826,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
 // does: EntityUI == GameWorld+0x120, active-tool IBP at EntityUI+0x28 (EntityUI_ToolTick_SA).
 static void EntityList_ClearToolSelectionForDyingEntities() {
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gw || !fn_IsDerivedFrom) return;
+    if (!gw) return;
     void* entityUI = reinterpret_cast<GameUpdateLoop*>(gw)->m_entityUI;   // B.3.8 bridge
     if (!entityUI) return;
     void* toolSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(entityUI) + 0x28);
@@ -896,7 +836,7 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
 
     const uint32_t s_tidEditTool = EditTool::TypeId();   // caller batch CB6: was a lazy by-name cache
     if (s_tidEditTool == 0 || s_tidEditTool == 0xFFFFFFFFu) return;
-    if (!fn_IsDerivedFrom(tool, s_tidEditTool)) return;
+    if (!::Object::IsDerivedFromNullSafe(tool, s_tidEditTool)) return;
 
     // Selected-entity IBP at EditTool+0x30 (the outline-follow target).
     void* entSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(tool) + 0x30);
@@ -959,11 +899,11 @@ static void AuditDyingEntity(int64_t entity) {
     int models = 0, live = 0;
     int   n   = *reinterpret_cast<int*>(entity + 0x38);
     int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
-    if (s_tidModel && s_tidModel != 0xFFFFFFFFu && fn_IsDerivedFrom) {
+    if (s_tidModel && s_tidModel != 0xFFFFFFFFu) {
         for (int i = 0; i < n && arr; ++i) {
             int64_t c = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
             if (c < 0x10000) continue;
-            if (!fn_IsDerivedFrom(reinterpret_cast<void*>(c), s_tidModel)) continue;
+            if (!::Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(c), s_tidModel)) continue;
             ++models;
             if (*reinterpret_cast<int32_t*>(c + 0x16c) < 0) continue;
             ++live;
@@ -1035,7 +975,7 @@ void EntityList_PreUpdate(EntityList* self) {
             // Insert into update tree
             uint64_t outBuf = 0;
             void* srcIBP = (void*)((uintptr_t)self->stagingUpdate.data + offset);
-            fn_IBPTreeInsert(&self->updateTreeRoot, &outBuf, srcIBP);
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->updateTreeRoot), &outBuf, srcIBP);
             EntityList_MarkUpdateTreeDirty();
         } else {
             // Search for entity in update tree, remove if found
@@ -1056,7 +996,7 @@ void EntityList_PreUpdate(EntityList* self) {
                             ReportStagingCorrupt("PreUpdate", self, node);
                             break;
                         }
-                        fn_IBPTreeRemove(&self->updateTreeRoot, node);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->updateTreeRoot), node);
                         EntityList_MarkUpdateTreeDirty();
                         break;
                     }
@@ -1101,7 +1041,7 @@ void EntityList_PostUpdateStaging(EntityList* self) {
             // Insert into post-update tree
             uint64_t outBuf = 0;
             void* srcIBP = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
-            fn_IBPTreeInsert(&self->postUpdateTreeRoot, &outBuf, srcIBP);
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->postUpdateTreeRoot), &outBuf, srcIBP);
         } else {
             // Search for entity in post-update tree, remove if found
             EntityTreeNode* node = self->postUpdateTreeRoot;
@@ -1121,7 +1061,7 @@ void EntityList_PostUpdateStaging(EntityList* self) {
                             ReportStagingCorrupt("PostUpdate", self, node);
                             break;
                         }
-                        fn_IBPTreeRemove(&self->postUpdateTreeRoot, node);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->postUpdateTreeRoot), node);
                         break;
                     }
                     node = node->right;
@@ -1281,11 +1221,11 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
 
     // Remove found nodes from trees
     if (updateNode != nullptr) {
-        fn_IBPTreeRemove(&self->updateTreeRoot, updateNode);
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->updateTreeRoot), updateNode);
         EntityList_MarkUpdateTreeDirty();
     }
     if (postUpdateNode != nullptr) {
-        fn_IBPTreeRemove(&self->postUpdateTreeRoot, postUpdateNode);
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->postUpdateTreeRoot), postUpdateNode);
     }
 
     // Step 5: Delete the entity IBP reference
@@ -1371,7 +1311,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
 
             // After loading, verify it's a ComponentEntity
             if (*(void**)currentIBP != nullptr) {
-                bool isDerived = fn_IsDerivedFrom(*(void**)currentIBP, ComponentEntity::TypeId());
+                bool isDerived = ::Object::IsDerivedFromNullSafe(*(void**)currentIBP, ComponentEntity::TypeId());
                 if (!isDerived) {
                     *(uint64_t*)currentIBP = 0;
                 }
@@ -1380,7 +1320,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     }
 
     // Step 6: Serialize bucket trees via helper (5 buckets starting at +0x18)
-    fn_BucketTreeSerialize(serializer, nullptr, &self->buckets[0]);
+    BucketTree_Serialize_21ba0(serializer, nullptr, &self->buckets[0]);   // 0x140021ba0
 
     // Step 7: Serialize processCount[5] and cursor[5] as bulk arrays
     // Retail (0x1400c45d0 / 0x1400c45e8) calls dispatch slot 0x140151278 =

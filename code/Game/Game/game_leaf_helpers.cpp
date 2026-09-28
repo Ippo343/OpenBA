@@ -23,6 +23,7 @@
 // name inside Volume.h's own static_asserts (Geometry.h includes Volume.h).
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
@@ -35,6 +36,7 @@
 #include <initializer_list>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Work/exe_bodies.h"   // WorkBase_TreeNodeFree_e320
 
 // ------------------------------------------------------------------
 // String-array destructors. Each is `{ void* data; int count; int cap; }`
@@ -200,13 +202,9 @@ void Game_MenuSceneArrayDtor(void* self) {
     uint64_t* p = reinterpret_cast<uint64_t*>(self);
     void* node = reinterpret_cast<void*>(p[2]);  // *(self + 0x10)
     if (node) {
-        typedef void (*treefree_t)(void* headerSlot, void* child);
-        treefree_t e320 = reinterpret_cast<treefree_t>(ResolveAddr(Module::Exe, 0x14000e320));
-        if (e320) {
-            e320(&p[2], *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x18));
-            e320(&p[2], *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x20));
-        }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+        WorkBase_TreeNodeFree_e320(&p[2], *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x18));   // 0x14000e320
+        WorkBase_TreeNodeFree_e320(&p[2], *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x20));
+        System::MemoryAllocator::MemFree(node);
     }
     p[2] = 0;
     *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(p) + 0x18) = 0;
@@ -285,7 +283,7 @@ void Game_TerrainResolveMaterial(void* refTriple) {
         // Retail: IsDerivedFrom against [0x140151350] (?_typeInfo@MaterialInstance@
         // Graphics@@); ENDGAME B.3.9 TI-REST: the class accessor.
         const uint32_t tid = Graphics::MaterialInstance::TypeId();
-        if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tid))
+        if (::Object::IsDerivedFromNullSafe(obj, tid))
             result = obj;
     }
     *reinterpret_cast<void**>(b + 0x10) = result;

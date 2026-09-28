@@ -24,7 +24,9 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
+#include "object/TypeInfo.h"
+#include "Component/exe_bodies.h"   // 0x140004680 FloorComponent_FindResData
+#include "Work/exe_bodies.h"        // 0x140003050 WorkBase_FindComponent_3050
 #include "Object/factory_registration.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Game/serialize_externals.h"
@@ -145,7 +147,7 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     void* result = nullptr;
     if (found) {
         uint32_t tid = Toolbar::TypeId();
-        if (!fn_IsDerivedFrom || fn_IsDerivedFrom(found, tid)) {
+        if (Object::IsDerivedFromNullSafe(found, tid)) {
             result = found;
         }
     }
@@ -190,10 +192,10 @@ extern "C" uint32_t TutBase_CountProfessionsByType(uintptr_t worldData, uintptr_
 // Returns null when the type can't be confirmed — safe for the slider-value
 // read path (count stays 0), never feeds a non-slider into Spinner accessors.
 extern "C" void* TutBase_CastToSliderElement(void* element) {
-    if (!element || !fn_IsDerivedFrom) {
+    if (!element) {
         return nullptr;
     }
-    return fn_IsDerivedFrom(element, UI::SpinnerElement::TypeId()) ? element : nullptr;
+    return Object::IsDerivedFromNullSafe(element, UI::SpinnerElement::TypeId()) ? element : nullptr;
 }
 
 // 0x14012e5c0 — WorkComponent::CalcMaxWorkers. Computes a workplace's worker
@@ -213,10 +215,10 @@ extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
     // Validate WorkDescription; trust on unresolved type-id (matches the
     // original's assumption that +0x18 is always a WorkDescription).
     uintptr_t desc = obj;
-    if (obj && fn_IsDerivedFrom) {
+    if (obj) {
         static uint32_t s_wdTid = 0;
         if (s_wdTid == 0) s_wdTid = WorkDescription::TypeId();
-        if (s_wdTid != 0) desc = fn_IsDerivedFrom(reinterpret_cast<void*>(obj), s_wdTid) ? obj : 0;
+        if (s_wdTid != 0) desc = Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(obj), s_wdTid) ? obj : 0;
     }
     if (!desc) return 0;   // original would deref null; we no-op instead.
 
@@ -232,10 +234,7 @@ extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
     if (divisor == 0) return baseCap;   // avoid float div-by-zero UB.
 
     uint8_t ibp[32] = {};
-    typedef void* (*FindComp_t)(uintptr_t entity, void* retIBP);
-    FindComp_t findComp = reinterpret_cast<FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-    if (!findComp) return baseCap;
-    findComp(*reinterpret_cast<uintptr_t*>(workComp + 0x10), ibp);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(workComp + 0x10), ibp);   // 0x140004680
     uintptr_t footprint = *reinterpret_cast<uintptr_t*>(ibp);
     if (!footprint) return baseCap;
 
@@ -260,20 +259,14 @@ extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
 extern "C" int WorkPlaceComponent_GetMaxWorkers(uintptr_t workplaceComp) {
 
     uint8_t ibp[32] = {};
-    typedef void* (*FindComp_t)(uintptr_t entity, void* retIBP);
-    FindComp_t findComp = reinterpret_cast<FindComp_t>(ResolveAddr(Module::Exe, 0x140003050));
-    if (!findComp) return 0;
-    void* self = findComp(*reinterpret_cast<uintptr_t*>(workplaceComp + 0x10), ibp);
+    void* self = WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(workplaceComp + 0x10), ibp);   // 0x140003050
 
     uintptr_t comp = *reinterpret_cast<uintptr_t*>(self);
     if (!comp) return 0;
 
     if (*reinterpret_cast<int*>(comp + 0x30) == 0) {
-        typedef int (*Compute_t)(uintptr_t);
-        Compute_t compute = reinterpret_cast<Compute_t>(ResolveAddr(Module::Exe, 0x14012e5c0));
-        if (compute) {
-            *reinterpret_cast<int*>(comp + 0x30) = compute(comp);
-        }
+        // 0x14012e5c0 -- the body registered there (reg_tutorial_base.cpp).
+        *reinterpret_cast<int*>(comp + 0x30) = WorkComponent_CalcMaxWorkers(comp);
     }
     return *reinterpret_cast<int*>(comp + 0x30);
 }

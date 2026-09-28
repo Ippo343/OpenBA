@@ -363,3 +363,9 @@ namespace rtgfxd {
 extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill);  // 0x1800637b0
 }  // namespace rtgfxd
 // ==== end B3R W0-P0c ====
+
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+// ---- graphics/scene.cpp
+extern "C" RtGraphics::Scene* RtGraphics_Scene_Ctor(RtGraphics::Scene* self);  // 0x180102730
+extern "C" void RtGraphics_Scene_Dtor(RtGraphics::Scene* self);  // 0x1801026c0
+// ==== end B3R G-Game ====

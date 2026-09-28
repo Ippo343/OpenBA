@@ -75,12 +75,8 @@ bool Toolbar::Serialize(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ExternalPtr fields
-    if (fn_ExternalPtr_Serialize2) {
-        fn_ExternalPtr_Serialize2(&_field20, serializer);
-    }
-    if (fn_ExternalPtr_Serialize) {
-        fn_ExternalPtr_Serialize(&_field28, serializer);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field28, serializer);
 
     // String fields
     reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);
@@ -94,9 +90,7 @@ bool Toolbar::Serialize(void* stream) {
     Reimpl_ExternalPtr_Serialize_Toolbar(&_field60, serializer);
 
     // ExternalPtr<BuildingDescription> at +0x58
-    if (fn_ExternalPtr_BuildSerialize) {
-        fn_ExternalPtr_BuildSerialize(&_field58, serializer);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field58, serializer);
 
     // Encoding vcall 0x98 for int at +0x40
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(

@@ -42,7 +42,6 @@
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
-#include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cmath>
@@ -50,6 +49,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Player/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "object/TypeInfo.h"
 
 namespace {
 
@@ -79,24 +81,10 @@ static inline float C_hScale()  { return 0.00390625f;  }  // DAT_1401720bc (0x3b
 // as "above the (sunk) model" — a model-Z / terrain-baseline issue, NOT an overlay bug.
 //
 
-static bool s_init = false;
-static void EnsureFns() {
-    if (s_init) return;
-    // The file-local `slot(addr)` reader went with the one cache it filled
-    // (MaterialInstance::Setup) — ENDGAME B.3.5 batch K1.
-    s_init = true;
-}
-
-// f5d0 (0x14009f5d0, registered) — single-cell validity test.
-typedef bool (*fn_f5d0_t)(int* grid, int col, int row, uint32_t code, float f5, float f6,
-                          float f7, char c8, char c9, int64_t p10);
-static fn_f5d0_t s_f5d0 = nullptr;
-// 0f90 (0x1400b0f90, registered as void — only used by 08c0's dead first loop).
-typedef float (*fn_0f90_t)(int64_t heightfield, float* posXY, void* extra);
-static fn_0f90_t s_0f90 = nullptr;
-// f3e0 (0x14009f3e0, registered) — grid->world.
-typedef float* (*fn_f3e0_t)(int* grid, float* out, float* in, char flag, void* extra);
-static fn_f3e0_t s_f3e0 = nullptr;
+// Called by name: 0x14009f5d0 PlayerPath_CharComp_f5d0 (single-cell validity test,
+// Player/exe_bodies.h), 0x1400b0f90 Pf_CellQuadRayWrap_0f90 (terrain Z under a point,
+// Action/exe_bodies.h), 0x14009f3e0 Reimpl_MapGetTerrainPos (grid -> world,
+// Game/exe_bodies.h).
 
 static uintptr_t GameWorld() {
     return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
@@ -117,7 +105,6 @@ static uintptr_t GameWorld() {
 // the same sampler; corner (posX,posY,col,row) tuples transcribed per branch).
 extern "C" void PlayerTileRender_TerrainCorners_b10e0(int64_t param_1, int col, int row,
                                                       float* out /*18 floats*/) {
-    EnsureFns();
     const float hScale = C_hScale();
     int base = (*reinterpret_cast<int*>(param_1 + 0xc0) - *reinterpret_cast<int*>(param_1 + 0xc4)) >> 1;
     int c0 = base + col;          // iVar11
@@ -178,7 +165,6 @@ extern "C" void PlayerTileRender_TerrainCorners_b10e0(int64_t param_1, int col, 
 // 0x140100fc0 / 0x140101130).
 extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ctx,
                                                   int64_t* param_3, int64_t* param_4) {
-    EnsureFns();
     const float half = C_half();
     const float uvScale = C_uvScale();     // fVar3 = 0.125 (XMM13)
     const float deg2rad = C_deg2rad();
@@ -187,8 +173,6 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
     int64_t heightfield = *reinterpret_cast<int64_t*>(gw + 0x110);   // local_1e8
     int* grid = *reinterpret_cast<int**>(gw + 0xf8);                 // local_1e0
 
-    if (!s_f3e0) s_f3e0 = reinterpret_cast<fn_f3e0_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    if (!s_0f90) s_0f90 = reinterpret_cast<fn_0f90_t>(ResolveAddr(Module::Exe, 0x1400b0f90));
 
     // --- FindOrLoad "Terrain/Selection.rsc" -> MaterialInstance, validated against
     //     the BaseTypeInfo* at .rdata slot 0x140151350 (Graphics::MaterialInstance). ---
@@ -204,8 +188,8 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         // the type-id slot 0x140151350 may be unfilled → can't verify → TRUST the load
         // (IsDerivedFromOrTrust pattern) rather than dropping a valid material.
         material = obj;
-        if (obj && fn_IsDerivedFrom) {   // ENDGAME B.3.9 TI-REST: the class accessor
-            if (!fn_IsDerivedFrom(obj, Graphics::MaterialInstance::TypeId())) material = nullptr;
+        if (obj) {   // ENDGAME B.3.9 TI-REST: the class accessor
+            if (!Object::IsDerivedFromNullSafe(obj, Graphics::MaterialInstance::TypeId())) material = nullptr;
         }
     }
 
@@ -246,16 +230,16 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         // corner A (rec+0,+4)
         int idxA = rec[1] * w + rec[0];
         float inA[3] = { (float)(idxA % w) - rc, (float)(idxA / w) - rc, 0.0f };
-        float wA[3] = {0,0,0}; if (s_f3e0) { float* r = s_f3e0(grid, wA, inA, 0, nullptr); wA[0]=r[0]; wA[1]=r[1]; }
+        float wA[3] = {0,0,0}; { float* r = Reimpl_MapGetTerrainPos(grid, wA, inA, 0, nullptr); wA[0]=r[0]; wA[1]=r[1]; }
         float pA3[3] = { wA[0], wA[1], 50.0f };
-        float hA = s_0f90 ? s_0f90(heightfield, pA3, nullptr) : 0.0f;
+        float hA = Pf_CellQuadRayWrap_0f90(heightfield, pA3, nullptr);
         float A[3] = { wA[0], wA[1], hA };
         // corner B (rec+0x14,+0x18)
         int idxB = rec[6] * w + rec[5];
         float inB[3] = { (float)(idxB % w) - rc, (float)(idxB / w) - rc, 0.0f };
-        float wB[3] = {0,0,0}; if (s_f3e0) { float* r = s_f3e0(grid, wB, inB, 0, nullptr); wB[0]=r[0]; wB[1]=r[1]; }
+        float wB[3] = {0,0,0}; { float* r = Reimpl_MapGetTerrainPos(grid, wB, inB, 0, nullptr); wB[0]=r[0]; wB[1]=r[1]; }
         float pB3[3] = { wB[0], wB[1], 50.0f };
-        float hB = s_0f90 ? s_0f90(heightfield, pB3, nullptr) : 0.0f;
+        float hB = Pf_CellQuadRayWrap_0f90(heightfield, pB3, nullptr);
         float B[3] = { wB[0], wB[1], hB };
         // dir = normalize(B - A); perp offset = (-dir.y, dir.x, 0) * width (rec+0x1c)
         float dir[3] = { B[0]-A[0], B[1]-A[1], B[2]-A[2] };
@@ -350,9 +334,7 @@ extern "C" void PlayerTileRender_BuildRecords_1380(
         uint32_t param_7, int64_t* param_8, int64_t* param_9, float param_10, float param_11,
         float param_12, char param_13, char param_14, int64_t* param_15, int param_16,
         int param_17, char param_18, int64_t param_19) {
-    EnsureFns();
     (void)param_1;   // 08c0's param_1 (unused; the exe reads the grid from the singleton)
-    if (!s_f5d0) s_f5d0 = reinterpret_cast<fn_f5d0_t>(ResolveAddr(Module::Exe, 0x14009f5d0));
 
     int* grid = *reinterpret_cast<int**>(GameWorld() + 0xf8);   // local_b8
 
@@ -408,7 +390,7 @@ extern "C" void PlayerTileRender_BuildRecords_1380(
                     }
                 }
 
-                bool ok = s_f5d0 && s_f5d0(grid, dcol, drow, code, param_10, param_11, param_12,
+                bool ok = PlayerPath_CharComp_f5d0(grid, dcol, drow, code, param_10, param_11, param_12,
                                            param_14, isRoad ? 1 : 0, param_19);
 
                 uint32_t color;

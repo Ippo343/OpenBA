@@ -143,8 +143,7 @@ bool ProfessionList::Serialize(void* stream) {
 // the by-name fallback for the Profession type id is Profession::TypeId().
 extern "C" void ProfessionList_Startup_Impl(void* profList) {
     ProfessionList* const self = static_cast<ProfessionList*>(profList);   // B.3.8 bridge
-    if (!self || !fn_IsDerivedFrom ||
-        !::Object::ExternalFactory::_singleton)
+    if (!self || !::Object::ExternalFactory::_singleton)
         return;
 
     // B.3.2 bridge: ProfessionList+0x20 is still a raw {data, count|cap} header.
@@ -163,7 +162,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
     const ::Object::External* found = efactory->FindNext(profTid, nullptr);
     for (; found; found = efactory->FindNext(profTid, found)) {
         void* it = const_cast<::Object::External*>(found);   // B.3.3 bridge
-        if (!fn_IsDerivedFrom(it, profTid)) continue;
+        if (!::Object::IsDerivedFromNullSafe(it, profTid)) continue;
         if (static_cast<Profession*>(it)->isAvailable == 0) continue;  // +0x4e: not player-selectable
 
         // Growable push into +0x20 (buf) / +0x28 (count) / +0x2c (cap).

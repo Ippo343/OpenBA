@@ -34,7 +34,10 @@
 
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "volume/Volume.h"
+#include "Game/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Component/exe_bodies.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -62,21 +65,8 @@
 //   0x140152788 ?Min@Vector2@Math@@QEBA?AV12@AEBV12@@Z                Vector2::Min(Vector2)
 //   0x140151e70 ??XVector2@Math@@QEAAXAEBV01@@Z                       Vector2::operator*=(Vector2)
 
-typedef void* (*fn_RectCtor_t)(void* self);                                          // RCX=self
-typedef void  (*fn_BoxGetCorners_t)(const void* box, void* outVec3Array);            // RCX=box,RDX=out
-
-static fn_RectCtor_t       s_RectCtor       = nullptr;
-static fn_BoxGetCorners_t  s_BoxGetCorners  = nullptr;
-static bool s_srExportsResolved = false;
-
-static void EnsureScreenRectExports() {
-    if (s_srExportsResolved) return;
-    s_RectCtor       = reinterpret_cast<fn_RectCtor_t>(
-        ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
-    s_BoxGetCorners  = reinterpret_cast<fn_BoxGetCorners_t>(
-        ResolveExport("?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z"));
-    s_srExportsResolved = true;
-}
+// Rectangle::Rectangle() and Box::GetCorners are called by name:
+// RtVolume_Rectangle_Ctor / RtVolume_Box_GetCorners (runtime/types/volume/Volume.h).
 
 static inline uintptr_t GameWorld() {
     return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
@@ -89,17 +79,8 @@ static inline void* Display() {
     return ::Video::Device::_singleton;
 }
 
-// CharacterComponent_impl_f3e0 (0x14009f3e0, registered) = grid->world conversion.
-typedef float* (*fn_GridToWorld_t)(int* grid, float* out, float* in, char flag, void* extra);
-static fn_GridToWorld_t s_GridToWorld = nullptr;
-static bool s_g2wResolved = false;
-static fn_GridToWorld_t GridToWorld() {
-    if (!s_g2wResolved) {
-        s_GridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-        s_g2wResolved = true;
-    }
-    return s_GridToWorld;
-}
+// CharacterComponent_impl_f3e0 (0x14009f3e0) = grid->world conversion:
+// Reimpl_MapGetTerrainPos (Game/exe_bodies.h), called by name.
 
 // ============================================================
 // FUN_1400fec70 — CharacterComponent_impl_ec70 (build 4 footprint corners)
@@ -131,7 +112,7 @@ extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*param_1*/, int
         in[1] = static_cast<float>(idx / w) - centerOff;
         in[2] = 0.0f;
         float world[3] = {0.0f, 0.0f, 0.0f};
-        if (GridToWorld()) GridToWorld()(grid, world, in, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(grid, world, in, '\0', nullptr);
         out[0] = world[0];
         out[1] = world[1];
         out[2] = world[2];   // f3e0 fills a real z (terrain height); kept verbatim
@@ -167,7 +148,6 @@ extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*param_1*/, int
 //   display = **g_pSingletonExref_151a80 ; +4=W, +8=H ; DAT_140172114 = 0.5f.
 extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(uintptr_t param_1, float* param_2,
                                                          float* param_3) {
-    EnsureScreenRectExports();
     const float halfScale = 0.5f;  // DAT_140172114
 
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;  // DAT_14017214c = 1.0f (the Scalar)
@@ -227,7 +207,6 @@ extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(uintptr_t param_1, floa
 //                               void* outRect p4) -> bool. The corners stride is 0xc.
 extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, uint32_t param_2,
                                                         float* param_3, void* param_4) {
-    EnsureScreenRectExports();
     const float bigPos =  1000000.0f;  // 0x49742400
     const float bigNeg = -1000000.0f;  // 0xc9742400
     const float scaleDiv = 100.0f;     // DAT_140172208
@@ -343,18 +322,14 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
 // gotRect is deterministic instead of relying on leftover-EAX codegen.
 extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* param_2,
                                                 uint64_t* param_3) {
-    EnsureScreenRectExports();
 
     // local_a8 = Rectangle()  (default ctor); copy its 16 bytes to param_3 as the seed.
     alignas(16) uint8_t rect[16];
-    void* rectPtr = nullptr;
-    if (s_RectCtor) {
-        rectPtr = s_RectCtor(rect);
+    void* rectPtr = RtVolume_Rectangle_Ctor(reinterpret_cast<struct Rectangle*>(rect));
+    {
         uint64_t* r = reinterpret_cast<uint64_t*>(rectPtr ? rectPtr : rect);
         param_3[0] = r[0];
         param_3[1] = r[1];
-    } else {
-        param_3[0] = 0; param_3[1] = 0;
     }
 
     // local_88 = Vector3[8] (96 bytes), each default-constructed.
@@ -366,11 +341,8 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
     uintptr_t entity = 0;   // local_res8
     {
         // Entity_ClearPathQueue (0x140003f60) : member-return ABI RCX=this, RDX=&retIBP.
-        typedef void* (*fn_ClearPathQueue_t)(uintptr_t self, void* retIBP);
-        fn_ClearPathQueue_t fn = reinterpret_cast<fn_ClearPathQueue_t>(
-            ResolveAddr(Module::Exe, 0x140003f60));
-        if (fn) fn(*reinterpret_cast<uintptr_t*>(param_2),
-                   reinterpret_cast<void*>(&entity));
+        ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(param_2),
+                                  reinterpret_cast<void*>(&entity));
     }
 
     uint32_t cornerCount = 0;  // R15D — count fed to fe960
@@ -395,7 +367,8 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
             box[i] = *reinterpret_cast<float*>(entity + 0x5c + i * 4);
 
         // box.GetCorners(corners)  (8 corners)
-        if (s_BoxGetCorners) s_BoxGetCorners(box, corners);
+        RtVolume_Box_GetCorners(reinterpret_cast<const struct Box*>(box),
+                                reinterpret_cast<Math::Vector3*>(corners));
 
         // For each of 8 corners: corner = transform * corner.Min(clampVec).
         // clampVec (R8) = (1e6, 1e6, 2.5).
@@ -425,10 +398,8 @@ extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* par
         uint8_t local_res10[8] = {0};
         void* self2 = nullptr;   // returned IBP
         {
-            typedef void* (*fn_4680_t)(uintptr_t self, void* retIBP);
-            fn_4680_t fn = reinterpret_cast<fn_4680_t>(ResolveAddr(Module::Exe, 0x140004680));
-            if (fn) self2 = fn(*reinterpret_cast<uintptr_t*>(param_2),
-                               reinterpret_cast<void*>(local_res10));
+            self2 = FloorComponent_FindResData(*reinterpret_cast<void**>(param_2),
+                                               reinterpret_cast<void*>(local_res10));
         }
         uintptr_t obj = self2 ? *reinterpret_cast<uintptr_t*>(self2) : 0;
         if (obj) {

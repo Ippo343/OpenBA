@@ -26,7 +26,8 @@
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Game/exe_bodies.h"   // Game_DestroyStringArray18
 #include "system/String.h"
 #include "system/Filename.h"
 #include <new>
@@ -46,9 +47,7 @@ BuildingGoal::BuildingGoal() : _field30(1), _pad31{}, _field38(nullptr), _field4
 // The dtor inside [0] 0x140025e80: destroy the entry array at +0x38
 // (0x14001b030); the compiler then runs ~Goal (retail's CALL).
 BuildingGoal::~BuildingGoal() {
-    if (fn_BuildingTypeArray_Dtor) {
-        fn_BuildingTypeArray_Dtor(static_cast<void*>(&_field38));
-    }
+    Game_DestroyStringArray18(static_cast<void*>(&_field38));   // 0x14001b030
 }
 
 // ============================================================
@@ -318,5 +317,5 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     fflush(stderr);
 
     reinterpret_cast<System::String*>(entry)->~String();
-    if (fn_MemFreeStatic) fn_MemFreeStatic(entry);
+    System::MemoryAllocator::MemFree(entry);
 }

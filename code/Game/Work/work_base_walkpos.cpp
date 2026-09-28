@@ -25,7 +25,7 @@
 
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // B3R: ActCNR_FindComponent_3f60, Pf_IsDstReachable_f810
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cmath>
@@ -33,26 +33,13 @@
 #include "Component/CitizenDescription.h"    // ENDGAME B.3.9 D5
 
 // ============================================================
-// Lazily-resolved exe sub-helpers
+// Exe sub-helpers, called by name (B3R)
 // ============================================================
-typedef void*    (*fn_ClearPathQueue_t)(uintptr_t entity, void* retIBP);          // 0x140003f60
-typedef int      (*fn_MapPathCost_t)(int* mapGrid, uint32_t cellA, int cellB, uint8_t cache); // 0x14009f810
-typedef uint64_t (*fn_ValidateCell_t)(int* mapGrid, uint32_t pathType, uint32_t srcCell, int dstCell); // 0x1400a00f0
+//   0x140003f60 ClearPathQueue = ActCNR_FindComponent_3f60   (Action/exe_bodies.h)
+//   0x14009f810 MapPathCost    = Pf_IsDstReachable_f810      (Action/exe_bodies.h)
+//   0x1400a00f0 ValidateCell   = WorkBase_ValidateCell_a00f0 (Work/exe_bodies.h)
 // Math::Transform::operator*(Vector3 const&) const -> Vector3: dispatch slot [0x140151470]
 // in retail, a direct Math::Transform member call since B.3.1 step 2.
-
-static fn_ClearPathQueue_t  s_fn_ClearPathQueue = nullptr;   // 0x140003f60
-static fn_MapPathCost_t     s_fn_MapPathCost    = nullptr;   // 0x14009f810
-static fn_ValidateCell_t    s_fn_ValidateCell   = nullptr;   // 0x1400a00f0
-
-static bool s_walkInit = false;
-static void EnsureWalk() {
-    if (s_walkInit) return;
-    s_fn_ClearPathQueue = reinterpret_cast<fn_ClearPathQueue_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_MapPathCost    = reinterpret_cast<fn_MapPathCost_t>(ResolveAddr(Module::Exe, 0x14009f810));
-    s_fn_ValidateCell   = reinterpret_cast<fn_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_walkInit = true;
-}
 
 // GameWorld object = *g_pGameWorldSingleton (the Ghidra symbol g_pGameWorldSingleton is the
 // already-dereferenced object; in this codebase g_pGameWorldSingleton is the pointer slot).
@@ -75,10 +62,8 @@ static inline int WalkClampCell(int v, int w) {
 // Returns true if *param_5 < 0xffff (a reachable record was found).
 bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
                                  float* param_3, float* param_4, int* param_5) {
-    EnsureWalk();
-
     uintptr_t pathObj = 0;   // ClearPathQueue fills this IBP; CheckPtr resolves it to the obj ptr
-    if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &pathObj);
+    ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &pathObj);
 
     int* mapGrid = *reinterpret_cast<int**>(WalkGameWorld() + 0xf8);
     int w = *mapGrid;
@@ -99,9 +84,9 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
         int row = WalkClampCell(static_cast<int>(pos.y + static_cast<float>(w2 >> 1)), w2);
         uint32_t destCell = static_cast<uint32_t>(w2 * row + col);
 
-        uint64_t reach = s_fn_ValidateCell ? s_fn_ValidateCell(mapGrid, 0xe1f, srcCell, static_cast<int>(destCell)) : 0;
+        uint64_t reach = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, srcCell, static_cast<int>(destCell));
         if (static_cast<char>(reach) != '\0') {
-            int dist = s_fn_MapPathCost ? s_fn_MapPathCost(mapGrid, srcCell, static_cast<int>(destCell), '\x01') : -1;
+            int dist = Pf_IsDstReachable_f810(mapGrid, srcCell, destCell, '\x01');
             if (dist < 0) {
                 int gw = *mapGrid;
                 int dRow = static_cast<int>(srcCell) / gw - static_cast<int>(destCell) / gw;
@@ -130,7 +115,7 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2,
                                              float* param_3, float* param_4, int* param_5) {
     void* buildRaw = *reinterpret_cast<void**>(param_1 + 0x18);
     void* build = nullptr;
-    if (fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, InteractDescription::TypeId()))
+    if (Object::IsDerivedFromNullSafe(buildRaw, InteractDescription::TypeId()))
         build = buildRaw;
 
     uint8_t result = WorkImpl_WalkablePos_122be0(
@@ -155,7 +140,6 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2,
 // param_5 = current Time. Returns a ulonglong whose low byte is a bool "should continue".
 uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
                                           uint32_t param_3, uint32_t param_4, void* param_5Time) {
-    EnsureWalk();
 
     // +0x30 += (*param_5 - +0x38)
     *reinterpret_cast<int64_t*>(param_1 + 0x30) +=
@@ -170,13 +154,11 @@ uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
         if (*reinterpret_cast<int64_t*>(target + 0x248) != 0) {
             uint64_t resDefault = *reinterpret_cast<uint64_t*>(WalkGameWorld() + 0x130);
             uintptr_t mapInfo   = *reinterpret_cast<uintptr_t*>(WalkGameWorld() + 0xf0);
-            int budget = s_fn_MapPathCost
-                ? s_fn_MapPathCost(*reinterpret_cast<int**>(WalkGameWorld() + 0xf8),
-                                   param_3, static_cast<int>(param_4), '\x01')
-                : -1;
+            int budget = Pf_IsDstReachable_f810(*reinterpret_cast<int**>(WalkGameWorld() + 0xf8),
+                                                param_3, param_4, '\x01');
 
             void* obj = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(param_2IBP) + 0x18);
-            void* stage = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, CitizenDescription::TypeId())) ? obj : nullptr;
+            void* stage = (Object::IsDerivedFromNullSafe(obj, CitizenDescription::TypeId())) ? obj : nullptr;
             uintptr_t st = reinterpret_cast<uintptr_t>(stage);
 
             int   field108 = *reinterpret_cast<int*>(st + 0x108);
@@ -187,7 +169,7 @@ uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
 
             // Time cap = field104 * 300.0f seconds.
             int64_t cap = 0;
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&cap, static_cast<float>(field104) * 300.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&cap), static_cast<float>(field104) * 300.0f);
 
             if ((*reinterpret_cast<int*>(mapInfo + 0xa8) / 2 < *reinterpret_cast<int*>(param_1 + 0x40)) &&
                 (*reinterpret_cast<int64_t*>(param_1 + 0x30) < cap)) {

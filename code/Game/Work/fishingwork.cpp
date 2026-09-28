@@ -20,7 +20,10 @@
 #include "Work/FishingWork.h"
 #include "Work/fishingwork_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: Pf_EntityResolvePos_2e20
+#include "Component/exe_bodies.h"   // B3R: CitizenComp_FUN_14012c3f0, AttendanceComponent_GetJobHostComponent
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
@@ -39,129 +42,22 @@
 #include "Component/CitizenComponent.h"     // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 // ============================================================
-// Local function pointers resolved at init time
+// Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
 // ============================================================
-
-// Entity_FindComponent_MeshInstance (0x140002f90) — finds MeshInstanceComponent on entity
-static void* (*s_fn_FindComponent_MeshInstance)(uintptr_t entity, void* retIBP) = nullptr;
-
-// Entity_FindComponent_Position (0x140002ed0) — finds PositionComponent on entity
-static void* (*s_fn_FindComponent_Position)(uintptr_t entity, void* retIBP) = nullptr;
-
-// Entity_impl_2e20 (0x140122e20) — get position for a spot index
-// (entity, outVec3, mode, spotIndex, outHeading)
-static void (*s_fn_Entity_GetSpotPosition)(void* entity, float* outVec3, int mode, int index, float* heading) = nullptr;
-
-// FUN_14012c3f0 — MeshInstance visibility toggle
-// (meshInstance, bitIndex, visible)
-static void (*s_fn_MeshInstance_SetVisibility)(void* meshInstance, int bitIndex, int visible) = nullptr;
-
-// FUN_1400a00f0 — Map_CheckPassable (already in engine_funcs as fn_Map_CheckPassable)
-
-// FUN_1400beae0 — Fishing action constructor (builds action stack for fishing at spot)
-// (citizenIBP, priority, entityIBP, position, heading, resourceType, uvScale, mapCell, spotInfo)
-static void (*s_fn_FishingAction_Ctor)(void* citizenIBP, int priority, void* entityIBP,
-    float* position, float heading, uint64_t resourceType, float uvScale,
-    int mapCell, uint32_t spotInfo) = nullptr;
-
-// PlayAnimation_Action_Ctor (0x1400c2490) — creates a play-animation action
-// (citizenIBP, priority, citizenIndex)
-static void (*s_fn_PlayAnimation_Action_Ctor)(void* citizenIBP, int priority, uint32_t citizenIndex) = nullptr;
-
-// FUN_1400f8620 — TryAssignToFishingSpot (work assignment helper)
-// (assignMgr, citizenIBP, spotRadius, doAssign) -> bool
-static uint64_t (*s_fn_TryAssignToSpot)(uintptr_t assignMgr, void* citizenIBP, int spotRadius, char doAssign) = nullptr;
-
-// StorageComponent_QueryCount (0x14012cf10) — already inline in engine_funcs
-
-// CitizenAI_State_LongTermPlan (0x140115e60) — already in engine_funcs as fn_CitizenAI_LongTermPlan
-
-// FUN_1400f7100 — Work::CanStartWork (already in engine_funcs as fn_Work_CanStartWork)
-
-// System::MemoryAllocator::MemAlloc/MemFree — use fn_MemAlloc/fn_MemFreeStatic from engine_funcs
-
-
+//   0x140002f90 Entity_FindComponent_MeshInstance   WorkBase_FindComponent_2f90
+//   0x140002ed0 Entity_FindComponent_Position       WorkBase_FindComponent_2ed0
+//   0x140122e20 Entity_impl_2e20 spot position      Pf_EntityResolvePos_2e20
+//   0x14012c3f0 MeshInstance visibility toggle      CitizenComp_FUN_14012c3f0
+//   0x1400beae0 Fishing action ctor                 WorkAct_FishWorkCtor_beae0
+//   0x1400c2490 PlayAnimation_Action_Ctor           WorkAct_PlayAnimationCtor_c2490
+//   0x1400f8620 TryAssignToFishingSpot              WorkGrid_TryAssignWorkplace_f8620
+//   0x140002e10 find PositionComponent (GetTarget)  AttendanceComponent_GetJobHostComponent
+//   0x1400c5400 cancel pending actions              WorkBase_TaskListCleanup_c5400
+//   0x1400a00f0 Map_CheckPassable                   WorkBase_ValidateCell_a00f0
+//   0x1400f7100 Work::CanStartWork                  WorkBase_ValidateTask_f7100
+//   0x140115e60 CitizenAI_State_LongTermPlan        CitizenAI_State_LongTermPlan
 // 0x1400032e0 (Array<Ptr8>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
-// exe-side Collection::Array<T> monomorphisations -- ENDGAME B.3.2 step 2 converted
-// their two call sites below to GameColl::AsArray<T> member calls, so their
-// resolved-pointer stand-ins are gone.
-
-// FUN_140002e10 — find PositionComponent on entity (for Slot10/GetTarget)
-static void* (*s_fn_FindComp_PositionEntity)(uintptr_t entity, void* outIBP) = nullptr;
-
-// FUN_1400c5400 — cancel pending actions on state machine action list
-static void (*s_fn_CancelPendingActions)(void* smActionList) = nullptr;
-
-static bool s_fishingwork_funcs_resolved = false;
-
-// ============================================================
-// Resolution — called once from Install
-// ============================================================
-bool FishingWork_ResolveFuncs() {
-    if (s_fishingwork_funcs_resolved) return true;
-
-    // Entity_FindComponent_MeshInstance (0x140002f90)
-    s_fn_FindComponent_MeshInstance = reinterpret_cast<void*(*)(uintptr_t, void*)>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-
-    // Entity_FindComponent_Position (0x140002ed0)
-    s_fn_FindComponent_Position = reinterpret_cast<void*(*)(uintptr_t, void*)>(
-        ResolveAddr(Module::Exe, 0x140002ed0));
-
-    // Entity_impl_2e20 (0x140122e20) — spot position getter
-    s_fn_Entity_GetSpotPosition = reinterpret_cast<void(*)(void*, float*, int, int, float*)>(
-        ResolveAddr(Module::Exe, 0x140122e20));
-
-    // FUN_14012c3f0 — MeshInstance visibility toggle
-    s_fn_MeshInstance_SetVisibility = reinterpret_cast<void(*)(void*, int, int)>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-
-    // FUN_1400beae0 — Fishing action constructor
-    s_fn_FishingAction_Ctor = reinterpret_cast<void(*)(void*, int, void*, float*, float, uint64_t, float, int, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x1400beae0));
-
-    // PlayAnimation_Action_Ctor (0x1400c2490)
-    s_fn_PlayAnimation_Action_Ctor = reinterpret_cast<void(*)(void*, int, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x1400c2490));
-
-    // FUN_1400f8620 — TryAssignToSpot
-    s_fn_TryAssignToSpot = reinterpret_cast<uint64_t(*)(uintptr_t, void*, int, char)>(
-        ResolveAddr(Module::Exe, 0x1400f8620));
-
-    // FUN_140002e10 — find PositionComponent on entity
-    s_fn_FindComp_PositionEntity = reinterpret_cast<void*(*)(uintptr_t, void*)>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-
-    // FUN_1400c5400 — cancel pending actions
-    s_fn_CancelPendingActions = reinterpret_cast<void(*)(void*)>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-
-    bool ok = s_fn_FindComponent_MeshInstance && s_fn_FindComponent_Position &&
-              s_fn_Entity_GetSpotPosition && s_fn_MeshInstance_SetVisibility &&
-              s_fn_FishingAction_Ctor && s_fn_PlayAnimation_Action_Ctor &&
-              s_fn_TryAssignToSpot &&
-              s_fn_FindComp_PositionEntity && s_fn_CancelPendingActions &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && fn_MemFreeStatic && fn_MemAlloc &&
-              fn_Map_CheckPassable && fn_Work_CanStartWork &&
-              fn_CitizenAI_LongTermPlan &&
-              g_pGameWorldSingleton && g_pMemAllocSingleton && g_fUVScale;
-
-#ifdef _DEBUG
-    printf("[FishingWork] ResolveFuncs: FindMesh=%p FindPos=%p GetSpotPos=%p SetVis=%p\n",
-           (void*)s_fn_FindComponent_MeshInstance, (void*)s_fn_FindComponent_Position,
-           (void*)s_fn_Entity_GetSpotPosition, (void*)s_fn_MeshInstance_SetVisibility);
-    printf("[FishingWork]   FishAction=%p PlayAnim=%p TryAssign=%p\n",
-           (void*)s_fn_FishingAction_Ctor, (void*)s_fn_PlayAnimation_Action_Ctor,
-           (void*)s_fn_TryAssignToSpot);
-    printf("[FishingWork]   FindPosEnt=%p CancelPending=%p\n",
-           (void*)s_fn_FindComp_PositionEntity, (void*)s_fn_CancelPendingActions);
-    if (!ok) printf("[FishingWork] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_fishingwork_funcs_resolved = ok;
-    return ok;
-}
+// GameColl::AsArray<T> member calls (ENDGAME B.3.2 step 2).
 
 // ============================================================
 // Helper: Find a specific component by type ID on an entity's component list
@@ -179,7 +75,7 @@ static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
         if (compTypeId == typeId) {
             ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
             void* result = (void*)*ibpSlot;
-            if (fn_IsDerivedFrom(result, typeId)) {
+            if (Object::IsDerivedFromNullSafe(result, typeId)) {
                 return result;
             }
             return nullptr;
@@ -201,7 +97,7 @@ static void* FindComponentOnSubObject(uintptr_t subObj, uint32_t typeId) {
         uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (compTypeId == typeId) {
             void* c = *(void**)(arrayPtr + (uintptr_t)i * 8);
-            if (fn_IsDerivedFrom(c, typeId)) {
+            if (Object::IsDerivedFromNullSafe(c, typeId)) {
                 return c;
             }
             return nullptr;
@@ -247,7 +143,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
     // Get fishing description via IsDerivedFrom check on component+0x18
     void* compBase = *(void**)(fishingIBP + 0x18);
     void* fishingDesc = nullptr;
-    if (fn_IsDerivedFrom(compBase, FishingDescription::TypeId())) {
+    if (Object::IsDerivedFromNullSafe(compBase, FishingDescription::TypeId())) {
         fishingDesc = compBase;
     }
 
@@ -261,8 +157,8 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
 
     // Toggle mesh instance visibility based on capacity (visGroup 2)
     uintptr_t meshIBPBuf = 0;
-    s_fn_FindComponent_MeshInstance(*(uintptr_t*)(selfAddr + 0x10), &meshIBPBuf);
-    s_fn_MeshInstance_SetVisibility(*(void**)&meshIBPBuf, 2, atCapacity ? 1 : 0);
+    WorkBase_FindComponent_2f90(*(uintptr_t*)(selfAddr + 0x10), &meshIBPBuf);
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(*(void**)&meshIBPBuf), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
         return 1;
@@ -270,7 +166,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
 
     // Find position component on building entity
     uintptr_t posIBP = 0;
-    s_fn_FindComponent_Position(*(uintptr_t*)(selfAddr + 0x10), &posIBP);
+    WorkBase_FindComponent_2ed0(*(uintptr_t*)(selfAddr + 0x10), &posIBP);
 
     int citizenCount = (int)selfQ[10];  // +0x50
 
@@ -305,7 +201,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
         for (int i = 0; i < spotCount; i++) {
             // Get spot position (mode=2)
             float spotPos[3];
-            s_fn_Entity_GetSpotPosition((void*)posIBP, spotPos, 2, i, nullptr);
+            Pf_EntityResolvePos_2e20((void*)posIBP, spotPos, 2, i, nullptr);
 
             int half = mapSize >> 1;
             int cx = ClampToMap((int)(spotPos[0] + (float)half), mapSize);
@@ -336,7 +232,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             // Get citizen position (mode=0) for pathfinding
             float citizenPos[3];
             float citizenHeading;
-            s_fn_Entity_GetSpotPosition((void*)posIBP, citizenPos, 0, emptySlot, &citizenHeading);
+            Pf_EntityResolvePos_2e20((void*)posIBP, citizenPos, 0, emptySlot, &citizenHeading);
 
             // Get citizen's home position for pathfinding source
             uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
@@ -353,7 +249,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
 
             // Get spot cell
             float spotPos[3];
-            s_fn_Entity_GetSpotPosition((void*)posIBP, spotPos, 0, emptySlot, &citizenHeading);
+            Pf_EntityResolvePos_2e20((void*)posIBP, spotPos, 0, emptySlot, &citizenHeading);
 
             int spHalf = cMapSize >> 1;
             int scx = ClampToMap((int)(spotPos[0] + (float)spHalf), cMapSize);
@@ -366,7 +262,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             // fishable-tile score, and this branch used to return silently — a working
             // dock and a stranded one logged exactly the same nothing. Count it and print
             // the two region ids, which name the cause outright.
-            uint64_t passResult = fn_Map_CheckPassable(mapGridPtr, 0xe1f, (uint32_t)citizenCell, spotCell);
+            uint64_t passResult = WorkBase_ValidateCell_a00f0(mapGridPtr, 0xe1f, (uint32_t)citizenCell, spotCell);
             if ((char)passResult == '\0') {
                 return 1;
             }
@@ -437,8 +333,8 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 float uvScale = (*g_fUVScale / (float)terrainType) * *(float*)(fishingIBP + 0x54);
                 uint32_t spotInfo = ((freeSpot | 0x800) << 4) | emptySlot;
 
-                s_fn_FishingAction_Ctor(
-                    &citizenRef, (int)selfQ[4], &entityRef,
+                WorkAct_FishWorkCtor_beae0(
+                    &citizenRef, (int)selfQ[4], reinterpret_cast<int64_t*>(&entityRef),
                     citizenPos, citizenHeading,
                     *(uint64_t*)((uintptr_t)fishingDesc + 0x20),
                     uvScale, freeSpotMapCell, spotInfo);
@@ -471,7 +367,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             // All 10 random attempts failed — retry with animation if under limit
             if ((int)selfQ[0xd] < 0xb) {  // retry count < 11
                 uintptr_t citizenRef2 = *(uintptr_t*)citizenIBP;
-                s_fn_PlayAnimation_Action_Ctor(&citizenRef2, (int)selfQ[4], emptySlot);
+                WorkAct_PlayAnimationCtor_c2490(&citizenRef2, (int)selfQ[4], emptySlot);
 
                 int priority = (int)selfQ[4];
                 uintptr_t ce = *(uintptr_t*)citizenIBP;
@@ -509,7 +405,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             }
 
             // Has storage items — replan citizen
-            fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
+            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenIBP));
             return 2;
         }
     }
@@ -519,7 +415,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
             float spotPos[3];
-            s_fn_Entity_GetSpotPosition((void*)posIBP, spotPos, 2, i, nullptr);
+            Pf_EntityResolvePos_2e20((void*)posIBP, spotPos, 2, i, nullptr);
 
             int half = *mapGridPtr >> 1;
             int cx = ClampToMap((int)(spotPos[0] + (float)half), *mapGridPtr);
@@ -583,7 +479,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 if (tid == WorkComponent::TypeId()) {
                     ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
                     void* c = (void*)*ibpSlot;
-                    if (fn_IsDerivedFrom(c, WorkComponent::TypeId())) {
+                    if (Object::IsDerivedFromNullSafe(c, WorkComponent::TypeId())) {
                         workplaceComp = c;
                     }
                     break;
@@ -658,7 +554,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
             void* citizenRef = *(void**)citizenIBP;
             int spotRadius = *(int*)(workplaceIBP + 0x28);
-            uint64_t assignResult = s_fn_TryAssignToSpot(assignMgr, &citizenRef, spotRadius, '\x01');
+            uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, spotRadius, '\x01');
 
             if ((char)assignResult != '\0') {
                 return 2;
@@ -699,7 +595,7 @@ int FishingWork::Validate() {
         // Validate this citizen's task
         uintptr_t citizenIBP = citizenRef;
         uintptr_t outTask = 0;
-        char valid = (char)fn_Work_CanStartWork(this, nullptr, &citizenIBP, &outTask);
+        char valid = (char)WorkBase_ValidateTask_f7100(this, nullptr, &citizenIBP, reinterpret_cast<void**>(&outTask));
 
         if (valid == '\0') {
             // Invalid — clear citizen slot
@@ -719,7 +615,7 @@ int FishingWork::Validate() {
                     if (mappingCount != 0) {
                         newCap = newCount * 3;
                     }
-                    int* newArr = (int*)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 4, 4);
+                    int* newArr = (int*)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 4, 4);
 
                     // Copy existing data
                     int copyStart = (spotMapping == newArr) ? mappingCount : 0;
@@ -739,7 +635,7 @@ int FishingWork::Validate() {
                     mappingCapacity = newCap;
 
                     if (oldArr != newArr && oldArr != nullptr) {
-                        fn_MemFreeStatic(oldArr);
+                        System::MemoryAllocator::MemFree(oldArr);
                     }
                 } else {
                     // Room in existing array
@@ -780,7 +676,7 @@ int FishingWork::Validate() {
         }
     }
 
-    fn_MemFreeStatic(spotMapping);
+    System::MemoryAllocator::MemFree(spotMapping);
     return allValid ? 1 : 0;
 }
 
@@ -829,7 +725,7 @@ void FishingWork::Persist(void* stream) {
             // Validate: if the ptr is non-null and not derived from expected type, null it
             uintptr_t ptrVal = *(uintptr_t*)ibpPtr;
             if (ptrVal != 0) {
-                if (!fn_IsDerivedFrom((void*)ptrVal, CitizenComponent::TypeId())) {
+                if (!Object::IsDerivedFromNullSafe((void*)ptrVal, CitizenComponent::TypeId())) {
                     *(uintptr_t*)ibpPtr = 0;
                 }
             }
@@ -961,7 +857,7 @@ int FishingWork::Cleanup() {
             uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
 
             // Cancel pending actions on smComp+0x48 (action list)
-            s_fn_CancelPendingActions((void*)(smComp + 0x48));
+            WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
         }
 
         i++;
@@ -985,7 +881,7 @@ void* FishingWork::GetTarget(void* param2) {
 
     // Find PositionComponent via FUN_140002e10
     uintptr_t posIBP[1] = {0};
-    s_fn_FindComp_PositionEntity(buildingEntity, posIBP);
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(buildingEntity), posIBP);
 
     // CheckPtr on the returned IBP
 
@@ -1005,12 +901,10 @@ int FishingWork::GetPriority() {
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The stamps are the compiler's. FishingWork_ResolveFuncs
-// wires the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The stamps are the compiler's.
 FishingWork::FishingWork()
     : Work(), citizenRefs(nullptr), citizenCount(0), citizenCapacity(0),
       spotStates(nullptr), spotCount(0), spotCapacity(0), retryCount(0) {
-    FishingWork_ResolveFuncs();
 }
 
 // ============================================================

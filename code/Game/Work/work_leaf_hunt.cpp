@@ -20,7 +20,9 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"                 // B3R: PlayerPath_FindComponent_3ea0
+#include "Component/controller_state_table.h"   // B3R: StateMachine_TickReimpl
+#include "system/Value.h"                      // B3R: RtSystem_Time_Ctor
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/HuntComponent.h"                // ENDGAME B.3.9 D5
@@ -61,7 +63,7 @@ void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
             if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
+                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -69,7 +71,7 @@ void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
             if (i >= n) { found = nullptr; break; }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -91,7 +93,7 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
             if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
+                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -99,7 +101,7 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
             if (i >= n) { found = nullptr; break; }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -121,7 +123,7 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
             if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
+                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -129,7 +131,7 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
             if (i >= n) { found = nullptr; break; }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -152,7 +154,7 @@ void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == tid) {
                 void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
+                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -188,7 +190,7 @@ bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self) {
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == tid) {
                 void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
+                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -240,7 +242,7 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
                 if (t == tidInner) {
                     uintptr_t* slot2 = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
                     void* c = reinterpret_cast<void*>(*slot2);
-                    sub = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidInner)) ? c : nullptr;
+                    sub = (Object::IsDerivedFromNullSafe(c, tidInner)) ? c : nullptr;
                     break;
                 }
             }
@@ -248,7 +250,7 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
 
         // Wrap the sub-component in an IBP buffer (matches the exe's local_res8).
         uintptr_t subIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&subIBP) ::Object::InternalBasePtr(
+        new (&subIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(sub));   // B.3.3 bridge
 
         // Candidate score = subIBP+0x44. Keep only if strictly greater than current best.
@@ -258,7 +260,7 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
                 float score = *reinterpret_cast<float*>(subIBP + 0x44);
                 void* obj = *reinterpret_cast<void**>(subIBP + 0x18);
                 void* derived = nullptr;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tidThresh)) derived = obj;
+                if (Object::IsDerivedFromNullSafe(obj, tidThresh)) derived = obj;
                 // Keep only if score strictly exceeds derived+0x30 (threshold).
                 float threshold = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(derived) + 0x30);
                 if (threshold <= score && score != threshold) {
@@ -283,24 +285,13 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
 // Closure: FUN_140003ea0 (registered), StateMachine_Tick 0x1400a9660 (registered),
 //          System::Time::Time float-ctor + InternalBasePtr CheckPtr (engine).
 // ABI: void fn(longlong self).
-typedef void* (*WL_FindEntity_3ea0_t)(uintptr_t self, void* retIBP);
-typedef void (*WL_StateMachine_Tick_t)(void* sm, int64_t deltaTime, char p3, char p4);
-static WL_FindEntity_3ea0_t s_wl_findEntity_3ea0 = nullptr;
-static WL_StateMachine_Tick_t s_wl_smTick = nullptr;
-static bool s_wl_b310_init = false;
-static void WorkLeaf_EnsureB310() {
-    if (s_wl_b310_init) return;
-    s_wl_b310_init = true;
-    s_wl_findEntity_3ea0 = reinterpret_cast<WL_FindEntity_3ea0_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_wl_smTick = reinterpret_cast<WL_StateMachine_Tick_t>(ResolveAddr(Module::Exe, 0x1400a9660));
-}
+// FUN_140003ea0 = PlayerPath_FindComponent_3ea0 (Player/exe_bodies.h), 0x1400a9660 =
+// StateMachine_TickReimpl (Component/controller_state_table.h): called by name (B3R).
 void WorkLeaf_ConsumeProduce_b310(uintptr_t self) {
-    WorkLeaf_EnsureB310();
     *reinterpret_cast<uint8_t*>(self + 0x48) = 1;
 
     uintptr_t ent = 0;
-    if (s_wl_findEntity_3ea0)
-        s_wl_findEntity_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
+    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
 
     char state = *reinterpret_cast<char*>(ent + 0x52);
     if (state < 0) state = *reinterpret_cast<char*>(ent + 0x50);
@@ -312,11 +303,11 @@ void WorkLeaf_ConsumeProduce_b310(uintptr_t self) {
     if (*reinterpret_cast<char*>(ent + 0x51) < 0) {
         // Build a zero Time (System::Time::Time(&t, 0.0f)) and tick.
         uint8_t timeBuf[16] = {0};
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeBuf, 0.0f);
-        if (s_wl_smTick) {
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
+        {
             // StateMachine_Tick(&(ent+0x48), Time, 0, 0). The SM object is at ent+0x48.
             int64_t t = *reinterpret_cast<int64_t*>(timeBuf);
-            s_wl_smTick(reinterpret_cast<void*>(ent + 0x48), t, 0, 0);
+            StateMachine_TickReimpl(reinterpret_cast<void*>(ent + 0x48), t, 0, 0);
         }
     }
 

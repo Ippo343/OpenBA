@@ -23,6 +23,7 @@
 // surface normal (fn_MapGetTerrainPos's outTri[2]); see mapquery.cpp.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdint>
@@ -54,7 +55,7 @@ static int MapTileGrid_Classify(void* game, int dim, int idx) {
     float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
     float out[3] = { 0, 0, 0 };
     float tri[4] = { 0, 0, 0, 0 };
-    fn_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only, no picking refine
+    Reimpl_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only, no picking refine
     const float h     = out[2];
     const float slope = tri[2];
     if (h < kDeepWaterMax) return TILE_DEEP_WATER;
@@ -65,13 +66,13 @@ static int MapTileGrid_Classify(void* game, int dim, int idx) {
 
 // Build the dim*dim tile grid at Game+0x80 (front-half of CreateNaturalResource).
 extern "C" void MapTileGrid_Build(void* gameVoid, int dim) {
-    if (!gameVoid || dim <= 0 || !fn_MapGetTerrainPos || !fn_MemAlloc) return;
+    if (!gameVoid || dim <= 0) return;
     uint8_t* game = (uint8_t*)gameVoid;
     *(int32_t*)(game + GAME_DIM) = dim;
 
     const int    count = dim * dim;
     const size_t bytes = (size_t)count * kCellStride;
-    uint8_t* cells = (uint8_t*)fn_MemAlloc(g_pMemAllocSingleton, bytes, 8);
+    uint8_t* cells = (uint8_t*)System::MemoryAllocator::MemAlloc(bytes, 8);
     if (!cells) return;
 
     // Fresh-cell init (sub_aa90 new-element branch): zeroed except +0x18/+0x2a.

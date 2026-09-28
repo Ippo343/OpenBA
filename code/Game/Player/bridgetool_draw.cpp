@@ -41,7 +41,7 @@
 
 #include "BridgeTool.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -110,17 +110,8 @@ void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
 constexpr uint32_t kRed   = 0xffff0000u;
 constexpr uint32_t kGreen = 0xff00ff00u;
 
-// FUN_140101270 — ScreenToCell (ray-picks the map cell under the cursor).
-typedef int (*fn_ScreenToCell_t)(void* self);
-fn_ScreenToCell_t s_fn_ScreenToCell = nullptr;
-bool s_resolved = false;
-
-void EnsureFuncs() {
-    if (s_resolved) return;
-    s_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
-        ResolveAddr(Module::Exe, 0x140101270));
-    s_resolved = true;
-}
+// FUN_140101270 — ScreenToCell (ray-picks the map cell under the cursor):
+// PlayerRay_ScreenToCell_101270 (Player/exe_bodies.h), called by name.
 
 }  // namespace
 
@@ -130,19 +121,15 @@ void EnsureFuncs() {
 void BridgeTool::Draw(void* context, char skip) {
     if (skip != '\0') return;
 
-    EnsureFuncs();
-
     // ---- 1. Resolve the span being previewed -------------------------------
     int startCell, endCell;
     if (dragState == '\0') {
         // Not dragging: preview the single cell under the cursor.
-        startCell = s_fn_ScreenToCell ? s_fn_ScreenToCell(this) : -1;
+        startCell = PlayerRay_ScreenToCell_101270(reinterpret_cast<uintptr_t>(this));
         endCell   = startCell;
     } else {
         startCell = this->startCell;
-        endCell   = fn_BridgeTool_SnapEndCell
-                  ? fn_BridgeTool_SnapEndCell(this, this->endCell)
-                  : -1;
+        endCell   = BridgeTool_SnapEndCell_Impl(this, this->endCell);   // 0x1400fb710
     }
     if (startCell < 0) return;
     if (endCell < 0) endCell = startCell;
@@ -174,9 +161,8 @@ void BridgeTool::Draw(void* context, char skip) {
     const int maxRow = (endRow < startRow) ? startRow : endRow;
 
     // Does the whole span validate? Drives the base color of every body cell.
-    const bool pathValid = fn_BridgeTool_ValidatePath
-        ? (fn_BridgeTool_ValidatePath(this, startCell, endCell, nullptr) != 0)
-        : false;
+    const bool pathValid =
+        static_cast<int>(BridgeTool_ValidatePath_Impl(this, startCell, endCell, nullptr)) != 0;   // 0x1400fb2d0
 
     const bool isDrag = (startCell != endCell);
 
@@ -259,7 +245,8 @@ void BridgeTool::Draw(void* context, char skip) {
     // ---- 4. Submit -----------------------------------------------------------
     // Retail passes an (uninitialised) RCX and a second, always-empty tile array in R9.
     TileArray empty;
-    if (fn_TileRender) fn_TileRender(nullptr, context, &tiles, &empty);
+    PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&tiles),
+                                      reinterpret_cast<int64_t*>(&empty));   // 0x1401008c0
 
     // Report the first hover frame and the first real DRAG frame separately — a hover
     // only ever emits one tile, so "it renders" says nothing about the span loop.
@@ -275,7 +262,7 @@ void BridgeTool::Draw(void* context, char skip) {
                     "valid=%d radius=%d tiles=%d green=%d red=%d render=%p\n",
                     isDrag ? "drag" : "hover", startCell, endCell, minCol, minRow,
                     maxCol, maxRow, (int)pathValid, radius, tiles._size, green,
-                    tiles._size - green, (void*)fn_TileRender);
+                    tiles._size - green, (void*)&PlayerTileRender_DrawOverlay_08c0);
             fflush(stderr);
         }
     }

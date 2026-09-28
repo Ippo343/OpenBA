@@ -15,7 +15,8 @@
 #include "Player/PathTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -24,52 +25,17 @@
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
-// Local function pointers for PathTool-specific operations
-// ============================================================
-
-// FUN_1401005a0: GetMouseRay — computes ray origin and direction from mouse position.
-// Args: (keyMap, outDir, outOrigin)
-typedef void (*fn_GetMouseRay_t)(uint64_t keyMap, void* outDir, void* outOrigin);
-static fn_GetMouseRay_t s_fn_GetMouseRay = nullptr;
-
-// FUN_1400aa530 (QuarryComponent_impl_a530): RaycastTerrain — intersects ray with terrain.
-// Args: (mapSystem, rayOrigin, rayDir, outParam, outPos, outDistance) -> bool
-typedef bool (*fn_RaycastTerrain_t)(uint64_t mapSystem, float* rayOrigin, void* rayDir,
-    float* outParam, float* outPos, float* outDistance);
-static fn_RaycastTerrain_t s_fn_RaycastTerrain = nullptr;
-
-// FUN_1400a0280: GetEntityAtCell — looks up entity at map cell index.
-// Args: (mapData, retIBP, cellIndex) -> InternalBasePtr*
-typedef void* (*fn_GetEntityAtCell_t)(uint64_t mapData, void* retIBP, int cellIndex);
-static fn_GetEntityAtCell_t s_fn_GetEntityAtCell = nullptr;
-
-// PathTool_helper_d710: SetSelectedEntity — sets the selected entity with highlighting.
-// Args: (self, entityIBP)
-typedef void (*fn_PathToolSetSelected_t)(uint64_t self, void* entityIBP);
-static fn_PathToolSetSelected_t s_fn_PathToolSetSelected = nullptr;
-
+// PathTool helpers, called by name (Player/exe_bodies.h):
+//   0x1401005a0 PlayerRay_GetMouseRay_1005a0 -- ray from the mouse position
+//               (this call site passes (keyMap, dir, origin))
+//   0x1400aa530 PlayerRay_TerrainMarch_aa530 -- intersect the ray with the terrain
+//   0x1400a0280 PlayerEdit_EntityAtCell_a0280 -- entity at a map cell
+//   0x1400dd710 PathTool_helper_d710 -- SetSelectedEntity (+ highlighting)
+//   0x1401008c0 PlayerTileRender_DrawOverlay_08c0 -- the tile overlay submit
 // NOTE: the former s_fn_SubmitDebugDraw helper was removed — it resolved a
 // dropped-digit-typo address (0x1400c08c0, mid-function in FUN_1400c0690) and was
-// never called (PathTool::Draw uses fn_TileRender for the debug overlay). Dead code.
-
-
-static bool s_funcsResolved = false;
-
-static void ResolvePathToolFuncs() {
-    if (s_funcsResolved) return;
-
-    s_fn_GetMouseRay = reinterpret_cast<fn_GetMouseRay_t>(
-        ResolveAddr(Module::Exe, 0x1401005a0));
-    s_fn_RaycastTerrain = reinterpret_cast<fn_RaycastTerrain_t>(
-        ResolveAddr(Module::Exe, 0x1400aa530));
-    s_fn_GetEntityAtCell = reinterpret_cast<fn_GetEntityAtCell_t>(
-        ResolveAddr(Module::Exe, 0x1400a0280));
-    s_fn_PathToolSetSelected = reinterpret_cast<fn_PathToolSetSelected_t>(
-        ResolveAddr(Module::Exe, 0x1400dd710));
-
-
-    s_funcsResolved = true;
-}
+// never called. Dead code.
+// ============================================================
 
 // ============================================================
 // Helper: get KeyMap from external reference
@@ -115,8 +81,6 @@ PathTool::~PathTool() {
 //
 // Original: 0x1400de6b0
 char PathTool::OnKey(char key) {
-    ResolvePathToolFuncs();
-
     if (key == '\0') {
         return 1;
     }
@@ -135,9 +99,7 @@ char PathTool::OnKey(char key) {
     float rayOrigin[3] = {0};  // 12 bytes (vec3)
     float rayDir[3] = {0};     // 12 bytes (vec3)
     float distance[2] = {0};   // raycast distance param
-    if (s_fn_GetMouseRay) {
-        s_fn_GetMouseRay(keyMap, rayDir, rayOrigin);
-    }
+    PlayerRay_GetMouseRay_1005a0(reinterpret_cast<void*>(keyMap), rayDir, rayOrigin);
 
     // Raycast terrain
     distance[0] = 400.0f;
@@ -150,9 +112,9 @@ char PathTool::OnKey(char key) {
     terrainParam[0] = 400.0f;  // 0x43c80000 as float
 
     uint64_t mapSystem = *(uint64_t*)(((uintptr_t)*g_pGameWorldSingleton) + 0x110);
-    if (s_fn_RaycastTerrain && mapSystem) {
-        bool hit = s_fn_RaycastTerrain(mapSystem, (float*)rayDir, rayOrigin,
-            terrainParam, outPos, distance);
+    if (mapSystem) {
+        bool hit = PlayerRay_TerrainMarch_aa530(mapSystem, (float*)rayDir, rayOrigin,
+            terrainParam, outPos, distance) != 0;
         if (hit) {
             int gridSize = *mapGrid;
             int cellX = (int)(outPos[0] + (float)(gridSize >> 1));
@@ -163,9 +125,9 @@ char PathTool::OnKey(char key) {
             if (cellY < 0) cellY = 0;
             if (cellY >= gridSize) cellY = gridSize - 1;
             int cellIndex = gridSize * cellY + cellX;
-            if (cellIndex > 0 && s_fn_GetEntityAtCell) {
+            if (cellIndex > 0) {
                 uint64_t retIBP = 0;
-                s_fn_GetEntityAtCell(mapData, &retIBP, cellIndex);
+                PlayerEdit_EntityAtCell_a0280(mapData, &retIBP, cellIndex);
                 entityIBP = retIBP;
             }
         }
@@ -184,7 +146,7 @@ char PathTool::OnKey(char key) {
             *reinterpret_cast<Vector3*>(hitNormal), *reinterpret_cast<Vector3*>(hitPos)));
         if ((int)hitIdx >= 0) {
             void* userData = reinterpret_cast<const Picking::Scene*>(pickingScene)->GetUserData(hitIdx);   // B.3.7 bridge
-            if (fn_InternalBasePtr_Ctor) {
+            {
                 uint64_t tmpIBP = 0;
                 new (&tmpIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(userData));   // B.3.3 bridge
@@ -197,9 +159,7 @@ char PathTool::OnKey(char key) {
     if (entityIBP != 0) {
         if ((uint64_t)selectedEntity != entityIBP) {
             uint64_t tmpIBP = entityIBP;
-            if (s_fn_PathToolSetSelected) {
-                s_fn_PathToolSetSelected((uint64_t)this, &tmpIBP);
-            }
+            PathTool_helper_d710(reinterpret_cast<int64_t>(this), &tmpIBP);
         }
     }
 
@@ -246,12 +206,12 @@ struct PathTileArray {
         int newCount = count + 1;
         if (newCount > capacity) {
             int newCap = (count == 0) ? newCount * 3 : newCount * 3;
-            PathTileRecord* newData = (PathTileRecord*)fn_MemAlloc(
-                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(PathTileRecord), 4);
+            PathTileRecord* newData = (PathTileRecord*)System::MemoryAllocator::MemAlloc(
+                (uint64_t)newCap * sizeof(PathTileRecord), 4);
             if (data && newData) {
                 memcpy(newData, data, (uint64_t)count * sizeof(PathTileRecord));
             }
-            if (data) fn_MemFreeStatic(data);
+            if (data) System::MemoryAllocator::MemFree(data);
             data = newData;
             capacity = newCap;
         }
@@ -268,7 +228,7 @@ struct PathTileArray {
     }
 
     void free() {
-        if (data) fn_MemFreeStatic(data);
+        if (data) System::MemoryAllocator::MemFree(data);
         data = nullptr;
         count = 0;
         capacity = 0;
@@ -287,12 +247,12 @@ struct PathLineArray {
         int newCount = count + 1;
         if (newCount > capacity) {
             int newCap = (count == 0) ? newCount * 3 : newCount * 3;
-            PathLineRecord* newData = (PathLineRecord*)fn_MemAlloc(
-                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(PathLineRecord), 4);
+            PathLineRecord* newData = (PathLineRecord*)System::MemoryAllocator::MemAlloc(
+                (uint64_t)newCap * sizeof(PathLineRecord), 4);
             if (data && newData) {
                 memcpy(newData, data, (uint64_t)count * sizeof(PathLineRecord));
             }
-            if (data) fn_MemFreeStatic(data);
+            if (data) System::MemoryAllocator::MemFree(data);
             data = newData;
             capacity = newCap;
         }
@@ -309,7 +269,7 @@ struct PathLineArray {
     }
 
     void free() {
-        if (data) fn_MemFreeStatic(data);
+        if (data) System::MemoryAllocator::MemFree(data);
         data = nullptr;
         count = 0;
         capacity = 0;
@@ -379,9 +339,8 @@ void PathTool::Draw(void* context, char) {
     tiles.toEngineFormat(tileArrayBuf);
     lines.toEngineFormat(lineArrayBuf);
 
-    if (fn_TileRender) {
-        fn_TileRender(nullptr, context, tileArrayBuf, lineArrayBuf);
-    }
+    PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(tileArrayBuf),
+                                      reinterpret_cast<int64_t*>(lineArrayBuf));
 
     lines.free();
     tiles.free();
@@ -395,8 +354,6 @@ void PathTool::Draw(void* context, char) {
 //
 // Original: 0x1400de8d0
 bool PathTool::IsSelected(uint64_t* param2) {
-    ResolvePathToolFuncs();
-
     // Call CheckPtr on self->selectedEntity to resolve any lazy pointer
 
     // Compare the stream value to the selected entity
