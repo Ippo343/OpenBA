@@ -382,8 +382,7 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         }
         *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x164) = static_cast<short>(uVar2);
         if (-1 < *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x166)) {
-            // vtable +0x38 call
-            (*reinterpret_cast<void(**)(long long*)>(*plVar4 + 0x38))(plVar4);
+            reinterpret_cast<Component*>(plVar4)->OnRemove();   // B.3.x bridge (slot 7)
         }
         *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
         // With the live construction pipeline (BANISHED_LIVE_BUILDCTRL) the placed building

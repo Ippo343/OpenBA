@@ -560,12 +560,8 @@ int Pickup::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
             if (pickupIBP == nullptr) continue;
 
             // vtable slot 11 (+0x58) = "already has a worker" -> skip this pile.
-            {
-                typedef char (*HasWorker_t)(void*);
-                auto hasWorker = *reinterpret_cast<HasWorker_t*>(
-                    *reinterpret_cast<uintptr_t*>(pickupIBP) + 0x58);
-                if (hasWorker && hasWorker(pickupIBP)) continue;
-            }
+            // The caller reads AL only (hence the char).
+            if (static_cast<char>(reinterpret_cast<Work*>(pickupIBP)->GetPriority())) continue;   // B.3.x bridge (slot 11)
 
             PickupCandidate n;
             n.cell       = nCell;

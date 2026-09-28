@@ -55,6 +55,9 @@
 
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"      // B.3.x W0: ~ModDialog deletes by name
+#include "graphics/Material.h"   // B.3.x W0: ~ModDialog deletes by name
+#include "video/ImageBuffer.h"   // B.3.x W0: ~ModDialog deletes by name
 #include "engine/UpdateLoop.h"   // ENDGAME B.3.7 callers (K1)
 #include "Dialog/ModDialog.h"
 #include "Dialog/ModDetailsDialog.h"
@@ -145,13 +148,13 @@ ModDialog::~ModDialog() {
     int count = *reinterpret_cast<int*>(s + 0xC0);
     for (int i = 0; entries && i < count; ++i) {
         uintptr_t e = entries + static_cast<uintptr_t>(i) * 0x58;
-        for (uintptr_t off : { (uintptr_t)0x50, (uintptr_t)0x48, (uintptr_t)0x40 }) {
-            void* obj = *reinterpret_cast<void**>(e + off);
-            if (!obj) continue;
-            void** vt = *reinterpret_cast<void***>(obj);
-            if (!vt || !vt[0]) continue;
-            reinterpret_cast<void* (*)(void*, uint32_t)>(vt[0])(obj, 1);
-        }
+        // Retail order +0x50, +0x48, +0x40; each deleted through its own slot 0 (B.3.x bridge).
+        if (void* sheet = *reinterpret_cast<void**>(e + 0x50))
+            reinterpret_cast<UI::SpriteSheet*>(sheet)->DeletingDtor(1);
+        if (void* mat = *reinterpret_cast<void**>(e + 0x48))
+            reinterpret_cast<Graphics::MaterialInstance*>(mat)->DeletingDtor(1);
+        if (void* image = *reinterpret_cast<void**>(e + 0x40))
+            reinterpret_cast<Video::ImageBuffer*>(image)->DeletingDtor(1);
     }
     if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(entries));
     *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;

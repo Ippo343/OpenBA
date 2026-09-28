@@ -897,10 +897,7 @@ int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
                     void** compIBP = reinterpret_cast<void**>(compArray + (uintptr_t)j * 8);
                     void* comp = *compIBP;
 
-                    // GetTypeId via vtable[2] (+0x10)
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    uint32_t typeId = reinterpret_cast<GetTypeId_t>(
-                        *(void**)((*(uintptr_t*)comp) + 0x10))(comp);
+                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
 
                     if (typeId == RawMaterialComponent::TypeId()) {
                         // Verify with IsDerivedFrom
@@ -932,9 +929,7 @@ int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
                     void** compIBP = reinterpret_cast<void**>(compArray + (uintptr_t)j * 8);
                     void* comp = *compIBP;
 
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    uint32_t typeId = reinterpret_cast<GetTypeId_t>(
-                        *(void**)((*(uintptr_t*)comp) + 0x10))(comp);
+                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
 
                     if (typeId == WorkComponent::TypeId()) {
                         void** compIBP2 = reinterpret_cast<void**>(

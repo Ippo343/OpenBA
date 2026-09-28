@@ -209,11 +209,8 @@ check_pressed:
             reinterpret_cast<::Object::External*>(pending)                 // B.3.3 bridge
                 ->SaveText(pathFilename, filenameRsc);
 
-            // g. Call vtable[0] on the External object (scalar dtor with flag=1, frees it)
-            typedef void (*fn_VtableDtor_t)(void* self, uint32_t flags);
-            void** vtable = *(void***)pending;
-            if (vtable)
-                ((fn_VtableDtor_t)vtable[0])(pending, 1);
+            // g. Delete the External through its own slot 0 (flag 1 = free)
+            reinterpret_cast<::Object::External*>(pending)->DeletingDtor(1);   // B.3.x bridge (slot 0)
 
             // h. Clear pendingExternal
             self->pendingExternal = nullptr;

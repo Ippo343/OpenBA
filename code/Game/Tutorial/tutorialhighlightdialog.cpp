@@ -12,6 +12,7 @@
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
+#include "object/VSlot.h"      // B.3.x W0: the typeName probe's slot
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Sprite.h"                        // ENDGAME B.3.6 UI callers (K4)
@@ -294,10 +295,10 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
         if (!obj) return "(null)";
         uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);
         if (!vt) return "(no vtable)";
-        typedef uint32_t (*fn_t)(void*);
-        fn_t f = *reinterpret_cast<fn_t*>(vt + 0x10);
-        if (!f) return "(no GetTypeId)";
-        const char* n = ::Object::GetTypeNameById(f(reinterpret_cast<void*>(obj)));
+        if (!::Object::SlotAddressOf(reinterpret_cast<void*>(obj), &::Object::Base::Type))
+            return "(no GetTypeId)";
+        const char* n = ::Object::GetTypeNameById(
+            reinterpret_cast< ::Object::Base*>(obj)->Type());   // B.3.x bridge (slot 2)
         return n ? n : "(unknown id)";
     };
     // The entity's whole component roster (+0x30 array / +0x38 count). Print

@@ -104,7 +104,7 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
     for (int i = 0; i < n; i++) {
         void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
         // GetTypeId is component vtable slot +0x10.
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
             found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;

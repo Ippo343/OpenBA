@@ -30,6 +30,7 @@
 #include "collection/Collection.h"
 #include "resolve.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "video/ImageBuffer.h"   // B.3.x W0: Game_ImageCaptureDtor deletes by name
 #include <cstdint>
 #include <initializer_list>
 #include <new>
@@ -179,9 +180,7 @@ void Game_ImageCaptureDtor(void* self) {
     for (int off : {8, 0x10}) {
         void* obj = *reinterpret_cast<void**>(b + off);
         if (!obj) continue;
-        void** vtbl = *reinterpret_cast<void***>(obj);
-        if (!vtbl || !vtbl[0]) continue;
-        reinterpret_cast<void(*)(void*, int)>(vtbl[0])(obj, 1);
+        reinterpret_cast<Video::ImageBuffer*>(obj)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
     }
     // ENDGAME B.3.2 step 2: two trivial-element `~Array`s (headers at +0x28 and
     // +0x18, in that order — re-decompiled 2026-09-13: MemFree, data = 0, one
@@ -236,9 +235,7 @@ void Game_WeatherDtor(void* self) {
                         reinterpret_cast<Graphics::Geometry*>(geom));   // B.3.5 bridge
                 // Retail: (**(code **)*puVar2)(puVar2, 1) — object -> vtable ->
                 // slot 0. Same one-deref-short bug as Game_ImageCaptureDtor above.
-                void** vtbl = *reinterpret_cast<void***>(geom);
-                if (vtbl && vtbl[0])
-                    reinterpret_cast<void(*)(void*, int)>(vtbl[0])(geom, 1);
+                reinterpret_cast<Graphics::Geometry*>(geom)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
             }
         }
     }

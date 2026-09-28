@@ -46,6 +46,8 @@
 #include "renderdoc_integration.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "engine/UpdateLoop.h"   // B.3.x W0: UpdateLoop::Update by name
+#include "system/Value.h"        // System::Time
 
 // ============================================================
 // Element IDs assigned in Startup, dispatched in OnEvent
@@ -902,11 +904,10 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
         // System::Time::Time(0.0f)
         uint8_t timeVal[8] = {};
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeVal, 0.0f);
-        // Virtual call: gameWorld->vtable[3](gameWorld, &time)
-        void** vtable = *(void***)gameWorld;
-        typedef void (*VCallUpdate_t)(void* self, void* time);
-        if (vtable && vtable[3])
-            ((VCallUpdate_t)vtable[3])(gameWorld, timeVal);
+        // UpdateLoop slot 3, dispatched through the loop's own table (the world
+        // is a GameUpdateLoop).
+        reinterpret_cast<Engine::UpdateLoop*>(gameWorld)->Update(
+            *reinterpret_cast<const System::Time*>(timeVal));   // B.3.x bridge (slot 3)
     }
 }
 

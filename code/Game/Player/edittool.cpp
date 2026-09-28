@@ -891,8 +891,7 @@ static void DumpCitizenElemTree(void* elem, int depth, int* counter) {
     char* nameData = *(char**)(e + 0x10);
     int len = nameData ? *(int*)(nameData - 8) : 0;
     uint32_t tid = 0;
-    { void** vt = *(void***)elem;
-      if (vt && vt[2]) { typedef uint32_t(*G)(void*); tid = ((G)vt[2])(elem); } }
+    tid = reinterpret_cast<Object::Base*>(elem)->Type();   // B.3.x bridge (slot 2)
     uint32_t flags = *(uint32_t*)(e + 0x34);
     // Element bounds: +0x68 x, +0x6c y, +0x70 w, +0x74 h (ints) — from
     // TabElement::UpdateContainers geometry math.

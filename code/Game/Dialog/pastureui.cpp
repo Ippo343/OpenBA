@@ -21,6 +21,7 @@
 #include <cstdio>
 #include "Component/AnimalDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/Component.h"   // B.3.x W0: Component::Command by name
 
 // ============================================================
 // File-local helper: PastureCalcMaxCount_Impl (FUN_140128570)
@@ -273,9 +274,7 @@ void PastureUI::SetResource(int64_t param2) {
     int64_t currentResource = *(int64_t*)(pastureComp + 0x28);
     if (currentResource == 0 && param2 != 0) {
         *(int64_t*)(pastureComp + 0x28) = param2;
-        void** vtable = *(void***)(void*)pastureComp;
-        typedef void (*fn_InitProduction_t)(void*, int);
-        ((fn_InitProduction_t)vtable[14])((void*)pastureComp, 2);
+        reinterpret_cast<Component*>(pastureComp)->Command(2);   // B.3.x bridge (slot 14)
     }
 
     // Set the resource type

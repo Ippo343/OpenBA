@@ -236,9 +236,9 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
             for (int i = 0; i < cnt; ++i) {
                 void* geo = activeArray[i];
                 if (!geo) continue;
-                void** vt = *reinterpret_cast<void***>(geo);
-                if (vt && vt[1])   // +0x08 particle Update(geo, time)
-                    reinterpret_cast<void(*)(void*, void*)>(vt[1])(geo, time);
+                // Geometry slot 1: the particle Update(time).
+                reinterpret_cast<Graphics::Geometry*>(geo)->Update(
+                    *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
                 float intensity = *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(geo) + 0xc0);
                 if (intensity == 0.0f || weatherSetting == 0) {
                     {
@@ -247,8 +247,8 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
                             reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
                                 reinterpret_cast<Graphics::Geometry*>(geo));   // B.3.5 bridge
                     }
-                    if (vt && vt[0])   // +0x00 scalar-deleting dtor(geo, free=1)
-                        reinterpret_cast<void*(*)(void*, uint32_t)>(vt[0])(geo, 1);
+                    // Geometry slot 0: the scalar deleting dtor, free = 1.
+                    reinterpret_cast<Graphics::Geometry*>(geo)->DeletingDtor(1);   // B.3.x bridge (slot 0)
                     activeArray[i] = nullptr;
                     // (audio IBP slot w+0x60[i] stays null — no audio spawned)
                 }

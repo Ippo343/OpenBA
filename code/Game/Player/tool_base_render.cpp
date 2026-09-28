@@ -84,6 +84,8 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/VSlot.h"      // B.3.x W0: ReportBadSelectionRef's slot probe
+#include "system/Value.h"      // System::Time (Geometry::Update by name)
 
 // [diag] last entities committed into EditTool+0x30 (edittool_select.cpp step 6).
 extern "C" void* g_LastSelectStore[4];
@@ -422,7 +424,7 @@ void Impl_b930(int64_t self) {
     // Release the previous EdgeMesh (vtable slot 0 = scalar deleting dtor, arg 1 = free).
     void** oldMesh = *reinterpret_cast<void***>(self + 0xf8);
     if (oldMesh) {
-        reinterpret_cast<void(*)(void*, int)>((*reinterpret_cast<void***>(oldMesh))[0])(oldMesh, 1);
+        reinterpret_cast<Graphics::EdgeMesh*>(oldMesh)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
         *reinterpret_cast<void**>(self + 0xf8) = nullptr;
     }
 
@@ -530,7 +532,7 @@ void Impl_c4a0(int64_t self) {
         void** m = *reinterpret_cast<void***>(self + 0xf8);
         *reinterpret_cast<uint32_t*>(self + 0x120) = 0xffffffff;
         if (m) {
-            reinterpret_cast<void(*)(void*, int)>((*reinterpret_cast<void***>(m))[0])(m, 1);
+            reinterpret_cast<Graphics::EdgeMesh*>(m)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
             *reinterpret_cast<void**>(self + 0xf8) = nullptr;
         }
     }
@@ -589,7 +591,8 @@ void Impl_c4a0(int64_t self) {
             uint8_t time[8];
             if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
             void* inst = reinterpret_cast<void*>(self + 0x28);
-            reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
+            reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+                *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
             *reinterpret_cast<uint32_t*>(self + 0x120) =
                 reinterpret_cast<Graphics::Scene*>(scene)
                     ->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
@@ -670,7 +673,8 @@ add_prebuilt:
         uint8_t time[8];
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
-        reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
+        reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+            *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
         uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
             ->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
         uint32_t f0 = *reinterpret_cast<uint32_t*>(self + 0x20);
@@ -721,8 +725,10 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
                  g_LastSelectStore[g_LastSelectStoreIdx & 3]);
     std::fflush(stderr);
     // Only now the virtual probe (a live EditTool answers; a recycled block may not).
-    if (vt && vt[2]) {
-        uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(reinterpret_cast<void*>(self));
+    // (Tripwire probe of possibly-recycled memory: a null vptr, or a null Type()
+    // entry in the table it names, skips the call; the slot comes from the member.)
+    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {
+        uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)
         const char* n = ::Object::GetTypeNameById(tid);
         std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
         std::fflush(stderr);
@@ -948,7 +954,8 @@ void Impl_HighlightFollow(int64_t self) {
     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
     // vtable slot [1] = EdgeMeshInstance::Update(time): pulls the current transform
     // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
-    reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
+    reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+        *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
 
 }
 

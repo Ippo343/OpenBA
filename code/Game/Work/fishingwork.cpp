@@ -644,9 +644,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
                         uintptr_t* s2 = (uintptr_t*)(compArray + (uintptr_t)k * 8);
                         uintptr_t c2 = *s2;
                         if (!c2) { std::fprintf(stderr, "[FishWork]     [%d] <null>\n", k); continue; }
-                        uintptr_t v2 = *(uintptr_t*)c2;
-                        typedef uint32_t (*GetTypeId_t)();
-                        uint32_t t2 = ((GetTypeId_t)(*(uintptr_t*)(v2 + 0x10)))();
+                        uint32_t t2 = reinterpret_cast<Object::Base*>(c2)->Type();   // B.3.x bridge (slot 2)
                         const char* n2 = ::Object::GetTypeNameById(t2);
                         std::fprintf(stderr, "[FishWork]     [%d] tid=0x%x %s\n",
                                      k, t2, n2 ? n2 : "(unregistered)");

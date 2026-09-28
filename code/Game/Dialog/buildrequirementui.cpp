@@ -23,6 +23,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/VSlot.h"      // B.3.x W0: Object::SlotAddressOf
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
@@ -79,7 +80,8 @@ static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
         // NOT necessarily 8-aligned — only require it be non-null, not SaneHeapPtr,
         // or every component gets skipped.
         void** vtable = *(void***)comp;
-        if (!SaneHeapPtr(vtable) || vtable[2] == nullptr) continue;
+        if (!SaneHeapPtr(vtable) ||
+            Object::SlotAddressOf(comp, &Object::Base::Type) == nullptr) continue;   // B.3.x: slot from the member
         int compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (compTypeId == (int)typeId) {

@@ -51,6 +51,7 @@
 #include "Component/CitizenDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Player/EditTool.h"   // X::TypeId() (B.3.8 callers)
+#include "Work/Work.h"         // B.3.x W0: Work::GetTarget by name
 
 // FUN_140011050 — Entity::FindComponent<CitizenAIComponent>, the component whose +0x28
 // holds the citizen's current action-state index (the Action text on this panel and on
@@ -549,11 +550,9 @@ void CitizenUI::OnUpdateLayout() {
         if (homeRef != 0) {
             // Get profession description from home entity, compare with citizen's
             uintptr_t homeEntity = homeRef;
-            typedef void* (*fn_VGetDesc_t)(void* self, void* retval);
-            void** homeVtable = *(void***)((void*)homeEntity);
-            fn_VGetDesc_t vGetDesc = (fn_VGetDesc_t)homeVtable[10]; // vtable+0x50
             uint64_t descRef = 0;
-            vGetDesc((void*)homeEntity, &descRef);
+            // The gw+0x118 work tree's node payload is a Work (0x1400f88a0 fills it).
+            reinterpret_cast<Work*>(homeEntity)->GetTarget(&descRef);   // B.3.x bridge (slot 10)
             uintptr_t profDesc = *(uintptr_t*)(ai + 0x1F0);
             if (*(uintptr_t*)&descRef != profDesc) {
                 actionIndex = 0x10;  // "looking for work" or similar

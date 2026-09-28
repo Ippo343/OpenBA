@@ -404,12 +404,11 @@ void ResidenceUI::OnUpdateLayout() {
                     }
                     if (textProfession && builtProf) reinterpret_cast<UI::TextElement*>(textProfession)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
 
-                    // Activate buttonGoto: vtable[8](this)
+                    // Enable buttonGoto: retail 0x1400b54f6 `MOV DL,0x1` before
+                    // `CALL [RAX+0x40]` (the call used to leave RDX unset).
                     void* buttonGoto = *(void**)(rowBase + 0x28);
                     if (buttonGoto) {
-                        void** vtbl = *(void***)buttonGoto;
-                        typedef void (*VCall_Activate_t)(void*);
-                        ((VCall_Activate_t)vtbl[8])(buttonGoto);
+                        reinterpret_cast<UI::Element*>(buttonGoto)->Enable(true);   // B.3.x bridge (slot 8)
                     }
 
                     rowIdx++;
@@ -455,12 +454,10 @@ void ResidenceUI::OnUpdateLayout() {
                 reinterpret_cast<UI::TextElement*>(textProfession)->SetText(reinterpret_cast<const UI::String*>(origUIStr));  // B.3.6 bridge
             }
 
-            // Deactivate buttonGoto: vtable[8](this, 0)
+            // Disable buttonGoto (retail 0x1400b5664 `XOR EDX,EDX`).
             void* buttonGoto = *(void**)(rowBase + 0x28);
             if (buttonGoto) {
-                void** vtbl = *(void***)buttonGoto;
-                typedef void (*VCall_Deactivate_t)(void*, int);
-                ((VCall_Deactivate_t)vtbl[8])(buttonGoto, 0);
+                reinterpret_cast<UI::Element*>(buttonGoto)->Enable(false);   // B.3.x bridge (slot 8)
             }
 
             i++;

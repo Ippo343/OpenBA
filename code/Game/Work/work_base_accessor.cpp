@@ -41,7 +41,7 @@ static void* FindComponentByTypeIdVal(uintptr_t entity, void* retIBP, uint32_t t
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
         void* comp = *slot;
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
             found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
@@ -88,7 +88,7 @@ void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
     uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(compList + 0x28);
     for (int i = 0; i < n; i++) {
         void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
             found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;

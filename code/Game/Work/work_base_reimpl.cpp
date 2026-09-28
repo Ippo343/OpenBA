@@ -59,7 +59,7 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t type
         void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
         void* comp = *slot;
         // GetTypeId is component vtable slot +0x10.
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
             found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
@@ -208,8 +208,8 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
         if (!node) continue;
         void* cur = node;
         do {
-            // action vtable +0x40 — cancel/abort (implicit this = cur)
-            (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(cur) + 0x40))(cur);
+            // 0x1400c5444: RCX = cur only.
+            reinterpret_cast<Action*>(cur)->CheckEntity();   // B.3.x bridge (slot 8)
             cur = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cur) + 0x10);  // node[2] = next
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).

@@ -232,10 +232,7 @@ void PlacementTool::Shutdown() {
     // Destroy mesh instance via vtable dtor if allocated
     void* mesh = meshInstance;
     if (mesh) {
-        typedef void* (*fn_MeshDtor_t)(void* self, uint32_t flags);
-        void** vtable = *(void***)mesh;
-        fn_MeshDtor_t dtor = (fn_MeshDtor_t)vtable[0];
-        dtor(mesh, 1);  // flags=1: free memory
+        reinterpret_cast<Graphics::MeshInstance*>(mesh)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
     }
 
     // Close dialog if open: dialogPtr (+0x10) points to an InternalBasePtr

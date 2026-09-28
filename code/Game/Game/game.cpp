@@ -67,8 +67,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
             bool hasSelect = false;
             for (int i = 0; i < compCount; i++) {
                 void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-                typedef uint32_t (*GetTypeId_t)(void*);
-                uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (typeId == SelectDescription::TypeId()) {
                     if (fn_IsDerivedFrom(comp, SelectDescription::TypeId()) && comp != nullptr) {
                         hasSelect = true;
@@ -82,8 +81,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
                 void* selectDesc = nullptr;
                 for (int i = 0; i < compCount; i++) {
                     void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                     if (typeId == SelectDescription::TypeId()) {
                         if (fn_IsDerivedFrom(comp, SelectDescription::TypeId())) {
                             selectDesc = comp;
@@ -127,9 +125,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
             if (*(int*)(entity + 0x30) > 0) {
                 do {
                     void* comp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
-                    // vtable call: GetTypeId at vtable+0x10
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                     if (typeId == RawMaterialDescription::TypeId()) {
                         void* foundComp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
                         bool isDerived = fn_IsDerivedFrom(foundComp, RawMaterialDescription::TypeId());
@@ -227,8 +223,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                             // Each component entry is an InternalBasePtr — CheckPtr before reading
                             void* compIBP = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
 
-                            typedef uint32_t (*GetTypeId_t)(void*);
-                            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)(*(int64_t*)compIBP) + 0x10)))(*(void**)compIBP);
+                            uint32_t typeId = reinterpret_cast<Object::Base*>(*(void**)compIBP)->Type();   // B.3.x bridge (slot 2)
                             if (typeId == StorageComponent::TypeId()) {
                                 // Re-CheckPtr the IBP slot and read again
                                 void* compIBP2 = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
