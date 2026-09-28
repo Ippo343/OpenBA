@@ -93,5 +93,5 @@ say "stub set: $(LC_ALL=C comm -13 "$OUT/stubset_base.txt" "$OUT/stubset_now.txt
 LC_ALL=C comm -13 "$OUT/stubset_base.txt" "$OUT/stubset_now.txt" | head -10 | sed 's/^/  NEW /' | tee -a "$SUM"
 TU="$HERE/runs/closeclean/tutorial"
 say "tutorial census: $(cat "$TU/standalone_error.log" "$TU/standalone_debug.log" 2>/dev/null | grep -h 'TownCensus\] LOAD exit' | head -1)"
-git checkout -- standalone/rt_export_addrs.inc
+true  # (B3R W0-SM deleted standalone/rt_export_addrs.inc: nothing to restore)
 say "== done $(date +%H:%M:%S)"
