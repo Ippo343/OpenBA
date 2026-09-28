@@ -1,82 +1,50 @@
 #!/usr/bin/env python3
-r"""Generate standalone/rt_data_mint_tables.inc — Wave 9 lane C2's minted DATA.
+r"""Generate standalone/rt_data_mint_tables.inc -- the minted exported DATA.
 
-WHY THIS EXISTS
+WHAT IS LEFT (ENDGAME B.3.9, the end of B.3)
 
-Lane C's harvest (docs/runtime_port/wave9_data_harvest.csv, WAVE9_LANE_C.md)
-recorded what every exported DATA symbol in Runtime-x64.dll contains while the
-DLL is still on disk. This script turns that harvest into C++ the exe can
-carry after the DLL is gone: storage for every singleton, a BaseTypeInfo per
-?_typeInfo@, and a slot-by-slot descriptor for every ??_7 vtable.
-
-IT DOES NOT DECIDE WHAT GOES IN A VTABLE SLOT. The descriptor records the DLL's
-ground truth (this slot holds function X, named or FUN_<addr>, or _purecall);
-standalone/rt_data_mint.cpp fills the actual table AT RUNTIME from the port
-registry, so a slot is our port the moment lane B registers it and a named trap
-until then. That is the only way to keep a minted vtable honest without
-regenerating this file per port.
-
-THREE THINGS THIS SCRIPT VERIFIES, not just transcribes
-  1. Slot COUNT, two independent ways. `sizeProof` is "adjacent-export" when
-     the vtable's last slot ends exactly where the next exported symbol starts
-     (exact, 13 of 28), or "tail-not-a-pointer" when the qword one past the end
-     is not a valid address inside the DLL image (15 of 28). A vtable that is
-     neither would be SUSPECT — the decode may have been truncated by the
-     harvest's next-export bound — and this script fails rather than emit one.
-  2. Every slot target VA is re-read from the DLL here, not copied from the
-     CSV, and compared against the CSV. A mismatch fails the run.
-  3. The exported-DATA set is re-derived by SECTION (any unported export whose
-     RVA is not in .text), not by name prefix. That is how the ten extra .data
-     statics were found: lane C's harvest filtered on the three name prefixes
-     ??_7 / ?_singleton@ / ?_typeInfo@ and so could not see
-     ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA — the head of the very
-     chain the 14 BaseTypeInfo mints live on — nor System::Timer's four
-     calibration statics.
+The mint used to carry every exported ??_7 vtable (a slot-by-slot descriptor
+filled at run time from the port registry), every ?_typeInfo@ BaseTypeInfo and
+every exported .data static of Runtime-x64.dll. Step 9 retired every vtable and
+every BaseTypeInfo (each class has its compiler vtable and its DEFINE_TYPE
+record), so this script now EMITS STORAGE ROWS ONLY: the exported .data statics
+our tree still reads by name or by address and that have no C++ home yet. A
+vtable or BaseTypeInfo that survives the retirement subtraction is an error.
+(Commit 851adb15's copy of this file holds the vtable / type-info emitter, the
+harvest cross-check and the slot-count proofs.)
 
 THE SET IS A MOVING TARGET, AND THAT IS WHY THIS RUNS THE CENSUS ITSELF
 
 The symbol list is not read from a frozen dump. This script SHELLS OUT to
 tools/runtime_census.py on every run and takes the unported exports from its
-fresh output. The set is "the DLL data our tree references today", so porting a
-class can ADD rows to it: lane B2's twelve Video::*Data companion classes took
-the vtable count from 28 to 38 in one afternoon, because ten of those vtables
-had no reference in the tree until that port existed (the same shape as
-reference_porting_can_grow_the_cutover_surface.md, now measured three times in
-Wave 9). A generator driven by a hard-coded list would under-report silently
-for the rest of the wave; this one cannot.
-
-The harvest CSV is still read, but only as an independent CROSS-CHECK of the
-slot bytes for the symbols it covers — never as the source of the set.
+fresh output, unions in a comment-stripped source scan for DATA-shaped literals
+(a wrapper, a named constant or a table walked in a loop is invisible to the
+census) and every exported ??_7 / ?_typeInfo@ / ?_singleton@, and re-derives
+the exported-DATA set by SECTION (any export whose RVA is not in .text).
 
 RETIREMENT (ENDGAME B.3 step 9, B39_RULES.md D3)
 
-The population rule above can only GROW: every exported ??_7 / ?_typeInfo@ /
-?_singleton@ is minted whether or not anything still reads it. Step 9 retires
-rows as their classes become real C++ classes, so the generator subtracts a
-RETIRED set LAST -- after the census, the source scan, the all-exported-data
-union and both ?_typeInfo@ closures -- read from every `*.txt` fragment in
-tools/rt_mint_retired/ (one fragment per block, so parallel blocks never edit
-the same file). One row per line:
+The generator subtracts a RETIRED set LAST, read from every `*.txt` fragment in
+tools/rt_mint_retired/ (one fragment per block). One row per line:
 
     <mangled symbol | 0xVA>   <owner block>   <free-text proof>
 
-`#` starts a comment. A key may appear once across all fragments.
+`#` starts a comment. A key may appear once across all fragments, and a key
+that the population rules do not produce is an error.
 
 A retired row that STILL HAS A READER is REFUSED (exit 2, in --check too, so
 the static gate fails if a reader comes back): a literal of the name anywhere
 in code/ runtime/ standalone/ engine/ dx11/ tests/unit/ (comments stripped;
-the mint's own .cpp/.h, the cutover manifest and the dead promotion file
-COUNT -- only the two generated tables do not), a stringizing macro expansion
-that builds the name, a hex literal inside the row's extent, a census
-consumer, or -- for a vtable -- an RT_DELDTOR row that still fills its slot 0
-(retire the row and the table in one commit). An empty set changes nothing:
-the emitted file is byte-identical to the pre-retirement generator's.
+the mint's own .cpp/.h COUNT -- only the two generated tables do not), a
+stringizing macro expansion that builds the name, a hex literal inside the
+row's extent, or a census consumer. That refusal is the permanent guard the
+step leaves behind: nothing can quietly read a retired table, record or cell
+again.
 
 USAGE
     tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
 """
 import argparse
-import ast
 import re
 import bisect
 import csv
@@ -89,7 +57,6 @@ import pefile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
-HARVEST = os.path.join(REPO, "docs", "runtime_port", "wave9_data_harvest.csv")
 CENSUS_TOOL = os.path.join(REPO, "tools", "runtime_census.py")
 OUT = os.path.join(REPO, "standalone", "rt_data_mint_tables.inc")
 
@@ -121,15 +88,11 @@ OUT = os.path.join(REPO, "standalone", "rt_data_mint_tables.inc")
 #            that it is seeded at all, because an all-zero MT19937 twists to
 #            all-zero forever and Particle's every draw would silently be 0.
 #            Reproduced by ConstructParticleRng().
-
-# The one CRT trap that appears as a vtable slot. Named by Ghidra
-# (get_function_by_address at 0x18007ec28 -> "_purecall"); its decompile is the
-# stock MSVC pure-virtual-call handler. A slot pointing here is a pure virtual
-# the concrete class never overrides -- retail relies on it never being called
-# -- so it is minted as a NAMED trap, not as a function to port.
-KNOWN_INTERNAL_THUNKS = {
-    0x18007ec28: "_purecall",
-}
+#
+# ENDGAME B.3.9: both rows are RETIRED (the class statics Engine::LoaderLoop::
+# _loader and Graphics::Particle::_rng are built by their own constructors at CRT
+# init). Their sizes stay here: EXTRA_SIZES of a RETIRED row still sizes the
+# reader refusal's address range (a hex literal inside the row is a reader).
 
 EXTRA_SIZES = {
     "?_loader@LoaderLoop@Engine@@1VLoader@2@A": (0x38, "Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader()"),
@@ -231,14 +194,11 @@ EXTRA_SIZES = {
         (8, "VertexBuffer* -- head of the live-vertex-buffer list"),
 }
 
-# Vtables the census CANNOT see, because the only thing that needs them is this
-# mint. ??_7Loader@Engine@@6B@ is referenced by exactly one thing in the whole
-# process: the CRT initialiser that constructs ?_loader@LoaderLoop@Engine@@,
-# which stamps it at +0x00. Our tree never resolves it, so it is absent from the
-# census's `called` set -- and the moment we reproduce that construction (see
-# KNOWN_CTORS) we become its consumer. Lane C2's own instance of "porting grows
-# the cutover surface".
 # Vtables and statics that have NO EXPORTED NAME at all, carried by ADDRESS.
+#
+# ENDGAME B.3.9: every row of both tables is RETIRED. The entries stay because
+# they are what makes a retirement key "0x<VA>" a row the population rules know
+# (and what sizes its reader refusal); nothing is minted from them any more.
 #
 # "Unexported" was being read as "unmintable", and that assumption was
 # load-bearing on the cutover: runtime/src/io/compressedstream.cpp records
@@ -352,11 +312,6 @@ EXTRA_INIT = {
                   "Timer::_secondsPerTick = 1.0/1000000.0 (retail Timer::Startup)"),
 }
 
-EXTRA_VTABLES = {
-    "??_7Loader@Engine@@6B@":
-        "stamped by the ?_loader construction; no other consumer exists",
-}
-
 # Vtables whose extent the `adjacent-export` proof gets WRONG, keyed by VA.
 #
 # Wave 19 lane FILE found this and lane MINT confirmed it from the bytes.
@@ -430,15 +385,9 @@ VTABLE_EXTENT = {
         "0x1800bafe0, the visitor table's slot 0."),
 }
 
-# Storage symbols the DLL's CRT CONSTRUCTS at load, and where the construction
-# lives on our side. A symbol that the sweep finds a constructor for and that is
-# NOT listed here is new work: the generator refuses rather than emitting a
-# symbol that would be minted as zeroed bytes and silently differ from the
-# loaded DLL.
-KNOWN_CTORS = {
-    "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA":
-        "MintTypeInfos() — head of our own BaseTypeInfo chain",
-}
+# (KNOWN_CTORS -- storage rows the DLL's CRT constructs and the mint reproduced --
+# is gone with its last entry, ?_firstTypeInfo@, ENDGAME B.3.9 close: the mint
+# constructs nothing, and a constructed row is refused below.)
 
 
 def find_crt_init_table(pe, ib, text, rdata):
@@ -601,7 +550,6 @@ READER_DIRS = SCAN_DIRS + ("tests/unit",)
 # NULL or go dead once the row is gone. (The cutover manifest and
 # reg_mint_promoted.cpp counted too until ENDGAME B.3.9 close deleted them.)
 READER_SKIP = ("standalone/rt_data_mint_tables.inc", "standalone/rt_export_addrs.inc")
-DELDTOR_FILES = ("runtime/src/object/deleting_dtor.cpp",)
 HEX_LITERAL = re.compile(r"\b0[xX]0*([0-9a-fA-F]{1,16})(?:[uU]?[lL]{0,2}|[lL]{1,2}[uU]?)\b")
 STRINGIZE = re.compile(r'"((?:\?\?_7|\?_)[^"]*)"\s*#\s*([A-Za-z_]\w*)\s*"([^"]*)"')
 MACRO_DEF = re.compile(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)\(([^)]*)\)", re.M)
@@ -698,19 +646,6 @@ def scan_readers(repo, retired_names, ranges):
                         hits.append((key, f"{rel}:{line_of(bare, m.start())} "
                                           f"address {hex(v)}"))
     return hits
-
-
-def deldtor_rows(repo):
-    """{deleting-dtor VA: 'file:line'} for every RT_DELDTOR row."""
-    out = {}
-    for rel in DELDTOR_FILES:
-        if not os.path.exists(os.path.join(repo, rel)):
-            continue   # ENDGAME B.3.9 OBJ: the RT_DELDTOR table is deleted
-        text = strip_comments(open(os.path.join(repo, rel), encoding="utf-8",
-                                   errors="replace").read())
-        for m in re.finditer(r"^\s*RT_DELDTOR\(\s*0x([0-9a-fA-F]+)", text, re.M):
-            out[int(m.group(1), 16)] = f"{rel}:{text.count(chr(10), 0, m.start()) + 1}"
-    return out
 
 
 def run_census(csv_path):
@@ -876,12 +811,6 @@ def main():
             (k, v[1]) for k, v in EXTRA_STORAGE_BY_ADDR.items()):
         data_syms.append((None, "byaddr", va - ib, "mint:" + why))
 
-    for sym, why in EXTRA_VTABLES.items():
-        rva = by_name.get(sym)
-        if rva is None:
-            errors.append(f"{sym}: EXTRA_VTABLES names a symbol the DLL does not export")
-        elif all(sym != d[0] for d in data_syms):
-            data_syms.append((sym, "Engine", rva, "mint:" + why))
     # ---- CLOSURE: a minted vtable DRAGS IN ITS OWN ?_typeInfo@ -------------
     # The rule above is "mint what our SOURCE names". That is the right rule for
     # everything a port calls by name, and it is BLIND BY CONSTRUCTION to a
@@ -973,7 +902,6 @@ def main():
     retired, rerrs = load_retired()
     errors.extend(rerrs)
     retired_rows = []                   # (key, symbol-or-None, rva)
-    retired_vt_starts = []              # kept in the overlap test below
     if retired:
         for key in retired:
             match = [d for d in data_syms
@@ -1003,7 +931,6 @@ def main():
             ovr = VTABLE_EXTENT.get(ib + rva)
             return 8 * (ovr[0] if ovr else max(n, 1))
         ranges, names = [], set()
-        retired_slot0 = {}
         for key, sym, rva in retired_rows:
             label = sym or hex(ib + rva)
             if sym:
@@ -1020,18 +947,10 @@ def main():
             else:
                 size = EXTRA_SIZES.get(sym, (8, ""))[0]
             ranges.append((ib + rva, ib + rva + size, label))
-            if (sym and sym.startswith("??_7")) or (sym is None and (ib + rva) in EXTRA_VTABLES_BY_ADDR):
-                retired_vt_starts.append(ib + rva)
-                retired_slot0[int.from_bytes(pe.get_data(rva, 8), "little")] = label
         readers = scan_readers(REPO, names, ranges)
         for row in unported:            # the census's own consumers
             if row["key"] in names:
                 readers.append((row["key"], "census consumer: " + (row.get("callers") or "?")))
-        dd = deldtor_rows(REPO)
-        for va, label in retired_slot0.items():
-            if va in dd:
-                readers.append((label, f"{dd[va]} RT_DELDTOR row {hex(va)} still fills slot 0 "
-                                       f"(retire the row with the table)"))
         by_row = {}
         for key, where in readers:
             by_row.setdefault(key, []).append(where)
@@ -1046,191 +965,42 @@ def main():
 
     data_syms.sort(key=lambda d: (d[0] or "", d[2]))
 
-    # ---- the construction sweep (see find_crt_init_table) -------------------
-    inits = find_crt_init_table(pe, ib, secs_text, secs_rdata)
-
-    # The harvest, keyed for cross-checking only. Slots first, then typeinfo.
-    harvest_slots = {}      # (symbol, index) -> target VA
-    harvest_ti = {}
-    for r in csv.DictReader(open(HARVEST, encoding="utf-8", newline="")):
-        if r["kind"] == "vtable" and r["slot_index"] != "":
-            harvest_slots[(r["symbol"], int(r["slot_index"]))] = int(r["slot_va"], 16)
-        elif r["kind"] == "typeinfo":
-            harvest_ti[r["symbol"]] = ast.literal_eval(r["slot_name"])
-    checked = 0
-
-    # ---- vtables -----------------------------------------------------------
-    vtables = []
-    for sym, ns, rva, _consumers in data_syms:
+    # ---- ENDGAME B.3.9: THE MINT CARRIES STORAGE ONLY ------------------------
+    # Every minted vtable (by name or by address) and every minted BaseTypeInfo
+    # was retired by step 9: each class has its compiler vtable and its
+    # DEFINE_TYPE record. The population rules above still RE-DERIVE every
+    # exported table and record from the DLL (so a retirement key stays checkable
+    # and its reader refusal keeps its extent), but a table or record that
+    # survives the retirement subtraction is now an error, never a row: the
+    # vtable / BaseTypeInfo emission and its runtime machinery are deleted.
+    for sym, _ns, rva, _c in data_syms:
         if sym is None:
-            if (ib + rva) not in EXTRA_VTABLES_BY_ADDR:
-                continue
-        elif not sym.startswith("??_7"):
-            continue
-        # Decode the slots straight out of the DLL. Bound: the next exported
-        # symbol (a vtable is never longer than that), stopping early on a
-        # zero or a qword that is not an address in this image.
-        j = bisect.bisect_right(sorted_rvas, rva)
-        nxt = sorted_rvas[j] if j < len(sorted_rvas) else None
-        max_slots = min(64, ((nxt - rva) // 8) if nxt else 64)
-        raw = pe.get_data(rva, max_slots * 8)
-        slots = []
-        for i in range(len(raw) // 8):
-            qw = int.from_bytes(raw[i * 8:i * 8 + 8], "little")
-            if qw == 0 or not (ib <= qw < ib + isize):
-                break
-            name = by_rva.get(qw - ib)
-            if qw in KNOWN_INTERNAL_THUNKS:
-                kind, name = "RT_MINT_PURECALL", None
-            elif name:
-                kind = "RT_MINT_NAMED"
-            else:
-                kind = "RT_MINT_UNNAMED"
-            # cross-check against the harvest where it has an opinion
-            h = harvest_slots.get((sym, i))
-            if h is not None:
-                checked += 1
-                if h != qw:
-                    errors.append(f"{sym} slot {i}: harvest {hex(h)} != DLL {hex(qw)}")
-            slots.append((i, name, qw, kind))
-        if not slots:
-            errors.append(f"{sym}: decoded 0 slots")
-            continue
-        # A hand-proved extent overrides the adjacency bound (see VTABLE_EXTENT).
-        ovr = VTABLE_EXTENT.get(ib + rva)
-        if ovr:
-            want, why = ovr
-            if want > len(slots):
-                errors.append(f"{sym or hex(ib+rva)}: VTABLE_EXTENT says {want} slots "
-                              f"but only {len(slots)} decode -- the override is wrong "
-                              f"or the table moved")
-                continue
-            slots = slots[:want]
-            # Collapse to ONE line here, at the source. The proof is emitted
-            # BOTH as a // comment header and as a C string literal, and a raw
-            # newline breaks each in its own way -- escaping it in cstr() alone
-            # fixed the literal and left the comment broken.
-            proof_override = "ctor-stamped-neighbour: " + " | ".join(
-                ln.strip() for ln in why.splitlines() if ln.strip())
-        else:
-            proof_override = None
-        n = len(slots)
-        end_rva = rva + 8 * n
-        if proof_override:
-            proof = proof_override
-        elif nxt == end_rva:
-            proof = "adjacent-export:" + by_rva[nxt]
-        else:
-            tail = int.from_bytes(pe.get_data(end_rva, 8), "little")
-            if ib <= tail < ib + isize:
-                errors.append(f"{sym}: slot count {n} SUSPECT — the qword after the "
-                              f"last slot ({hex(tail)}) is a valid image pointer")
-                proof = "SUSPECT"
-            else:
-                proof = "tail-not-a-pointer"
-        # A harvested vtable that changed LENGTH would mean the decode rule and
-        # the harvest disagree about the class, which is worth a hard stop.
-        hn = sum(1 for (hs, _hi) in harvest_slots if hs == sym)
-        if hn and hn != n:
-            errors.append(f"{sym}: harvest has {hn} slots, this decode has {n}")
-        vtables.append({"symbol": sym, "va": ib + rva, "slots": slots, "proof": proof})
+            if (ib + rva) in EXTRA_VTABLES_BY_ADDR:
+                errors.append(f"{hex(ib + rva)}: an unexported vtable re-entered the mint's "
+                              f"population -- B.3.9 retired every minted vtable; retire it "
+                              f"(tools/rt_mint_retired/) and give the class its compiler table")
+        elif sym.startswith("??_7"):
+            errors.append(f"{sym}: a vtable re-entered the mint's population -- B.3.9 retired "
+                          f"every minted vtable; retire it (tools/rt_mint_retired/)")
+        elif sym.startswith("?_typeInfo@"):
+            errors.append(f"{sym}: a BaseTypeInfo re-entered the mint's population -- B.3.9 "
+                          f"retired every minted record (DEFINE_TYPE); retire it")
 
-    # ---- NO MINTED VTABLE MAY CONTAIN ANOTHER'S START ----------------------
-    #
-    # Wave 19 lane MINT. The cheap, SOUND half of the over-sizing check above.
-    # It needs no disassembly and has no false positives: if row A's extent
-    # strictly contains row B's start address, then A has swallowed B, full
-    # stop -- two rows cannot begin inside one table. That is exactly what
-    # ??_7ReaderWriter@ was doing to the by-address IO::Encoding table at
-    # 0x1801554a8, emitting those 5 bodies twice, for the entire life of this
-    # generator.
-    #
-    # It is a REFUSAL, not a warning, because the symptom is otherwise
-    # invisible: an over-sized row's surplus slots are read from the DLL at
-    # their real addresses, so the mint's own shadow compares them and finds
-    # 0 MISMATCH. The shadow cannot see extent -- only overlap can.
-    #
-    # It does NOT catch the general case: an unexported neighbour that nothing
-    # else mints (??_7TextFileStream@'s 0x1801559d0) is invisible here and needs
-    # the constructor evidence in VTABLE_EXTENT. Stated so the green is not read
-    # as "no over-sized rows remain".
-    # A RETIRED table still occupies its bytes in .rdata: keep its start in the
-    # test so retiring a row can never hide a neighbour that swallows it.
-    starts = sorted([v["va"] for v in vtables] + retired_vt_starts)
-    for v in vtables:
-        lo, hi = v["va"], v["va"] + 8 * len(v["slots"])
-        for s in starts:
-            if lo < s < hi:
-                errors.append(
-                    f"{v['symbol'] or hex(lo)}: extent {hex(lo)}..{hex(hi)} "
-                    f"({len(v['slots'])} slots) CONTAINS the start of another "
-                    f"minted vtable at {hex(s)} — it has swallowed that table and "
-                    f"is emitting its bodies twice. True extent is at most "
-                    f"{(s - lo) // 8} slots; add it to VTABLE_EXTENT with the "
-                    f"constructor site that proves the bound.")
-
-    # ---- the construction sweep, now that every symbol's EXTENT is known ---
+    # ---- the construction sweep (see find_crt_init_table) -------------------
+    # A storage row the DLL's CRT CONSTRUCTS cannot be minted as zeroed bytes.
     # A constructor may reference any field, not the base (see scan_ctor_refs),
-    # so the scan needs sizes: a vtable is slots*8, a BaseTypeInfo is 0x38, and
-    # a storage symbol's size is the one EXTRA_SIZES / the singleton rule gives.
-    extents = {v["va"]: len(v["slots"]) * 8 for v in vtables}
+    # so the scan needs each row's size.
+    inits = find_crt_init_table(pe, ib, secs_text, secs_rdata)
+    extents = {}
     for sym, _ns, rva, _c in data_syms:
         if sym is None:
             if (ib + rva) in EXTRA_STORAGE_BY_ADDR:
                 extents[ib + rva] = EXTRA_STORAGE_BY_ADDR[ib + rva][0]
-        elif sym.startswith("?_typeInfo@"):
-            extents[ib + rva] = 0x38
         elif sym.startswith("?_singleton@"):
             extents[ib + rva] = 8
         elif sym in EXTRA_SIZES:
             extents[ib + rva] = EXTRA_SIZES[sym][0]
     ctor_of = scan_ctor_refs(pe, ib, inits, extents)
-
-    # ---- typeinfo (Object::BaseTypeInfo, 0x38) -----------------------------
-    def cstr_at(va):
-        if not va or not (ib <= va < ib + isize):
-            return None
-        d = pe.get_data(va - ib, 256)
-        if not d:
-            return None
-        e = d.find(b"\0")
-        return d[:e if e >= 0 else len(d)].decode("latin1")
-
-    typeinfos = []
-    for sym, ns, rva, _consumers in data_syms:
-        if sym is None or not sym.startswith("?_typeInfo@"):
-            continue
-        raw = pe.get_data(rva, 0x38)
-        if len(raw) != 0x38:
-            errors.append(f"{sym}: could not read 0x38 bytes")
-            continue
-        q = lambda o: int.from_bytes(raw[o:o + 8], "little")
-        name_p, parent_p, ext_p = q(8), q(16), q(24)
-        fac_p, inp_p, next_p = q(32), q(40), q(48)
-        if next_p != 0:
-            errors.append(f"{sym}: next is {hex(next_p)} in the file, expected 0x0")
-        t = {
-            "symbol": sym, "va": ib + rva,
-            "name": cstr_at(name_p), "parent": cstr_at(parent_p), "ext": cstr_at(ext_p),
-            "factory": by_rva.get(fac_p - ib) if fac_p else None, "factory_va": fac_p,
-            "inplace": by_rva.get(inp_p - ib) if inp_p else None, "inplace_va": inp_p,
-        }
-        h = harvest_ti.get(sym)
-        if h:
-            checked += 1
-            for k_here, k_there in (("name", "name"), ("parent", "parentName"),
-                                    ("ext", "fileExtension"), ("factory", "factoryFn"),
-                                    ("inplace", "inPlaceFactoryFn")):
-                if t[k_here] != h[k_there]:
-                    errors.append(f"{sym}.{k_here}: harvest {h[k_there]!r} != "
-                                  f"DLL {t[k_here]!r}")
-        typeinfos.append(t)
-    for t in typeinfos:
-        if t["va"] not in ctor_of:
-            errors.append(f"{t['symbol']}: NOT built by any CRT initialiser — "
-                          f"every BaseTypeInfo is supposed to be, so either the "
-                          f"sweep is broken or this one is built somewhere else")
-    typeinfos.sort(key=lambda t: t["symbol"])
 
     # ---- storage: everything else in the exported-DATA set -----------------
     storage = []
@@ -1253,17 +1023,15 @@ def main():
                           f"size — add it to EXTRA_SIZES with the header that pins it")
             continue
         ctor = ctor_of.get(ib + rva, [])
-        if ctor and sym not in KNOWN_CTORS:
+        if ctor:
             errors.append(
-                f"{sym}: the DLL CONSTRUCTS this at load (initialiser "
-                f"{hex(ctor[0])}) and nothing in rt_data_mint.cpp reproduces it. "
-                f"Minting it as zeroed storage would silently differ from the "
-                f"loaded DLL — add it to KNOWN_CTORS and implement it.")
+                f"{sym or hex(ib + rva)}: the DLL CONSTRUCTS this at load (initialiser "
+                f"{hex(ctor[0])}). The mint constructs nothing since ENDGAME B.3.9: give "
+                f"it a C++ home (a class static built by its own constructor) and "
+                f"retire the row.")
         init = EXTRA_INIT.get(ib + rva)
         storage.append({"symbol": sym, "va": ib + rva, "size": size,
-                        "note": note, "namespace": ns, "init": init,
-                        "ctor": (hex(ctor[0]) + (f" (+{len(ctor)-1} more)" if len(ctor) > 1 else ""))
-                                if ctor else ""})
+                        "note": note, "namespace": ns, "init": init})
     storage.sort(key=lambda s: (s["symbol"] or "", s["va"]))
 
     if errors:
@@ -1276,75 +1044,24 @@ def main():
     o = []
     w = o.append
     w("// GENERATED by tools/rt_mint_gen.py — DO NOT EDIT BY HAND.")
-    w("// Source of truth: docs/runtime_port/wave9_data_harvest.csv (lane C's")
-    w("// harvest of Runtime-x64.dll) re-verified against the DLL at generation")
-    w("// time. Regenerate with:")
+    w("// The minted exported DATA of Runtime-x64.dll: STORAGE rows only (ENDGAME")
+    w("// B.3.9 retired every minted vtable and BaseTypeInfo). Regenerate with:")
     w("//   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py")
-    w(f"// Counts: {len(vtables)} vtables, {len(typeinfos)} BaseTypeInfo, "
-      f"{len(storage)} storage symbols.")
+    w(f"// Counts: 0 vtables, 0 BaseTypeInfo, {len(storage)} storage symbols.")
     if retired_rows:
         w(f"// Retired (ENDGAME B.3 step 9): {len(retired_rows)} row(s), listed in "
           f"tools/rt_mint_retired/*.txt.")
     w("")
-
-    # per-slot trap stubs
-    w("// ---- Per-slot traps. One function per (vtable, slot) so an unreachable")
-    w("// slot that DOES get called names itself instead of aborting anonymously.")
-    for vi, v in enumerate(vtables):
-        for (si, _n, _va, _k) in v["slots"]:
-            w(f"RT_MINT_TRAP({vi},{si})")
-    w("")
-
-    for vi, v in enumerate(vtables):
-        w(f"// {v['symbol'] or '(unexported, carried by address)'}  DLL {v['va']:#x}  {len(v['slots'])} slots  "
-          f"[{v['proof']}]")
-        w(f"static const RtMintVSlot kVSlots{vi}[] = {{")
-        for (si, name, va, kind) in v["slots"]:
-            w(f"    {{ {cstr(name)}, {va:#x}ull, {kind} }},")
-        w("};")
-        w(f"static void* kVTable{vi}[{len(v['slots'])}];")
-        w(f"static const RtMintTrapFn kVTraps{vi}[] = {{ "
-          + ", ".join(f"&RtMintTrapStub_{vi}_{si}" for (si, _, _, _) in v["slots"]) + " };")
-        w("")
-
-    w("static RtMintVtable kMintVtables[] = {")
-    for vi, v in enumerate(vtables):
-        w(f"    {{ {cstr(v['symbol'])}, {v['va']:#x}ull, {len(v['slots'])}, "
-          f"kVSlots{vi}, kVTable{vi}, kVTraps{vi}, {cstr(v['proof'])} }},")
-    w("};")
-    w("")
-
-    w("// ---- Object::BaseTypeInfo. Fields are link-time constants copied from")
-    w("// the DLL; `next` is deliberately NOT copied (it reads 0x0 on disk and is")
-    w("// built by running constructors) and is rebuilt from OUR init order.")
-    w(f"static RtObject::BaseTypeInfo kTypeInfoStorage[{len(typeinfos)}];")
-    for ti_i, t in enumerate(typeinfos):
-        for si in range(2):
-            w(f"RT_MINT_TI_TRAP({ti_i},{si})")
-    w("static RtMintTypeInfo kMintTypeInfos[] = {")
-    for ti_i, t in enumerate(typeinfos):
-        w(f"    {{ {cstr(t['symbol'])}, {t['va']:#x}ull, &kTypeInfoStorage[{ti_i}],")
-        w(f"      {cstr(t['name'])}, {cstr(t['parent'])}, {cstr(t['ext'])},")
-        w(f"      {cstr(t['factory'])}, {t['factory_va']:#x}ull, &RtMintTiTrapStub_{ti_i}_0,")
-        w(f"      {cstr(t['inplace'])}, {t['inplace_va']:#x}ull, &RtMintTiTrapStub_{ti_i}_1 }},")
-    w("};")
-    w("")
-
-    w("// ---- Plain storage: the singleton pointers plus the ten other exported")
-    w("// .data statics. All are BSS in the DLL — written only at runtime — so")
+    w("// ---- Plain storage. All are BSS in the DLL — written only at runtime — so")
     w("// there is nothing to copy: minting one means OWNING the bytes.")
-    # Each entry gets a 16-byte-aligned slice. Two of these are OBJECTS, not
-    # scalars (Engine::Loader and System::Random), and the singletons are
-    # pointers; carving them out of a byte array at packed offsets would put
-    # pointer fields on odd addresses. 16 matches what the DLL's own .data
-    # gives them and costs a few dozen bytes.
+    # Each entry gets a 16-byte-aligned slice, as the DLL's own .data gives them.
     offsets = []
     off = 0
     for s in storage:
         off = (off + 15) & ~15
         offsets.append(off)
         off += s["size"]
-    total = (off + 15) & ~15
+    total = max(16, (off + 15) & ~15)
     w(f"alignas(16) static unsigned char kStorageBytes[{total}];  // one block, zero-initialised")
     for i, (s, so) in enumerate(zip(storage, offsets)):
         if s["init"]:
@@ -1355,34 +1072,18 @@ def main():
     for i, (s, so) in enumerate(zip(storage, offsets)):
         init = f"kInit{i}, {len(s['init'][0])}" if s["init"] else "nullptr, 0"
         w(f"    {{ {cstr(s['symbol'])}, {s['va']:#x}ull, {s['size']}, "
-          f"&kStorageBytes[{so}], {cstr(s['note'])}, {cstr(s['ctor'] or None)}, "
-          f"{init} }},")
+          f"&kStorageBytes[{so}], {cstr(s['note'])}, {init} }},")
     w("};")
     w("")
 
     text = "\n".join(o) + "\n"
 
     # ---- --check: STALENESS is the failure mode this file actually has -----
-    #
-    # Wave 19 lane MINT, 2026-09-10. Five IO vtables (??_7{BinaryFileStream,
-    # CompressedFileStream, FileStream, TextFileStream, VisitorStream}@IO@@6B@)
-    # were absent from the committed .inc and were diagnosed as a HARVEST GAP in
-    # this generator. They were not. The generator was correct on every run: at
-    # the last regeneration (4f037fd, WAVE 10D) nothing in the tree referenced
-    # those five, and the four files that made the census name them landed
-    # AFTER it, in Wave 11f lane IOSTREAM. The generator was never re-run.
-    #
-    # The population rule is DELIBERATELY a moving target -- see "THE SET IS A
-    # MOVING TARGET" at the top -- so this file goes stale every time any lane
-    # anywhere adds a reference to an exported DATA symbol. Nothing detected
-    # that, because a missing row is INVISIBLE: it does not fail to compile, it
-    # does not trip the shadow (which only checks rows that EXIST), and it does
-    # not fail a build. It shows up as a cutover fault, one row at a time.
-    #
-    # This mode makes the staleness visible without touching the tree, so it can
-    # be a wave-close gate. It prints the entered/left row NAMES, never a count
-    # delta: a count that moves the right direction by the wrong amount reads as
-    # success (reference_diff_the_set_not_the_count).
+    # The population is a moving target (see the banner), so the generated file
+    # goes stale whenever any change adds or removes a reference to an exported
+    # DATA symbol, and a missing row is invisible until a run faults on it. This
+    # mode makes the staleness visible without touching the tree. It prints the
+    # entered/left row NAMES, never a count delta.
     if args.check:
         try:
             have = open(args.out, encoding="utf-8").read()
@@ -1391,15 +1092,9 @@ def main():
             return 3
         if have.replace("\r\n", "\n") == text:
             print(f"--check: {args.out} is UP TO DATE "
-                  f"({len(vtables)} vtables, {len(typeinfos)} BaseTypeInfo, "
-                  f"{len(storage)} storage)")
+                  f"(0 vtables, 0 BaseTypeInfo, {len(storage)} storage)")
             return 0
-        # ROWS only, never slots: a kVSlotsN entry has the same {name, VA, ...}
-        # shape, so an untightened pattern reports 35 slot targets alongside the
-        # 5 rows and buries the answer. Each of the three top-level tables is
-        # pinned by what FOLLOWS the VA.
-        ROW = re.compile(r'^\s*\{ (?:"([^"]*)"|nullptr), (0x[0-9a-f]+)ull, '
-                         r'(?:\d+, kVSlots|&kTypeInfoStorage\[|\d+, &kStorageBytes\[)',
+        ROW = re.compile(r'^\s*\{ (?:"([^"]*)"|nullptr), (0x[0-9a-f]+)ull, \d+, &kStorageBytes\[',
                          re.M)
         old_rows = set(ROW.findall(have))
         new_rows = set(ROW.findall(text))
@@ -1423,16 +1118,8 @@ def main():
           f"(wrapper / named constant / table loop)")
     for sym, where in scan_added:
         print(f"                {sym}   [{where}]")
-    print(f"  census     {len(unported)} unported exports -> {len(data_syms)} exported DATA "
-          f"({checked} rows cross-checked against the round-1 harvest, 0 disagreements)")
-    print(f"  vtables    {len(vtables):3d}  ({sum(len(v['slots']) for v in vtables)} slots, "
-          f"{sum(1 for v in vtables if v['proof'].startswith('adjacent'))} count-proved by adjacency, "
-          f"{sum(1 for v in vtables if v['proof'] == 'tail-not-a-pointer')} by tail probe)")
-    print(f"  typeinfo   {len(typeinfos):3d}")
-    print(f"  crt init   {len(inits):3d} initialisers; {len(ctor_of)} of the exported "
-          f"DATA symbols are CONSTRUCTED at load "
-          f"({sum(1 for s in storage if s['ctor'])} storage + {len(typeinfos)} BaseTypeInfo"
-          f" + {sum(1 for v in vtables if v['va'] in ctor_of)} vtable)")
+    print(f"  census     {len(unported)} unported exports")
+    print(f"  crt init   {len(inits):3d} initialisers; 0 minted rows are CONSTRUCTED at load")
     print(f"  storage    {len(storage):3d}  ({total} bytes; "
           f"{sum(1 for s in storage if (s['symbol'] or '').startswith('?_singleton@'))} singletons, "
           f"{sum(1 for s in storage if not (s['symbol'] or '').startswith('?_singleton@'))} other .data statics)")

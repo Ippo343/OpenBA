@@ -18,10 +18,10 @@
 // and (2) exists only in the generated standalone/rt_data_mint_tables.inc. So:
 //   * test 1 walks the unit process's real `_firstTypeInfo` chain — population
 //     (1) as far as it is linked — and asserts every name's CRC is unique;
-//   * test 2 adds population (2) by reading the minted records' NAME column out
-//     of the generated table (`make unit` runs from the repository root) and
-//     asserts the union is unique — the check that would have failed on the
-//     Internal duplicate;
+//   * test 2 (ENDGAME B.3.9 close) pins that population (2) is EMPTY: the
+//     generated table declares no BaseTypeInfo and no vtable row any more (it
+//     used to read the minted NAME column and assert the union unique -- the
+//     check that would have failed on the Internal duplicate);
 //   * population (3), and the Runtime DEFINE_TYPEs not linked here, are NOT
 //     covered: the whole-chain check is the boot's `Post-Startup
 //     _firstTypeInfo` count, which the coordinator's gate reads (416 -> 415
@@ -54,41 +54,6 @@ std::vector<NameCrc> ChainNames() {
     return out;
 }
 
-// Population (2): the minted records' `name` column. Each kMintTypeInfos row is
-//     { "?_typeInfo@...", 0x...ull, &kTypeInfoStorage[i],
-//       "<name>", "<parent>", <ext>,
-// so the name is the first quoted string on the line after the mangled one.
-// `declared` is the table's own row count, `kTypeInfoStorage[N]` (ENDGAME B.3.9
-// TI-UI: the parse is checked against it instead of a fixed floor, which every
-// retirement lowers).
-bool MintedNames(std::vector<NameCrc>& out, int* declared) {
-    std::FILE* f = std::fopen("standalone/rt_data_mint_tables.inc", "rb");
-    if (f == nullptr) return false;
-    char line[1024];
-    bool inTable = false, wantName = false;
-    *declared = -1;
-    while (std::fgets(line, sizeof line, f)) {
-        if (const char* st = std::strstr(line, "BaseTypeInfo kTypeInfoStorage["))
-            std::sscanf(st, "BaseTypeInfo kTypeInfoStorage[%d]", declared);
-        if (std::strstr(line, "kMintTypeInfos[] = {")) { inTable = true; continue; }
-        if (!inTable) continue;
-        if (line[0] == '}') break;
-        if (wantName) {
-            wantName = false;
-            const char* q = std::strchr(line, '"');
-            const char* e = q ? std::strchr(q + 1, '"') : nullptr;
-            if (q && e) {
-                std::string n(q + 1, e);
-                out.push_back({ n, ::Object::TypeNameCRC(n.c_str()) });
-            }
-            continue;
-        }
-        if (std::strstr(line, "{ \"?_typeInfo@")) wantName = true;
-    }
-    std::fclose(f);
-    return true;
-}
-
 // The number of (i, j) pairs with equal CRCs; each is printed.
 int Duplicates(const std::vector<NameCrc>& v) {
     int dup = 0;
@@ -100,6 +65,32 @@ int Duplicates(const std::vector<NameCrc>& v) {
                 ++dup;
             }
     return dup;
+}
+
+// Population (2) is EMPTY since ENDGAME B.3.9 close: the mint carries storage
+// rows only. The generated table must declare no BaseTypeInfo storage and no
+// `?_typeInfo@` / `??_7` row -- the check that a retired record never comes back
+// through the mint (the generator refuses it too; this pins the emitted file).
+struct MintShape {
+    int typeInfoRows = 0;   // lines naming a "?_typeInfo@ row
+    int vtableRows   = 0;   // lines naming a "??_7 row
+    bool typeInfoStorage = false;
+    int storageRows  = 0;
+};
+
+bool ReadMintShape(MintShape* s) {
+    std::FILE* f = std::fopen("standalone/rt_data_mint_tables.inc", "rb");
+    if (f == nullptr) return false;
+    char line[1024];
+    while (std::fgets(line, sizeof line, f)) {
+        if (std::strncmp(line, "//", 2) == 0) continue;
+        if (std::strstr(line, "kTypeInfoStorage")) s->typeInfoStorage = true;
+        if (std::strstr(line, "{ \"?_typeInfo@")) ++s->typeInfoRows;
+        if (std::strstr(line, "{ \"??_7")) ++s->vtableRows;
+        if (std::strstr(line, "&kStorageBytes[")) ++s->storageRows;
+    }
+    std::fclose(f);
+    return true;
 }
 
 }  // namespace
@@ -114,14 +105,11 @@ UNIT_TEST(b39_obj_typeinfo_chain_names_are_unique) {
     CHECK_EQ(Duplicates(chain), 0);
 }
 
-UNIT_TEST(b39_obj_typeinfo_chain_plus_minted_names_are_unique) {
-    std::vector<NameCrc> all = ChainNames();
-    std::vector<NameCrc> minted;
-    int declared = -1;
-    CHECK(MintedNames(minted, &declared)); // `make unit` runs from the repo root
-    CHECK_EQ((int)minted.size(), declared); // the table parsed: every declared row
-    for (const NameCrc& n : minted)
-        CHECK(n.name != "Internal");       // the retired duplicate stays retired
-    all.insert(all.end(), minted.begin(), minted.end());
-    CHECK_EQ(Duplicates(all), 0);
+UNIT_TEST(b39_close_mint_carries_no_typeinfo_and_no_vtable) {
+    MintShape s;
+    CHECK(ReadMintShape(&s));               // `make unit` runs from the repo root
+    CHECK(!s.typeInfoStorage);
+    CHECK_EQ(s.typeInfoRows, 0);
+    CHECK_EQ(s.vtableRows, 0);
+    CHECK(s.storageRows > 0);               // the parse saw the table it reads
 }
