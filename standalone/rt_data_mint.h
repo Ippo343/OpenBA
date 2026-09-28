@@ -9,31 +9,13 @@
 // and registered through both doors (name and address).
 //
 // Until ENDGAME B.3.9 the mint also carried every `??_7` vtable (a slot was our
-// port or a named trap) and every `?_typeInfo@` BaseTypeInfo. Both are gone:
-// every class has its compiler vtable and its DEFINE_TYPE record. Only STORAGE
-// rows remain (tools/rt_mint_gen.py --check prints the count).
+// port or a named trap), every `?_typeInfo@` BaseTypeInfo and a storage
+// REDIRECT that let a class static stand in for a minted cell. All three are
+// gone: every class has its compiler vtable and its DEFINE_TYPE record, and a
+// storage row retires with its last reader instead of being redirected. Only
+// STORAGE rows remain (tools/rt_mint_gen.py --check prints the count).
 // ============================================================================
 
-// Lay out the minted storage and register every row by name and address. Call
-// from RuntimePortInit(), AFTER every *_PortInit().
+// Register every minted storage row by name and address. Call from
+// RuntimePortInit(), AFTER every *_PortInit().
 void RtDataMintInit();
-
-// ============================================================================
-// B.3.9 (D7) -- THE STORAGE REDIRECT
-// ============================================================================
-// Make `cell` (a class static / file static the caller owns) the storage of
-// the minted storage row `symbol` -- its mangled name, or "0x<VA>" for a row
-// the mint carries by address only. Call it from a `*PortInit()` (they all run
-// before RtDataMintInit()); from then on the name door, the address door and
-// the class answer with the same bytes.
-//
-// Seeding rule (full text: standalone/rt_mint_redirect.h): the mint never
-// memsets or re-seeds a redirected cell. Zero comes from the language (static
-// storage); a row's kInit seed is copied in HERE, once, if the cell is still
-// all-zero (or verified if the class's own initialiser already holds it); what
-// the owner writes after this call is never overwritten. Aborts at boot on an
-// unknown row, a null cell, a second different cell, a seed conflict, or a
-// call after the mint ran.
-//
-// Declared byte-identically in runtime/funcs/rt_port.h for the runtime tree.
-void RtMintRedirectStorage(const char* symbol, void* cell);

@@ -50,16 +50,9 @@ void RtSystemPortInit() {
     // on init order. Consolidated to one owner in allocator.cpp.
     RtSystemAllocatorRegisterSharedAddresses();
 
-    // ENDGAME B.3.9 SYS (B39_RULES D7): the minted storage rows ARE the class
-    // statics from here on (name door, address door, manifest publish). Before
-    // the mint, as the redirect requires. Timer's five go TOGETHER (B34B 4.1).
-    RtMintRedirectStorage("?_ticksPerSecond@Timer@System@@0_JA",       &System::Timer::_ticksPerSecond);
-    RtMintRedirectStorage("?_secondsPerTick@Timer@System@@0NA",        &System::Timer::_secondsPerTick);
-    RtMintRedirectStorage("?_systemTicksPerSecond@Timer@System@@0_JA", &System::Timer::_systemTicksPerSecond);
-    RtMintRedirectStorage("?_systemInitialTick@Timer@System@@0_JA",    &System::Timer::_systemInitialTick);
-    RtMintRedirectStorage("?_systemSecondsPerTick@Timer@System@@0NA",  &System::Timer::_systemSecondsPerTick);
-    // Error's three, together (B39_RULES 1.5). `_errorString` is the 0x2000-byte
-    // BUFFER: the cell is the array's own address.
+    // ENDGAME B.3.9: Timer's five (close.txt, together, B34B 4.1), Error's three
+    // and Configuration's singleton are RETIRED mint rows; every reader uses the
+    // class statics in Timer.h / Error.h / Configuration.h.
 
     int n = 0;
     n += RtSystemStringRegister();

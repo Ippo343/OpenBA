@@ -156,6 +156,7 @@
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
 #include "../../types/graphics/Material.h"    // ENDGAME B.3.5: Graphics::MaterialInstance
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
@@ -306,18 +307,12 @@ const uint32_t kDirtyScissor = 0x400;
 // The half-pixel offset. `Video::Device::_singleton` (0x1801fe7a8) -> +0x100
 // (the DeviceData) -> vtable slot 5.
 //
-// The SLOT ADDRESS is cached (it is a fixed .data location); the POINTER it
-// holds is re-read on every call, which is what retail does
-// (`MOV RAX,[0x1801fe7a8]` inside the body). Never cache a null: the singleton
-// is null while the address registry is being built, and freezing that would
-// break the process for good (rt_port.h's contract; lane UIF's probe fault at
-// Runtime+0x11BA66 is the same hole seen from the other side).
+// The POINTER is re-read on every call, which is what retail does
+// (`MOV RAX,[0x1801fe7a8]` inside the body). ENDGAME B.3.9 close (D7): the
+// cell is the class static; the by-address door and its cached slot are gone.
 // ---------------------------------------------------------------------------
 inline void* VideoDeviceData() {
-    static void** slot = nullptr;
-    if (!slot) slot = reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
-    if (!slot) return nullptr;
-    void* device = *slot;
+    void* device = ::Video::Device::_singleton;
     if (!device) return nullptr;
     return Field<void*>(device, 0x100);
 }

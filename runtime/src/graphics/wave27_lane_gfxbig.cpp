@@ -112,6 +112,7 @@
                                               // Graphics::Animation, the clip record
                                               // ApplyEvents is called on
 #include "../../types/system/Value.h"   // System::Time -- ENDGAME B.3.5 block GC
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 close: Timer::_secondsPerTick
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
 #include "../../types/graphics/Material.h"
@@ -635,13 +636,10 @@ using ApplyEventsFn   = void (*)(const void* clip, const void* base,
                                  const int64_t* fromTime, const int64_t* toTime);
 
 // `System::Timer::_secondsPerTick`, retail 0x1801fe728 — a DOUBLE in .data's
-// uninitialised tail, written at engine startup. Resolved to the DLL's OWN live
-// global rather than copied, so every reader agrees on the value (the reason
-// animation.cpp:177 gives for AnimationManager::_singleton).
+// uninitialised tail, written at engine startup. ENDGAME B.3.9 close (D7): the
+// class static, read fresh -- the cached by-address door is gone.
 inline double SecondsPerTick() {
-    static const double* p = nullptr;
-    if (!p) p = reinterpret_cast<const double*>(ResolveAddr(Module::Runtime, 0x1801fe728));
-    return p ? *p : 0.0;
+    return ::System::Timer::_secondsPerTick;
 }
 
 // `Graphics::AnimationManager::_singleton`, retail 0x1801fe7b0 — the same global

@@ -28,9 +28,8 @@ extern int      RtVideoVideoProgramRegister();              // video_program.cpp
 extern "C" int RtVideoBatchCSetLightRegister();
 
 void RtVideoPortInit() {
-    // ENDGAME B.3.9 VID (B39_RULES D7): the minted storage rows ARE the class
-    // statics from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@Device@Video@@0PEAV12@EA", &Video::Device::_singleton);
+    // ENDGAME B.3.9 close: `?_singleton@Device@Video@@` is RETIRED (close.txt);
+    // every site reads the class static Video::Device::_singleton.
     // BATCH C — Video::Context::SetLight. Unconditional, see DIRECTION.md §2.3.
     {
         // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).

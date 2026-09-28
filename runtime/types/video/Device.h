@@ -514,10 +514,10 @@ public:
     static Device* Get();
 
     // ?_singleton@Device@Video@@0PEAV12@EA (0x1801fe7a8) — the class static
-    // (ENDGAME B.3.9 VID, B39_RULES D7). RtVideoPortInit redirects the minted
-    // storage row onto it, so the name door, the address door and this member
-    // are the same bytes. Written by the ctor door (singleton_ctors.cpp, type 0
-    // only) and cleared by ~Device. PUBLIC while foreign readers remain.
+    // (ENDGAME B.3.9 VID, B39_RULES D7); its minted row is RETIRED (B.3.9
+    // close): no name or address door is left. Written by the ctor door
+    // (singleton_ctors.cpp, type 0 only) and cleared by ~Device. PUBLIC:
+    // foreign readers (dx11, UI, Graphics) read it directly.
     static Device* _singleton;
 
     // ========================================================================
