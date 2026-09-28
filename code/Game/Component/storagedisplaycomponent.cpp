@@ -23,6 +23,7 @@
 #include "graphics/Mesh.h"
 #include "Component/storagedisplaycomponent_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "math/Math.h"
 #include <cstdint>
@@ -32,6 +33,8 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
 #include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"   // WorkBase_FindComponent_6270
+#include "Game/exe_constants.h"
 
 // ============================================================
 // Pile-rendering bring-up (BANISHED_LIVE_STORAGEDISPLAY, default OFF)
@@ -54,80 +57,22 @@ static uint32_t SDD_RawMatDescTypeId() {
     return 0;
 }
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// FUN_140004680 — FindComponent (MapComponent type)
-typedef void* (*fn_FindComponent_Map_t)(uintptr_t entity, void* retval);
-static fn_FindComponent_Map_t s_fn_FindComponent_Map = nullptr;
-
-// FUN_14000ca10 — resize MeshInstance array (0x128-byte entries)
-typedef void (*fn_MeshArrayResize_t)(void* arrayBase, int newCount);
-static fn_MeshArrayResize_t s_fn_MeshArrayResize = nullptr;
-
-// CharacterComponent_impl_f3e0 — map tile to world position
-typedef void (*fn_TileToWorld_t)(void* mapInfo, float* outPos, float* inPos, char param4, void* param5);
-static fn_TileToWorld_t s_fn_TileToWorld = nullptr;
-
-// Entity_FindComponent_Storage — find StorageComponent on entity
-typedef void* (*fn_FindComponent_Storage_t)(uintptr_t entity, void* retval);
-static fn_FindComponent_Storage_t s_fn_FindComponent_Storage = nullptr;
-
-// Entity_impl_63e0_sub_62b0 — set display object mesh for one slot
-typedef void (*fn_SetDisplayMesh_t)(uintptr_t self, int index, float fraction, uintptr_t materialType);
-static fn_SetDisplayMesh_t s_fn_SetDisplayMesh = nullptr;
-
-// DAT_1401c3dd8 — game state singleton
-static void** s_pGameState = nullptr;
-
-// DAT_140172204 — yaw rotation constant (float)
-static float* s_pYawConstant = nullptr;
-
-// DAT_140172114 — half-tile offset constant (float)
-static float* s_pHalfTileOffset = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_FindComponent_Map = reinterpret_cast<fn_FindComponent_Map_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-
-    s_fn_MeshArrayResize = reinterpret_cast<fn_MeshArrayResize_t>(
-        ResolveAddr(Module::Exe, 0x14000ca10));
-
-    s_fn_TileToWorld = reinterpret_cast<fn_TileToWorld_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));  // CharacterComponent_impl_f3e0 tile->world (CALL @140056869 in StorageDisplayComponent::Draw)
-
-
-    // Entity_FindComponent_Storage (0x140006270) — finds the entity's StorageComponent
-    // (type DWORD_1401c7e78). Verified in the real Update disassembly at 0x1400563e0:
-    // the CALL at 0x140056432 targets 0x140006270, NOT 0x140003050. (0x140003050 finds
-    // type 0x1401c8070 = WorkComponent — which the yard ALSO carries, so the old wiring
-    // silently found the WorkComponent and read StorageComponent field offsets off it,
-    // an out-of-bounds read. Registered in SA as WorkBase_FindComponent_6270.)
-    s_fn_FindComponent_Storage = reinterpret_cast<fn_FindComponent_Storage_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-
-    s_fn_SetDisplayMesh = reinterpret_cast<fn_SetDisplayMesh_t>(
-        ResolveAddr(Module::Exe, 0x1400562b0));
-
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_pYawConstant = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x140172204));
-
-    s_pHalfTileOffset = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x140172114));
-
-    s_initialized = true;
-}
-
-
-
+// Exe helpers, by retail address:
+//   0x140004680 FloorComponent_FindResData (MapComponent)
+//   0x14000ca10 StorageDisplayComponent_MeshArrayResize (below; 0x128-byte MeshInstances)
+//   0x14009f3e0 Reimpl_MapGetTerrainPos (CharacterComponent_impl_f3e0, map tile -> world;
+//               CALL @140056869 in StorageDisplayComponent::Draw)
+//   0x140006270 WorkBase_FindComponent_6270 — Entity_FindComponent_Storage, the entity's
+//               StorageComponent (type DWORD_1401c7e78). Verified in the real Update
+//               disassembly at 0x1400563e0: the CALL at 0x140056432 targets 0x140006270,
+//               NOT 0x140003050. (0x140003050 finds type 0x1401c8070 = WorkComponent —
+//               which the yard ALSO carries, so the old wiring silently found the
+//               WorkComponent and read StorageComponent field offsets off it, an
+//               out-of-bounds read.)
+//   0x1400562b0 StorageDisplayComponent_SetDisplayMesh (below)
+//   0x14000cbd0 StorageDisplay_EntityFindByType_cbd0 (below)
+//   the GameWorld cell 0x1401c3dd8 is g_pGameWorldSingleton; .rdata 0x140172204 = 90.0f
+//   (checkerboard yaw), 0x140172114 = 0.5f (half-tile centre bias), 0x14017214c = 1.0f.
 
 // ============================================================
 // StorageDisplayComponent::Update (vtable slot [9], 0x1400563e0)
@@ -147,7 +92,6 @@ static void EnsureHelpers() {
 //   4. Remaining display objects get cleared (no mesh)
 
 void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
-    EnsureHelpers();
 
     uintptr_t selfAddr = (uintptr_t)self;
 
@@ -157,17 +101,13 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
 
     // FindComponent(MapComponent) — needed for entity context
     uintptr_t mapCompBuf[2] = {0, 0};
-    if (s_fn_FindComponent_Map) {
-        s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
-    }
+    FloorComponent_FindResData((void*)entity, (void*)mapCompBuf);   // 0x140004680
 
     // CheckPtr on entity again
 
-    // FindComponent(StorageComponent) via FUN_140003050
+    // FindComponent(StorageComponent) via FUN_140006270
     uintptr_t storageBuf[2] = {0, 0};
-    if (s_fn_FindComponent_Storage) {
-        s_fn_FindComponent_Storage(entity, (void*)storageBuf);
-    }
+    WorkBase_FindComponent_6270(entity, (void*)storageBuf);
 
     int displayIndex = 0;
     int slotCount = 0;
@@ -182,7 +122,7 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
 
 
     {
-        float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+        float uvScale = kRdata_14017214c;   // g_fUVScale, .rdata 0x14017214c
         int totalWeight = *(int*)(storageComp + 0x38);
         int displayCount = *(int*)(selfAddr + 0x30);
         const uint32_t rawMatTid = SDD_RawMatDescTypeId();
@@ -203,7 +143,7 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
                 // The decompilation does a manual component search with typeId check.
                 // (SA: rawMatTid comes from the runtime registry fallback — see helper.)
                 void* rawMatDesc = nullptr;
-                if (materialType && fn_IsDerivedFrom && rawMatTid) {
+                if (materialType && rawMatTid) {
                     int compCount = *(int*)(materialType + 0x30);
                     uintptr_t compArray = *(uintptr_t*)(materialType + 0x28);
                     for (int c = 0; c < compCount; c++) {
@@ -211,7 +151,7 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
                         if (!comp) continue;   // guard partially-materialized SA entity
                         uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
                         if (typeId == rawMatTid) {
-                            if (fn_IsDerivedFrom(comp, rawMatTid)) {
+                            if (Object::IsDerivedFromNullSafe(comp, rawMatTid)) {
                                 rawMatDesc = comp;
                             }
                             break;
@@ -228,9 +168,9 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
                 int assignCount = (int)fraction;
 
                 // Assign display objects
-                if (assignCount > 0 && s_fn_SetDisplayMesh) {
+                if (assignCount > 0) {
                     for (int j = 0; j < assignCount; j++) {
-                        s_fn_SetDisplayMesh(selfAddr, displayIndex, uvScale, materialType);
+                        StorageDisplayComponent_SetDisplayMesh(selfAddr, displayIndex, uvScale, materialType);
                         displayIndex++;
                     }
                 }
@@ -239,9 +179,9 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
                 if (displayIndex >= displayCount) break;
 
                 // Assign one more with partial fraction
-                if (displayIndex < displayCount && s_fn_SetDisplayMesh) {
+                if (displayIndex < displayCount) {
                     float partial = fraction - (float)assignCount;
-                    s_fn_SetDisplayMesh(selfAddr, displayIndex, partial, materialType);
+                    StorageDisplayComponent_SetDisplayMesh(selfAddr, displayIndex, partial, materialType);
                     displayIndex++;
                 }
 
@@ -254,9 +194,9 @@ fill_remaining:
     // Fill remaining display slots with empty (no mesh)
     {
         int displayCount = *(int*)(selfAddr + 0x30);
-        if (displayIndex < displayCount && s_fn_SetDisplayMesh) {
+        if (displayIndex < displayCount) {
             while (displayIndex < displayCount) {
-                s_fn_SetDisplayMesh(selfAddr, displayIndex, 0.0f, 0);
+                StorageDisplayComponent_SetDisplayMesh(selfAddr, displayIndex, 0.0f, 0);
                 displayIndex++;
             }
         }
@@ -286,8 +226,7 @@ void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0) {
             *(int*)((uintptr_t)field + 0xc) = newCount * 3;
         }
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) * STRIDE), 8);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) * STRIDE), 8);
         field[0] = (int64_t)nb;
     }
 
@@ -324,7 +263,7 @@ void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
             reinterpret_cast<Graphics::MeshInstance*>(p)->Graphics::MeshInstance::~MeshInstance();
             p += STRIDE;
         }
-        if (oldBuf) fn_MemFreeStatic(oldBuf);
+        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 
@@ -335,16 +274,6 @@ void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
 // self+0x28 = display array (0x128 stride), self+0x30 = count. Scene id at entry+0x120,
 // current mesh at entry+0xc0. param_4==0 => remove the object; otherwise pick the LOD
 // mesh nearest the requested fraction and (re)add it to the scene.
-typedef void* (*fn_SDC_EntityHelperCbd0_t)(void* param4, void* retbuf);
-static fn_SDC_EntityHelperCbd0_t s_fn_SDC_Cbd0 = nullptr;
-static bool s_sdcSlotHelpersResolved = false;
-static void EnsureSlotHelpers() {
-    if (s_sdcSlotHelpersResolved) return;
-    s_fn_SDC_Cbd0 = reinterpret_cast<fn_SDC_EntityHelperCbd0_t>(
-        ResolveAddr(Module::Exe, 0x14000cbd0));
-    s_sdcSlotHelpersResolved = true;
-}
-
 // ============================================================
 // Reimpl of Entity_helper_cbd0 (0x14000cbd0) — Component reg wave B.
 // Scans a host entity's component list (count@+0x30, IBP array@+0x28) for the first
@@ -366,7 +295,7 @@ void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
             if (!comp) continue;   // guard partially-materialized SA entity
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == modelTid) {
-                if (fn_IsDerivedFrom(comp, modelTid)) found = comp;
+                if (Object::IsDerivedFromNullSafe(comp, modelTid)) found = comp;
                 break;
             }
         }
@@ -377,7 +306,6 @@ void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
 
 void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction,
                                             uintptr_t materialType) {
-    EnsureSlotHelpers();
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
 
@@ -400,7 +328,7 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
     // entity (no ModelDescription / empty MeshGroup) can't fault SetMesh — it just
     // renders no pile for that slot instead of crashing the shared Graphics::Scene.
     int64_t cbd0Ret = 0;
-    if (s_fn_SDC_Cbd0) s_fn_SDC_Cbd0((void*)materialType, &cbd0Ret);
+    StorageDisplay_EntityFindByType_cbd0((void*)materialType, &cbd0Ret);   // 0x14000cbd0
     if (!cbd0Ret) return;                                   // material has no ModelDescription
     uintptr_t lodTable = *(uintptr_t*)(cbd0Ret + 0x20);
     if (!lodTable) return;                                  // ModelDescription has no MeshGroup
@@ -432,22 +360,6 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
 
 }
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void StorageDisplayComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    // Scene::RemoveObject is a member now (B.3.5 caller batch I2), so it is no
-    // longer a pointer this can print.
-    printf("[StorageDisplayComponent] Funcs resolved: "
-           "FindComponent_Map=%p MeshArrayResize=%p "
-           "SetDisplayMesh=%p pGameState=%p\n",
-           (void*)s_fn_FindComponent_Map, (void*)s_fn_MeshArrayResize,
-           (void*)s_fn_SetDisplayMesh, (void*)s_pGameState);
-#endif
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — StorageDisplayComponent as a REAL class (StorageDisplayComponent.h).
 //
@@ -476,8 +388,6 @@ StorageDisplayComponent::StorageDisplayComponent()
 // Simple: Component_Serialize + one empty Serializer block (version 0).
 
 void StorageDisplayComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     alignas(8) uint8_t serializerBuf[24];
@@ -505,13 +415,11 @@ void StorageDisplayComponent::Startup() {}
 //      e. Build transform and set on geometry
 
 void StorageDisplayComponent::OnAdded() {
-    EnsureHelpers();
-
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
 #ifdef _DEBUG
     printf("[StorageDisplayComp::Draw] ENTER self=%p MeshResize=%p\n",
-           (void*)selfAddr, (void*)s_fn_MeshArrayResize);
+           (void*)selfAddr, (void*)&StorageDisplayComponent_MeshArrayResize);
     fflush(stdout);
 #endif
 
@@ -520,9 +428,7 @@ void StorageDisplayComponent::OnAdded() {
     // Find MapComponent on entity
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
     uintptr_t mapCompBuf[2] = {0, 0};
-    if (s_fn_FindComponent_Map) {
-        s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
-    }
+    FloorComponent_FindResData((void*)entity, (void*)mapCompBuf);   // 0x140004680
 
 
     uintptr_t mapComp = mapCompBuf[0];
@@ -544,27 +450,22 @@ void StorageDisplayComponent::OnAdded() {
            width, height, totalSlots, (void*)(selfAddr + 0x28));
     fflush(stdout);
 #endif
-    if (s_fn_MeshArrayResize) {
-        s_fn_MeshArrayResize((void*)(selfAddr + 0x28), totalSlots);
-    }
+    StorageDisplayComponent_MeshArrayResize((void*)(selfAddr + 0x28), totalSlots);   // 0x14000ca10
 #ifdef _DEBUG
     printf("[StorageDisplayComp::Draw]   MeshResize done\n");
     fflush(stdout);
 #endif
 
     // Get map info from game state
-    if (!s_pGameState || !*s_pGameState) return;
-    uintptr_t gameState = (uintptr_t)*s_pGameState;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
     int* mapInfo = *(int**)(gameState + 0xf8);
     if (!mapInfo) return;
 
-    // Real-value fallbacks: these raw .rdata floats resolve NULL in standalone
-    // (ResolveAddr on a .rdata constant returns null), so use the true retail values
-    // instead of 0 — else piles shift by a half-tile and lose the checkerboard yaw.
     //   DAT_140172204 = 0x42b40000 = 90.0f (per-cell checkerboard yaw, degrees)
     //   DAT_140172114 = 0x3f000000 = 0.5f  (half-tile center bias)
-    float yawAngle = (s_pYawConstant   && *s_pYawConstant   != 0.0f) ? *s_pYawConstant   : 90.0f;
-    float halfTile = (s_pHalfTileOffset && *s_pHalfTileOffset != 0.0f) ? *s_pHalfTileOffset : 0.5f;
+    float yawAngle = kRdata_140172204;
+    float halfTile = kRdata_140172114;
 
     int displayCount = *(int*)(selfAddr + 0x30);
     if (displayCount <= 0) return;
@@ -588,9 +489,7 @@ void StorageDisplayComponent::OnAdded() {
         // Convert tile to world position (f3e0). worldPos[0]/[1] are the world X/Y
         // on the yard footprint; the original drops worldPos[2] and uses z=0.
         float worldPos[4] = {0.f, 0.f, 0.f, 0.f};
-        if (s_fn_TileToWorld) {
-            s_fn_TileToWorld(mapInfo, worldPos, &vec3Buf.x, '\0', nullptr);
-        }
+        Reimpl_MapGetTerrainPos(mapInfo, worldPos, &vec3Buf.x, '\0', nullptr);   // 0x14009f3e0
 
         // Build transform with yaw rotation
         // Alternating checkerboard: if (row + col) is odd, use zero yaw
@@ -628,16 +527,14 @@ void StorageDisplayComponent::OnAdded() {
 // Scene ID is at entry+0x120.
 
 void StorageDisplayComponent::OnRemove() {
-    EnsureHelpers();
-
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
     int count = *(int*)(selfAddr + 0x30);
     uintptr_t arrayBase = *(uintptr_t*)(selfAddr + 0x28);
 
-    if (!s_pGameState || !*s_pGameState) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     // Get the graphics scene from game state
-    uintptr_t gameState = (uintptr_t)*s_pGameState;
+    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
     void* scene = *(void**)(gameState + 0x60);
 
     for (int i = 0; i < count; i++) {

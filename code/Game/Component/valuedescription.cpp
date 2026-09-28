@@ -12,9 +12,9 @@
 //   int         @ +0x44 = 100 (baseValue)
 //   int         @ +0x48 = 0   (weight) [factory writes 8 bytes @+0x44 = 100]
 // Serialize (vtable +0x28, 0x14005cd60), stream order:
-//   ExternalPtr @ +0x20  (FUN_14000bd30 -> fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x20  (FUN_14000bd30 -> Reimpl_ExternalPtr_Serialize_StringTable)
 //   String      @ +0x28
-//   ExternalPtr @ +0x30  (FUN_14000bf40 -> fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x30  (FUN_14000bf40 -> Reimpl_ExternalPtr_Serialize_StringTable)
 //   String      @ +0x38
 //   int         @ +0x40
 //   int         @ +0x44
@@ -47,11 +47,10 @@ ValueDescription::ValueDescription()
 
 // [5] 0x14005cd60: stream order as retail.
 bool ValueDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_sprite, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_sprite, &ser);
     _name.Serialize(&ser);
-    fn_ExternalPtr_BuildSerialize(&_ref30, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
     _s38.Serialize(&ser);
     ser.Serialize(_i40, nullptr);
     ser.Serialize(_baseValue, nullptr);

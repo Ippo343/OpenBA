@@ -32,46 +32,12 @@
 #include <new>
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-
-// StatusIconComponent_helper_a440 (0x1400aa440) — geometry setup helper
-typedef void (*fn_StatusIconHelper_a440_t)(void* geometry, float param2, int spriteCount,
-                                           void* param4, void* spriteSheet);
-static fn_StatusIconHelper_a440_t s_fn_StatusIconHelper_a440 = nullptr;
-
-// System::Time::Time(Time*, float) — dispatch slot at 0x140152b00
-typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
-static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
-
-// FUN_1400c3470 — entity notification callback
-typedef void (*fn_EntityNotify_t)(void* entity);
-static fn_EntityNotify_t s_fn_EntityNotify = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    uintptr_t slot;
-
-    // Dispatch slots
-
-    slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
-
-    // Direct exe addresses
-    s_fn_StatusIconHelper_a440 = reinterpret_cast<fn_StatusIconHelper_a440_t>(
-        ResolveAddr(Module::Exe, 0x1400aa440));
-
-    s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
-        ResolveAddr(Module::Exe, 0x1400c3470));
-
-    s_helpersResolved = true;
-}
+// Exe helpers, by retail address: 0x1400aa440 StatusIconComponent_GeometrySetup (below),
+// 0x1400c3470 ActHunt_NotifyEntityChanged_c3470 (entity notification), 0x140152b00
+// ??0Time@System@@QEAA@M@Z (RtSystem_Time_Ctor), 0x140004680 FloorComponent_FindResData
+// (MapComponent), 0x14009f3e0 Reimpl_MapGetTerrainPos (grid cell -> world position).
 
 // ============================================================
 // Reimpl of FUN_1400aa440 (StatusIcon geometry-bounds setup)
@@ -112,13 +78,11 @@ void StatusIconComponent_GeometrySetup(void* geometry, float param2, int spriteC
 // Helper: Get StatusIconDescription sibling component
 // ============================================================
 static void* GetStatusIconDescription(uintptr_t self) {
-    EnsureHelpers();
-    if (!fn_IsDerivedFrom) return nullptr;
 
     void* obj = *(void**)(self + 0x18);
     if (!obj) return nullptr;
 
-    bool derived = fn_IsDerivedFrom(obj, StatusIconDescription::TypeId());
+    bool derived = Object::IsDerivedFromNullSafe(obj, StatusIconDescription::TypeId());
     return derived ? obj : nullptr;
 }
 
@@ -131,7 +95,6 @@ static void* GetStatusIconDescription(uintptr_t self) {
 // to set up the geometry with sprite dimensions and sheet reference.
 
 void StatusIconComponent_Serialize(StatusIconComponent* self) {
-    EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
     void* desc = GetStatusIconDescription(s);
@@ -147,11 +110,11 @@ void StatusIconComponent_Serialize(StatusIconComponent* self) {
     // Call geometry setup helper with:
     //   geometry (+0x28), float from desc +0x28, sprite count,
     //   value from desc +0x30 (Geometry data), SpriteSheet ptr from desc +0x20
-    if (s_fn_StatusIconHelper_a440) {
+    {
         float iconSize = *(float*)(d + 0x28);
         // desc +0x30 is passed as a Geometry-like value (copied by value in original)
         void* geomData = *(void**)(d + 0x30);
-        s_fn_StatusIconHelper_a440(
+        StatusIconComponent_GeometrySetup(
             (void*)(s + 0x28), iconSize, spriteCount, geomData, spriteSheet);
     }
 }
@@ -209,7 +172,6 @@ static void StatusIcon_EnsureSprite(uintptr_t c) {
 // with Time(0) to trigger positioning.
 
 void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
-    EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
     // Save fieldF0 (fieldE8 in longlong* terms = offset 0xF0)
@@ -248,34 +210,19 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
                 if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
                     void* ownerEntity = *(void**)(s + 0x10);
                     if (ownerEntity != nullptr) {
-                        if (s_fn_EntityNotify) {
-                            s_fn_EntityNotify(*(void**)(s + 0x10));
-                        }
+                        ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));
                     }
                 }
 
                 // Call vtable +0x40 (OnRemove) with Time(0) to position the icon
-                if (s_fn_Time_Ctor) {
+                {
                     uint8_t timeObj[8];
-                    s_fn_Time_Ctor(timeObj, 0.0f);
+                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), 0.0f);
                     self->Tick(timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
                 }
             }
         }
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void StatusIconComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    // Scene::AddObject/RemoveObject are members now (B.3.5 caller batch I2).
-    printf("[StatusIconComponent] Funcs resolved: "
-           "Helper_a440=%p\n",
-           (void*)s_fn_StatusIconHelper_a440);
-#endif
 }
 
 // ============================================================
@@ -293,25 +240,11 @@ void StatusIconComponent_InitFuncs() {
 
 // Graphics::Geometry::SetTransform (Runtime export) — used by OnRemove positioning.
 
-// Entity component finders (registered exe ports; member ABI RCX=entity, RDX=retIBP).
-typedef void* (*fn_Finder_t)(uintptr_t entity, void* outIBP);
-static fn_Finder_t s_fn_FindModel = nullptr;   // 0x140003f60 -> ModelComponent (type 0x1401c7a50)
-static fn_Finder_t s_fn_FindMulti = nullptr;   // 0x140004740 -> MultiObjectComponent (type 0x1401c7ac0)
-static fn_Finder_t s_fn_FindMap   = nullptr;   // 0x140004680 -> MapComponent (type 0x1401c79e0)
-
-// CharacterComponent_impl_f3e0 (0x14009f3e0) — grid cell -> world position.
-typedef float* (*fn_GridToWorld_t)(int* grid, float* outWorld, float* inGrid, char flag, void* extra);
-static fn_GridToWorld_t s_fn_GridToWorld = nullptr;
-
-static bool s_drawHelpersResolved = false;
-static void EnsureDrawHelpers() {
-    if (s_drawHelpersResolved) return;
-    s_fn_FindModel = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_FindMulti = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004740));
-    s_fn_FindMap   = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_GridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_drawHelpersResolved = true;
-}
+// Entity component finders: 0x140003f60 ModelComponent (type 0x1401c7a50) and
+// 0x140004740 MultiObjectComponent (type 0x1401c7ac0) are replaced by the by-name
+// lookup below; 0x140004680 FloorComponent_FindResData -> MapComponent (type 0x1401c79e0).
+// CharacterComponent_impl_f3e0 (0x14009f3e0, Reimpl_MapGetTerrainPos) — grid cell ->
+// world position.
 
 // ============================================================
 // [STANDALONE GUARD] component-array entry sanity (2 deviations, kept deliberately)
@@ -400,7 +333,6 @@ static inline bool SI_Initialised(uintptr_t c) {
 // additionally strips icons at demolition start (state-3 enter → helper_c2a0);
 // this teardown-time removal is the safety net that must always run.
 void StatusIconComponent::OnRemove() {
-    EnsureHelpers();
     uintptr_t c = (uintptr_t)this;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
@@ -448,7 +380,7 @@ static int s_siUninitBudget = 4;
 // the per-name first-use cache this helper used to keep (B6-5); `typeName` is only
 // for the guard trace.
 static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const char* typeName) {
-    if (!entity || !fn_IsDerivedFrom) return nullptr;
+    if (!entity) return nullptr;
     if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
 
     int count = 0;
@@ -474,7 +406,7 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const ch
         }
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want)
-            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+            return Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
     }
     return nullptr;
 }
@@ -493,7 +425,6 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const ch
 // "no occupants / no workers" warning (bit 4 = 0x10). The real exe fn is unmapped in
 // standalone, so the occupancy driver below calls this port instead.
 void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
-    EnsureHelpers();
     uintptr_t c = (uintptr_t)selfC;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
@@ -542,16 +473,16 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
             *(int32_t*)(c + 0x100) = (int32_t)id;
             SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Show");
         }
-        if (s_fn_Time_Ctor) {
+        {
             uint8_t timeObj[8];
-            s_fn_Time_Ctor(timeObj, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), 0.0f);
             selfC->Tick(timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
         }
         new20 = old20 | 4u;
     }
     *(uint32_t*)(c + 0x20) = new20;
     if (((new20 ^ old20) & 0xffff) != 0 && *(uintptr_t*)(c + 0x10) != 0) {
-        if (s_fn_EntityNotify) s_fn_EntityNotify(*(void**)(c + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*(void**)(c + 0x10));
     }
 }
 
@@ -590,7 +521,6 @@ StatusIconComponent::StatusIconComponent() : _geometry(), iconId(-1), _pad104{} 
 // then one uint via IO::Serializer(version 0). On load, writes back to +0xF0.
 
 void StatusIconComponent::Persist(void* stream) {
-    EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Base class serialize
@@ -620,8 +550,6 @@ void StatusIconComponent::Persist(void* stream) {
 // ⚠ A LOAD never dispatches this slot — anything that must hold for a stream-restored
 // component belongs in the ctor (StatusIconComponent::StatusIconComponent), not here.
 void StatusIconComponent::Startup() {
-    EnsureHelpers();
-
     // The ctor half runs at CONSTRUCTION (the real ctor). It used to be re-run here
     // too (Geometry door + the table stamp + sceneObjId = -1 a second time, on a
     // component nothing had touched since construction); a C++ member cannot be
@@ -646,8 +574,6 @@ void StatusIconComponent::Startup() {
 // the model's bounding box); the map-cell fallback mirrors the original for entities
 // without a model. Verified line-by-line against the disassembly.
 void StatusIconComponent::Tick(void* /*time*/) {
-    EnsureHelpers();
-    EnsureDrawHelpers();
     uintptr_t c = reinterpret_cast<uintptr_t>(this);
 
     // [STANDALONE GUARD D4] never-initialised component: the inert factory's zero-fill left
@@ -695,8 +621,7 @@ void StatusIconComponent::Tick(void* /*time*/) {
     }
 
     void* descObj = *(void**)(c + 0x18);
-    void* desc = (fn_IsDerivedFrom &&
-                  fn_IsDerivedFrom(descObj, StatusIconDescription::TypeId())) ? descObj : nullptr;
+    void* desc = (Object::IsDerivedFromNullSafe(descObj, StatusIconDescription::TypeId())) ? descObj : nullptr;
 
     float pos[3];
     pos[0] = 0.0f;
@@ -742,8 +667,8 @@ void StatusIconComponent::Tick(void* /*time*/) {
     } else {
         // MAP-CELL fallback.
         void* mapIBP[2] = { nullptr, nullptr };
-        if (s_fn_FindMap) s_fn_FindMap(entity, mapIBP);
-        if (mapIBP[0] && s_fn_GridToWorld) {
+        FloorComponent_FindResData(reinterpret_cast<void*>(entity), mapIBP);   // 0x140004680
+        if (mapIBP[0]) {
             uintptr_t mc = (uintptr_t)mapIBP[0];
             int* widthPtr = *(int**)(gw + 0xf8);
             int w = *widthPtr;
@@ -752,7 +677,7 @@ void StatusIconComponent::Tick(void* /*time*/) {
             float f = (float)(w >> 1) - 0.5f;
             float in[3]  = { (float)(idx % w) - f, (float)(idx / w) - f, 0.0f };
             float out[3] = { 0.0f, 0.0f, 0.0f };
-            s_fn_GridToWorld(widthPtr, out, in, 0, nullptr);
+            Reimpl_MapGetTerrainPos(widthPtr, out, in, 0, nullptr);   // 0x14009f3e0
             pos[0] += out[0];
             pos[1] += out[1];
             pos[2] += out[2];

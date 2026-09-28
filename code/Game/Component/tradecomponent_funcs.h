@@ -29,4 +29,3 @@ void TradeComponent_Draw(TradeComponent* self);
 void TradeComponent_OnCreate(TradeComponent* self);
 
 // Init: resolve all internal function pointers (called once at startup)
-void TradeComponent_InitFuncs();

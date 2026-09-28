@@ -22,28 +22,17 @@
 #include <cstring>
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Action/exe_bodies.h"   // ActHunt_MarkEntityRemoval_c2ea0
+#include "Game/exe_constants.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
-
-// Base::IsDerivedFrom — dispatched through [0x140152a98]
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* self, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// FUN_1400c2ea0 — mark entity for removal
-typedef void (*fn_MarkForRemoval_t)(void* entity);
-static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
-
-// FUN_140003110 — dynamic array push
-
-// Global: seconds per tick multiplier (DAT_140172234)
-static float* s_pSecondsPerTickMul = nullptr;
-
-// Game state singleton
-static void** s_pGameState = nullptr;
-
-static bool s_initialized = false;
+// Base::IsDerivedFrom — import slot 0x140152a98, called on the object.
+// FUN_1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0 — mark entity for removal.
+// FUN_140003110 — dynamic array push (GameColl SetSizeFill).
+// .rdata 0x140172234 — seconds-per-tick multiplier (kRdata_140172234).
+// The GameWorld cell 0x1401c3dd8 is g_pGameWorldSingleton.
 
 
 // ============================================================
@@ -54,51 +43,30 @@ void TombstoneComponent_Serialize(TombstoneComponent* self) {
 
     // IsDerivedFrom check for tombstone data type
     void* buildingData = nullptr;
-    if (s_fn_IsDerivedFrom_d) {
-        bool isDerived = s_fn_IsDerivedFrom_d(baseObj, TombstoneDescription::TypeId());
+    {
+        bool isDerived = reinterpret_cast<const Object::Base*>(baseObj)
+                             ->IsDerivedFrom(TombstoneDescription::TypeId());   // B.3.x bridge
         if (isDerived) buildingData = baseObj;
     }
 
-    if (!buildingData || !s_pGameState || !*s_pGameState) return;
+    if (!buildingData || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     // Random float in [0, 1)
-    void* rng = *(void**)((uintptr_t)*s_pGameState + 0xD8);
+    void* rng = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xD8);
     float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
 
     // Compute lifetime: (randVal * max + min) * tickMultiplier
     float minTime = *(float*)((uintptr_t)buildingData + 0x20);
     float maxTime = *(float*)((uintptr_t)buildingData + 0x24);
-    float seconds = (randVal * maxTime + minTime) * *s_pSecondsPerTickMul;
+    float seconds = (randVal * maxTime + minTime) * kRdata_140172234;
 
     // Construct Time from seconds, store at +0x28
     int64_t timeVal;
-    if (fn_Time_Ctor_Float)
-        fn_Time_Ctor_Float(&timeVal, seconds);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), seconds);
     *(int64_t*)&self->field28 = timeVal;
 }
 
 
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void TombstoneComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
-        ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_pSecondsPerTickMul = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x140172234));
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_initialized = true;
-}
 
 // ============================================================================
 // ENDGAME B.3.8 CIT — TombstoneComponent as a REAL class (TombstoneComponent.h).
@@ -122,10 +90,6 @@ TombstoneComponent::TombstoneComponent() : field28(nullptr) {
 // TombstoneComponent::Persist (0x1400578E0)
 // ============================================================
 void TombstoneComponent::Persist(void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: Shutdown never resolved
-    // its own helpers (only Startup/Update did), so on a load-from-save path where
-    // Shutdown fires first every s_fn_* below could still be null.
-    TombstoneComponent_InitFuncs();
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     alignas(8) uint8_t serializer[24];
@@ -158,27 +122,26 @@ void TombstoneComponent::Persist(void* stream) {
 // above): identical arithmetic, but it trusts _unk18 instead of gating on
 // IsDerivedFrom so the timer is reliably populated.
 void TombstoneComponent::Startup() {
-    TombstoneComponent_InitFuncs();
 
     // Already initialized (a live tombstone carries a positive lifetime) — leave it.
     if (*(int64_t*)&field28 != 0) return;
 
     void* buildingData = _description;  // +0x18 = the TombstoneDescription
     if (!buildingData) return;
-    if (!s_pGameState || !*s_pGameState) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     // Random float in [0,1) from the world RNG (world+0xD8).
-    void* rng = *(void**)((uintptr_t)*s_pGameState + 0xD8);
+    void* rng = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xD8);
     float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
 
     // lifetime seconds = (rand * maxTime + minTime) * secondsPerTickMul  (DAT_140172234).
     float minTime = *(float*)((uintptr_t)buildingData + 0x20);
     float maxTime = *(float*)((uintptr_t)buildingData + 0x24);
-    float tickMul = s_pSecondsPerTickMul ? *s_pSecondsPerTickMul : 1.0f;
+    float tickMul = kRdata_140172234;
     float seconds = (randVal * maxTime + minTime) * tickMul;
 
     int64_t timeVal = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeVal, seconds);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), seconds);
     *(int64_t*)&field28 = timeVal;
 }
 
@@ -189,7 +152,6 @@ void TombstoneComponent::Startup() {
 // ============================================================
 void TombstoneComponent::Update(void* timeV) {
     int64_t* pDeltaTime = static_cast<int64_t*>(timeV);
-    TombstoneComponent_InitFuncs();
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // +0x28 countdown timer is zero unless Startup (slot +0x20) ran. If it is still
@@ -206,16 +168,15 @@ void TombstoneComponent::Update(void* timeV) {
 
     if (*pTimer < 1) {
         void* entityPtr = _entity;
-        if (!s_pGameState || !*s_pGameState) return;
-        void* gameWorld = *(void**)((uintptr_t)*s_pGameState + 0xE8);
+        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+        void* gameWorld = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xE8);
 
         if (entityPtr != nullptr) {
 
             // Check bit 10 of entity flags at +0x40
             uint32_t entityFlags = *(uint32_t*)((uintptr_t)entityPtr + 0x40);
             if (((entityFlags >> 10) & 1) == 0) {
-                if (s_fn_MarkForRemoval)
-                    s_fn_MarkForRemoval(entityPtr);
+                ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
 
                 // Add to removal queue
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)

@@ -17,34 +17,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Action/exe_bodies.h"   // ActRm_ArrayResize16_da70 (0x14000da70)
+#include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// FUN_14000da70 — resize paired (IBP+int) array
-typedef void (*fn_ResizePairedArray_t)(void* arrayPtr, int newCount);
-static fn_ResizePairedArray_t s_fn_ResizePairedArray = nullptr;
-
-// FUN_140002340 — serialize IBP array entry
-typedef void (*fn_SerializeIBPEntry_t)(void* entryPtr, void* serializer);
-static fn_SerializeIBPEntry_t s_fn_SerializeIBPEntry = nullptr;
-
-static bool s_initialized = false;
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-static void TrackerComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_ResizePairedArray = reinterpret_cast<fn_ResizePairedArray_t>(
-        ResolveAddr(Module::Exe, 0x14000da70));
-    s_fn_SerializeIBPEntry = reinterpret_cast<fn_SerializeIBPEntry_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    s_initialized = true;
-}
+// Helpers: FUN_14000da70 ActRm_ArrayResize16_da70 — resize a paired (IBP+int) array;
+// FUN_140002340 Reimpl_ExternalPtr_Serialize_StringTable — serialize an IBP entry.
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — TrackerComponent as a REAL class (TrackerComponent.h).
@@ -72,10 +49,6 @@ TrackerComponent::TrackerComponent()
 // at +0x28/+0x30 and +0x38/+0x40, plus trackerId at +0x48.
 
 void TrackerComponent::Persist(void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
-    // but never called anywhere, so every s_fn_* below stayed null and load silently
-    // skipped this component's fields.
-    TrackerComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
@@ -89,8 +62,8 @@ void TrackerComponent::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount1, nullptr);   // B.3.4 bridge
 
     // If loading, resize array
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0 && s_fn_ResizePairedArray) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        s_fn_ResizePairedArray((void*)(selfAddr + 0x28), localCount1);
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        ActRm_ArrayResize16_da70((int64_t*)(selfAddr + 0x28), localCount1);   // 0x14000da70
     }
 
     // Serialize each (IBP + int) pair — each pair is 16 bytes (8 IBP + 4 int + 4 pad = 16)
@@ -98,8 +71,7 @@ void TrackerComponent::Persist(void* stream) {
     if (localCount1 > 0) {
         uintptr_t entryPtr = (uintptr_t)array1;
         for (int i = 0; i < localCount1; i++) {
-            if (s_fn_SerializeIBPEntry)
-                s_fn_SerializeIBPEntry((void*)entryPtr, serializer);
+            Reimpl_ExternalPtr_Serialize_StringTable((void*)entryPtr, serializer);   // 0x140002340
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entryPtr + 8), nullptr);   // B.3.4 bridge
             entryPtr += 16;  // sizeof(IBP) + sizeof(int) = 8 + 8
         }
@@ -110,16 +82,15 @@ void TrackerComponent::Persist(void* stream) {
     int localCount2 = count2;
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount2, nullptr);   // B.3.4 bridge
 
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0 && s_fn_ResizePairedArray) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        s_fn_ResizePairedArray((void*)(selfAddr + 0x38), localCount2);
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        ActRm_ArrayResize16_da70((int64_t*)(selfAddr + 0x38), localCount2);   // 0x14000da70
     }
 
     void* array2 = *(void**)(selfAddr + 0x38);
     if (localCount2 > 0) {
         uintptr_t entryPtr = (uintptr_t)array2;
         for (int i = 0; i < localCount2; i++) {
-            if (s_fn_SerializeIBPEntry)
-                s_fn_SerializeIBPEntry((void*)entryPtr, serializer);
+            Reimpl_ExternalPtr_Serialize_StringTable((void*)entryPtr, serializer);   // 0x140002340
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entryPtr + 8), nullptr);   // B.3.4 bridge
             entryPtr += 16;
         }

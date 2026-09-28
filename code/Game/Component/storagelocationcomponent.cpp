@@ -6,7 +6,10 @@
 //
 // Vtable at 0x140164880. Two non-trivial overrides:
 //   Shutdown  (0x14012d2a0) — Component_Serialize + two empty Serializer blocks
-//   OnCreate  (0x14012d270) — register entity with game world storage location list
+//   OnCreate  (0x14012d270) — register entity with game world storage location list.
+//             (Its standalone port StorageLocationComponent_OnCreate had no caller and
+//             was deleted in B3R G-CompD; the live registration is the state-2 enter
+//             below, TownRegistry_RegisterStorageLocation.)
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
@@ -18,59 +21,6 @@
 #include <cstdlib>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
-
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// FUN_140002cc0 — register entity with world entity list
-typedef void (*fn_RegisterEntity_t)(void* listPtr, void* entityPtr);
-static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
-
-// DAT_1401c3dd8 — game state singleton pointer
-static void** s_pGameState = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-
-    s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_initialized = true;
-}
-
-// ============================================================
-// StorageLocationComponent::OnCreate (vtable slot [7], 0x14012d270)
-// ============================================================
-// Registers the owning entity with the game world's storage location list.
-// Gets entity ptr from self+0x10, registers on gameState->+0xf0 list.
-//
-// Original disassembly:
-//   MOV RAX,[RCX+0x10]        ; entity ptr
-//   MOV RCX,[0x1401c3dd8]     ; game state singleton
-//   MOV RCX,[RCX+0xf0]        ; world manager
-//   LEA RDX,[RAX+0x28]        ; entity chain ptr (entity+0x28)
-//   CALL FUN_140002cc0         ; register entity
-
-void StorageLocationComponent_OnCreate(StorageLocationComponent* self) {
-    EnsureHelpers();
-
-    if (!s_fn_RegisterEntity || !s_pGameState) return;
-
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
-
-    uintptr_t gameState = (uintptr_t)*s_pGameState;
-    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
-
-    // Register entity at worldMgr + 0x00 (storage location entity list)
-    s_fn_RegisterEntity((void*)worldMgr, &entityPtr);
-}
 
 // ===== ENDGAME B.3.8 MI-B — StorageLocationComponent as a REAL class =====
 // (StorageLocationComponent.h). Before: CONTROLLER_LIVE_FACTORY_STATES +

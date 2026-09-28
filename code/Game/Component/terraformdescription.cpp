@@ -38,11 +38,10 @@ TerraformDescription::TerraformDescription()
 
 // [5] 0x1400576a0: stream order as retail.
 bool TerraformDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     ser.Serialize(_u30, nullptr);
-    fn_ExternalPtr_BuildSerialize(&_ref28, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);
     ser.Serialize(_u34, nullptr);
     return true;
 }

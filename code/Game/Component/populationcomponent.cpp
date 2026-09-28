@@ -17,6 +17,7 @@
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -25,36 +26,16 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// PopulationComponent_SmoothDensity(this) — 0x1400538c0
-typedef void (*fn_SmoothDensity_t)(void* self);
-static fn_SmoothDensity_t s_fn_SmoothDensity = nullptr;
-
-// PopulationComponent_ScanHabitability(this, terrainGrid*, cellIndex) — 0x140053b50
-typedef void (*fn_ScanHabitability_t)(void* self, void* terrainGrid, int cellIndex);
-static fn_ScanHabitability_t s_fn_ScanHabitability = nullptr;
-
-// Game world singleton
-static void** s_pGameWorld = nullptr;
-
-// Startup (herd-creation) deps.
-// ComponentEntity_CopyCtor(mem, description) — 0x1400c3720
-typedef void* (*fn_CopyCtor_t)(void* mem, int64_t description);
-static fn_CopyCtor_t s_fn_CopyCtor = nullptr;
-// EntityList_RegisterEntity(list, &entityIbp, categoryId) — 0x1400c48a0
-typedef void (*fn_RegisterEntity_t)(void* list, void* entityIbp, int categoryId);
-static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
-
-// Town-registry helpers used by the OnAdd/OnRemove pair below.
-// DynArray8_ResizeFill(arrayField, newCount, valueIbp) — 0x140003110, converted
-// to GameColl::AsArray<GameColl::Ptr8>(h).SetSizeFill(n, fill) (ENDGAME B.3.2
-// step 2); DynArray8_EraseByValue(arrayField, valueIbp) — 0x140002cc0.
-typedef void (*fn_ArrErase_t)(int64_t* arrayField, void* valueIbp);
-static fn_ArrErase_t      s_fn_ArrErase      = nullptr;
+// The exe helpers this file calls, by retail address:
+//   0x1400538c0 PopulationComponent_SmoothDensity_Reimpl (below)
+//   0x140053b50 PopulationComponent_ScanHabitability_Reimpl (below)
+//   0x1400c3720 ComponentEntity_CtorFromDescription (ComponentEntity copy ctor)
+//   0x1400c48a0 EntityList_RegisterEntity_Impl
+//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140003110 DynArray8_ResizeFill = GameColl::AsArray<GameColl::Ptr8>(h).SetSizeFill
+//   the GameWorld cell 0x1401c3dd8 is g_pGameWorldSingleton.
 
 // Component find-loop over a freshly-instantiated entity (IBP array at +0x30,
 // count at +0x38); match on the component's vtable+0x10 GetTypeId.
@@ -69,7 +50,7 @@ static void* PopulationFindComponent(int64_t entity, uint32_t typeId) {
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (t != typeId) continue;
         void* c = *slot;
-        return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+        return (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
     }
     return nullptr;
 }
@@ -77,15 +58,12 @@ static void* PopulationFindComponent(int64_t entity, uint32_t typeId) {
 // Density smoothing interval constant: 300.0f seconds
 static constexpr float SMOOTH_INTERVAL_SECONDS = 300.0f;
 
-static bool s_initialized = false;
-
 
 // ============================================================
 // Reimpl of FUN_1400538c0 (PopulationComponent::SmoothDensity)
 // Weighted 5x5 kernel smoothing pass over the population density grid.
 // Self-contained: only MemAlloc/MemFree, pure pointer arithmetic.
-// Registered so populationcomponent.cpp's s_fn_SmoothDensity fires
-// (was silently skipped when unregistered in standalone).
+// (Was silently skipped when unregistered in standalone.)
 // ============================================================
 void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
@@ -120,7 +98,7 @@ void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
     if (n40 != 0) {
         if (0 < n40) {
             temp = reinterpret_cast<int*>(
-                fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n40 * 4, 4));
+                System::MemoryAllocator::MemAlloc((uint64_t)n40 * 4, 4));
         }
         // Faithful port of the (quirky) zero-init loop from the original.
         for (int64_t k = 0; k < (int64_t)n40; k++) {
@@ -137,7 +115,7 @@ void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
         }
         // Original frees a null pointer here (no-op); preserved for fidelity.
         if (temp != nullptr) {
-            fn_MemFreeStatic((void*)0);
+            System::MemoryAllocator::MemFree((void*)0);
         }
     }
 
@@ -209,7 +187,7 @@ void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
         } while (i < *reinterpret_cast<int*>(self + 0x40));
     }
 
-    fn_MemFreeStatic(temp);
+    System::MemoryAllocator::MemFree(temp);
 }
 
 // ============================================================
@@ -284,7 +262,7 @@ void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
         *pCap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) *pCap = newCount * 3;
         arr[0] = reinterpret_cast<int64_t>(
-            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(*pCap) * 0xc, 4));
+            System::MemoryAllocator::MemAlloc((uint64_t)(*pCap) * 0xc, 4));
     }
 
     int start = (oldBuf == reinterpret_cast<uint8_t*>(arr[0])) ? oldCount : 0;
@@ -302,7 +280,7 @@ void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
         }
     }
 
-    if (oldBuf != reinterpret_cast<uint8_t*>(arr[0])) fn_MemFreeStatic(oldBuf);
+    if (oldBuf != reinterpret_cast<uint8_t*>(arr[0])) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
@@ -344,29 +322,6 @@ void PopulationComponent_OnRemove(void* selfV) {
 
 
 // ============================================================
-// Init: resolve function pointers
-// ============================================================
-void PopulationComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_SmoothDensity = reinterpret_cast<fn_SmoothDensity_t>(
-        ResolveAddr(Module::Exe, 0x1400538c0));
-    s_fn_ScanHabitability = reinterpret_cast<fn_ScanHabitability_t>(
-        ResolveAddr(Module::Exe, 0x140053b50));
-    s_pGameWorld = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_fn_CopyCtor = reinterpret_cast<fn_CopyCtor_t>(
-        ResolveAddr(Module::Exe, 0x1400c3720));
-    s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_fn_ArrErase = reinterpret_cast<fn_ArrErase_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_initialized = true;
-}
-
-// ============================================================
 // ENDGAME B.3.8 CIT — PopulationComponent as a REAL class (PopulationComponent.h)
 // ============================================================
 // Before: a 48-slot hand-built PopulationComponent_LiveVtable filled at every
@@ -392,14 +347,12 @@ PopulationComponent::PopulationComponent()
 void PopulationComponent::Persist(void* stream) { PopulationComponent_Serialize_Real(this, stream); }   // [3] 0x1400544a0
 void PopulationComponent::Startup() {
     uint8_t* self = reinterpret_cast<uint8_t*>(this);
-    PopulationComponent_InitFuncs();
-    if (!fn_IsDerivedFrom || !fn_MemAlloc || !fn_InternalBasePtr_Ctor) return;
-    if (!s_pGameWorld || !*s_pGameWorld) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*s_pGameWorld);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
 
     uint32_t tidPopDesc = PopulationDescription::TypeId();   // cell 0x1401c47c8 (D5)
     void* descObj = *reinterpret_cast<void**>(self + 0x18);
-    void* popDesc = (tidPopDesc && fn_IsDerivedFrom(descObj, tidPopDesc)) ? descObj : nullptr;
+    void* popDesc = (tidPopDesc && Object::IsDerivedFromNullSafe(descObj, tidPopDesc)) ? descObj : nullptr;
     *reinterpret_cast<void**>(self + 0x28) = popDesc;
     if (!popDesc) {
         fprintf(stderr, "[Herd] PopulationComponent::Startup: self=%p has no "
@@ -450,8 +403,10 @@ void PopulationComponent::Startup() {
 
     int created = 0;
     for (int i = 0; i < herdCount; i++) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-        void* ent = (mem && s_fn_CopyCtor) ? s_fn_CopyCtor(mem, herdTemplate) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+        void* ent = mem ? ComponentEntity_CtorFromDescription(
+                              reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(herdTemplate))
+                        : nullptr;
         uint64_t entRef = 0;
         new (&entRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
         int64_t entObj = static_cast<int64_t>(entRef);
@@ -469,7 +424,7 @@ void PopulationComponent::Startup() {
         *reinterpret_cast<uint64_t*>(herd + 0x28) = selfRef;
 
         void* hDescObj = *reinterpret_cast<void**>(herd + 0x18);
-        void* herdDesc = (tidHerdDesc && fn_IsDerivedFrom(hDescObj, tidHerdDesc))
+        void* herdDesc = (tidHerdDesc && Object::IsDerivedFromNullSafe(hDescObj, tidHerdDesc))
                              ? hDescObj : nullptr;
         int size = 0;
         if (herdDesc) {
@@ -479,9 +434,9 @@ void PopulationComponent::Startup() {
         }
         HerdComponent_Populate(reinterpret_cast<int64_t>(herd), size);
 
-        if (s_fn_RegisterEntity) {
+        {
             uint64_t regRef = entRef;
-            s_fn_RegisterEntity(entityList, &regRef, *reinterpret_cast<int*>(herdTemplate + 0x20));
+            EntityList_RegisterEntity_Impl(entityList, &regRef, *reinterpret_cast<int*>(herdTemplate + 0x20));
         }
         created++;
     }
@@ -503,14 +458,13 @@ void PopulationComponent::Startup() {
 // for the row text. With slot 6 never installed the array stayed empty and the
 // combo had zero rows.
 void PopulationComponent::OnAdded() {
-    PopulationComponent_InitFuncs();
-    if (!s_pGameWorld || !*s_pGameWorld) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uint8_t* townMgr = *reinterpret_cast<uint8_t**>(
-        reinterpret_cast<uint8_t*>(*s_pGameWorld) + 0xf0);
+        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
     if (!townMgr) return;
 
     uint64_t selfRef = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+    new (&selfRef) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     GameColl::AsArray<GameColl::Ptr8>(townMgr + 0xc0)
@@ -525,16 +479,15 @@ void PopulationComponent::OnAdded() {
 // InternalBasePtr in the town array for the combo (and anything else walking it)
 // to dereference.
 void PopulationComponent::OnRemove() {
-    PopulationComponent_InitFuncs();
-    if (!s_pGameWorld || !*s_pGameWorld) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uint8_t* townMgr = *reinterpret_cast<uint8_t**>(
-        reinterpret_cast<uint8_t*>(*s_pGameWorld) + 0xf0);
-    if (!townMgr || !s_fn_ArrErase) return;
+        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+    if (!townMgr) return;
 
     uint64_t selfRef = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+    new (&selfRef) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    s_fn_ArrErase(reinterpret_cast<int64_t*>(townMgr + 0xc0), &selfRef);
+    CemeteryListErase_Reimpl(townMgr + 0xc0, &selfRef);
 }
 
 // [9] 0x140054070. RDX is a pointer to the elapsed System::Time (EntityList
@@ -551,13 +504,12 @@ void PopulationComponent::Update(void* timeV) {
 
     // Convert smoothing interval (300.0f seconds) to engine ticks
     int64_t smoothInterval;
-    if (fn_Time_Ctor_Float)
-        fn_Time_Ctor_Float(&smoothInterval, SMOOTH_INTERVAL_SECONDS);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&smoothInterval), SMOOTH_INTERVAL_SECONDS);
 
     // Run SmoothDensity for each full interval accumulated
-    if (s_fn_SmoothDensity && *pAccum > smoothInterval) {
+    if (*pAccum > smoothInterval) {
         do {
-            s_fn_SmoothDensity(this);
+            PopulationComponent_SmoothDensity_Reimpl(this);
             *pAccum -= smoothInterval;
         } while (*pAccum > smoothInterval);
     }
@@ -577,8 +529,8 @@ void PopulationComponent::Update(void* timeV) {
     if (cellsToProcess <= 0) return;
 
     // Get terrain grid from game world global
-    if (!s_pGameWorld || !*s_pGameWorld) return;
-    void* gameWorld = *s_pGameWorld;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    void* gameWorld = *g_pGameWorldSingleton;
     void* terrainGrid = *reinterpret_cast<void**>(
         reinterpret_cast<uint8_t*>(gameWorld) + 0xf8);
 
@@ -589,8 +541,7 @@ void PopulationComponent::Update(void* timeV) {
         int idx = *pScanIndex;
 
         // Scan habitability
-        if (s_fn_ScanHabitability)
-            s_fn_ScanHabitability(this, terrainGrid, idx);
+        PopulationComponent_ScanHabitability_Reimpl(this, terrainGrid, idx);
 
         // Clamp smoothedDensity and minDensity to density
         // Grid entry = 12 bytes: [density(4), smoothedDensity(4), minDensity(4)]

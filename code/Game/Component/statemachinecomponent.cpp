@@ -91,15 +91,12 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
 
         // Check if this component is derived from ControllerComponent
         void* candidate = nullptr;
-        if (fn_IsDerivedFrom) {
-            if (fn_IsDerivedFrom(comp, ControllerComponent::TypeId()))
-                candidate = comp;
-        }
+        if (Object::IsDerivedFromNullSafe(comp, ControllerComponent::TypeId()))
+            candidate = comp;
 
         // Wrap in InternalBasePtr
         void* ibpValue = nullptr;
-        if (fn_InternalBasePtr_Ctor)
-            new (&ibpValue) ::Object::InternalBasePtr(
+        new (&ibpValue) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(candidate));   // B.3.3 bridge
 
         if (ibpValue != nullptr) {
@@ -139,9 +136,7 @@ void StateMachineComponent_Draw(StateMachineComponent* self) {
 
     // Construct Time(0.0) on stack
     int64_t zeroTime = 0;
-    if (fn_Time_Ctor_Float) {
-        fn_Time_Ctor_Float(&zeroTime, 0.0f);
-    }
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
 
     // StateMachine_Tick(&controllerSelf, zeroTime, false, false)
     StateMachine_TickReimpl(&self->controllerSelf, zeroTime, 0, 0);
@@ -195,14 +190,11 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
             void* comp = tempIBP;
 
             void* candidate = nullptr;
-            if (fn_IsDerivedFrom) {
-                if (fn_IsDerivedFrom(comp, ControllerComponent::TypeId()))
-                    candidate = comp;
-            }
+            if (Object::IsDerivedFromNullSafe(comp, ControllerComponent::TypeId()))
+                candidate = comp;
 
             void* ibpValue = nullptr;
-            if (fn_InternalBasePtr_Ctor)
-                new (&ibpValue) ::Object::InternalBasePtr(
+            new (&ibpValue) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(candidate));   // B.3.3 bridge
 
             if (ibpValue != nullptr) {
