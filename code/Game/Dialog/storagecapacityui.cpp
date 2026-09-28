@@ -26,9 +26,8 @@ namespace storagecapacityui_sa {
 // ENDGAME B.3.9 CG2: TypeId_ProgressElement -> UI::ProgressElement::TypeId(),
 // TypeId_ComponentEntity -> ComponentEntity::TypeId(), TypeId_StorageComponent_FC
 // -> StorageComponent::TypeId(). The class statics always answer, so the lazy-fill of
-// the exe-.rdata globals retires.
-void EnsureGlobals() {
-}
+// the exe-.rdata globals retires. (B3R: the empty EnsureGlobals that was left is
+// gone with its calls.)
 
 bool Ready() {
     return true;
@@ -56,7 +55,6 @@ static void Trace(const char* what, void* self) {
 
 // [4] 0x14007b600
 void StorageCapacityUI::OnCreated() {
-    storagecapacityui_sa::EnsureGlobals();
     if (!storagecapacityui_sa::Ready()) { storagecapacityui_sa::Trace("Serialize SKIP", this); return; }
     storagecapacityui_sa::Trace("Serialize", this);
     // Get dialog element from controller base (+0x20)
@@ -69,7 +67,7 @@ void StorageCapacityUI::OnCreated() {
 
     // Dereference InternalPtr to get raw Element*, type check, wrap in InternalBasePtr
     void* rawElem = (void*)findResult;
-    bool valid = fn_IsDerivedFrom(rawElem, typeId);
+    bool valid = ::Object::IsDerivedFromNullSafe(rawElem, typeId);
     void* checkedElem = valid ? rawElem : nullptr;
 
     uint8_t basePtrBuf[8];
@@ -92,7 +90,6 @@ void StorageCapacityUI::OnCreated() {
 
 // [7] 0x14007b4d0
 void StorageCapacityUI::OnUpdateLayout() {
-    storagecapacityui_sa::EnsureGlobals();
     if (!storagecapacityui_sa::Ready()) return;
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe. Reliable now that removals are one-frame-deferred
@@ -101,7 +98,7 @@ void StorageCapacityUI::OnUpdateLayout() {
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr
@@ -117,7 +114,7 @@ void StorageCapacityUI::OnUpdateLayout() {
     if (!component) return;
 
     // Query current count
-    int count = fn_StorageComponent_QueryCount(component);
+    int count = fn_StorageComponent_QueryCount(component);   // a real function (storagecomponent.cpp), not a door
 
     // Get capacity from component +0x38
     int capacity = *(int*)((uintptr_t)component + 0x38);
@@ -173,7 +170,6 @@ void StorageCapacityUI::OnUpdateLayout() {
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void StorageCapacityUI::OnUpdate(const System::Time& /*time*/) {
-    storagecapacityui_sa::EnsureGlobals();
     if (!storagecapacityui_sa::Ready()) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {
