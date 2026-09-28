@@ -8,6 +8,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Dialog/exe_bodies.h"
 
 // ENDGAME B.3.8 block DLG: MessageDialog is a real class (Dialog/MessageDialog.h)
 // with a compiler-generated vtable. Retail evidence per slot is in the header.

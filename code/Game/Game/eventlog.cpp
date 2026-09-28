@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "Game/exe_bodies.h"
 
 // ============================================================
 // EventArray_Grow (0x140019b70) — grow-and-append primitive

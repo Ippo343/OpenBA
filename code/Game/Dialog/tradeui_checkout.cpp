@@ -77,6 +77,7 @@
 #include "Component/TradeDescription.h"
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
 #include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "Dialog/exe_bodies.h"
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
 // 0x140091e60 — appends into townMgr+0x110 (code/Game/Component/rawmaterialcomponent.cpp)

@@ -47,6 +47,7 @@
 #include <initializer_list>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Player/Tool.h"       // B.3.x W0: ~EntityUI shuts the active tool down by name
+#include "Game/exe_bodies.h"
 
 namespace {
 

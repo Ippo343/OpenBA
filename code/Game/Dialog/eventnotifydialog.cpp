@@ -37,6 +37,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // EventNotifyDialog_CreatePopup — modal popup creation (Slot7 popup branch)

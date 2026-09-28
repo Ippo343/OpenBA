@@ -374,6 +374,24 @@ static_assert(sizeof(Base) == sizeof(RtObject::Base),
 // `operator delete`.
 inline void Destroy(Base* p) { delete p; }
 
+// `Object::IsDerivedFromNullSafe(p, id)` — STANDALONE DEVIATION.
+// Wraps `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (retail 0x1800c0390,
+// `Base::IsDerivedFrom` above), whose body dereferences `this` unguarded. It is
+// exactly the trampoline `EngineFuncsInit` (engine/funcs/engine_funcs.cpp,
+// `IsDerivedFrom_NullSafe`) installs over `fn_IsDerivedFrom` today: a null
+// object answers false, anything else is the registered body
+// `RtObject_Base_IsDerivedFrom` = `reinterpret_cast<const Base*>(p)->
+// IsDerivedFrom(id)`. (The trampoline's other arm, "no real body -> false", is
+// unreachable: the export is always registered.) Retail never passes null;
+// standalone dialogs keep ticking after an entity's weak ref is nulled, and
+// dozens of ported call sites hand that ref straight in. The readers of
+// `fn_IsDerivedFrom` convert to this helper (B3R_RULES §3) so no site changes
+// behaviour; removing the deviation is not this step. ENDGAME B.3R, W0-P0c.
+inline bool IsDerivedFromNullSafe(const void* p, uint32_t typeId) {
+    if (!p) return false;
+    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);
+}
+
 using TypeRecord = RtObject::TypeRecord;
 
 // ============================================================
@@ -736,3 +754,17 @@ constexpr const char* LastComponent(const char* s) {
 }  // namespace detail
 
 }  // namespace Object
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+namespace RtObjFactoryDtor {
+// ---- object/factory_dtors.cpp
+void RtObject_Factory_Dtor(void* self);  // 0x1800071a0
+void RtObject_InternalFactory_Dtor(void* self);  // 0x18002f860
+void RtObject_ExternalFactory_Dtor(void* self);  // 0x1800be760
+}  // namespace RtObjFactoryDtor
+// ==== end B3R W0-P0c ====

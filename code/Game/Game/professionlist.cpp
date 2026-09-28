@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // FUN_140018020(ExternalPtr<Profession>*, Serializer*) -- typed ExternalPtr
 // serialize. The address is registered to this body (address_registry.cpp); it

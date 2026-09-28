@@ -36,6 +36,7 @@
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 #include <new>
+#include "Player/exe_bodies.h"
 
 namespace {
 

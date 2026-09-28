@@ -44,6 +44,7 @@
 #include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/EntityUI.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Dialog/exe_bodies.h"
 
 // code/Game/Object/factory_registration.cpp
 

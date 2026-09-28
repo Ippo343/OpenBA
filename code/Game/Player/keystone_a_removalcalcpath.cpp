@@ -50,6 +50,7 @@
 #include "Work/BuildRoad.h"
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Player/exe_bodies.h"
 
 // PlayerPath removability checks (sub_48a0/4770/4670) are defined with C++ linkage in
 // tool_base_path.cpp. Declare them at FILE SCOPE so the linkage matches — declaring them

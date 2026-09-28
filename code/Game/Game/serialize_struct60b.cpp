@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include "Game/exe_bodies.h"
 
 namespace {
 

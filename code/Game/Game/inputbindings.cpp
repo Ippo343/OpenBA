@@ -21,6 +21,7 @@
 #include <cstdio>
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
+#include "Game/exe_bodies.h"
 
 namespace Game {
 

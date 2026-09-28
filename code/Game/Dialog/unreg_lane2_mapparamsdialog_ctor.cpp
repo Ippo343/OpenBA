@@ -32,6 +32,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Dialog/exe_bodies.h"
 
 // Registered at exe 0x14006bd80 by RegisterCodeLane2() (standalone/reg_code_lane2.cpp).
 // Signature must match fn_MapParamsDialog_Ctor_t in engine/funcs/engine_funcs.h:

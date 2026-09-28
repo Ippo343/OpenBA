@@ -34,6 +34,7 @@
 #include "Component/WorkDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Game/Toolbar.h"                // B.3.9 EXA: Toolbar::TypeId()
 #include "ui/SpinnerElement.h"           // UI::SpinnerElement::TypeId() (D5, ENDGAME B.3.9 CG3)
+#include "Tutorial/exe_bodies.h"
 
 // ============================================================
 // Family A — ExternalPtr serialize helpers

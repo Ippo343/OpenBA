@@ -20,6 +20,7 @@
 #include "ui/DialogInstance.h"  // ENDGAME B.3.8 CB4: the real UI::DialogInstance
 #include "ui/Dialog.h"          // UI::Dialog::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include <new>
+#include "Player/exe_bodies.h"
 
 // ============================================================
 // The ToolUI child dialog is a plain UI::DialogInstance (exe table 0x14015f5a0)

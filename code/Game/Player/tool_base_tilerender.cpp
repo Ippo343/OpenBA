@@ -49,6 +49,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include "Player/exe_bodies.h"
 
 namespace {
 

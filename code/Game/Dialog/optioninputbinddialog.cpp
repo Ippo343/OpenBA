@@ -26,6 +26,7 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "input/Device.h"   // ENDGAME B.3.9 SS2: Input::Device::_singleton
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // [7] OnUpdate (0x140071c80): scan for key/mouse input releases

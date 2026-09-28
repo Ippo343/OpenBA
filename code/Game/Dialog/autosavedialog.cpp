@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // [4] AutoSaveDialog::OnOpened (0x14005E110) — vtable +0x20

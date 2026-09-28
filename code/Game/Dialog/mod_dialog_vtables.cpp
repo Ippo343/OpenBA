@@ -78,6 +78,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "Dialog/exe_bodies.h"
 
 // ENDGAME B.3.8 block DLG: both classes are real (Dialog/ModDialog.h,
 // Dialog/ModDetailsDialog.h). The two hand-built tables, the by-name base-slot

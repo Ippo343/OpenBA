@@ -48,6 +48,7 @@
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "engine/UpdateLoop.h"   // B.3.x W0: UpdateLoop::Update by name
 #include "system/Value.h"        // System::Time
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // Element IDs assigned in Startup, dispatched in OnEvent

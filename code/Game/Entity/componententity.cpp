@@ -36,6 +36,7 @@
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "Entity/exe_bodies.h"
 
 // TownManager::AbortCitizenActionsFor (exe 0x140089e30) - ported in
 // code/Game/Component/destroycomponent_state6.cpp.

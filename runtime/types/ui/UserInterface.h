@@ -522,3 +522,13 @@ static_assert(sizeof(UserInterface::Iterator) == 0x08,
               "GetFirstDialog's by-value Iterator is one node pointer");
 
 } // namespace UI
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- ui/userinterface.cpp
+extern "C" void RtUi_UserInterface_Dtor(UI::UserInterface* self);  // 0x180120b90
+// ==== end B3R W0-P0c ====

@@ -125,6 +125,7 @@
 #include "object/TypeInfo.h"   // caller batch CB6: Object::Base::Type()
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/exe_bodies.h"
 
 // ============================================================
 // Externs for already-ported/registered sibling functions

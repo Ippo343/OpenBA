@@ -43,6 +43,7 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / ResolveTypeIdByNameLazy
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "application/Application.h"   // ENDGAME B.3.7 callers (K2)
+#include "Player/exe_bodies.h"
 
 namespace {
 

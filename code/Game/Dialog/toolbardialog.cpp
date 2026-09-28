@@ -68,6 +68,7 @@
 #include "ui/ButtonElement.h"              // UI::ButtonElement::TypeId() (ENDGAME B.3.9 TR)
 #include "ui/CheckElement.h"               // UI::CheckElement::TypeId() (ENDGAME B.3.9 TR)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "Dialog/exe_bodies.h"
 
 
 #ifdef _DEBUG

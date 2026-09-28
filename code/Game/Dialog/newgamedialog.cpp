@@ -45,6 +45,7 @@
 #include "Game/MapGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Game/ClimateGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Game/TerrainGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer

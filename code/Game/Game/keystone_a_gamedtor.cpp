@@ -61,6 +61,7 @@
 #include <cstdint>
 #include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
 #include "application/Application.h"   // ENDGAME B.3.7 callers (K2)
+#include "Game/exe_bodies.h"
 
 namespace {
 

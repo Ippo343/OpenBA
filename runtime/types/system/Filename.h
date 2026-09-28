@@ -123,3 +123,15 @@ struct FilenamePrivateAccess {
 };
 
 }  // namespace System
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+namespace RtSystem {
+// ---- system/filename.cpp
+bool RtSystem_Filename_Less(const Filename* self, const Filename* other);  // 0x180026cb0
+}  // namespace RtSystem
+// ==== end B3R W0-P0c ====

@@ -240,3 +240,14 @@ namespace RtVideo {
 using IndexBuffer  = ::Video::IndexBuffer;
 using VertexBuffer = ::Video::VertexBuffer;
 }  // namespace RtVideo
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- video/buffers.cpp
+void Video_IndexBuffer_Ctor(Video::IndexBuffer* self);  // 0x1800f3490
+void Video_VertexBuffer_Ctor(Video::VertexBuffer* self);  // 0x1800f55f0
+// ==== end B3R W0-P0c ====
