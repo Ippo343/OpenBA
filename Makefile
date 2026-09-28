@@ -56,7 +56,15 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # load: at -O2+ it proved CitizenAI_ActionExecutor_c4c50's pop loop could never exit and
 # emitted a literal `jmp .` self-loop, which froze the game in-world with the citizens
 # T-posing (the sim tick never returned). Do not remove.
-SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
+# -fno-lifetime-dse is MANDATORY for the same reason. Retail's destructors NULL the fields
+# they free (`~Array` zeroes data/size/capacity) and retail's callers rely on it: a class
+# destructor body frees a member array through its ported dtor and the compiler's member
+# destructor then runs on the same field. GCC at -O2 treats stores to a dying object as
+# dead and deletes them, so the second pass freed a stale pointer (the perf exe corrupted
+# the heap in ~MeshInstance at the menu shutdown, 2026-09-27; -O0 kept the stores and
+# passed). The same rule deletes field stores made BEFORE a placement `::new (p) T()`.
+# Do not remove.
+SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-cast-function-type -Wno-invalid-offsetof -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # -lshell32: runtime/src/io/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
 # for FileSystem::GetSaveDirectory. Behind the _win seam per PLAN.md §4.1 decision 1.
@@ -117,7 +125,7 @@ include tests/unit/sources.mk
 UNIT_BUILD_DIR = tests/unit/build
 UNIT_SRCS = $(wildcard tests/unit/*.cpp) $(UNIT_TREE_SRCS)
 UNIT_OBJECTS = $(addprefix $(UNIT_BUILD_DIR)/, $(subst /,__,$(UNIT_SRCS:.cpp=.o)))
-UNIT_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-invalid-offsetof -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
+UNIT_CXXFLAGS = -std=c++17 -fno-strict-aliasing -fno-lifetime-dse -Wall -Wextra -Wno-invalid-offsetof -g -O0 -D_DEBUG -DBANISHED_UNIT_TEST -MMD -MP
 .PHONY: unit
 unit: $(UNIT_BUILD_DIR)/unit.exe
 	@$(UNIT_BUILD_DIR)/unit.exe

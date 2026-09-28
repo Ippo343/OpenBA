@@ -80,3 +80,18 @@ readers; none new).
 | b39-TIR (W3: 29 Runtime type records folded into DEFINE_TYPE — Graphics 11, Video 7, Achievement 4, Collision2D 2, Audio 2, Picking, Pathfinding, IO) | b0835c71 | ok | 0 | 909 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/74/10 | 4 | tools x3 exit 0; typetable == baseline (428 lines, identical ids) | 0 |
 | b39-TIUI (W3: the 68 UI type records folded into DEFINE_TYPE) | 251c9c9a | ok | 0 | 912 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/6/10 | 4 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0; forced device-lost in game COMPLETE, crash log 0; typetable == baseline (identical ids) | 0 |
 | b39-OBJ3 (W3: the four Object base tables are the compiler's, Base last; Object's 6 type records folded; RT_DELDTOR machinery and FACTREST deleted; 5 behaviour commits) | 851adb15 | ok | 5 (all in standalone/rt_data_mint.cpp: two trap helpers unused, one -Warray-bounds on the empty type-info table — the mint's DEAD paths, deleted by CLOSE) | 919 | 5683/0 · 5773/12 · 4787 | 5/5 | 0/0/10 | table deleted | Mods, Quit / Options / Achievements, GoalDialog, tools x3, in-game save, forced device-lost in game: see the run lines below | 0 functional; the 5 warnings are owed to CLOSE |
+
+| b39-close (W4 closing pass) + `-fno-lifetime-dse` | a699884d + flag commit | ok | 0 | 914 | 5683/0 · 5773/12 · 4758 | 5/5 | 0/0/2 | — | acceptance at target; `newgame_perf` (-O2 exe) exit 0 |
+
+## Step close (2026-09-27)
+Every route of `stepclose.sh` clean (see STATUS, B.3.9 block) EXCEPT `sa-stress`, which crashed on the -O2 exe:
+heap corruption in `~MeshInstance` at the menu shutdown (third member-destructor free, `_materials`). Reproduced
+twice, and on the plain new-game route with the perf exe; the debug exe passes both. Disassembly of
+`rtcoll::ArrayDtorImpl` inlined through `a->~Array()` showed the `_data = nullptr` stores deleted (lifetime DSE).
+Fixed by `-fno-lifetime-dse`; clean rebuild + full gate 0 problems; `sa-stress` exit 0.
+**Coordinator error 3:** no per-merge gate ran the optimised exe, so the merge that introduced the double free
+(a GFX block: real `~MeshInstance` with `Collection::Array` members) is not identified. `gate.sh` now runs
+`newgame_perf`.
+Device-lost at the close: killed by the harness for low memory (game process 6.6 GB) -- NOT a pass, NOT a
+failure; the user reported the terrain texture sliding with the camera during that run. Not reproduced on a
+plain new game.

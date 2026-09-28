@@ -139,6 +139,24 @@ if [ "$MODE" != resaveonly ]; then
   fi
   route tutorial 600 BANISHED_AUTOTUTORIAL=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120
   route loadgame 300 BANISHED_AUTOMENU_BUTTON=2 BANISHED_AUTOMENU_CLICKS=m6
+  # The OPTIMISED exe on the new-game route (added at the B.3.9 step close: every per-merge gate
+  # ran the -O0 exe only, and an -O2-only heap corruption at the menu shutdown reached the step
+  # close unseen). The perf build strips logs, so it is judged on exit code and crash log alone.
+  if [ -f standalone/build-perf/reimpl-x64.exe ]; then
+    cp -f standalone/build-perf/reimpl-x64.exe "$G/reimpl-x64.exe" || bad "route newgame_perf: exe busy"
+    rm -f "$G"/standalone_{debug,error,crash,hang}.log "$G/standalone_boot_state.txt"
+    ( cd "$G" && env BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 ./reimpl-x64.exe ) & ppid=$!
+    for pi in $(seq 1 300); do kill -0 $ppid 2>/dev/null || break; sleep 1; done
+    if kill -0 $ppid 2>/dev/null; then bad "route newgame_perf: ALIVE after 300s, killing"; taskkill //F //IM reimpl-x64.exe >/dev/null 2>&1; fi
+    wait $ppid 2>/dev/null; prc=$?
+    mkdir -p "$OUT/newgame_perf"
+    for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_hang.log; do
+      [ -f "$G/$f" ] && cp -f "$G/$f" "$OUT/newgame_perf/$f"
+    done
+    pcrash=$(stat -c %s "$G/standalone_crash.log" 2>/dev/null || echo 0)
+    say "route newgame_perf (-O2 exe): exit $prc crashlog=$pcrash (${pi}s)"
+    if [ "$prc" -ne 0 ] || [ "$pcrash" -ne 0 ]; then bad "route newgame_perf not clean"; fi
+  fi
 fi
 
 PASSN=0; STREAK=0

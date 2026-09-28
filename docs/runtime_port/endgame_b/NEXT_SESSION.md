@@ -10,15 +10,11 @@ two storage rows. Every class's vtable is the COMPILER's. That is what makes END
 
 ## 0. Owed from step 9
 
-1. **The step close** (coordinator, after merging `b39-close`): `b39_session/stepclose.sh` (Mods with `.pkm`,
-   Quit / Options / Achievements, GoalDialog from a tutorial game's pause menu, the three tool routes, an in-game
-   save, `sa-stress` recorded never chased, the forced device-lost route at Present #40000), the true release
-   compile then `make clean`, the clean rebuild and the full gate on the clean-built exe, the `NOT IMPLEMENTED`
-   stub-set diff (11 hits on the new-game route after TR) and the tutorial `[TownCensus]` line. Record it on the
-   `**Step close:**` line of STATUS's B.3.9 block. Expected boot-line changes from the close's branch: `[RtMint]`
-   prints `registered 2 by name, 2 by address` and `minted 2 storage symbols (32 bytes); no vtable and no
-   BaseTypeInfo is minted`; the `COMPLETE`, `BaseTypeInfo factories`, `constructed N of the M statics`,
-   `seeded N storage row(s)` and every `[CutoverManifest]` line are gone. Nothing else should move.
+1. **The step close is DONE** (STATUS, B.3.9 block) except the forced device-lost route, which the harness
+   killed for low memory with the game process at 6.6 GB. It found one real fault: the -O2 exe corrupted the heap
+   (lifetime dead-store elimination deleted a ported destructor's field-nulling stores). `-fno-lifetime-dse` is
+   now MANDATORY in the Makefile and `gate.sh` runs a `newgame_perf` route on the optimised exe — keep both.
+   Open for the user with the device-lost decision: in that run the terrain texture slid with the camera.
 2. `code/Game/Dialog/spritecaptureui.cpp:200` reads retail `.rdata` 0x14015d424 as a raw `const char*` (`".rsc"`):
    in our exe that address is our own image. One-line fix (`".rsc"`), its own titled behaviour commit.
 3. The four `DEFINE_EXE_VTABLE` lines left (GameUpdateLoop, MenuDialogLoopT, GameLoadDialogLoopT, StatGoal) each

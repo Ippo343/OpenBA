@@ -89,7 +89,24 @@ built them wrong, and callbacks stored in data.
   `kCitizenAIMessageTargetTypeId` / `kHappinessMessageTargetTypeId` (receivers unported); AutoPickupComponent's
   uninstalled Startup; the EventNotify / AutoSave dialog construction skips; the `InitFields` seams the unit
   tests' recording stand-ins define; `spritecaptureui.cpp:200`'s raw read of retail `.rdata` 0x14015d424.
-  **Step close:** (coordinator fills this in)
+  **Step close:** RUN 2026-09-27 on a699884d + the flag commit. Mods route with `.pkm` exit 0; Quit / Options /
+  Achievements exit 0; GoalDialog from a tutorial pause menu opens (1 `OpenGoal` line, killed at the timeout as
+  designed); tool routes placement / road / removal exit 0; in-game save `SAVE OPERATION COMPLETE`, crash log 0;
+  true release compile exit 0 (1,093 files) then `make clean`; clean rebuild of debug / perf / unit exit 0, 0 new
+  warnings, unit 914 / 0 failures; full gate on the clean-built exe 0 problems (new game 5683/0, tutorial
+  5773/12, Load Game 4758, resave 5/5, typetable == baseline 428 lines b983f144); `NOT IMPLEMENTED` stub set 0
+  new / 0 gone; tutorial `[TownCensus] LOAD exit` citizen=16 herd=16; `acceptance.sh` at target on every line.
+  **FOUND AND FIXED AT THE CLOSE:** `sa-stress` CRASHED (exit 2) -- the -O2 exe corrupted the heap in
+  `~MeshInstance` at the menu shutdown, on the plain new-game route too; the -O0 exe never did, so no per-merge
+  gate saw it. Cause: GCC's lifetime dead-store elimination deletes the field-nulling stores of a ported
+  destructor (`ArrayDtorSited` -> `~Array`), and step 9's real classes free a member array in the destructor body
+  and again in the compiler's member destructor. Fix: `-fno-lifetime-dse` in `SA_CXXFLAGS` / `UNIT_CXXFLAGS`
+  (Makefile banner), MANDATORY like `-fno-strict-aliasing`. After it: `sa-stress` exit 0, 6,000 frames, clean quit
+  (sim 0.19 ms/iteration, update 1.92 ms/frame; recorded, not chased), and the gate gained a `newgame_perf` route
+  on the -O2 exe. **NOT RUN TO COMPLETION:** the forced device-lost route -- the harness killed it for low system
+  memory with the game process at 6.6 GB (the repeated real device recoveries of `GATE_TABLE.md`); last clean
+  round trip is the b39-TIUI merge. The user saw the terrain texture slide with the camera in that run; a plain
+  new game does not show it (two screenshots at different pins). Both belong to the device-lost decision.
 - **B.3.8 CLOSED (2026-09-26; step close completed 2026-09-27):** every exe-phase class in
   `code/Game` is a real C++ class with a COMPILER-GENERATED vtable, on the Runtime bases steps 3-7 made
   real: 310 of 310 reflected exe classes (components, descriptions, actions, works, tools, dialogs, panels,

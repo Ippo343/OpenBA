@@ -69,14 +69,14 @@ grep -iE "frames|fps|ms/frame|median|mean|RESULT|crash|hang|exit" "$OUT/stress.l
 
 # 4. true release compile from a clean obj dir, FOLLOWED by make clean
 $MK clean > "$OUT/clean1.log" 2>&1
-$MK -j12 standalone > "$OUT/build_release.log" 2>&1; rc=$?
+$MK -j4 standalone > "$OUT/build_release.log" 2>&1; rc=$?
 say "true release compile: exit $rc, $(grep -c -E -- ' -c ' "$OUT/build_release.log") files compiled, exe $(stat -c %s standalone/build/reimpl-x64.exe 2>/dev/null) bytes, warnings $(grep -c 'warning:' "$OUT/build_release.log")"
 $MK clean > "$OUT/clean2.log" 2>&1
 
 # 5. clean rebuild of debug/perf/unit -> then gate.sh skipbuild does the warning diff, routes, resave
 CL="$HERE/runs/closeclean"; mkdir -p "$CL"
 for t in standalone-debug standalone-perf unit; do
-  $MK -j12 $t > "$CL/build_$t.log" 2>&1; rc=$?; say "clean rebuild $t: exit $rc"
+  $MK -j4 $t > "$CL/build_$t.log" 2>&1; rc=$?; say "clean rebuild $t: exit $rc"
 done
 say "== gate closeclean (skipbuild) =="
 bash "$HERE/gate.sh" closeclean 3 skipbuild > "$OUT/gate_closeclean.log" 2>&1; rc=$?
