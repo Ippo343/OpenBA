@@ -25,10 +25,6 @@
 #include "Work/AutoPickupWork.h"
 #include "Object/exe_type.h"
 
-namespace HarvestOrchardAddr {
-    constexpr uintptr_t Factory = 0x14002a520;
-    constexpr uintptr_t Vtable  = 0x140161520;
-}
 
 class HarvestOrchard final : public AutoPickupWork {
     DECLARE_EXE_TYPE(HarvestOrchard)

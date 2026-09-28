@@ -24,22 +24,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace BuildRoadAddr {
-    constexpr uintptr_t Ctor         = 0x1400e4ad0;
-    constexpr uintptr_t CtorParams   = 0x1400e4b50;
-    constexpr uintptr_t Factory      = 0x140029560;
-    constexpr uintptr_t Vtable       = 0x140161020;
-    constexpr uintptr_t ScalarDtor   = 0x1400295b0;
-    constexpr uintptr_t Serialize    = 0x1400e4980;
-    constexpr uintptr_t Execute      = 0x1400e4190;
-    constexpr uintptr_t OnComplete   = 0x1400e4150;
-    constexpr uintptr_t OnCancel     = 0x1400e4120;
-    constexpr uintptr_t Cleanup      = 0x1400e4910;
-    constexpr uintptr_t Validate     = 0x1400e40c0;
-    constexpr uintptr_t GetTarget    = 0x1400e4960;
-    constexpr uintptr_t GetPriority  = 0x1400295a0;
-    constexpr uintptr_t WorkVtable   = 0x140161a80;
-}
 
 class BuildRoad final : public Work {
     DECLARE_EXE_TYPE(BuildRoad)

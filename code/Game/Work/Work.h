@@ -42,9 +42,6 @@
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
-namespace WorkAddr {
-    constexpr uintptr_t Vtable       = 0x140161a80;
-}
 
 class Work : public Object::Internal {
     DECLARE_EXE_TYPE(Work)

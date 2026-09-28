@@ -27,19 +27,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace PlantAreaAddr {
-    constexpr uintptr_t Ctor         = 0x1400f4770;
-    constexpr uintptr_t Vtable       = 0x140161890;
-    constexpr uintptr_t ScalarDtor   = 0x14002c4b0;
-    constexpr uintptr_t BaseDtor     = 0x1400f4600;
-    constexpr uintptr_t Serialize    = 0x1400f4540;
-    constexpr uintptr_t Slot4        = 0x1400f4010;
-    constexpr uintptr_t OnComplete   = 0x1400f3f60;
-    constexpr uintptr_t OnCancel     = 0x1400f3ea0;
-    constexpr uintptr_t Cleanup      = 0x1400f4460;
-    constexpr uintptr_t Validate     = 0x1400f3c70;
-    constexpr uintptr_t GetTarget    = 0x1400f44e0;
-}
 
 class PlantArea final : public Work {
     DECLARE_EXE_TYPE(PlantArea)

@@ -29,11 +29,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace FireWorkAddr {
-    constexpr uintptr_t Ctor    = 0x1400e9b50;
-    constexpr uintptr_t Factory = 0x14002a1e0;
-    constexpr uintptr_t Vtable  = 0x1401612a0;
-}
 
 class FireWork final : public Work {
     DECLARE_EXE_TYPE(FireWork)

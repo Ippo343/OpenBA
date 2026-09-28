@@ -67,9 +67,6 @@ public:
     void*    meshInstance;      // +0x68 Graphics::MeshInstance* (preview)
 };
 
-namespace PlacementToolAddr {
-    constexpr uintptr_t Vtable = 0x140161d20;   // retail table (documentation)
-}
 
 static_assert(sizeof(PlacementTool) == 0x70, "PlacementTool is 0x70 (create 0x14002dc40 MemAlloc(0x70))");
 static_assert(alignof(PlacementTool) == 8, "PlacementTool is 8-aligned");

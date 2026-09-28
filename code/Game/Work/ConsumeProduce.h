@@ -28,14 +28,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace ConsumeProduceAddr {
-    constexpr uintptr_t Ctor         = 0x1400e9340;
-    constexpr uintptr_t Factory      = 0x14002a150;
-    constexpr uintptr_t Vtable       = 0x140161220;
-    constexpr uintptr_t ScalarDtor   = 0x14002a190;
-    constexpr uintptr_t BaseDtor     = 0x1400e9190;
-    constexpr uintptr_t Serialize    = 0x1400e9020;
-}
 
 class ConsumeProduce final : public Work {
     DECLARE_EXE_TYPE(ConsumeProduce)

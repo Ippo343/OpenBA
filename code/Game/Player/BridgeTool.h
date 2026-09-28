@@ -53,11 +53,6 @@ public:
     void* bridgeDesc;   // +0x38 CreateBridgeDescription* — set by Startup
 };
 
-namespace BridgeToolAddr {
-    constexpr uintptr_t Vtable       = 0x140161b00;   // retail table (documentation)
-    constexpr uintptr_t SnapEndCell  = 0x1400fb710;   // sub_b710: snaps end cell to row/col
-    constexpr uintptr_t ValidatePath = 0x1400fb2d0;   // sub_b2d0: validates bridge path
-}
 
 static_assert(sizeof(BridgeTool) == 0x40, "BridgeTool is 0x40 (create 0x14002d7a0 MemAlloc(0x40))");
 static_assert(alignof(BridgeTool) == 8, "BridgeTool is 8-aligned");

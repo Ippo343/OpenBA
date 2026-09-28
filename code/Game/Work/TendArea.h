@@ -30,10 +30,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace TendAreaAddr {
-    constexpr uintptr_t Ctor    = 0x1400f5a00;
-    constexpr uintptr_t Vtable  = 0x140161990;
-}
 
 class TendArea final : public Work {
     DECLARE_EXE_TYPE(TendArea)

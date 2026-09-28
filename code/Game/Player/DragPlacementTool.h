@@ -49,9 +49,6 @@ public:
     void* areaDesc;        // +0x40 area (Map) description* (DAT_1401c7a18) — Startup
 };
 
-namespace DragPlacementToolAddr {
-    constexpr uintptr_t Vtable = 0x140161b90;   // retail table (documentation)
-}
 
 static_assert(sizeof(DragPlacementTool) == 0x48, "DragPlacementTool is 0x48 (create 0x14002d8b0 MemAlloc(0x48))");
 static_assert(alignof(DragPlacementTool) == 8, "DragPlacementTool is 8-aligned");

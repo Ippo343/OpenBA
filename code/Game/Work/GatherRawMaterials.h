@@ -28,14 +28,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace GatherRawMaterialsAddr {
-    constexpr uintptr_t Ctor         = 0x1400ec8a0;
-    constexpr uintptr_t Factory      = 0x14002a3c0;
-    constexpr uintptr_t Vtable       = 0x140161420;
-    constexpr uintptr_t ScalarDtor   = 0x14002a410;
-    constexpr uintptr_t BaseDtor     = 0x1400ec650;
-    constexpr uintptr_t Serialize    = 0x1400ec560;
-}
 
 class GatherRawMaterials final : public Work {
     DECLARE_EXE_TYPE(GatherRawMaterials)

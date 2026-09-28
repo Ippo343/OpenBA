@@ -69,9 +69,6 @@ public:
     void*    meshInstance;      // +0x68 Graphics::MeshInstance* (fence preview)
 };
 
-namespace FencedToolAddr {
-    constexpr uintptr_t Vtable = 0x1401605d0;   // retail table (documentation)
-}
 
 static_assert(sizeof(FencedTool) == 0x70, "FencedTool is 0x70 (create 0x1400268d0 MemAlloc(0x70))");
 static_assert(alignof(FencedTool) == 8, "FencedTool is 8-aligned");

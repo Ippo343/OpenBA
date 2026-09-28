@@ -27,10 +27,6 @@
 #include "Work/AutoPickupWork.h"
 #include "Object/exe_type.h"
 
-namespace HuntWorkAddr {
-    constexpr uintptr_t Factory = 0x14002a690;
-    constexpr uintptr_t Vtable  = 0x140161620;
-}
 
 class HuntWork final : public AutoPickupWork {
     DECLARE_EXE_TYPE(HuntWork)
