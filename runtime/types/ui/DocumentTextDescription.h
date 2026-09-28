@@ -91,8 +91,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x18003b900
-    uint32_t    Type() const override;                            // [2] 0x18003b8e0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003b900, Type 0x18003b8e0, _TypeName 0x18003b8c0, _ParentTypeName 0x18003b8d0
+    //         CreateNewObject 0x18003b9f0, CreateInPlaceObject 0x18003ba70
+    DECLARE_TYPE(DocumentTextDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800cfb20
     bool        Serialize(void* stream) override;                 // [5] 0x1800cf8a0 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x18003ba80
@@ -108,9 +112,6 @@ public:
 
     DocumentTextDescription(const DocumentTextDescription& src);  // 0x18003bac0  not ported
     DocumentTextDescription& operator=(const DocumentTextDescription& src); // 0x18003bc00 not ported
-    static uint32_t TypeId();                                     // over the minted record until W3
-    static Object::Base* CreateNewObject();                       // 0x18003b9f0  (D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003ba70  (D2)
 
 protected:
     // ??1 0x1800cfb30 -- NON-VIRTUAL; retail's body (documenttextdescription.cpp),
@@ -118,9 +119,6 @@ protected:
     ~DocumentTextDescription();
 
 private:
-    static const char* _TypeName();                               // 0x18003b8c0
-    static const char* _ParentTypeName();                         // 0x18003b8d0
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     // (named apart from ElementDescription's own _stringTable/_textName at

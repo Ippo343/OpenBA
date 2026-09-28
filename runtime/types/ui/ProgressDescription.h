@@ -80,8 +80,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180077770
-    uint32_t    Type() const override;                            // [2] 0x180077750
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180077770, Type 0x180077750, _TypeName 0x180077730, _ParentTypeName 0x180077740
+    DECLARE_TYPE(ProgressDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x18011a070
     bool        Serialize(void* stream) override;                 // [5] 0x180119f60 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x1800778f0
@@ -93,9 +96,6 @@ public:
 
     ProgressDescription(const ProgressDescription& src);          // 0x180077930  not ported
     ProgressDescription& operator=(const ProgressDescription& src); // 0x180077a30  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1ProgressDescription@UI@@UEAA@XZ` (0x18011a080): NON-VIRTUAL (no virtual dtor until
@@ -104,9 +104,6 @@ protected:
     ~ProgressDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180077730
-    static const char* _ParentTypeName();                         // 0x180077740
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     uint32_t _unknown68;          // +0x68  ctor DWORD 0; kScalarUInt. Serialized, read by no slot

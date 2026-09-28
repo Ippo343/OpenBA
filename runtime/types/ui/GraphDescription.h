@@ -71,8 +71,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180040090
-    uint32_t    Type() const override;                            // [2] 0x180040070
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180040090, Type 0x180040070, _TypeName 0x180040050, _ParentTypeName 0x180040060
+    //         CreateNewObject 0x180040180, CreateInPlaceObject 0x180040200
+    DECLARE_TYPE(GraphDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d1b20
     // [4] Compile — Object::External's, inherited
     bool        Serialize(void* stream) override;                 // [5] 0x1800d1a30 (IO::Stream&)
@@ -85,9 +89,6 @@ public:
 
     GraphDescription(const GraphDescription& src);                // 0x180040250  not ported
     GraphDescription& operator=(const GraphDescription& src);     // 0x1800402d0  not ported
-    static uint32_t TypeId();                                     // over the minted record until W3
-    static Object::Base* CreateNewObject();                       // 0x180040180  (D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180040200  (D2)
 
 protected:
     // ??1GraphDescription 0x1800d1b30 -- NON-VIRTUAL; retail's body in
@@ -95,9 +96,6 @@ protected:
     ~GraphDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180040050 -> "GraphDescription"
-    static const char* _ParentTypeName();                         // 0x180040060 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     // Ctor 0x1800d1bd0 stores (factory_ui1_tables.inc kGraphDescription) and

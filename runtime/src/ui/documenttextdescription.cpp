@@ -55,38 +55,10 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: the members below run on the loader thread. Every export they
-// resolve lives in a namespace-scope atomic, never a function-local static.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* DocumentTextTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
 
-// [1] 0x18003b900 / [2] 0x18003b8e0 — the BaseTypeInfo's +0x08 name and +0x00 id.
-const char* DocumentTextDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, DocumentTextTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t DocumentTextDescription::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, DocumentTextTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t DocumentTextDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, DocumentTextTypeInfo(), sizeof v); return v;
-}
 // [3] 0x1800cfb20
 int32_t DocumentTextDescription::GetFileVersion() const { return 0x204; }
 
@@ -413,3 +385,12 @@ int RtUiDocumentTextDescriptionRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::DocumentTextDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@DocumentTextDescription@UI@@ (0x1801f9eb8): name "DocumentTextDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@DocumentTextDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::DocumentTextDescription, "ElementDescription", nullptr)

@@ -103,8 +103,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x18004b110
-    uint32_t    Type() const override;                            // [2] 0x18004b0f0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18004b110, Type 0x18004b0f0, _TypeName 0x18004b0d0, _ParentTypeName 0x18004b0e0
+    DECLARE_TYPE(SpinnerElement)
+public:
     void ComputeSize() override;                                  // [4] 0x1800d83b0
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;            // [5] 0x1800d80c0
@@ -130,9 +133,6 @@ public:
 
     SpinnerElement(const SpinnerElement& src);                    // 0x18004b2e0  not ported
     SpinnerElement& operator=(const SpinnerElement& src);         // 0x18004b330  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1SpinnerElement@UI@@UEAA@XZ` (0x1800d8640): NON-VIRTUAL (no virtual dtor until
@@ -141,9 +141,6 @@ protected:
     ~SpinnerElement();
 
 private:
-    static const char* _TypeName();                               // 0x18004b0d0 -> "SpinnerElement"
-    static const char* _ParentTypeName();                         // 0x18004b0e0 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     int32_t  _increment;   // +0xc0  ctor 1; the step Update adds / subtracts

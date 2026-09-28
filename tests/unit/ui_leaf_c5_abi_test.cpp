@@ -136,6 +136,14 @@ struct BaseDescriptionProbe final : UI::ElementDescription {
     }
 };
 
+// Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's inline bodies over the
+// class's own record -- checked by what they return, not by a marker.
+const ::Object::BaseTypeInfo* WhoRecord(int cls);
+void CheckOwnTypeSlots(const void* raw, int cls) {
+    CHECK(SlotAt<const char* (*)(const void*)>(raw, 1)(raw) == WhoRecord(cls)->name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, 2)(raw), WhoRecord(cls)->typeId);
+}
+
 // Raw-call one Element slot with retail-shaped arguments.
 void CallElementSlot(void* raw, int slot) {
     switch (slot) {
@@ -185,7 +193,10 @@ void CheckElementSlots(void* raw, int cls, unsigned ownMask) {
     const void* const* vb = VTableOf(&base);
     const void* const* vl = VTableOf(raw);
     for (int s = 1; s <= 11; ++s) {
-        if (ownMask & (1u << s)) {
+        if ((ownMask & (1u << s)) && (s == 1 || s == 2)) {   // TI-UI: own record
+            CheckOwnTypeSlots(raw, cls);
+            CHECK(vl[s] != vb[s]);
+        } else if (ownMask & (1u << s)) {
             Reset(); CallElementSlot(raw, s);
             CHECK_EQ(g_cls, cls); CHECK_EQ(g_slot, s); CHECK(g_self == raw);
             CHECK(vl[s] != vb[s]);
@@ -202,6 +213,7 @@ void CheckDescriptionSlots(void* raw, int cls) {
     const void* const* vl = VTableOf(raw);
     const int own[] = {1, 2, 3, 5, 6, 7, 8, 9};
     for (int s : own) {
+        if (s == 1 || s == 2) { CheckOwnTypeSlots(raw, cls); continue; }   // TI-UI
         Reset(); CallDescriptionSlot(raw, s);
         CHECK_EQ(g_cls, cls); CHECK_EQ(g_slot, s); CHECK(g_self == raw);
     }
@@ -247,8 +259,6 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
 // not link here). One macro per shape so every class gets the same set.
 // ===========================================================================
 #define C5_DESCRIPTION_MARKERS(C, K)                                                         \
-    const char* UI::C::TypeName() const { Hit(this, K, 1); return #C; }                     \
-    uint32_t UI::C::Type() const { Hit(this, K, 2); return 0; }                              \
     int32_t UI::C::GetFileVersion() const { Hit(this, K, 3); return 0; }                     \
     bool UI::C::Serialize(void*) { Hit(this, K, 5); return true; }                           \
     Object::External* UI::C::Reconstruct() { Hit(this, K, 6); return this; }                 \
@@ -261,8 +271,6 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
     UI::C::~C() { B39NoteDtor(this); }
 
 #define C5_ELEMENT_MARKERS(C, K)                                                             \
-    const char* UI::C::TypeName() const { Hit(this, K, 1); return #C; }                     \
-    uint32_t UI::C::Type() const { Hit(this, K, 2); return 0; }                              \
     void UI::C::ComputeSize() { Hit(this, K, 4); }                                           \
     void UI::C::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {                      \
         Hit(this, K, 5, (long long)x * 1000 + h);                                            \
@@ -535,6 +543,63 @@ UNIT_TEST(ui_c5_tab_slots) {
 // ===========================================================================
 C5_DESCRIPTION_MARKERS(DocumentTextDescription, kDocTextD)
 C5_ELEMENT_MARKERS(DocumentTextElement, kDocTextE)
+
+// ENDGAME B.3.9 TI-UI: the fourteen records (literals as runtime/src/ui passes
+// them) and the null factory pair they point at; the factories are never
+// called here.
+#define C5_TEST_FACTORIES(CLS)                                              \
+    ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \
+    ::Object::Base* UI::CLS::CreateInPlaceObject(void*) { return nullptr; }
+C5_TEST_FACTORIES(GraphDescription)
+DEFINE_TYPE(UI::GraphDescription, "ElementDescription", nullptr)
+C5_TEST_FACTORIES(GraphElement)
+DEFINE_TYPE(UI::GraphElement, "Element", nullptr)
+C5_TEST_FACTORIES(ProgressDescription)
+DEFINE_TYPE(UI::ProgressDescription, "ElementDescription", nullptr)
+C5_TEST_FACTORIES(ProgressElement)
+DEFINE_TYPE(UI::ProgressElement, "Element", nullptr)
+C5_TEST_FACTORIES(SpinnerDescription)
+DEFINE_TYPE(UI::SpinnerDescription, "ElementDescription", nullptr)
+C5_TEST_FACTORIES(SpinnerElement)
+DEFINE_TYPE(UI::SpinnerElement, "Element", nullptr)
+C5_TEST_FACTORIES(SliderDescription)
+DEFINE_TYPE(UI::SliderDescription, "ElementDescription", nullptr)
+C5_TEST_FACTORIES(SliderElement)
+DEFINE_TYPE(UI::SliderElement, "Element", nullptr)
+C5_TEST_FACTORIES(RibbonDescription)
+DEFINE_TYPE(UI::RibbonDescription, "ElementDescription", nullptr)
+C5_TEST_FACTORIES(RibbonElement)
+DEFINE_TYPE(UI::RibbonElement, "Element", nullptr)
+C5_TEST_FACTORIES(TabDescription)
+DEFINE_TYPE(UI::TabDescription, "ElementDescription", nullptr)
+C5_TEST_FACTORIES(TabElement)
+DEFINE_TYPE(UI::TabElement, "Element", nullptr)
+C5_TEST_FACTORIES(DocumentTextDescription)
+DEFINE_TYPE(UI::DocumentTextDescription, "ElementDescription", nullptr)
+C5_TEST_FACTORIES(DocumentTextElement)
+DEFINE_TYPE(UI::DocumentTextElement, "Element", nullptr)
+#undef C5_TEST_FACTORIES
+namespace {
+const ::Object::BaseTypeInfo* WhoRecord(int cls) {
+    switch (cls) {
+    case kGraphD: return &UI::GraphDescription::GetTypeInfo();
+    case kGraphE: return &UI::GraphElement::GetTypeInfo();
+    case kProgressD: return &UI::ProgressDescription::GetTypeInfo();
+    case kProgressE: return &UI::ProgressElement::GetTypeInfo();
+    case kSpinnerD: return &UI::SpinnerDescription::GetTypeInfo();
+    case kSpinnerE: return &UI::SpinnerElement::GetTypeInfo();
+    case kSliderD: return &UI::SliderDescription::GetTypeInfo();
+    case kSliderE: return &UI::SliderElement::GetTypeInfo();
+    case kRibbonD: return &UI::RibbonDescription::GetTypeInfo();
+    case kRibbonE: return &UI::RibbonElement::GetTypeInfo();
+    case kTabD: return &UI::TabDescription::GetTypeInfo();
+    case kTabE: return &UI::TabElement::GetTypeInfo();
+    case kDocTextD: return &UI::DocumentTextDescription::GetTypeInfo();
+    case kDocTextE: return &UI::DocumentTextElement::GetTypeInfo();
+    default: return nullptr;
+    }
+}
+}  // namespace
 C5_ELEMENT_UPDATE_MARKER(DocumentTextElement, kDocTextE)
 
 namespace {

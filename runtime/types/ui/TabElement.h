@@ -105,8 +105,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x18004c700
-    uint32_t    Type() const override;                            // [2] 0x18004c6e0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18004c700, Type 0x18004c6e0, _TypeName 0x18004c6c0, _ParentTypeName 0x18004c6d0
+    DECLARE_TYPE(TabElement)
+public:
     void ComputeSize() override;                                  // [4] 0x1800d9ea0
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;            // [5] 0x1800d9b20
@@ -130,9 +133,6 @@ public:
 
     TabElement(const TabElement& src);                            // 0x18004c8b0  not ported
     TabElement& operator=(const TabElement& src);                 // 0x18004c980  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
     // Private in retail (`AEAA`); public here only because the registered door
     // in tabelement.cpp and widgets_layout.cpp's forwarder reach it.
@@ -148,9 +148,6 @@ private:
     int32_t GetContainerIndex(int32_t tab) const { return 4 + tab * 2; }  // 0x1800da110
     int32_t GetButtonIndex(int32_t tab) const    { return 3 + tab * 2; }  // 0x1800da120
 
-    static const char* _TypeName();                               // 0x18004c6c0 -> "TabElement"
-    static const char* _ParentTypeName();                         // 0x18004c6d0 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     int32_t  _tabCount;       // +0xc0   ctor 0 (one qword store with +0xc4); AddTab ++

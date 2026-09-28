@@ -109,13 +109,7 @@ constexpr int kFontUnderlineTrim = 0x5c;
 constexpr int32_t kEventActivated = 0x12;
 
 // RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_memFree{nullptr};
-
-const uint8_t* DocumentTextElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 double SecondsPerTick() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
@@ -197,10 +191,6 @@ void PlayInline(void* ui, int soundField) {
 }  // namespace
 
 namespace UI {
-
-// [1] 0x18003be50 / [2] 0x18003be30
-const char* DocumentTextElement::TypeName() const { return TypeNameOf(DocumentTextElementTypeInfo()); }
-uint32_t    DocumentTextElement::Type() const     { return TypeIdOf(DocumentTextElementTypeInfo()); }
 
 // ============================================================================
 // [4] ?ComputeSize@DocumentTextElement@UI@@UEAAXXZ   0x1800cdb60
@@ -414,9 +404,6 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
     }
 }
 
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t DocumentTextElement::TypeId() { return TypeIdOf(DocumentTextElementTypeInfo()); }
-
 // ??1DocumentTextElement@UI@@UEAA@XZ  0x1800cf320 — retail's body, moved from
 // the retired door (ENDGAME B.3.9 UI-B): both Strings released, six arrays
 // destroyed in retail's order. The entry restamp and the TAIL JUMP to ~Element
@@ -471,3 +458,12 @@ int RtUiDocumentTextElementRegister() {
     RegisterRuntimeAddr(0x18003bfc0ull, (void*)&UI::DocumentTextElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::DocumentTextElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@DocumentTextElement@UI@@ (0x1801f9ef0): name "DocumentTextElement", parent
+// "Element" (retail ?_ParentTypeName@DocumentTextElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::DocumentTextElement, "Element", nullptr)

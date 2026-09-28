@@ -100,36 +100,11 @@ void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDes
 // The MEMBERS
 // ============================================================================
 namespace {
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* SpinnerTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 }  // namespace
 
 namespace UI {
 
-// [1] 0x18004ad60 / [2] 0x18004ad40 / [3] 0x1800d8940
-const char* SpinnerDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, SpinnerTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t SpinnerDescription::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t SpinnerDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
-}
+// [3] 0x1800d8940
 int32_t SpinnerDescription::GetFileVersion() const { return 0x204; }
 
 // [9] 0x18004af00 — the ctor, placement (the null test sat in the retired door).
@@ -251,3 +226,12 @@ int RtUiSpinnerDescriptionRegister() {
     RegisterRuntimeAddr(0x18004aed0ull, (void*)&UI::SpinnerDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::SpinnerDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@SpinnerDescription@UI@@ (0x1801fa388): name "SpinnerDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@SpinnerDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::SpinnerDescription, "ElementDescription", nullptr)

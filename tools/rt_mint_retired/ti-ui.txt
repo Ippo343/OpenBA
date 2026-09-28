@@ -50,3 +50,19 @@
 ?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ListElement, "Element") in listelement.cpp; readers: own accessor slot gone, combodialog_ctor / comboelement -> ListElement::TypeId() (cluster 1)
 ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ScrollElement, "Element") in scrollelement.cpp; readers: own accessor slot gone, containerelement / element -> ScrollElement::TypeId() (cluster 1)
 ?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TableElement, "Element") in tableelement.cpp; readers: own accessor slot gone
+
+# -- cluster 5: Graph / Progress / Spinner / Slider / Ribbon / Tab / DocumentText --
+?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GraphDescription, "ElementDescription") in graphdescription.cpp; readers: own accessor slot gone
+?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GraphElement, "Element") in graphelement.cpp; readers: own accessor slot gone
+?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ProgressDescription, "ElementDescription") in progressdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ProgressElement, "Element") in progresselement.cpp; readers: own accessor slot gone
+?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpinnerDescription, "ElementDescription") in spinnerdescription.cpp; readers: own accessor slot gone
+?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpinnerElement, "Element") in spinnerelement.cpp; readers: own accessor slot gone
+?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SliderDescription, "ElementDescription") in sliderdescription.cpp; readers: own accessor slot gone
+?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SliderElement, "Element") in sliderelement.cpp; readers: own accessor slot gone
+?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RibbonDescription, "ElementDescription") in ribbondescription.cpp; readers: own accessor slot gone
+?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RibbonElement, "Element") in ribbonelement.cpp; readers: own accessor slot gone, listdescription -> RibbonElement::TypeId() (cluster 1)
+?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TabDescription, "ElementDescription") in tabdescription.cpp; readers: own accessor slot gone
+?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TabElement, "Element") in tabelement.cpp; readers: own accessor slot gone
+?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DocumentTextDescription, "ElementDescription") in documenttextdescription.cpp; readers: own accessor slot gone
+?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DocumentTextElement, "Element") in documenttextelement.cpp; readers: own accessor slot gone
