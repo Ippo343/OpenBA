@@ -164,11 +164,7 @@ extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
 
 // Declared by the six sibling files of this batch.
 int RtClosure2bGraphicsRegister();
-int RtClosure2bVideoRegister();
 int RtClosure2bSaveRegister();
-int RtClosure2bEngineRegister();
-int RtClosure2bPickingRegister();
-int RtClosure2bIoRegister();
 
 // ============================================================================
 // Registration — the one hook standalone/resolve_standalone.cpp calls.
@@ -187,16 +183,11 @@ void RtClosureBatch2bPortInit() {
     // reader by name or by address and are deleted; their bodies above stay
     // (provenance, R3). 0x180061ae0 keeps its row: wave28_lane_partsys.cpp
     // reads it by address.
-    RegisterRuntimeAddr(0x180061ae0, (void*)&RtGraphics_Material_OperatorDelete); ++n;
 
     const int g = RtClosure2bGraphicsRegister();
-    const int v = RtClosure2bVideoRegister();
     const int s = RtClosure2bSaveRegister();
-    const int e = RtClosure2bEngineRegister();
-    const int p = RtClosure2bPickingRegister();
-    const int i = RtClosure2bIoRegister();
 
-    printf("[RtPort]   cutover closure batch 2b: %d system + %d graphics + "
-           "%d video + %d save + %d engine + %d picking + %d io\n",
-           n, g, v, s, e, p, i);
+    // B3R RT-Core: the video and io registrars were empty and went.
+    printf("[RtPort]   cutover closure batch 2b: %d system + %d graphics + %d save\n",
+           n, g, s);
 }

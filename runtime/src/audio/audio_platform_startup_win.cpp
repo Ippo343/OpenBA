@@ -164,15 +164,3 @@ bool Device::PlatformStartup() {
 extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
     return reinterpret_cast<Audio::Device*>(self)->Audio::Device::PlatformStartup();   // B.3.7 bridge
 }
-
-int RtAudioPlatformStartupRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?PlatformStartup@Device@Audio@@AEAA_NXZ",   // ord 3403
-                          (void*)&RtAudio_Device_PlatformStartup); ++n;
-    RegisterRuntimeAddr(0x1800de600, (void*)&RtAudio_Device_PlatformStartup);
-    // The unexported helper, reachable only by address. Registered because a
-    // by-address call into the DLL dies at cutover unless something registers
-    // that address (reference_by_address_door_dies_at_cutover.md).
-    RegisterRuntimeAddr(0x180050270, (void*)&RtAudio_CreateXAudio2);
-    return n;
-}

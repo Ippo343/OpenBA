@@ -214,11 +214,7 @@
 #include "../../types/audio/SoundEffect.h"
 #include "../../types/system/Value.h"          // System::Time, System::Random
 #include "../../types/system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "../engine/mainloop_internal.h"       // rtengine::AtomicResolve (B6-5)
-#include <atomic>
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
+#include "../../types/collection/Collection.h"   // rtsort::Array16Assign
 
 namespace {
 
@@ -283,13 +279,10 @@ inline void*     PTR(const void* p, size_t o){ void* v;   std::memcpy(&v, static
 using ArrayAssignFn   = void  (*)(void* dst, const void* src);
 using SetVolumeFn     = void  (*)(void* platformChannel, float volume, void* zero);
 
-std::atomic<void*> g_arrayAssignSlot{nullptr};
-ArrayAssignFn ArrayAssign16() {
-    // 0x180050d30 Array<T16>::operator= -- unexported, ported and registered
-    // by address (array.cpp lane Q J10).
-    return reinterpret_cast<ArrayAssignFn>(rtengine::AtomicResolve(g_arrayAssignSlot, [] {
-        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180050d30));
-    }));
+void ArrayAssign16(void* dst, const void* src) {
+    // 0x180050d30 Array<T16>::operator= -- unexported, ported in
+    // collection/introsort.cpp; called by name (B3R).
+    rtsort::Array16Assign(dst, src);
 }
 
 void* DeviceSingleton() {
@@ -644,7 +637,7 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
                         // array ASSIGNED to it -- which releases its storage --
                         // rather than being memset away.
                         int64_t empty[2] = { 0, 0 };
-                        ArrayAssign16()(slot + 0x30, empty);              // 1800dfd10
+                        ArrayAssign16(slot + 0x30, empty);              // 1800dfd10
                         break;
                     }
                 }
@@ -686,16 +679,4 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
     return reinterpret_cast<Audio::Scene*>(selfv)->Audio::Scene::Update(                   // B.3.7 bridge
         delta, now, *static_cast<System::Random*>(rngv),
         *static_cast<const Vector3*>(listenerPos), m);
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtAudioSceneUpdateRegister() {
-    int n = 0;
-    RegisterRuntimeExport(
-        "?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z",
-        (void*)&RtAudio_Scene_Update);
-    RegisterRuntimeAddr(0x1800df6c0ull, (void*)&RtAudio_Scene_Update);     ++n;
-    return n;
 }

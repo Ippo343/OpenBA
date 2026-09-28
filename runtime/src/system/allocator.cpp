@@ -73,6 +73,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
+#include "../../types/system/Error.h"   // B3R: FatalOutOfMemory calls Error by name
 
 using rt::system::MemoryAllocator;
 using rt::system::MemoryRange;
@@ -131,25 +132,13 @@ uint64_t g_largestRequestedSize = 0;
 // own Error class" -- Wave 9 lane ENG, iteration 3, is when that happened, and
 // the door had to change with it.
 //
-// Both `?SetText@` and `?Display@` go through the PORT-AWARE `ResolveExport`;
-// runtime/src/system/error.cpp ports and registers them.
-//
-// The `if (display)` guard below is kept: ResolveExport still yields null if
-// nothing has registered the symbol.
-typedef void (*ErrorSetTextFn)(const char* text, bool stopApplication);
-typedef void (*ErrorDisplayFn)();
-
+// `System::Error::SetText` (0x1800c5fa0) and `Display` (0x1800c6060) are
+// runtime/src/system/error.cpp's, called by name (B3R: they were two
+// ResolveExport doors; both rows are registered and ported, so the readiness
+// guards and the "nothing registered" fallback print were dead arms).
 void FatalOutOfMemory(const char* text, bool stopApplication) {
-    ErrorSetTextFn setText =
-        reinterpret_cast<ErrorSetTextFn>(ResolveExport("?SetText@Error@System@@SAXPEBD_N@Z"));
-    ErrorDisplayFn display =
-        reinterpret_cast<ErrorDisplayFn>(ResolveExport("?Display@Error@System@@SAXXZ"));
-    if (setText) setText(text, stopApplication);
-    if (stopApplication && display) display();
-    if (!setText) {
-        fprintf(stderr, "[RtAlloc] FATAL: %s\n", text);
-        std::fflush(stderr);
-    }
+    System::Error::SetText(text, stopApplication);
+    if (stopApplication) System::Error::Display();
 }
 
 // ---------------------------------------------------------------------------
@@ -691,29 +680,12 @@ void Destruct(MemoryAllocator* self) {
     g_plat.lockDelete(self->lock);
 }
 
-// --- Registration thunks ----------------------------------------------------
-// A registry row stores a plain function address and its callers pass `this`
-// in RCX, so each non-static member is registered through a one-line `self`-
-// explicit thunk. They exist only for the RegisterRuntimeExport rows at the
-// bottom of this file and die with those rows (W2). The statics (MemAlloc,
-// MemFree, Get, PointerOffset) are registered directly.
+// --- The cutover armer's pair ---------------------------------------------
+// g_armCutover composes the locked entry points from these two `self`-explicit
+// bodies. B3R RT-Core: the other fifteen registration thunks went with their
+// rows, which had no reader.
 void*    Allocate(MemoryAllocator* self, uint64_t size, int align) { return self->Allocate(size, align); }
 void     Free(MemoryAllocator* self, void* p)                      { self->Free(p); }
-uint64_t GetAllocationSize(MemoryAllocator* self, void* p)         { return self->GetAllocationSize(p); }
-int64_t  GetAllocatedSize(const MemoryAllocator* self)             { return self->GetAllocatedSize(); }
-MemoryRange* GetMemoryRange(MemoryAllocator* self, void* p)        { return self->GetMemoryRange(p); }
-FreeTag* GetFreeTagForSize(MemoryAllocator* self, uint64_t want)   { return self->GetFreeTagForSize(want); }
-void     LinkFreeTag(MemoryAllocator* self, MemoryTag* tag)        { self->LinkFreeTag(tag); }
-void     UnlinkFreeTag(MemoryAllocator* self, FreeTag* n, FreeTag* u) { self->UnlinkFreeTag(n, u); }
-void     UnlinkFreeTagT(MemoryAllocator* self, MemoryTag* tag)     { self->UnlinkFreeTag(tag); }
-void     CommitToPage(MemoryAllocator* self, MemoryRange* r, void* p)  { self->CommitToPage(r, p); }
-void     ReleaseToPage(MemoryAllocator* self, MemoryRange* r, void* p) { self->ReleaseToPage(r, p); }
-bool     AddNewMemoryRange(MemoryAllocator* self, uint64_t want)   { return self->AddNewMemoryRange(want); }
-bool     ExpandMemoryRangeTable(MemoryAllocator* self)             { return self->ExpandMemoryRangeTable(); }
-bool     Startup(MemoryAllocator* self, uint64_t a, uint64_t b)    { return self->Startup(a, b); }
-void     Shutdown(MemoryAllocator* self)                           { self->Shutdown(); }
-int      GetBinForSizeM(const MemoryAllocator* self, uint64_t n)      { return self->GetBinForSize(n); }
-int      GetBinForLargeSizeM(const MemoryAllocator* self, uint64_t n) { return self->GetBinForLargeSize(n); }
 
 }  // namespace rtalloc
 
@@ -1192,8 +1164,8 @@ const char* PlatformSeamMissing() {
 
 // Defined below, after RtSystemAllocatorRegister, next to the export list it
 // owns; both arming paths call it.
-int RegisterAllocatorExports(void* allocateEntry, void* freeEntry);
-int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry);
+int RegisterAllocatorExports(void* allocateEntry);
+int RegisterAllocatorAddresses(void* allocateEntry);
 }
 
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
@@ -1260,8 +1232,8 @@ int RtSystemAllocatorRegister() {
             AttestArming("REFUSED: cutover armer said no", 0);
             return 0;
         }
-        const int n = RegisterAllocatorExports(composedAlloc, composedFree);
-        const int nAddr = RegisterAllocatorAddresses(composedAlloc, composedFree);
+        const int n = RegisterAllocatorExports(composedAlloc);
+        const int nAddr = RegisterAllocatorAddresses(composedAlloc);
         printf("[RtAlloc] cutover: %d allocator ADDRESSES registered for by-address "
                "callers (rtcoll::MemAlloc and friends). See RegisterAllocatorAddresses.\n",
                nAddr);
@@ -1281,51 +1253,15 @@ int RtSystemAllocatorRegister() {
 // entry points on the cutover path, where there is no detour and no
 // allocator_lock patch, so the critical section has to come from here.
 namespace {
-int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
+int RegisterAllocatorExports(void* allocateEntry) {
     RegisterRuntimeExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",
                           reinterpret_cast<void*>(&MemoryAllocator::MemAlloc));
     RegisterRuntimeExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z",
                           reinterpret_cast<void*>(&MemoryAllocator::MemFree));
     RegisterRuntimeExport("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z", allocateEntry);
-    RegisterRuntimeExport("?Free@MemoryAllocator@System@@QEAAXPEAX@Z", freeEntry);
-    RegisterRuntimeExport("?Get@MemoryAllocator@System@@SAPEAV12@XZ",
-                          reinterpret_cast<void*>(&MemoryAllocator::Get));
-    RegisterRuntimeExport("?GetAllocationSize@MemoryAllocator@System@@QEAA_KPEAX@Z",
-                          reinterpret_cast<void*>(&rtalloc::GetAllocationSize));
-    RegisterRuntimeExport("?GetAllocatedSize@MemoryAllocator@System@@QEBA_JXZ",
-                          reinterpret_cast<void*>(&rtalloc::GetAllocatedSize));
-    RegisterRuntimeExport("?GetMemoryRange@MemoryAllocator@System@@AEAAPEAUMemoryRange@12@PEAX@Z",
-                          reinterpret_cast<void*>(&rtalloc::GetMemoryRange));
-    RegisterRuntimeExport("?GetFreeTagForSize@MemoryAllocator@System@@AEAAPEAUFreeTag@12@_K@Z",
-                          reinterpret_cast<void*>(&rtalloc::GetFreeTagForSize));
-    RegisterRuntimeExport("?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z",
-                          reinterpret_cast<void*>(&rtalloc::LinkFreeTag));
-    RegisterRuntimeExport("?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z",
-                          reinterpret_cast<void*>(&rtalloc::UnlinkFreeTag));
-    RegisterRuntimeExport("?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z",
-                          reinterpret_cast<void*>(&rtalloc::UnlinkFreeTagT));
-    RegisterRuntimeExport("?CommitToPage@MemoryAllocator@System@@AEAAXPEAUMemoryRange@12@PEAX@Z",
-                          reinterpret_cast<void*>(&rtalloc::CommitToPage));
-    RegisterRuntimeExport("?ReleaseToPage@MemoryAllocator@System@@AEAAXPEAUMemoryRange@12@PEAX@Z",
-                          reinterpret_cast<void*>(&rtalloc::ReleaseToPage));
-    RegisterRuntimeExport("?AddNewMemoryRange@MemoryAllocator@System@@AEAA_N_K@Z",
-                          reinterpret_cast<void*>(&rtalloc::AddNewMemoryRange));
-    RegisterRuntimeExport("?ExpandMemoryRangeTable@MemoryAllocator@System@@AEAA_NXZ",
-                          reinterpret_cast<void*>(&rtalloc::ExpandMemoryRangeTable));
-    RegisterRuntimeExport("?Startup@MemoryAllocator@System@@QEAA_N_K0@Z",
-                          reinterpret_cast<void*>(&rtalloc::Startup));
-    RegisterRuntimeExport("?Shutdown@MemoryAllocator@System@@QEAAXXZ",
-                          reinterpret_cast<void*>(&rtalloc::Shutdown));
-    RegisterRuntimeExport("?PointerOffset@MemoryAllocator@System@@CA_JPEAX0@Z",
-                          reinterpret_cast<void*>(&MemoryAllocator::PointerOffset));
-    RegisterRuntimeExport("?GetBinForSize@MemoryAllocator@System@@AEBAH_K@Z",
-                          reinterpret_cast<void*>(&rtalloc::GetBinForSizeM));
-    RegisterRuntimeExport("?GetBinForLargeSize@MemoryAllocator@System@@AEBAH_K@Z",
-                          reinterpret_cast<void*>(&rtalloc::GetBinForLargeSizeM));
-    // The six Platform* exports are registered by the _win half, which owns
-    // their bodies.
-    const int platformExports = RtSystemAllocatorRegisterPlatformExports();
-    return 21 + platformExports;
+    // B3R RT-Core: the six Platform* rows, the member thunks' rows and
+    // ?Startup@/?Shutdown@ had no reader and are gone.
+    return 3;
 }
 
 // ============================================================================
@@ -1448,63 +1384,22 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 // B3R W0-A0: the static, called directly. The by-address door above was bound
 // to this same function (RegisterAllocatorAddresses), and the instrument seat
 // now lives inside it, so the "observed" property the banner asks for holds.
+// B3R RT-Core: external linkage, declared in runtime/types/system/
+// MemoryAllocator.h, so its readers call it by name.
+}  // namespace
+namespace rtalloc {
 void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
     MemoryAllocator::MemFree(p);
 }
+}  // namespace rtalloc
+namespace {
 
-// ============================================================================
-// 0x180009c30 -- ONE owner, unconditional. The SHADOWED-REGISTRATION fix.
-// ============================================================================
-//
-// Wave 9 lane VID2 re-checked this address and found it registered THREE times,
-// each with a different body:
-//
-//     runtime/src/system/allocator.cpp        (mine, cutover-only)
-//     runtime/src/collection/linkedlist.cpp   (lane UIC)
-//     runtime/src/io/modification.cpp         (lane MOD)
-//
-// The registry's LAST BINDING WINS, so two of the three were dead code and
-// which one survived depended on init order. All three bodies are "Free with an
-// ignored first argument", so nothing was broken today -- but this is exactly
-// the SHADOWED hazard `tools/dispatch_slot_map.py --check` reports for the exe's
-// import table, occurring here in the runtime registry where NOTHING checks for
-// it. A future edit to any one of the three would have changed behaviour or not
-// depending on link order, silently.
-//
-// Consolidated to one owner. This file owns it because the body is an allocator
-// wrapper, and it is registered UNCONDITIONALLY rather than from
-// RegisterAllocatorAddresses() for two reasons:
-//
-//   * RegisterAllocatorAddresses runs only on the CUTOVER path, and this door
-//     has live callers on the DLL-present path too (Graphics::RemoveGlobalObject,
-//     Input::KeyMap::ClearAll, the LinkedList node free, the Set node free).
-//   * The two registrations being removed were unconditional, so anything less
-//     would be a behaviour change dressed up as a cleanup.
-//
-// THE SIGNATURE TRAP, restated because removing two copies removes two copies of
-// the warning: it takes TWO parameters and IGNORES THE FIRST. Registering the
-// one-argument `?MemFree@` here would free the ignored `this`, leak the buffer,
-// and put a block the allocator never handed out onto the free list -- with no
-// fault at the call site.
-void RegisterAllocatorSharedAddressesImpl() {
-    RegisterRuntimeAddr(0x180009c30, reinterpret_cast<void*>(&FreeLockedIgnoringSelf));
-}
-
-int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry) {
+int RegisterAllocatorAddresses(void* allocateEntry) {
     RegisterRuntimeAddr(0x1800c7a50, reinterpret_cast<void*>(&MemoryAllocator::MemAlloc));
     RegisterRuntimeAddr(0x1800c7ad0, reinterpret_cast<void*>(&MemoryAllocator::MemFree));
     RegisterRuntimeAddr(0x1800c6e60, allocateEntry);
-    RegisterRuntimeAddr(0x1800c6c00, freeEntry);
-    // 0x180009c30 is NOT registered here -- see
-    // RegisterAllocatorSharedAddressesImpl() above for why it has to be
-    // unconditional and why it has exactly one owner.
-    return 4;
+    // 0x180009c30 is not registered at all any more (B3R RT-Core): every
+    // reader calls rtalloc::FreeLockedIgnoringSelf by name.
+    return 3;
 }
 }  // namespace
-
-// The one unconditional registration. Called from RtSystemPortInit() regardless
-// of whether the allocator port is armed -- see the banner on
-// RegisterAllocatorSharedAddressesImpl().
-extern "C" void RtSystemAllocatorRegisterSharedAddresses() {
-    RegisterAllocatorSharedAddressesImpl();
-}

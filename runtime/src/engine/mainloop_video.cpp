@@ -209,15 +209,13 @@
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 #include "../system/string.h"
+#include "../object/external_compiled.h"   // B3R: GetCompiledPath by name
+#include "../../types/video/Context.h"     // B3R: RtVideo_Context_Dtor
+#include "../../types/collection/Collection.h"   // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // ----------------------------------------------------------------------------
-// Same reasoning rt_port.h and engine.cpp give: resolve.h drags in <windows.h>,
-// and PLAN §4.1 requires runtime/src/ to stay platform-neutral. Must sit at
-// FILE scope or it declares a different, internal-linkage function.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // ----------------------------------------------------------------------------
 // Ported callees in other translation units of this same port, declared rather
@@ -529,10 +527,9 @@ void Engine::MainLoop::OnVideoError() {
     // MainLoop.h) types its String field as a raw `char* _name`, so it is
     // trivially destructible in THIS header and the trait-derived
     // `Array<VideoResourceEntry>::~Array()` would wrongly skip the release —
-    // see engine.cpp's identical banner on this same address/field. Stays a
-    // by-address call.
-    reinterpret_cast<void (*)(void*)>(
-        ResolveAddr(Module::Runtime, 0x180033880))(&_videoResources);
+    // see engine.cpp's identical banner on this same address/field. Stays the
+    // J2 body, called by name (B3R).
+    rtcoll::RtColl_ArrayDtorElem_180033880(&_videoResources);
 
     // ENDGAME B.3.2 step 2 — `arr` is now the real `_videoResources` member
     // seen through its own hand-derived spec, `kSpec_VideoResource`
@@ -640,8 +637,7 @@ void Engine::MainLoop::OnVideoError() {
     // written.
     void* const context = _context;
     if (context != nullptr) {
-        reinterpret_cast<void (*)(void*)>(
-            ResolveAddr(Module::Runtime, 0x1800f16e0))(context);   // ~Context
+        RtVideo_Context_Dtor(static_cast<Video::Context*>(context));   // ~Context 0x1800f16e0
         rtcoll::MemFree(context);
     }
     _context = nullptr;
@@ -788,20 +784,15 @@ void Engine::MainLoop::OnVideoRestart() {
 
     // ---- 6: compile the path and load ------------------------------------------
     {
-        using GetCompiledPathFn = System::Filename* (*)(System::Filename*,
-                                                        const System::Filename*);
-        using ExternalLoadFn    = void* (*)(const System::Filename*, void*);
-        GetCompiledPathFn getCompiled = RT_EXPORT_ONCE(
-            GetCompiledPathFn,
-            "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z");
-        ExternalLoadFn load = RT_EXPORT_ONCE(
-            ExternalLoadFn, "?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z");
-
+        // ExternalFactory::GetCompiledPath (0x1800bec10) and External::Load
+        // (0x1800bc620), the bodies in runtime/src/object/, called by name (B3R).
         for (int i = 0; i < arr->_size; ++i) {
             VideoResource* const r = reinterpret_cast<VideoResource*>(arr->_data) + i;
             System::Filename compiled;
-            System::Filename* const got = getCompiled(&compiled, &r->path);
-            load(got, r->object);
+            RtSystem::Filename* const got = RtObject::RtObject_ExternalFactory_GetCompiledPath(
+                reinterpret_cast<RtSystem::Filename*>(&compiled),
+                reinterpret_cast<const RtSystem::Filename*>(&r->path));
+            RtObject::RtObject_External_Load(got, static_cast<RtObject::External*>(r->object));
             // `compiled` releases here — retail's 0x1800dc4fe, now ~Filename.
         }
     }
@@ -822,37 +813,4 @@ void Engine::MainLoop::OnVideoRestart() {
 
 extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
     self->Engine::MainLoop::OnVideoRestart();
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Both the exported NAME and the retail ADDRESS, for the reason engine.cpp
-// gives: a name-only registration leaves every `ResolveAddr` caller on the DLL,
-// and the two static thunks reach these members BY ADDRESS.
-//
-// Every mangled name is ONE string literal on ONE line — a name split across
-// lines or hidden behind a named constant is invisible to
-// tools/runtime_census.py, and a port the census cannot see is a port nobody
-// will ever check (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// The two Collection addresses get RegisterRuntimeAddr and no export name
-// because neither is exported (checked with pefile: both absent from the export
-// directory), so they are not counted in the returned total — which counts
-// NAMES closed.
-int RtEngineMainLoopVideoRegister() {
-    int n = 0;
-
-    RegisterRuntimeAddr(0x18004f620, (void*)&RtColl_ArraySetSizeFill_18004f620);
-    RegisterRuntimeAddr(0x180034440, (void*)&RtEngine_VideoResourceDestroyRange_180034440);
-
-    RegisterRuntimeExport("?OnVideoError@MainLoop@Engine@@QEAAXXZ",
-                          (void*)&RtEngine_MainLoop_OnVideoError); ++n;
-    RegisterRuntimeAddr(0x1800dc5e0, (void*)&RtEngine_MainLoop_OnVideoError);
-
-    RegisterRuntimeExport("?OnVideoRestart@MainLoop@Engine@@QEAAXXZ",
-                          (void*)&RtEngine_MainLoop_OnVideoRestart); ++n;
-    RegisterRuntimeAddr(0x1800dc3b0, (void*)&RtEngine_MainLoop_OnVideoRestart);
-
-    return n;
 }

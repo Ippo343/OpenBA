@@ -146,13 +146,6 @@ char System::Error::_errorString[0x2000] = {};   // 0x1801fc720
 bool System::Error::_hideDisplay         = false; // 0x1801fc709
 bool System::Error::_stopApplication     = false; // 0x1801fc70a
 
-// ---- Wave 22 lane ERRCFG ---------------------------------------------------
-// `ResolveAddr` for the one address-keyed callee ?Display@ has (retail's CRT
-// `exit`). Declared the way every other runtime/src file declares it rather
-// than by pulling in a header, so this file keeps its "no new include" property.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // Four kernel32 entry points, declared directly instead of including
 // <windows.h>. The banner's "no new Win32 API and no new import library" claim
 // is preserved in the sense that matters: kernel32 is already an import of this
@@ -220,11 +213,10 @@ const char kCaption[9] = { 'B','a','n','i','s','h','e','d','\0' };
 // deliberate rather than overlooked.
 void DisplayStopIfRequested() {
     if (!System::Error::_stopApplication) return;
-    typedef void (*ExitFn)(unsigned);
-    if (ExitFn rtExit = reinterpret_cast<ExitFn>(
-            ResolveAddr(Module::Runtime, 0x18007f8a8))) {
-        rtExit(0xFFFFFFFFu);      // retail's `OR ECX,0xffffffff`
-    }
+    // PORT GAP 0x18007f8a8 the Runtime CRT's exit(code): not ported; retail
+    // calls it here with 0xFFFFFFFF. Nothing registers the address, so the
+    // by-address resolve that stood here returned null and the fallback below
+    // is what runs (B3R_RULES R4).
     RtSystem_ErrorDisplayFallbackExit();
 }
 
@@ -549,60 +541,4 @@ void System::Error::Display() {
     // EFFECTIVENESS CONTROL. `work` counts the calls that actually reached the
     // message box; a run whose Display rows are all work=0 took the
     // `_hideDisplay` arm every time and has exercised none of the above.
-}
-
-// ============================================================================
-// ENDGAME B.3.4b — the two delegating DOORS.
-// ============================================================================
-// Each keeps the registered name and the retail address it always had.
-// `System::Error` has no vtable, so a plain static call cannot dispatch back
-// into the door and B34_BRIEFS §A.1's qualified-call rule does not apply.
-// `extern "C"` is kept: these are the symbols the registration below hands out
-// and other ported files reach by name.
-extern "C" void RtSystem_Error_SetText(const char* text, bool stopApplication) {
-    System::Error::SetText(text, stopApplication);
-}
-
-extern "C" void RtSystem_Error_Display() {
-    System::Error::Display();
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtSystemErrorRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?SetText@Error@System@@SAXPEBD_N@Z", (void*)&RtSystem_Error_SetText); ++n;
-    RegisterRuntimeAddr(0x1800c5fa0, (void*)&RtSystem_Error_SetText);
-
-    RegisterRuntimeExport("?StrAppend@String@System@@SAPEADPEADHPEBD@Z", (void*)&RtSystem_String_StrAppend); ++n;
-    RegisterRuntimeAddr(0x1800c9020, (void*)&RtSystem_String_StrAppend);
-
-    // ---- Wave 22 lane ERRCFG ------------------------------------------------
-    // WAS "DELIBERATELY ABSENT" UNTIL 2026-09-11. The old note read: "the
-    // message box. Not on any path this wave reaches: Engine::Startup never
-    // calls it (only SetText), and allocator.cpp's FatalOutOfMemory calls it
-    // solely when stopApplication is true, which Engine::Startup never passes."
-    // Every clause of that is still TRUE and it is no longer the reason to
-    // decline: unreachability on the happy path is why this row is SAFE to
-    // land, not why it should be skipped. What changed is that ?Display@ is
-    // the ONLY unported in-DLL reader of three exported statics
-    // (?_errorString@, ?_stopApplication@, ?_hideDisplay@), so while it is
-    // unported those three rows cannot be reasoned about at all. See
-    // docs/runtime_port/WAVE22_LANE_ERRCFG.md.
-    //
-    // BOTH DOORS. The address closes exe import slot 0x140152b58's eventual
-    // consumer and any ResolveAddr site.
-    RegisterRuntimeExport("?Display@Error@System@@SAXXZ", (void*)&RtSystem_Error_Display); ++n;
-    RegisterRuntimeAddr(0x1800c6060, (void*)&RtSystem_Error_Display);
-
-    // STILL DELIBERATELY ABSENT:
-    //   ?HideErrorDisplay@Error@System@@SAX_N@Z  0x1800c5f90 -- a seven-byte
-    //   setter (`MOV byte [rip],CL ; RET`) for ?_hideDisplay@. NOT ported
-    //   because it is DEAD, and the proof is in the lane doc §4: no call site
-    //   in any of the four shipped binaries by four independent screens, each
-    //   run with a known-live positive control. Porting a dead export would
-    //   grow `called` for nothing.
-    return n;
 }

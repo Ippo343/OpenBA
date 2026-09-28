@@ -59,17 +59,11 @@
 // caches these used to keep are gone. The two unused by-address
 // `MemAlloc`/`MemFree` helpers are deleted.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-// ResolveAddr, declared locally rather than via standalone/resolve.h -- that header
-// pulls in <windows.h>, which collides with names this file (or a header it
-// includes) uses -- see runtime/src/collection/array_internal.h for the same fix.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
@@ -119,51 +113,34 @@ IO::ReaderWriter* AsRw(ReaderWriter* rw) {
 //     freeing it.
 //
 // Each body is ported ONCE, in runtime/src/collection/array{,_destroy}.cpp with
-// the rest of its family, and reached here by address -- registry-first, so
-// these call OUR bodies from the moment RtCollectionPortInit runs.
+// the rest of its family.
 //
-// RULE B6-5: one namespace-scope atomic slot per address; a miss is retried,
-// a null is never cached (the element_common.h `AtomicAddr` contract).
-void* AtomicAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_vecSetSize{nullptr};      // 0x18007a4d0
-std::atomic<void*> g_triSetSize{nullptr};      // 0x18007a790
-std::atomic<void*> g_uvSetSize{nullptr};       // 0x18007a900
-std::atomic<void*> g_subMeshSetSize{nullptr};  // 0x18007aa40
-std::atomic<void*> g_subMeshDtor{nullptr};     // 0x180073720
-
-using ArraySetSizeFn = void (*)(void*, int32_t);
+// Called by name (B3R); the bodies are declared in
+// runtime/types/collection/Collection.h.
 
 // 0x18007a4d0  Array<Vector3>::SetSize   (_vertices AND _normals: retail shares
 //              one body, stride 0xc, align 4, tail zeroed)
 void VecArraySetSize(Collection::Array<Vector3>* a, int32_t n) {
-    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_vecSetSize, 0x18007a4d0ull))(a, n);
+    rtcoll::RtColl_ArraySetSize_18007a4d0(a, n);
 }
 // 0x18007a790  Array<Triangle>::SetSize  (stride 0xc, align 2, tail UNTOUCHED)
 void TriArraySetSize(Collection::Array<Triangle>* a, int32_t n) {
-    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_triSetSize, 0x18007a790ull))(a, n);
+    rtcoll::RtColl_ArraySetSize_18007a790(a, n);
 }
 // 0x18007a900  Array<UV16>::SetSize      (stride 4, align 2, tail UNTOUCHED)
 void UvArraySetSize(Collection::Array<UV16>* a, int32_t n) {
-    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_uvSetSize, 0x18007a900ull))(a, n);
+    rtcoll::RtColl_ArraySetSize_18007a900(a, n);
 }
 // 0x18007aa40  Array<SubMesh>::SetSize. NON-TRIVIAL: element copy ctor
 // 0x1800734a0, per-element destroy 0x180073ee0 on the shrink tail and on the
 // abandoned buffer.
 void SubMeshArraySetSize(Collection::Array<SubMesh>* a, int32_t n) {
-    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_subMeshSetSize, 0x18007aa40ull))(a, n);
+    rtcoll::RtColl_ArraySetSize_18007aa40(a, n);
 }
 // 0x180073720  ~Array<SubMesh>: the element destroy 0x180073ee0, then the
 // plain `~Array`. Retail's ~PickingMesh CALLs exactly this at 0x1801228c4.
 void SubMeshArrayDtor(Collection::Array<SubMesh>* a) {
-    using Fn = void* (*)(void*);
-    reinterpret_cast<Fn>(AtomicAddr(g_subMeshDtor, 0x180073720ull))(a);
+    rtcoll::RtColl_ArrayDtorElem_180073720(a);
 }
 
 // ---- the two Serialize halves retail keeps out of line --------------------
@@ -346,25 +323,10 @@ extern "C" void RtPicking_PickingMesh_SerializeSubMeshes(void* ser, int32_t coun
     SerializeSubMeshesBody(static_cast<Serializer*>(ser), count, static_cast<SubMesh*>(base));
 }
 
+// B3R (registry teardown, W1 RT-Core): every row this function registered had
+// no reader by name or by address, so they went. It registers nothing and
+// stays defined only because standalone/resolve_standalone.cpp's
+// RuntimePortInit() still calls it (the coordinator removes the call).
 int RtPickingPickingMeshRegister() {
-    int n = 0;
-    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
-    // (picking_type_records.cpp) carries both as its factoryFn /
-    // inPlaceFactoryFn, so `Object::Factory` -- External::Load's
-    // create-by-type-id -- builds a real PickingMesh.
-    RegisterRuntimeExport("?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ",
-                          (void*)&Picking::PickingMesh::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x180071ba0ull, (void*)&Picking::PickingMesh::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@PickingMesh@Picking@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Picking::PickingMesh::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180071c60ull, (void*)&Picking::PickingMesh::CreateInPlaceObject);
-    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
-    // The two out-of-line halves of Serialize. Unexported in both builds, so
-    // RegisterRuntimeAddr only. Their Array callees (0x18007a4d0, 0x18007a790,
-    // 0x18007a900, 0x18007aa40, 0x180073720, 0x180073ee0) are registered by
-    // runtime/src/collection/array{,_destroy}.cpp in the same commit.
-    RegisterRuntimeAddr  (0x18007a350ull, (void*)&RtPicking_PickingMesh_SerializeTriangles);
-    RegisterRuntimeAddr  (0x18007ac20ull, (void*)&RtPicking_PickingMesh_SerializeSubMeshes);
-    return n;
+    return 0;
 }

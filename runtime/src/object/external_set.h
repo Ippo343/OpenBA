@@ -155,7 +155,6 @@ void   Erase        (Set* set, Node* z);                                  // 0x1
 Node*  Find         (const Set* set, const RtSystem::Filename* key);      // 0x18002dd70
 
 void   ArrayDestroyRange(void* ignored, RtSystem::Filename* first, int count); // 0x18002e3d0
-void   MemFreeForClean  (void* p);   // the 0x1800c7ad0 door, for Clean's array
 void   ArrayResize      (FilenameArray* self, int newSize,
                          const RtSystem::Filename* fill);                     // 0x18002dff0
 

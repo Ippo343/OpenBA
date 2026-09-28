@@ -475,26 +475,13 @@ Filename Filename::GetPathExtension() const {
 // ############################################################################
 namespace RtSystem {
 
-Filename* RtSystem_Filename_Ctor(Filename* self) {
-    new (AsSys(self)) System::Filename();
-    return self;
-}
-Filename* RtSystem_Filename_CtorString(Filename* self, const String* src) {
-    new (AsSys(self)) System::Filename(*reinterpret_cast<const System::String*>(src));
-    return self;
-}
 Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other) {
     new (AsSys(self)) System::Filename(*AsSys(other));
     return self;
 }
-void RtSystem_Filename_Dtor(Filename* self) { AsSys(self)->~Filename(); }
 
 Filename* RtSystem_Filename_Assign(Filename* self, const Filename* rhs) {
     *AsSys(self) = *AsSys(rhs);
-    return self;
-}
-Filename* RtSystem_Filename_AssignString(Filename* self, const String* rhs) {
-    *AsSys(self) = *reinterpret_cast<const System::String*>(rhs);
     return self;
 }
 bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
@@ -502,10 +489,6 @@ bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
 }
 void RtSystem_Filename_AdjustDelimiters(Filename* self) {
     System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(self));
-}
-Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret, bool stripExt) {
-    new (AsSys(ret)) System::Filename(AsSys(self)->GetPathFilename(stripExt));
-    return ret;
 }
 
 }  // namespace RtSystem
@@ -518,22 +501,8 @@ int RtSystemFilenameRegister() {
     using namespace RtSystem;
     int n = 0;
 
-    RegisterRuntimeExport("??0Filename@System@@QEAA@XZ",   (void*)&RtSystem_Filename_Ctor); ++n;
-    RegisterRuntimeExport("??0Filename@System@@QEAA@AEBVString@1@@Z",
-                          (void*)&RtSystem_Filename_CtorString); ++n;
-    RegisterRuntimeExport("??0Filename@System@@QEAA@AEBV01@@Z",
-                          (void*)&RtSystem_Filename_CtorCopy); ++n;
-    RegisterRuntimeExport("??1Filename@System@@QEAA@XZ",   (void*)&RtSystem_Filename_Dtor); ++n;
-    RegisterRuntimeExport("??4Filename@System@@QEAAAEAV01@AEBV01@@Z",
-                          (void*)&RtSystem_Filename_Assign); ++n;
-    RegisterRuntimeExport("??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z",
-                          (void*)&RtSystem_Filename_AssignString); ++n;
     RegisterRuntimeExport("??MFilename@System@@QEBA_NAEBV01@@Z",
                           (void*)&RtSystem_Filename_Less); ++n;
-    RegisterRuntimeExport("?AdjustDelimiters@Filename@System@@AEAAXXZ",
-                          (void*)&RtSystem_Filename_AdjustDelimiters); ++n;
-    RegisterRuntimeExport("?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z",
-                          (void*)&RtSystem_Filename_GetPathFilename); ++n;
 
     // The SAME functions by Ghidra address — and here it is not belt-and-braces
     // but REQUIRED. Two of the exe's Filename resolves use mangled names that
@@ -549,15 +518,7 @@ int RtSystemFilenameRegister() {
     // only the export names would leave every one of the eight exe call sites
     // of fn_Filename_AdjustDelimiters — and ProfessionUI's GetPathIdentifer —
     // on the DLL while the census reported them ported.
-    RegisterRuntimeAddr(0x180006220, (void*)&RtSystem_Filename_Ctor);
-    RegisterRuntimeAddr(0x18000c780, (void*)&RtSystem_Filename_CtorString);
-    RegisterRuntimeAddr(0x1800067d0, (void*)&RtSystem_Filename_CtorCopy);
-    RegisterRuntimeAddr(0x180006980, (void*)&RtSystem_Filename_Dtor);
-    RegisterRuntimeAddr(0x180006770, (void*)&RtSystem_Filename_Assign);
-    RegisterRuntimeAddr(0x180026d40, (void*)&RtSystem_Filename_AssignString);
     RegisterRuntimeAddr(0x180026cb0, (void*)&RtSystem_Filename_Less);
-    RegisterRuntimeAddr(0x1800c6970, (void*)&RtSystem_Filename_AdjustDelimiters);
-    RegisterRuntimeAddr(0x1800c6740, (void*)&RtSystem_Filename_GetPathFilename);
 
     // CONSEQUENCE FOR standalone/filename_runtime_hook.cpp (PLAN.md §2.2
     // hazard A): that diagnostic resolves 0x1800067d0 / 0x180006980 /

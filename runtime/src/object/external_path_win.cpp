@@ -123,13 +123,6 @@ namespace {
 // lines. `BufLength` was `String::GetLength` (0x1800063c0), whose null arm
 // returns 0 and is therefore the same two branches retail tests.
 
-typedef bool (*ExistsInPackfileFn)(const RtIO::FileSystem*, const Filename*);
-
-inline bool ExistsInPackfile(const RtIO::FileSystem* fs, const Filename* f) {
-    return RT_EXPORT_ONCE(ExistsInPackfileFn,
-        "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(fs, f);
-}
-
 // `?_singleton@FileSystem@IO@@0PEAV12@EA`, retail 0x1801fc6a8 — the qword
 // `MOV R14,qword ptr [0x1801fc6a8]` at 0x1800bd5e3 loads. The class static now
 // (ENDGAME B.3.9 SS1, B39_RULES D7): read fresh, exactly as
@@ -457,7 +450,8 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
 
     // MSVC's inlined FileSystem::Exists(candidate), gate and all.
     if (fs->existsInPackfileGate != 0 &&
-        ExistsInPackfile(fs, reinterpret_cast<const Filename*>(&candidate))) {
+        reinterpret_cast<const ::IO::FileSystem*>(fs)->ExistsInPackfile(   // 0x1800ab180
+            *reinterpret_cast<const Filename*>(&candidate))) {
         found = true; decided = true;                            // 0x1800bd7c8
         ++g_pc.hitPackfile;
     }
@@ -499,8 +493,8 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
         // 0x1800bd8cf adopt + 0x1800bd8e2 normalise, onto a null object.
         candidate2 = u6;
 
-        found = ExistsInPackfile(                                // 0x1800bd8fb
-            fs, reinterpret_cast<const Filename*>(&candidate2));
+        found = reinterpret_cast<const ::IO::FileSystem*>(fs)->ExistsInPackfile(   // 0x1800bd8fb
+            *reinterpret_cast<const Filename*>(&candidate2));
         if (found) ++g_pc.hitPackfileRetry; else ++g_pc.notFound;
     }
 
@@ -550,74 +544,4 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     return ret;
 }
 
-namespace {
-
-void DumpCounters() {
-    printf("[ResPath] counters: expand=%llu empty=%llu | ident def/present=%llu/%llu "
-                "| fname stack/present=%llu/%llu | stack empty/nonempty=%llu/%llu\n",
-                (unsigned long long)g_pc.expandCalls,
-                (unsigned long long)g_pc.expandEmptyPath,
-                (unsigned long long)g_pc.identDefaulted,
-                (unsigned long long)g_pc.identPresent,
-                (unsigned long long)g_pc.filenameFromStack,
-                (unsigned long long)g_pc.filenamePresent,
-                (unsigned long long)g_pc.stackEmpty,
-                (unsigned long long)g_pc.stackNonEmpty);
-    printf("[ResPath] counters: hit pkg=%llu attrProbe/hit=%llu/%llu retry=%llu "
-                "notFound=%llu | tail ident/none=%llu/%llu\n",
-                (unsigned long long)g_pc.hitPackfile,
-                (unsigned long long)g_pc.attrProbeEntered,
-                (unsigned long long)g_pc.hitAttributes,
-                (unsigned long long)g_pc.hitPackfileRetry,
-                (unsigned long long)g_pc.notFound,
-                (unsigned long long)g_pc.appendedIdentifier,
-                (unsigned long long)g_pc.noIdentifierTail);
-    printf("[ResPath] counters: ext calls=%llu ok=%llu nodata=%llu nodot=%llu "
-                "emptyAfterDot=%llu colonTrim=%llu\n",
-                (unsigned long long)g_pc.extCalls,
-                (unsigned long long)g_pc.extOk,
-                (unsigned long long)g_pc.extNullNoData,
-                (unsigned long long)g_pc.extNoDot,
-                (unsigned long long)g_pc.extEmptyAfterDot,
-                (unsigned long long)g_pc.extColonTrim);
-    std::fflush(stdout);
-}
-
-}  // namespace
-
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-//
-// Global scope, like every other wave's Register function, because
-// runtime/src/object/rt_object_port.cpp declares it with a bare
-// `extern int RtObjectExternalPathRegister();`.
-// ============================================================================
-int RtObjectExternalPathRegister() {
-    using namespace RtObject;
-    int n = 0;
-
-    // Literal mangled names, NOT constants: tools/runtime_census.py matches
-    // `RegisterRuntimeExport("<literal>"` and cannot see through a named
-    // constant (reference_census_cannot_see_nonliteral_registrations.md).
-    RegisterRuntimeExport("?GetPathExtension@Filename@System@@QEBA?AV12@XZ",
-                          (void*)&RtSystem_Filename_GetPathExtension); ++n;
-    RegisterRuntimeExport("?GetPathStackFilename@ExternalFactory@Object@@QEBA?AVFilename@System@@XZ",
-                          (void*)&RtObject_ExternalFactory_GetPathStackFilename); ++n;
-    RegisterRuntimeExport("?GetPathStackDirectory@ExternalFactory@Object@@QEBA?AVFilename@System@@XZ",
-                          (void*)&RtObject_ExternalFactory_GetPathStackDirectory); ++n;
-    RegisterRuntimeExport("?ExpandRelativePath@ExternalFactory@Object@@QEBA?AVFilename@System@@AEBV34@_N@Z",
-                          (void*)&RtObject_ExternalFactory_ExpandRelativePath); ++n;
-
-    RegisterRuntimeAddr(0x1800c64f0, (void*)&RtSystem_Filename_GetPathExtension);
-    RegisterRuntimeAddr(0x1800bcf60, (void*)&RtObject_ExternalFactory_GetPathStackFilename);
-    RegisterRuntimeAddr(0x1800bcfd0, (void*)&RtObject_ExternalFactory_GetPathStackDirectory);
-    RegisterRuntimeAddr(0x1800bd360, (void*)&RtObject_ExternalFactory_ExpandRelativePath);
-
-    printf("[ResPath] registered %d doors + 4 addresses\n", n);
-    std::fflush(stdout);
-
-    std::atexit(&DumpCounters);
-    return n;
-}

@@ -193,21 +193,8 @@ uint32_t GoalInstanceTypeId() { return Achievement::GoalInstance::TypeId(); }
 // `?_singleton@Factory@Object@@0PEAV12@EA` @ 0x1801fc6e8. ENDGAME B.3.9 SS1
 // (B39_RULES D7): the class static now -- read fresh, no lazy cache (this body
 // runs on the LOADER thread, B9-10).
-void* FactorySingleton() {
+const ::Object::Factory* FactorySingleton() {
     return ::Object::Factory::_singleton;
-}
-
-using CreateObjectFn   = void* (*)(const void* factory, uint32_t typeId);
-using IsDerivedFromFn  = bool  (*)(const void* self, uint32_t typeId);
-
-// Port-aware NAME doors onto Object's own ported bodies (type_system.cpp).
-// RT_EXPORT_ONCE is a constant-initialised `RtResolveCached` slot, the B6-5
-// shape (this body runs on the LOADER thread — B37_RULES §5).
-CreateObjectFn FactoryCreateObject() {
-    return RT_EXPORT_ONCE(CreateObjectFn, "?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z");
-}
-IsDerivedFromFn BaseIsDerivedFrom() {
-    return RT_EXPORT_ONCE(IsDerivedFromFn, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
 }
 
 }  // namespace
@@ -239,12 +226,13 @@ void GoalList::Initialize(GoalArray* src) {
         Object::Type typeSlot;
         const uint32_t instanceTypeId = *goal->GetInstanceType(&typeSlot);
 
-        void* inst = FactoryCreateObject()(FactorySingleton(), instanceTypeId);
+        void* inst = FactorySingleton()->CreateObject(instanceTypeId);   // 0x1800c0ae0
 
         // The inlined dynamic cast at 0x18009f17e..0x18009f1cd. On failure
         // retail nulls the instance (`XOR ESI,ESI`) and then writes through it
         // two instructions later. Faithful.
-        if (!BaseIsDerivedFrom()(inst, GoalInstanceTypeId())) inst = nullptr;
+        if (!static_cast<const ::Object::Base*>(inst)->IsDerivedFrom(GoalInstanceTypeId()))   // 0x1800c0390
+            inst = nullptr;
 
         _goals[i] = Object::InternalPtr<GoalInstance>(static_cast<GoalInstance*>(inst));
 
@@ -271,17 +259,4 @@ void GoalList::Initialize(GoalArray* src) {
 // ---- The registered door — a QUALIFIED delegation --------------------------
 extern "C" void RtAch_GoalList_Initialize(Achievement::GoalList* self, Achievement::GoalArray* src) {
     self->Achievement::GoalList::Initialize(src);
-}
-
-// ---- Registration ----------------------------------------------------------
-// By NAME and by ADDRESS. Every consumer found so far reaches it by address
-// (the AchievementInstance / CreateInstance callers now call the member).
-int RtAchGoalListRegister() {
-    int n = 0;
-    RegisterRuntimeExport(
-        "?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@"
-        "VGoal@Achievement@@@Object@@@Collection@@@Z",
-        (void*)&RtAch_GoalList_Initialize); ++n;
-    RegisterRuntimeAddr(0x18009f0e0ull, (void*)&RtAch_GoalList_Initialize);
-    return n;
 }

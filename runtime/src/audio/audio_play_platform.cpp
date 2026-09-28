@@ -199,7 +199,6 @@
 // this file does the same, for the same reason.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -209,10 +208,7 @@
 #include "../../types/audio/SoundBuffer.h"
 #include "../../types/system/Value.h"          // System::Time
 #include "../../types/system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
-#include "../engine/mainloop_internal.h"       // rtengine::AtomicResolve (B6-5)
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
+#include "../../funcs/rt_libm.h"                 // RtCrt_Powf
 
 namespace {
 
@@ -269,17 +265,10 @@ double SecondsPerTick() {
     return ::System::Timer::_secondsPerTick;
 }
 
-// FUN_180127560 -- a plain CRT powf(base, exponent). Out of this batch's
-// scope; reached by ADDRESS, port registry first, DLL fallback. See the banner.
-// B.3.7 (B6-5): the function-local first-call cache that lived here is a
-// NAMESPACE-SCOPE atomic slot now that PlayPlatform is a Device member.
-std::atomic<void*> g_powfSlot{nullptr};
+// FUN_180127560 -- a plain CRT powf(base, exponent), ported in
+// runtime/src/crt/msvc_libm.cpp; called by name (B3R).
 float PowF(float base, float exponent) {
-    using Fn = float (*)(float, float);
-    Fn fn = reinterpret_cast<Fn>(rtengine::AtomicResolve(g_powfSlot, [] {
-        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180127560));
-    }));
-    return fn ? fn(base, exponent) : 1.0f;
+    return RtCrt_Powf(base, exponent);
 }
 
 // The XAUDIO2_BUFFER shape this body builds, standard field order/sizes.
@@ -483,17 +472,4 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
     return reinterpret_cast<Audio::Device*>(device)->Audio::Device::PlayPlatform(          // B.3.7 bridge
         slot, Object::ExternalPtr<Audio::SoundBuffer>(static_cast<Audio::SoundBuffer*>(bufferRef)),
         *reinterpret_cast<const System::Time*>(startTime), vol, pitch, third);           // B.3.7 bridge
-}
-
-// ============================================================================
-// Registration — unconditional (DIRECTION.md: a port registers unconditionally,
-// no new kill switches).
-// ============================================================================
-int RtAudioPlayPlatformRegister() {
-    int n = 0;
-    RegisterRuntimeExport(
-        "?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z",
-        (void*)&RtAudio_Device_PlayPlatform);
-    RegisterRuntimeAddr(0x1800de7a0, (void*)&RtAudio_Device_PlayPlatform); ++n;
-    return n;
 }

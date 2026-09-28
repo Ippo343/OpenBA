@@ -134,9 +134,6 @@
 using Input::Binding;
 using Input::BindingNode;
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)
 // is a static member of `System::String` now, so the local variadic declaration
 // this file carried for the shim is gone — as in keymap_load.cpp.
@@ -324,14 +321,11 @@ void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
     set->root  = nullptr;
     set->count = 0;
 
-    // 0x180006a10 — `if (p) { Enter; Free(_singleton, p); Leave; }`, one
-    // argument. Already registered by runtime/src/video/context_lifecycle.cpp,
-    // so this resolves to our own body at cutover.
-    using FreeFn = void (*)(void*);
-    static FreeFn guardedFree = nullptr;
-    if (!guardedFree)
-        guardedFree = reinterpret_cast<FreeFn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    if (guardedFree) guardedFree(selfPtr);
+    // PORT GAP 0x180006a10 the guarded object free (`if (p) { Enter;
+    // Free(_singleton, p); Leave; }`): no body is bound at this address -- its
+    // row went with context_lifecycle.cpp's Rt_GuardedObjectFree in 1386db46,
+    // so the by-address resolve here returned null and nothing was freed.
+    // Retail calls it here. The null arm is kept (B3R_RULES R4).
 
     // No comparison is possible: the tree is freed, so there is nothing left to
     // compare against, and the shipped body reaches 0x180009c30 through a near
@@ -346,16 +340,4 @@ void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
     std::snprintf(a, sizeof(a), "destroy walk visited %u of count-1 = %d",
                   visited, countBefore - 1);
     return selfPtr;
-}
-
-// ============================================================================
-int RtInputKeyMapSaveRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Save@KeyMap@Input@@QEAAXXZ", (void*)&RtInput_KeyMap_Save);
-    RegisterRuntimeAddr(0x1800a7520, (void*)&RtInput_KeyMap_Save); ++n;
-
-    // Address only: 0x180053440 has no name in retail's 4,926 exports nor in
-    // Runtime-x64-profile.dll's 5,182.
-    RegisterRuntimeAddr(0x180053440, (void*)&RtInput_KeyMap_DeletingDtor); ++n;
-    return n;
 }

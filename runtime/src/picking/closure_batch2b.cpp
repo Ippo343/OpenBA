@@ -111,8 +111,3 @@ Scene* Scene::InitGrid(float cellSize) {
 extern "C" Picking::Scene* RtPicking_Scene_InitGrid(void* selfv, float cellSize) {
     return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(cellSize);   // B.3.7 bridge
 }
-
-int RtClosure2bPickingRegister() {
-    RegisterRuntimeAddr(0x18007aef0, (void*)&RtPicking_Scene_InitGrid);
-    return 1;
-}

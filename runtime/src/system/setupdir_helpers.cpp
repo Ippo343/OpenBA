@@ -120,27 +120,3 @@ String* RtSystem_Configuration_GetBuildName(void* self, String* ret, int build) 
 }
 
 }  // namespace RtSystem
-
-// ============================================================================
-// Registration — gated by the lane switch in rt_system_port.cpp
-// ============================================================================
-int RtSystemSetupDirHelpersRegister() {
-    using namespace RtSystem;
-    int n = 0;
-
-    RegisterRuntimeExport("?GetPathDirectory@Filename@System@@QEBA?AV12@XZ",
-                          (void*)&RtSystem_Filename_GetPathDirectory); ++n;
-    RegisterRuntimeExport(
-        "?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platform@12@@Z",
-        (void*)&RtSystem_Configuration_GetPlatformName); ++n;
-    RegisterRuntimeExport(
-        "?GetBuildName@Configuration@System@@QEAA?AVString@2@W4Build@12@@Z",
-        (void*)&RtSystem_Configuration_GetBuildName); ++n;
-
-    RegisterRuntimeAddr(0x1800c6880, (void*)&RtSystem_Filename_GetPathDirectory);
-    RegisterRuntimeAddr(0x1800c5210, (void*)&RtSystem_Configuration_GetPlatformName);
-    RegisterRuntimeAddr(0x1800c5280, (void*)&RtSystem_Configuration_GetBuildName);
-
-    printf("[RtPort]   Wave9 lane FS helpers: %d exports registered\n", n);
-    return n;
-}

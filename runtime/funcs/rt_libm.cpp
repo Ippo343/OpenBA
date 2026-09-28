@@ -21,17 +21,6 @@ void InstallPorted() {
 
 }  // namespace
 
-// runtime/src/crt/msvc_libm.cpp — registers the six ported CRT math bodies at
-// their retail addresses (sqrtf/sinf/cosf/atan2f/powf/fmodf). BATCH 4:
-// unconditional, because a port registers unconditionally (DIRECTION.md §2.3)
-// and because these six have been the default arithmetic here since Wave 8 —
-// they were simply never registered, so the cutover closure still listed them
-// and their whole error-reporting subtree as unported.
-int RtCrtLibmRegister();
-// runtime/src/crt/msvc_qsort.cpp — the CRT qsort/shortsort pair at 0x18007f050 /
-// 0x18007f340, reached by ADDRESS from Save::SaveLoad::UpdateList's save-list sort.
-int RtCrtQsortRegister();
-
 namespace RtLibm {
 
 // Static-init defaults are the ported bodies, so a caller that runs before
@@ -44,8 +33,6 @@ float (*Pow)(float, float)     = &MsvcLibm::Powf;
 
 
 void Init() {
-    ::RtCrtLibmRegister();
-    ::RtCrtQsortRegister();
     InstallPorted();
 }
 

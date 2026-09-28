@@ -90,9 +90,7 @@
 #include "../../types/object/External.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../funcs/rt_libm.h"      // B3R: rtcrt::StrICmp (0x18007eefc)
 
 // ENDGAME B.3.1 step 2: `String::Serialize` (0x1800c9930, which takes the
 // Serializer and not the Stream) and `Filename::AdjustDelimiters` (0x1800c6970)
@@ -149,17 +147,6 @@ inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
 inline void* VSlot(void* obj, int byteOffset) {
     void** vt = *reinterpret_cast<void***>(obj);
     return vt[byteOffset / 8];
-}
-
-// 0x18007eefc — the CRT `_stricmp`. Already an unregistered address door in
-// avl_trees.cpp with the same justification: it is CRT code inside the DLL, it
-// has no export, and the descent below must use the SAME comparator retail
-// inlines or the two trees order differently.
-int StrICmp(const char* a, const char* b) {
-    using Fn = int (*)(const char*, const char*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007eefc));
-    return fn ? fn(a, b) : 0;
 }
 
 // ENDGAME B.3.1 step 2 removed this file's `ReleaseInline` and `AdoptRef`
@@ -314,7 +301,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                         if (!found) break;
                         continue;
                     }
-                    if (StrICmp(searchKey, nodeKey) < 0) {
+                    if (rtcrt::StrICmp(searchKey, nodeKey) < 0) {
                         found = found->left;
                         if (!found) break;
                         continue;
@@ -325,7 +312,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 // second test — 1800bcd37
                 if (!searchKey) break;           // FOUND (both keys null)
                 nodeKey = rtresset::Elem(found)->path.data;
-                if (nodeKey && StrICmp(nodeKey, searchKey) >= 0) break;  // FOUND
+                if (nodeKey && rtcrt::StrICmp(nodeKey, searchKey) >= 0) break;  // FOUND
                 found = found->right;            // 1800bcd54, +0x28
             }
 
@@ -429,25 +416,6 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtObjectExternalRefTableRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport(
-        "?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z",
-        (void*)&RtObject::RtObject_ExternalFactory_SerializeReferenceTable); ++n;
-    RegisterRuntimeAddr(0x1800bcb60,
-        (void*)&RtObject::RtObject_ExternalFactory_SerializeReferenceTable);
-
-    printf("[RtPort]   Object::ExternalFactory::SerializeReferenceTable: 1 export "
-           "+ 1 address registered. Its live call site is "
-           "code/Game/Game/gameupdateloop_serialize.cpp (by export name), so it "
-           "runs once per save AND once per load.\n");
-    return n;
-}
 
 // The counters, for the exit summary.
 void RtObjectExternalRefTableSummary() {

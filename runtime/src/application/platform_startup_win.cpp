@@ -79,18 +79,13 @@
 #include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: AchievementManager::PlatformStartup
 #include "../collection/set_avl.h"
 #include "../system/widestring.h"
+#include "../../types/system/Error.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
 using RtSystem::WideString;
 using rtsetavl::Node;
-
-// Declared locally rather than by including standalone/resolve.h (PLAN §4.1
-// decision 1). Byte-identical to runtime/src/collection/array.cpp:133. Used by
-// the oracle ONLY, to read retail's own hbrBackground constant out of .rdata.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -118,11 +113,9 @@ App** AppSingletonSlot() {
 }
 
 // `?SetText@Error@System@@SAXPEBD_N@Z` @ 0x1800c5fa0 — ported in Wave 2
-// (runtime/src/system/error.cpp:286), reached through the port-aware door.
+// (runtime/src/system/error.cpp), called by name (B3R).
 void ErrorSetText(const char* text, bool flag) {
-    using Fn = void (*)(const char*, bool);
-    Fn fn = RT_EXPORT_ONCE(Fn, "?SetText@Error@System@@SAXPEBD_N@Z");
-    if (fn) fn(text, flag);
+    System::Error::SetText(text, flag);
 }
 
 // The two literals retail passes, read out of the shipped .rdata rather than
@@ -470,60 +463,4 @@ bool Engine::Engine::PlatformStartup() {
 
 extern "C" bool RtEngine_Engine_PlatformStartup(void* self) {
     return reinterpret_cast<Engine::Engine*>(self)->Engine::Engine::PlatformStartup();  // B.3.7 bridge
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtApplicationPlatformStartupRegister() {
-    int n = 0;
-
-    // Every name below was verified against Runtime-x64.dll's export directory
-    // with pefile before use; the ordinals are quoted so a future reader can
-    // re-check without re-deriving. Literals, never named constants
-    // (reference_census_cannot_see_nonliteral_registrations.md).
-    RegisterRuntimeExport("?PlatformStartup@Application@1@AEAA_NXZ",           // 3402
-                          (void*)&RtApp_PlatformStartup); ++n;
-    RegisterRuntimeAddr(0x18009fc10, (void*)&RtApp_PlatformStartup);
-
-    RegisterRuntimeExport("?WindowProc@Application@1@CA_JPEAUHWND__@@I_K_J@Z", // 4546
-                          (void*)&RtApp_WindowProc); ++n;
-    RegisterRuntimeAddr(0x18009f930, (void*)&RtApp_WindowProc);
-
-    RegisterRuntimeExport("?PlatformStartup@AchievementManager@Achievement@@AEAA_NXZ", // 3401
-                          (void*)&RtAchievement_AchievementManager_PlatformStartup); ++n;
-    RegisterRuntimeAddr(0x18009eb70, (void*)&RtAchievement_AchievementManager_PlatformStartup);
-
-    RegisterRuntimeExport("?PlatformStartup@ExternalFactory@Object@@AEAA_NXZ", // 3407
-                          (void*)&RtObject_ExternalFactory_PlatformStartup); ++n;
-    RegisterRuntimeAddr(0x1800bf6c0, (void*)&RtObject_ExternalFactory_PlatformStartup);
-
-    RegisterRuntimeExport("?PlatformStartup@Engine@1@QEAA_NXZ",               // 3406
-                          (void*)&RtEngine_Engine_PlatformStartup); ++n;
-    RegisterRuntimeAddr(0x1800a2100, (void*)&RtEngine_Engine_PlatformStartup);
-
-    // Wave 9 lane PLAT also took the NEXT boot wall after Video's, which lives
-    // in another namespace: `?PlatformStartup@Device@Audio@@AEAA_NXZ`
-    // (engine_lifecycle.cpp:730, g_startupFailAt == 12). Registered from here
-    // so the whole family lands behind ONE switch and one identity line.
-    {
-        extern int RtAudioPlatformStartupRegister();
-        n += RtAudioPlatformStartupRegister();
-    }
-
-    // ...and the wall after Audio's: `?PlatformStartup@Device@Input@@AEAA_NXZ`
-    // (engine_lifecycle.cpp:741, g_startupFailAt == 13), plus the three
-    // exported message callbacks it installs, which are equally unreachable
-    // at cutover if only the outer function is ported.
-    {
-        extern int RtInputPlatformStartupRegister();
-        n += RtInputPlatformStartupRegister();
-    }
-
-    // THE BUILD IDENTITY LINE. Every measurement this lane reports is gated on
-    // finding this exact string in that run's OWN log — not on "I rebuilt",
-    // not on a file timestamp. Bump the revision when the bodies change.
-    printf("[LanePLAT] rev=PLAT-r5 registered=%d\n", n);
-
-    return n;
 }

@@ -27,31 +27,14 @@
 #include "rt_port.h"
 #include "../../types/math/Math.h"
 
-// transform.cpp, Wave 1 lane 2 — the same class family, registered together.
-// Declared rather than resolved: see the note on CallAsMatrix() below for why
-// this one is a direct call.
-Matrix* RtMath_Transform_AsMatrix(const Transform* self, Matrix* ret);
-
 namespace {
 
-// Math::Transform::AsMatrix, reached the way retail reaches it (a direct CALL
-// to 0x18001e5f0) but through the PORT-AWARE resolver so that our own Wave 1
-// port is what runs. Going by ADDRESS here would be the exact defect
-// `tools/port_bypass_audit.py` was written for: ResolveAddr consults only the
-// address registry, and Wave 1 registered AsMatrix by NAME, so a by-address
-// call inside runtime/ walks past our port into the DLL.
-//
-// Resolved once and cached.
-//
-// ENDGAME B.3.1 note: this whole indirection is a step-2 casualty. The DLL is
-// gone, `Transform::AsMatrix` is an ordinary member of our own class, and the
-// registry lookup can only ever land back on the shim in transform.cpp. It is
-// left exactly as it was here because step 1 moves bodies, not call sites.
+// Math::Transform::AsMatrix (retail 0x18001e5f0: a direct CALL), the member
+// of our own class, called by name (B3R: it was a name door whose only row was
+// transform.cpp's one-line shim over this same member).
 Matrix* CallAsMatrix(const Transform* self, Matrix* ret) {
-    using Fn = Matrix* (*)(const Transform*, Matrix*);
-    static Fn fn = reinterpret_cast<Fn>(
-        ResolveExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
-    return fn ? fn(self, ret) : RtMath_Transform_AsMatrix(self, ret);
+    *ret = self->AsMatrix();
+    return ret;
 }
 
 }  // namespace
@@ -204,40 +187,7 @@ Math::Transform3 Math::Transform::AsTransform3() const {
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// TRANSITIONAL SHIMS — ENDGAME B.3.1 step 1. One line each onto the members
-// above; they and their registry rows die in step 2 with their last caller.
-// ---------------------------------------------------------------------------
-Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
-                                   const Quaternion* other, const Scalar* t) {
-    *ret = self->Lerp(*other, *t);
-    return ret;
-}
-
 Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret) {
     *ret = self->AsTransform3();
     return ret;
-}
-
-// ---- Registration ----------------------------------------------------------
-// Called from RtMathPortInit() alongside RtMathTransformRegister().
-//
-// Lerp is registered BY ADDRESS as well as by name: its only in-tree caller
-// today, runtime/src/graphics/scene.cpp's RtQuaternionLerp, reaches it through
-// ResolveAddr(Module::Runtime, 0x18001d500), and the address registry is a
-// separate table from the export registry. Registering the name alone would
-// leave that one caller — the only one — still on the DLL, which is precisely
-// the shape of the port-bypass defect lane R found in the same file.
-int RtMathWave9LanePRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z",
-                          (void*)&RtMath_Quaternion_Lerp); ++n;
-    RegisterRuntimeAddr(0x18001d500, (void*)&RtMath_Quaternion_Lerp);
-
-    RegisterRuntimeExport("?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ",
-                          (void*)&RtMath_Transform_AsTransform3); ++n;
-    RegisterRuntimeAddr(0x18001fcd0, (void*)&RtMath_Transform_AsTransform3);
-
-    return n;
 }

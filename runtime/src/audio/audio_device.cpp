@@ -375,37 +375,6 @@ void RtAudio_Device_Stop(void* selfPtr, void* channelPtr) {
         static_cast<Audio::Device::AudioChannel*>(channelPtr));
 }
 
-int RtAudioDeviceRegister() {
-    int n = 0;
-    // Name AND address for both, the pattern audio.cpp already uses: the name
-    // is how engine_funcs.cpp reaches them (engine_funcs.cpp:1558 and :1562),
-    // and the address keeps port_bypass_audit.py's ADDRESS door off the DLL.
-    RegisterRuntimeExport("?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z",
-                          (void*)&RtAudio_Device_Update);
-    RegisterRuntimeAddr(0x1800de520, (void*)&RtAudio_Device_Update); ++n;
-
-    RegisterRuntimeExport("?FreeChannelPlatform@Device@Audio@@AEAAXH@Z",
-                          (void*)&RtAudio_Device_FreeChannelPlatform);
-    RegisterRuntimeAddr(0x1800de6f0, (void*)&RtAudio_Device_FreeChannelPlatform); ++n;
-
-    // ---- WAVE 23 LANE TAIL -------------------------------------------------
-    // Both doors for both, the pattern above. `Stop`'s NAME door is the live
-    // one (audio.cpp:901 resolves it by name); the ADDRESS door keeps
-    // tools/port_bypass_audit.py's address route off the DLL. `StopPlatform`
-    // has no caller in our tree other than `Stop` immediately above it, and is
-    // registered anyway for the reason its banner gives - an unregistered body
-    // is indistinguishable from an absent one to the census
-    // (reference_half_registered_port_reads_as_absent.md).
-    RegisterRuntimeExport("?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z",
-                          (void*)&RtAudio_Device_Stop);
-    RegisterRuntimeAddr(0x1800de200, (void*)&RtAudio_Device_Stop); ++n;
-
-    RegisterRuntimeExport("?StopPlatform@Device@Audio@@AEAAXH@Z",
-                          (void*)&RtAudio_Device_StopPlatform);
-    RegisterRuntimeAddr(0x1800dea20, (void*)&RtAudio_Device_StopPlatform); ++n;
-    return n;
-}
-
 // ?_singleton@Device@Audio@@0PEAV12@EA (0x1801fe760) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
 // RtAudioPortInit redirects the minted storage row onto it.
 ::Audio::Device* ::Audio::Device::_singleton = nullptr;

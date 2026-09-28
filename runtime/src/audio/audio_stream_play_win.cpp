@@ -154,14 +154,3 @@ void Stream::Play(int32_t channel, int32_t bytePosition) {
 extern "C" void RtAudio_Stream_Play(void* selfPtr, int32_t a, int32_t b) {
     reinterpret_cast<Audio::Stream*>(selfPtr)->Audio::Stream::Play(a, b);   // B.3.7 bridge
 }
-
-// ============================================================================
-// Registration -- unconditional (DIRECTION.md: a port registers unconditionally,
-// no new kill switches).
-// ============================================================================
-int RtAudioStreamPlayRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Play@Stream@Audio@@QEAAXHH@Z", (void*)&RtAudio_Stream_Play);
-    RegisterRuntimeAddr(0x1800a0d10, (void*)&RtAudio_Stream_Play); ++n;
-    return n;
-}

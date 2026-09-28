@@ -25,8 +25,3 @@
 // itself is inert here — see rt_port_stub.cpp).
 // ============================================================================
 
-int RtCollectionSetAvlRegister()          { return 0; }  // set_avl.cpp
-int RtCollectionSetAvlPathIdRegister()    { return 0; }  // set_avl_pathid.cpp
-int RtCollectionSetClearRegister()        { return 0; }  // set_clear.cpp
-int RtCollectionAvlTreesRegister()        { return 0; }  // avl_trees.cpp
-int RtCrtStrICmpRegister()                { return 0; }  // runtime/src/crt (via introsort)

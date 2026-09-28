@@ -247,10 +247,6 @@
 #include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "../../types/system/Timer.h"              // ENDGAME B.3.9 close: Timer's class statics
 #include "mainloop_internal.h"
-#include <atomic>
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
 
@@ -526,21 +522,4 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
 
 extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
     return self->Engine::MainLoop::Frame(skipUpdate);
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH DOORS.  The NAME closes the door `mainloop_run.cpp` opened; the ADDRESS
-// is registered because at cutover anything that reaches Frame by address must
-// find this body rather than a null
-// (reference_by_address_door_dies_at_cutover.md).
-//
-// Every mangled name is ONE literal on ONE line so runtime_census.py and
-// export_name_audit.py can see it.
-int RtEngineMainLoopFrameRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Frame@MainLoop@Engine@@QEAA_N_N@Z", (void*)&RtEngine_MainLoop_Frame); ++n;
-    RegisterRuntimeAddr(0x1800dd100, (void*)&RtEngine_MainLoop_Frame);
-    return n;
 }

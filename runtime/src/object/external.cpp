@@ -175,22 +175,6 @@ Filename* RtObject_External_GetPath(const External* self, Filename* ret) {
 // Object::ExternalFactory — the read-only half
 // ============================================================
 
-// ?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ  retail 0x1800bf0f0
-bool RtObject_ExternalFactory_IsReferenceModeEnabled(const ExternalFactory* self) {
-    bool ours = self->_referenceModeEnabled;
-    return ours;
-}
-
-// ?EnableReferenceMode@ExternalFactory@Object@@QEAAX_N@Z  retail 0x1800bcf40
-//
-// NOT DIFFED — a store into live factory state. It is one byte and idempotent,
-// but running the original as well would write it twice, and a diff site whose
-// only content is "we both wrote the same constant" is the `calls=0`-shaped
-// non-evidence WAVE2 finding 5 warns about.
-void RtObject_ExternalFactory_EnableReferenceMode(ExternalFactory* self, bool enable) {
-    self->_referenceModeEnabled = enable;
-}
-
 // ?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z
 //   retail 0x1800bdeb0                                             — DIFFED
 //
@@ -561,47 +545,10 @@ int RtObjectExternalRegister() {
     // ENDGAME B.3.9 OBJ (B39_RULES D2): External's and CompiledExternal's
     // factory pairs are the classes' own statics (external_class.cpp), not
     // FACTREST rows.
-    RegisterRuntimeExport("?CreateNewObject@External@Object@@SAPEAVBase@2@XZ",
-                          (void*)&::Object::External::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18002c980, (void*)&::Object::External::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z",
-                          (void*)&::Object::External::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18002c990, (void*)&::Object::External::CreateInPlaceObject);
-    RegisterRuntimeExport("?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ",
-                          (void*)&::Object::CompiledExternal::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18000b6c0, (void*)&::Object::CompiledExternal::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z",
-                          (void*)&::Object::CompiledExternal::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18000b6d0, (void*)&::Object::CompiledExternal::CreateInPlaceObject);
-    RegisterRuntimeExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ",
-                          (void*)&RtObject_External_GetPath); ++n;
-    RegisterRuntimeExport("?EnableReferenceMode@ExternalFactory@Object@@QEAAX_N@Z",
-                          (void*)&RtObject_ExternalFactory_EnableReferenceMode); ++n;
-    RegisterRuntimeExport("?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ",
-                          (void*)&RtObject_ExternalFactory_IsReferenceModeEnabled); ++n;
-    RegisterRuntimeExport("?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z",
-                          (void*)&RtObject_ExternalFactory_Find); ++n;
-    RegisterRuntimeExport("?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z",
-                          (void*)&RtObject_ExternalFactory_FindNext); ++n;
-    RegisterRuntimeExport("?GetReferenceId@ExternalFactory@Object@@QEBAIPEBVExternal@2@@Z",
-                          (void*)&RtObject_ExternalFactory_GetReferenceId); ++n;
-    RegisterRuntimeExport("?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z",
-                          (void*)&RtObject_ExternalFactory_GetPathForReferenceId); ++n;
     RegisterRuntimeExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ",
                           (void*)&RtObject_ExternalList_GetResourceCount); ++n;
-    RegisterRuntimeExport("?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@"
-                          "AEBVFilename@System@@VType@2@@Z",
-                          (void*)&RtObject_ExternalList_Find); ++n;
 
-    RegisterRuntimeAddr(0x180006250, (void*)&RtObject_External_GetPath);
-    RegisterRuntimeAddr(0x1800bcf40, (void*)&RtObject_ExternalFactory_EnableReferenceMode);
-    RegisterRuntimeAddr(0x1800bf0f0, (void*)&RtObject_ExternalFactory_IsReferenceModeEnabled);
-    RegisterRuntimeAddr(0x1800bdeb0, (void*)&RtObject_ExternalFactory_Find);
-    RegisterRuntimeAddr(0x1800be9d0, (void*)&RtObject_ExternalFactory_FindNext);
-    RegisterRuntimeAddr(0x1800bf100, (void*)&RtObject_ExternalFactory_GetReferenceId);
-    RegisterRuntimeAddr(0x1800bf1d0, (void*)&RtObject_ExternalFactory_GetPathForReferenceId);
     RegisterRuntimeAddr(0x180007650, (void*)&RtObject_ExternalList_GetResourceCount);
-    RegisterRuntimeAddr(0x1800bf700, (void*)&RtObject_ExternalList_Find);
 
     // The Wave 3 banner named four deliberate omissions. All four have since
     // been ported by other files and this line was still claiming otherwise:

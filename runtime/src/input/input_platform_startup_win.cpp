@@ -92,13 +92,7 @@
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"
 #include "../../types/input/Input.h"
-
-// Declared locally rather than by including standalone/resolve.h, which drags
-// in <windows.h> under different macros (PLAN §4.1 decision 1). Byte-identical
-// to runtime/src/collection/array.cpp:133.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-extern "C" void RtLanePlatInputFormatProbe();
+#include "../../types/system/Error.h"
 
 namespace {
 
@@ -112,10 +106,9 @@ Application::Application** AppSingletonSlot() {
     return reinterpret_cast<Application::Application**>(&::Application::Application::_singleton);
 }
 
+// `?SetText@Error@System@@SAXPEBD_N@Z` 0x1800c5fa0, called by name (B3R).
 void ErrorSetText(const char* text, bool flag) {
-    using Fn = void (*)(const char*, bool);
-    Fn fn = RT_EXPORT_ONCE(Fn, "?SetText@Error@System@@SAXPEBD_N@Z");
-    if (fn) fn(text, flag);
+    System::Error::SetText(text, flag);
 }
 
 // ENDGAME B.3.7 B5: two by-NAME doors of this file became member calls.
@@ -367,111 +360,4 @@ extern "C" int RtInput_Device_OnLostFocusMessage(void* hwnd, unsigned msg, uint6
 }
 extern "C" int RtInput_Device_OnMouseWheelMessage(void* hwnd, unsigned msg, uint64_t wp, int64_t lp) {
     return Input::Device::OnMouseWheelMessage(hwnd, msg, wp, lp);
-}
-
-// ============================================================================
-// RtLanePlatInputFormatProbe — the one substitution, measured
-// ============================================================================
-// This port hands DirectInput MinGW's `c_dfDIKeyboard` / `c_dfDIMouse2` where
-// retail hands its own embedded copies at 0x18014bc20 / 0x18014be30. That is
-// the only place in this file where a DIFFERENT object is passed, so it is the
-// only place that needs proving, and it is provable exactly while the DLL is
-// still loaded.
-//
-// It compares the DIDATAFORMAT header and then every DIOBJECTDATAFORMAT entry:
-// the GUID BY VALUE (the pointers are in two different modules and can never be
-// equal — comparing them would fail 100% of entries for the one reason that is
-// correct), plus dwOfs, dwType and dwFlags. A null pguid on one side and not
-// the other counts as a mismatch.
-//
-// EFFECTIVENESS CONTROL: `fields` — the number of individual comparisons made.
-// For the two formats together that must be 2*5 + (256 + 11)*4 = 1078. A run
-// reporting `mismatch=0` with a small `fields` proved nothing.
-//
-// NEGATIVE CONTROL: the same comparator is then run on keyboard-vs-mouse, which
-// MUST report a mismatch. It is unconditional, not env-gated, precisely because
-// a control nobody runs is not a control.
-// ============================================================================
-namespace {
-
-int CompareFormat(const DIDATAFORMAT* ours, const DIDATAFORMAT* theirs,
-                  int* fields) {
-    int bad = 0;
-    auto cmp = [&](unsigned long long x, unsigned long long y) {
-        ++*fields;
-        if (x != y) ++bad;
-    };
-    cmp(ours->dwSize, theirs->dwSize);
-    cmp(ours->dwObjSize, theirs->dwObjSize);
-    cmp(ours->dwFlags, theirs->dwFlags);
-    cmp(ours->dwDataSize, theirs->dwDataSize);
-    cmp(ours->dwNumObjs, theirs->dwNumObjs);
-    if (bad != 0) return bad;   // a header mismatch makes the object walk unsafe
-    for (DWORD i = 0; i < ours->dwNumObjs; ++i) {
-        const DIOBJECTDATAFORMAT& a = ours->rgodf[i];
-        const DIOBJECTDATAFORMAT& b = theirs->rgodf[i];
-        ++*fields;
-        if ((a.pguid == nullptr) != (b.pguid == nullptr)) ++bad;
-        else if (a.pguid && std::memcmp(a.pguid, b.pguid, sizeof(GUID)) != 0) ++bad;
-        cmp(a.dwOfs, b.dwOfs);
-        cmp(a.dwType, b.dwType);
-        cmp(a.dwFlags, b.dwFlags);
-    }
-    return bad;
-}
-
-}  // namespace
-
-extern "C" void RtLanePlatInputFormatProbe() {
-    static bool done = false;
-    if (done) return;
-    done = true;
-
-    const auto* theirKbd = reinterpret_cast<const DIDATAFORMAT*>(
-        ResolveAddr(Module::Runtime, 0x18014bc20));
-    const auto* theirMouse = reinterpret_cast<const DIDATAFORMAT*>(
-        ResolveAddr(Module::Runtime, 0x18014be30));
-    if (!theirKbd || !theirMouse) {
-        printf("[PlatProbe] DIDATAFORMAT probe SKIPPED: the shipped blobs did not resolve\n");
-        return;
-    }
-
-    int fields = 0;
-    const int badKbd = CompareFormat(&c_dfDIKeyboard, theirKbd, &fields);
-    const int badMouse = CompareFormat(&c_dfDIMouse2, theirMouse, &fields);
-
-    // The negative control, run every time: the keyboard format compared
-    // against the mouse's MUST disagree. If it does not, the comparator is
-    // broken and the two zeros above mean nothing.
-    int negFields = 0;
-    const int negBad = CompareFormat(&c_dfDIKeyboard, theirMouse, &negFields);
-
-    printf("[PlatProbe] DIDATAFORMAT keyboard_mismatch=%d mouse_mismatch=%d "
-                "fields=%d | NEGATIVE-CONTROL(kbd vs mouse) mismatch=%d %s\n",
-                badKbd, badMouse, fields, negBad,
-                negBad > 0 ? "(fired, as it must)" : "(DID NOT FIRE — comparator is broken)");
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtInputPlatformStartupRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?PlatformStartup@Device@Input@@AEAA_NXZ",     // 3404
-                          (void*)&RtInput_Device_PlatformStartup); ++n;
-    RegisterRuntimeAddr(0x1800e1880, (void*)&RtInput_Device_PlatformStartup);
-
-    RegisterRuntimeExport("?OnFocusMessage@Device@Input@@CAHPEAUHWND__@@I_K_J@Z",  // 3275
-                          (void*)&RtInput_Device_OnFocusMessage); ++n;
-    RegisterRuntimeAddr(0x1800e1800, (void*)&RtInput_Device_OnFocusMessage);
-
-    RegisterRuntimeExport("?OnLostFocusMessage@Device@Input@@CAHPEAUHWND__@@I_K_J@Z",  // 3276
-                          (void*)&RtInput_Device_OnLostFocusMessage); ++n;
-    RegisterRuntimeAddr(0x1800e17d0, (void*)&RtInput_Device_OnLostFocusMessage);
-
-    RegisterRuntimeExport("?OnMouseWheelMessage@Device@Input@@CAHPEAUHWND__@@I_K_J@Z",  // 3277
-                          (void*)&RtInput_Device_OnMouseWheelMessage); ++n;
-    RegisterRuntimeAddr(0x1800e17a0, (void*)&RtInput_Device_OnMouseWheelMessage);
-
-    return n;
 }

@@ -66,9 +66,6 @@
 #include "array_destroy_internal.h"
 #include "../../types/graphics/AnimationState.h"   // B3R RT-VG: the Rt_* declarations
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // The three element copy constructors live with the class they belong to, in
 // runtime/src/graphics/animationstate.cpp. They are reached by name and not by
 // address so that this file has no dependency on registration ORDER.
@@ -432,24 +429,7 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<Interpolated
 // DestroyAnimStateRange / DestroyInstanceRange) are still called from this
 // file's own dtor bodies, so only the retail-arity forwarders went.
 int RtCollectionGraphicsAnimRegister() {
-    using namespace rtcoll;
-    int n = 0;
-    RegisterRuntimeAddr(0x18001c480ull, (void*)&Rt_ArrayDtor_18001c480);          ++n;
-    RegisterRuntimeAddr(0x18001c550ull, (void*)&Rt_ArrayDtor_18001c550);          ++n;
-    RegisterRuntimeAddr(0x180014090ull, (void*)&Rt_ArrayDtor_180014090);          ++n;
-    RegisterRuntimeAddr(0x18005bbb0ull, (void*)&Rt_ArrayDtor_18005bbb0);          ++n;
-
-
-    RegisterRuntimeAddr(0x18005aa30ull, (void*)&Rt_SetSize_18005aa30);            ++n;
-    RegisterRuntimeAddr(0x18005b1e0ull, (void*)&Rt_SetSize_18005b1e0);            ++n;
-    RegisterRuntimeAddr(0x18005c8a0ull, (void*)&Rt_SetSize_18005c8a0);            ++n;
-    RegisterRuntimeAddr(0x18005ac50ull, (void*)&Rt_SetSize_18005ac50);            ++n;
-    RegisterRuntimeAddr(0x18005c3d0ull, (void*)&Rt_SetSize_18005c3d0);            ++n;
-    RegisterRuntimeAddr(0x18005be30ull, (void*)&Rt_SetSize_18005be30);            ++n;
-
-    RegisterRuntimeAddr(0x180013960ull, (void*)&Rt_ArrayAssign_180013960);        ++n;
-    RegisterRuntimeAddr(0x18005b130ull, (void*)&Rt_ArrayAssign_18005b130);        ++n;
-    RegisterRuntimeAddr(0x18001b700ull, (void*)&Rt_ArrayAssign_18001b700);        ++n;
-    RegisterRuntimeAddr(0x18001b810ull, (void*)&Rt_ArrayAssign_18001b810);        ++n;
-    return n;
+    // B3R RT-Core: every row this registered lost its last reader. Kept
+    // defined, returning 0, only because runtime/src/graphics/animationstate.cpp (RT-VG) still calls it.
+    return 0;
 }

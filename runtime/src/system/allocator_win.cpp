@@ -7,10 +7,9 @@
 // `Platform*` members and every VirtualAlloc/GetSystemInfo/CRITICAL_SECTION call
 // in the allocator is either one of them or an inlined copy of one. So this file
 // is not a wrapper we invented — it is the retail `_win` translation unit,
-// reconstructed. A `_posix`/`_sdl` twin implements the same two entry points:
+// reconstructed. A `_posix`/`_sdl` twin implements the same entry point:
 //
 //     RtSystemAllocatorInstallPlatform()
-//     RtSystemAllocatorRegisterPlatformExports()
 //
 // runtime/src/system/allocator.cpp — the portable half — never sees an OS header.
 //
@@ -110,38 +109,9 @@ void MemoryAllocator::PlatformFree(void* p, uint64_t /*bytes*/) {
     VirtualFree(p, 0, MEM_RELEASE);
 }
 
-// Registration thunks (`self` in RCX, as the rows' callers pass it). They exist
-// only for the six RegisterRuntimeExport rows below and die with them (W2).
-namespace rtalloc_win {
-void  PlatformConstruct(MemoryAllocator* self)  { self->PlatformConstruct(); }
-void  PlatformDestruct(MemoryAllocator* self)   { self->PlatformDestruct(); }
-void  PlatformShutdown(MemoryAllocator* self)   { self->PlatformShutdown(); }
-bool  PlatformStartup(MemoryAllocator* self)    { return self->PlatformStartup(); }
-void* PlatformAllocate(MemoryAllocator* self, uint64_t bytes, void* at, bool commitToo) {
-    return self->PlatformAllocate(bytes, at, commitToo);
-}
-void  PlatformFree(MemoryAllocator* self, void* p, uint64_t bytes) { self->PlatformFree(p, bytes); }
-}  // namespace rtalloc_win
-
 // ---------------------------------------------------------------------------
 // Entry points the portable half calls.
 // ---------------------------------------------------------------------------
 extern "C" void RtSystemAllocatorInstallPlatform() {
     RtSysMemPlatformInstall(&kWin32);
-}
-
-extern "C" int RtSystemAllocatorRegisterPlatformExports() {
-    RegisterRuntimeExport("?PlatformConstruct@MemoryAllocator@System@@AEAAXXZ",
-                          reinterpret_cast<void*>(&rtalloc_win::PlatformConstruct));
-    RegisterRuntimeExport("?PlatformDestruct@MemoryAllocator@System@@AEAAXXZ",
-                          reinterpret_cast<void*>(&rtalloc_win::PlatformDestruct));
-    RegisterRuntimeExport("?PlatformShutdown@MemoryAllocator@System@@AEAAXXZ",
-                          reinterpret_cast<void*>(&rtalloc_win::PlatformShutdown));
-    RegisterRuntimeExport("?PlatformStartup@MemoryAllocator@System@@AEAA_NXZ",
-                          reinterpret_cast<void*>(&rtalloc_win::PlatformStartup));
-    RegisterRuntimeExport("?PlatformAllocate@MemoryAllocator@System@@AEAAPEAX_KPEAX_N@Z",
-                          reinterpret_cast<void*>(&rtalloc_win::PlatformAllocate));
-    RegisterRuntimeExport("?PlatformFree@MemoryAllocator@System@@AEAAXPEAX_K@Z",
-                          reinterpret_cast<void*>(&rtalloc_win::PlatformFree));
-    return 6;
 }

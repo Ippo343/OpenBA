@@ -131,17 +131,11 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 #ifdef BANISHED_UNIT_TEST
 #include <cstdlib>
 #endif
-
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — same reasoning array.cpp gives (resolve.h drags in <windows.h>, whose
-// <wingdi.h> declares a function called `Rectangle`). Must stay byte-identical
-// to resolve.h's declaration; the linker checks the two against each other.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // The one retail instantiation. Named here so the shims below and the layout
 // asserts read against the same type the header defines.
@@ -169,15 +163,13 @@ namespace {
 // dispatch slots 0x140152b60 / 0x140152b68 first and falls back to these two
 // addresses. Same allocator, same lock; the difference is that the door is the
 // one `BANISHED_REDZONE` rewrites, so a list node is no longer invisible to it.
-// The `fn ? … : nullptr` shape below is this seam's own and is kept.
+// B3R RT-Core: the two statics, called by name.
 void* MemAllocLocked(uint64_t bytes, int align) {
-    const rtcoll::DoorAllocFn_t fn = rtcoll::DoorAlloc();
-    return fn ? fn(bytes, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(bytes, align);   // 0x1800c7a50
 }
 
 void MemFreeLocked(void* p) {
-    const rtcoll::DoorFreeFn_t fn = rtcoll::DoorFree();
-    if (fn) fn(p);
+    System::MemoryAllocator::MemFree(p);                      // 0x1800c7ad0
 }
 
 }  // namespace
@@ -249,89 +241,3 @@ void ListNodeFree(void* p) {
 
 }  // namespace detail
 }  // namespace Collection
-
-// ============================================================================
-// The four entry points — one line each onto the class
-// ============================================================================
-// The transcription notes for each moved to the member it became; the retail
-// address stays on both sides so a crash log naming either one leads to the
-// other.
-
-// ---- 0x180009c30 — the allocator-lock Free wrapper -------------------------
-// The first argument is homed at [RSP+0x8] and never read again. Retail passes
-// the container there at every call site (`this`), so the parameter is kept and
-// named honestly rather than deleted — deleting it would silently change the
-// ABI of an address every other caller reaches through a 2-argument typedef
-// (runtime/src/graphics/scene.cpp:238 and runtime/src/input/input.cpp:131 both
-// declare it that way).
-//
-// It goes to the seam and NOT to `List8::FreeNode` even though that member is
-// the same one line: retail's callers pass a `Set*`, an unrelated container, or
-// (avl_trees.cpp:1170) outright junk in that slot, so spelling this as a member
-// call would invent a `this` that no caller promises.
-extern "C" void RtColl_FreeLocked_180009c30(void* /*ignoredThis*/, void* p) {
-    Collection::detail::ListNodeFree(p);
-}
-
-// ---- 0x180032750 — LinkedList node allocate + initialise -------------------
-// THE FIRST ARGUMENT IS NEVER READ (the whole body touches RCX only as the
-// destination of `XOR ECX,ECX`), which is why `NewNode` is a static member.
-extern "C" void* RtColl_LinkedListNewNode_180032750(void* /*neverRead*/,
-                                                    void* const* value) {
-    return List8::NewNode(*value);
-}
-
-// ---- 0x18007a010 — LinkedList::Remove(list, &value) ------------------------
-extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
-                                                  void* const* value) {
-    static_cast<List8*>(listPtr)->Remove(*value);
-}
-
-// ---- 0x1800325f0 — LinkedList::Clear(list) ---------------------------------
-// WAVE 9 LANE UID. The member `??1DialogInstance@UI@@` (0x180114d40) calls on
-// its `_children` list at 0x180114e5e.
-//
-// ORACLE: none, and none is possible — the same reason `Remove` has none. A
-// replay walks a chain whose every node has already been freed and frees each
-// one a second time. Two things stand in for it, and neither is dressed up as
-// more than it is:
-//   * A SHAPE CHECK against the shipped bytes, `VerifyListClearShape` in
-//     runtime/src/ui/dialog.cpp, run beside the `??1DialogInstance` shape check.
-//     The entire failure surface of this body is four displacements — the
-//     `next` offset it walks and the three fields it zeroes — and all four are
-//     literal displacements in the shipped instruction stream, so all four are
-//     compared against the DLL while the DLL is still there.
-//   * `LinkedListClearFreesEveryNodeOnce` in tests/unit/list_test.cpp, which
-//     runs the member against the counting test allocator above.
-extern "C" void RtColl_LinkedListClear_1800325f0(void* listPtr) {
-    static_cast<List8*>(listPtr)->Clear();
-}
-
-// ============================================================================
-// Registration — BY ADDRESS ONLY
-// ============================================================================
-// None of these is in the shipped export directory, so there is no mangled
-// name to register under and nothing for tools/export_name_audit.py to verify.
-// The addresses are spelled as hex literals in the RegisterRuntimeAddr calls
-// because tools/runtime_census.py counts the literal in the call and cannot see
-// through a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-int RtCollLinkedListRegister() {
-    int n = 0;
-    // 0x180009c30 is NOT registered here any more. It was registered by THREE
-    // files (this one, io/modification.cpp, system/allocator.cpp), the registry's
-    // last binding won, and which body survived depended on init order -- lane
-    // VID2 found it. runtime/src/system/allocator.cpp is now the single owner and
-    // registers it UNCONDITIONALLY from RtSystemPortInit, so this file's callers
-    // still reach a correct body. RtColl_FreeLocked_180009c30 is kept because it
-    // is the named spelling of `LinkedList::FreeNode` that scene.cpp and
-    // input.cpp reach through a 2-argument typedef.
-    RegisterRuntimeAddr(0x180032750, (void*)&RtColl_LinkedListNewNode_180032750); ++n;
-    RegisterRuntimeAddr(0x18007a010, (void*)&RtColl_LinkedListRemove_18007a010);  ++n;
-    // WAVE 9 LANE UID — Clear. Unexported, so ADDRESS ONLY like the two above;
-    // verified absent from the shipped export directory with pefile BEFORE the body
-    // was written (reference_resolveexport_phantom_names.md). Its only caller today
-    // is `??1DialogInstance@UI@@`, which reaches it by address at 0x180114e5e.
-    RegisterRuntimeAddr(0x1800325f0, (void*)&RtColl_LinkedListClear_1800325f0);   ++n;
-    return n;
-}

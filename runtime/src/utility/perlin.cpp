@@ -260,6 +260,5 @@ int RtUtilityRegister() {
     // OTHER caller that reaches 0x1801085c0 directly — including the DLL
     // itself, should a hybrid boot ever call back into this address — gets
     // this body rather than nothing.
-    RegisterRuntimeAddr(0x1801085c0, (void*)&SmoothNoise);
     return n;
 }

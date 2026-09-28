@@ -1008,4 +1008,7 @@ extern "C" void RtVideo_ArrayRefreshDtor(void* arr);  // 0x180010760
 // ---- video/video_resources.cpp
 Video::RenderBuffer* Video_RenderBuffer_Ctor(Video::RenderBuffer* self);  // 0x1800f3ee0
 void Video_RenderBuffer_Dtor(Video::RenderBuffer* self);  // 0x1800f4020
+// B3R RT-Core: the two destructor bodies Engine::Shutdown calls by name.
+void Video_Configuration_Dtor(void* self);  // 0x1800f6f80  ??1Configuration@Video@@QEAA@XZ
+void Video_Device_Dtor(RtVideo::Device* self);  // 0x1800f7290  ??1Device@Video@@QEAA@XZ
 // ==== end B3R W0-P0c ====

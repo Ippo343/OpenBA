@@ -12,20 +12,11 @@
 //                             the DLL exactly as they did before the lane.
 // ============================================================================
 
-#include <cstdio>
 #include "../../funcs/rt_port.h"
-#include "scene_grid.h"
 
-extern int RtPickingSceneRegister();  // scene.cpp (Wave 5 lane D)
-extern int RtPickingGridRegister();   // scene_grid.cpp (Wave 9 lane PICK)
-
+// B3R RT-Core: Scene's and the spatial grid's rows lost their last readers, so
+// both register functions went with them. This entry point registers nothing;
+// it stays defined only because standalone/resolve_standalone.cpp's
+// RuntimePortInit() still calls it (the coordinator removes that call).
 void RtPickingPortInit() {
-    int n = 0;
-    n += RtPickingSceneRegister();
-
-    // [[maybe_unused]]: the perf build strips printf's arguments (B5-11), which
-    // leaves `grid` read by nothing there. The registration call stays OUTSIDE
-    // the printf for exactly that reason.
-    [[maybe_unused]] int grid = RtPickingGridRegister();
-    printf("[RtPort] Picking: %d exports + %d grid addresses registered\n", n, grid);
 }

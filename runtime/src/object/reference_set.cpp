@@ -64,12 +64,7 @@
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
-
-// Declared locally rather than including standalone/resolve.h, which drags in
-// <windows.h> (PLAN §4.1 decision 1). Byte-identical to external_set.cpp's,
-// set_avl.cpp's and avl_trees.cpp's; the linker checks they agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc by name
 
 // `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
 // here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the
@@ -97,16 +92,8 @@ ProbeCounters g_fc = {};
 // pinning 0x1800c6e60 plus the `+0x640` offset plus the two `[0x18014b39x]`
 // import slots keeps four fragile facts out of this file.
 //
-// CACHE A HIT, RETRY A MISS — the RtResolveCached contract. Freezing a null
-// here would leak every node for the life of the process if anything ran before
-// the allocator armed its address door.
+// B3R RT-Core: the static is called by name.
 // ---------------------------------------------------------------------------
-static void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
 
 // The refcount release idiom retail inlines at 0x18002cbda. ENDGAME B.3.1
 // step 2: that idiom IS `~Filename` (0x180006980), retail's release asymmetry
@@ -350,7 +337,7 @@ Node* PairCtor(Node* node, const ReferenceEntry* src, Node* parent) {
 // parameter because a by-address caller passes it.
 // ---------------------------------------------------------------------------
 Node* AllocNode(void* /*ignored, never read*/, const ReferenceEntry* src, Node* parent) {
-    Node* n = static_cast<Node*>(MemAlloc(0x30, 8));
+    Node* n = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x30, 8));   // 0x1800c7a50
     if (n == nullptr) { ++g_fc.allocFail; return nullptr; }
     return PairCtor(n, src, parent);
 }
@@ -487,39 +474,3 @@ Node** Insert(Set* set, Node** out, const uint32_t* key, const Filename* value) 
 }
 
 }  // namespace rtrefset
-
-// ============================================================================
-// Registration
-// ============================================================================
-//
-// ADDRESSES ONLY — none of these seven has an export in either shipped build.
-// They are template instantiations MSVC emitted into the DLL's private text,
-// and `dispatch_slot_map.py` has nothing to say about them. That is NOT the
-// `AEAA`-means-private confusion (reference_aeaa_is_private_not_unexported.md):
-// the export table was searched for each and returns nothing, which is a
-// different fact from "the mangling says private".
-//
-// The only caller in this tree is `SerializeReferenceTable`'s READ path
-// (runtime/src/object/external_reftable.cpp), which reaches `Insert` BY
-// ADDRESS because retail does — an in-DLL `rel32` at 0x1800bcc65. Our port
-// calls `rtrefset::Insert` directly by symbol, so the registration is what
-// keeps the row alive for anything that still jumps to 0x18002cb90.
-// ============================================================================
-int RtObjectReferenceSetRegister() {
-    int n = 0;
-
-    RegisterRuntimeAddr(0x18002dac0, (void*)&rtrefset::RotateLeft);   ++n;
-    RegisterRuntimeAddr(0x18002dbf0, (void*)&rtrefset::RotateRight);  ++n;
-    RegisterRuntimeAddr(0x18002d4b0, (void*)&rtrefset::Retrace);      ++n;
-    RegisterRuntimeAddr(0x18002e570, (void*)&rtrefset::PairCtor);     ++n;
-    RegisterRuntimeAddr(0x18002e5d0, (void*)&rtrefset::AllocNode);    ++n;
-    RegisterRuntimeAddr(0x18002d180, (void*)&rtrefset::InsertCore);   ++n;
-    RegisterRuntimeAddr(0x18002cb90, (void*)&rtrefset::Insert);       ++n;
-
-    printf("[RtPort]   Object::Set<ReferenceEntry>: %d address doors registered "
-           "(no export exists for any of them). Their only caller in this tree "
-           "is SerializeReferenceTable's READ path, so a 0 here on a run that "
-           "never loaded a save is expected -- see "
-           "docs/runtime_port/WAVE11F_LANE_AVL.md.\n", n);
-    return n;
-}

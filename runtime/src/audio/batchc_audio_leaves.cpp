@@ -44,6 +44,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/audio/Device.h"
 #include "../../types/audio/SoundBuffer.h"
+#include "../../types/system/MemoryAllocator.h"
 
 // ENDGAME B.3.7 block B4: this file's private copy of `AudioChannel` and its
 // `ChannelAt` / `FreeChannelPlatform` forward declaration are gone — the
@@ -51,8 +52,6 @@
 // the call is the member. The SoundBuffer offsets are the class's fields.
 
 namespace {
-
-using VoidThisFn = void (*)(void*);
 
 // `?_singleton@Device@Audio@@0PEAV12@EA` @ 0x1801fe760 — ordinal 4805, an
 // exported DATA symbol (carry-over 5: it stays a slot). Retail derefs it
@@ -66,8 +65,8 @@ void* AudioDeviceSingleton() {
 
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — PORTED. Retail's
 // four call sites here test for null OUTSIDE the call; MemFree tests again
-// inside, so the behaviour is identical.
-void MemFree(void* p) { RT_EXPORT_ONCE(VoidThisFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p); }
+// inside, so the behaviour is identical. Called by name (B3R).
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 }  // namespace
 
@@ -152,23 +151,4 @@ Audio::SoundBuffer::~SoundBuffer() {
         MemFree(_data);                                      // +0x38
     if (_wmaData != nullptr)
         MemFree(_wmaData);                                   // +0x48
-}
-
-// ============================================================================
-// Registration — BOTH DOORS, unconditionally.
-//
-// 0x1800e03b0 and 0x1800de0e0 were grepped across code/, engine/, runtime/,
-// standalone/ and dx11/ first. 0x1800e03b0 appears only as a RT_DELDTOR row in
-// runtime/src/object/deleting_dtor.cpp, which reaches it through ResolveAddr
-// (registry-first) and therefore now lands on the body above — the intent.
-// 0x1800de0e0 appears nowhere at all. Neither is an identity token.
-// ============================================================================
-extern "C" int RtAudioBatchCLeavesRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?OnSoundBufferDeleted@Device@Audio@@QEAAXPEBVSoundBuffer@2@@Z",
-                          (void*)&RtAudio_Device_OnSoundBufferDeleted); ++n;
-    RegisterRuntimeAddr(0x1800de0e0ull, (void*)&RtAudio_Device_OnSoundBufferDeleted);
-
-    return n;
 }

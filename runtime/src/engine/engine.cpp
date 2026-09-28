@@ -195,17 +195,10 @@
 #include "../../types/engine/Engine.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/video/Context.h"  // B3R: RtVideo_Context_Dtor, Video_Context_OperatorDelete
+#include "../../types/collection/Collection.h"  // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
 
 // ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring the seam locally: resolve.h
-// drags in <windows.h>, and PLAN §4.1 requires runtime/src/ to stay
-// platform-neutral. This declaration must stay byte-identical to resolve.h's.
-// It has to sit at FILE scope, not inside the anonymous namespace below, or it
-// would declare a different, internal-linkage function that never links.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // The engine layouts live in `namespace RtEngine` (see the header banners): the
 // exe tree's engine/types/{MainLoop,UpdateLoop}.h define GLOBAL structs of the
@@ -590,10 +583,8 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
 
     void* context = self->_context;
     if (context) {
-        reinterpret_cast<VoidThisFn>(
-            ResolveAddr(Module::Runtime, 0x1800f16e0))(context);   // ~Context
-        reinterpret_cast<VoidThisFn>(
-            ResolveAddr(Module::Runtime, 0x180018500))(context);   // operator delete
+        RtVideo_Context_Dtor(static_cast<Video::Context*>(context));   // ~Context 0x1800f16e0
+        Video_Context_OperatorDelete(context);                        // operator delete 0x180018500
     }
     self->_context = nullptr;
 
@@ -617,61 +608,9 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
     // struct from `ArraySpec`, defined in array_destroy.cpp) — that is new
     // Collection-side plumbing this batch does not own (runtime/src/collection
     // is out of scope here), so this stays a by-address call rather than a
-    // forced (and wrong) `.~Array()`.
-    reinterpret_cast<VoidThisFn>(
-        ResolveAddr(Module::Runtime, 0x180033880))(&self->_videoResources);
+    // forced (and wrong) `.~Array()`. B3R: called by name.
+    rtcoll::RtColl_ArrayDtorElem_180033880(&self->_videoResources);
 
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Both the exported NAME and the retail ADDRESS are registered for every port.
-// Registering only the name would leave `ResolveAddr(Module::Runtime, …)`
-// callers on the DLL — the gap WAVE3_LANE_A.md found the hard way, and the one
-// game_main.cpp would fall into: it resolves the MainLoop ctor/dtor by name but
-// several sites in this tree reach Runtime functions by address after a failed
-// name resolve.
-//
-// Every mangled name below is ONE string literal on ONE line. A name split
-// across lines or hidden behind a named constant is invisible to
-// tools/runtime_census.py and tools/export_name_audit.py, and a port the census
-// cannot see is a port nobody will ever check
-// (reference_census_cannot_see_nonliteral_registrations.md — it has already
-// produced two false progress reports in this project).
-//
-// The integrator wires `RtEngineCoreRegister()` into
-// runtime/src/engine/rt_engine_port.cpp alongside lane A's register function;
-// this lane does NOT create or edit that file.
-int RtEngineCoreRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??0MainLoop@Engine@@QEAA@PEAV11@@Z", (void*)&RtEngine_MainLoop_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800dd6b0, (void*)&RtEngine_MainLoop_Ctor);
-
-    RegisterRuntimeExport("??1MainLoop@Engine@@QEAA@XZ", (void*)&RtEngine_MainLoop_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800dd640, (void*)&RtEngine_MainLoop_Dtor);
-
-    RegisterRuntimeExport("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z", (void*)&RtEngine_MainLoop_SetNextLoop); ++n;
-    RegisterRuntimeAddr(0x1800dd7a0, (void*)&RtEngine_MainLoop_SetNextLoop);
-
-    // MOVED to runtime/src/engine/engine_lifecycle.cpp (Wave 9 lane ENG), which
-    // registers all four. The "allocator, NO-GO" reason that used to stand here
-    // was discharged by Wave 9 lanes E/E2/E3/E4:
-    //   ??0Engine@0@QEAA@PEAX@Z              0x1800dbf00
-    //   ??1Engine@0@QEAA@XZ                  0x1800dbec0
-    //   ?Startup@Engine@1@QEAAIPEBDII_N@Z    0x1800db8a0
-    //   ?Shutdown@Engine@1@QEAAXXZ           0x1800db4f0
-    //
-    // DELIBERATELY ABSENT -- see the holdback sections in the banner:
-    //   ?Run@MainLoop@Engine@@…              0x1800dd3c0  no oracle, kills the run
-    //   (?OnVideoError@ and ?OnVideoRestart@ are NO LONGER absent — Wave 9 lane
-    //    VIDL registers both from runtime/src/engine/mainloop_video.cpp. They
-    //    are not registered HERE because a duplicate registration is
-    //    last-binding-wins and would silently make one of the two bodies dead
-    //    code; see reference_grep_for_the_port_before_writing_it.md.)
-    //   ?_singleton@MainLoop@Engine@@1PE…    0x1801fe750  DATA symbol, nothing to port
-    return n;
 }
 
 // ?_singleton@MainLoop@Engine@@1PEAV12@EA (0x1801fe750) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);

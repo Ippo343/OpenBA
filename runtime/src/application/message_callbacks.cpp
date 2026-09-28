@@ -44,19 +44,13 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"
-#include "../engine/mainloop_internal.h"   // ENDGAME B.3.7: rtengine::AtomicResolve
-#include <atomic>
+#include "../../types/system/MemoryAllocator.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
 using rtsetavl::Node;
 using rtsetavl::Set;
-
-// Declared locally rather than by including standalone/resolve.h, which drags
-// in <windows.h> (PLAN §4.1 decision 1). Byte-identical to array.cpp:133.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // The two layouts must agree, and this is where that is enforced. The header
 // keeps `Application` free of runtime/src/ includes by declaring the Set as two
@@ -95,22 +89,11 @@ inline Set* CallbackSet(App* app) {
 // `0x18000a5b0` open-codes `EnterCriticalSection(*0x1801fc718 + 0x640);
 // Allocate(*0x1801fc718, 0x30, 8); LeaveCriticalSection(...)`. That triple IS
 // `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` at 0x1800c7a50 — lane Q
-// disassembled it and proved the composition instruction for instruction, and
-// runtime/src/collection/array.cpp:155 already reaches it this way.
-//
-// Cache a hit, RETRY a miss (the RtResolveCached contract). Freezing a null
-// would make every later registration silently fail for the life of the
-// process — the ordering defect attempt 14 fixed.
+// disassembled it and proved the composition instruction for instruction.
+// Called by name (B3R).
 // ---------------------------------------------------------------------------
-// ENDGAME B.3.7 (B6-5): a namespace-scope atomic slot, not a function-local
-// `static Fn fn` first-call cache.
-std::atomic<void*> g_memAlloc{nullptr};
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    Fn fn = reinterpret_cast<Fn>(rtengine::AtomicResolve(g_memAlloc, [] {
-        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    }));
-    return fn ? fn(bytes, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
 }  // namespace
@@ -281,27 +264,4 @@ void Application::Application::UnregisterMessageCallback(uint32_t id) {
 
 extern "C" void RtApp_UnregisterMessageCallback(App* app, unsigned id) {
     app->Application::UnregisterMessageCallback(id);
-}
-
-// ============================================================================
-// Registration
-//
-// BOTH DOORS for the two exports (dx11's import table asks by NAME, retail's
-// own `PlatformShutdown` reaches the erase by a direct near CALL that our port
-// replaces wholesale, and `?UnregisterMessageCallback@`'s address is reachable
-// by anything that resolves it that way). The address door for 0x18000a5b0 is
-// registered because retail's `RegisterMessageCallback` calls it by direct near
-// CALL — anything else that still goes by address reaches this port.
-// ============================================================================
-int RtApplicationMessageCallbacksRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z",
-                          (void*)&RtApp_RegisterMessageCallback); ++n;
-    RegisterRuntimeExport("?UnregisterMessageCallback@Application@1@QEAAXI@Z",
-                          (void*)&RtApp_UnregisterMessageCallback); ++n;
-
-    RegisterRuntimeAddr(0x18009fa60, (void*)&RtApp_RegisterMessageCallback);
-    RegisterRuntimeAddr(0x18009fa20, (void*)&RtApp_UnregisterMessageCallback);
-    RegisterRuntimeAddr(0x18000a5b0, (void*)&RtApp_SetAllocNode);
-    return n;
 }

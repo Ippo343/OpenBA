@@ -104,9 +104,6 @@
 #include "../../types/io/FileSystem.h"
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_ExtArrayElem bridge
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace RtObject {
 
 using RtSystem::Filename;
@@ -127,13 +124,9 @@ static_assert(sizeof(Serializer) == 0x10, "the pair retail keeps at [rsp+0x20]")
 // verbatim; it is not derived from anything.
 constexpr uint32_t kCompiledMagic = 0x5412a91fu;
 
-// ---- doors ----------------------------------------------------------------
-// All names except the four addresses called out below.
-using CompOpenFn   = bool  (*)(RtIo::CompressedStream* self, RtIo::Stream* src, int flag);
-using VoidSelfFn    = void  (*)(void* self);
-using CloseFileFn   = void  (*)(RtIO::FileSystem*, RtIO::FileInfo*);
-using IsDerivedFn   = bool  (*)(const void* self, uint32_t typeId);
-using StrSerFn      = void  (*)(String* self, Serializer* ser);
+// ---- the two raw function-pointer shapes this body calls through ----------
+// B3R RT-Core: CompressedStream::Open / Commit, FileSystem::CloseFile,
+// Base::IsDerivedFrom and String::Serialize are called by name.
 using SerFactoryFn  = void* (*)(void* encoding, Serializer* ser, int flag);
 using FactoryFn     = void* (*)();
 
@@ -174,9 +167,7 @@ void ArraySetSize(void* arr, int32_t n) {
 void CloseIfOpen(RtIO::FileInfo* fi) {
     if (fi->handle == -1) return;
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    RtIO::FileSystem* fs = reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);
-    RT_EXPORT_ONCE(CloseFileFn,
-        "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fi);
+    ::IO::FileSystem::_singleton->CloseFile(*fi);                 // 0x1800accc0
 }
 
 // The two Serializer-implementation entry points this body drives, named once.
@@ -276,9 +267,8 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     if (!static_cast<::IO::FileStream&>(cfsObj->_file).Open(
             *reinterpret_cast<const ::System::Filename*>(path))) {   // B.3.x bridge
         ++g_lc.openFileFailed;
-    } else if (!RT_EXPORT_ONCE(CompOpenFn,
-                   "?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
-                       &cfs.base, &cfs.file.base.base, 1)) {
+    } else if (!RtIo::RtIo_CompressedStream_Open(                   // 0x1800aa560
+                   &cfs.base, &cfs.file.base.base, 1)) {
         ++g_lc.openCompFailed;
     } else {
         // ---- 1800bc69b..1800bc6ca ---------------------------------------
@@ -347,8 +337,9 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // through the Object accessor slot (external_class.cpp,
                 // ENDGAME B.3.9 OBJ D6 step 1) -- no lazy RT_DATA_SLOT cache
                 // on the loader thread.
-                const bool isExternal = RT_EXPORT_ONCE(IsDerivedFn,
-                    "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, ::Object::External::TypeId());
+                const bool isExternal =                           // 0x1800c0390
+                    reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(
+                        ::Object::External::TypeId());
                 if (!isExternal || obj == nullptr) {              // 1800bc758/761
                     ++g_lc.notAnExternal;
                     bad = true;
@@ -387,9 +378,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 uint8_t* elem = reinterpret_cast<uint8_t*>(obj->_refs._data);
                 for (int32_t i = 0; i < depCount; ++i, elem += 0x10) {
                     ++g_lc.deps;
-                    RT_EXPORT_ONCE(StrSerFn,
-                        "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(
-                            reinterpret_cast<String*>(elem), &ser);      // 1800bc7e9
+                    reinterpret_cast<::System::String*>(elem)->Serialize(&ser);   // 1800bc7e9
                     SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc
                     SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811
                 }
@@ -423,7 +412,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     if (keep) {
         if (cfs.base.headerSize > 0 && cfs.base.base.direction == 1) {   // 1800bc85b/861
             ++g_lc.committed;
-            RT_EXPORT_ONCE(VoidSelfFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&cfs.base);
+            RtIo::RtIo_CompressedStream_Commit(&cfs.base);                 // 0x1800a9ee0
         }
         CloseIfOpen(&cfs.file.base.file);                                // 1800bc872
     }
@@ -467,18 +456,3 @@ void DumpLoadCounters() {
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtObjectExternalLoadRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z",
-                          (void*)&RtObject::RtObject_External_Load); ++n;
-    RegisterRuntimeAddr(0x1800bc620, (void*)&RtObject::RtObject_External_Load);
-
-    printf("[RtPort]   Object::External::Load "
-                "(wave 11f lane IOSTREAM): %d export registered\n", n);
-    std::atexit(&RtObject::DumpLoadCounters);
-    return n;
-}

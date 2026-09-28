@@ -97,15 +97,8 @@
 #include "../../types/input/Input.h"
 #include "../../types/audio/Audio.h"
 #include "../../types/audio/Device.h"
-
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — same reasoning rt_port.h gives for RegisterRuntimeExport: resolve.h drags
-// in <windows.h> and PLAN.md section 4.1 keeps runtime/src/ platform-neutral.
-// This declaration must stay byte-identical to resolve.h's.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/engine/Engine.h"     // B3R: rtengine::Ctor_* declarations
+#include "../../types/system/Value.h"      // B3R: RtSystem_Random_Ctor
 
 // The platform half (singleton_ctors_win.cpp).
 void RtLaneXPlatformLockInit(void* cs);
@@ -224,6 +217,14 @@ static_assert(kSizePersistence >= offsetof(RtIo::Persistence, savePath) + 8,
               "Persistence subject must cover _savePath");
 static_assert(kSizeAudioDevice == 0xa98 + 64 * 0x20,
               "Audio::Device subject must cover the whole of loop 2");
+
+}  // namespace
+
+// B3R RT-Core: the fifteen constructor bodies below have external linkage
+// (declared in runtime/types/engine/Engine.h, namespace rtengine) because
+// engine_lifecycle.cpp's Engine::Engine / Startup call them by name; they were
+// reached through the ??0 / ??1 name rows before.
+namespace rtengine {
 
 // ===========================================================================
 // System::MemoryAllocator   ??0MemoryAllocator@System@@QEAA@XZ  0x1800c79a0
@@ -352,9 +353,8 @@ void* Ctor_InternalFactory(void* self) {
     W64(self, 0x08, 0);
     W64(self, 0x10, 0);
     W64(self, 0x18, 0);
-    using RandomCtorFn = void* (*)(void*);
-    RT_EXPORT_ONCE(RandomCtorFn, "??0Random@System@@QEAA@XZ")(
-        static_cast<uint8_t*>(self) + offsetof(RtObject::InternalFactory, random));
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(          // 0x1800c7f20
+        static_cast<uint8_t*>(self) + offsetof(RtObject::InternalFactory, random)));
     Publish(SlotInternalFactory(), self);
     return self;
 }
@@ -767,6 +767,10 @@ void* Ctor_AudioDevice(void* self) {
     return self;
 }
 
+}  // namespace rtengine
+
+namespace {
+
 // ===========================================================================
 // THE PROBE — this lane's only executor, and its effectiveness control
 // ===========================================================================
@@ -895,26 +899,10 @@ void ControlMustDetect(size_t n) {
 // Evidence and the full crossing list: docs/runtime_port/WAVE22_LANE_ALLOC.md §2.2.
 // ---------------------------------------------------------------------------
 void RtSingletonCtorsPortInit() {
-    int n = 0;
-    RegisterRuntimeExport("??0MemoryAllocator@System@@QEAA@XZ",       (void*)&Ctor_MemoryAllocator);     ++n;
-    RegisterRuntimeExport("??1MemoryAllocator@System@@QEAA@XZ",       (void*)&Dtor_MemoryAllocator);     ++n;
-    RegisterRuntimeExport("??0Modification@IO@@QEAA@XZ",              (void*)&Ctor_Modification);        ++n;
-    RegisterRuntimeExport("??0Factory@Object@@QEAA@XZ",               (void*)&Ctor_Factory);             ++n;
-    RegisterRuntimeExport("??0ExternalFactory@Object@@QEAA@XZ",       (void*)&Ctor_ExternalFactory);     ++n;
-    RegisterRuntimeExport("??0InternalFactory@Object@@QEAA@XZ",       (void*)&Ctor_InternalFactory);     ++n;
-    RegisterRuntimeExport("??0FileSystem@IO@@QEAA@XZ",                (void*)&Ctor_FileSystem);          ++n;
-    RegisterRuntimeExport("??0Persistence@IO@@QEAA@XZ",               (void*)&Ctor_Persistence);         ++n;
-    RegisterRuntimeExport("??0Device@Video@@QEAA@W4DeviceType@01@@Z", (void*)&Ctor_VideoDevice);         ++n;
-    RegisterRuntimeExport("??0Configuration@Video@@QEAA@XZ",          (void*)&Ctor_VideoConfiguration);  ++n;
-    RegisterRuntimeExport("??0Application@0@QEAA@PEAX@Z",             (void*)&Ctor_Application);         ++n;
-    RegisterRuntimeExport("??0Device@Input@@QEAA@XZ",                 (void*)&Ctor_InputDevice);         ++n;
-    RegisterRuntimeExport("??0Configuration@Input@@QEAA@XZ",          (void*)&Ctor_InputConfiguration);  ++n;
-    RegisterRuntimeExport("??0Device@Audio@@QEAA@XZ",                 (void*)&Ctor_AudioDevice);         ++n;
-    RegisterRuntimeExport("??0Configuration@Audio@@QEAA@XZ",          (void*)&Ctor_AudioConfiguration);  ++n;
-    printf("[RtPort] Wave9 lane X (singleton ctors): %d exports registered\n", n);
-
-    // THE PROBE IS NOT CALLED FROM HERE. It runs from RuntimePortInit() after
-    // RtDataMintInit(); the split is deliberate and the reason is on the probe.
+    // B3R (registry teardown, W1 RT-Core): the fifteen ??0 / ??1 rows went --
+    // their one reader, engine_lifecycle.cpp, calls the bodies by name. This
+    // registers nothing; it stays defined only because
+    // standalone/resolve_standalone.cpp's RuntimePortInit() still calls it.
 }
 
 #undef LANEX_PROBE

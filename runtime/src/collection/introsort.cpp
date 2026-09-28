@@ -74,11 +74,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"   // rtcoll::DoorAlloc (the one allocator door)
 #include "avl_trees.h"
-
-// Declared locally rather than including standalone/resolve.h (PLAN §4.1
-// decision 1). Byte-identical to array.cpp:133; the linker checks they agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtsort {
 
@@ -361,10 +357,7 @@ void* Array16Assign(void* dstRaw, const void* srcRaw) {
     const ArrayHdr16* src = static_cast<const ArrayHdr16*>(srcRaw);
     if (dst == src) return dst;
 
-    using DtorFn = void* (*)(void*);
-    static DtorFn dtor = nullptr;          // cache a hit, retry a miss
-    if (!dtor) dtor = reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x180051d80));
-    dtor(dst);
+    rtcoll::RtColl_ArrayDtor_180051d80(dst);
 
     const int32_t n   = src->_size;
     const int32_t old = dst->_size;        // always 0 here
@@ -377,7 +370,7 @@ void* Array16Assign(void* dstRaw, const void* srcRaw) {
         // (runtime/src/collection/alloc_door.cpp) rather than a private
         // resolution of 0x1800c7a50 — same allocator, but the channel
         // `BANISHED_REDZONE` can see. `4` is this instantiation's own align.
-        dst->_data = static_cast<uint8_t*>(rtcoll::DoorAlloc()(
+        dst->_data = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(
             static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 0x10, 4));
     }
     for (int32_t k = 0; k < dst->_size; ++k) {
@@ -436,24 +429,9 @@ void* EffectSlotAssign(void* dstRaw, const void* srcRaw) {
 
     // Through the port-aware address door, so the 0x180050d30 registration
     // below is what runs and the census can see the edge.
-    using AssignFn = void* (*)(void*, const void*);
-    static AssignFn assign = nullptr;
-    if (!assign)
-        assign = reinterpret_cast<AssignFn>(ResolveAddr(Module::Runtime, 0x180050d30));
-    assign(d + 0x30, s + 0x30);
+    rtsort::Array16Assign(d + 0x30, s + 0x30);
 
     return d;
 }
 
 }  // namespace rtsort
-
-// ============================================================================
-// Registration. ADDRESS DOORS ONLY — none of the three is exported.
-// ============================================================================
-int RtCollectionSortRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x1800264a0, (void*)&rtsort::SortByKey70);      ++n;
-    RegisterRuntimeAddr(0x180050d30, (void*)&rtsort::Array16Assign);    ++n;
-    RegisterRuntimeAddr(0x180051650, (void*)&rtsort::EffectSlotAssign); ++n;
-    return n;
-}

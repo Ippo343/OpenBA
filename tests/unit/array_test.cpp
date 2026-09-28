@@ -30,15 +30,12 @@
 
 #include <cstdint>
 #include <cstring>
+#include <new>
 #include <vector>
 
 #include "collection/Collection.h"
 #include "system/Filename.h"
 #include "../../runtime/src/collection/array_internal.h"
-
-// The host stub's resolver hook (tests/unit/rt_port_stub.cpp). The PkgEntry
-// case installs one; every other case leaves it null.
-extern uintptr_t (*g_unitResolveAddr)(int module, uintptr_t ghidraAddr);
 
 namespace {
 
@@ -293,80 +290,75 @@ UNIT_TEST(array_destructor_destroys_the_live_elements_then_frees) {
 // row nothing exercises. It is driven here through the same explicit-spec
 // instantiation the registered shim uses.
 //
-// The row's two element operations reach the Filename copy ctor (0x1800067d0)
-// and the string-release range helper (0x180026b50) BY ADDRESS. On the host
-// there is no registry, so the test installs doubles for exactly those two
-// addresses and records their arguments: what is under test is which ARM
-// SetSizeCore takes and over which RANGE, not what a Filename copy ctor does.
+// The row's two element operations are the Filename copy ctor (0x1800067d0)
+// and the string-release range helper (0x180026b50), and B3R RT-Core calls
+// both BY NAME, so this case runs the REAL bodies (filename.cpp and
+// array_destroy.cpp are linked here). It used to install doubles for the two
+// addresses through the stub resolver; it now observes the same two facts
+// through each element's System::String reference count instead:
+//   * the shrink arm releases exactly the truncated TAIL, in place (buffer and
+//     capacity kept, the survivors untouched);
+//   * the realloc arm copy-constructs the survivors (one reference taken) and
+//     then releases the OLD buffer's elements (one reference dropped), so every
+//     survivor's count is unchanged and its string is shared, not duplicated.
 
 namespace {
 
-struct PkgCall { const uint8_t* base; int count; };
-std::vector<PkgCall>* g_pkgDestroyLog = nullptr;
-int g_pkgAssignCalls = 0;
-
-void* FakeFilenameCopyCtor(void* dst, const void* src) {
-    *static_cast<uint64_t*>(dst) = *static_cast<const uint64_t*>(src);
-    ++g_pkgAssignCalls;
-    return dst;
-}
-void FakeReleaseStrings(void* /*ignoredThis*/, uint8_t* base, int count) {
-    if (g_pkgDestroyLog) g_pkgDestroyLog->push_back({base, count});
-}
-
-uintptr_t PkgResolver(int /*module*/, uintptr_t addr) {
-    if (addr == 0x1800067d0ull) return reinterpret_cast<uintptr_t>(&FakeFilenameCopyCtor);
-    if (addr == 0x180026b50ull) return reinterpret_cast<uintptr_t>(&FakeReleaseStrings);
-    return 0;
+// System::String's reference count lives at `_data - 4` (String.h).
+int32_t RefCount(const System::Filename& f) {
+    return *reinterpret_cast<const int32_t*>(f._data - 4);
 }
 
 }  // namespace
 
 UNIT_TEST(array_pkgentry_shrink_arm_destroys_the_tail_in_place) {
-    std::vector<PkgCall> destroys;
-    g_pkgDestroyLog = &destroys;
-    g_pkgAssignCalls = 0;
-    g_unitResolveAddr = &PkgResolver;
+    // Four names, no path separators (so the copy ctor's AdjustDelimiters has
+    // nothing to rewrite and the copy shares the buffer). Each holds one
+    // reference of its own.
+    System::Filename names[4] = { System::Filename("one"), System::Filename("two"),
+                                  System::Filename("three"), System::Filename("four") };
 
-    // The instantiation the registered 0x1800298f0 shim uses.
-    rtcoll::ArrayWithSpec<&rtcoll::kSpec_PkgEntry> a;
-    a.SetSize(4);                       // grow: exact fit, capacity 4
-    CHECK_EQ(a.GetCapacity(), 4);
-    uint8_t* buf = a.GetData();
-    CHECK(buf != nullptr);
-    std::memset(buf, 0, 4 * 0x10);      // the row's init is null: the tail is
-                                        // whatever the allocation held
+    {
+        // The instantiation the registered 0x1800298f0 shim uses.
+        rtcoll::ArrayWithSpec<&rtcoll::kSpec_PkgEntry> a;
+        a.SetSize(4);                       // grow: exact fit, capacity 4
+        CHECK_EQ(a.GetCapacity(), 4);
+        uint8_t* buf = a.GetData();
+        CHECK(buf != nullptr);
+        std::memset(buf, 0, 4 * 0x10);      // the row's init is null
+        for (int i = 0; i < 4; ++i) {       // each element takes a reference
+            new (buf + i * 0x10) System::Filename(names[i]);
+            CHECK_EQ(RefCount(names[i]), 2);
+        }
 
-    destroys.clear();
-    a.SetSize(2);                       // THE SHRINK ARM
+        a.SetSize(2);                       // THE SHRINK ARM
 
-    CHECK_EQ(a.GetSize(), 2);
-    CHECK_EQ(a.GetCapacity(), 4);       // no reallocation, no free
-    CHECK(a.GetData() == buf);
-    CHECK_EQ(static_cast<int>(destroys.size()), 1);
-    if (destroys.size() == 1) {
-        // base is the TAIL, not the whole buffer — the distinction the realloc
-        // arm and this arm are impossible to tell apart from inside the callee.
-        CHECK(destroys[0].base == buf + 2 * 0x10);
-        CHECK_EQ(destroys[0].count, 2);
+        CHECK_EQ(a.GetSize(), 2);
+        CHECK_EQ(a.GetCapacity(), 4);       // no reallocation, no free
+        CHECK(a.GetData() == buf);
+        CHECK_EQ(RefCount(names[0]), 2);    // survivors untouched
+        CHECK_EQ(RefCount(names[1]), 2);
+        CHECK_EQ(RefCount(names[2]), 1);    // the tail, released in place
+        CHECK_EQ(RefCount(names[3]), 1);
+
+        // And the realloc arm of the same row, for the contrast: it copies the
+        // two survivors into the new buffer and releases the OLD buffer's two.
+        a.SetSize(5);
+        CHECK(a.GetCapacity() >= 5);
+        uint8_t* nbuf = a.GetData();
+        CHECK(nbuf != buf);
+        CHECK_EQ(RefCount(names[0]), 2);    // +1 copy, -1 old element
+        CHECK_EQ(RefCount(names[1]), 2);
+        CHECK(*reinterpret_cast<char**>(nbuf + 0x00) == names[0]._data);   // shared
+        CHECK(*reinterpret_cast<char**>(nbuf + 0x10) == names[1]._data);
+        // The grown tail (elements 2..4) is NOT initialised -- the row has no
+        // init arm -- so null it before the final shrink releases all five.
+        std::memset(nbuf + 2 * 0x10, 0, 3 * 0x10);
+
+        a.SetSize(0);                       // releases the two survivors
+        CHECK_EQ(RefCount(names[0]), 1);
+        CHECK_EQ(RefCount(names[1]), 1);
     }
-    CHECK_EQ(g_pkgAssignCalls, 0);      // the shrink arm copies nothing
-
-    // And the realloc arm of the same row, for the contrast: it destroys the
-    // WHOLE old buffer after copying, and it does copy.
-    destroys.clear();
-    a.SetSize(5);
-    CHECK_EQ(g_pkgAssignCalls, 2);      // the two survivors, copy-constructed
-    CHECK_EQ(static_cast<int>(destroys.size()), 1);
-    if (destroys.size() == 1) {
-        CHECK(destroys[0].base == buf);
-        CHECK_EQ(destroys[0].count, 2); // the OLD size, over the OLD buffer
-    }
-
-    a.SetSize(0);
-    destroys.clear();
-    g_pkgDestroyLog = nullptr;
-    g_unitResolveAddr = nullptr;
 }
 
 // ============================================================================

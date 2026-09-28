@@ -295,9 +295,3 @@ void KeyMap::Load() {
 void RtInput_KeyMap_Load(void* selfPtr) {
     reinterpret_cast<Input::KeyMap*>(selfPtr)->Input::KeyMap::Load();
 }
-
-int RtInputKeyMapLoadRegister() {
-    RegisterRuntimeExport("?Load@KeyMap@Input@@QEAAXXZ", (void*)&RtInput_KeyMap_Load);
-    RegisterRuntimeAddr(0x1800a7190, (void*)&RtInput_KeyMap_Load);
-    return 1;
-}

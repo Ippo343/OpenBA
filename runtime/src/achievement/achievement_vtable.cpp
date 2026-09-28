@@ -159,7 +159,6 @@
 // (reference_porting_can_grow_the_cutover_surface.md).
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -167,14 +166,13 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/object/External.h"
+#include "../../types/object/Internal.h"
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // (ENDGAME B.3.9 ENG: the thirteen stores are the real constructor
 // `Achievement()` now; the ??0 door that stamped the MINTED tables is retired.)
@@ -213,29 +211,11 @@ void DestroyCodec(ReaderWriter* rw) {
     delete AsRw(rw);
 }
 
-// Two unexported template instantiations reached by ADDRESS (no mangled name
-// exists). Both addresses are REGISTERED by runtime/src/object/
-// (external_ptr_serialize.cpp, internal_ptr_array_serialize.cpp), so
-// ResolveAddr — registry first — lands on the ports.
+// Two unexported template instantiations (no mangled name exists), ours in
+// runtime/src/object/ (external_ptr_serialize.cpp,
+// internal_ptr_array_serialize.cpp), called by name (B3R):
 //   0x180006d10  ExternalPtr<Achievement::Achievement>::Serialize
 //   0x180009fa0  serialize N InternalPtr<Achievement::GoalInstance>
-// ENDGAME B.3.7: namespace-scope ATOMIC caches (RULE B6-5 — Persist runs on
-// the LOADER thread on every save load, B37_RULES §5), not function-local
-// statics.
-std::atomic<void*> g_ptrSerAchievement{nullptr};
-std::atomic<void*> g_serGoalInstancePtrs{nullptr};
-
-void* RuntimeAddr(std::atomic<void*>& slot, uintptr_t addr) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, addr));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-using PtrSerializeFn   = void (*)(void*, Serializer*);
-using ArraySerializeFn = void (*)(Serializer*, int, void*);
 
 }  // namespace
 
@@ -297,8 +277,8 @@ void AchievementInstance::Persist(void* streamv) {
         return;
     }
 
-    reinterpret_cast<PtrSerializeFn>(RuntimeAddr(g_ptrSerAchievement, 0x180006d10))(
-        &_achievement, &outer);                                       // +0x20
+    RtObject_ExternalPtrSerialize_Achievement(
+        reinterpret_cast<RtObject::External**>(&_achievement), &outer);   // 0x180006d10                                       // +0x20
 
     // The INNER codec, version 0 (XOR R8D,R8D at 0x18009e522).
     Serializer inner;
@@ -311,8 +291,9 @@ void AchievementInstance::Persist(void* streamv) {
         // retail 0x180009d70 — `_goals` names kSpec_PtrZero in its type.
         _goalList._goals.SetSize(count);
     }
-    reinterpret_cast<ArraySerializeFn>(RuntimeAddr(g_serGoalInstancePtrs, 0x180009fa0))(
-        &inner, count, _goalList._goals.GetData());
+    RtObject_InternalPtrArraySerialize_GoalInstance(                // 0x180009fa0
+        reinterpret_cast<::IO::Serializer*>(&inner), count,          // B.3.x bridge
+        reinterpret_cast<RtObject::InternalBasePtr*>(_goalList._goals.GetData()));
 
     DestroyCodec(rwInner);
     DestroyCodec(rwOuter);

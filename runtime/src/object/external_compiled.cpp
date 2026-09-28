@@ -201,15 +201,8 @@ Filename* RtObject_ExternalFactory_GetCompiledPath(Filename* ret, const Filename
 // exports its private members (reference_aeaa_is_private_not_unexported.md).
 // Calling the ported public one here would be a different function.
 //
-// THREE NAME DOORS, ZERO ADDRESS DOORS. `Find`(private), `Add` and
-// `External::Load` are all unported today and are reached by MANGLED NAME
-// through `RT_EXPORT_ONCE`, so each one follows a later port automatically and
-// each is visible to tools/unsatisfied_export_scan.py. None of them is reached
-// by address, which is the door class that silently keeps using the DLL
-// (reference_bypassed_port_needs_a_source_checker.md).
-using FindPrivateFn = External* (*)(ExternalFactory*, const Filename*);
-using AddFn         = void (*)(ExternalFactory*, External*);
-using ExtLoadFn     = External* (*)(const Filename*, External*);
+// B3R RT-Core: `Find`(private, 0x1800be0e0), `Add` (0x1800be570) and
+// `External::Load` (0x1800bc620) are ported and called by name.
 
 const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
                                                     const Filename* path) {
@@ -236,9 +229,8 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
     RtObject_ExternalFactory_ExpandRelativePath(
         self, reinterpret_cast<Filename*>(&expanded), path, true);
 
-    External* found = RT_EXPORT_ONCE(FindPrivateFn,
-        "?Find@ExternalFactory@Object@@AEAAPEAVExternal@2@AEBVFilename@System@@@Z")
-        (self, reinterpret_cast<const Filename*>(&expanded));
+    External* found = RtObject_ExternalFactory_Find(
+        self, reinterpret_cast<const Filename*>(&expanded));    // private Find
 
     const External* result = nullptr;
 
@@ -247,8 +239,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
         ++g_cc.cacheHit;
         if (self->_loadEnabled) {
             ++g_cc.hitReAdded;
-            RT_EXPORT_ONCE(AddFn, "?Add@ExternalFactory@Object@@QEAAXPEAVExternal@2@@Z")
-                (self, found);
+            RtObject_ExternalFactory_Add(self, found);
         } else {
             ++g_cc.hitNotReAdded;
         }
@@ -268,9 +259,8 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
         // against it is not a self-check. It is the reason the two functions
         // share a file.
 
-        External* loaded = RT_EXPORT_ONCE(ExtLoadFn,
-            "?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z")
-            (reinterpret_cast<const Filename*>(&compiled), nullptr);
+        External* loaded = RtObject_External_Load(
+            reinterpret_cast<const Filename*>(&compiled), nullptr);
 
         if (loaded != nullptr) {
             ++g_cc.loaded;
@@ -280,8 +270,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
             // for instruction. `_path` is a POD member of the not-yet-converted
             // `Object::External`, so the left-hand side comes through the bridge.
             Sys(loaded->_path) = expanded;
-            RT_EXPORT_ONCE(AddFn, "?Add@ExternalFactory@Object@@QEAAXPEAVExternal@2@@Z")
-                (self, loaded);                                   // 0x1800bf5b1
+            RtObject_ExternalFactory_Add(self, loaded);           // 0x1800bf5b1
             result = loaded;
         } else {
             ++g_cc.loadFailed;
@@ -309,31 +298,3 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
 // door went with the minted ??_7CompiledExternal@Object@@6B@ row and its
 // RT_DELDTOR row 0x18000b7e0, its only callers; the body is the real
 // Object::CompiledExternal::~CompiledExternal (external_class.cpp).
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Global scope, like every other wave's Register function, because
-// runtime/src/object/rt_object_port.cpp declares it with a bare
-// `extern int RtObjectExternalCompiledRegister();`.
-int RtObjectExternalCompiledRegister() {
-    using namespace RtObject;
-    int n = 0;
-
-    // Literal mangled names, NOT constants: tools/runtime_census.py matches
-    // `RegisterRuntimeExport("<literal>"` and cannot see through a named
-    // constant (reference_census_cannot_see_nonliteral_registrations.md).
-    RegisterRuntimeExport(
-        "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z",
-        (void*)&RtObject_ExternalFactory_GetCompiledPath); ++n;
-    RegisterRuntimeAddr(0x1800bec10, (void*)&RtObject_ExternalFactory_GetCompiledPath);
-
-    RegisterRuntimeExport(
-        "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z",
-        (void*)&RtObject_ExternalFactory_FindOrLoad); ++n;
-    RegisterRuntimeAddr(0x1800bf320, (void*)&RtObject_ExternalFactory_FindOrLoad);
-
-    // THE IDENTITY LINE. Nothing else in the tree prints "Compiled".
-    printf("[Compiled] registered %d exports (GetCompiledPath, FindOrLoad)\n", n);
-    return n;
-}

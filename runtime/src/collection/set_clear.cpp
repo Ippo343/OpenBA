@@ -209,26 +209,3 @@ void Clear(Set* set) {
 }
 
 }  // namespace rtsetclear
-
-// ============================================================================
-// Registration
-//
-// ADDRESS DOORS ONLY — none of the three is exported. Checked against the
-// shipped export directory with pefile before this block was written (no name
-// resolves to 0x18000f7d0, 0x18000f890 or 0x18000fa90), and said explicitly
-// rather than left implied.
-//
-// GREPPED FIRST. Three lanes this wave nearly duplicated an existing port, so:
-// before writing a line, all three addresses were grepped across code/,
-// engine/, runtime/, standalone/ and dx11/. The only textual hits were
-// persistence_registry_win.cpp's call site and its comments — no registration
-// anywhere, so there is no shadowed binding here
-// (set_avl.cpp's banner records what one looked like when there was).
-// ============================================================================
-int RtCollectionSetClearRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x18000f7d0, (void*)&rtsetclear::Clear);          ++n;
-    RegisterRuntimeAddr(0x18000f890, (void*)&rtsetclear::DestroySubtree); ++n;
-    RegisterRuntimeAddr(0x18000fa90, (void*)&rtsetclear::DestroyElement); ++n;
-    return n;
-}

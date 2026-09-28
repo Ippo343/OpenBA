@@ -200,14 +200,3 @@ int StrICmp(const char* a, const char* b) {
 
 }  // namespace rtcrt
 
-// ============================================================================
-// Registration. ADDRESS DOORS ONLY: neither body is exported (they are static
-// CRT code linked into the DLL, named only by Ghidra's signature matcher).
-// ============================================================================
-int RtCrtStrICmpRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x18007eefc, (void*)&rtcrt::StrICmp);       ++n;
-    RegisterRuntimeAddr(0x18007eec0, (void*)&rtcrt::AsciiStrICmp);  ++n;
-    return n;
-}
-

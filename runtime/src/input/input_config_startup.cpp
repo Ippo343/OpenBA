@@ -113,6 +113,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "../../types/system/MemoryAllocator.h"
 
 // The unexported KeyMap scalar deleting destructor 0x180053440, ported in
 // keymap_save.cpp and registered there BY ADDRESS. Startup's re-entry arm used
@@ -121,9 +122,6 @@
 void* RtInput_KeyMap_DeletingDtor(void* selfPtr);
 
 namespace {
-
-typedef void* (*MemAllocFn)(uint64_t, int);
-typedef bool  (*GetBoolFn)(void* self, const char* section, const char* key, bool* out);
 
 // The four literals, read out of the DLL rather than retyped from a header.
 const char kSection[]      = "Input";          // 0x180155200
@@ -149,12 +147,11 @@ void Configuration::Load() {
     // three calls. ENDGAME B.3.9 SS1 (B39_RULES D7): the cell is the class
     // static now, so the slot-existence guard this used to need is gone; the
     // null `this` it may still hold is retail's and stays unguarded.
-    void* persistence = ::IO::Persistence::_singleton;
-    GetBoolFn get = RT_EXPORT_ONCE(GetBoolFn,
-        "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z");
-    get(persistence, kSection, kMouseClipping, &_mouseClipping);
-    get(persistence, kSection, kLegacy,        &_legacy);
-    get(persistence, kSection, kMouseDisplay,  &_mouseDisplay);
+    // IO::Persistence::Get(bool&) (0x1800b8290), called by name (B3R).
+    const ::IO::Persistence* persistence = ::IO::Persistence::_singleton;
+    persistence->Get(kSection, kMouseClipping, _mouseClipping);
+    persistence->Get(kSection, kLegacy,        _legacy);
+    persistence->Get(kSection, kMouseDisplay,  _mouseDisplay);
 }
 
 // ============================================================================
@@ -169,8 +166,8 @@ bool Configuration::Startup() {
     }
 
     // `MemAlloc(0x18, 4)` with KeyMap's ctor INLINED: three zero stores.
-    auto* keyMap = static_cast<KeyMap*>(RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(KeyMap), 4));
+    auto* keyMap = static_cast<KeyMap*>(
+        System::MemoryAllocator::MemAlloc(sizeof(KeyMap), 4));   // 0x1800c7a50
     if (keyMap) {
         keyMap->_suspendCount = 0;
         keyMap->_root         = nullptr;
@@ -192,25 +189,4 @@ extern "C" void RtInput_Configuration_Load(Input::Configuration* self) {
 
 extern "C" bool RtInput_Configuration_Startup(Input::Configuration* self) {
     return self->Input::Configuration::Startup();
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtInputConfigStartupRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Startup@Configuration@Input@@QEAA_NXZ", (void*)&RtInput_Configuration_Startup); ++n;
-    RegisterRuntimeAddr(0x1800e0d30, (void*)&RtInput_Configuration_Startup);
-
-    // 0x1800e0c80 / ?Load@Configuration@Input@@QEAAXXZ is registered -- BOTH
-    // doors, at this body -- by input.cpp, whose registration is ungated. It
-    // was registered here too, by address, on the false premise that the
-    // function had no export name; that duplicate is what made the two doors
-    // disagree, so it is gone rather than merely repointed.
-
-    // NOTHING is deliberately absent here -- see the banner. Every callee in
-    // the closure is ported: MemAlloc (lane E), ?Load@KeyMap@Input@@ (lane IOA,
-    // keymap_load.cpp:303) and ?Get@Persistence@IO@@…AEA_N@Z (Wave 4 lane C,
-    // persistence.cpp:309).
-    return n;
 }

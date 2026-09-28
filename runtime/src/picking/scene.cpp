@@ -596,12 +596,6 @@ extern "C" Picking::Scene* RtPicking_Scene_Ctor(void* selfv) {
     return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(kCellSize);   // B.3.7 bridge
 }
 
-// ??1Scene@Picking@@QEAA@XZ  0x180125890 — four `~Array` calls, +0x48, +0x30,
-// +0x18, +0x08, the fourth a tail JMP: the implicit destructor (Scene.h).
-extern "C" void RtPicking_Scene_Dtor(void* selfv) {
-    reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::~Scene();   // B.3.7 bridge
-}
-
 // ?GetUserData@Scene@Picking@@QEBAPEAXI@Z  0x1800722d0
 extern "C" void* RtPicking_Scene_GetUserData(const void* selfv, uint32_t id) {
     return reinterpret_cast<const Picking::Scene*>(selfv)->Picking::Scene::GetUserData(id);   // B.3.7 bridge
@@ -652,57 +646,4 @@ extern "C" int RtPicking_Scene_Intersect(const void* selfv, const Vector3* start
                                          Vector3* outPos, Vector3* outNormal) {
     return reinterpret_cast<const Picking::Scene*>(selfv)->Picking::Scene::Intersect(   // B.3.7 bridge
         *start, *dir, *maxDist, *outPos, *outNormal);
-}
-
-// ============================================================================
-// Registration.
-//
-// Both the mangled NAME and the retail ADDRESS are registered for every
-// function. The two registries are separate (standalone/resolve_standalone.cpp
-// keeps RtExportReg and RtAddrReg apart), and this lane's call sites use both:
-// edittool.cpp / mapquery.cpp / gameupdateloop_load.cpp go by name, while
-// citizenai_executor.cpp:406 resolves AddMesh by ADDRESS
-// (`ResolveAddr(Module::Runtime, 0x1801252e0)`). Registering only the name
-// would leave that call on the DLL and the diff oracle would under-count.
-//
-// Every name below is a string LITERAL, not one of the `k*` constants above,
-// because tools/runtime_census.py cannot see through a named constant. It CAN
-// see through a multi-line literal (see the correction above the constants),
-// so the two very long names are kept on one line for readability only, not
-// because the tool requires it.
-//
-// The AddMesh name is present in the shipped DLL at 0x1801252e0, ordinal 1571
-// — verified against the export directory with pefile, not inferred.
-// ============================================================================
-int RtPickingSceneRegister() {
-    int count = 0;
-
-    RegisterRuntimeExport("??0Scene@Picking@@QEAA@XZ", (void*)&RtPicking_Scene_Ctor); ++count;
-    RegisterRuntimeAddr(0x1801258e0, (void*)&RtPicking_Scene_Ctor);
-
-    RegisterRuntimeExport("??1Scene@Picking@@QEAA@XZ", (void*)&RtPicking_Scene_Dtor); ++count;
-    RegisterRuntimeAddr(0x180125890, (void*)&RtPicking_Scene_Dtor);
-
-    RegisterRuntimeExport("?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z", (void*)&RtPicking_Scene_AddMesh); ++count;
-    RegisterRuntimeAddr(0x1801252e0, (void*)&RtPicking_Scene_AddMesh);
-
-    RegisterRuntimeExport("?GetUserData@Scene@Picking@@QEBAPEAXI@Z", (void*)&RtPicking_Scene_GetUserData); ++count;
-    RegisterRuntimeAddr(0x1800722d0, (void*)&RtPicking_Scene_GetUserData);
-
-    RegisterRuntimeExport("?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z", (void*)&RtPicking_Scene_Intersect); ++count;
-    RegisterRuntimeAddr(0x1801246c0, (void*)&RtPicking_Scene_Intersect);
-
-    RegisterRuntimeExport("?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z", (void*)&RtPicking_Scene_SetMeshUserData); ++count;
-    RegisterRuntimeAddr(0x180125240, (void*)&RtPicking_Scene_SetMeshUserData);
-
-    RegisterRuntimeExport("?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z", (void*)&RtPicking_Scene_SetTransform); ++count;
-    RegisterRuntimeAddr(0x1800721b0, (void*)&RtPicking_Scene_SetTransform);
-
-    RegisterRuntimeExport("?RemoveMesh@Scene@Picking@@QEAAXI@Z", (void*)&RtPicking_Scene_RemoveMesh); ++count;
-    RegisterRuntimeAddr(0x180125290, (void*)&RtPicking_Scene_RemoveMesh);
-
-    RegisterRuntimeExport("?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z", (void*)&RtPicking_PickingMesh_Vertices); ++count;
-    RegisterRuntimeAddr(0x180071e10, (void*)&RtPicking_PickingMesh_Vertices);
-
-    return count;
 }

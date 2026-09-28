@@ -808,6 +808,7 @@ static_assert(std::is_trivially_destructible<RtIo::CompressedMemoryStream>::valu
 namespace RtIo {
 // ---- io/compressed_stream_open.cpp
 extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int32_t n);  // 0x1800aa020
+extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src, int32_t flag);  // 0x1800aa560 (B3R RT-Core)
 // ---- io/compressed_stream_write.cpp
 extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self);  // 0x1800a9ee0
 extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int32_t i);  // 0x1800a9810

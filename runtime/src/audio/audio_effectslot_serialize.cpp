@@ -93,11 +93,6 @@ namespace rtcoll { extern const ArraySpec kSpec_EmitterInstance; }
 using RtAudio::EffectSlot;
 using RtAudio::EmitterInstance;
 
-// Declared locally rather than including standalone/resolve.h — see rt_port.h's
-// banner on why <windows.h> must not reach runtime/src/.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // 0x180051790 — `Object::ExternalPtr<Audio::SoundEffect>::Serialize`, ported
 // and registered by runtime/src/object/external_ptr_serialize.cpp. Declared
 // here rather than by address so the call cannot silently walk past our port
@@ -186,16 +181,4 @@ extern "C" void RtAudio_Scene_SerializeEffectSlots(void* serv, int32_t count,
 
         ++s;                                                   // ADD RBX,0x40
     } while (--count != 0);                                    // DEC RSI / JNE
-}
-
-// ============================================================================
-// Registration — ADDRESS ONLY, unconditional (DIRECTION.md §2).
-// 0x180052330 is registered by runtime/src/collection/array.cpp, which owns
-// every `Array<T>::SetSize` instantiation; registering it here as well would
-// SHADOW that body (last binding wins) and make one of the two dead code.
-// ============================================================================
-int RtAudioEffectSlotSerializeRegister() {
-    RegisterRuntimeAddr(0x180052640, (void*)&RtAudio_Scene_SerializeEffectSlots);
-    RegisterRuntimeAddr(0x180051e00, (void*)&RtAudio_Scene_SerializeEmitterInstances);
-    return 2;
 }

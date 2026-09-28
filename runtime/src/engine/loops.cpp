@@ -90,7 +90,6 @@
 // platform seam for exactly this.
 // ============================================================================
 
-#include <atomic>       // ENDGAME B.3.7: RULE B6-5 namespace-scope door caches
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -98,7 +97,6 @@
 #include <new>          // ENDGAME B.3.1 step 2: placement new into a POD member
 
 #include "../../funcs/rt_port.h"
-#include "mainloop_internal.h"             // ENDGAME B.3.7: rtengine::AtomicExport
 #include "../system/pod_bridge.h"          // the one transitional POD<->class cast
 #include "../../types/engine/UpdateLoop.h"
 #include "../../types/engine/MainLoop.h"   // lane B; for MainLoop::_currentLoop
@@ -107,6 +105,12 @@
 #include "../../types/ui/DialogInstance.h" // ENDGAME B.3.7: slot 4 OnOpened
 #include "../../types/ui/Dialog.h"         // ENDGAME B.3.9 TI-UI: Dialog::TypeId()
 #include "../../types/object/External.h"
+#include "../../types/object/TypeInfo.h"       // B3R: Object::Base::IsDerivedFrom
+#include "../../types/system/Timer.h"          // B3R: the Timer statics
+#include "../../types/ui/UserInterface.h"      // B3R: RtUi_UserInterface_Ctor / _Dtor
+#include "../../types/collection/Collection.h" // B3R: rtcoll::RtColl_ArrayDtorElem_180010ab0
+#include "../object/external_compiled.h"       // B3R: RtObject_ExternalFactory_FindOrLoad
+#include "../object/external_set.h"            // B3R: RtObject_ExternalFactory_Clean
 #include "../../types/io/Modification.h"    // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../../types/system/Value.h"
 // WAVE 27 lane LOOPS: the three Draw slots and MainLoop::Draw reach into the
@@ -117,15 +121,8 @@
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_Fill8Z bridge
 
 // ----------------------------------------------------------------------------
-// ResolveAddr / ResolveExport, forward-declared rather than pulled in from
-// standalone/resolve.h — same reasoning rt_port.h gives for declaring
-// RegisterRuntimeExport locally: resolve.h drags in <windows.h>, and PLAN §4.1
-// requires runtime/src/ to stay platform-neutral. These declarations must stay
-// byte-identical to resolve.h's; the linker checks them against it.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-void*     ResolveExport(const char* mangled_name);
+// B3R: the ResolveAddr / ResolveExport declarations that stood here are gone
+// with their last readers.
 
 // ENDGAME B.3.7: the `RtSystem_Thread_Start` forward declaration that stood
 // here is gone. `Engine::Loader` derives from the real `System::Thread`
@@ -147,110 +144,23 @@ namespace {
 // runtime_census.py greps the literal at the registration site).
 
 // ============================================================================
-// Dependencies — each resolved ONCE and cached.
+// Dependencies — B3R: every one is called by name at its site below (they were
+// ResolveExport / ResolveAddr doors behind namespace-scope atomic caches). The
+// Loader runs on its own thread; a direct call needs no cache.
 // ============================================================================
-// Which door each one uses is a decision, not a habit:
-//
-//  * ResolveExport(name) — "whatever is registered". Used for everything a
-//    ported body calls, so one live object is never split between our port and
-//    the DLL's body for the same class (the Wave 5 lane D failure mode).
-//  * ResolveAddr(Module::Runtime, addr) — "the DLL", for the one helper this
-//    lane needs that the DLL does not export. Safe only because this lane never
-//    calls RegisterRuntimeAddr on that address; ResolveAddr consults the port
-//    registry FIRST (standalone/resolve_standalone.cpp), so reading bytes or
-//    taking a pointer at an address you also register hands back your own
-//    prologue (reference_resolveaddr_consults_port_registry_first.md).
-
-// ENDGAME B.3.1 step 2: `MemFreeFn` and `AdjustDelimFn` are gone with the two
-// String idioms they served — the allocator call lived inside the release
-// sequence (now ~String, 0x180006c80) and the delimiter pass lived inside the
-// Adopt-then-normalise pair (now the Filename ctor 0x18000c780).
-using FindOrLoadFn     = void* (*)(void*, const void*);         // (factory, const Filename&)
-using IsDerivedFromFn  = bool (*)(const void*, uint32_t);
-using ExtFactoryCleanFn = void (*)(void*);
-using ListCleanupFn    = void (*)(void*);
-using RefreshListFn    = void (*)(void*);
-using SetupFileSystemFn = void (*)(void*);
-using ModArrayCopyFn   = void (*)(void*, const void*);
-using UiCtorFn         = void* (*)(void*);
-using ArraySetSizeFillFn = void (*)(void*, int, const void*);
-using SecondsToTicksFn = int64_t (*)(float);
-using TicksToSecondsFn = float (*)(int64_t);
-
-// ENDGAME B.3.7 (RULE B7-7.1 / B6-5). These used to be function-local
-// `static Fn fn = ResolveExport(...)` caches -- a guarded lazy initialiser that
-// the loader thread reaches first (`FindOrLoad`/`IsDerivedFrom` from the two
-// slot-6 `Load` bodies Loader::Run dispatches; the UI ctor/dtor from the loop
-// ctor/dtor doors GameUpdateLoop::Load runs there). Each is now a
-// NAMESPACE-SCOPE atomic slot (`rtengine::AtomicExport`, mainloop_internal.h).
-std::atomic<void*> g_findOrLoad{nullptr};
-std::atomic<void*> g_isDerivedFrom{nullptr};
-std::atomic<void*> g_externalFactoryClean{nullptr};
-std::atomic<void*> g_modificationRefreshList{nullptr};
-std::atomic<void*> g_modificationSetupFileSystem{nullptr};
-std::atomic<void*> g_userInterfaceCtor{nullptr};
-std::atomic<void*> g_userInterfaceDtor{nullptr};
-std::atomic<void*> g_listCleanup{nullptr};
-std::atomic<void*> g_modArrayCopy{nullptr};
-
-FindOrLoadFn FindOrLoad() {
-    return reinterpret_cast<FindOrLoadFn>(rtengine::AtomicExport(g_findOrLoad,
-        "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z"));
-}
-IsDerivedFromFn IsDerivedFrom() {
-    return reinterpret_cast<IsDerivedFromFn>(rtengine::AtomicExport(g_isDerivedFrom,
-        "?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-}
-ExtFactoryCleanFn ExternalFactoryClean() {
-    return reinterpret_cast<ExtFactoryCleanFn>(rtengine::AtomicExport(g_externalFactoryClean,
-        "?Clean@ExternalFactory@Object@@QEAAXXZ"));
-}
-RefreshListFn ModificationRefreshList() {
-    return reinterpret_cast<RefreshListFn>(rtengine::AtomicExport(g_modificationRefreshList,
-        "?RefreshList@Modification@IO@@QEAAXXZ"));
-}
-SetupFileSystemFn ModificationSetupFileSystem() {
-    return reinterpret_cast<SetupFileSystemFn>(rtengine::AtomicExport(g_modificationSetupFileSystem,
-        "?SetupFileSystem@Modification@IO@@QEAAXXZ"));
-}
-UiCtorFn UserInterfaceCtor() {
-    return reinterpret_cast<UiCtorFn>(rtengine::AtomicExport(g_userInterfaceCtor,
-        "??0UserInterface@UI@@QEAA@XZ"));
-}
-// BATCH 8: the three loop dtors below each embed a UI::UserInterface and
-// destroy it by calling this same exported dtor (0x180120b90, already ported
-// and registered — runtime/src/ui/userinterface.cpp's RtUi_UserInterface_Dtor
-// — so this reaches OUR body, not the DLL's).
-using UiDtorFn = void (*)(void*);
-UiDtorFn UserInterfaceDtor() {
-    return reinterpret_cast<UiDtorFn>(rtengine::AtomicExport(g_userInterfaceDtor,
-        "??1UserInterface@UI@@QEAA@XZ"));
-}
-
-// ---- the two the DLL does not export ---------------------------------------
-// 0x180010ab0 — the tail call of ~UpdateLoop, on (this + 0x10). Already known
-// to our tree as fn_ListCleanup (engine/funcs/engine_funcs.h:277), resolved
-// there from this same address.
-// NOT CONVERTED (ENDGAME B.3.2 step 2): 0x180010ab0 is a J2 entry
-// (array_destroy.cpp), `ReleaseStringsCounted(..., kD_Str_08)` then
-// `ArrayDtorImpl` — a per-element String RELEASE, not a trivial destroy.
-// `UpdateLoop::_internalListA` (runtime/types/engine/UpdateLoop.h) is typed
-// only as `void* _internalListA` — there is no `Collection::Array<T>` member
-// here to call `.~Array()` on, and inventing the element type is struct work
-// this "callers" step does not cover.
-ListCleanupFn ListCleanup() {
-    return reinterpret_cast<ListCleanupFn>(rtengine::AtomicResolve(g_listCleanup, [] {
-        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180010ab0));
-    }));
-}
-// 0x180010110 — Array<IO::Mod>::operator=, the deep copy Loader::Load runs when
-// mod changes are switched OFF. Our tree already resolves this exact address as
-// fn_ModArrayCopy (engine_funcs.cpp:1823).
-ModArrayCopyFn ModArrayCopy() {
-    return reinterpret_cast<ModArrayCopyFn>(rtengine::AtomicResolve(g_modArrayCopy, [] {
-        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180010110));
-    }));
-}
+//   ?FindOrLoad@ExternalFactory@Object@@  0x1800bf320  RtObject_ExternalFactory_FindOrLoad
+//   ?IsDerivedFrom@Base@Object@@          0x1800c0390  Object::Base::IsDerivedFrom
+//   ?Clean@ExternalFactory@Object@@       0x1800be310  RtObject_ExternalFactory_Clean
+//   ?RefreshList@Modification@IO@@        0x1800af5f0  IO::Modification::RefreshList
+//   ?SetupFileSystem@Modification@IO@@    0x1800aebb0  IO::Modification::SetupFileSystem
+//   ??0UserInterface@UI@@ / ??1…          0x180120de0 / 0x180120b90  RtUi_UserInterface_Ctor / _Dtor
+//   0x180010ab0  the tail call of ~UpdateLoop, on (this + 0x10): a J2 entry
+//                (array_destroy.cpp), rtcoll::RtColl_ArrayDtorElem_180010ab0.
+//                `UpdateLoop::_internalListA` is typed only as `void*`, so it
+//                is not a `.~Array()` (ENDGAME B.3.2 step 2 note).
+//   0x180010110  Array<IO::Mod>::operator=, RtColl_ArrayModAssign_180010110
+//                (io/modification.cpp), the deep copy Loader::Load runs when
+//                mod changes are switched OFF.
 // 0x18007a0d0 — Collection::Array<InternalPtr<UI::DialogInstance>>::SetSize
 // (newSize, fillValue): the 8-byte-element, fill-the-new-tail instantiation.
 // Both Startup bodies use it to append one dialog to UserInterface::_addDialogs.
@@ -359,10 +269,10 @@ Engine::MainLoop* MainLoopSingleton() {
 // file changing. RT_EXPORT_ONCE keeps the caching the paragraph above argues
 // for and reaches whichever implementation is armed.
 int64_t SecondsToTicks(float seconds) {
-    return RT_EXPORT_ONCE(SecondsToTicksFn, "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
+    return System::Timer::SecondsToTicks(seconds);   // 0x1800ca800
 }
 float TicksToSeconds(int64_t ticks) {
-    return RT_EXPORT_ONCE(TicksToSecondsFn, "?TicksToSeconds@Timer@System@@SAM_J@Z")(ticks);
+    return System::Timer::TicksToSeconds(ticks);     // 0x1800ca820
 }
 
 } // namespace
@@ -422,7 +332,7 @@ void Engine::UpdateLoop::ReleaseFields() {
         // order is load bearing — clearing the mask first would sweep for the
         // wrong bit.
         factory->_cleanBitIndex = bit;
-        ExternalFactoryClean()(factory);
+        RtObject::RtObject_ExternalFactory_Clean(factory);   // 0x1800be310
         // Retail re-reads this->_loadBit here rather than reusing the register
         // it tested; reproduced, because Clean could in principle reach code
         // that writes it.
@@ -431,7 +341,7 @@ void Engine::UpdateLoop::ReleaseFields() {
 
 
     // Tail call in retail: `LEA RCX,[RBX+0x10]; JMP 0x180010ab0`.
-    ListCleanup()(&_internalListA);
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_internalListA);
 }
 
 // ??0LoaderLoop 0x1800dc1e0 after UpdateLoop() and the stamp.
@@ -451,18 +361,18 @@ void Engine::LoaderLoop::InitFields(UpdateLoop* nextLoop, int64_t delayTicks) {
 void Engine::DialogLoopT::InitFields() {
     _dialogExternal = nullptr;
     _dialogInstance = nullptr;
-    UserInterfaceCtor()(&_ui);
+    RtUi_UserInterface_Ctor(&_ui);   // 0x180120de0
 }
 void Engine::DialogLoaderLoopT::InitFields() {
     _dialogExternal = nullptr;
     _dialogInstance = nullptr;
-    UserInterfaceCtor()(&_ui);
+    RtUi_UserInterface_Ctor(&_ui);
 }
 // ??1DialogLoopT 0x1800db340 / ??1DialogLoaderLoopT 0x1800db060: the
 // UserInterface teardown. The ~String and the base teardown after it are the
 // compiler's member/base chain in the real destructor, the doors' own lines.
-void Engine::DialogLoopT::ReleaseFields()       { UserInterfaceDtor()(&_ui); }
-void Engine::DialogLoaderLoopT::ReleaseFields() { UserInterfaceDtor()(&_ui); }
+void Engine::DialogLoopT::ReleaseFields()       { RtUi_UserInterface_Dtor(&_ui); }   // 0x180120b90
+void Engine::DialogLoaderLoopT::ReleaseFields() { RtUi_UserInterface_Dtor(&_ui); }
 
 // ---- ?IsRunning@UpdateLoop@Engine@@QEBA_NXZ  0x1800dd7b0 ord 3160 -----------
 // The one genuinely const, side-effect-free function in the lane, so it gets a
@@ -511,12 +421,12 @@ void Engine::Loader::Load(UpdateLoop* loop) {
     if (mod[1] != static_cast<uint8_t>(allowsModChanges)) {
         if (allowsModChanges) {
             mod[1] = static_cast<uint8_t>(allowsModChanges);
-            ModificationRefreshList()(mod);
+            reinterpret_cast<IO::Modification*>(mod)->RefreshList();
             mod[0] = 1;
         } else {
             mod[1] = 0;
             // Array<Mod>::operator=(&_savedMods, &_mods) — dst +0x18, src +0x08.
-            ModArrayCopy()(mod + 0x18, mod + 0x08);
+            RtIO::RtColl_ArrayModAssign_180010110(mod + 0x18, mod + 0x08);
         }
     }
 
@@ -524,7 +434,7 @@ void Engine::Loader::Load(UpdateLoop* loop) {
     // FindOrLoad cache-hit path re-registers each resource against the current
     // clean bit (runtime/types/object/External.h documents +0x41).
     factory->_loadEnabled = true;
-    ModificationSetupFileSystem()(mod);
+    reinterpret_cast<IO::Modification*>(mod)->SetupFileSystem();   // 0x1800aebb0
     factory->_loadEnabled = false;
 
     // Retail inlines System::Thread::Start here:
@@ -558,12 +468,14 @@ void Engine::DialogLoopT::Load() {
     // and RAII is the release retail does at the bottom.
     System::Filename tmp(_dialogFilename);
 
-    void* external = FindOrLoad()(Factory(), &tmp);
+    const void* external = RtObject::RtObject_ExternalFactory_FindOrLoad(   // 0x1800bf320
+        Factory(), reinterpret_cast<const RtSystem::Filename*>(&tmp));
     void* result = nullptr;
     if (external) {
         // `? external : nullptr` is a CMOVNZ on the type test, not a branch
         // that skips the store: the field is written either way.
-        if (IsDerivedFrom()(external, UI::Dialog::TypeId())) result = external;
+        if (static_cast<const ::Object::Base*>(external)->IsDerivedFrom(UI::Dialog::TypeId()))
+            result = const_cast<void*>(external);
     }
     _dialogExternal = result;
 }
@@ -632,10 +544,12 @@ void Engine::DialogLoaderLoopT::Load() {
     // Filename ctor 0x18000c780 and the release at the bottom is ~Filename.
     System::Filename tmp(_dialogFilename);
 
-    void* external = FindOrLoad()(Factory(), &tmp);
+    const void* external = RtObject::RtObject_ExternalFactory_FindOrLoad(   // 0x1800bf320
+        Factory(), reinterpret_cast<const RtSystem::Filename*>(&tmp));
     void* result = nullptr;
     if (external) {
-        if (IsDerivedFrom()(external, UI::Dialog::TypeId())) result = external;
+        if (static_cast<const ::Object::Base*>(external)->IsDerivedFrom(UI::Dialog::TypeId()))
+            result = const_cast<void*>(external);
     }
     _dialogExternal = result;
 }
@@ -805,8 +719,6 @@ namespace {
 Engine::Loader* LoaderLoopLoader() {
     return &::Engine::LoaderLoop::_loader;
 }
-
-using CurrentTimeTicksFn  = int64_t (*)();
 
 // The Video::Context backend object hangs off Context::_contextData (+0x2160).
 // Retail does NOT route these through `?Clear@Context@Video@@` etc.; it inlines
@@ -1222,12 +1134,10 @@ void Engine::MainLoop::Draw(float dt) {
 
     RtVideo::Context* last = reinterpret_cast<RtVideo::Context*>(_context);
 
-    // See note 1 above: the GLOBAL singleton, deliberately. ENDGAME B.3.7:
-    // RT_EXPORT_ONCE (B7-7.2's accepted shape) replaces a function-local
-    // `static` ResolveExport cache.
+    // See note 1 above: the GLOBAL singleton, deliberately.
     if (MainLoop* g = MainLoopSingleton())
-        g->_frameUpdateTime = RT_EXPORT_ONCE(CurrentTimeTicksFn,
-            "?CurrentTimeTicks@Timer@System@@SA_JXZ")() - g->_frameStartTicks;
+        g->_frameUpdateTime = System::Timer::CurrentTimeTicks()   // 0x1800ca8f0
+                            - g->_frameStartTicks;
 
     Video::ContextData* cd3 = CtxDataOf(last);
     ++last->_frameIndex;
@@ -1236,56 +1146,4 @@ void Engine::MainLoop::Draw(float dt) {
 
 extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
     self->Engine::MainLoop::Draw(dt);
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Every port is registered TWICE, under its mangled name and under its retail
-// address. The name form is what every live call site in our tree uses today
-// (engine_funcs.cpp resolves all twelve by ResolveExport); the address form
-// costs nothing and closes the Wave 5 lane D failure mode where a later call
-// site reaches the other door and one live object ends up split between two
-// implementations. Nine of these names ALSO have an
-// `if (!fn) fn = ResolveAddr(Module::Runtime, <addr>)` fallback in
-// engine_funcs.cpp, so the address registration keeps that path consistent too.
-//
-// The literal string is repeated at each call rather than using the constants
-// above: tools/runtime_census.py cannot see a registration whose name is a
-// named constant, and that blind spot has produced a false progress report
-// twice (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// NOT REGISTERED, deliberately:
-//
-//   ?_loader@LoaderLoop@Engine@@1VLoader@2@A  (0x1801fe7b8, ord 4794)
-//     Nothing to register: since ENDGAME B.3.9 ENG W2 it is the class static
-//     Engine::LoaderLoop::_loader (defined above), read directly.
-//
-//   ?LoadResources@UpdateLoop@Engine@@QEAAXXZ  (0x1800dd7d0, ord 3210)
-//     Held back. See docs/runtime_port/WAVE8_LANE_A.md §3.
-// ============================================================================
-int RtEngineLoopsRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?IsRunning@UpdateLoop@Engine@@QEBA_NXZ",
-                          (void*)&RtEngine_UpdateLoop_IsRunning); ++n;
-    RegisterRuntimeAddr(0x1800dd7b0, (void*)&RtEngine_UpdateLoop_IsRunning);
-
-    RegisterRuntimeExport("?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z",
-                          (void*)&RtEngine_Loader_Load); ++n;
-    RegisterRuntimeAddr(0x1800dc050, (void*)&RtEngine_Loader_Load);
-
-    // ENDGAME B.3.9 ENG W2: the loops' four ctor doors, four dtor doors and
-    // twenty-two slot doors (the Wave 25 VTIO six, the Wave 27 LOOPS twelve
-    // minus Loader::Run, the four Load/Startup/Update rows) are GONE with the
-    // four minted loop tables and their RT_DELDTOR rows: their only reader was
-    // the mint. The member bodies above are what the compiler tables call.
-
-    // NOT a vtable slot — the census BODY row. Exported (ord 2251) despite
-    // MainLoop.h having filed it under "Internal, NOT exported"; see the body.
-    RegisterRuntimeExport("?Draw@MainLoop@Engine@@QEAAXM@Z",
-                          (void*)&RtEngine_MainLoop_Draw); ++n;
-    RegisterRuntimeAddr(0x1800dcd40, (void*)&RtEngine_MainLoop_Draw);
-
-    return n;   // IsRunning, Loader::Load, MainLoop::Draw = 3
 }

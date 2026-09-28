@@ -52,6 +52,7 @@
 #include "../../types/system/Value.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
+#include "../../types/system/Timer.h"   // B3R: the Timer statics by name
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 #include "../../funcs/rt_port.h"
 #include "widestring.h"
@@ -160,69 +161,10 @@ System::Random* RtSystem_Random_CtorSeed(System::Random* self, uint32_t seed) {
     return self;
 }
 
-// ?NextGroup@Random@System@@AEAAXXZ  retail 0x1800c7dd0, ordinal 3245.
-//
-// WAVE 28 LANE MISC.  The BODY for this row has existed since Wave 2 as the
-// file-local `NextGroupImpl` above; what was missing was the REGISTRATION, so a
-// callee census could not tell it from an absent body and Wave 27's board
-// carried it as a named unported System BODY row.  This wrapper is the whole of
-// the port -- it adds no logic, it opens the door.
-//
-// AEAA is the PRIVATE spelling, NOT the unexported one.  Verified against the
-// export directory with pefile, by name AND by RVA: both lookups return
-// (?NextGroup@Random@System@@AEAAXXZ, 0x1800c7dd0, ord 3245).  Registering the
-// name is therefore the plain door, not a workaround.
-//
-extern "C" void RtSystem_Random_NextGroup(System::Random* self) { self->NextGroup(); }
-
-// ?Rand@Random@System@@QEAAIXZ  retail 0x1800c7f90
-uint32_t RtSystem_Random_Rand(System::Random* self) { return self->Rand(); }
-
-// ?Rand@Random@System@@QEAAII@Z  retail 0x1800c8040  (bound==0 short-circuits
-// to 0 WITHOUT drawing — state must stay untouched, hence the ternary rather
-// than an early `if`+call).
-uint32_t RtSystem_Random_RandBound(System::Random* self, uint32_t bound) {
-    return self->Rand(bound);
-}
-
-// ?Rand@Random@System@@QEAAHHH@Z  retail 0x1800c7d70
-int32_t RtSystem_Random_RandRange(System::Random* self, int32_t lo, int32_t hi) {
-    return self->Rand(lo, hi);
-}
-
 // ?RandFloat@Random@System@@QEAAMXZ  retail 0x1800c7d40
 // DAT_18016165c = 1/2^32 exactly (read as bytes: 0x2f800000): maps a full
 // 32-bit draw to [0,1).
 namespace { constexpr float kRandUnit = 2.3283064365386963e-10f; }  // 0x2f800000
-float RtSystem_Random_RandFloat(System::Random* self) {
-    return self->RandFloat();
-}
-
-// ?RandFloatTol@Random@System@@QEAAMXZ  retail 0x1800c8000
-float RtSystem_Random_RandFloatTol(System::Random* self) {
-    return self->RandFloatTol();
-}
-
-// ?RandTol@Random@System@@QEAAHH@Z  retail 0x1800c7da0
-int32_t RtSystem_Random_RandTol(System::Random* self, int32_t tol) {
-    return self->RandTol(tol);
-}
-
-// ?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c7cf0
-// Two calls: slot +0x98 serializes the plain `index` (same slot
-// Color::Serialize uses for its own 4-byte scalar), slot +0x40 serializes the
-// 624-entry uint32 array. I/O side effect on a live stream — not diffed, same
-// rationale as Vector2::operator*= in vector.cpp (running the original would
-// mean writing the record twice).
-//
-// ENDGAME B.3.4 callers batch H. `serializer + 8` was called "the stream"
-// here; it is the READERWRITER (the Stream is at Serializer+0x00). +0x98 is
-// rw_vtbl::kScalarUInt and +0x40 is rw_vtbl::kArrayUInt, so the doors name the
-// types: `unsigned int&` and `(int, unsigned int*)`. The old trailing `0` was
-// the ignored `const char* name`.
-void RtSystem_Random_Serialize(System::Random* self, void* serializer) {
-    self->Serialize(*reinterpret_cast<::IO::Serializer*>(serializer));
-}
 
 // ============================================================================
 // ENDGAME B.3.4b — the `System::Random` member BODIES.
@@ -245,12 +187,15 @@ uint32_t System::Random::Rand() {
     return RandImpl(this);
 }
 
+// ?Rand@Random@System@@QEAAII@Z  retail 0x1800c8040  (bound==0 short-circuits
+// to 0 WITHOUT drawing -- state must stay untouched).
 uint32_t System::Random::Rand(uint32_t bound) {
     // bound==0 short-circuits to 0 WITHOUT drawing — the state must stay
     // untouched, hence the ternary rather than an early `if` + call.
     return (bound == 0) ? 0u : (RandImpl(this) % bound);
 }
 
+// ?Rand@Random@System@@QEAAHHH@Z  retail 0x1800c7d70
 int32_t System::Random::Rand(int32_t lo, int32_t hi) {
     uint32_t r = RandImpl(this);
     return lo + static_cast<int32_t>(r % (static_cast<uint32_t>(hi - lo) + 1u));
@@ -260,11 +205,13 @@ float System::Random::RandFloat() {
     return static_cast<float>(RandImpl(this)) * kRandUnit;
 }
 
+// ?RandFloatTol@Random@System@@QEAAMXZ  retail 0x1800c8000
 float System::Random::RandFloatTol() {
     // 1.0f - (u * (1/2^32)) * 2.0f, left-associated exactly as retail.
     return 1.0f - (static_cast<float>(RandImpl(this)) * kRandUnit) * 2.0f;
 }
 
+// ?RandTol@Random@System@@QEAAHH@Z  retail 0x1800c7da0
 int32_t System::Random::RandTol(int32_t tol) {
     uint32_t r = RandImpl(this);
     return static_cast<int32_t>(r % (static_cast<uint32_t>(tol) * 2u + 1u)) - tol;
@@ -274,6 +221,9 @@ void System::Random::NextGroup() {
     NextGroupImpl(this);
 }
 
+// ?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c7cf0
+// Two calls: slot +0x98 serializes the plain `index`, slot +0x40 the
+// 624-entry uint32 array.
 void System::Random::Serialize(::IO::Serializer& s) {
     s.Serialize(*reinterpret_cast<unsigned int*>(&_index), nullptr);   // B.3.4 bridge  (0x98 = uint door)
     s.Serialize(0x270, reinterpret_cast<unsigned int*>(_mt), nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
@@ -294,22 +244,9 @@ void System::Random::Serialize(::IO::Serializer& s) {
 // caller-batch work gated behind the 4a closing pass; the constructor converts
 // WITH them, not before. Value.h's banner restates this.
 System::Time* RtSystem_Time_Ctor(System::Time* self, float seconds) {
-    using SecondsToTicksFn = int64_t(*)(float);
-    // Resolved ONCE per call site either way: this body runs on every
-    // Update(const Time&), and resolving per call put a GetProcAddress under
-    // the loader lock on the engine's hottest value type -- 5.6 points of sim
-    // time, most of the Wave 2 perf-gate breach, and invisible to both
-    // profilers because it lands in ntdll self time
-    // (reference_rtoriginal_is_getprocaddress.md, WAVE3_LANE_P.md).
-    self->_ticks = RT_EXPORT_ONCE(SecondsToTicksFn,
-                                 "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
+    // System::Timer::SecondsToTicks (0x1800ca800), called by name (B3R).
+    self->_ticks = System::Timer::SecondsToTicks(seconds);
     return self;
-}
-
-// ?AsSeconds@Time@System@@QEBAMXZ  retail 0x180007900 — same delegation, same
-// RT_EXPORT_ONCE reasoning as the ctor above.
-float RtSystem_Time_AsSeconds(const System::Time* self) {
-    return self->AsSeconds();
 }
 
 // ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800ca740
@@ -332,10 +269,9 @@ void RtSystem_Time_Serialize(System::Time* self, void* serializer) {
 // ENDGAME B.3.4b — the `System::Time` member BODIES.
 // ============================================================================
 
+// ?AsSeconds@Time@System@@QEBAMXZ  retail 0x180007900
 float System::Time::AsSeconds() const {
-    using TicksToSecondsFn = float(*)(int64_t);
-    return RT_EXPORT_ONCE(TicksToSecondsFn,
-                          "?TicksToSeconds@Timer@System@@SAM_J@Z")(_ticks);
+    return System::Timer::TicksToSeconds(_ticks);   // 0x1800ca820
 }
 
 // ENDGAME B.3.4b SYSTEM (5) — THE HAND-INLINED SLOT CALL IS GONE, and this is
@@ -359,16 +295,9 @@ void System::Time::Serialize(::IO::Serializer& s) {
 // System::Color
 // ============================================================
 
-// ?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c4150
-// Slot +0x98 serializes the packed 4-byte `value` (same slot Random uses for
-// its plain int). Not diffed (I/O side effect, see Random::Serialize above).
-// ENDGAME B.3.4 callers batch H: `serializer + 8` is the READERWRITER, +0x98
-// is rw_vtbl::kScalarUInt, and the trailing `0` was the ignored `name`.
-void RtSystem_Color_Serialize(System::Color* self, void* serializer) {
-    self->Serialize(*reinterpret_cast<::IO::Serializer*>(serializer));
-}
-
 // ENDGAME B.3.4b — the `System::Color` member BODY.
+// ?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c4150
+// Slot +0x98 serializes the packed 4-byte `value`.
 void System::Color::Serialize(::IO::Serializer& s) {
     s.Serialize(*reinterpret_cast<unsigned int*>(&_value), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
@@ -403,13 +332,9 @@ System::String* RtSystem_DateTime_AsString(const void* self, System::String* ret
 }
 
 System::String System::DateTime::AsString() const {
-    using StringRetFn = System::String*(*)(const void*, System::String*);
-
-    // ENDGAME B.3.4b: the two inner calls STAY on the registry doors. They are
-    // what retail's own AsString does (it CALLs the two exported siblings) and
-    // re-pointing them at the members would be caller work, not this commit's.
-    // The doors below now delegate to those same members anyway, so the route
-    // is one indirection longer and one body deep, exactly as before.
+    // Retail's own AsString CALLs the two exported siblings; B3R calls the
+    // members by name (the doors were one-line delegations to them), and each
+    // by-value result is constructed into its slot as the doors did.
     //
     // ENDGAME B.3.1 step 2. THE DECLARATION ORDER IS DELIBERATELY THE REVERSE
     // OF THE FILL ORDER: retail releases dateStr FIRST and timeStr second
@@ -420,8 +345,8 @@ System::String System::DateTime::AsString() const {
     // not to matter.
     System::String timeStr;
     System::String dateStr;
-    RT_EXPORT_ONCE(StringRetFn, "?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(this, &dateStr);
-    RT_EXPORT_ONCE(StringRetFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(this, &timeStr);
+    ::new (&dateStr) System::String(DateAsString());   // 0x1800c56a0
+    ::new (&timeStr) System::String(TimeAsString());   // 0x1800c55b0
 
     // ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730), spelled as itself.
     //
@@ -544,19 +469,6 @@ static System::String* RtSystem_DateTime_FormatPart(const System::DateTime* self
     RtSystem::RtSystem_WideString_AsUTF8(&ws, reinterpret_cast<RtSystem::String*>(ret));
     RtSystem::RtSystem_WideString_Dtor(&ws);
     return ret;   // MOV RAX,RBX
-}
-
-// The two doors keep retail's hidden-retslot shape and delegate to the members.
-System::String* RtSystem_DateTime_DateAsString(const void* self, System::String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const System::DateTime*>(self)->DateAsString());
-    return ret;
-}
-
-System::String* RtSystem_DateTime_TimeAsString(const void* self, System::String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const System::DateTime*>(self)->TimeAsString());
-    return ret;
 }
 
 // ============================================================================
@@ -716,32 +628,16 @@ int RtSystemValueRegister() {
     int n = 0;
 
     RegisterRuntimeExport("??0Random@System@@QEAA@XZ", (void*)&RtSystem_Random_Ctor); ++n;
-    RegisterRuntimeExport("??0Random@System@@QEAA@I@Z", (void*)&RtSystem_Random_CtorSeed); ++n;
     // WAVE 28 LANE MISC: the body has existed since Wave 2; this line is the port.
-    RegisterRuntimeExport("?NextGroup@Random@System@@AEAAXXZ", (void*)&RtSystem_Random_NextGroup); ++n;
-    RegisterRuntimeExport("?Rand@Random@System@@QEAAIXZ", (void*)&RtSystem_Random_Rand); ++n;
-    RegisterRuntimeExport("?Rand@Random@System@@QEAAII@Z", (void*)&RtSystem_Random_RandBound); ++n;
-    RegisterRuntimeExport("?Rand@Random@System@@QEAAHHH@Z", (void*)&RtSystem_Random_RandRange); ++n;
-    RegisterRuntimeExport("?RandFloat@Random@System@@QEAAMXZ", (void*)&RtSystem_Random_RandFloat); ++n;
-    RegisterRuntimeExport("?RandFloatTol@Random@System@@QEAAMXZ", (void*)&RtSystem_Random_RandFloatTol); ++n;
-    RegisterRuntimeExport("?RandTol@Random@System@@QEAAHH@Z", (void*)&RtSystem_Random_RandTol); ++n;
-    RegisterRuntimeExport("?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Random_Serialize); ++n;
 
     RegisterRuntimeExport("??0Time@System@@QEAA@M@Z", (void*)&RtSystem_Time_Ctor); ++n;
-    RegisterRuntimeExport("?AsSeconds@Time@System@@QEBAMXZ", (void*)&RtSystem_Time_AsSeconds); ++n;
     RegisterRuntimeExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Time_Serialize); ++n;
-
-    RegisterRuntimeExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Color_Serialize); ++n;
 
     RegisterRuntimeExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ", (void*)&RtSystem_DateTime_AsString); ++n;
     // WAVE 22 LANE SYSBODY -- the two AsString has been forwarding to since
     // Wave 9. Name only: grep over runtime/, engine/, code/ and standalone/
     // finds 0x1800c56a0 / 0x1800c55b0 in exactly one place each, a comment in
     // this file, so there is no by-address consumer to satisfy.
-    RegisterRuntimeExport("?DateAsString@DateTime@System@@QEBA?AVString@2@XZ",
-                          (void*)&RtSystem_DateTime_DateAsString); ++n;
-    RegisterRuntimeExport("?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ",
-                          (void*)&RtSystem_DateTime_TimeAsString); ++n;
 
     RegisterRuntimeExport("?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ", (void*)&RtSystem_Configuration_CurrentBuildId); ++n;
     RegisterRuntimeExport("?CurrentVersion@Configuration@System@@SA?AVString@2@XZ", (void*)&RtSystem_Configuration_CurrentVersion); ++n;

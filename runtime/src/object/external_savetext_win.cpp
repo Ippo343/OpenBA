@@ -109,9 +109,6 @@
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace RtObject {
 
 using RtSystem::Filename;
@@ -127,9 +124,6 @@ namespace {
 // name; reference_aeaa_is_private_not_unexported.md).
 // ---------------------------------------------------------------------------
 
-
-// `?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z` (0x1800accc0).
-using CloseFileFn = void (*)(RtIO::FileSystem* self, RtIO::FileInfo* fi);
 
 // External's virtuals, by BYTE offset into the vtable, as External.h names them.
 //   +0x10  GetTypeId() -> uint32
@@ -159,9 +153,7 @@ bool ExternalSerialize(External* self, void* stream) {
 void CloseIfOpen(RtIO::FileInfo* fi) {
     if (fi->handle == -1) return;
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    RtIO::FileSystem* fs = reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);
-    RT_EXPORT_ONCE(CloseFileFn,
-        "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fi);
+    ::IO::FileSystem::_singleton->CloseFile(*fi);                 // 0x1800accc0
 }
 
 }  // namespace
@@ -344,18 +336,3 @@ void DumpSaveTextCounters() {
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtObjectExternalSaveTextRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z",
-                          (void*)&RtObject::RtObject_External_SaveText); ++n;
-    RegisterRuntimeAddr(0x1800bb9d0, (void*)&RtObject::RtObject_External_SaveText);
-
-    printf("[RtPort]   Object::External::SaveText "
-                "(wave 11f lane IOSTREAM): %d export registered\n", n);
-    std::atexit(&RtObject::DumpSaveTextCounters);
-    return n;
-}

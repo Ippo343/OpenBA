@@ -29,47 +29,6 @@
 #include <atomic>
 #include <cstdint>
 
-// runtime/funcs/rt_port.h's caching resolver, redeclared so this header stays
-// include-order independent (the declaration must stay byte-identical).
-void* RtResolveCached(const char* mangled, void** cache);
-
-// ----------------------------------------------------------------------------
-// RULE B6-5 / B7-7 door caches (ENDGAME B.3.7 block B1). `Engine::Loader::Run`
-// runs on the LOADER thread and dispatches the loop's slot 6 `Load` there, so
-// the Engine/Application member bodies keep no function-local first-call cache.
-// A door owned by another namespace is resolved through a NAMESPACE-SCOPE
-// `std::atomic<void*>` slot with one of these two, the `rtuielem::AtomicExport`
-// shape (runtime/src/ui/element_common.h, after the B36_RULES 14.4 fix): same
-// never-cache-a-null contract as RT_EXPORT_ONCE, and a by-name answer is kept
-// only when RtResolveCached itself would have cached it (a pre-init hit is not
-// frozen, rt_resolve_cache.cpp section 6).
-// ----------------------------------------------------------------------------
-namespace rtengine {
-
-inline void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (scratch != nullptr) slot.store(scratch, std::memory_order_release);
-    }
-    return p;
-}
-
-// For the few address doors (unexported helpers): `resolve` is the caller's own
-// `ResolveAddr(Module::Runtime, addr)` wrapper, so this header needs no `Module`.
-template <typename Resolve>
-inline void* AtomicResolve(std::atomic<void*>& slot, Resolve resolve) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = resolve();
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-}  // namespace rtengine
-
 namespace rtmainloop {
 
 // Retail's inlined System::Timer::CurrentTimeTicks:

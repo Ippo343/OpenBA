@@ -168,7 +168,3 @@ extern "C" void RtVolume_Frustum_SelectBoxSupportVertices(const float* n,
     outPos[2] = b2;
 }
 
-int RtClosure2bVideoRegister() {
-    int n = 0;
-    return n;
-}
