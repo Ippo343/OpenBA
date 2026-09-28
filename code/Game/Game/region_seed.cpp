@@ -31,17 +31,14 @@
 
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // Pf_RegionGraphCtor_8670, Pf_RegionPairCache_Build, Pf_FlushDirtyChunks_8a90
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
-// --- ported region-graph builders (region_graph_build.cpp / region_paircache.cpp) ---
-extern int*  Pf_RegionGraphCtor_8670(int* param_1, int64_t param_2, int64_t param_3,
-                                     int64_t param_4, uint32_t param_5, int param_6);  // 0x1400a8670
-extern "C" void* Pf_RegionPairCache_Build();                                           // e8c0 pair-cache tail
-// --- already-ported region chunk flush (action_pf_region.cpp) ---
-extern void  Pf_FlushDirtyChunks_8a90(int64_t param_1);                                // 0x1400a8a90
+// Ported region-graph builders and chunk flush, called by name through Action/exe_bodies.h:
+// Pf_RegionGraphCtor_8670 (0x1400a8670), Pf_RegionPairCache_Build (the e8c0 pair-cache
+// tail), Pf_FlushDirtyChunks_8a90 (0x1400a8a90).
 
 extern "C" void Region_Seed(void* gameObjV, int dim) {
     if (!gameObjV || dim <= 0) return;

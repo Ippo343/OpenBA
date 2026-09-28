@@ -81,7 +81,7 @@
 #include "video/Context.h"
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
+#include "volume/Volume.h"   // RtVolume_Frustum_MulTransform3 / _Contains
 #include <new>
 #include <cstdint>
 #include <cmath>
@@ -101,42 +101,12 @@ namespace {
 //     0x18001a6b0  ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z
 //     0x1800f2130  Context::BeginInstancedIndexedVertices(int,int,int,int)
 //     0x1800f2110  Context::EndInstancedIndexedVertices(int)
-// The FOUR remaining doors are Math/Volume, not Video/Graphics, and stay.
-typedef void  (*Transform3Copy_t)(void* dst, const void* src);                       // ??0Transform3@Math@@QEAA@AEBV01@@Z
-typedef void* (*FrustumMul_t)(void* frustum, void* retbuf, const void* transform);    // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z
-typedef uint32_t (*FrustumContains_t)(void* frustum, const void* box, uint32_t mask); // ?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z
-typedef void* (*MatrixCtor_t)(void* self, const void* c0, const void* c1,
-                              const void* c2, const void* pos);                       // ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z @ Runtime 0x18001e540
-
-Transform3Copy_t     s_Transform3Copy    = nullptr;
-FrustumMul_t         s_FrustumMul        = nullptr;
-FrustumContains_t    s_FrustumContains   = nullptr;
-MatrixCtor_t         s_MatrixCtor        = nullptr;
-bool s_resolved = false;
-
-void ResolvePtrs() {
-    if (s_resolved) return;
-
-    // Functions with verified mangled names: ResolveExport primary.
-    s_Transform3Copy   = reinterpret_cast<Transform3Copy_t>(
-        ResolveExport("??0Transform3@Math@@QEAA@AEBV01@@Z"));
-    s_FrustumMul       = reinterpret_cast<FrustumMul_t>(
-        ResolveExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z"));
-    s_FrustumContains  = reinterpret_cast<FrustumContains_t>(
-        ResolveExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z"));
-
-    // WAVE 9 LANE SAVE2: the Matrix column ctor moved UP into the name group.
-    // It was in the by-address group below under "no verified mangled name to
-    // hand" -- but 0x18001e540 IS exported, as
-    // ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z (checked with pefile against the
-    // shipped export table). It is now ported (runtime/src/math/transform.cpp),
-    // and an address door here would have walked straight past that port into
-    // the DLL, which is the defect tools/port_bypass_audit.py exists to catch.
-    s_MatrixCtor      = reinterpret_cast<MatrixCtor_t>(
-        ResolveExport("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z"));
-
-    s_resolved = true;
-}
+// The four Math/Volume doors that stayed then are direct calls now (B3R).
+// Called by name (B3R): ??0Transform3@Math@@QEAA@AEBV01@@Z -> the Math::Transform3 copy
+// ctor (the registered RtMath_Transform3_CtorCopy is a memcpy of the class), ??D /
+// ?Contains@Frustum@Volume@@ -> RtVolume_Frustum_MulTransform3 / _Contains
+// (volume/Volume.h), ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z (Runtime 0x18001e540) ->
+// the Math::Matrix column ctor (RtMath_Matrix_CtorColumns assigns Matrix(c0, c1, c2, c3)).
 
 // ------------------------------------------------------------------
 // Inlined Vector3 math (bit-identical to the Math::Vector3 Runtime helpers).
@@ -178,11 +148,9 @@ namespace { std::atomic<bool> s_weatherDrawWarned{false}; }
 void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Camera& cam,
                                    Graphics::ExternalPtrHandle /*material*/,
                                    float /*opacity*/, int /*a*/, int /*b*/, int /*c*/) const {
-    ResolvePtrs();
-    // B.3.5: the seven Video/Graphics readiness terms are gone with their doors.
-    if (!s_Transform3Copy || !s_FrustumMul || !s_FrustumContains ||
-        !s_MatrixCtor ||
-        !System::MemoryAllocator::_singleton) {
+    // B.3.5: the seven Video/Graphics readiness terms are gone with their doors;
+    // B3R: the four Math/Volume ones too.
+    if (!System::MemoryAllocator::_singleton) {
         // Cascade-safe: skip the weather draw rather than crash on a null fn ptr.
         s_weatherDrawWarned.store(true);
         return;
@@ -203,7 +171,8 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
 
     // (1) Copy the camera Transform3 (camera+0x64) and pull its basis columns.
     uint8_t camXform[0x70];
-    s_Transform3Copy(camXform, reinterpret_cast<uint8_t*>(camera) + 0x64);
+    ::new (static_cast<void*>(camXform)) Math::Transform3(
+        *reinterpret_cast<const Math::Transform3*>(reinterpret_cast<uint8_t*>(camera) + 0x64));
 
     const float col0[3] = { rd_f(camXform, 0x00), rd_f(camXform, 0x04), rd_f(camXform, 0x08) };
     const float col1[3] = { rd_f(camXform, 0x0c), rd_f(camXform, 0x10), rd_f(camXform, 0x14) };
@@ -239,7 +208,9 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     // ONE construction, into the SAME caller storage the door was handed.
     void* fr = ::new (static_cast<void*>(frBuf))
         ::Frustum(reinterpret_cast<const Graphics::Camera*>(camera)->GetFrustum());   // B.3.5 bridge
-    s_FrustumMul(fr, worldFrustum, camXform);
+    RtVolume_Frustum_MulTransform3(static_cast<const ::Frustum*>(fr),
+                                   reinterpret_cast<::Frustum*>(worldFrustum),
+                                   reinterpret_cast<const Math::Transform3*>(camXform));
 
     for (int i = -2; i < 3; ++i) {            // z (outer)
         for (int j = -2; j < 3; ++j) {        // y (middle)
@@ -254,7 +225,8 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
                     center[0], center[1], center[2],
                     center[0] + boxSize, center[1] + boxSize, center[2] + boxSize,
                 };
-                uint32_t r = s_FrustumContains(worldFrustum, aabb, 0x3f);
+                uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(worldFrustum),
+                                                       reinterpret_cast<const ::Box*>(aabb), 0x3f);
                 if (r != 0x40) {
                     if (visibleTiles < kTileCap) {
                         tiles[visibleTiles * 3 + 0] = center[0] + boxHalf;
@@ -362,7 +334,11 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
                     // Translation matrix: identity basis + tile cell-center.
                     // Matrix::Matrix reads a 4th float from `pos`; the tiles[]
                     // buffer is padded/zeroed so that read is well-defined.
-                    s_MatrixCtor(matrix, mcol0, mcol1, mcol2, &tiles[(tileBase + t) * 3]);
+                    *reinterpret_cast<Math::Matrix*>(matrix) = Math::Matrix(
+                        *reinterpret_cast<const Math::Vector4*>(mcol0),
+                        *reinterpret_cast<const Math::Vector4*>(mcol1),
+                        *reinterpret_cast<const Math::Vector4*>(mcol2),
+                        *reinterpret_cast<const Math::Vector4*>(&tiles[(tileBase + t) * 3]));
                     reinterpret_cast<Video::Context*>(ctx)->SetTransform(
                         t, *reinterpret_cast<const Math::Matrix*>(matrix));   // B.3.5 bridge
                 }

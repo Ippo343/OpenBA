@@ -105,8 +105,8 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj) {
         static bool warned = false;
         if (!warned) {
             printf("[Minimap] primitives unresolved — skipping upload "
-                   "(MemAlloc=%p dev=%p)\n",
-                   (void*)fn_MemAlloc,
+                   "(alloc=%p dev=%p)\n",
+                   (void*)System::MemoryAllocator::_singleton,
                    ::Video::Device::_singleton);
             fflush(stdout);
             warned = true;

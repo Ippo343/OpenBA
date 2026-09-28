@@ -180,16 +180,6 @@ void* Struct60B_CopyCtor_Body(void* dst, const void* src) {
 // `MemFree(lVar1-0x1c)` cadence).
 void Struct60B_DtorRange_Body(void* /*unused*/, void* first, int count) {
     if (count <= 0 || !first) return;
-    if (!fn_MemFreeStatic) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Struct60B::DtorRange] fn_MemFreeStatic unavailable — "
-                   "leaking %d elements\n", count);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
 
     auto* p = reinterpret_cast<uint8_t*>(first);
     for (int i = 0; i < count; ++i) {

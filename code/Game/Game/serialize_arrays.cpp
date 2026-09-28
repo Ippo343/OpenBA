@@ -80,14 +80,14 @@ WorldGeometry::WorldGeometry() {
     _dirtyTreeCount = 0;                // dword +0xf0
     _terrainMaterial = nullptr;         // +0xf8
 
-    fn_Video_VertexBuffer_Ctor(&_vertexBuffer);   // +0x100 (ctor door, B4b-2)
-    fn_Video_IndexBuffer_Ctor(&_indexBuffer);     // +0x120
+    Video_VertexBuffer_Ctor(reinterpret_cast<Video::VertexBuffer*>(&_vertexBuffer));   // +0x100 (ctor body, B4b-2)
+    Video_IndexBuffer_Ctor(reinterpret_cast<Video::IndexBuffer*>(&_indexBuffer));      // +0x120
 
     _waterMaterialA = nullptr;          // +0x150
     _waterMaterialB = nullptr;          // +0x158
 
-    fn_Video_VertexBuffer_Ctor(&_waterVertexBuffer);   // +0x160
-    fn_Video_IndexBuffer_Ctor(&_waterIndexBuffer);     // +0x180
+    Video_VertexBuffer_Ctor(reinterpret_cast<Video::VertexBuffer*>(&_waterVertexBuffer));   // +0x160
+    Video_IndexBuffer_Ctor(reinterpret_cast<Video::IndexBuffer*>(&_waterIndexBuffer));      // +0x180
 
     for (Header& h : _arrays) { h.data = nullptr; h.sizeCap = 0; }   // +0x1a0..+0x228
 

@@ -29,7 +29,7 @@
 #include "Game/PathfinderThread.h"
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // Pf_WorkerApplyCmd_a6430, Pf_EnqueueCmd1_a6a30, Pf_ArrayResize18_d830
 #include <cstdint>
 #include <new>
 #include <cstdio>
@@ -37,19 +37,12 @@
 #include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
 #include "Object/exe_type.h"     // DEFINE_EXE_VTABLE
 
-// A* / pathfinder helpers (reimplemented + registered elsewhere) — call directly by name.
-extern void Pf_WorkerApplyCmd_a6430(int64_t self, uint32_t* cmd, void* ctxA, void* ctxB);   // 0x1400a6430
-extern void Pf_EnqueueCmd1_a6a30(int64_t self, int idx, void* cost, void* ctx);             // 0x1400a6a30
-extern void Pf_ArrayResize18_d830(int64_t* arr, int count);                                 // 0x14001d830
-
-namespace {
-// Runtime-DLL functions (resolved by mangled name; import strings verified in the exe .rdata).
-typedef void* (*fn_CSCtor_t)(void* self);                               // ??0CriticalSection@System@@QEAA@XZ
-typedef void  (*pf_fn_MemFree_t)(void* ptr);                            // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-static fn_CSCtor_t     s_fn_CSCtor     = nullptr;
-static pf_fn_MemFree_t s_fn_MemFree    = nullptr;
-
-} // namespace
+// A* / pathfinder helpers (reimplemented + registered elsewhere) — called by name through
+// Action/exe_bodies.h: Pf_WorkerApplyCmd_a6430 (0x1400a6430), Pf_EnqueueCmd1_a6a30
+// (0x1400a6a30), Pf_ArrayResize18_d830 (0x14001d830).
+// Runtime-DLL functions, called by name: ??0CriticalSection@System@@QEAA@XZ ->
+// RtSystem_CriticalSection_Ctor (system/Thread.h); ?MemFree@MemoryAllocator@System@@ ->
+// System::MemoryAllocator::MemFree.
 
 
 // --- Pathfinder System::Thread vtable (2 slots) ------------------------------------------
@@ -89,7 +82,7 @@ void PathfinderThread::Run() {
         node[2] = 0;
         node[3] = 0;
         *reinterpret_cast<int*>(p + 0x70) = *reinterpret_cast<int*>(p + 0x70) - 1;
-        if (s_fn_MemFree) s_fn_MemFree(node);
+        System::MemoryAllocator::MemFree(node);
         uint64_t cmd[2] = { cmdLo, cmdHi };
         reinterpret_cast<System::CriticalSection*>(p + 0x30)->Unlock();   // B.3.4b bridge
         Pf_WorkerApplyCmd_a6430(self, reinterpret_cast<uint32_t*>(cmd), nullptr, nullptr);
@@ -128,15 +121,6 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     uint8_t* game = reinterpret_cast<uint8_t*>(gameObjV);
     if (*reinterpret_cast<void**>(game + 0x68) != nullptr) return;   // already seeded
 
-    if (!s_fn_CSCtor) {
-        s_fn_CSCtor     = reinterpret_cast<fn_CSCtor_t>(ResolveExport("??0CriticalSection@System@@QEAA@XZ"));
-        s_fn_MemFree    = reinterpret_cast<pf_fn_MemFree_t>(ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    }
-    if (!s_fn_CSCtor) {
-        fprintf(stderr, "[PfSeed] missing Thread/CS ctor export — skip\n"); fflush(stderr);
-        return;
-    }
-
     void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);
     if (!pfV) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(pfV);
@@ -145,7 +129,7 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     // ENDGAME B.3.9 ENG W2: the REAL class ctor on System::Thread(0x10000) --
     // creates + parks the worker thread; the 0x14015ef18 stamp is the compiler's.
     ::new (pfV) PathfinderThread(0x10000);
-    s_fn_CSCtor(p + 0x30);                               // System::CriticalSection::CriticalSection(self+0x30)
+    RtSystem_CriticalSection_Ctor(reinterpret_cast<RtSystem::CriticalSection*>(p + 0x30));   // System::CriticalSection::CriticalSection(self+0x30)
     *reinterpret_cast<int*>(p + 0x58)       = 1;         // next result-slot generation id
     p[0x5c]                                 = 1;         // priming runs SYNC (a6a30/a6430 apply inline); flipped to 0 (async) after priming
     *reinterpret_cast<uint64_t*>(p + 0x60)  = 0;         // queue tail
@@ -190,8 +174,8 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
 
     // Priming is complete. Flip to ASYNC so runtime path queries (cmd 5 via a6c10) queue and
     // wake the worker thread instead of running the A* inline on the main thread. Requires the
-    // worker's MemFree to be resolved; otherwise stay sync (safe fallback).
-    bool async = s_fn_MemFree != nullptr;
+    // worker's MemFree, which is System::MemoryAllocator::MemFree: always ASYNC.
+    bool async = true;
     if (async) p[0x5c] = 0;
 
     fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, %s mode)\n",
