@@ -66,7 +66,7 @@ void AttendanceUI::OnCreated() {
     void* foundElem = (void*)result;
 
     // Type-check and wrap as InternalBasePtr
-    bool isProgress = fn_IsDerivedFrom(foundElem, UI::ProgressElement::TypeId());
+    bool isProgress = ::Object::IsDerivedFromNullSafe(foundElem, UI::ProgressElement::TypeId());
     void* progressPtr = isProgress ? foundElem : nullptr;
     uint8_t basePtrBuf[8];
     new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progressPtr));   // B.3.3 bridge
@@ -74,7 +74,7 @@ void AttendanceUI::OnCreated() {
 
     // Get entity, find AttendanceComponent
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -85,7 +85,7 @@ void AttendanceUI::OnCreated() {
 
     // Get sub-component at +0x18, check type
     void* subComp = *(void**)((uintptr_t)attendComp + 0x18);
-    bool isType = fn_IsDerivedFrom(subComp, AttendanceDescription::TypeId());
+    bool isType = ::Object::IsDerivedFromNullSafe(subComp, AttendanceDescription::TypeId());
     void* typedComp = isType ? subComp : nullptr;
 
     // Set progress maximum from sub-component's capacity field (+0x20)
@@ -106,7 +106,7 @@ void AttendanceUI::OnCreated() {
 void AttendanceUI::OnUpdateLayout() {
     // Get entity, find AttendanceComponent
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge

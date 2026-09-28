@@ -65,7 +65,7 @@ void ConsumeProduceUI::OnCreated() {
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr
@@ -79,7 +79,7 @@ void ConsumeProduceUI::OnCreated() {
 
     // Get Description at component+0x18, check ConsumeProduceComponent
     void* desc = *(void**)((uintptr_t)component + 0x18);
-    bool isCPComp = fn_IsDerivedFrom(desc, ConsumeProduceDescription::TypeId());
+    bool isCPComp = ::Object::IsDerivedFromNullSafe(desc, ConsumeProduceDescription::TypeId());
     void* cpComp = isCPComp ? desc : nullptr;
 
     // Find "comboProduct" element via DialogInstance
@@ -110,7 +110,7 @@ void ConsumeProduceUI::OnCreated() {
         void* foundElem = *(void**)elemBuf;
 
         // IsDerivedFrom ComboElement type check
-        bool isCombo = fn_IsDerivedFrom(foundElem, UI::ComboElement::TypeId());
+        bool isCombo = ::Object::IsDerivedFromNullSafe(foundElem, UI::ComboElement::TypeId());
         void* comboRaw = isCombo ? foundElem : nullptr;
         uint64_t comboBP = 0;
         new (&comboBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comboRaw));   // B.3.3 bridge
@@ -163,7 +163,7 @@ void ConsumeProduceUI::OnCreated() {
                 int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
                 if (typeId == (int)RawMaterialDescription::TypeId()) {
                     // Verify with IsDerivedFrom
-                    if (fn_IsDerivedFrom((void*)subEntry, RawMaterialDescription::TypeId())) {
+                    if (::Object::IsDerivedFromNullSafe((void*)subEntry, RawMaterialDescription::TypeId())) {
                         resourceDesc = subEntry;
                     }
                     break;
@@ -223,7 +223,7 @@ void ConsumeProduceUI::OnCreated() {
         void* progElem = *(void**)elemBuf2;
 
         // Check ProgressElement type
-        bool isProgress = fn_IsDerivedFrom(progElem, UI::ProgressElement::TypeId());
+        bool isProgress = ::Object::IsDerivedFromNullSafe(progElem, UI::ProgressElement::TypeId());
         void* progRaw = isProgress ? progElem : nullptr;
         uint64_t progBP = 0;
         new (&progBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progRaw));   // B.3.3 bridge
@@ -258,7 +258,7 @@ void ConsumeProduceUI::OnUpdateLayout() {
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr
@@ -272,7 +272,7 @@ void ConsumeProduceUI::OnUpdateLayout() {
 
     // Get sub-component at +0x18 of found component, check if ConsumeProduceComponent
     void* subComp = *(void**)((uintptr_t)component + 0x18);
-    bool isCPComp = fn_IsDerivedFrom(subComp, ConsumeProduceDescription::TypeId());
+    bool isCPComp = ::Object::IsDerivedFromNullSafe(subComp, ConsumeProduceDescription::TypeId());
     void* cpComp = isCPComp ? subComp : nullptr;
 
     // Calculate production ratio: 1.0 - currentTicks / totalTicks
@@ -308,7 +308,7 @@ void ConsumeProduceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr

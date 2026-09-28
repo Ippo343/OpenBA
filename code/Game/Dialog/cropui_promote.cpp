@@ -62,7 +62,7 @@ void* FindComp(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* entity = *reinterpret_cast<void**>(s + 0x28);
     uint32_t entTid = ComponentEntity::TypeId();
-    void* checked = fn_IsDerivedFrom(entity, entTid) ? entity : nullptr;
+    void* checked = ::Object::IsDerivedFromNullSafe(entity, entTid) ? entity : nullptr;
     uint64_t entIbp = 0;
     new (&entIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     uint64_t comp = 0;
@@ -139,7 +139,7 @@ void CropUI::OnCreated() {
     }
 
     void* raw = reinterpret_cast<void*>(found);
-    void* checked = fn_IsDerivedFrom(raw, ProgressElementTypeId()) ? raw : nullptr;
+    void* checked = ::Object::IsDerivedFromNullSafe(raw, ProgressElementTypeId()) ? raw : nullptr;
     uint64_t ibp = 0;
     new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(s + 0x38) = ibp;

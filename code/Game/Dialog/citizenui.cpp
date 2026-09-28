@@ -53,13 +53,14 @@
 #include "Player/EditTool.h"   // X::TypeId() (B.3.8 callers)
 #include "Work/Work.h"         // B.3.x W0: Work::GetTarget by name
 #include "Dialog/exe_bodies.h"
+#include "Game/exe_constants.h"   // B3R: kRdata_140172198
 
 // FUN_140011050 — Entity::FindComponent<CitizenAIComponent>, the component whose +0x28
 // holds the citizen's current action-state index (the Action text on this panel and on
 // the Follow dialog). Retail compares against [0x1401c70e8] = CitizenAIComponent's
 // type id (0x140011093) and IsDerivedFrom-checks with it (0x1400110ec).
 // ENDGAME B.3.9 CB: by the class static. The old spelling went through
-// TypeId_CitizenAIComponent, which EnsureGlobals() below pointed at a
+// TypeId_CitizenAIComponent, which a since-deleted EnsureGlobals() pointed at a
 // "ProfessionComponent" by-name id (no such class) or a static 0, so the finder found
 // nothing and the Action line was skipped.
 void fn_FindComponent_CitizenAI(void* entity, void* retval) {
@@ -180,25 +181,11 @@ static uint64_t FindElemInTree(void* elem, const char* name) {
     return CitUI_OkPtr(result) ? result : 0;
 }
 
-namespace citizenui_sa {
-
-// g_pAgeMultiplier's exe .rdata (0x140172198) is uninitialized in the standalone
-// image (unreadable / zero-fill), so fall back to 1.0 — citizen age at CitizenAI+0x3c
-// is already in display years for the panel. Not a crash risk either way; the fallback
-// just avoids a null-deref in the age line.
-static float s_ageMul = 1.0f;
-
 // ENDGAME B.3.9: ComponentEntity / CitizenDescription / CitizenComponent (was
-// TypeId_CitizenComponent_FC) / EditTool all have a ported TypeId() now, and
-// TypeId_Dialog is UI::Dialog's own _typeInfo (engine_funcs.cpp:828, a Runtime
-// address, always resolved) — not "External" as this file's old heal guessed (that
-// heal never ran: the pointer is set at EngineFuncsInit before this ever fires).
-// Only the age-multiplier fallback (a different, non-type-id singleton) is left.
-void EnsureGlobals() {
-    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
-}
-
-}  // namespace citizenui_sa
+// TypeId_CitizenComponent_FC) / EditTool all have a ported TypeId() now.
+// B3R: the age multiplier is the .rdata constant 0x140172198 = 5.0f
+// (kRdata_140172198). The old local 1.0f fallback installed over g_pAgeMultiplier
+// when it was null never ran: the cell is registered before EngineFuncsInit binds it.
 
 // ============================================================
 // Slot4: Setup — finds all named elements, stores pointers, sets button IDs
@@ -214,7 +201,6 @@ void EnsureGlobals() {
 
 // [4] 0x1400651a0
 void CitizenUI::OnCreated() {
-    citizenui_sa::EnsureGlobals();
     if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
     void* dialogInst = *(void**)(s + 0x18);
@@ -301,13 +287,12 @@ void CitizenUI::OnClosed() {
 
 // [7] 0x140064ae0
 void CitizenUI::OnUpdateLayout() {
-    citizenui_sa::EnsureGlobals();
     if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source (+0x28), cast to ComponentEntity
     void* entityBase = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
     void* entity = isEntity ? entityBase : nullptr;
     uint64_t entityRef = 0;
     new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -320,7 +305,7 @@ void CitizenUI::OnUpdateLayout() {
 
     // Get CitizenDescription from CitizenAI (+0x18), check IsDerivedFrom
     void* descBase = *(void**)(ai + 0x18);
-    bool isDesc = fn_IsDerivedFrom(descBase, CitizenDescription::TypeId());
+    bool isDesc = ::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId());
     void* citizenDesc = isDesc ? descBase : nullptr;
     if (!CitUI_OkPtr((uintptr_t)citizenDesc)) citizenDesc = nullptr;
 
@@ -378,7 +363,7 @@ void CitizenUI::OnUpdateLayout() {
 
     // --- Age number ---
     float ageFloat = *(float*)(ai + 0x3c);
-    int ageYears = (int)(ageFloat * *g_pAgeMultiplier);
+    int ageYears = (int)(ageFloat * kRdata_140172198);
     void* numberAge = (void*)*(uint64_t*)(s + 0x48);
     if (numberAge) reinterpret_cast<UI::NumberElement*>(numberAge)->SetValue(static_cast<int32_t>(ageYears));  // B.3.6 bridge
 
@@ -409,7 +394,7 @@ void CitizenUI::OnUpdateLayout() {
     } else {
         int toolItem = *(int*)(ai + 0xA8);
         void* descBase2 = *(void**)(ai + 0x18);
-        bool isDesc2 = fn_IsDerivedFrom(descBase2, CitizenDescription::TypeId());
+        bool isDesc2 = ::Object::IsDerivedFromNullSafe(descBase2, CitizenDescription::TypeId());
         void* desc2 = isDesc2 ? descBase2 : nullptr;
         if (!CitUI_OkPtr((uintptr_t)desc2)) desc2 = nullptr;
         // desc2 (CitizenDescription) may be null on a partially-initialized standalone
@@ -594,7 +579,6 @@ void CitizenUI::OnUpdateLayout() {
 // [9] 0x1400650f0
 void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    citizenui_sa::EnsureGlobals();
     // Gate on datasource-alive like the sibling slots (4/6/7): a click on a dead
     // citizen's still-open panel must not drive this body into a freed entity.
     if (!SA_DialogEntityAlive(this)) return;
@@ -606,7 +590,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
     if (param4 == 0x227) {
         // --- buttonProfession: go to workplace/job ---
         void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
+        bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
         new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -636,7 +620,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
     else if (param4 == 0x226) {
         // --- buttonHome: go to home building ---
         void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
+        bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
         new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -658,7 +642,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // Creates a FollowDialog (0xD8 bytes) from Dialog/Follow.rsc and adds it to the UI.
         // Manually constructs the object: DialogInstance base ctor + FollowDialog vtable + fields.
         void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
+        bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
         new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -676,12 +660,12 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // Type-check the resource
         void* checkedRes = nullptr;
         if (extResource) {
-            bool isExternal = fn_IsDerivedFrom(extResource, UI::Dialog::TypeId());
+            bool isExternal = ::Object::IsDerivedFromNullSafe(extResource, UI::Dialog::TypeId());
             if (isExternal) checkedRes = extResource;
         }
 
         // Allocate and construct FollowDialog (0xD8 bytes)
-        void* followDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
+        void* followDialog = System::MemoryAllocator::MemAlloc(0xD8, 8);
         void* resultPtr = nullptr;
         if (followDialog) {
             // The real ctor (B38 B8-5): DialogInstance(ui, resource, null parent, 0, 0, 0),
@@ -739,10 +723,9 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 //                         Slot7 here to refresh the panel every frame.
 //   +0x48 (idx9) Slot9  = button dispatch (profession/home/follow)
 //
-// Every exe-.rdata type-id / multiplier CitizenUI_Slot7 dereferences is NULL in
-// standalone (raw .rdata addr → ResolveAddr returns null). EnsureGlobals lazy-fills
-// them from the live factory tree (post-Engine::Startup); Slot7 is guarded to skip
-// (not fault) if any critical id failed to resolve.
+// The type ids CitizenUI_Slot7 reads are the classes' TypeId() statics and the age
+// multiplier is the .rdata constant kRdata_140172198 (B3R; the old EnsureGlobals
+// lazy-fill is gone).
 
 
 

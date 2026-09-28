@@ -270,7 +270,7 @@ void AchievementDialog_Slot14(AchievementDialog* self) {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
@@ -304,7 +304,7 @@ void AchievementDialog_Slot17(AchievementDialog* self) {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
@@ -372,7 +372,7 @@ AchievementDialog::AchievementDialog(UI::UserInterface* ui, const UI::Dialog* di
 // Retail's dtor (inside [0] 0x1400103f0): MemFree the entry array at +0xc0 and
 // zero its header (+0xc0 data, +0xc8 count/capacity), then ~DialogInstance.
 AchievementDialog::~AchievementDialog() {
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dataC0));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dataC0));
     dataC0 = 0;
     dataC8 = 0;
 }

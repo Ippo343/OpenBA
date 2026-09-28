@@ -12,7 +12,6 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -41,23 +40,10 @@
 // address. Fixed 2026-08-30 (LANE1 rows 13/14).
 // ENDGAME B.3.6 (K2): both are now direct UI::DialogInstance member calls; the
 // two by-name caches went with their last callers.
-typedef void* (*fn_TimeCtor_t)(void* retbuf, float seconds);
-
-// Time::Time(float) - dispatch slot 0x140152b00 IS registered; guard anyway.
-// ENDGAME B.3.8 (B6-5): resolved per call, no first-call cache.
-static fn_TimeCtor_t ResolveTimeCtor() {
-    fn_TimeCtor_t ctor = nullptr;
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) ctor = reinterpret_cast<fn_TimeCtor_t>(*reinterpret_cast<void**>(slot));
-    if (!ctor) ctor = reinterpret_cast<fn_TimeCtor_t>(fn_Time_Ctor_Float);
-    return ctor;
-}
+// Time::Time(float) is the import slot 0x140152b00: RtSystem_Time_Ctor, called by
+// name (B3R).
 
 void AutoSaveDialog::OnOpened() {
-    fn_TimeCtor_t timeCtor = ResolveTimeCtor();
-    if (!timeCtor)
-        return;
-
     StopTimer(0);
 
     // Autosave-interval setting: gs[1] = the Options 'Autosave' combo index (0..7).
@@ -94,7 +80,7 @@ void AutoSaveDialog::OnOpened() {
     float interval = kIntervalMinutes[speedSetting] * kMinutesToSeconds;
 
     uint8_t timeBuf[8];
-    void* timeResult = timeCtor(timeBuf, interval);
+    void* timeResult = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), interval);
     uint64_t timeVal = *(uint64_t*)timeResult;
 
     StartTimer(0, static_cast<int64_t>(timeVal));
