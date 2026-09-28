@@ -37,6 +37,7 @@
 
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"
+#include "Game/exe_bodies.h"        // B3R: 0x140002340
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
@@ -187,8 +188,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
             // int payload at record +0x10.
             reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&rec[2]), nullptr);   // B.3.4 bridge
             // ExternalPtr at record +0x08 (0x140002340 = fn_ExternalPtr_BuildSerialize).
-            if (fn_ExternalPtr_BuildSerialize)
-                fn_ExternalPtr_BuildSerialize(&rec[1], param_2);
+            Reimpl_ExternalPtr_Serialize_StringTable(&rec[1], param_2);
 
             // Insert into the tree.
             void* out = nullptr;
@@ -213,8 +213,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
                 *reinterpret_cast<int64_t*>(node) = 0;
             }
             reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(node + 0x10), nullptr);   // B.3.4 bridge
-            if (fn_ExternalPtr_BuildSerialize)
-                fn_ExternalPtr_BuildSerialize(reinterpret_cast<void*>(node + 0x08), param_2);
+            Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(node + 0x08), param_2);
 
             // In-order successor.
             int64_t right = NodeRight(node);
