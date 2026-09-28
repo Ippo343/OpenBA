@@ -46,6 +46,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "system/MemoryAllocator.h"
 
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);  // serialize_externals.cpp
 
@@ -63,7 +64,7 @@ BuildDescription::BuildDescription()
 BuildDescription::~BuildDescription() {
     // Free the element array (+0x20). Elements hold weak External* refs (no
     // per-element dtor in the original) — only the buffer itself is freed.
-    if (fn_MemFreeStatic && _costs) fn_MemFreeStatic(_costs);
+    if (_costs) ::System::MemoryAllocator::MemFree(_costs);
     _costs = nullptr;
     _costCount = 0;
     _costCap = 0;
@@ -71,7 +72,7 @@ BuildDescription::~BuildDescription() {
 
 // [5] 0x140109140: stream order as retail.
 bool BuildDescription::Serialize(void* stream) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: the allocator is unwired
+    if (!::System::MemoryAllocator::_singleton) return true;   // standalone: the allocator is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // Preserve any already-populated requirement array across re-loads. The engine
     // re-invokes this Serialize for an already-loaded resource.
@@ -116,7 +117,7 @@ bool BuildDescription::Serialize(void* stream) {
     uint8_t* arr = nullptr;
     if (count > 0) {
         arr = reinterpret_cast<uint8_t*>(
-            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 0x10, 8));
+            ::System::MemoryAllocator::MemAlloc((uint64_t)count * 0x10, 8));
     }
     
     uint8_t* e = arr;
@@ -135,11 +136,11 @@ bool BuildDescription::Serialize(void* stream) {
     // Serializer scope at the return instead changes nothing.)
     bool newPopulated = (count > 0 && arr && *(uint64_t*)arr != 0);
     if (oldPopulated && !newPopulated) {
-        if (arr && fn_MemFreeStatic) fn_MemFreeStatic(arr);  // discard empty re-load
+        if (arr) ::System::MemoryAllocator::MemFree(arr);  // discard empty re-load
         arr = reinterpret_cast<uint8_t*>(oldArr);
         count = oldCount;
-    } else if (oldArr && oldArr != arr && fn_MemFreeStatic) {
-        fn_MemFreeStatic(oldArr);                            // replaced -> free prior
+    } else if (oldArr && oldArr != arr) {
+        ::System::MemoryAllocator::MemFree(oldArr);                            // replaced -> free prior
     }
     _costs     = arr;
     _costCount = count;

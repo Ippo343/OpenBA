@@ -29,7 +29,8 @@
 
 #include "ConsumeRawMaterial.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActRm_* helpers
+#include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -38,59 +39,14 @@
 #include "Entity/ComponentEntity.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- ConsumeRawMaterial-specific helpers)
+// Helpers, called by name (B3R)
+//   0x14012d150 ActRm_StorageSubtract_d150      -- StorageComponent::SubtractItem(storage, itemType, count)
+//   0x140088f90 ActRm_GetResourceCategory_88f90 -- GetResourceCategoryIndex(storageComp, materialExternalPtr)
+//               -> int; the resource category index for the material, or -1 if not found
+//   0x14000da70 ActRm_ArrayResize16_da70        -- array resize for 16-byte elements (material list)
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable -- ExternalPtr serialize
+// DAT_1401c7158 -- type ID for CitizenAI-like component (not used here; for reference)
 // ============================================================
-
-// FUN_14012d150 -- StorageComponent::SubtractItem(storage, itemType, count)
-typedef void (*s_fn_Storage_SubtractItem_t)(void* storageComp, int64_t itemType, int count);
-static s_fn_Storage_SubtractItem_t s_fn_Storage_SubtractItem = nullptr;
-
-// FUN_140088f90 -- GetResourceCategoryIndex(storageComp, materialExternalPtr) -> int
-// Returns the resource category index for the given material, or -1 if not found.
-typedef int (*s_fn_GetResourceCategoryIndex_t)(void* storageComp, int64_t materialPtr);
-static s_fn_GetResourceCategoryIndex_t s_fn_GetResourceCategoryIndex = nullptr;
-
-// FUN_14000da70 -- Array resize for 16-byte elements (material list)
-typedef void (*s_fn_ArrayResize16_t)(void* arrayBase, int newCount);
-static s_fn_ArrayResize16_t s_fn_ArrayResize16 = nullptr;
-
-// DAT_1401c7158 -- type ID for CitizenAI-like component (used for entity type check)
-// (Not directly used here, but included for reference)
-
-static bool s_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool ConsumeRawMaterial_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-    s_fn_Storage_SubtractItem = reinterpret_cast<s_fn_Storage_SubtractItem_t>(
-        ResolveAddr(Module::Exe, 0x14012d150));
-
-    s_fn_GetResourceCategoryIndex = reinterpret_cast<s_fn_GetResourceCategoryIndex_t>(
-        ResolveAddr(Module::Exe, 0x140088f90));
-
-    s_fn_ArrayResize16 = reinterpret_cast<s_fn_ArrayResize16_t>(
-        ResolveAddr(Module::Exe, 0x14000da70));
-
-    bool ok = s_fn_Storage_SubtractItem && s_fn_GetResourceCategoryIndex &&
-              s_fn_ArrayResize16 &&
-              g_pGameWorldSingleton &&
-              fn_IsDerivedFrom &&
-              fn_ExternalPtr_BuildSerialize;
-
-#ifdef _DEBUG
-    printf("[ConsumeRawMaterial] ResolveFuncs: SubItem=%p GetResCat=%p Resize16=%p\n",
-           (void*)s_fn_Storage_SubtractItem, (void*)s_fn_GetResourceCategoryIndex,
-           (void*)s_fn_ArrayResize16);
-    if (!ok) printf("[ConsumeRawMaterial] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // ConsumeRawMaterial::Serialize (0x1400c6120) -- slot 3
@@ -100,11 +56,6 @@ bool ConsumeRawMaterial_ResolveFuncs() {
 //   v2+: consume mode flag(+0x38)
 // ============================================================
 void ConsumeRawMaterial::Persist(void* stream) {
-    // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
-    // was the one that never got it, so a save taken while one of these actions was
-    // in flight called a null serializer pointer (EXEC of 0). Found live on
-    // CompleteRoad once roads started being built; these four are the same shape.
-    ConsumeRawMaterial_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -120,7 +71,7 @@ void ConsumeRawMaterial::Persist(void* stream) {
     // Serialize target entity (+0x20) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field20, ComponentEntity::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -131,7 +82,7 @@ void ConsumeRawMaterial::Persist(void* stream) {
     if (version == 0) {
         // Legacy v0 format: single ExternalPtr + int (no material list)
         uintptr_t legacyExtPtr = 0;
-        fn_ExternalPtr_BuildSerialize(&legacyExtPtr, ser2);
+        Reimpl_ExternalPtr_Serialize_StringTable(&legacyExtPtr, ser2);   // 0x140002340
         uint32_t legacyCount;
         reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&legacyCount), nullptr);   // B.3.4 bridge
     } else {
@@ -141,7 +92,7 @@ void ConsumeRawMaterial::Persist(void* stream) {
 
         // If loading, resize the material array
         if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            s_fn_ArrayResize16((void*)(s + 0x28), (int)matCount);
+            ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(s + 0x28), (int)matCount);   // 0x14000da70
         }
 
         // Serialize each material entry (ExternalPtr + int count, 0x10 bytes each)
@@ -149,7 +100,7 @@ void ConsumeRawMaterial::Persist(void* stream) {
         if ((int)matCount > 0) {
             uint64_t remaining = (uint64_t)matCount;
             do {
-                fn_ExternalPtr_BuildSerialize(matList, ser2);
+                Reimpl_ExternalPtr_Serialize_StringTable(matList, ser2);   // 0x140002340
                 reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(((uintptr_t)matList + 8)), nullptr);   // B.3.4 bridge
                 matList = (uintptr_t*)((uintptr_t)matList + 0x10);
                 remaining--;
@@ -179,7 +130,6 @@ void ConsumeRawMaterial::Persist(void* stream) {
 // Returns 0 on success, 2 on failure.
 // ============================================================
 int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
-    ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
@@ -246,14 +196,14 @@ int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
 
         // SubtractItem from storage
         void* storageComp = (void*)storageIBP;
-        s_fn_Storage_SubtractItem(storageComp, matEntry[0], requestedCount);
+        ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storageComp), matEntry[0], requestedCount);   // 0x14012d150
 
         // Update global resource tracker
         uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
         uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
         int64_t consumedCount = matEntry[1];
 
-        int categoryIndex = s_fn_GetResourceCategoryIndex(storageComp, matEntry[0]);
+        int categoryIndex = ActRm_GetResourceCategory_88f90(storageComp, static_cast<uintptr_t>(matEntry[0]));   // 0x140088f90
         if (categoryIndex >= 0) {
             int* trackerEntry = (int*)(*(uintptr_t*)(resourceTracker + 0x170) +
                                        (int64_t)categoryIndex * 0x20 + 0xc);
@@ -273,7 +223,6 @@ int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
 // Iterates material list, subtracts reserved amounts from storage.
 // ============================================================
 void ConsumeRawMaterial::CheckEntity() {
-    ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Only undo if consume mode is active
@@ -318,7 +267,6 @@ void ConsumeRawMaterial::CheckEntity() {
 // Simple compare: returns true if param matches entity at +0x20.
 // ============================================================
 bool ConsumeRawMaterial::GetTarget(void* param) {
-    ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     return *(uintptr_t*)param == *(uintptr_t*)(s + 0x20);
@@ -358,13 +306,11 @@ ConsumeRawMaterial::~ConsumeRawMaterial() {
 // [9] 0x1400c5f10
 
 void* ConsumeRawMaterial::CreateNewObject() {
-    ConsumeRawMaterial_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ConsumeRawMaterial());
 }
 void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
-    ConsumeRawMaterial_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ConsumeRawMaterial());
 }

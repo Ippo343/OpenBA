@@ -9,7 +9,7 @@
 //   0x1400499c0  FireComponent_sub_99c0          add/remove the fire-danger rect
 //   0x14009fa80  FUN_14009fa80                   the rect stamp itself
 //   (0x140053720 ParticleComponent fade-OUT and 0x140042960 audio-emitter move are
-//    the TORNADO lane's ports — resolved here, not duplicated; see below.)
+//    the TORNADO lane's ports — called here, not duplicated; see below.)
 //   0x140042c60  FUN_140042c60                   start ONE audio emitter
 //   0x1400e9bd0  FireWork_Ctor(mem, entityIBP, capacity)
 //
@@ -47,69 +47,33 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Component/FireComponent.h"
+#include "system/MemoryAllocator.h"
+#include "Component/exe_bodies.h"
+#include "Component/tornadocomponent_funcs.h"
+#include "Component/particlecomponent_funcs.h"
+#include "Player/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
 
-// EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp).
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
-
-// Shared with the tornado lane — ported once in firecomponent_smstate.cpp.
-extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp);
-extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64_t* burnTime);
-extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp);
+// EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp),
+// declared in Game/exe_bodies.h. The three shared SM-state helpers are ported once
+// in firecomponent_smstate.cpp (firecomponent_funcs.h).
 
 // ============================================================
-// Resolved dependencies
+// Dependencies, called directly
 // ============================================================
+//   0x140005780 DestroyComponent finder   PlayerPath_FindComponent_5780
+//   0x140005200 ParticleComponent finder  NaturalResourceComponent_FindComponentByType
+//   0x140003050 WorkComponent finder      WorkBase_FindComponent_3050
+//   0x140004680 MapComponent finder       FloorComponent_FindResData
+//   0x140002280 AmbientEmitterComponent finder — NOT PORTED (PORT GAP arms below)
+//   0x14012ec60 CitizenAI_WorkScheduler_Post, 0x1400f9ad0 RemovalCalc_CitizenAI_9ad0,
+//   0x14012eb50 WorkComponent_RegisterWorkSlot, 0x140053660 ParticleComponent_StartEmitterFade,
+//   0x140053720 Tornado_ParticleReverse_53720 (tornado lane's port),
+//   0x14011e710 PlayerPath_Sub_11e710.
+//   .rdata: 0x140172234 = 300.0f (seconds-per-unit scale), 0x140172114 = 0.5f.
 namespace {
-
-typedef void* (*fn_Find_t)(uintptr_t entity, void* retIBP);
-typedef void  (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
-typedef void  (*fn_RemovalCalc_t)(int64_t townMgr, int id);
-typedef void  (*fn_StopSlot_t)(uintptr_t workComp);
-typedef void  (*fn_ParticleFade_t)(void* particleComp, int emitterIdx);
-typedef void  (*fn_AudioMove_t)(void* ambientComp, void* newPos);
-typedef bool  (*fn_Gate11e710_t)(void* destroyComp);
-
-fn_Find_t         s_findDestroy   = nullptr;  // 0x140005780 DestroyComponent
-fn_Find_t         s_findParticle  = nullptr;  // 0x140005200 ParticleComponent
-fn_Find_t         s_findWorkComp  = nullptr;  // 0x140003050 WorkComponent
-fn_Find_t         s_findMapComp   = nullptr;  // 0x140004680 MapComponent
-fn_Find_t         s_findAmbient   = nullptr;  // 0x140002280 AmbientEmitterComponent
-fn_Find_t         s_findXform     = nullptr;  // 0x140003f60 ModelComponent (world transform)
-fn_PostWork_t     s_postWork      = nullptr;  // 0x14012ec60
-fn_RemovalCalc_t  s_removalCalc   = nullptr;  // 0x1400f9ad0
-fn_StopSlot_t     s_stopSlot      = nullptr;  // 0x14012eb50
-fn_ParticleFade_t s_particleFadeIn  = nullptr;// 0x140053660
-fn_ParticleFade_t s_particleFadeOut = nullptr;// 0x140053720 (tornado lane's port)
-fn_AudioMove_t    s_audioMove       = nullptr;// 0x140042960 (tornado lane's port)
-fn_Gate11e710_t   s_gate11e710    = nullptr;  // 0x14011e710
-
-const float* s_pK300 = nullptr;   // DAT_140172234 = 300.0f  (seconds-per-unit scale)
-const float* s_pHalf = nullptr;   // DAT_140172114 = 0.5f
-
-bool s_init = false;
-
-inline float K300() { return s_pK300 ? *s_pK300 : 300.0f; }
-inline float Half() { return s_pHalf ? *s_pHalf : 0.5f;   }
-
-void EnsureInit() {
-    if (s_init) return;
-    s_findDestroy    = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140005780));
-    s_findParticle   = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140005200));
-    s_findWorkComp   = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_findMapComp    = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_findAmbient    = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140002280));
-    s_findXform      = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_postWork       = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_removalCalc    = reinterpret_cast<fn_RemovalCalc_t>(ResolveAddr(Module::Exe, 0x1400f9ad0));
-    s_stopSlot       = reinterpret_cast<fn_StopSlot_t>(ResolveAddr(Module::Exe, 0x14012eb50));
-    s_particleFadeIn = reinterpret_cast<fn_ParticleFade_t>(ResolveAddr(Module::Exe, 0x140053660));
-    s_particleFadeOut= reinterpret_cast<fn_ParticleFade_t>(ResolveAddr(Module::Exe, 0x140053720));
-    s_audioMove      = reinterpret_cast<fn_AudioMove_t>(ResolveAddr(Module::Exe, 0x140042960));
-    s_gate11e710     = reinterpret_cast<fn_Gate11e710_t>(ResolveAddr(Module::Exe, 0x14011e710));
-    s_pK300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
-    s_pHalf = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_init = true;
-}
 
 inline uintptr_t GameWorld() {
     return (g_pGameWorldSingleton && *g_pGameWorldSingleton)
@@ -118,7 +82,7 @@ inline uintptr_t GameWorld() {
 
 inline int64_t MakeTime(float seconds) {
     int64_t t = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, seconds);
+    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t), seconds);
     return t;
 }
 
@@ -181,13 +145,11 @@ extern "C" void FireComp_StampDangerRect_9fa80(int* grid, uint64_t /*unused*/,
 // FireComponent_sub_99c0 (0x1400499c0) — add (+1) / remove (-1) the danger rect.
 // ============================================================
 extern "C" void FireComp_MarkDanger_99c0(void* self, short delta) {
-    EnsureInit();
     void* desc = FireDesc(self);
-    if (!s_findMapComp) return;
 
     void* ibpSlot = reinterpret_cast<uint8_t*>(self) + 0x10;
     uintptr_t mapIbp = 0;
-    s_findMapComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &mapIbp);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(ibpSlot), &mapIbp);
 
     const int r = *reinterpret_cast<int*>(
         reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::DangerRadius);
@@ -207,8 +169,8 @@ extern "C" void FireComp_MarkDanger_99c0(void* self, short delta) {
 // ── 0x140053720 (ParticleComponent fade-out) and 0x140042960 (move this entity's
 // audio emitters) are NOT ported here. The TORNADO lane ported and registered both
 // first (tornadocomponent.cpp:977 / :1002, standalone/reg_tornado.cpp:80-81) and
-// its damage arm calls them for the same reason this lane does. Resolving them
-// through ResolveAddr keeps ONE body per retail function
+// its damage arm calls them for the same reason this lane does. Calling those
+// bodies keeps ONE body per retail function
 // (reference_one_retail_fn_ported_twice_diverges) — writing a second copy here
 // would have been exactly that failure mode, with each copy faithful in a
 // different half.
@@ -265,7 +227,6 @@ extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx) {
 // FireWork_Ctor (0x1400e9bd0) — the 3-arg ctor. The ONLY producer of a FireWork.
 // ============================================================
 extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32_t capacity) {
-    EnsureInit();
     // ENDGAME B.3.9 OBJ: the real 3-argument ctor (FireWork.h) -- the Work
     // base ctor 0x1400f72e0, the table, the +0x48 dword / +0x50 / +0x58 stores
     // and FireWork_ResolveFuncs() (the Work's own leaf pointers: the factory
@@ -280,7 +241,6 @@ extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32
 // FireComponent_Extinguish (0x1400494c0)
 // ============================================================
 extern "C" void FireComponent_Extinguish_4c0(void* self) {
-    EnsureInit();
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
 
@@ -289,52 +249,32 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
     void* desc = FireDesc(self);
 
     // ParticleComponent: fade the flames out.
-    if (s_findParticle) {
+    {
         uintptr_t partIbp = 0;
-        s_findParticle(*reinterpret_cast<uintptr_t*>(ibpSlot), &partIbp);
-        if (s_particleFadeOut)
-            s_particleFadeOut(reinterpret_cast<void*>(partIbp),
-                              *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) +
-                                                      FireDescriptionField::ParticleEmitter));
+        NaturalResourceComponent_FindComponentByType(*reinterpret_cast<void**>(ibpSlot), &partIbp);
+        Tornado_ParticleReverse_53720(reinterpret_cast<void*>(partIbp),
+                                      *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) +
+                                                              FireDescriptionField::ParticleEmitter));
     }
 
     // DestroyComponent: leave the BURNING state.
-    if (s_findDestroy) {
+    {
         uintptr_t destIbp = 0;
-        s_findDestroy(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
+        PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
         FireComponent_StopBurning_11ea10(reinterpret_cast<void*>(destIbp));
     }
 
     // WorkComponent: release the firefighting work slot (this is what retires the
     // FireWork Ignite posted).
-    if (s_findWorkComp && s_stopSlot) {
+    {
         uintptr_t workIbp = 0;
-        s_findWorkComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &workIbp);
-        s_stopSlot(workIbp);
+        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(ibpSlot), &workIbp);
+        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(workIbp));
     }
 
     // AmbientEmitterComponent: stop the crackle.
-    if (s_findAmbient) {
-        uintptr_t ambIbp = 0;
-        s_findAmbient(*reinterpret_cast<uintptr_t*>(ibpSlot), &ambIbp);
-        int64_t base = ambIbp ? *reinterpret_cast<int64_t*>(ambIbp + 0x38) : 0;
-        const uintptr_t gw = GameWorld();
-        if (base && gw) {
-            uint32_t* handle = reinterpret_cast<uint32_t*>(
-                static_cast<int64_t>(*reinterpret_cast<int*>(
-                    reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::AudioEmitter)) * 0x10
-                + base);
-            void* scene = *reinterpret_cast<void**>(gw + 0x78);
-            void* pos = reinterpret_cast<void*>(ambIbp + 0x28);
-            if (scene) {
-                reinterpret_cast<Audio::Scene*>(scene)->RemoveEmitter(
-                    *handle, *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
-                if (reinterpret_cast<Audio::Scene*>(scene)->GetEmitterCount(*handle) == 0)   // B.3.7 bridge
-                    reinterpret_cast<Audio::Scene*>(scene)->StopEffect3D(*handle);   // B.3.7 bridge
-            }
-            *handle = 0;
-        }
-    }
+    // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it here.
+    // Its null arm: no emitter is found, so the crackle-stop block is skipped.
 
     FireComp_MarkDanger_99c0(self, -1);
 
@@ -345,22 +285,21 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
 // FireComponent_Ignite (0x140049610)
 // ============================================================
 extern "C" void FireComponent_Ignite_610(void* self) {
-    EnsureInit();
     if (!self) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
     const uintptr_t gw = GameWorld();
-    if (!gw || !s_findDestroy) return;
+    if (!gw) return;
 
     // --- the two abort gates, on the DestroyComponent ---
     uintptr_t destIbp = 0;
-    s_findDestroy(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
+    PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
     void* destroyComp = reinterpret_cast<void*>(destIbp);
 
     if (FireComponent_IsBeingDemolished_11e690(destroyComp)) {
         return;
     }
-    if (s_gate11e710 && s_gate11e710(destroyComp)) {
+    if (PlayerPath_Sub_11e710(reinterpret_cast<uintptr_t>(destroyComp)) != 0) {
         return;
     }
 
@@ -370,10 +309,10 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     // Burn duration = Time(BurnScale * 300 + BurnBase); the DestroyComponent gets
     // HALF of it (its own damage clock).
     const int64_t burnFull = MakeTime(
-        *reinterpret_cast<float*>(d + FireDescriptionField::BurnScale) * K300() +
+        *reinterpret_cast<float*>(d + FireDescriptionField::BurnScale) * kRdata_140172234 +
         *reinterpret_cast<float*>(d + FireDescriptionField::BurnBase));
     const float   burnSecs = reinterpret_cast<const System::Time*>(const_cast<int64_t*>(&burnFull))->AsSeconds();   // B.3.4b bridge
-    const int64_t burnHalf = MakeTime(burnSecs * Half());
+    const int64_t burnHalf = MakeTime(burnSecs * kRdata_140172114);
 
     if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
         return;
@@ -385,22 +324,20 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     *reinterpret_cast<int64_t*>(s + 0x28) = 0;      // bucketsApplied + bucketsAtSpread
 
     // ParticleComponent: fade the flames in.
-    if (s_findParticle && s_particleFadeIn) {
+    {
         uintptr_t partIbp = 0;
-        s_findParticle(*reinterpret_cast<uintptr_t*>(ibpSlot), &partIbp);
-        s_particleFadeIn(reinterpret_cast<void*>(partIbp),
+        NaturalResourceComponent_FindComponentByType(*reinterpret_cast<void**>(ibpSlot), &partIbp);
+        ParticleComponent_StartEmitterFade(reinterpret_cast<ParticleComponent*>(partIbp),
                          *reinterpret_cast<int*>(d + FireDescriptionField::ParticleEmitter));
     }
 
     // --- MINT the FireWork and POST it to the reservation ledger ---
     uintptr_t workCompIbp = 0;
-    if (s_findWorkComp) {
-        s_findWorkComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &workCompIbp);
-    }
+    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(ibpSlot), &workCompIbp);
 
     void* work = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+    if (::System::MemoryAllocator::_singleton) {
+        void* mem = ::System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
             uint64_t entityIbp = *reinterpret_cast<uint64_t*>(s + 0x10);
             work = FireWork_CtorFull_e9bd0(
@@ -410,14 +347,14 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     }
 
     uint64_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+    new (&workIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
-    if (s_postWork && workCompIbp) {
-        s_postWork(workCompIbp, 0x4000, 0, &workIbp);
+    if (workCompIbp) {
+        CitizenAI_WorkScheduler_Post(workCompIbp, 0x4000, 0, &workIbp);
     }
-    if (s_removalCalc && workCompIbp) {
-        s_removalCalc(*reinterpret_cast<int64_t*>(gw + 0x118),
+    if (workCompIbp) {
+        RemovalCalc_CitizenAI_9ad0(*reinterpret_cast<int64_t*>(gw + 0x118),
                       *reinterpret_cast<int*>(workCompIbp + 0x28));
     }
 
@@ -445,24 +382,9 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     }
 
     // --- audio: move this entity's emitters to its world position, then start one ---
-    if (s_findAmbient && s_findXform) {
-        uintptr_t ambIbp = 0;
-        s_findAmbient(*reinterpret_cast<uintptr_t*>(ibpSlot), &ambIbp);
-
-        uintptr_t xformIbp = 0;
-        s_findXform(*reinterpret_cast<uintptr_t*>(ibpSlot), &xformIbp);
-
-        if (ambIbp && xformIbp) {
-            float pos[3];
-            pos[0] = *reinterpret_cast<float*>(xformIbp + 0x158);
-            pos[1] = *reinterpret_cast<float*>(xformIbp + 0x15c);
-            pos[2] = *reinterpret_cast<float*>(xformIbp + 0x160);
-            if (s_audioMove) s_audioMove(reinterpret_cast<void*>(ambIbp), pos);
-            FireComp_StartAudioEmitter_42c60(
-                reinterpret_cast<void*>(ambIbp),
-                *reinterpret_cast<int*>(d + FireDescriptionField::AudioEmitter));
-        }
-    }
+    // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it here.
+    // Its null arm: no emitter is found, so the move (0x140042960) and the start
+    // (0x140042c60) are skipped, and the ModelComponent find (0x140003f60) with them.
 
     FireComp_MarkDanger_99c0(self, 1);
 
@@ -474,11 +396,10 @@ extern "C" void FireComponent_Ignite_610(void* self) {
 // Spread census — see the comment at the roll site below.
 
 extern "C" void FireComponent_Spread_130(void* self) {
-    EnsureInit();
     if (!self) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     const uintptr_t gw = GameWorld();
-    if (!gw || !s_findMapComp) return;
+    if (!gw) return;
 
     void* myDesc = FireDesc(self);
     int* grid = *reinterpret_cast<int**>(gw + 0xf8);
@@ -486,7 +407,7 @@ extern "C" void FireComponent_Spread_130(void* self) {
 
     void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
     uintptr_t mapIbp = 0;
-    s_findMapComp(*reinterpret_cast<uintptr_t*>(ibpSlot), &mapIbp);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(ibpSlot), &mapIbp);
 
     // Footprint-derived sample rect, expanded by min(w,h) on each side.
     int w  = static_cast<int>(*reinterpret_cast<int16_t*>(mapIbp + 0x2c));
@@ -525,7 +446,7 @@ extern "C" void FireComponent_Spread_130(void* self) {
 
         *reinterpret_cast<int64_t*>(s + 0x38) += MakeTime(
             *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(myDesc) +
-                                      FireDescriptionField::SpreadInterval) * K300());
+                                      FireDescriptionField::SpreadInterval) * kRdata_140172234);
 
         int cx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<int32_t>(xMin), static_cast<int32_t>(xMax));   // B.3.4b bridge
         int cy = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<int32_t>(oy - pad), static_cast<int32_t>(yMax));   // B.3.4b bridge
@@ -558,11 +479,11 @@ extern "C" void FireComponent_Spread_130(void* self) {
             float chance = *reinterpret_cast<float*>(nd + FireDescriptionField::SpreadChance);
             // Half the chance while the game is at its slowest speed step.
             int64_t speedObj = *reinterpret_cast<int64_t*>(gw + 0x130);
-            if (speedObj && *reinterpret_cast<int*>(speedObj + 0x10) == 0) chance *= Half();
+            if (speedObj && *reinterpret_cast<int*>(speedObj + 0x10) == 0) chance *= kRdata_140172114;
             // Half it again once the brigade is visibly winning here.
             if (*reinterpret_cast<int*>(nd + FireDescriptionField::BucketsToOut) / 5 <
                 *reinterpret_cast<int32_t*>(s + 0x28) - *reinterpret_cast<int32_t*>(s + 0x2c))
-                chance *= Half();
+                chance *= kRdata_140172114;
 
             const float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
             const bool caught = roll < chance;
@@ -585,7 +506,6 @@ extern "C" void FireComponent_Spread_130(void* self) {
 // body reads only the message id.
 void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
     if (message != 0) return;
-    EnsureInit();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     void* desc = FireDesc(this);
     const uintptr_t d = reinterpret_cast<uintptr_t>(desc);
@@ -594,7 +514,7 @@ void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
 
     const int needed = *reinterpret_cast<int*>(d + FireDescriptionField::BucketsToOut);
     const int64_t step = MakeTime(
-        (*reinterpret_cast<float*>(d + FireDescriptionField::SpreadInterval) * K300()) /
+        (*reinterpret_cast<float*>(d + FireDescriptionField::SpreadInterval) * kRdata_140172234) /
         static_cast<float>(needed));
     *reinterpret_cast<int64_t*>(s + 0x30) -= step;
 

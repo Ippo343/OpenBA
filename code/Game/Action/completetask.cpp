@@ -10,7 +10,7 @@
 
 #include "CompleteTask.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActCt_* task helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -25,74 +25,19 @@
 
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h — CompleteTask-specific helpers)
+// Helpers, called by name (B3R)
+//   0x1400f8760 ActCt_TryCompleteTask_8760 -- try complete task
+//   0x1400f8e30 ActCt_TaskCleanup_8e30     -- cleanup after task completion
+//   0x1400f8800 ActCt_TaskReassign_8800    -- task reassignment (used by CheckEntity)
+// DAT_1401c3dd8 (the game state singleton; the task manager is *(it+0x118)) is read
+// through g_pGameWorldSingleton, the engine_funcs global bound to the same cell.
 // ============================================================
-
-// FUN_1400f8760 — try complete task
-static bool (*s_fn_TryCompleteTask)(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam) = nullptr;
-
-// FUN_1400f8e30 — cleanup after task completion
-static void (*s_fn_TaskCleanup)(void* taskMgr, int taskIdx) = nullptr;
-
-// FUN_1400f8800 — task reassignment (used by CheckEntity)
-static void (*s_fn_TaskReassign)(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam) = nullptr;
-
-// Game state singleton
-static void** s_pGameState = nullptr;  // DAT_1401c3dd8
-
-static bool s_funcs_resolved = false;
-
-// ============================================================
-// Resolution — called once from Install
-// ============================================================
-bool CompleteTask_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-    // Task functions
-    s_fn_TryCompleteTask = reinterpret_cast<bool(*)(void*, void*, int, void*, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x1400f8760));
-    s_fn_TaskCleanup = reinterpret_cast<void(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400f8e30));
-    s_fn_TaskReassign = reinterpret_cast<void(*)(void*, void*, int, void*, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x1400f8800));
-
-    // Game state singleton (== g_pGameWorldSingleton; the task manager is *(this+0x118)).
-    s_pGameState = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    // Exec-critical gate. The action methods (AbstractImpl/CheckEntity/GetTarget) must run
-    // whenever the task-manager BST helpers, the game-state singleton, and the shared
-    // InternalBasePtr ops are live — they never reference the Serialize-only pointers
-    // (IBP::Serialize dispatch slot + the raw .rdata type-ids + the IO::Serializer fns).
-    // Gating them on those Serialize deps is exactly what silently disabled the entire
-    // completion path in the standalone exe (both are null there), so the task manager
-    // was reachable for POST but never for complete/cancel.
-    bool execOk = s_fn_TryCompleteTask && s_fn_TaskCleanup && s_fn_TaskReassign &&
-                  s_pGameState && fn_IsDerivedFrom &&
-                  fn_InternalBasePtr_DeletePtr && fn_MemFreeStatic;
-
-#ifdef _DEBUG
-    printf("[CompleteTask] ResolveFuncs: execOk=%d TryComplete=%p TaskCleanup=%p TaskReassign=%p\n",
-           (int)execOk, (void*)s_fn_TryCompleteTask,
-           (void*)s_fn_TaskCleanup, (void*)s_fn_TaskReassign);
-    printf("[CompleteTask]   GameState=%p\n",
-           s_pGameState ? *s_pGameState : nullptr);
-    if (!execOk) printf("[CompleteTask] ERROR: exec-critical pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = execOk;
-    return execOk;
-}
 
 // ============================================================
 // Serialize (0x1400c5be0, vtable slot 3)
 // Serializes status, entity refs with type checks, task fields.
 // ============================================================
 void CompleteTask::Persist(void* stream) {
-    // Reached through the registered vtable, which the factory path never
-    // has to touch — an exe-ctor-built action arrives here with the file
-    // statics still null. Lazy-resolve like the other entry points do.
-    CompleteTask_ResolveFuncs();
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
@@ -109,7 +54,7 @@ void CompleteTask::Persist(void* stream) {
     // is simply skipped when the type-id can't be resolved.
     reinterpret_cast<Object::InternalBasePtr*>(&this->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->workEntity != nullptr) {
-        if (!fn_IsDerivedFrom(this->workEntity, CitizenComponent::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(this->workEntity, CitizenComponent::TypeId())) {
             this->workEntity = nullptr;
         }
     }
@@ -117,7 +62,7 @@ void CompleteTask::Persist(void* stream) {
     // Target entity ref (+0x28) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->targetEntity != nullptr) {
-        if (!fn_IsDerivedFrom(this->targetEntity, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(this->targetEntity, ComponentEntity::TypeId())) {
             this->targetEntity = nullptr;
         }
     }
@@ -142,12 +87,10 @@ void CompleteTask::Persist(void* stream) {
 
 int  CompleteTask::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    // Lazy resolve (action built via exe ctor path -> ResolveFuncs never ran -> s_fn_* null).
-    if (!CompleteTask_ResolveFuncs()) return 0;
     // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
     // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).
-    if (!s_pGameState || !*s_pGameState ||
-        !*(void**)((uint8_t*)*s_pGameState + 0x118)) return 0;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
+        !*(void**)((uint8_t*)*g_pGameWorldSingleton + 0x118)) return 0;
 
     // Lazy-resolve task index from work entity
     if (this->taskIndex == 0x7FFFFFFF) {
@@ -168,12 +111,12 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
     if (taskIdx >= 0) {
         void* entityRef28 = this->targetEntity;
         void* entityRef20 = this->workEntity;
-        void* gameState = *s_pGameState;
+        void* gameState = *g_pGameWorldSingleton;
         void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
 
-        bool completed = s_fn_TryCompleteTask(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);
+        bool completed = ActCt_TryCompleteTask_8760(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8760
         if (completed) {
-            s_fn_TaskCleanup(taskMgr, taskIdx);
+            ActCt_TaskCleanup_8e30(taskMgr, taskIdx);   // 0x1400f8e30
         }
     }
     return 0;
@@ -184,9 +127,8 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
 // Resolves task index, calls task reassignment.
 // ============================================================
 void CompleteTask::CheckEntity() {
-    if (!CompleteTask_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
-    if (!s_pGameState || !*s_pGameState ||
-        !*(void**)((uint8_t*)*s_pGameState + 0x118)) return;   // inert task mgr -> no-op
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
+        !*(void**)((uint8_t*)*g_pGameWorldSingleton + 0x118)) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
     if (this->taskIndex == 0x7FFFFFFF) {
         uint8_t* workEnt = static_cast<uint8_t*>(workEntity);
@@ -195,10 +137,10 @@ void CompleteTask::CheckEntity() {
 
     void* entityRef28 = this->targetEntity;
     void* entityRef20 = this->workEntity;
-    void* gameState = *s_pGameState;
+    void* gameState = *g_pGameWorldSingleton;
     void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
 
-    s_fn_TaskReassign(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);
+    ActCt_TaskReassign_8800(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8800
 }
 
 // ============================================================
@@ -206,7 +148,6 @@ void CompleteTask::CheckEntity() {
 // Returns true if param matches entity at +0x28 or parent entity at +0x20.
 // ============================================================
 bool CompleteTask::GetTarget(void* param) {
-    if (!CompleteTask_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
     void* paramVal = *(void**)param;
 
     // Check direct match with target entity
@@ -242,13 +183,11 @@ CompleteTask::CompleteTask()
 // [9] 0x1400c5a50
 
 void* CompleteTask::CreateNewObject() {
-    CompleteTask_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(CompleteTask), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CompleteTask());
 }
 void* CompleteTask::CreateInPlaceObject(void* storage) {
-    CompleteTask_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CompleteTask());
 }

@@ -25,6 +25,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "system/MemoryAllocator.h"
 
 namespace {
 // serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
@@ -58,7 +59,7 @@ AnimalDescription::AnimalDescription()
 // dtor (slot 0 0x14002f100 minus the stamps): frees the External* array buffer.
 // The compiler then chains ~Description -> ~External.
 AnimalDescription::~AnimalDescription() {
-    if (_refs && fn_MemFreeStatic) fn_MemFreeStatic(_refs);
+    if (_refs) ::System::MemoryAllocator::MemFree(_refs);
     _refs = nullptr;
 }
 
@@ -68,8 +69,8 @@ bool AnimalDescription::Serialize(void* stream) {
     // External*-array @ +0x48 (count @ +0x50, stride 8)
     ser.Serialize(_refCount, nullptr);
     int n = _refCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * 8, 8);
+    if (SerStreamErr(ser) == 0 && n > 0 && ::System::MemoryAllocator::_singleton) {
+        void* buf = ::System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
         _refs = buf;
         _refCap = n;
         if (buf) for (int i = 0; i < n; ++i) static_cast<void**>(buf)[i] = nullptr;

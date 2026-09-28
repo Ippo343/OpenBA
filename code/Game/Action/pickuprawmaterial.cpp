@@ -27,7 +27,7 @@
 
 #include "PickupRawMaterial.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActRm_*, ActHunt_* helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include "Component/CitizenComponent.h"
@@ -38,63 +38,19 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- PickupRawMaterial-specific helpers)
-// ============================================================
-
-// FUN_1400223c0 -- FindComponent for CitizenAI-like component (DAT_1401c7c80)
-// Params: (entity, retval_IBP) -- finds component by type ID DAT_1401c7c80
-// Returns InternalBasePtr with found component.
-typedef void* (*s_fn_FindComponent_7c80_t)(void* entity, void* retval);
-static s_fn_FindComponent_7c80_t s_fn_FindComponent_7c80 = nullptr;
-
-// FUN_14012d000 -- StorageComponent::AddItem(storage, itemType, count)
-// Adds count of itemType to the storage component's inventory.
-typedef void (*s_fn_Storage_AddItem_t)(void* storageComp, int64_t itemType, int count);
-static s_fn_Storage_AddItem_t s_fn_Storage_AddItem = nullptr;
-
-// FUN_1400c2ea0 -- Entity flag set (sets bit 0x400 on entity +0x40 flags, optionally exits components)
-typedef void (*s_fn_EntityFlagSet_t)(void* entity);
-static s_fn_EntityFlagSet_t s_fn_EntityFlagSet = nullptr;
-
+// Helpers, called by name (B3R)
+//   0x1400223c0 ActRm_FindComponent_223c0 -- FindComponent for the RawMaterial component
+//               (type ID DAT_1401c7c80): (entity, retval_IBP), returns the IBP
+//   0x14012d000 ActRm_StorageAdd_d000 -- StorageComponent::AddItem(storage, itemType, count)
+//   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0 -- entity flag set (sets bit 0x400 on entity
+//               +0x40 flags, optionally exits components)
+//
 // FUN_140003110 (DynArrayPush 8-byte elements, used to add the entity to the game
 // world list) is the exe-side Collection::Array<Ptr8>::SetSize(n,fill) mono-
 // morphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
 // is gone.
-
-static bool s_funcs_resolved = false;
-
 // ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool PickupRawMaterial_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-    s_fn_FindComponent_7c80 = reinterpret_cast<s_fn_FindComponent_7c80_t>(
-        ResolveAddr(Module::Exe, 0x1400223c0));
-
-    s_fn_Storage_AddItem = reinterpret_cast<s_fn_Storage_AddItem_t>(
-        ResolveAddr(Module::Exe, 0x14012d000));
-
-    s_fn_EntityFlagSet = reinterpret_cast<s_fn_EntityFlagSet_t>(
-        ResolveAddr(Module::Exe, 0x1400c2ea0));
-
-    bool ok = s_fn_FindComponent_7c80 && s_fn_Storage_AddItem &&
-              s_fn_EntityFlagSet &&
-              g_pGameWorldSingleton &&
-              fn_IsDerivedFrom;
-
-#ifdef _DEBUG
-    printf("[PickupRawMaterial] ResolveFuncs: FC7c80=%p AddItem=%p FlagSet=%p\n",
-           (void*)s_fn_FindComponent_7c80, (void*)s_fn_Storage_AddItem,
-           (void*)s_fn_EntityFlagSet);
-    if (!ok) printf("[PickupRawMaterial] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // PickupRawMaterial::Serialize (0x1400c99e0)
@@ -117,7 +73,7 @@ void PickupRawMaterial::Persist(void* stream) {
     // Serialize source building (+0x20) with type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field20, CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -125,7 +81,7 @@ void PickupRawMaterial::Persist(void* stream) {
     // Serialize source entity (+0x28) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(_field28, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field28, ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }
@@ -144,7 +100,6 @@ void PickupRawMaterial::Persist(void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 int  PickupRawMaterial::AbstractImpl(void* actionStack) {
-    PickupRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
 
     // Get source entity at +0x28
@@ -153,7 +108,7 @@ int  PickupRawMaterial::AbstractImpl(void* actionStack) {
     // Find RawMaterial description component on source entity via FUN_1400223c0
     // This is a FindComponent variant using DAT_1401c7c80 type ID
     uint8_t resultIBP[16]; // InternalBasePtr result
-    s_fn_FindComponent_7c80((void*)(uintptr_t)sourceEntity, resultIBP);
+    ActRm_FindComponent_223c0((uintptr_t)sourceEntity, resultIBP);   // 0x1400223c0
 
     // CheckPtr on the result to resolve lazy pointer
 
@@ -173,7 +128,7 @@ int  PickupRawMaterial::AbstractImpl(void* actionStack) {
     fn_FindComponent_Storage((void*)parentEntity, &storageIBP);
 
     // CheckPtr + add item to storage
-    s_fn_Storage_AddItem((void*)storageIBP, itemType, quantity);
+    ActRm_StorageAdd_d000(storageIBP, itemType, quantity);   // 0x14012d000
 
     // Get source entity again, check if it should be flagged for removal
     void* entityRef = _field28;
@@ -188,7 +143,7 @@ int  PickupRawMaterial::AbstractImpl(void* actionStack) {
         uint32_t flags = *(uint32_t*)(localEntity + 0x40);
         if (((flags >> 10) & 1) == 0) {
             // Entity not yet flagged -- call entity flag set and add to world removal list
-            s_fn_EntityFlagSet((void*)localEntity);
+            ActHunt_MarkEntityRemoval_c2ea0((void*)localEntity);   // 0x1400c2ea0
 
             // Push entity ref to world list at worldList + 0xd0.
             // B.3.2 bridge: FUN_140003110 == Collection::Array<Ptr8>::SetSize(n,fill)
@@ -209,7 +164,6 @@ int  PickupRawMaterial::AbstractImpl(void* actionStack) {
 // matches the parent entity (+0x10) of the building at +0x20.
 // ============================================================
 bool PickupRawMaterial::GetTarget(void* param) {
-    PickupRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Check direct match with +0x28
@@ -245,13 +199,11 @@ PickupRawMaterial::PickupRawMaterial()
 // [9] 0x1400c9860
 
 void* PickupRawMaterial::CreateNewObject() {
-    PickupRawMaterial_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(PickupRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PickupRawMaterial());
 }
 void* PickupRawMaterial::CreateInPlaceObject(void* storage) {
-    PickupRawMaterial_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PickupRawMaterial());
 }

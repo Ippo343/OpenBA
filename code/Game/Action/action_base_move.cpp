@@ -1,12 +1,10 @@
 // code/Game/Action/action_base_move.cpp
 // Shared MoveTo / PerformWork / PlayAnimation base-class / ECS exe sub-helpers.
 //
-// These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from the
-// per-class Action .cpp files (moveto.cpp, performwork.cpp, playanimation.cpp,
-// huntanimal.cpp). They resolve to 0 (silently skipped) unless registered. This file provides
-// faithful 1:1 reimplementations and a single registration point
-// (RegisterActionMoveBatch in standalone/reg_action_move.cpp) so the shared call
-// sites fire real logic in the standalone exe.
+// The per-class Action .cpp files (moveto.cpp, performwork.cpp, playanimation.cpp,
+// huntanimal.cpp) call these by name through Action/exe_bodies.h (B3R); the
+// registration (RegisterActionMoveBatch in standalone/reg_action_move.cpp) stays for
+// readers other blocks still have.
 //
 // Wave 3 (Action) — MoveTo / PerformWork / PlayAnimation sub-batch. Each function is
 // a 1:1 port of the decompiled exe helper; do not "improve" behavior.
@@ -14,7 +12,8 @@
 #include "Action/exe_bodies.h"
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
+#include "Game/exe_constants.h"   // kRdata_140172114
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Object/factory_registration.h"
 #include "system/String.h"
@@ -71,12 +70,12 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == wantId) {
                 void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantId)) ? c : nullptr;
+                found = ::Object::IsDerivedFromNullSafe(c, wantId) ? c : nullptr;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -98,7 +97,7 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 //   0x1401529f0 External::GetPath(retbuf)    -> ::Object::External::GetPath (B.3.3)
 //   0x1401529d8 ExternalFactory _singleton   -> g_pExternalFactorySingleton
 //   0x140151230 ExternalFactory::FindOrLoad  -> ::Object::ExternalFactory::FindOrLoad (B.3.3)
-//   0x140152a98 IsDerivedFrom                -> fn_IsDerivedFrom
+//   0x140152a98 IsDerivedFrom                -> Object::IsDerivedFromNullSafe (B3R)
 //   0x140151d40 Filename::Filename()         -> System::Filename ctor (B.3.1)
 //   0x140151218 IsReferenceModeEnabled       -> ::Object::ExternalFactory member (B.3.3)
 //   0x140151220 GetReferenceId               -> ::Object::ExternalFactory member (B.3.3)
@@ -128,7 +127,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
             ::Object::ExternalFactory* efactory =
                 ::Object::ExternalFactory::_singleton;  // B.3.3 bridge
             void* found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnStorage)));
-            if (found && fn_IsDerivedFrom) fn_IsDerivedFrom(found, typeId);
+            if (found) ::Object::IsDerivedFromNullSafe(found, typeId);
         }
         return;   // ~Filename releases fnStorage (was the manual fn_Filename_Dtor)
     }
@@ -193,7 +192,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
             if (::Object::ExternalFactory::_singleton)
                 found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnLocal)));
             uintptr_t result = 0;
-            if (found && fn_IsDerivedFrom && fn_IsDerivedFrom(found, typeId))
+            if (found && ::Object::IsDerivedFromNullSafe(found, typeId))
                 result = reinterpret_cast<uintptr_t>(found);
             *pSlot = result;
         }
@@ -231,24 +230,13 @@ void ActMv_SetFacingDirection_a060(void* comp, void* vector3) {
 //   self+0x28 -> citizen IBP; that+0x68 -> movement sub-object; +0x158/+0x15c =
 //     current world x/y; +0x160 carried through.
 //   self+0x60 = current path index; self+0x68[idx] = target cell.
-//   CharacterComponent_impl_f3e0 (0x14009f3e0) = grid->world conversion.
+//   CharacterComponent_impl_f3e0 (0x14009f3e0, Reimpl_MapGetTerrainPos) = grid->world
+//   conversion. DAT_140172114 = 0.5f (kRdata_140172114).
 // Caller signature: void fn(void* self)
-typedef float* (*fn_GridToWorld_f3e0_t)(int* grid, float* outWorld, float* inGrid, char flag, void* extra);
-static fn_GridToWorld_f3e0_t s_fn_GridToWorld_f3e0 = nullptr;
-static float* s_pHalfCell_172114 = nullptr;  // DAT_140172114 = 0.5f
-static bool s_facingResolved = false;
-static void EnsureFacingFuncs() {
-    if (s_facingResolved) return;
-    s_fn_GridToWorld_f3e0 = reinterpret_cast<fn_GridToWorld_f3e0_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_pHalfCell_172114 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_facingResolved = true;
-}
-
 void ActMv_UpdateFacing_c8d20(void* selfp) {
-    EnsureFacingFuncs();
     uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
     int* grid = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(GameWorld() + 0xf8));
-    float halfCell = s_pHalfCell_172114 ? *s_pHalfCell_172114 : 0.5f;
+    float halfCell = kRdata_140172114;   // 0x140172114
 
     // Resolve the citizen movement sub-object: self+0x28 -> +0x68.
     uintptr_t citizen = *reinterpret_cast<uintptr_t*>(self + 0x28);
@@ -269,8 +257,7 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
     inGrid[2] = 0.0f;
 
     float outWorld[3] = {0.0f, 0.0f, 0.0f};
-    if (s_fn_GridToWorld_f3e0)
-        s_fn_GridToWorld_f3e0(grid, outWorld, inGrid, 0, nullptr);
+    Reimpl_MapGetTerrainPos(grid, outWorld, inGrid, 0, nullptr);   // 0x14009f3e0
 
     // dir2 = (worldX - curX, worldY - curY), normalized.
     Math::Vector2 dir2in(outWorld[0] - curX, outWorld[1] - curY);
@@ -301,22 +288,12 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
 //     XMM3=*(lVar1+0x2c), stack5=p3 float).  Verified in disassembly: XMM6=p3, XMM7=p4.
 //   self+0x38 = *(animObj+0x13c) * p4  (speed multiplier).
 // Caller signature: void fn(void* self, uint32_t animId, float p3, float p4)
-typedef void (*fn_AnimHelper_50f0_t)(uintptr_t animObj, uint32_t animId, float a, float b, float p3);
-static fn_AnimHelper_50f0_t s_fn_AnimHelper_50f0 = nullptr;
-static bool s_animResolved = false;
-
 void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
-    if (!s_animResolved) {
-        s_fn_AnimHelper_50f0 = reinterpret_cast<fn_AnimHelper_50f0_t>(ResolveAddr(Module::Exe, 0x1401250f0));
-        s_animResolved = true;
-    }
     uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
     uintptr_t sub = *reinterpret_cast<uintptr_t*>(self + 0x78);
     uintptr_t animObj = *reinterpret_cast<uintptr_t*>(self + 0x68);
-    if (s_fn_AnimHelper_50f0) {
-        // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
-        s_fn_AnimHelper_50f0(animObj, animId, 0.0f, *reinterpret_cast<float*>(sub + 0x2c), p3);
-    }
+    // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
+    ActMvDep_AnimHelper_50f0(animObj, animId, 0.0f, *reinterpret_cast<float*>(sub + 0x2c), p3);   // 0x1401250f0
     uintptr_t animObj2 = *reinterpret_cast<uintptr_t*>(self + 0x68);
     *reinterpret_cast<float*>(self + 0x38) = *reinterpret_cast<float*>(animObj2 + 0x13c) * p4;
 }
@@ -333,15 +310,7 @@ void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
 //     to fetch a record; read float at out+0x54; FUN_1400a9290(self+0x200, &thatFloat,
 //     gw+0xd8 Random) decides. On success stash out at self+0x1f8 and return it (nonzero).
 // Caller signature: uint8_t fn(void* entity)
-typedef bool (*fn_TimeCheck_a9290_t)(void* time, float* val, void* rng);
-static fn_TimeCheck_a9290_t s_fn_TimeCheck_a9290 = nullptr;
-static bool s_breakResolved = false;
-
 uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
-    if (!s_breakResolved) {
-        s_fn_TimeCheck_a9290 = reinterpret_cast<fn_TimeCheck_a9290_t>(ResolveAddr(Module::Exe, 0x1400a9290));
-        s_breakResolved = true;
-    }
     uintptr_t self = reinterpret_cast<uintptr_t>(entityp);
     uintptr_t gw = GameWorld();
 
@@ -374,8 +343,8 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
         }
     }
     if (!haveValue) {
-        // (*fn_InternalBasePtr_Ctor)(&local_res10, 0): value stays null.
-        if (fn_InternalBasePtr_Ctor) new (&valueIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        // InternalBasePtr ctor (&local_res10, 0): value stays null.
+        new (&valueIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         valueObj = reinterpret_cast<uintptr_t>(valueIBP);
     }
 
@@ -397,9 +366,7 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
     duePair[0] = *reinterpret_cast<float*>(outRec + 0x54);
     duePair[1] = *reinterpret_cast<float*>(outRec + 0x58);
     void* rng = *reinterpret_cast<void**>(gw + 0xd8);
-    bool ok = false;
-    if (s_fn_TimeCheck_a9290)
-        ok = s_fn_TimeCheck_a9290(reinterpret_cast<void*>(self + 0x200), duePair, rng);
+    bool ok = ActMvDep_TimeCheck_a9290(reinterpret_cast<void*>(self + 0x200), duePair, rng);   // 0x1400a9290
     if (ok) {
         *reinterpret_cast<uintptr_t*>(self + 0x1f8) = outRec;
         return 1;
@@ -416,20 +383,19 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
 //   param_1 = map grid (longlong); +0x68 -> some sub-object for the final call.
 //   param_2 = pathfinder (Thread*).
 // Caller signature: void fn(void* mapGrid, void* pathfinder, int profile, void* param4)
-typedef void (*fn_SetCost_a6a30_t)(void* pathfinder, int slot, int cost, void* p4);
-typedef void (*fn_RoadFlag_a68b0_t)(void* sub, uint8_t flag, int a, int b);
-static fn_SetCost_a6a30_t  s_fn_SetCost_a6a30 = nullptr;
-static fn_RoadFlag_a68b0_t s_fn_RoadFlag_a68b0 = nullptr;
-static bool s_terrainResolved = false;
+//
+// B3R: FUN_1400a6a30 is Pf_EnqueueCmd1_a6a30(int64_t, int, void* param_3, void* param_4)
+// and FUN_1400a68b0 is Pf_EnqueueCmd4_a68b0(int64_t, uint8_t, void*, void*). The doors
+// this file used typed the third / fourth arguments as ints (the cost; the two zeros);
+// the bodies take them as pointer-width values and truncate. The call passes the same
+// bits the door passed (the int zero-extended).
+static inline void SetCost_a6a30(void* pathfinder, int slot, int cost, void* p4) {
+    Pf_EnqueueCmd1_a6a30(reinterpret_cast<int64_t>(pathfinder), slot,   // 0x1400a6a30
+                         reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<uint32_t>(cost))), p4);
+}
 
 void ActMv_SetTerrainCosts_e550(void* mapGrid, void* pathfinder, int profile, void* param4) {
-    if (!s_terrainResolved) {
-        s_fn_SetCost_a6a30  = reinterpret_cast<fn_SetCost_a6a30_t>(ResolveAddr(Module::Exe, 0x1400a6a30));
-        s_fn_RoadFlag_a68b0 = reinterpret_cast<fn_RoadFlag_a68b0_t>(ResolveAddr(Module::Exe, 0x1400a68b0));
-        s_terrainResolved = true;
-    }
-    if (!s_fn_SetCost_a6a30) return;
-    fn_SetCost_a6a30_t set = s_fn_SetCost_a6a30;
+    auto set = SetCost_a6a30;
     uint8_t roadFlag;
 
     if (profile == 0) {
@@ -479,9 +445,9 @@ void ActMv_SetTerrainCosts_e550(void* mapGrid, void* pathfinder, int profile, vo
         return;
     }
 
-    if (s_fn_RoadFlag_a68b0) {
+    {
         uintptr_t sub = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x68);
-        s_fn_RoadFlag_a68b0(reinterpret_cast<void*>(sub), roadFlag, 0, 0);
+        Pf_EnqueueCmd4_a68b0(static_cast<int64_t>(sub), roadFlag, nullptr, nullptr);   // 0x1400a68b0
     }
 }
 
@@ -536,26 +502,17 @@ int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* path
 //   grid+0x1a (int-units) => *(grid+0x1a) read as Thread* = pathfinder owner.
 //   param_3 (uint64) = terrain pass flags. param_4 = destCell, param_5 = srcCell.
 // Caller signature: void* fn(void* grid, void* outResult, uint64_t flags, uint32_t dest, uint32_t src)
-typedef void (*fn_ConnRefresh_9c480_t)(int* grid, int* out, uint64_t flags, uint32_t dest);
-typedef void (*fn_PathSetupA_a6b20_t)(void* owner, uint32_t mask, uintptr_t recDest, uintptr_t recSrc);
-typedef void (*fn_PathSetupB_a6c10_t)(void* owner, int* out, uint64_t dest, uint64_t src);
-static fn_ConnRefresh_9c480_t s_fn_ConnRefresh_9c480 = nullptr;
-static fn_PathSetupA_a6b20_t  s_fn_PathSetupA_a6b20 = nullptr;
-static fn_PathSetupB_a6c10_t  s_fn_PathSetupB_a6c10 = nullptr;
-static bool s_pfqResolved = false;
-
+//
+// B3R: 0x14009c480 Pf_ZoneRefresh_9c480, 0x1400a6b20 Pf_EnqueueCmd0_a6b20 and 0x1400a6c10
+// Pf_EnqueueTradeRoute_a6c10 take their third / fourth arguments as pointer-width values;
+// the doors this file used passed the flags / record addresses / cells there as integers.
+// The calls pass the same bits (cells zero-extended, as the uint64 door did).
 void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
                                   uint32_t destCell, uint32_t srcCell) {
-    if (!s_pfqResolved) {
-        s_fn_ConnRefresh_9c480 = reinterpret_cast<fn_ConnRefresh_9c480_t>(ResolveAddr(Module::Exe, 0x14009c480));
-        s_fn_PathSetupA_a6b20  = reinterpret_cast<fn_PathSetupA_a6b20_t>(ResolveAddr(Module::Exe, 0x1400a6b20));
-        s_fn_PathSetupB_a6c10  = reinterpret_cast<fn_PathSetupB_a6c10_t>(ResolveAddr(Module::Exe, 0x1400a6c10));
-        s_pfqResolved = true;
-    }
     int* grid = reinterpret_cast<int*>(gridp);
     int* out = reinterpret_cast<int*>(outResultp);
 
-    if (s_fn_ConnRefresh_9c480) s_fn_ConnRefresh_9c480(grid, out, flags, destCell);
+    Pf_ZoneRefresh_9c480(grid, out, reinterpret_cast<void*>(flags), static_cast<int>(destCell));   // 0x14009c480
 
     // Cell-record array base: *(grid + 0x20 int-units) == *(uintptr_t*)((char*)grid + 0x80).
     uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
@@ -586,8 +543,11 @@ void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
 
     // owner = *(grid + 0x1a int-units) == *(void**)((char*)grid + 0x68).
     void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(grid) + 0x68);
-    if (s_fn_PathSetupA_a6b20) s_fn_PathSetupA_a6b20(owner, mask, recDest, recSrc);
-    if (s_fn_PathSetupB_a6c10) s_fn_PathSetupB_a6c10(owner, out, destCell, srcCell);
+    Pf_EnqueueCmd0_a6b20(reinterpret_cast<int64_t>(owner), static_cast<int>(mask),   // 0x1400a6b20
+                         reinterpret_cast<void*>(recDest), reinterpret_cast<void*>(recSrc));
+    Pf_EnqueueTradeRoute_a6c10(reinterpret_cast<int64_t>(owner), out,   // 0x1400a6c10
+                               reinterpret_cast<void*>(static_cast<uint64_t>(destCell)),
+                               reinterpret_cast<void*>(static_cast<uint64_t>(srcCell)));
     return out;
 }
 

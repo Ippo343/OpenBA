@@ -97,3 +97,4 @@ see this file's context — put the relevant hard rules in the prompt.
 | Toolchain versions, VS Code / MCP debugging | `docs/reference/environment.md` |
 | Per-binary function inventories | `decomp/README.md` |
 | Known retail bugs | `docs/retail_bugs.md` |
+| Known / suspected bugs in OUR port, not yet fixed | `docs/known_port_issues.md` |

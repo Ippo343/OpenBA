@@ -25,6 +25,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x1400343c0 / createInPlace 0x140034430):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -37,9 +38,8 @@ FishingDescription::FishingDescription()
 
 // [5] 0x14011f170: stream order as retail.
 bool FishingDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_fish, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_fish, &ser);
     ser.Serialize(_u2c, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_u28, nullptr);   // version-gated, as retail
     return true;

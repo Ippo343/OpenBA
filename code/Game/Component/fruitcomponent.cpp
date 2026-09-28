@@ -34,60 +34,38 @@
 #include <cstring>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/FruitDescription.h"   // ENDGAME B.3.9 C1: 0x1401c4288 cell class
+#include "Work/exe_bodies.h"
+#include "Game/exe_constants.h"
 
 // ============================================================
-// Resolved helpers (.rdata constants + globals)
+// .rdata constants (Game/exe_constants.h) and helpers
 // ============================================================
+
+static inline float BitsF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 // g_fUVScale (DAT_140172140 = 0.98f). Used as the "near-1.0" comparison/clamp
 // value throughout Update AND as the ripeningSpeed numerator. (NOT a literal
 // 1.0f -- that was the prior port's bug.)
-static float* s_fUVScale = nullptr;            // 0x140172140 -> 0.98f
-static float* s_fSecsPerSeason = nullptr;      // 0x140172234 -> 300.0f
-static float* s_fSecsPerYear = nullptr;        // 0x14017225c -> 3600.0f
-static float* s_fMonthsPerYear = nullptr;      // 0x1401721b8 -> 12.0f
-static float* s_fFreezeThreshold = nullptr;    // 0x1401721d0 -> 32.0f
-static float* s_fFrostDamage = nullptr;        // 0x140172288 -> -10.0f
-// DAT_1401722b0 -- double mask for fabs (0x7FFFFFFFFFFFFFFF)
-static uint64_t* s_dblAbsMask = nullptr;       // 0x1401722b0
+static const float kUVScale         = BitsF(kRdata_140172140);   // 0.98f
+static const float kSecsPerSeason   = kRdata_140172234;          // 300.0f
+static const float kSecsPerYear     = BitsF(kRdata_14017225c);   // 3600.0f
+static const float kMonthsPerYear   = BitsF(kRdata_1401721b8);   // 12.0f
+static const float kFreezeThreshold = BitsF(kRdata_1401721d0);   // 32.0f
+static const float kFrostDamage     = BitsF(kRdata_140172288);   // -10.0f
 
 // Game world singleton (DAT_1401c3dd8 == g_pGameWorldSingleton)
 //   +0x128: pointer to the season-time object (+8 = Time value)
 //   +0x130: pointer to the weather/environment data (+0x18 = current temperature)
-static void** s_pGameWorld = nullptr;          // 0x1401c3dd8
 
 // FUN_1400052c0 -- find the sibling NaturalResourceComponent IBP on the owner
-// entity (the slot-4 OnCreate accessor; already registered in reg_work_base.cpp).
-typedef void* (*fn_FindNatResSibling_t)(void* owner, void* outIBP);
-static fn_FindNatResSibling_t s_fn_FindNatResSibling = nullptr;
+// entity (the slot-4 OnCreate accessor): WorkBase_FindComponent_52c0, called directly.
 
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fUVScale         = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172140));
-    s_fSecsPerSeason   = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172234));
-    s_fSecsPerYear     = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017225c));
-    s_fMonthsPerYear   = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721b8));
-    s_fFreezeThreshold = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721d0));
-    s_fFrostDamage     = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172288));
-    s_dblAbsMask       = reinterpret_cast<uint64_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
-
-    s_pGameWorld       = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_fn_FindNatResSibling = reinterpret_cast<fn_FindNatResSibling_t>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-
-    s_initialized = true;
-}
-
-// fabsf via the double-abs bitmask the original uses (matches bitwise pattern).
+// fabsf via the double-abs bitmask the original uses (DAT_1401722b0, matches bitwise pattern).
 static inline float AbsViaMask(float v) {
     double d = static_cast<double>(v);
     uint64_t bits;
     __builtin_memcpy(&bits, &d, sizeof(bits));
-    bits &= s_dblAbsMask ? *s_dblAbsMask : 0x7fffffffffffffffull;
+    bits &= kRdata_1401722b0;
     __builtin_memcpy(&d, &bits, sizeof(d));
     return static_cast<float>(d);
 }
@@ -96,19 +74,6 @@ static inline float AbsViaMask(float v) {
 // FruitComponent::Update (vtable slot [9], +0x48, 0x140049de0)
 // ============================================================
 // Fruit ripening simulation with temperature-dependent growth.
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void FruitComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[FruitComponent] Funcs resolved: GameWorld=%p FruitDescTypeId=%u "
-           "FindNatResSibling=%p UVScale=%p\n",
-           (void*)s_pGameWorld, FruitDescription::TypeId(),
-           (void*)s_fn_FindNatResSibling, (void*)s_fUVScale);
-#endif
-}
 
 // ===== ENDGAME B.3.8 CIT — FruitComponent as a REAL class (FruitComponent.h) =====
 // Before: a 48-slot hand-built FruitComponent_LiveVtable filled at every create
@@ -139,7 +104,6 @@ FruitComponent::FruitComponent()
 // (+0x18, the FruitDescription) is set earlier by the base Component copy-ctor
 // (ComponentEntity_CtorFromDescription).
 void FruitComponent::Startup() {
-    EnsureHelpers();
     uint8_t* comp = reinterpret_cast<uint8_t*>(this);
 
     void* owner = *reinterpret_cast<void**>(comp + 0x10);
@@ -149,8 +113,7 @@ void FruitComponent::Startup() {
     // FUN_1400052c0 returns an InternalBasePtr (out-param); its first qword is the
     // wrapped component pointer, which the original stores into this+0x28.
     int64_t ibp = 0;
-    if (s_fn_FindNatResSibling)
-        s_fn_FindNatResSibling(owner, &ibp);
+    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(owner), &ibp);
     *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(ibp);
 }
 
@@ -158,7 +121,6 @@ void FruitComponent::Startup() {
 // bucket tick 0x1400c42af).
 void FruitComponent::Update(void* time) {
     int64_t* pDeltaTime = static_cast<int64_t*>(time);
-    EnsureHelpers();
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(this);
 
@@ -178,13 +140,13 @@ void FruitComponent::Update(void* time) {
             return;
     }
 
-    const float fUV = s_fUVScale ? *s_fUVScale : 0.98f;  // ~1.0 comparison/clamp
+    const float fUV = kUVScale;  // ~1.0 comparison/clamp
 
     // resData = IsDerivedFrom(_description, FruitDescription) ? _description : 0
     void* baseObj = _description;
     void* resData = nullptr;
-    if (baseObj && fn_IsDerivedFrom) {
-        if (fn_IsDerivedFrom(baseObj, FruitDescription::TypeId()))
+    if (baseObj) {
+        if (::Object::IsDerivedFromNullSafe(baseObj, FruitDescription::TypeId()))
             resData = baseObj;
     }
     // [STANDALONE TRUST] The factory/type tree can be incomplete in standalone, so
@@ -195,19 +157,19 @@ void FruitComponent::Update(void* time) {
     if (!resData) return;  // original derefs resData->+0x20/+0x24/+0x28 below
 
     // ripeningSpeed = g_fUVScale / (resData->+0x20 * SECS_PER_SEASON)
-    float secsPerSeason = s_fSecsPerSeason ? *s_fSecsPerSeason : 300.0f;
+    float secsPerSeason = kSecsPerSeason;
     float ripeningSpeed = fUV / (*(float*)((uintptr_t)resData + 0x20) * secsPerSeason);
 
     // Seasonal flag-clear: when fruitFlag(+0x34) set, clear it once the month index
     // leaves the fruit-bearing window.  month = (seasonSecs/3600)*12 - 7; clear if
     // (uint)month > 4.
     if (fruitFlag != 0) {
-        if (s_pGameWorld && *s_pGameWorld) {
-            uintptr_t world = (uintptr_t)*s_pGameWorld;
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
             void* seasonTime = (void*)(*(uintptr_t*)(world + 0x128) + 8);
             float seasonSecs = reinterpret_cast<const System::Time*>(seasonTime)->AsSeconds();   // B.3.4b bridge
-            float secsPerYear   = s_fSecsPerYear   ? *s_fSecsPerYear   : 3600.0f;
-            float monthsPerYear = s_fMonthsPerYear ? *s_fMonthsPerYear : 12.0f;
+            float secsPerYear   = kSecsPerYear;
+            float monthsPerYear = kMonthsPerYear;
             unsigned int monthIdx =
                 (unsigned int)((int)((seasonSecs / secsPerYear) * monthsPerYear) - 7);
             if (monthIdx > 4)
@@ -217,8 +179,8 @@ void FruitComponent::Update(void* time) {
 
     // currentTemp = *(*(world+0x130)+0x18)
     float currentTemp = 0.0f;
-    if (s_pGameWorld && *s_pGameWorld) {
-        uintptr_t world = (uintptr_t)*s_pGameWorld;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
         currentTemp = *(float*)(*(uintptr_t*)(world + 0x130) + 0x18);
     }
 
@@ -237,9 +199,9 @@ void FruitComponent::Update(void* time) {
                 growthFactor = fUV - tempDelta * tempDelta;
             } else {
                 growthFactor = 0.0f;
-                float freezeTemp = s_fFreezeThreshold ? *s_fFreezeThreshold : 32.0f;
+                float freezeTemp = kFreezeThreshold;
                 if (currentTemp <= freezeTemp)
-                    growthFactor = s_fFrostDamage ? *s_fFrostDamage : -10.0f;
+                    growthFactor = kFrostDamage;
             }
         }
         // growthRate < g_fUVScale -> growthFactor stays 0.0

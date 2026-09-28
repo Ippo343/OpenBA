@@ -38,26 +38,12 @@
 // each). Registered at 0x14006c5b0 (see frustumoutlinedescription.cpp) so
 // fn_MapUI_ProjectCornersToGround (minimap click-to-move-camera) resolves too.
 // ===========================================================================
-typedef void  (*Frustum_fnGetCorners_t)(void* frustum, void* out8Vec3);
-
-static Frustum_fnGetCorners_t s_getCorners = nullptr;
-static bool s_frustumMathReady = false;
-
-// These are plain Runtime engine exports; resolve them by name directly. (The
-// exe reaches them through .rdata dispatch slots 0x1401518a8/a0, 0x140151860.
-// Vector3::Normalize / Transform3::Rotate / Vector3::Dot — slots 0x1401512c0,
-// 0x140151298 — are now direct Math:: class calls.)
-static void EnsureFrustumMathFns() {
-    if (s_frustumMathReady) return;
-    s_frustumMathReady = true;
-    s_getCorners = reinterpret_cast<Frustum_fnGetCorners_t>(
-        ResolveExport("?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z"));
-}
-
+// Volume::Frustum::GetCorners is the Runtime body RtVolume_Frustum_GetCorners,
+// called directly. (The exe reaches it through .rdata dispatch slots
+// 0x1401518a8/a0, 0x140151860. Vector3::Normalize / Transform3::Rotate /
+// Vector3::Dot — slots 0x1401512c0, 0x140151298 — are direct Math:: class calls.)
 extern "C" void FrustumOutline_ProjectCorners(float* out) {
     if (!out) return;
-    EnsureFrustumMathFns();
-    if (!s_getCorners) return;
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw) return;
     uint8_t* cam = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(gw) + 0xe0);
@@ -75,10 +61,10 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
     // Camera::GetFrustum is a hidden-retslot door in retail; the door body moves
     // to the call site as exactly ONE construction into the same caller storage.
     alignas(::Frustum) uint8_t frustum[0x80];
-    void* fr = ::new (static_cast<void*>(frustum)) ::Frustum(
+    ::Frustum* fr = ::new (static_cast<void*>(frustum)) ::Frustum(
         reinterpret_cast<const Graphics::Camera*>(cam + 0x34)->GetFrustum());   // B.3.5 bridge
     Math::Vector3 corners[8];
-    s_getCorners(fr, corners);
+    RtVolume_Frustum_GetCorners(fr, corners);
 
     // Far corners 4..7 -> normalized -> rotated into world-space ray directions.
     Math::Vector3 dir[4];

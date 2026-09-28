@@ -18,7 +18,7 @@
 //   int   @ +0x60
 //   int   @ +0x64
 //   bool  @ +0x68
-//   ExternalPtr @ +0x70  (FUN_140002340 / fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x70  (FUN_140002340 / Reimpl_ExternalPtr_Serialize_StringTable)
 // GetVersion (vtable +0x18, 0x1400479c0): mov eax,3; ret -> version 3.
 // Dtor (vtable +0x00, 0x140004960): External::~External + free.
 //
@@ -39,6 +39,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x1400048e0 / createInPlace 0x140004920):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -57,16 +58,15 @@ CreateFencedDescription::CreateFencedDescription()
 
 // [5] 0x1400478f0: stream order as retail.
 bool CreateFencedDescription::Serialize(void* stream) {
-    if (!fn_ExternalRefArray_Serialize || !fn_ExternalPtr_BuildSerialize) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_u20, nullptr);
-    fn_ExternalRefArray_Serialize(&ser, 6, _refs, nullptr);   // ExtPtr[6] +0x28 (0x1400049c0)
+    Reimpl_ExternalPtrArray_Serialize(&ser, 6, reinterpret_cast<long long>(_refs), nullptr);   // ExtPtr[6] +0x28 (0x1400049c0)
     ser.Serialize(_i58, nullptr);
     ser.Serialize(_i5c, nullptr);
     ser.Serialize(_i60, nullptr);
     ser.Serialize(_i64, nullptr);
     ser.Serialize(_b68, nullptr);
-    fn_ExternalPtr_BuildSerialize(&_ref70, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref70, &ser);
     return true;
 }
 

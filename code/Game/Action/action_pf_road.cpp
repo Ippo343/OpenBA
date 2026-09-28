@@ -17,11 +17,10 @@
 //   0x14004edb0  Pf_PickReachableCell_edb0 — pick a random nearby reachable cell
 //   0x140087fb0  Pf_EntityAnchorCell_7fb0  — compute an entity's spawn/anchor cell + worldpos
 //
-// All sub-callees that are themselves in the broader closure are resolved via
-// ResolveAddr(Module::Exe, 0xADDR) — they are registered in sibling batches:
-//   1fa80 acc10 ae180 1f8d0 aa810 ae270 a8420 123070 1a4f0  (+ dispatch slots / engine exports).
-// In standalone they resolve to 0 (and the call is skipped) unless registered. This file provides ONLY the callee bodies; the single
-// registration point is RegisterPfRoadBatch() in standalone/reg_pf_road.cpp.
+// All sub-callees that are themselves in the broader closure are called by name (B3R):
+//   1fa80 acc10 ae180 1f8d0 aa810 ae270 a8420 123070 1a4f0  (+ engine members).
+// The registration point RegisterPfRoadBatch() (standalone/reg_pf_road.cpp) stays for readers
+// other blocks have.
 //
 // Faithfulness is everything: none of this is runtime-exercised on the autostart path, so a
 // wrong port is undetectable silent corruption. Each function is a literal transcription of the
@@ -30,7 +29,12 @@
 //
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"          // WorkBase_FindComponent_2ed0, WorkBase_ValidateCell_a00f0, WorkBase_CalcDistance_8830
+#include "Component/exe_bodies.h"     // FloorComponent_FindResData
+#include "Game/exe_bodies.h"          // Reimpl_TradeWork_helper_e270, Reimpl_Struct60B_Resize, Reimpl_MapGetTerrainPos
+#include "Game/exe_constants.h"       // kRdata_*
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include <cstring>
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
@@ -61,110 +65,39 @@ static_assert(std::is_trivially_default_constructible<PfRawElem14>::value,
               "init = !is_trivially_default_constructible)");
 
 // ------------------------------------------------------------
-// Lazily-resolved exe sub-helpers + .rdata constants (resolved once).
+// Exe sub-helpers + .rdata constants, called / read by name (B3R).
 // ------------------------------------------------------------
-// Direct exe-code helpers (E8-relative CALLs in the original), all registered in sibling batches.
-typedef void  (*fn_RoadVtxFill_t)(int64_t self, int x, int y, short* outVtx, uint8_t blend);     // acaa0 (this file)
-typedef void  (*fn_RoadQuad_t)(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend); // cc10 (this file)
-typedef void* (*fn_RoadNormal_t)(int64_t self, void* outVec3, int x, int y);                     // ae270
-typedef int   (*fn_RoadCornerBlend_t)(uint64_t a1, char c2, char c3, char c4, char c5,
-                                      char c6, char c7, char c8, char c9);                        // ae180
-typedef void  (*fn_GrowElemDup_t)(int64_t* arr, int newCount, void* src);                        // fa80
-typedef void  (*fn_GrowElem_t)(int64_t* arr, uint32_t newCount);                                 // f250
+//   ae270 Reimpl_TradeWork_helper_e270 (road normal)    ae180 Pf_TileShapeLut_ae180
+//   fa80  Pf_VectorResize60_fa80 (grow + dup element)   f250  Reimpl_Struct60B_Resize
+//   aa810 Pf_RayTriIntersect_aa810                       1a4f0 Pf_AvlInsertA_a4f0
+//   a8420 Pf_DirtyCoarseCellB_8420                       123070 Pf_RecursiveChildSum_123070
+//   002ed0 WorkBase_FindComponent_2ed0                   003f60 ActCNR_FindComponent_3f60
+//   004680 FloorComponent_FindResData                    122e20 Pf_EntityResolvePos_2e20 (self-rec)
+//   a00f0 WorkBase_ValidateCell_a00f0                    008830 WorkBase_CalcDistance_8830
+//   9f3e0 Reimpl_MapGetTerrainPos (f3e0, grid -> world)
 // 021d0 (int-array SetSize), c890 (uint16 SetSize) and 1f8d0/ee40 (0x14-byte-element
 // SetSize/SetSizeFill) are the exe-side Collection::Array<T> monomorphisations --
 // ENDGAME B.3.2 step 2 converted their call sites below to GameColl::AsArray<T>
 // member calls, so the resolved-pointer stand-ins for them are gone.
-
-typedef uint64_t (*fn_CellRayTri_t)(uint64_t a1, float* p2, void* p3, float* p4, float* p5,
-                                    float* p6, float* p7, float* p8, uint32_t* p9);               // aa810
-typedef void* (*fn_CellQuadRay_t)(int64_t self, int x, int y, void* p4, float* p5, float* p6,
-                                  float* p7, float* p8, uint32_t* p9);                            // aaa20 (this file)
-typedef void  (*fn_AvlInsert_t)(int64_t* tree, void* outNode, uint32_t* key);                    // 1a4f0
-typedef void  (*fn_MarkFineDirty_t)(int64_t self, int cell);                                     // a8420
-typedef int   (*fn_PosCount_t)(int64_t posComp, int mode);                                       // 123070
-typedef void* (*fn_FindCompPos_t)(int64_t entity, void* retIBP);                                 // 002ed0
-typedef void* (*fn_ClearPathQueue_t)(int64_t entity, void* retIBP);                              // 003f60
-typedef void* (*fn_FindComp4680_t)(int64_t entity, void* retIBP);                                // 004680
-typedef void* (*fn_EntityResolvePos_t)(void* self, float* retVec3, int mode, int index,
-                                       float* heading);                                          // 122e20 (this file, self-rec)
-typedef uint64_t (*fn_ValidateCell_t)(int* mapGrid, uint32_t pathType, uint64_t destCell, int srcCell); // a00f0
-typedef int   (*fn_FindNearestCell_t)(int* mapGrid, uint32_t pathType, uint32_t cell);           // 008830
-typedef void  (*fn_GridToWorld_t)(int* mapGrid, float* out3, float* in2, char flag, void* ptr);  // 9f3e0 (f3e0)
-
-// Dispatch-slot helpers (CALL qword ptr [0x140xxxxxx] in the original): read the runtime fn-ptr
-// out of the .rdata slot (the moveto.cpp / autosavedialog.cpp idiom).
 // B.3.1: Math::Quaternion::Rotate [0x1401525f0] (3-arg — R8 = input vec; Ghidra dropped it),
 // Math::Vector3::Heading [0x1401512d8], Math::Transform::operator*(Vector3) [0x140151470]
-// and the Math::Vector3 splat ctor [0x140151320] are now direct members of the real classes.
+// and the Math::Vector3 splat ctor [0x140151320] are direct members of the real classes.
+//
+// .rdata constants (Game/exe_constants.h): 0x140172264 (caa0 ao-uv scale), 0x1401720bc
+// (aa20 height scale, 1/256), 0x140172114 (7fb0 half-cell offset), 0x14017214c (1.0),
+// 0x140172208 / 0x140172280 / 0x140172228 (0f90 query origin z / dir z / maxT).
+// (This file also resolved 0x1401720b8, 0x140172214 and 0x14017226c into pointers
+// nothing read; those dead reads are gone.)
 
-static fn_RoadNormal_t        s_fn_RoadNormal      = nullptr;  // ae270
-static fn_RoadCornerBlend_t   s_fn_RoadCornerBlend = nullptr;  // ae180
-static fn_GrowElemDup_t       s_fn_GrowElemDup     = nullptr;  // fa80
-static fn_GrowElem_t          s_fn_GrowElem        = nullptr;  // f250
-static fn_CellRayTri_t        s_fn_CellRayTri      = nullptr;  // aa810
-static fn_AvlInsert_t         s_fn_AvlInsert       = nullptr;  // 1a4f0
-static fn_MarkFineDirty_t     s_fn_MarkFineDirty   = nullptr;  // a8420
-static fn_PosCount_t          s_fn_PosCount        = nullptr;  // 123070
-static fn_FindCompPos_t       s_fn_FindCompPos     = nullptr;  // 002ed0
-static fn_ClearPathQueue_t    s_fn_ClearPathQueue  = nullptr;  // 003f60
-static fn_FindComp4680_t      s_fn_FindComp4680    = nullptr;  // 004680
-static fn_EntityResolvePos_t  s_fn_EntityResolvePos= nullptr;  // 122e20
-static fn_ValidateCell_t      s_fn_ValidateCell    = nullptr;  // a00f0
-static fn_FindNearestCell_t   s_fn_FindNearestCell = nullptr;  // 008830
-static fn_GridToWorld_t       s_fn_GridToWorld     = nullptr;  // 9f3e0
-
-// Type-ID global + float .rdata constants used by the ports below.
-static const float* s_pUVScale        = nullptr;  // g_fUVScale (DAT_1401720b8 family) — read from exe
-static const float* s_pDAT_172214     = nullptr;  // road-uv add bias
-static const float* s_pDAT_17214c     = nullptr;  // caa0 height->byte add
-static const float* s_pDAT_172264     = nullptr;  // caa0 ao-uv scale (short)
-static const float* s_pDAT_1720bc     = nullptr;  // aa20 height scale
-static const float* s_pDAT_17226c     = nullptr;  // a810 epsilon (resolved in a810; not needed here)
-static const float* s_pDAT_172114     = nullptr;  // 7fb0 half-cell offset
-static const float* s_pTypeTid        = nullptr;  // unused placeholder
-
-static bool s_init = false;
-static void EnsureInit() {
-    if (s_init) return;
-    s_fn_RoadNormal      = reinterpret_cast<fn_RoadNormal_t>(ResolveAddr(Module::Exe, 0x1400ae270));
-    s_fn_RoadCornerBlend = reinterpret_cast<fn_RoadCornerBlend_t>(ResolveAddr(Module::Exe, 0x1400ae180));
-    s_fn_GrowElemDup     = reinterpret_cast<fn_GrowElemDup_t>(ResolveAddr(Module::Exe, 0x14001fa80));
-    s_fn_GrowElem        = reinterpret_cast<fn_GrowElem_t>(ResolveAddr(Module::Exe, 0x14001f250));
-    s_fn_CellRayTri      = reinterpret_cast<fn_CellRayTri_t>(ResolveAddr(Module::Exe, 0x1400aa810));
-    s_fn_AvlInsert       = reinterpret_cast<fn_AvlInsert_t>(ResolveAddr(Module::Exe, 0x14001a4f0));
-    s_fn_MarkFineDirty   = reinterpret_cast<fn_MarkFineDirty_t>(ResolveAddr(Module::Exe, 0x1400a8420));
-    s_fn_PosCount        = reinterpret_cast<fn_PosCount_t>(ResolveAddr(Module::Exe, 0x140123070));
-    s_fn_FindCompPos     = reinterpret_cast<fn_FindCompPos_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_fn_ClearPathQueue  = reinterpret_cast<fn_ClearPathQueue_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_FindComp4680    = reinterpret_cast<fn_FindComp4680_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_EntityResolvePos= reinterpret_cast<fn_EntityResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_fn_ValidateCell    = reinterpret_cast<fn_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_FindNearestCell = reinterpret_cast<fn_FindNearestCell_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_fn_GridToWorld     = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-
-    s_pUVScale    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720b8));  // g_fUVScale
-    s_pDAT_172214 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172214));
-    s_pDAT_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pDAT_172264 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172264));
-    s_pDAT_1720bc = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720bc));
-    s_pDAT_17226c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017226c));
-    s_pDAT_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    (void)s_pTypeTid; (void)s_pDAT_17226c;
-    s_init = true;
-}
+// The .rdata float constants that are stored as bit patterns.
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 static inline uintptr_t GameWorld() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 
-static inline float fUV()      { return s_pUVScale    ? *s_pUVScale    : 0.0f; }
-static inline float f172214()  { return s_pDAT_172214 ? *s_pDAT_172214 : 0.0f; }
-static inline float f17214c()  { return s_pDAT_17214c ? *s_pDAT_17214c : 0.0f; }
-static inline float f172264()  { return s_pDAT_172264 ? *s_pDAT_172264 : 0.0f; }
-// DAT_1401720bc = heightmap int16 -> world-height scale = 0x3b800000 = 1/256. Raw .rdata
-// constant, NULL in standalone (ResolveAddr(Exe,.rdata)=0) → without this fallback the
-// terrain reads flat (all corner heights 0), so the placement ray only ever "hits" z=0.
-static inline float f1720bc()  { return s_pDAT_1720bc ? *s_pDAT_1720bc : 0.00390625f; }
-static inline float f172114()  { return s_pDAT_172114 ? *s_pDAT_172114 : 0.5f; }
+static inline float f172264()  { return RdataF(kRdata_140172264); }   // 0x140172264
+// DAT_1401720bc = heightmap int16 -> world-height scale = 0x3b800000 = 1/256.
+static inline float f1720bc()  { return RdataF(kRdata_1401720bc); }   // 0x1401720bc
+static inline float f172114()  { return kRdata_140172114; }           // 0x140172114
 
 static inline int ClampCell(int v, int w) {
     if (v < 0) v = 0;
@@ -184,11 +117,10 @@ static inline int ClampCell(int v, int w) {
 //   [6 lo,6 hi]=normal->byte uv pair, [13]=(normal.y+uv)*bias byte, [4],[5]=AO uv shorts.
 // Bit-exact transcription (disassembly-verified for the IMUL using +0xd0 width).
 void Pf_RoadVtxFill_caa0(int64_t self, int x, int y, short* outVtx, uint8_t blend) {
-    EnsureInit();
     int half = *reinterpret_cast<int*>(self + 0xc0) >> 1;
 
     float normal[3] = {0, 0, 0};   // local_18/local_14/local_10
-    if (s_fn_RoadNormal) s_fn_RoadNormal(self, normal, x, y);
+    Reimpl_TradeWork_helper_e270(reinterpret_cast<void*>(self), normal, x, y);   // 0x1400ae270
 
     short hSv = static_cast<short>(half);
     outVtx[0] = static_cast<short>(static_cast<short>(x) - hSv);
@@ -197,12 +129,9 @@ void Pf_RoadVtxFill_caa0(int64_t self, int x, int y, short* outVtx, uint8_t blen
     // Terrain-normal -> rgba8 encode (disasm 0x1400acb1a..0x1400acba6):
     //   byte = (normal_component + 1.0) * 127.5
     // where 1.0 = DAT_14017214c (XMM3, the +1 UNORM offset) and 127.5 = DAT_140172214
-    // (XMM2, the [-1,1]->[0,255] scale). Hardcoded (not via the f17214c()/f172214()
-    // accessors) because in standalone ResolveAddr(Exe,.rdata) returns NULL, so those
-    // accessors give their 0.0 fallback -> the encode collapses to ~0 -> the decal/road
-    // shader decodes a garbage ~(-1,-1,-1) normal -> lighting washes out (decal renders
-    // pale/faint instead of the retail dark, properly-lit dirt). The prior port ALSO
-    // swapped the two constants (used f17214c()=1.0 as the scale, fUV() as the offset).
+    // (XMM2, the [-1,1]->[0,255] scale). Hardcoded: an earlier port read them through
+    // accessors that fell back to 0.0 (the encode collapsed to ~0 -> garbage normal ->
+    // washed-out decal lighting) and ALSO swapped the two constants.
     const float addOff = 1.0f;    // DAT_14017214c
     const float encScl = 127.5f;  // DAT_140172214
     int hmW = *reinterpret_cast<int*>(self + 0xd0);
@@ -241,7 +170,6 @@ void Pf_RoadVtxFill_caa0(int64_t self, int x, int y, short* outVtx, uint8_t blen
 // puVar4 += 0x14 bytes). After the 4th, the 6 index shorts are read from the (DAT_1401c23d0+
 // dirIdx*8) table into [+0xc,+0xe,+0x20,+0x22,+0x34,+0x36,+0x48,+0x4a].
 void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend) {
-    EnsureInit();
 
     // local vertex scratch (0x14 bytes = 10 shorts), matches caa0's outVtx layout: shorts at
     // [0..5] (local_38..local_2e) and bytes at [0xc..0xf] (local_2c..local_29).
@@ -293,8 +221,11 @@ void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, u
             // shader samples the 'tiles' mask at texcoord.zw/4096, so a NULL table (the raw
             // .rdata pointer resolves NULL in standalone — reference_standalone_rdata_null_fallback)
             // leaves texcoord.zw = 0 -> mask.y ~ 0 -> the tiled decal alpha collapses to 0
-            // -> invisible. Embed the retail bytes (exact, read from 0x1401c23d0) as the
-            // fallback so the mask samples the correct per-tile cell. Bytes are little-endian
+            // -> invisible.
+            // PORT GAP 0x1401c23d0 tiled-decal mask-atlas rect LUT: not registered; retail
+            // reads the .rdata table here. The resolve always returned NULL, so this file
+            // always fell back to its own copy of the retail bytes (exact, read from
+            // 0x1401c23d0) -- that fallback is the code (B3R R4). Bytes are little-endian
             // uint16 pairs; casting the byte array to uint16_t* is valid on x64.
             alignas(2) static const uint8_t kZwLutBytes[376] = {
                 128,0,128,0,128,1,128,1, 128,2,128,0,128,3,128,1,
@@ -322,8 +253,7 @@ void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, u
                 128,8,128,10,128,9,128,11, 128,10,128,10,128,11,128,11,
                 128,12,128,10,128,12,128,10,
             };
-            const uint16_t* idxTbl = reinterpret_cast<const uint16_t*>(ResolveAddr(Module::Exe, 0x1401c23d0));
-            if (!idxTbl) idxTbl = reinterpret_cast<const uint16_t*>(kZwLutBytes);
+            const uint16_t* idxTbl = reinterpret_cast<const uint16_t*>(kZwLutBytes);
             if (idxTbl) {
                 const uint16_t* t = reinterpret_cast<const uint16_t*>(reinterpret_cast<uintptr_t>(idxTbl) + lVar1);
                 // DAT_1401c23d0=t[0], d2=t[1], d4=t[2], d6=t[3]
@@ -356,21 +286,15 @@ static inline void s_fn_RoadVtxFill_caa0_call(int64_t self, int x, int y, short*
 // original (a810 keeps its own 64KB-class scratch; here only the small locals are needed).
 int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4 /*Vector3* dir*/, float* p5 /*origin*/,
                         float* p6 /*maxT*/, float* p7 /*outHit3*/, float* p8 /*outT*/, uint32_t* p9) {
-    EnsureInit();
     int half = *reinterpret_cast<int*>(self + 0xc0) >> 1;
     int hmW = *reinterpret_cast<int*>(self + 0xd0);
     int64_t lW = hmW;
     short* hm = *reinterpret_cast<short**>(self + 0xd8);
     float hscale = f1720bc();
     // Cell-corner world spacing. The original (disasm 0x1400aaaf7) adds *0x14017214c = 1.0
-    // to step to the next corner — NOT fUV()=*0x1401720b8=0.001, which collapses the quad
-    // to a near-degenerate sliver so aa810's det≈0 and every ray misses. Raw .rdata => null
-    // in standalone => 1.0 fallback.
-    float uv = 1.0f;
-    {
-        const float* pUv = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-        if (pUv) uv = *pUv;
-    }
+    // to step to the next corner — NOT *0x1401720b8=0.001, which collapses the quad
+    // to a near-degenerate sliver so aa810's det≈0 and every ray misses.
+    float uv = kRdata_14017214c;   // 0x14017214c
 
     // Heightmap sample at (col,row), clamped to the map — matches the original's
     // per-corner ClampCell of x/x+1 and y/y+1. height = int16 sample * hscale.
@@ -400,16 +324,16 @@ int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4 /*Vector3* dir*/, f
     // Split the quad into two triangles by (x+y) parity, ray-test each (aa810).
     bool hit;
     if (((x + y) & 1) == 0) {
-        uint64_t r = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V00, V01, V10, outT, p9) : 0;
+        uint64_t r = Pf_RayTriIntersect_aa810(reinterpret_cast<void*>(maxBits), p5, static_cast<const float*>(p4), maxTbuf, V00, V01, V10, outT, reinterpret_cast<float*>(p9));
         hit = (static_cast<char>(r) != 0);
         if (hit) maxTbuf[0] = outT[0];
-        uint64_t r2 = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V01, V11, V10, outT, p9) : 0;
+        uint64_t r2 = Pf_RayTriIntersect_aa810(reinterpret_cast<void*>(maxBits), p5, static_cast<const float*>(p4), maxTbuf, V01, V11, V10, outT, reinterpret_cast<float*>(p9));
         if (static_cast<char>(r2) != 0) hit = true;
     } else {
-        uint64_t r = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V00, V01, V11, outT, p9) : 0;
+        uint64_t r = Pf_RayTriIntersect_aa810(reinterpret_cast<void*>(maxBits), p5, static_cast<const float*>(p4), maxTbuf, V00, V01, V11, outT, reinterpret_cast<float*>(p9));
         hit = (static_cast<char>(r) != 0);
         if (hit) maxTbuf[0] = outT[0];
-        uint64_t r2 = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V00, V11, V10, outT, p9) : 0;
+        uint64_t r2 = Pf_RayTriIntersect_aa810(reinterpret_cast<void*>(maxBits), p5, static_cast<const float*>(p4), maxTbuf, V00, V11, V10, outT, reinterpret_cast<float*>(p9));
         if (static_cast<char>(r2) != 0) hit = true;
     }
 
@@ -449,20 +373,16 @@ int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4 /*Vector3* dir*/, f
 // side) while the point markers — which use a different helper (b10e0) — sat correctly
 // on the terrain. Found live 2026-08-20.
 float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
-    EnsureInit();
-    const float* pD208 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172208));
-    const float* pD280 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
-    const float* pD228 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172228));
 
     float origin[3];   // p5 = [RSP+0x50..0x58]
     origin[0] = param_2[0];
     origin[1] = param_2[1];
-    origin[2] = pD208 ? *pD208 : 0.0f;     // DAT_140172208
+    origin[2] = RdataF(kRdata_140172208);  // DAT_140172208
 
     float dir[3] = {0.0f, 0.0f, 0.0f};     // p4 = [RSP+0x60..0x68]
-    dir[2] = pD280 ? *pD280 : 0.0f;        // DAT_140172280
+    dir[2] = kRdata_140172280;             // DAT_140172280
 
-    float maxT = pD228 ? *pD228 : 0.0f;    // p6 = DAT_140172228 (single float)
+    float maxT = RdataF(kRdata_140172228);  // p6 = DAT_140172228 (single float)
 
     float half = static_cast<float>(*reinterpret_cast<int*>(self + 0xc0) >> 1);
     // p7 spans [R11-0x18 .. R11-0x10] — three floats, and the third IS the return value.
@@ -486,7 +406,6 @@ float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
 // previous coarse column/row exists, insert the 3 adjacent coarse cells; always insert the
 // owning coarse cell. Each insert via 1a4f0(tree, &outNode, &key).
 void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
-    EnsureInit();
     int cs = *reinterpret_cast<int*>(self + 0xc8);     // coarse cell size
     int qx = x / cs;
     int qy = y / cs;
@@ -498,18 +417,18 @@ void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
 
     if ((x % cs == 0) && (-1 < qx - 1)) {
         key[0] = static_cast<uint32_t>(cw * qy - 1 + qx);
-        if (s_fn_AvlInsert) s_fn_AvlInsert(tree, &outNode, key);
+        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
     }
     if ((y % cs == 0) && (-1 < qy - 1)) {
         key[0] = static_cast<uint32_t>((qy - 1) * cw + qx);
-        if (s_fn_AvlInsert) s_fn_AvlInsert(tree, &outNode, key);
+        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
     }
     if ((x % cs == 0) && (y % cs == 0) && (-1 < qx - 1) && (-1 < qy - 1)) {
         key[0] = static_cast<uint32_t>((qy - 1) * cw - 1 + qx);
-        if (s_fn_AvlInsert) s_fn_AvlInsert(tree, &outNode, key);
+        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
     }
     key[0] = static_cast<uint32_t>(cw * qy + qx);
-    if (s_fn_AvlInsert) s_fn_AvlInsert(tree, &outNode, key);
+    Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
 }
 
 // ============================================================
@@ -521,7 +440,6 @@ void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
 // append its index to the dirty list (grow-by-3 on a non-empty append), then walk the 3x3 fine
 // neighbourhood and call a8420 on each in-bounds fine cell.
 void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
-    EnsureInit();
     int cellW = *reinterpret_cast<int*>(self + 0x58);
     int cellH = *reinterpret_cast<int*>(self + 0x5c);
     int gridW = *reinterpret_cast<int*>(self + 0x60);
@@ -541,10 +459,8 @@ void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
         if (*reinterpret_cast<int*>(self + 0x94) < newN) {
             *reinterpret_cast<int*>(self + 0x94) = newN;
             if (oldN != 0) *reinterpret_cast<int*>(self + 0x94) = newN * 3;
-            void* nb = fn_MemAlloc
-                ? fn_MemAlloc(g_pMemAllocSingleton,
-                              static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x94)) << 2, 4)
-                : nullptr;
+            void* nb = System::MemoryAllocator::MemAlloc(
+                              static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x94)) << 2, 4);
             *reinterpret_cast<void**>(self + 0x88) = nb;
         }
         int srcIdx = (oldBuf == *reinterpret_cast<void**>(self + 0x88)) ? oldN : 0;
@@ -556,8 +472,8 @@ void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
                 *dst = v;
             }
         }
-        if (oldBuf != *reinterpret_cast<void**>(self + 0x88) && fn_MemFreeStatic)
-            fn_MemFreeStatic(oldBuf);
+        if (oldBuf != *reinterpret_cast<void**>(self + 0x88))
+            System::MemoryAllocator::MemFree(oldBuf);
     }
 
     // 3x3 fine neighbourhood: rows (row-1 .. row+1), cols (col-1 .. col+1)
@@ -571,7 +487,7 @@ void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
             int cc = baseCol - 1;
             for (int c = 0; c < 3; c++) {
                 if (-1 < cc && cc < fineGW) {
-                    if (s_fn_MarkFineDirty) s_fn_MarkFineDirty(self, rr * fineGW + cc);
+                    Pf_DirtyCoarseCellB_8420(self, rr * fineGW + cc);   // 0x1400a8420
                 }
                 cc++;
             }
@@ -591,13 +507,12 @@ void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
 // ClearPathQueue(*(self+0x10), &ibp) → object; optionally Rotate the quaternion at obj+0x148 to
 // get heading; then Transform::operator*(obj+0x148 transform, retVec3).
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5) {
-    EnsureInit();
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* buildRaw = *reinterpret_cast<void**>(s + 0x18);
 
     uint32_t tid = InteractDescription::TypeId();
     void* build = nullptr;
-    if (fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, tid)) build = buildRaw;
+    if (::Object::IsDerivedFromNullSafe(buildRaw, tid)) build = buildRaw;
 
     // [SA-GUARD 2026-07-20] Retail reads build+((p3+3)*0x10) unguarded — its
     // data guarantees the +0x18 component passes the 1c7938 check. Standalone
@@ -633,12 +548,11 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
             int64_t off = 0;
             do {
                 int64_t* node = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(s + 0x28) + off);
-                int n = s_fn_PosCount ? s_fn_PosCount(*node, p3) : 0;
+                int n = Pf_RecursiveChildSum_123070(*node, p3);   // 0x140123070
                 if (local_68 <= p4 && p4 < n + local_68) {
                     int64_t* node2 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(s + 0x28) +
                                                                 static_cast<int64_t>(i) * 8);
-                    if (s_fn_EntityResolvePos)
-                        s_fn_EntityResolvePos(reinterpret_cast<void*>(*node2), retVec3, p3, p4 - local_68, p5);
+                    Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(*node2), retVec3, p3, p4 - local_68, p5);   // 0x140122e20
                     return retVec3;
                 }
                 i++;
@@ -651,7 +565,7 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     }
 
     uintptr_t ibp = 0;   // local_res8 (object pointer after ClearPathQueue)
-    if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<int64_t*>(s + 0x10), &ibp);
+    ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &ibp);   // 0x140003f60
     // [M-D SCOPED FALLBACK] "ClearPathQueue" = the shared ModelComponent finder
     // FUN_140003f60, whose type-id comes from raw .rdata 0x1401c7a50 — NULL in
     // standalone, so the find never matches (the GrowthComponent +0x30 lesson;
@@ -717,18 +631,16 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
 // world XY (122e20), converts to a grid cell, then validates reachability (a00f0 with path
 // type 0xe1f) — if reachable, returns the nearest reachable cell (008830), else -1.
 int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3) {
-    EnsureInit();
     int* mapGrid = *reinterpret_cast<int**>(GameWorld() + 0xf8);
 
     uintptr_t posIBP = 0;   // local_res8
-    if (s_fn_FindCompPos) s_fn_FindCompPos(*reinterpret_cast<int64_t*>(param_1 + 0x10), &posIBP);
+    WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &posIBP);   // 0x140002ed0
 
-    uint32_t cnt = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
+    uint32_t cnt = static_cast<uint32_t>(Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIBP), 0));   // 0x140123070
     uint32_t rnd = reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(cnt));   // B.3.4b bridge
 
     float pos[3] = {0, 0, 0};   // local_28/24/20
-    if (s_fn_EntityResolvePos)
-        s_fn_EntityResolvePos(reinterpret_cast<void*>(posIBP), pos, 0, static_cast<int>(rnd), nullptr);
+    Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), pos, 0, static_cast<int>(rnd), nullptr);   // 0x140122e20
     param_3[0] = pos[0];
     param_3[1] = pos[1];
     param_3[2] = pos[2];
@@ -740,9 +652,9 @@ int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3)
     gy = ClampCell(gy, w);
     uint32_t cell = static_cast<uint32_t>(w * gy + gx);
 
-    uint64_t ok = s_fn_ValidateCell ? s_fn_ValidateCell(mapGrid, 0xe1f, static_cast<uint64_t>(param_2), static_cast<int>(cell)) : 0;
+    uint64_t ok = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_2, static_cast<int>(cell));   // 0x1400a00f0
     if (static_cast<char>(ok) == '\0') return -1;
-    return s_fn_FindNearestCell ? s_fn_FindNearestCell(mapGrid, param_2, cell) : -1;
+    return WorkBase_CalcDistance_8830(mapGrid, param_2, cell);   // 0x140008830
 }
 
 // ============================================================
@@ -755,7 +667,6 @@ int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3)
 // at +0x28/+0x2a (col/row) and +0x2c/+0x2e (offset halves). If param_2 given and cell>=0,
 // fill the world pos via GridToWorld (f3e0).
 int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
-    EnsureInit();
     int iVar4 = -1;
 
     int64_t rawAnchorEntity = *reinterpret_cast<int64_t*>(param_1IBP);
@@ -780,20 +691,19 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
         return -1;
     }
     uintptr_t posIBP = 0;   // local_res8
-    if (s_fn_FindCompPos) s_fn_FindCompPos(resolvedAnchorEntity, &posIBP);
+    WorkBase_FindComponent_2ed0(static_cast<uintptr_t>(resolvedAnchorEntity), &posIBP);   // 0x140002ed0
 
     bool handled = false;
     if (posIBP != 0) {
-        int n = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
+        int n = Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIBP), 0);   // 0x140123070
         if (0 < n) {
-            int n2 = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
+            int n2 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIBP), 0);
             if (1 < n2) {
-                uint32_t n3 = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
+                uint32_t n3 = static_cast<uint32_t>(Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIBP), 0));
                 reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(n3)); // result discarded  // B.3.4b bridge
             }
             float pos[3] = {0, 0, 0};   // local_28/24/20
-            if (s_fn_EntityResolvePos)
-                s_fn_EntityResolvePos(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);
+            Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);   // 0x140122e20
             int w = **reinterpret_cast<int**>(GameWorld() + 0xf8);
             int gx = static_cast<int>(pos[0] + static_cast<float>(w >> 1));
             int gy = static_cast<int>(pos[1] + static_cast<float>(w >> 1));
@@ -806,7 +716,7 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
 
     if (!handled) {
         uintptr_t compIBP = 0;   // local_res10
-        if (s_fn_FindComp4680) s_fn_FindComp4680(*reinterpret_cast<int64_t*>(param_1IBP), &compIBP);
+        FloorComponent_FindResData(*reinterpret_cast<void**>(param_1IBP), &compIBP);   // 0x140004680
         if (compIBP != 0) {
             int w = **reinterpret_cast<int**>(GameWorld() + 0xf8);
             int row = static_cast<int>(*reinterpret_cast<int16_t*>(compIBP + 0x2a));
@@ -825,7 +735,7 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
         local[1] = static_cast<float>(iVar4 / *mapGrid) - half;
         local[2] = 0.0f;
         float wp[3] = {0, 0, 0};   // local_28..local_20
-        if (s_fn_GridToWorld) s_fn_GridToWorld(mapGrid, wp, local, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(mapGrid, wp, local, '\0', nullptr);   // 0x14009f3e0
         param_2[0] = wp[0];
         param_2[1] = wp[1];
         param_2[2] = wp[2];
@@ -888,7 +798,7 @@ static void Pf_AppendShortA_f370(uintptr_t recBase, short valueForNew) {
     if (*pCap < newN) {
         *pCap = newN;
         if ((newN == oldN + 1) && (oldN != 0)) *pCap = newN * 3;
-        void* nb = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(*pCap) * 2, 2) : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*pCap) * 2, 2);
         *pPtr = nb;
     }
     int start = (oldBuf == *pPtr) ? oldN : 0;
@@ -900,14 +810,13 @@ static void Pf_AppendShortA_f370(uintptr_t recBase, short valueForNew) {
             *dst = v;
         }
     }
-    if (oldBuf != *pPtr && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+    if (oldBuf != *pPtr) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
-    EnsureInit();
 
     int64_t* meshRecArr = reinterpret_cast<int64_t*>(param_1 + 0x200);   // local_a8
-    if (s_fn_GrowElem) s_fn_GrowElem(meshRecArr, 0);                     // f250(local_a8, 0)
+    Reimpl_Struct60B_Resize(meshRecArr, 0);                                // f250(local_a8, 0)
 
     int vtxOff = (*reinterpret_cast<int*>(param_1 + 0xc0) - *reinterpret_cast<int*>(param_1 + 0xc4)) >> 1; // iVar12
 
@@ -928,7 +837,7 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
 
     // Phase 2: local working batch array, sized to the batch count.
     int64_t local_108[2] = {0, 0};   // {ptr@0, count@1 (int low dword)}
-    if (s_fn_GrowElem) s_fn_GrowElem(local_108, *reinterpret_cast<uint32_t*>(param_1 + 0x218));
+    Reimpl_Struct60B_Resize(local_108, *reinterpret_cast<uint32_t*>(param_1 + 0x218));   // 0x14001f250
 
     int batchCount = static_cast<int>(local_108[1]);          // (int)local_100
     int gridDim = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_2));  // MOVSXD R13,[RDI]
@@ -1018,11 +927,9 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                                         }
                                     }
 
-                                    int blendVal = s_fn_RoadCornerBlend
-                                        ? s_fn_RoadCornerBlend(0,
+                                    int blendVal = Pf_TileShapeLut_ae180(nullptr,   // 0x1400ae180
                                                                local_f0[3], local_f0[5], local_f0[1], local_f0[7],
-                                                               local_f0[0], local_f0[2], local_f0[6], local_f0[8])
-                                        : 0;
+                                                               local_f0[0], local_f0[2], local_f0[6], local_f0[8]);
 
                                     // build the quad (cc10) into the 0x60-byte scratch (local_98 / outQuad).
                                     uint8_t quad[0x60];
@@ -1081,7 +988,7 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                     uintptr_t recBase = static_cast<uintptr_t>(local_108[0]);
                     for (int b = 0; b < batchCount; b++) {
                         if (0 < *reinterpret_cast<int*>(recBase + 0x10)) {
-                            if (s_fn_GrowElemDup) s_fn_GrowElemDup(meshRecArr, static_cast<int>(meshRecArr[1]) + 1, reinterpret_cast<void*>(recBase));
+                            Pf_VectorResize60_fa80(meshRecArr, static_cast<int>(meshRecArr[1]) + 1, reinterpret_cast<uint64_t*>(recBase));   // 0x14001fa80
                         }
                         recBase += 0x60;
                     }
@@ -1098,14 +1005,14 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
         int n = static_cast<int>(local_108[1]);
         uintptr_t recBase = static_cast<uintptr_t>(local_108[0]);
         for (int b = 0; b < n; b++) {
-            if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(recBase + 0x18));   // buffer A
+            System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(recBase + 0x18));   // buffer A
             *reinterpret_cast<int64_t*>(recBase + 0x18) = 0;
             *reinterpret_cast<int64_t*>(recBase + 0x20) = 0;
-            if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(recBase + 0x08));   // buffer B
+            System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(recBase + 0x08));   // buffer B
             *reinterpret_cast<int64_t*>(recBase + 0x08) = 0;
             *reinterpret_cast<int64_t*>(recBase + 0x10) = 0;
             recBase += 0x60;
         }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(local_108[0]));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(local_108[0]));
     }
 }

@@ -48,6 +48,3 @@ extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP);         
 // ParticleComponent: fade every emitter OUT (sign-flipped fade rate). Sibling of
 // ParticleComponent_StartEmitterFade (0x140053660) in particlecomponent.cpp.
 extern "C" void  ParticleComponent_StopEmitterFade(void* self);                       // 0x1400537f0
-
-// Resolve the leaves this module calls (safe to call more than once).
-void DiseaseComponent_InitFuncs();
