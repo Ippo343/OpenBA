@@ -20,7 +20,6 @@
 #include "runtime_funcs.h"
 #include "dx11_seam.h"
 #include "video_interface.h"
-#include "address_registry.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
 #include "boot_state_watchdog.h"
@@ -1318,11 +1317,8 @@ static bool Init() {
     RuntimePortInit();
     StallDebug::Mark("RuntimePortInit");
 
-    // 3. Populate address registry (exe dispatch slots, code fns, vtables).
-    //    Must happen BEFORE EngineFuncsInit, which reads from these slots.
-    printf("[Standalone] Initializing address registry...\n");
-    AddressRegistryInit();
-    StallDebug::Mark("AddressRegistryInit");
+    // 3. (B3R W2-EXE: AddressRegistryInit() and standalone/address_registry.cpp
+    //    are gone; no exe address is registered any more.)
 
     // 4. (B3R W2-EZ: EngineFuncsInit() and engine/funcs/ are gone; nothing binds
     //    engine function pointers any more.)
@@ -1464,7 +1460,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     }
 
     printf("\n[Standalone] === INIT SUCCESS ===\n");
-    AddressRegistryPrintStats();
     RegistryStats stats = GetRegistryStats();
     printf("[Standalone] Coverage: %zu / 582 exe addresses registered (%.1f%%)\n",
            stats.registered, stats.registered * 100.0 / 582.0);

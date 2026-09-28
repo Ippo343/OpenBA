@@ -72,9 +72,6 @@ public:
     uint8_t  _pad5C[4];        // +0x5c
 };
 
-namespace PathToolAddr {
-    constexpr uintptr_t Vtable = 0x140160680;   // retail table (documentation)
-}
 
 static_assert(sizeof(PathTool) == 0x60, "PathTool is 0x60 (create 0x140026b10 MemAlloc(0x60))");
 static_assert(alignof(PathTool) == 8, "PathTool is 8-aligned");

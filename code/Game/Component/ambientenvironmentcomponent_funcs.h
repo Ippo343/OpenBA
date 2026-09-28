@@ -15,6 +15,3 @@
 // and every emitter sits at the world origin.
 void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* self,
                                             int gridX, int gridY, int rw, int rh);
-
-// Init: resolve all internal function pointers (called once at startup)
-void AmbientEnvironmentComponent_InitFuncs();

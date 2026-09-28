@@ -53,9 +53,6 @@ public:
     void* removalDesc;   // +0x38 RemovalDescription* — set by Startup
 };
 
-namespace RemovalToolAddr {
-    constexpr uintptr_t Vtable = 0x140161de0;   // retail table (documentation)
-}
 
 static_assert(sizeof(RemovalTool) == 0x40, "RemovalTool is 0x40 (create 0x14002e7a0 MemAlloc(0x40))");
 static_assert(alignof(RemovalTool) == 8, "RemovalTool is 8-aligned");

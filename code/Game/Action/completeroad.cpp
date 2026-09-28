@@ -74,7 +74,6 @@ int CompleteRoad::AbstractImpl(void* actionStack) {                     // [4] 0
 // table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // create 0x140021ec0 (inlined ctor). The tree's factory zeroed every field
 // above +0x10; kept (B38 B8-13 / D1: no behaviour change in this step).

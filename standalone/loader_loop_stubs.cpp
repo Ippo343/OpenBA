@@ -29,7 +29,6 @@
 // whose compiler vtables the two retail addresses serve (B38_RULES D5).
 
 
-#include "address_registry.h"
 #include "resolve.h"
 #include "stall_debug.h"
 #include "options.h"

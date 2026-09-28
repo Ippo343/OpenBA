@@ -59,9 +59,6 @@ public:
     uint64_t lastEntityRef;   // +0x30 InternalBasePtr: the selected entity
 };
 
-namespace EditToolAddr {
-    constexpr uintptr_t Vtable = 0x140161ca0;   // retail table (documentation)
-}
 
 static_assert(sizeof(EditTool) == 0x38, "EditTool is 0x38 (create 0x14002daa0 MemAlloc(0x38))");
 static_assert(alignof(EditTool) == 8, "EditTool is 8-aligned");

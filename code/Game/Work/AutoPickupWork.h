@@ -25,12 +25,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
-namespace AutoPickupWorkAddr {
-    constexpr uintptr_t Ctor         = 0x1400e4050;
-    constexpr uintptr_t Vtable       = 0x140160fa0;
-    constexpr uintptr_t RegisterType = 0x14014dc10;
-    constexpr uintptr_t Factory_Abstract = 0x140003730; // shared factory (45 xrefs)
-}
 
 class AutoPickupWork : public Work {
     DECLARE_EXE_TYPE(AutoPickupWork)

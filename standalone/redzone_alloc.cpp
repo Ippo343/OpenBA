@@ -355,17 +355,9 @@ void RedzoneAlloc_Install() {
         g_watchIntervalMs = Opt().redzoneWatchMs;  // 0 = tight spin
     }
     g_zeroOnAlloc = Opt().redzoneZero;
-    // Rewire the static MemAlloc/MemFree dispatch slots too (see ShimAllocStatic
-    // comment). Consumers snapshot *(fn**)slot lazily at first use, which happens
-    // after this install, so overwriting the slot storage here covers them all.
-    {
-        uintptr_t sa = ResolveAddr(Module::Exe, 0x140152b60);
-        uintptr_t sf = ResolveAddr(Module::Exe, 0x140152b68);
-        if (sa) *reinterpret_cast<void**>(sa) = reinterpret_cast<void*>(&ShimAllocStatic);
-        if (sf) *reinterpret_cast<void**>(sf) = reinterpret_cast<void*>(&ShimFreeStatic);
-        printf("[REDZONE] static MemAlloc/MemFree slots rewired: b60=%p b68=%p\n",
-               (void*)sa, (void*)sf);
-    }
+    // (B3R W2-EXE: the rewrite of the static MemAlloc/MemFree dispatch-slot cells
+    // 0x140152b60 / 0x140152b68 is gone with the cells. No code read either cell
+    // any more -- every allocation reaches the instrument seat below.)
     // The allocator's instrument seat (B3R W0-A0, STANDALONE DEVIATION in
     // allocator.cpp): every MemoryAllocator::MemAlloc / MemFree caller — the
     // ?MemAlloc@/?MemFree@ name and address doors, InternalMemAlloc/Free, the

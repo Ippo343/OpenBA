@@ -292,7 +292,6 @@ bool ShowTool::GetTarget(void* param) {
 // the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // create 0x1400013b0. Retail's default ctor (inlined, 0x14000140c) stores +0x28 = -1;
 // the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the

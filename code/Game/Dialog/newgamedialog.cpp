@@ -954,7 +954,6 @@ void NewGameDialog::OnUpdateLayout() {
 // our standalone ctor at that address below.
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 #include "resolve.h"
 
 // Defined in standalone/autostart.cpp — the auto-new-game driver reads this to
@@ -1029,10 +1028,6 @@ void* NewGameDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
     // populated the combos + OK button. Harmless when autostart is disabled.
     g_StandaloneNewGameDialog = dlg;
     return dlg;
-}
-
-extern "C" void RegisterNewGameDialogVtable() {
-    RegisterExeAddr(0x140071040, reinterpret_cast<uintptr_t>(&NewGameDialog_Ctor_Standalone));
 }
 
 DEFINE_EXE_TYPE(NewGameDialog, "UI::DialogInstance")

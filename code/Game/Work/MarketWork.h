@@ -28,11 +28,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace MarketWorkAddr {
-    constexpr uintptr_t Ctor    = 0x1400f1f70;
-    constexpr uintptr_t Factory = 0x14002a8d0;
-    constexpr uintptr_t Vtable  = 0x140161710;
-}
 
 class MarketWork final : public Work {
     DECLARE_EXE_TYPE(MarketWork)

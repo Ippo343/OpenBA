@@ -29,11 +29,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace PickupAddr {
-    constexpr uintptr_t Ctor    = 0x1400f3c00;
-    constexpr uintptr_t Factory = 0x14002bfc0;
-    constexpr uintptr_t Vtable  = 0x140161810;
-}
 
 class Pickup final : public Work {
     DECLARE_EXE_TYPE(Pickup)

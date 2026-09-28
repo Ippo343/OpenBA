@@ -32,7 +32,6 @@
 #include "resolve.h"
 #include "Game/serialize_externals.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

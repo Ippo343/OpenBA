@@ -26,20 +26,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace ClearAreaAddr {
-    constexpr uintptr_t Ctor         = 0x1400e68d0;
-    constexpr uintptr_t Vtable       = 0x140161110;
-    constexpr uintptr_t ScalarDtor   = 0x140029870;
-    constexpr uintptr_t BaseDtor     = 0x1400e6810;
-    constexpr uintptr_t Serialize    = 0x1400e6740;
-    constexpr uintptr_t Execute      = 0x1400e5ee0;
-    constexpr uintptr_t OnComplete   = 0x1400e5e30;
-    constexpr uintptr_t OnCancel     = 0x1400e5e00;
-    constexpr uintptr_t Cleanup      = 0x1400e6650;
-    constexpr uintptr_t Validate     = 0x1400e5b10;  // bug class 3 - unhookable
-    constexpr uintptr_t GetTarget    = 0x1400e6720;
-    constexpr uintptr_t GetPriority  = 0x140029860;  // 9 bytes - too small to hook
-}
 
 class ClearArea final : public Work {
     DECLARE_EXE_TYPE(ClearArea)

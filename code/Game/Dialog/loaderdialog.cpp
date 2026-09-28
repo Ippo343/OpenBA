@@ -55,7 +55,6 @@ void LoaderDialog::OnUpdate(const System::Time& time) {
 // at +0x60. (Different from DialogLoopT's +0x30/+0x40.)
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 #include "resolve.h"
 
 LoaderDialog::LoaderDialog() : loadingImage(nullptr), rotation(0.0f) {}

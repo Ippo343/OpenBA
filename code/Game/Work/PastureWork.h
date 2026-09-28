@@ -29,10 +29,6 @@
 #include "Work/AutoPickupWork.h"
 #include "Object/exe_type.h"
 
-namespace PastureWorkAddr {
-    constexpr uintptr_t Factory = 0x14002bf00;
-    constexpr uintptr_t Vtable  = 0x1401617a0;
-}
 
 class PastureWork final : public AutoPickupWork {
     DECLARE_EXE_TYPE(PastureWork)

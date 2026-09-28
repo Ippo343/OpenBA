@@ -647,10 +647,3 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
     void* outSlot = nullptr;
     WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(newBucket + 0x08), &outSlot, reinterpret_cast<uint32_t*>(&pair));
 }
-
-#include "address_registry.h"
-extern "C" void RegisterCitizenAIWorkScheduler() {
-    RegisterExeAddr(0x1400f88a0, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Insert));
-    RegisterExeAddr(0x14012ec60, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Post));
-    RegisterExeAddr(0x1400f8400, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Rekey));
-}

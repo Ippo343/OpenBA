@@ -818,7 +818,6 @@ void* BuildStructure::CreateInPlaceObject(void* storage) {
 
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // The one entry point other blocks name: the full ctor on caller memory
 // (buildcomponent_state8.cpp / destroycomponent_states.cpp, BuildComponent's state-8

@@ -1651,27 +1651,3 @@ void GameUpdateLoop::Load() {
             m_graphicsScene, m_sunLight);
     fflush(stderr);
 }
-
-// ============================================================
-// STANDALONE_EXE: register the Load-owned exe addresses so gameupdateloop.cpp's
-// EnsureInit (which resolves these via ResolveAddr) finds real bodies/values.
-// ============================================================
-#include "address_registry.h"
-
-// .rdata float constants the in-game loop dereferences (*g_fXxx). Verified via
-// read_memory: 1.0 / 6.0 (audio time scale) / 40.0 / 2.0 / 512.0 (camera params).
-static float s_fConst_1_0      = 1.0f;    // 0x14017214c
-static float s_fAudioTimeScale = 6.0f;    // 0x14017219c
-static float s_fCamParam1      = 40.0f;   // 0x1401721dc
-static float s_fCamParam2      = 2.0f;    // 0x140172174
-static float s_fCamParam3      = 512.0f;  // 0x140172240
-
-extern "C" void RegisterGameUpdateLoopLoadAddrs() {
-    RegisterExeAddr(0x1400983f0, reinterpret_cast<uintptr_t>(&Reimpl_FUN_1400983f0)); // CalcTransform
-    RegisterExeAddr(0x140098660, reinterpret_cast<uintptr_t>(&Reimpl_FUN_140098660)); // UpdateCamera
-    RegisterExeAddr(0x14017214c, reinterpret_cast<uintptr_t>(&s_fConst_1_0));
-    RegisterExeAddr(0x14017219c, reinterpret_cast<uintptr_t>(&s_fAudioTimeScale));
-    RegisterExeAddr(0x1401721dc, reinterpret_cast<uintptr_t>(&s_fCamParam1));
-    RegisterExeAddr(0x140172174, reinterpret_cast<uintptr_t>(&s_fCamParam2));
-    RegisterExeAddr(0x140172240, reinterpret_cast<uintptr_t>(&s_fCamParam3));
-}

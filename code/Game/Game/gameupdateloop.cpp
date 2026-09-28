@@ -36,7 +36,6 @@
 #include "Game/WorldGeometry.h"    // caller batch CB6: m_worldGeometry's class
 #include "Player/Tool.h"            // caller batch CB6: the active tool's Draw
 #include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
-#include "address_registry.h"       // RegisterExeAddr
 #include "Entity/entitylist_funcs.h"
 #include "Object/internal_factory_audit.h"
 #include <windows.h>

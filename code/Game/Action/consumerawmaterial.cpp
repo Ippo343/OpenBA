@@ -281,7 +281,6 @@ bool ConsumeRawMaterial::GetTarget(void* param) {
 // the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // create 0x1400220c0 (inlined ctor). The tree's factory zeroed every field above
 // +0x10; kept (not a behaviour change of this step).

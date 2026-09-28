@@ -29,11 +29,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace LocationWorkAddr {
-    constexpr uintptr_t Ctor    = 0x1400efc60;
-    constexpr uintptr_t Factory = 0x14002a810;
-    constexpr uintptr_t Vtable  = 0x1401616a0;
-}
 
 class LocationWork final : public Work {
     DECLARE_EXE_TYPE(LocationWork)

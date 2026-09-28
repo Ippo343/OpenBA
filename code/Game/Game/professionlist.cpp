@@ -206,13 +206,4 @@ void* ProfessionList::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) ProfessionList());
 }
 
-
-extern "C" void RegisterProfessionListVtable() {
-    // ProfessionList::Startup (array populate + sort) — GameUpdateLoop::Startup
-    // resolves exe 0x1400a90a0 (fn_ProfessionList_Startup) and calls it when the
-    // profession list is live; unregistered it was NULL and the call was skipped,
-    // leaving the profession array empty (TownHallUI blank-tab root cause).
-    RegisterExeAddr(0x1400a90a0, reinterpret_cast<uintptr_t>(&ProfessionList_Startup_Impl));
-}
-
 DEFINE_EXE_TYPE(ProfessionList, "Object::External")

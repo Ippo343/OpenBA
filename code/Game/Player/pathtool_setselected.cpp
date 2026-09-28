@@ -610,9 +610,3 @@ extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2) {
 void PathTool::Shutdown() {
     PathSel_ClearHighlight_d250(reinterpret_cast<int64_t>(this));
 }
-
-// Empty: the 0x1400dd710 row's one reader (pathtool.cpp) calls PathTool_helper_d710
-// by name, so the row was DEAD and is gone. The call in AddressRegistryInit is the
-// coordinator's to remove.
-extern "C" void RegisterPathToolSetSelected() {
-}

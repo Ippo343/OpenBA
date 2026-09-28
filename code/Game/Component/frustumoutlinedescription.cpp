@@ -41,7 +41,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/FrustumOutlineDescription.h"
 #include "Component/FrustumOutlineElement.h"
-#include "address_registry.h"
 #include "Game/exe_bodies.h"
 
 // 0x14006c520: ElementDescription() is `??0ElementDescription@UI@@`; the
@@ -140,19 +139,6 @@ Object::InternalPtr<UI::Element>* FrustumOutlineDescription::CreateInstance(
 // [9] 0x140012330 — placement construction on `this` (the createInPlace body).
 Object::External* FrustumOutlineDescription::Construct() {
     return new (static_cast<void*>(this)) FrustumOutlineDescription();
-}
-
-// Defined in frustumoutlineelement.cpp — the port of the frustum ground-corner
-// projection (exe 0x14006c5b0). Registering it makes fn_MapUI_ProjectCornersToGround
-// / fn_FrustumProject resolve, which also enables minimap click-to-move-camera
-// (MapUI_HandleClick early-returns while that pointer is null).
-extern "C" void FrustumOutline_ProjectCorners(float* out);
-
-// The 0x14015c300 row had no by-address reader (B38 D5): it is gone with the
-// hand-built table. The frustum-projection port is still reached by address.
-extern "C" void RegisterFrustumOutlineDescriptionVtable() {
-    RegisterExeAddr(0x14006c5b0,
-                    reinterpret_cast<uintptr_t>(&FrustumOutline_ProjectCorners));
 }
 
 // create 0x1400122c0: MemAlloc(0x80, 8), then the ctor.

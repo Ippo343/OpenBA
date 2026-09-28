@@ -515,13 +515,5 @@ void* BuildRoad::CreateInPlaceObject(void* storage) {
 
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
-#include "resolve.h"   // RegisterExeAddr (the BuildRoadAddr::CtorParams row stays for W2)
 
-extern "C" void RegisterBuildRoadVtable() {
-    // The parameterised ctor RoadTool's commit path calls by address (FUN_14009c960).
-    // Unregistered it resolved to 0, so every road segment posted a NULL work item and
-    // faulted inside the work scheduler.
-    RegisterExeAddr(BuildRoadAddr::CtorParams, (uintptr_t)&BuildRoad_CtorParams_Impl);
-}
 DEFINE_EXE_TYPE(BuildRoad, "Work")

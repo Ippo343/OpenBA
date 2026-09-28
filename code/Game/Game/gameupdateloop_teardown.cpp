@@ -41,7 +41,6 @@
 #include "Entity/entitylist_funcs.h"     // EntityList_RemoveEntity
 #include "Player/exe_bodies.h"          // TradeWork_helper_14b00
 #include "Work/exe_bodies.h"            // WorkBase_TreeNodeFree_e320 / _14c30
-#include "address_registry.h"
 #include "options.h"         // Opt().teardownHeapCheck
 #include "redzone_alloc.h"   // RedzoneAlloc_FindCorruptBlockNative
 #include "collection/Collection.h"
@@ -445,18 +444,4 @@ extern "C" void Tutorial_Dtor_f8ff0(void* selfV) {
         I32(hdr, 0x08) = 0;
         P(hdr, 0x00) = nullptr;
     }
-}
-
-// ============================================================
-// Registration
-// ============================================================
-extern "C" void RegisterGulTeardown() {
-    RegisterExeAddr(0x1400c3d30, reinterpret_cast<uintptr_t>(&EntityList_Shutdown_c3d30));
-    RegisterExeAddr(0x1400c3e60, reinterpret_cast<uintptr_t>(&EntityList_Dtor_c3e60));
-    RegisterExeAddr(0x1400907b0, reinterpret_cast<uintptr_t>(&CitizenList_Dtor_907b0));
-    RegisterExeAddr(0x1401024d0, reinterpret_cast<uintptr_t>(&EntityUI_Dtor_1024d0));
-    RegisterExeAddr(0x1400f8ff0, reinterpret_cast<uintptr_t>(&Tutorial_Dtor_f8ff0));
-
-    // Shared container-free leaves — registered so any other caller that reaches
-    // them through ResolveAddr gets a body instead of a null.
 }

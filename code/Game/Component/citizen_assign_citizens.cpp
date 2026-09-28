@@ -460,11 +460,3 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
 
     g_wpcRosterOnly = prevRoster;
 }
-
-// ===========================================================================
-// Standalone registration
-// ===========================================================================
-#include "address_registry.h"
-extern "C" void RegisterCitizenAssignCitizens() {
-    RegisterExeAddr(0x1400d43b0, reinterpret_cast<uintptr_t>(&CitizenAssignCitizens));
-}

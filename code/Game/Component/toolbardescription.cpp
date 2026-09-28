@@ -225,13 +225,4 @@ void* ToolbarDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ToolbarDescription());
 }
 
-// FUN_140028860 String-array resize — register for resolve-by-address callers
-// (TutorialSetupDialog_Slot5, and fn_StringArray_Resize if resolved after this).
-// The ToolbarDescription table row (0x140164980) that this function also carried
-// is gone with the hand-built table (no by-address reader, B38 D5).
-#include "resolve.h"
-extern "C" void RegisterToolbarDescriptionStringArrayResize() {
-    RegisterExeAddr(0x140028860, reinterpret_cast<uintptr_t>(&ToolbarDescription_StringArrayResize));
-}
-
 DEFINE_EXE_TYPE(ToolbarDescription, "Description")

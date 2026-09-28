@@ -24,21 +24,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace BuildStructureAddr {
-    constexpr uintptr_t Ctor         = 0x1400e5a90;
-    constexpr uintptr_t Factory      = 0x140029630;
-    constexpr uintptr_t Vtable       = 0x1401610a0;
-    constexpr uintptr_t ScalarDtor   = 0x140029680;
-    constexpr uintptr_t BaseDtor     = 0x1400e5920;
-    constexpr uintptr_t Serialize    = 0x1400e5850;
-    constexpr uintptr_t Execute      = 0x1400e4fc0;
-    constexpr uintptr_t OnComplete   = 0x1400e4f80;
-    constexpr uintptr_t OnCancel     = 0x1400e4f40;
-    constexpr uintptr_t Cleanup      = 0x1400e57a0;
-    constexpr uintptr_t Validate     = 0x1400e4be0;
-    constexpr uintptr_t GetTarget    = 0x1400e5830;
-    constexpr uintptr_t GetPriority  = 0x140029670;
-}
 
 class BuildStructure final : public Work {
     DECLARE_EXE_TYPE(BuildStructure)

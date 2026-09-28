@@ -51,9 +51,6 @@ public:
     uint8_t _pad41[7];      // +0x41 never written by retail (zeroed here)
 };
 
-namespace RoadToolAddr {
-    constexpr uintptr_t Vtable = 0x140161e70;   // retail table (documentation)
-}
 
 static_assert(sizeof(RoadTool) == 0x48, "RoadTool is 0x48 (create 0x14002e870 MemAlloc(0x48))");
 static_assert(alignof(RoadTool) == 8, "RoadTool is 8-aligned");

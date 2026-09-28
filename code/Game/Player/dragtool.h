@@ -66,9 +66,6 @@ protected:
                  startCell(-1), endCell(-1), lastEndCell(-1) {}
 };
 
-namespace DragToolAddr {
-    constexpr uintptr_t Vtable = 0x140161c10;   // retail table (documentation)
-}
 
 static_assert(sizeof(DragTool) == 0x38, "DragTool is 0x38 bytes");
 static_assert(alignof(DragTool) == 8, "DragTool is 8-aligned");

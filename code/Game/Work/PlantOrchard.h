@@ -28,30 +28,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace PlantOrchardAddr {
-    // ⚠ TWO constructors exist and they are not interchangeable:
-    //   Ctor           0x1400f50b0 — the DEFAULT/zero-arg ctor (Object::Internal::Internal,
-    //                                vtable_Work, manual field init, +0x68 = 0). This is the
-    //                                deserialize/factory path.
-    //   CtorFromEntity 0x1400f5140 — (mem, InternalBasePtr* entityIBP, ExternalPtr treeType).
-    //                                This is the one the OrchardComponent state machine calls
-    //                                from state 9 and state 12 enter; it sizes the per-slot
-    //                                byte array from the orchard's slot count and stores the
-    //                                tree type at +0x68. Anything wiring `Ctor` for the
-    //                                orchard planting path is wiring the wrong constructor.
-    constexpr uintptr_t Ctor           = 0x1400f50b0;
-    constexpr uintptr_t CtorFromEntity = 0x1400f5140;
-    constexpr uintptr_t Vtable       = 0x140161910;
-    constexpr uintptr_t ScalarDtor   = 0x14002c540;
-    constexpr uintptr_t BaseDtor     = 0x1400f5010;
-    constexpr uintptr_t Serialize    = 0x1400f4f50;
-    constexpr uintptr_t Slot4        = 0x1400f4af0;
-    constexpr uintptr_t OnComplete   = 0x1400f4a90;
-    constexpr uintptr_t OnCancel     = 0x1400f4a20;
-    constexpr uintptr_t Cleanup      = 0x1400f4e70;
-    constexpr uintptr_t Validate     = 0x1400f47f0;
-    constexpr uintptr_t GetTarget    = 0x1400f4ef0;
-}
 
 class PlantOrchard final : public Work {
     DECLARE_EXE_TYPE(PlantOrchard)

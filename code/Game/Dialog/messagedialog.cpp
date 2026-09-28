@@ -81,7 +81,6 @@ void MessageDialog::OnNo()     { CloseWithResult(this, 3); }
 // the vtable store. No additional fields beyond DialogInstance's.
 
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 #include "resolve.h"
 #include <cstdio>
 
@@ -115,16 +114,6 @@ void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
         parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
     return ::new (self) MessageDialog(static_cast<UI::UserInterface*>(ui),
                                       static_cast<const UI::Dialog*>(extRes), parent);
-}
-
-
-// B38 D5: the table row 0x14015c480 is gone - its readers (saveloaddialog.cpp's
-// two stamps) build through the real ctor since the CB2 caller batch, and
-// engine_funcs.cpp's g_ReloadDialog_Vtable has no code use. The ctor door stays:
-// engine_funcs.cpp resolves 0x14006d300 into fn_MessageDialog_Ctor.
-extern "C" void RegisterMessageDialogVtable() {
-    RegisterExeAddr(0x14006d300,
-                    reinterpret_cast<uintptr_t>(&MessageDialog_Ctor_Standalone));
 }
 
 DEFINE_EXE_TYPE(MessageDialog, "UI::DialogInstance")

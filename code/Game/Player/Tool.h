@@ -76,9 +76,6 @@ protected:
     Tool() : Object::Internal(), dialogPtr(nullptr), toolSetting(nullptr), descriptionPtr(nullptr) {}
 };
 
-namespace ToolAddr {
-    constexpr uintptr_t Vtable = 0x140161f10;   // retail table (documentation)
-}
 
 static_assert(sizeof(Tool) == 0x28, "Tool is 0x28 bytes (0x10 Internal + 0x18)");
 static_assert(alignof(Tool) == 8, "Tool is 8-aligned");

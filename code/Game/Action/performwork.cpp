@@ -244,7 +244,6 @@ bool PerformWork::GetTarget(void* param) {
 // the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // create 0x140022b90. Retail's default ctor (0x1400c96b0) stores +0x44 = -1;
 // the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the

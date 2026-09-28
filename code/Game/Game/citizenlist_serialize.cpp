@@ -102,7 +102,6 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include <cstdio>
 #include "resolve.h"
-#include "address_registry.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include "Component/LivestockComponent.h"
@@ -830,19 +829,4 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
             WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(base), cx, cy, slot);   // 0x140088a80
         }
     }
-}
-
-// ============================================================
-// Registration
-// ============================================================
-void RegisterCitizenListSerialize() {
-    RegisterExeAddr(0x14008f760, reinterpret_cast<uintptr_t>(&CitizenList_Serialize_8f760));
-    RegisterExeAddr(0x14008f580, reinterpret_cast<uintptr_t>(&CitizenList_PostLoad_8f580));
-
-    // Newly-ported helpers not registered elsewhere.
-    RegisterExeAddr(0x140017640, reinterpret_cast<uintptr_t>(&ResizeStride0x10));
-    RegisterExeAddr(0x1400177c0, reinterpret_cast<uintptr_t>(&ResizeStride0x20));
-    // (ENDGAME B.3.9 TR: the never-filled HealerComponent / WellComponent type-id cells
-    // 0x1401c4330 / 0x1401c4c28 and their storage went -- the serializer validates by the
-    // class statics since B.3.9 CB.)
 }

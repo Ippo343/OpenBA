@@ -26,7 +26,6 @@
 // (B38_RULES D5), plus the standalone resource-loading helpers they call.
 
 
-#include "address_registry.h"
 #include "resolve.h"
 #include "system/String.h"
 #include "runtime/types/ui/DialogInstance.h"

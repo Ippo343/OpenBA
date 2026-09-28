@@ -30,7 +30,6 @@
 
 #include "BridgeTool.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "address_registry.h"
 #include <cstdint>
 #include <cstdlib>
 #include "Player/exe_bodies.h"

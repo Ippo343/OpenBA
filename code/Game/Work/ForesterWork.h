@@ -27,10 +27,6 @@
 #include "Work/AutoPickupWork.h"
 #include "Object/exe_type.h"
 
-namespace ForesterWorkAddr {
-    constexpr uintptr_t Factory = 0x14002a310;
-    constexpr uintptr_t Vtable  = 0x1401613a0;
-}
 
 class ForesterWork final : public AutoPickupWork {
     DECLARE_EXE_TYPE(ForesterWork)

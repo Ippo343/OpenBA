@@ -27,11 +27,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace FishingWorkAddr {
-    constexpr uintptr_t Ctor    = 0x1400eabe0;
-    constexpr uintptr_t Factory = 0x14002a280;
-    constexpr uintptr_t Vtable  = 0x140161320;
-}
 
 class FishingWork final : public Work {
     DECLARE_EXE_TYPE(FishingWork)

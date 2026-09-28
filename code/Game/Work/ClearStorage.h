@@ -29,10 +29,6 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
-namespace ClearStorageAddr {
-    constexpr uintptr_t Ctor    = 0x1400e74b0;
-    constexpr uintptr_t Vtable  = 0x1401611a0;
-}
 
 class ClearStorage final : public Work {
     DECLARE_EXE_TYPE(ClearStorage)
