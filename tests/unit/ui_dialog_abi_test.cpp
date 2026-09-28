@@ -31,6 +31,7 @@
 // what makes GCC emit their vtables in this translation unit.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/Dialog.h"
 #include "runtime/types/ui/DialogInstance.h"
@@ -407,16 +408,6 @@ static void B39UidDlgNoteDtor(const void* self) {
     ++g_b39DtorCount;
 }
 namespace {
-// Itanium PMF -> vtable byte offset: 1 + offset for a virtual, adjustment 0.
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 // Scalar arm (with a free) on one object, then the VECTOR arm on three behind
 // an array cookie: destroyed downward, the block freed and returned.
 template <typename T, typename Make>
@@ -453,11 +444,11 @@ static_assert(sizeof(B39CfgLeaf) == 0x20, "no fields of its own");
 }  // namespace
 
 UNIT_TEST(b39_uid_dialog_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::Dialog::DeletingDtor), (uintptr_t)0x00);                   // 0x180038b20
-    CHECK_EQ(SlotOffset(&UI::Dialog::Construct), (uintptr_t)EX::kConstruct);
-    CHECK_EQ(SlotOffset(&UI::DialogController::DeletingDtor), (uintptr_t)0x00);         // 0x18003b800
-    CHECK_EQ(SlotOffset(&UI::DialogController::OnSerializeSettings), (uintptr_t)DC::kOnSerializeSettings);
-    CHECK_EQ(SlotOffset(&UI::DialogControllerConfig::DeletingDtor), (uintptr_t)0x00);   // 0x18003b600
+    CHECK_DTOR_SLOT(UI::Dialog);                   // 0x180038b20
+    CHECK_SLOT(UI::Dialog, Construct, EX::kConstruct/8);
+    CHECK_DTOR_SLOT(UI::DialogController);         // 0x18003b800
+    CHECK_SLOT(UI::DialogController, OnSerializeSettings, DC::kOnSerializeSettings/8);
+    CHECK_DTOR_SLOT(UI::DialogControllerConfig);   // 0x18003b600
 }
 
 // ??0Dialog 0x180112db0: External's words, +0x20..+0x80 zero, +0x30 = -1, and
@@ -482,10 +473,10 @@ UNIT_TEST(b39_uid_dialog_ctor_makes_retails_stores) {
 }
 
 UNIT_TEST(b39_uid_combo_tooltip_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::ComboDialog::DeletingDtor), (uintptr_t)0x00);     // 0x180074a10
-    CHECK_EQ(SlotOffset(&UI::ComboDialog::OnElementEvent), (uintptr_t)DI::kOnElementEvent);
-    CHECK_EQ(SlotOffset(&UI::ToolTipDialog::DeletingDtor), (uintptr_t)0x00);   // 0x18004d270
-    CHECK_EQ(SlotOffset(&UI::ToolTipDialog::Type), (uintptr_t)DI::kType);
+    CHECK_DTOR_SLOT(UI::ComboDialog);     // 0x180074a10
+    CHECK_SLOT(UI::ComboDialog, OnElementEvent, DI::kOnElementEvent/8);
+    CHECK_DTOR_SLOT(UI::ToolTipDialog);   // 0x18004d270
+    CHECK_SLOT(UI::ToolTipDialog, Type, DI::kType/8);
 }
 
 // The default ctors the factory pairs inline: DialogInstance(), then

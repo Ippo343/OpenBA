@@ -66,6 +66,7 @@
 // layouts depend on.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/graphics/Material.h"
 #include "runtime/types/graphics/GraphicsMesh.h"
@@ -687,14 +688,6 @@ UNIT_TEST(graphics_block_g_all_four_introduce_construct_at_slot8) {
 // ===========================================================================
 // ENDGAME B.3.9 block GFX -- Material / GraphicsMesh CONCRETE (D1, B9-16).
 // ===========================================================================
-template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
 
 template <class T> void CheckBothSlot0Arms(size_t stride) {
     void* m = Object::detail::InternalMemAlloc(sizeof(T), 8);
@@ -720,14 +713,14 @@ UNIT_TEST(b39_gfx_material_concrete_ctor_stores_and_both_slot0_arms) {
     using M = Graphics::Material;
     CHECK(!std::is_destructible<M>::value);
     CHECK(!std::has_virtual_destructor<M>::value);
-    CHECK_EQ(GfxSlotOffset(&M::DeletingDtor),   (uintptr_t)0x00);   // 0x180011d20
-    CHECK_EQ(GfxSlotOffset(&M::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(GfxSlotOffset(&M::Type),           (uintptr_t)0x10);
-    CHECK_EQ(GfxSlotOffset(&M::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(GfxSlotOffset(&M::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(GfxSlotOffset(&M::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(GfxSlotOffset(&M::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(GfxSlotOffset(&M::Construct),      (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(M);   // 0x180011d20
+    CHECK_SLOT(M, TypeName,       0x08/8);
+    CHECK_SLOT(M, Type,           0x10/8);
+    CHECK_SLOT(M, GetFileVersion, 0x18/8);
+    CHECK_SLOT(M, Serialize,      0x28/8);
+    CHECK_SLOT(M, Reconstruct,    0x30/8);
+    CHECK_SLOT(M, Destruct,       0x38/8);
+    CHECK_SLOT(M, Construct,      0x40/8);
 
     // retail 0x1801029a0 / the FACTREST steps: External's three zero qwords,
     // +0x20 dword 0, +0x24 untouched, +0x28 / +0x30 zero.
@@ -751,14 +744,14 @@ UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
     using G = Graphics::GraphicsMesh;
     CHECK(!std::is_destructible<G>::value);
     CHECK(!std::has_virtual_destructor<G>::value);
-    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor),   (uintptr_t)0x00);   // 0x180012bd0
-    CHECK_EQ(GfxSlotOffset(&G::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(GfxSlotOffset(&G::Type),           (uintptr_t)0x10);
-    CHECK_EQ(GfxSlotOffset(&G::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(GfxSlotOffset(&G::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(GfxSlotOffset(&G::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(GfxSlotOffset(&G::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(GfxSlotOffset(&G::Construct),      (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(G);   // 0x180012bd0
+    CHECK_SLOT(G, TypeName,       0x08/8);
+    CHECK_SLOT(G, Type,           0x10/8);
+    CHECK_SLOT(G, GetFileVersion, 0x18/8);
+    CHECK_SLOT(G, Serialize,      0x28/8);
+    CHECK_SLOT(G, Reconstruct,    0x30/8);
+    CHECK_SLOT(G, Destruct,       0x38/8);
+    CHECK_SLOT(G, Construct,      0x40/8);
 
     // retail 0x1800ff170, the store list read as bit patterns.
     alignas(8) uint8_t buf[0x98];

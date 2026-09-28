@@ -29,6 +29,7 @@
 // (runtime/src/audio does not link into a host test).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/audio/Audio.h"
 #include "runtime/types/audio/Device.h"
@@ -420,15 +421,6 @@ UNIT_TEST(audio_accessors_read_retails_offsets) {
 // ENDGAME B.3.9 ENG (B39_RULES D1/D2, rule B9-16) -- the concrete classes.
 // ---------------------------------------------------------------------------
 namespace {
-template <typename PMF>
-uintptr_t PmfSlot(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 template <class T, int kSize>
 void CheckBothArms() {
     void* m = Object::detail::InternalMemAlloc(kSize, 8);
@@ -454,27 +446,27 @@ void CheckBothArms() {
 
 UNIT_TEST(b39_eng_soundbuffer_slot_order_by_pmf) {
     using B = Audio::SoundBuffer;
-    CHECK_EQ(PmfSlot(&B::DeletingDtor),   (uintptr_t)0x00);   // 0x18000bef0
-    CHECK_EQ(PmfSlot(&B::TypeName),       (uintptr_t)0x08);   // 0x18000b8b0
-    CHECK_EQ(PmfSlot(&B::Type),           (uintptr_t)0x10);   // 0x18000b890
-    CHECK_EQ(PmfSlot(&B::GetFileVersion), (uintptr_t)0x18);   // 0x1800e0470
-    CHECK_EQ(PmfSlot(&B::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
-    CHECK_EQ(PmfSlot(&B::Serialize),      (uintptr_t)0x28);   // 0x1800e0480
-    CHECK_EQ(PmfSlot(&B::Reconstruct),    (uintptr_t)0x30);   // 0x18000bb30
-    CHECK_EQ(PmfSlot(&B::Destruct),       (uintptr_t)0x38);   // 0x18000bc70
-    CHECK_EQ(PmfSlot(&B::Construct),      (uintptr_t)0x40);   // 0x18000bbd0
+    CHECK_DTOR_SLOT(B);   // 0x18000bef0
+    CHECK_SLOT(B, TypeName,       0x08/8);   // 0x18000b8b0
+    CHECK_SLOT(B, Type,           0x10/8);   // 0x18000b890
+    CHECK_SLOT(B, GetFileVersion, 0x18/8);   // 0x1800e0470
+    CHECK_SLOT(B, Compile,        0x20/8);   // External's 0x1800066e0
+    CHECK_SLOT(B, Serialize,      0x28/8);   // 0x1800e0480
+    CHECK_SLOT(B, Reconstruct,    0x30/8);   // 0x18000bb30
+    CHECK_SLOT(B, Destruct,       0x38/8);   // 0x18000bc70
+    CHECK_SLOT(B, Construct,      0x40/8);   // 0x18000bbd0
 }
 UNIT_TEST(b39_eng_soundeffect_slot_order_by_pmf) {
     using E = Audio::SoundEffect;
-    CHECK_EQ(PmfSlot(&E::DeletingDtor),   (uintptr_t)0x00);   // 0x180050820
-    CHECK_EQ(PmfSlot(&E::TypeName),       (uintptr_t)0x08);   // 0x180050340
-    CHECK_EQ(PmfSlot(&E::Type),           (uintptr_t)0x10);   // 0x180050320
-    CHECK_EQ(PmfSlot(&E::GetFileVersion), (uintptr_t)0x18);   // 0x1800e0990
-    CHECK_EQ(PmfSlot(&E::Compile),        (uintptr_t)0x20);   // 0x1800e09a0
-    CHECK_EQ(PmfSlot(&E::Serialize),      (uintptr_t)0x28);   // 0x1800e0aa0
-    CHECK_EQ(PmfSlot(&E::Reconstruct),    (uintptr_t)0x30);   // 0x180050560
-    CHECK_EQ(PmfSlot(&E::Destruct),       (uintptr_t)0x38);   // 0x180050640
-    CHECK_EQ(PmfSlot(&E::Construct),      (uintptr_t)0x40);   // 0x1800505d0
+    CHECK_DTOR_SLOT(E);   // 0x180050820
+    CHECK_SLOT(E, TypeName,       0x08/8);   // 0x180050340
+    CHECK_SLOT(E, Type,           0x10/8);   // 0x180050320
+    CHECK_SLOT(E, GetFileVersion, 0x18/8);   // 0x1800e0990
+    CHECK_SLOT(E, Compile,        0x20/8);   // 0x1800e09a0
+    CHECK_SLOT(E, Serialize,      0x28/8);   // 0x1800e0aa0
+    CHECK_SLOT(E, Reconstruct,    0x30/8);   // 0x180050560
+    CHECK_SLOT(E, Destruct,       0x38/8);   // 0x180050640
+    CHECK_SLOT(E, Construct,      0x40/8);   // 0x1800505d0
 }
 
 // SoundBuffer's factory stores (0x18000ba03..a6a): word +0x20, dword +0x24,
@@ -549,13 +541,13 @@ UNIT_TEST(b39_eng_platformchannel_slot_order_by_pmf) {
     using PC = Audio::Device::PlatformChannel;
     CHECK(std::is_polymorphic<PC>::value);
     CHECK(!std::has_virtual_destructor<PC>::value);
-    CHECK_EQ(PmfSlot(&PC::OnVoiceProcessingPassStart), (uintptr_t)0x00);   // 0x180050200
-    CHECK_EQ(PmfSlot(&PC::OnVoiceProcessingPassEnd),   (uintptr_t)0x08);   // 0x1800501f0
-    CHECK_EQ(PmfSlot(&PC::OnStreamEnd),                (uintptr_t)0x10);   // 0x1800501c0
-    CHECK_EQ(PmfSlot(&PC::OnBufferStart),              (uintptr_t)0x18);   // 0x180050210
-    CHECK_EQ(PmfSlot(&PC::OnBufferEnd),                (uintptr_t)0x20);   // 0x1800501d0
-    CHECK_EQ(PmfSlot(&PC::OnLoopEnd),                  (uintptr_t)0x28);   // 0x180050220
-    CHECK_EQ(PmfSlot(&PC::OnVoiceError),               (uintptr_t)0x30);   // 0x180050230
+    CHECK_SLOT(PC, OnVoiceProcessingPassStart, 0x00/8);   // 0x180050200
+    CHECK_SLOT(PC, OnVoiceProcessingPassEnd,   0x08/8);   // 0x1800501f0
+    CHECK_SLOT(PC, OnStreamEnd,                0x10/8);   // 0x1800501c0
+    CHECK_SLOT(PC, OnBufferStart,              0x18/8);   // 0x180050210
+    CHECK_SLOT(PC, OnBufferEnd,                0x20/8);   // 0x1800501d0
+    CHECK_SLOT(PC, OnLoopEnd,                  0x28/8);   // 0x180050220
+    CHECK_SLOT(PC, OnVoiceError,               0x30/8);   // 0x180050230
 }
 
 UNIT_TEST(b39_eng_platformchannel_ctor_makes_loop2_stores) {

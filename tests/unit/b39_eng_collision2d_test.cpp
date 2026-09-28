@@ -12,6 +12,7 @@
 // DeletingDtor are inline in the headers and are the code under test.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/collision2d/Surface.h"
 #include "runtime/types/collision2d/CollisionMesh.h"
@@ -50,15 +51,6 @@ CollisionMesh::~CollisionMesh() { NoteDtor(this); }
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 const void* VTableOf(const void* obj) { return *reinterpret_cast<const void* const*>(obj); }
 
 // Array-arm driver: `n` elements behind an 8-byte cookie, destroyed through
@@ -103,15 +95,15 @@ UNIT_TEST(b39_eng_collision2d_classes_are_concrete) {
 
 UNIT_TEST(b39_eng_surface_slot_order_by_pmf) {
     using S = Collision2D::Surface;
-    CHECK_EQ(SlotOffset(&S::DeletingDtor),   (uintptr_t)0x00);   // 0x180064ea0
-    CHECK_EQ(SlotOffset(&S::TypeName),       (uintptr_t)0x08);   // 0x180064a70
-    CHECK_EQ(SlotOffset(&S::Type),           (uintptr_t)0x10);   // 0x180064a50
-    CHECK_EQ(SlotOffset(&S::GetFileVersion), (uintptr_t)0x18);   // 0x18010ca30
-    CHECK_EQ(SlotOffset(&S::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
-    CHECK_EQ(SlotOffset(&S::Serialize),      (uintptr_t)0x28);   // 0x18010ca40
-    CHECK_EQ(SlotOffset(&S::Reconstruct),    (uintptr_t)0x30);   // 0x180064c70
-    CHECK_EQ(SlotOffset(&S::Destruct),       (uintptr_t)0x38);   // 0x180064d40
-    CHECK_EQ(SlotOffset(&S::Construct),      (uintptr_t)0x40);   // 0x180064ce0
+    CHECK_DTOR_SLOT(S);   // 0x180064ea0
+    CHECK_SLOT(S, TypeName,       0x08/8);   // 0x180064a70
+    CHECK_SLOT(S, Type,           0x10/8);   // 0x180064a50
+    CHECK_SLOT(S, GetFileVersion, 0x18/8);   // 0x18010ca30
+    CHECK_SLOT(S, Compile,        0x20/8);   // External's 0x1800066e0
+    CHECK_SLOT(S, Serialize,      0x28/8);   // 0x18010ca40
+    CHECK_SLOT(S, Reconstruct,    0x30/8);   // 0x180064c70
+    CHECK_SLOT(S, Destruct,       0x38/8);   // 0x180064d40
+    CHECK_SLOT(S, Construct,      0x40/8);   // 0x180064ce0
     // slot 4 is NOT overridden: it is Object::External's own Compile.
     CHECK((std::is_same<decltype(&S::Compile),
                         Object::External::CompileResult (Object::External::*)(const System::Filename&)>::value));
@@ -119,15 +111,15 @@ UNIT_TEST(b39_eng_surface_slot_order_by_pmf) {
 
 UNIT_TEST(b39_eng_collisionmesh_slot_order_by_pmf) {
     using C = Collision2D::CollisionMesh;
-    CHECK_EQ(SlotOffset(&C::DeletingDtor),   (uintptr_t)0x00);   // 0x1800656b0
-    CHECK_EQ(SlotOffset(&C::TypeName),       (uintptr_t)0x08);   // 0x180064f70
-    CHECK_EQ(SlotOffset(&C::Type),           (uintptr_t)0x10);   // 0x180064f50
-    CHECK_EQ(SlotOffset(&C::GetFileVersion), (uintptr_t)0x18);   // 0x180108cc0
-    CHECK_EQ(SlotOffset(&C::Compile),        (uintptr_t)0x20);   // 0x180108cb0
-    CHECK_EQ(SlotOffset(&C::Serialize),      (uintptr_t)0x28);   // 0x180108cd0
-    CHECK_EQ(SlotOffset(&C::Reconstruct),    (uintptr_t)0x30);   // 0x1800651b0
-    CHECK_EQ(SlotOffset(&C::Destruct),       (uintptr_t)0x38);   // 0x1800652c0
-    CHECK_EQ(SlotOffset(&C::Construct),      (uintptr_t)0x40);   // 0x180065240
+    CHECK_DTOR_SLOT(C);   // 0x1800656b0
+    CHECK_SLOT(C, TypeName,       0x08/8);   // 0x180064f70
+    CHECK_SLOT(C, Type,           0x10/8);   // 0x180064f50
+    CHECK_SLOT(C, GetFileVersion, 0x18/8);   // 0x180108cc0
+    CHECK_SLOT(C, Compile,        0x20/8);   // 0x180108cb0
+    CHECK_SLOT(C, Serialize,      0x28/8);   // 0x180108cd0
+    CHECK_SLOT(C, Reconstruct,    0x30/8);   // 0x1800651b0
+    CHECK_SLOT(C, Destruct,       0x38/8);   // 0x1800652c0
+    CHECK_SLOT(C, Construct,      0x40/8);   // 0x180065240
     CHECK((std::is_same<decltype(&C::Compile),
                         Object::External::CompileResult (C::*)(const System::Filename&)>::value));
 }

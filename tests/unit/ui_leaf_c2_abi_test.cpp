@@ -33,6 +33,7 @@
 // members as its own markers (runtime/src/ui does not link into a host test).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -713,15 +714,6 @@ UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
 // ENDGAME B.3.9 UI-A (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
 namespace {
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
@@ -748,15 +740,15 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 }  // namespace
 
 UNIT_TEST(b39_uia_image_family_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::ImageDescription::DeletingDtor),         (uintptr_t)0x00);   // 0x1800361f0
-    CHECK_EQ(SlotOffset(&UI::ImageDescription::Serialize),            (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&UI::ImageDescription::Construct),            (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageDescription::DeletingDtor), (uintptr_t)0x00);   // 0x1800369e0
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::ImageElement::DeletingDtor),             (uintptr_t)0x00);   // 0x180036600
-    CHECK_EQ(SlotOffset(&UI::ImageElement::Draw),                     (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180036db0
-    CHECK_EQ(SlotOffset(&UI::AnimatedImageElement::Update),           (uintptr_t)0x38);
+    CHECK_DTOR_SLOT(UI::ImageDescription);   // 0x1800361f0
+    CHECK_SLOT(UI::ImageDescription, Serialize, 0x28/8);
+    CHECK_SLOT(UI::ImageDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::AnimatedImageDescription);   // 0x1800369e0
+    CHECK_SLOT(UI::AnimatedImageDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::ImageElement);   // 0x180036600
+    CHECK_SLOT(UI::ImageElement, Draw, 0x30/8);
+    CHECK_DTOR_SLOT(UI::AnimatedImageElement);   // 0x180036db0
+    CHECK_SLOT(UI::AnimatedImageElement, Update, 0x38/8);
 }
 
 // The real ctors' stores (each header cites the transcribed instructions);
@@ -832,18 +824,18 @@ UNIT_TEST(b39_uia_image_family_deletingdtor_both_arms) {
 }
 
 UNIT_TEST(b39_uia_group_family_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::GroupDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180046af0
-    CHECK_EQ(SlotOffset(&UI::GroupDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::PageDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x1800471a0
-    CHECK_EQ(SlotOffset(&UI::PageDescription::Serialize),     (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&UI::RadioDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180047930
-    CHECK_EQ(SlotOffset(&UI::RadioDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::GroupElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180046e10
-    CHECK_EQ(SlotOffset(&UI::GroupElement::Draw),             (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&UI::PageElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180047540
-    CHECK_EQ(SlotOffset(&UI::PageElement::Type),              (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&UI::RadioElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180047d50
-    CHECK_EQ(SlotOffset(&UI::RadioElement::Update),           (uintptr_t)0x38);
+    CHECK_DTOR_SLOT(UI::GroupDescription);   // 0x180046af0
+    CHECK_SLOT(UI::GroupDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::PageDescription);   // 0x1800471a0
+    CHECK_SLOT(UI::PageDescription, Serialize, 0x28/8);
+    CHECK_DTOR_SLOT(UI::RadioDescription);   // 0x180047930
+    CHECK_SLOT(UI::RadioDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::GroupElement);   // 0x180046e10
+    CHECK_SLOT(UI::GroupElement, Draw, 0x30/8);
+    CHECK_DTOR_SLOT(UI::PageElement);   // 0x180047540
+    CHECK_SLOT(UI::PageElement, Type, 0x10/8);
+    CHECK_DTOR_SLOT(UI::RadioElement);   // 0x180047d50
+    CHECK_SLOT(UI::RadioElement, Update, 0x38/8);
 }
 
 UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {

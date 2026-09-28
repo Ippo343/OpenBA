@@ -29,6 +29,7 @@
 // .cpp files is in UNIT_TREE_SRCS), which also makes GCC emit the vtables here.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/CharacterSet.h"
 #include "runtime/types/ui/Cursor.h"
@@ -416,16 +417,6 @@ UNIT_TEST(ui_block_d_resources_construct_at_slot8) {
 // ===========================================================================
 // ENDGAME B.3.9 UI-D (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
-// Itanium PMF -> vtable byte offset: 1 + offset for a virtual, adjustment 0.
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
 
 // Build one real object and run the SCALAR arm with a free; then three behind
 // an array cookie, run the ARRAY arm of slot 0 and check it destroys downward,
@@ -456,14 +447,14 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 // The nine slots of the six resources, by PMF (adjustment 0).
 template <typename C>
 void B39ExpectNineSlots() {
-    CHECK_EQ(SlotOffset(&C::DeletingDtor),   (uintptr_t)kDeletingDtor);
-    CHECK_EQ(SlotOffset(&C::TypeName),       (uintptr_t)kTypeName);
-    CHECK_EQ(SlotOffset(&C::Type),           (uintptr_t)kType);
-    CHECK_EQ(SlotOffset(&C::GetFileVersion), (uintptr_t)kGetFileVersion);
-    CHECK_EQ(SlotOffset(&C::Serialize),      (uintptr_t)kSerialize);
-    CHECK_EQ(SlotOffset(&C::Reconstruct),    (uintptr_t)kReconstruct);
-    CHECK_EQ(SlotOffset(&C::Destruct),       (uintptr_t)kDestruct);
-    CHECK_EQ(SlotOffset(&C::Construct),      (uintptr_t)kConstruct);
+    CHECK_DTOR_SLOT(C);
+    CHECK_SLOT(C, TypeName,       kTypeName/8);
+    CHECK_SLOT(C, Type,           kType/8);
+    CHECK_SLOT(C, GetFileVersion, kGetFileVersion/8);
+    CHECK_SLOT(C, Serialize,      kSerialize/8);
+    CHECK_SLOT(C, Reconstruct,    kReconstruct/8);
+    CHECK_SLOT(C, Destruct,       kDestruct/8);
+    CHECK_SLOT(C, Construct,      kConstruct/8);
 }
 
 UNIT_TEST(b39_uid_characterset_slot_order_by_pmf) {
@@ -552,7 +543,7 @@ UNIT_TEST(b39_uid_stringtable_deleting_dtor_both_arms) {
 
 UNIT_TEST(b39_uid_font_slot_order_by_pmf) {
     B39ExpectNineSlots<UI::Font>();
-    CHECK_EQ(SlotOffset(&UI::Font::Compile), (uintptr_t)kCompile);   // the override
+    CHECK_SLOT(UI::Font, Compile, kCompile/8);   // the override
 }
 
 // The inlined constructor (Construct 0x180031ce0, 21 stores): +0x08..+0x58

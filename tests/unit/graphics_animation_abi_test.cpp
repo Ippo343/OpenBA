@@ -43,6 +43,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/graphics/Animation.h"
 #include "runtime/types/graphics/AnimationGroup.h"
@@ -301,29 +302,20 @@ UNIT_TEST(b39_gfx_animationevent_slot0_is_the_classs_own_both_arms) {
 int g_agDtorCount = 0;
 const void* g_agDtorOrder[4] = {};
 
-template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
-
 UNIT_TEST(b39_gfx_animationgroup_concrete_slot_order_by_pmf) {
     using G = Graphics::AnimationGroup;
     CHECK(!std::is_abstract<G>::value);
     CHECK(!std::is_destructible<G>::value);
     CHECK(!std::has_virtual_destructor<G>::value);
-    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor),   (uintptr_t)0x00);   // 0x1800167f0
-    CHECK_EQ(GfxSlotOffset(&G::TypeName),       (uintptr_t)0x08);   // 0x180016310
-    CHECK_EQ(GfxSlotOffset(&G::Type),           (uintptr_t)0x10);   // 0x1800162f0
-    CHECK_EQ(GfxSlotOffset(&G::GetFileVersion), (uintptr_t)0x18);   // 0x1800fb680
-    CHECK_EQ(GfxSlotOffset(&G::Compile),        (uintptr_t)0x20);   // 0x1800fb690
-    CHECK_EQ(GfxSlotOffset(&G::Serialize),      (uintptr_t)0x28);   // 0x1800fb6a0
-    CHECK_EQ(GfxSlotOffset(&G::Reconstruct),    (uintptr_t)0x30);   // 0x180016550
-    CHECK_EQ(GfxSlotOffset(&G::Destruct),       (uintptr_t)0x38);   // 0x180016650
-    CHECK_EQ(GfxSlotOffset(&G::Construct),      (uintptr_t)0x40);   // 0x1800165d0
+    CHECK_DTOR_SLOT(G);   // 0x1800167f0
+    CHECK_SLOT(G, TypeName,       0x08/8);   // 0x180016310
+    CHECK_SLOT(G, Type,           0x10/8);   // 0x1800162f0
+    CHECK_SLOT(G, GetFileVersion, 0x18/8);   // 0x1800fb680
+    CHECK_SLOT(G, Compile,        0x20/8);   // 0x1800fb690
+    CHECK_SLOT(G, Serialize,      0x28/8);   // 0x1800fb6a0
+    CHECK_SLOT(G, Reconstruct,    0x30/8);   // 0x180016550
+    CHECK_SLOT(G, Destruct,       0x38/8);   // 0x180016650
+    CHECK_SLOT(G, Construct,      0x40/8);   // 0x1800165d0
 }
 
 // The real ctor makes the factory's stores (0x180016463..4ab): External's three

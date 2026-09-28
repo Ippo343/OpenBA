@@ -30,6 +30,7 @@
 // PART D — the QUALIFIED call on the slot this block introduces (12).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/TextDescription.h"
 #include "runtime/types/ui/LabelDescription.h"
@@ -563,15 +564,6 @@ UNIT_TEST(ui_c3_qualified_finalizetext_does_not_redispatch) {
 // ENDGAME B.3.9 UI-A (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
 namespace {
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
@@ -598,18 +590,18 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 }  // namespace
 
 UNIT_TEST(b39_uia_edit_number_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::EditDescription::DeletingDtor),       (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::EditDescription::Construct),          (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::EditElement::DeletingDtor),           (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::EditElement::FinalizeText),           (uintptr_t)0x60);
-    CHECK_EQ(SlotOffset(&UI::NumberEditDescription::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberEditDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::NumberEditElement::DeletingDtor),     (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberEditElement::FinalizeText),     (uintptr_t)0x60);
-    CHECK_EQ(SlotOffset(&UI::NumberDescription::DeletingDtor),     (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberDescription::CreateInstance),   (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&UI::NumberElement::DeletingDtor),         (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberElement::Draw),                 (uintptr_t)0x30);
+    CHECK_DTOR_SLOT(UI::EditDescription);
+    CHECK_SLOT(UI::EditDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::EditElement);
+    CHECK_SLOT(UI::EditElement, FinalizeText, 0x60/8);
+    CHECK_DTOR_SLOT(UI::NumberEditDescription);
+    CHECK_SLOT(UI::NumberEditDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::NumberEditElement);
+    CHECK_SLOT(UI::NumberEditElement, FinalizeText, 0x60/8);
+    CHECK_DTOR_SLOT(UI::NumberDescription);
+    CHECK_SLOT(UI::NumberDescription, CreateInstance, 0x40/8);
+    CHECK_DTOR_SLOT(UI::NumberElement);
+    CHECK_SLOT(UI::NumberElement, Draw, 0x30/8);
 }
 
 // The real ctors make retail's stores (each header cites the transcribed
@@ -704,14 +696,14 @@ UNIT_TEST(b39_uia_edit_number_deletingdtor_both_arms) {
 }
 
 UNIT_TEST(b39_uia_text_label_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::TextDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x180041e30
-    CHECK_EQ(SlotOffset(&UI::TextDescription::Construct),     (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::LabelDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180042730
-    CHECK_EQ(SlotOffset(&UI::LabelDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::TextElement::DeletingDtor),      (uintptr_t)0x00);   // 0x1800422f0
-    CHECK_EQ(SlotOffset(&UI::TextElement::Draw),              (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&UI::LabelElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180042bb0
-    CHECK_EQ(SlotOffset(&UI::LabelElement::SetColor),         (uintptr_t)0x50);
+    CHECK_DTOR_SLOT(UI::TextDescription);   // 0x180041e30
+    CHECK_SLOT(UI::TextDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::LabelDescription);   // 0x180042730
+    CHECK_SLOT(UI::LabelDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::TextElement);   // 0x1800422f0
+    CHECK_SLOT(UI::TextElement, Draw, 0x30/8);
+    CHECK_DTOR_SLOT(UI::LabelElement);   // 0x180042bb0
+    CHECK_SLOT(UI::LabelElement, SetColor, 0x50/8);
 }
 
 UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {

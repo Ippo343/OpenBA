@@ -29,6 +29,7 @@
 // slot 0 (free on `flags & 1`, the downward array arm on `flags & 2`).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/pathfinding/PointList.h"
 #include "runtime/types/pathfinding/IPathInfo.h"
@@ -236,28 +237,19 @@ UNIT_TEST(pathfinding_pointlist_qualified_call_does_not_reenter_the_door) {
 // ENDGAME B.3.9 ENG (B39_RULES D1/D2, rule B9-16) -- the concrete PointList.
 // ---------------------------------------------------------------------------
 namespace {
-template <typename PMF>
-uintptr_t PlSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 }  // namespace
 
 UNIT_TEST(b39_pointlist_slot_order_by_pmf) {
     using PL = Pathfinding::PointList;
-    CHECK_EQ(PlSlotOffset(&PL::DeletingDtor),   (uintptr_t)0x00);   // 0x1800713b0
-    CHECK_EQ(PlSlotOffset(&PL::TypeName),       (uintptr_t)0x08);   // 0x180070e40
-    CHECK_EQ(PlSlotOffset(&PL::Type),           (uintptr_t)0x10);   // 0x180070e20
-    CHECK_EQ(PlSlotOffset(&PL::GetFileVersion), (uintptr_t)0x18);   // 0x18010f880
-    CHECK_EQ(PlSlotOffset(&PL::Compile),        (uintptr_t)0x20);   // 0x18010f6d0
-    CHECK_EQ(PlSlotOffset(&PL::Serialize),      (uintptr_t)0x28);   // 0x18010f6e0
-    CHECK_EQ(PlSlotOffset(&PL::Reconstruct),    (uintptr_t)0x30);   // 0x180071060
-    CHECK_EQ(PlSlotOffset(&PL::Destruct),       (uintptr_t)0x38);   // 0x180071150
-    CHECK_EQ(PlSlotOffset(&PL::Construct),      (uintptr_t)0x40);   // 0x1800710e0
+    CHECK_DTOR_SLOT(PL);   // 0x1800713b0
+    CHECK_SLOT(PL, TypeName,       0x08/8);   // 0x180070e40
+    CHECK_SLOT(PL, Type,           0x10/8);   // 0x180070e20
+    CHECK_SLOT(PL, GetFileVersion, 0x18/8);   // 0x18010f880
+    CHECK_SLOT(PL, Compile,        0x20/8);   // 0x18010f6d0
+    CHECK_SLOT(PL, Serialize,      0x28/8);   // 0x18010f6e0
+    CHECK_SLOT(PL, Reconstruct,    0x30/8);   // 0x180071060
+    CHECK_SLOT(PL, Destruct,       0x38/8);   // 0x180071150
+    CHECK_SLOT(PL, Construct,      0x40/8);   // 0x1800710e0
 }
 
 // The real constructor makes retail's factory stores (0x180070f93..fd4): six
@@ -379,18 +371,6 @@ struct PickingMeshProbe final : Picking::PickingMesh {
     Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
 };
 
-// Itanium PMF -> vtable byte offset (the exe_class_abi_test.cpp model):
-// 1 + offset for a virtual, and adjustment 0 for single inheritance.
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
-
 
 // B7-5 pin: `Object::ExternalPtr<T>` BY VALUE travels as the bare pointer in
 // the next integer register — what `Scene::AddMesh`'s door hands the member,
@@ -437,15 +417,15 @@ UNIT_TEST(picking_pickingmesh_layout) {
 // Slot order read off the REAL header's pointers-to-virtual-member.
 UNIT_TEST(b39_pickingmesh_slot_order_by_pmf) {
     using PM = Picking::PickingMesh;
-    CHECK_EQ(SlotOffset(&PM::DeletingDtor),   (uintptr_t)0x00);   // 0x180072050
-    CHECK_EQ(SlotOffset(&PM::TypeName),       (uintptr_t)0x08);   // 0x180071ab0
-    CHECK_EQ(SlotOffset(&PM::Type),           (uintptr_t)0x10);   // 0x180071a90
-    CHECK_EQ(SlotOffset(&PM::GetFileVersion), (uintptr_t)0x18);   // 0x180122940
-    CHECK_EQ(SlotOffset(&PM::Compile),        (uintptr_t)0x20);   // 0x180122950
-    CHECK_EQ(SlotOffset(&PM::Serialize),      (uintptr_t)0x28);   // 0x180122960
-    CHECK_EQ(SlotOffset(&PM::Reconstruct),    (uintptr_t)0x30);   // 0x180071cd0
-    CHECK_EQ(SlotOffset(&PM::Destruct),       (uintptr_t)0x38);   // 0x180071db0
-    CHECK_EQ(SlotOffset(&PM::Construct),      (uintptr_t)0x40);   // 0x180071d40
+    CHECK_DTOR_SLOT(PM);   // 0x180072050
+    CHECK_SLOT(PM, TypeName,       0x08/8);   // 0x180071ab0
+    CHECK_SLOT(PM, Type,           0x10/8);   // 0x180071a90
+    CHECK_SLOT(PM, GetFileVersion, 0x18/8);   // 0x180122940
+    CHECK_SLOT(PM, Compile,        0x20/8);   // 0x180122950
+    CHECK_SLOT(PM, Serialize,      0x28/8);   // 0x180122960
+    CHECK_SLOT(PM, Reconstruct,    0x30/8);   // 0x180071cd0
+    CHECK_SLOT(PM, Destruct,       0x38/8);   // 0x180071db0
+    CHECK_SLOT(PM, Construct,      0x40/8);   // 0x180071d40
 }
 
 // The real constructor makes retail's factory stores (0x180071c03..c3f): every

@@ -20,6 +20,7 @@
 // cannot link into a host test) — the coordinator's run gates verify those.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Player/ToolSetting.h"
 #include "Player/RotationSetting.h"
@@ -41,16 +42,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
 // ===========================================================================
 // ToolSetting / RotationSetting
 // ===========================================================================
@@ -62,11 +53,11 @@ UNIT_TEST(tool_setting_layout) {
 }
 
 UNIT_TEST(tool_setting_slot_order) {
-    CHECK_EQ(SlotOffset(&ToolSetting::DeletingDtor),     (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&ToolSetting::TypeName),         (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&ToolSetting::Type),             (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&ToolSetting::Persist),          (uintptr_t)0x18);   // inherited Internal::Persist
-    CHECK_EQ(SlotOffset(&RotationSetting::DeletingDtor), (uintptr_t)0x00);   // 0x140026dd0
+    CHECK_DTOR_SLOT(ToolSetting);
+    CHECK_SLOT(ToolSetting, TypeName, 0x08/8);
+    CHECK_SLOT(ToolSetting, Type,     0x10/8);
+    CHECK_SLOT(ToolSetting, Persist,  0x18/8);   // inherited Internal::Persist
+    CHECK_DTOR_SLOT(RotationSetting);   // 0x140026dd0
     // (slots 1/2 of a leaf are DECLARE_EXE_TYPE's inline bodies over the
     // registration record, which does not link into a host test.)
 }
@@ -98,26 +89,26 @@ UNIT_TEST(tool_base_layout) {
 
 UNIT_TEST(tool_base_slot_order) {
     // Tool 0x140161f10, 13 slots.
-    CHECK_EQ(SlotOffset(&Tool::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&Tool::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&Tool::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&Tool::Persist),        (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&Tool::Startup),        (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&Tool::Shutdown),       (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&Tool::OnKey),          (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&Tool::Update),         (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&Tool::Draw),           (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&Tool::OnCancel),       (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&Tool::IsSelected),     (uintptr_t)0x50);
-    CHECK_EQ(SlotOffset(&Tool::GetSettingType), (uintptr_t)0x58);
-    CHECK_EQ(SlotOffset(&Tool::GetCursor),      (uintptr_t)0x60);   // 13th and last
+    CHECK_DTOR_SLOT(Tool);
+    CHECK_SLOT(Tool, TypeName,       0x08/8);
+    CHECK_SLOT(Tool, Type,           0x10/8);
+    CHECK_SLOT(Tool, Persist,        0x18/8);
+    CHECK_SLOT(Tool, Startup,        0x20/8);
+    CHECK_SLOT(Tool, Shutdown,       0x28/8);
+    CHECK_SLOT(Tool, OnKey,          0x30/8);
+    CHECK_SLOT(Tool, Update,         0x38/8);
+    CHECK_SLOT(Tool, Draw,           0x40/8);
+    CHECK_SLOT(Tool, OnCancel,       0x48/8);
+    CHECK_SLOT(Tool, IsSelected,     0x50/8);
+    CHECK_SLOT(Tool, GetSettingType, 0x58/8);
+    CHECK_SLOT(Tool, GetCursor,      0x60/8);   // 13th and last
     // DragTool 0x140161c10, 15 slots.
-    CHECK_EQ(SlotOffset(&DragTool::DeletingDtor), (uintptr_t)0x00);   // 0x14002da20
-    CHECK_EQ(SlotOffset(&DragTool::OnKey),        (uintptr_t)0x30);   // 0x1400fc6b0
-    CHECK_EQ(SlotOffset(&DragTool::OnCancel),     (uintptr_t)0x48);   // 0x1400fc640
-    CHECK_EQ(SlotOffset(&DragTool::GetCursor),    (uintptr_t)0x60);   // 0x1400fc9d0
-    CHECK_EQ(SlotOffset(&DragTool::CalcPath),     (uintptr_t)0x68);   // pure
-    CHECK_EQ(SlotOffset(&DragTool::CalcCost),     (uintptr_t)0x70);   // pure, 15th and last
+    CHECK_DTOR_SLOT(DragTool);   // 0x14002da20
+    CHECK_SLOT(DragTool, OnKey,     0x30/8);   // 0x1400fc6b0
+    CHECK_SLOT(DragTool, OnCancel,  0x48/8);   // 0x1400fc640
+    CHECK_SLOT(DragTool, GetCursor, 0x60/8);   // 0x1400fc9d0
+    CHECK_SLOT(DragTool, CalcPath,  0x68/8);   // pure
+    CHECK_SLOT(DragTool, CalcCost,  0x70/8);   // pure, 15th and last
 }
 
 UNIT_TEST(tool_base_shape) {
@@ -155,27 +146,27 @@ UNIT_TEST(tool_leaf_sizes_match_retail_create) {
 }
 
 UNIT_TEST(tool_leaf_overrides_land_on_retail_slots) {
-    CHECK_EQ(SlotOffset(&BridgeTool::DeletingDtor), (uintptr_t)0x00);   // 0x14002d7f0
-    CHECK_EQ(SlotOffset(&BridgeTool::Startup),      (uintptr_t)0x20);   // 0x1400fb7a0
-    CHECK_EQ(SlotOffset(&BridgeTool::Draw),         (uintptr_t)0x40);   // 0x1400fadc0
-    CHECK_EQ(SlotOffset(&BridgeTool::CalcPath),     (uintptr_t)0x68);   // 0x1400f9cd0
-    CHECK_EQ(SlotOffset(&BridgeTool::CalcCost),     (uintptr_t)0x70);   // 0x1400facf0
-    CHECK_EQ(SlotOffset(&RoadTool::OnKey),          (uintptr_t)0x30);   // 0x140105690
-    CHECK_EQ(SlotOffset(&FencedTool::Update),       (uintptr_t)0x38);   // 0x1400dcad0
-    CHECK_EQ(SlotOffset(&FencedTool::OnCancel),     (uintptr_t)0x48);   // 0x1400dcd10
-    CHECK_EQ(SlotOffset(&FencedTool::GetSettingType), (uintptr_t)0x58); // 0x140026920
-    CHECK_EQ(SlotOffset(&PlacementTool::Shutdown),  (uintptr_t)0x28);   // 0x1400fe4e0
-    CHECK_EQ(SlotOffset(&PlacementTool::GetSettingType), (uintptr_t)0x58);   // 0x140026920
-    CHECK_EQ(SlotOffset(&PlacementTool::GetCursor), (uintptr_t)0x60);   // 0x1400fe800
-    CHECK_EQ(SlotOffset(&EditTool::Shutdown),       (uintptr_t)0x28);   // 0x1400fd2e0
-    CHECK_EQ(SlotOffset(&EditTool::IsSelected),     (uintptr_t)0x50);   // 0x1400fd290
-    CHECK_EQ(SlotOffset(&PathTool::IsSelected),     (uintptr_t)0x50);   // 0x1400de8d0
-    CHECK_EQ(SlotOffset(&PathTool::GetCursor),      (uintptr_t)0x60);   // 0x1400de910
-    CHECK_EQ(SlotOffset(&RemovalTool::CalcPath),    (uintptr_t)0x68);   // 0x1401035e0
-    CHECK_EQ(SlotOffset(&DragPlacementTool::CalcCost), (uintptr_t)0x70);   // 0x1400fbae0
+    CHECK_DTOR_SLOT(BridgeTool);   // 0x14002d7f0
+    CHECK_SLOT(BridgeTool, Startup,           0x20/8);   // 0x1400fb7a0
+    CHECK_SLOT(BridgeTool, Draw,              0x40/8);   // 0x1400fadc0
+    CHECK_SLOT(BridgeTool, CalcPath,          0x68/8);   // 0x1400f9cd0
+    CHECK_SLOT(BridgeTool, CalcCost,          0x70/8);   // 0x1400facf0
+    CHECK_SLOT(RoadTool, OnKey,               0x30/8);   // 0x140105690
+    CHECK_SLOT(FencedTool, Update,            0x38/8);   // 0x1400dcad0
+    CHECK_SLOT(FencedTool, OnCancel,          0x48/8);   // 0x1400dcd10
+    CHECK_SLOT(FencedTool, GetSettingType,    0x58/8); // 0x140026920
+    CHECK_SLOT(PlacementTool, Shutdown,       0x28/8);   // 0x1400fe4e0
+    CHECK_SLOT(PlacementTool, GetSettingType, 0x58/8);   // 0x140026920
+    CHECK_SLOT(PlacementTool, GetCursor,      0x60/8);   // 0x1400fe800
+    CHECK_SLOT(EditTool, Shutdown,            0x28/8);   // 0x1400fd2e0
+    CHECK_SLOT(EditTool, IsSelected,          0x50/8);   // 0x1400fd290
+    CHECK_SLOT(PathTool, IsSelected,          0x50/8);   // 0x1400de8d0
+    CHECK_SLOT(PathTool, GetCursor,           0x60/8);   // 0x1400de910
+    CHECK_SLOT(RemovalTool, CalcPath,         0x68/8);   // 0x1401035e0
+    CHECK_SLOT(DragPlacementTool, CalcCost,   0x70/8);   // 0x1400fbae0
     // D9 #4: EditTool and PathTool have 14 slots in retail — their own slot 13.
-    CHECK_EQ(SlotOffset(&EditTool::GetSelected),    (uintptr_t)0x68);   // 0x14002daf0
-    CHECK_EQ(SlotOffset(&PathTool::GetSelected),    (uintptr_t)0x68);   // 0x140026b60
+    CHECK_SLOT(EditTool, GetSelected, 0x68/8);   // 0x14002daf0
+    CHECK_SLOT(PathTool, GetSelected, 0x68/8);   // 0x140026b60
 }
 
 UNIT_TEST(tool_leaf_shape) {

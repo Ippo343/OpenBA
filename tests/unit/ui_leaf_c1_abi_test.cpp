@@ -34,6 +34,7 @@
 // members as its own markers (runtime/src/ui does not link into a host test).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -890,16 +891,6 @@ UNIT_TEST(ui_c1_clipregion_contains_reaches_the_base_without_reentry) {
 // ENDGAME B.3.9 UI-A (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
 namespace {
-// Itanium PMF -> vtable byte offset: 1 + offset for a virtual, adjustment 0.
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
 
 // Build three elements behind an array cookie, run the ARRAY arm of slot 0 and
 // check it destroys downward, frees and returns the block; then the scalar
@@ -930,22 +921,22 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 
 UNIT_TEST(b39_uia_border_slot_order_by_pmf) {
     using BE = UI::BorderElement;
-    CHECK_EQ(SlotOffset(&BE::DeletingDtor),  (uintptr_t)0x00);   // 0x1800414f0
-    CHECK_EQ(SlotOffset(&BE::TypeName),      (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&BE::Type),          (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&BE::ComputeSize),   (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&BE::ComputeLayout), (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&BE::Draw),          (uintptr_t)0x30);
+    CHECK_DTOR_SLOT(BE);   // 0x1800414f0
+    CHECK_SLOT(BE, TypeName,      0x08/8);
+    CHECK_SLOT(BE, Type,          0x10/8);
+    CHECK_SLOT(BE, ComputeSize,   0x20/8);
+    CHECK_SLOT(BE, ComputeLayout, 0x28/8);
+    CHECK_SLOT(BE, Draw,          0x30/8);
     using BD = UI::BorderDescription;
-    CHECK_EQ(SlotOffset(&BD::DeletingDtor),   (uintptr_t)0x00);  // 0x180040ff0
-    CHECK_EQ(SlotOffset(&BD::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&BD::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&BD::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&BD::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&BD::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&BD::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&BD::CreateInstance), (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&BD::Construct),      (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(BD);  // 0x180040ff0
+    CHECK_SLOT(BD, TypeName,       0x08/8);
+    CHECK_SLOT(BD, Type,           0x10/8);
+    CHECK_SLOT(BD, GetFileVersion, 0x18/8);
+    CHECK_SLOT(BD, Serialize,      0x28/8);
+    CHECK_SLOT(BD, Reconstruct,    0x30/8);
+    CHECK_SLOT(BD, Destruct,       0x38/8);
+    CHECK_SLOT(BD, CreateInstance, 0x40/8);
+    CHECK_SLOT(BD, Construct,      0x48/8);
 }
 
 // ??0BorderElement 0x18010fd40: Element(), then nine {sheet 0, index -1}; each
@@ -997,22 +988,22 @@ UNIT_TEST(b39_uia_border_deletingdtor_both_arms) {
 
 UNIT_TEST(b39_uia_clipregion_slot_order_by_pmf) {
     using CE = UI::ClipRegionElement;
-    CHECK_EQ(SlotOffset(&CE::DeletingDtor),  (uintptr_t)0x00);   // 0x180038370
-    CHECK_EQ(SlotOffset(&CE::TypeName),      (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&CE::Type),          (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&CE::ComputeSize),   (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&CE::ComputeLayout), (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&CE::Draw),          (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&CE::Update),        (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&CE::Contains),      (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(CE);   // 0x180038370
+    CHECK_SLOT(CE, TypeName,      0x08/8);
+    CHECK_SLOT(CE, Type,          0x10/8);
+    CHECK_SLOT(CE, ComputeSize,   0x20/8);
+    CHECK_SLOT(CE, ComputeLayout, 0x28/8);
+    CHECK_SLOT(CE, Draw,          0x30/8);
+    CHECK_SLOT(CE, Update,        0x38/8);
+    CHECK_SLOT(CE, Contains,      0x48/8);
     using CD = UI::ClipRegionDescription;
-    CHECK_EQ(SlotOffset(&CD::DeletingDtor),   (uintptr_t)0x00);  // 0x180037eb0
-    CHECK_EQ(SlotOffset(&CD::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&CD::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&CD::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&CD::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&CD::CreateInstance), (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&CD::Construct),      (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(CD);  // 0x180037eb0
+    CHECK_SLOT(CD, GetFileVersion, 0x18/8);
+    CHECK_SLOT(CD, Serialize,      0x28/8);
+    CHECK_SLOT(CD, Reconstruct,    0x30/8);
+    CHECK_SLOT(CD, Destruct,       0x38/8);
+    CHECK_SLOT(CD, CreateInstance, 0x40/8);
+    CHECK_SLOT(CD, Construct,      0x48/8);
 }
 
 // ??0ClipRegionElement 0x1800cbe60: Element(), then 100, 100, 0, 0, 0, 0.
@@ -1054,18 +1045,18 @@ UNIT_TEST(b39_uia_clipregion_deletingdtor_both_arms) {
 }
 
 UNIT_TEST(b39_uia_button_family_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::ButtonElement::DeletingDtor),     (uintptr_t)0x00);   // 0x1800485b0
-    CHECK_EQ(SlotOffset(&UI::ButtonElement::Enable),           (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&UI::CheckElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180048d80
-    CHECK_EQ(SlotOffset(&UI::CheckElement::Update),            (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&UI::ComboElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180075390
-    CHECK_EQ(SlotOffset(&UI::ComboElement::Update),            (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&UI::ButtonDescription::DeletingDtor), (uintptr_t)0x00);   // 0x1800481a0
-    CHECK_EQ(SlotOffset(&UI::ButtonDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::CheckDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x1800489c0
-    CHECK_EQ(SlotOffset(&UI::CheckDescription::Construct),     (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::ComboDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x180074e70
-    CHECK_EQ(SlotOffset(&UI::ComboDescription::Construct),     (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(UI::ButtonElement);   // 0x1800485b0
+    CHECK_SLOT(UI::ButtonElement, Enable, 0x40/8);
+    CHECK_DTOR_SLOT(UI::CheckElement);   // 0x180048d80
+    CHECK_SLOT(UI::CheckElement, Update, 0x38/8);
+    CHECK_DTOR_SLOT(UI::ComboElement);   // 0x180075390
+    CHECK_SLOT(UI::ComboElement, Update, 0x38/8);
+    CHECK_DTOR_SLOT(UI::ButtonDescription);   // 0x1800481a0
+    CHECK_SLOT(UI::ButtonDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::CheckDescription);   // 0x1800489c0
+    CHECK_SLOT(UI::CheckDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::ComboDescription);   // 0x180074e70
+    CHECK_SLOT(UI::ComboDescription, Construct, 0x48/8);
 }
 
 // The real ctors' stores; untouched bytes stay 0xCD.
