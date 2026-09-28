@@ -55,35 +55,23 @@
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include "volume/Volume.h"
 
 namespace {
 
 typedef uint8_t u8;
 
-// ---- exe functions already ported+registered (reused via ResolveAddr) -------
-typedef void  (*fn_FindCareBuilding_t)(void* self);                 // 0x140111590
-typedef void  (*fn_ReleaseLink_t)(void* self);                   // 0x1401159b0
-typedef void  (*fn_QInit_t)(void* walker, float* map, uint32_t zLoBits, uint32_t zHiBits); // 0x140018dd0
-typedef void  (*fn_QSubdiv_t)(void* walker);                     // 0x140018880
-typedef void  (*fn_AddCitizenEvent_t)(void* eventLog, int eventType, int severity,
-                                      void* entityIBP, void* nameStr, void* titleStr,
-                                      void* extraStr);           // 0x140094e00
-static fn_FindCareBuilding_t   s_findCareBuilding  = nullptr;
-static fn_ReleaseLink_t     s_releaseLink    = nullptr;          // Entity_impl_59b0
-static fn_QInit_t           s_qinit          = nullptr;
-static fn_QSubdiv_t         s_qsubdiv        = nullptr;
-static fn_AddCitizenEvent_t s_addCitizenEvent = nullptr;
-
-// ---- Runtime engine calls via exe .rdata dispatch slots (export fallback) ---
-// Original call sites use these slots: V3 ctor3 0x140152a30, V3 splat 0x140151320,
-// Dot 0x140151298 (both now direct Math::Vector3 calls), Box::Intersect 0x140151e80,
-// StringTable::GetText(String&) 0x140151718.
-typedef bool  (*fn_BoxIntersect_t)(const void* self, const void* other);
-static fn_BoxIntersect_t s_boxIntersect  = nullptr;
-
-// ---- rdata float constants (registered by earlier waves) --------------------
-static const float* s_pMonthsPerYear = nullptr;  // 0x1401721b8 = 12.0f
-static const float* s_pSecsPerMonth  = nullptr;  // 0x140172234 = 300.0f
+// Exe bodies called by name: CitizenComp_FindCareBuilding 0x140111590,
+// AttendanceComponent_ReleaseLink59b0 0x1401159b0 (Entity_impl_59b0), the quadtree
+// walker Pf_QuadtreeInit_18dd0 0x140018dd0 / Pf_QuadtreeSubdivide_18880 0x140018880,
+// EventLog_AddCitizenEvent 0x140094e00.
+// Runtime calls the original makes through exe import slots: V3 ctor3 0x140152a30,
+// V3 splat 0x140151320, Dot 0x140151298 (all direct Math::Vector3 calls),
+// Box::Intersect 0x140151e80 (RtVolume_Box_Intersect), StringTable::GetText(String&)
+// 0x140151718.
 
 // Disease type id. The .rdata global (0x1401c5948) is env-gated / unregistered
 // in standalone — resolve the class's own record instead (D5, ENDGAME B.3.9 CG3;
@@ -92,27 +80,10 @@ static uint32_t s_tidDisease = 0;
 
 static bool s_init = false;
 
-static inline void* RSlot(uintptr_t slotAddr) {
-    uintptr_t slot = ResolveAddr(Module::Exe, slotAddr);
-    return slot ? *reinterpret_cast<void**>(slot) : nullptr;
-}
-
+// Resolves no door: it only caches the Disease type id.
 static void EnsureInit() {
     if (s_init) return;
     s_init = true;
-
-    s_findCareBuilding  = reinterpret_cast<fn_FindCareBuilding_t>(ResolveAddr(Module::Exe, 0x140111590));
-    s_releaseLink    = reinterpret_cast<fn_ReleaseLink_t>(ResolveAddr(Module::Exe, 0x1401159b0));
-    s_qinit          = reinterpret_cast<fn_QInit_t>(ResolveAddr(Module::Exe, 0x140018dd0));
-    s_qsubdiv        = reinterpret_cast<fn_QSubdiv_t>(ResolveAddr(Module::Exe, 0x140018880));
-    s_addCitizenEvent = reinterpret_cast<fn_AddCitizenEvent_t>(ResolveAddr(Module::Exe, 0x140094e00));
-
-    s_boxIntersect = reinterpret_cast<fn_BoxIntersect_t>(RSlot(0x140151e80));
-    if (!s_boxIntersect) s_boxIntersect = reinterpret_cast<fn_BoxIntersect_t>(
-        ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));
-
-    s_pMonthsPerYear = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721b8));
-    s_pSecsPerMonth  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
 
     s_tidDisease = Disease::TypeId();   // B.3.9 EXA: the class's own record (was by name)
 }
@@ -120,13 +91,19 @@ static void EnsureInit() {
 static inline void* GameWorld() {
     return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
 }
-static inline float MonthsPerYear() { return s_pMonthsPerYear ? *s_pMonthsPerYear : 12.0f; }
-static inline float SecsPerMonth()  { return s_pSecsPerMonth  ? *s_pSecsPerMonth  : 300.0f; }
+// 0x1401721b8 = 12.0f, stored as its bit pattern (exe_constants.h).
+static inline float MonthsPerYear() {
+    float f;
+    const uint32_t bits = kRdata_1401721b8;
+    std::memcpy(&f, &bits, sizeof f);
+    return f;
+}
+static inline float SecsPerMonth()  { return kRdata_140172234; }   // 0x140172234 = 300.0f
 
 // Time(float seconds) -> int64 ticks, via the Runtime ctor.
 static inline int64_t TimeFromSeconds(float secs) {
     int64_t t = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), secs);
     return t;
 }
 
@@ -369,13 +346,13 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
                                        int typeId, void* outArr) {
     EnsureInit();
     if (out) *out = nullptr;
-    if (!map || !pos || !radius || !outArr || !s_qinit || !s_qsubdiv ||
-        !s_boxIntersect)
+    if (!map || !pos || !radius || !outArr)
         return out;
 
     // 0x2430-byte walker (0xFF records * 0x24 + header + map ptr at +0x2428).
     alignas(16) u8 walker[0x2430];
-    s_qinit(walker, map, 0xbf800000u /* -1.0f bits */, 0x3f800000u /* +1.0f bits */);
+    Pf_QuadtreeInit_18dd0(reinterpret_cast<uintptr_t>(walker), map,
+                          0xbf800000u /* -1.0f bits */, 0x3f800000u /* +1.0f bits */);
 
     float r  = *radius;
     float r2 = r * r;
@@ -400,7 +377,8 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
         float* zhi = (float*)(walker + 0x18);   // (0, 0, +1)
         float nbox[6] = { rp[0] - sx + zlo[0], rp[1] - sy + zlo[1], rp[2] - sz + zlo[2],
                           rp[0] + sx + zhi[0], rp[1] + sy + zhi[1], rp[2] + sz + zhi[2] };
-        if (!s_boxIntersect(qbox, nbox)) { (*top)--; continue; }
+        if (!RtVolume_Box_Intersect(reinterpret_cast<const struct Box*>(qbox),
+                                    reinterpret_cast<const struct Box*>(nbox))) { (*top)--; continue; }
 
         int first = *(int*)(*(uintptr_t*)((uintptr_t)map + 0x30) + (uintptr_t)nodeId * 4);
         if (first >= 0) {
@@ -456,7 +434,7 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
             } while (idx != first);
         }
 
-        s_qsubdiv(walker);   // pop node / push its children
+        Pf_QuadtreeSubdivide_18880(reinterpret_cast<uintptr_t>(walker));   // pop node / push its children
     }
     return out;
 }
@@ -517,10 +495,10 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
                     *reinterpret_cast<const System::String*>((u8*)disease + 0x28)));
             haveName = true;
         }
-        if (s_addCitizenEvent && eventLog) {
+        if (eventLog) {
             // {3}/{4} unused by the type-0xb template; AddCitizenEvent maps null -> "".
-            s_addCitizenEvent(eventLog, 0xb, 3, nullptr,
-                              haveName ? &diseaseName : nullptr, nullptr, nullptr);
+            EventLog_AddCitizenEvent(eventLog, 0xb, 3, nullptr,
+                                     haveName ? &diseaseName : nullptr, nullptr, nullptr);
         }
     }
 
@@ -531,7 +509,7 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
         (tol * *(float*)(desc + 0x98) + *(float*)(desc + 0x94)) * SecsPerMonth());
     *(int64_t*)(s + 0x78) = TimeFromSeconds(
         *(float*)((uintptr_t)disease + 0x30) * SecsPerMonth());
-    if (s_findCareBuilding) s_findCareBuilding(self);
+    CitizenComp_FindCareBuilding(static_cast<CitizenComponent*>(self));   // 0x140111590
 
     // Both arms: whether the care link actually got made. +0x228 == 0 here means
     // FindCareBuilding (0x140111590 -> sub_1930 0x140111930) found no building whose
@@ -544,7 +522,7 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
                 self, disease, (long long)*(int64_t*)(s + 0x70),
                 (long long)*(int64_t*)(s + 0x78),
                 (*(int64_t*)(s + 0x228) != 0) ? "LINKED" : "NOT-LINKED",
-                s_findCareBuilding ? 1 : 0);
+                1);   // the finder is a direct call: always resolved
         fflush(stderr);
     }
 }
@@ -559,15 +537,13 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
 extern "C" void CitizenComp_CatchDisease(void* self) {
     EnsureInit();
     void* gw = GameWorld();
-    if (!self || !gw || !fn_IsDerivedFrom || !fn_ExternalList_GetResourceCount ||
-        s_tidDisease == 0) {
+    if (!self || !gw || s_tidDisease == 0) {
         // One-shot: this is a structural condition, true for every citizen every tick.
         static bool once = false;
         if (PlagueTraceOn() && !once && (once = true))
-            fprintf(stderr, "[Plague] CATCH bail=unresolved citizen=%p gw=%p IsDerivedFrom=%p "
-                    "GetResourceCount=%p tidDisease=%u\n",
-                    self, gw, (void*)fn_IsDerivedFrom, (void*)fn_ExternalList_GetResourceCount,
-                    s_tidDisease), fflush(stderr);
+            fprintf(stderr, "[Plague] CATCH bail=unresolved citizen=%p gw=%p "
+                    "tidDisease=%u\n",
+                    self, gw, s_tidDisease), fflush(stderr);
         return;
     }
     if (CitizenComp_AnyCitizenSick(*(void**)((uintptr_t)gw + 0xf0))) {
@@ -593,7 +569,7 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
     for (int i = 0; i < count; i++) {
         uintptr_t entry = *(uintptr_t*)(*(uintptr_t*)((uintptr_t)list + 0x20) +
                                         (uintptr_t)i * 8);
-        void* d = fn_IsDerivedFrom((void*)entry, s_tidDisease) ? (void*)entry : nullptr;
+        void* d = Object::IsDerivedFromNullSafe((void*)entry, s_tidDisease) ? (void*)entry : nullptr;
         total += *(float*)((uintptr_t)d + 0x3c);   // faithful: NULL deref if not Disease
         uint32_t bits; memcpy(&bits, &total, 4);
         CitizenComp_IntArrayResize(&cum, cum.count + 1, &bits);
@@ -607,7 +583,7 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
         if (prev <= target && target < c) {
             uintptr_t entry = *(uintptr_t*)(*(uintptr_t*)((uintptr_t)list + 0x20) +
                                             (uintptr_t)i * 8);
-            void* d = fn_IsDerivedFrom((void*)entry, s_tidDisease) ? (void*)entry : nullptr;
+            void* d = Object::IsDerivedFromNullSafe((void*)entry, s_tidDisease) ? (void*)entry : nullptr;
             picked = i;
             if (PlagueTraceOn()) {
                 fprintf(stderr, "[Plague] CATCH draw citizen=%p entries=%d totalWeight=%.4f "
@@ -725,7 +701,7 @@ extern "C" char CitizenComp_RecoverOrDie(void* self) {
                     treated ? "LINKED" : "NOT-LINKED");
             fflush(stderr);
         }
-        if (s_releaseLink) s_releaseLink(self);
+        AttendanceComponent_ReleaseLink59b0(self);   // 0x1401159b0
         return 0;                               // dead
     }
     *(int64_t*)(s + 0x78) = 0;
@@ -739,7 +715,7 @@ extern "C" char CitizenComp_RecoverOrDie(void* self) {
                 treated ? "LINKED" : "NOT-LINKED", (long long)*(int64_t*)(s + 0x70));
         fflush(stderr);
     }
-    if (s_releaseLink) s_releaseLink(self);
+    AttendanceComponent_ReleaseLink59b0(self);   // 0x1401159b0
     return 1;                                   // recovered
 }
 
