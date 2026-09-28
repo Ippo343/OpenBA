@@ -44,6 +44,10 @@ void RtObjectPortInit() {
     n += RtObjectTypeSystemRegister();
     n += RtObjectInternalRegister();
     n += RtObjectExternalRegister();
+    {   // the [ExtLoad] exit line (a gate invariant): external_load.cpp
+        extern void RtObjectExternalLoadInstallCounters();
+        RtObjectExternalLoadInstallCounters();
+    }
 
     printf("[RtPort] Object: %d exports registered\n", n);
 }

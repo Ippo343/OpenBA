@@ -175,8 +175,6 @@ int RtClosure2bSaveRegister();
 // (reference_census_cannot_see_nonliteral_registrations.md).
 // ============================================================================
 void RtClosureBatch2bPortInit() {
-    int n = 0;
-
     // B3R W0-A0 (R3): the rows for ??3MaterialInstance@Graphics@@ (0x1800028a0),
     // ??3ImageBuffer@Video@@ (0x18001e990), ??3PackageFile@IO@@ (0x1800251e0),
     // the operator new copy 0x180011640 and LinkPrevBlock 0x180034d60 had NO
@@ -188,6 +186,6 @@ void RtClosureBatch2bPortInit() {
     const int s = RtClosure2bSaveRegister();
 
     // B3R RT-Core: the video and io registrars were empty and went.
-    printf("[RtPort]   cutover closure batch 2b: %d system + %d graphics + %d save\n",
-           n, g, s);
+    printf("[RtPort]   cutover closure batch 2b: 0 system + %d graphics + %d save\n",
+           g, s);
 }
