@@ -149,6 +149,12 @@ PtrSerializeFn RuntimeAddr(std::atomic<void*>& slot, uintptr_t addr) {
 // The third argument is the save-format VERSION and it is ZERO here: retail
 // zeroes R8D at 0x18009ee44 / 0x18009ef94 for the `CMP [stream+8],R8D` and
 // never reloads it before the factory call.
+// The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable (Serializer.h); the members are called by name on the class.
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
     ser->stream = stream;
     ser->readerWriter = nullptr;
@@ -170,8 +176,7 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
 // allocated. Skipping it leaks 0x30 bytes per Serialize.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+    AsRw(rw)->DeletingDtor(1);
 }
 
 }  // namespace
@@ -223,9 +228,7 @@ void GoalInstance::Persist(void* streamv) {
 
     RuntimeAddr(g_ptrSerGoalInstance, 0x180005dc0)(&_goal, &ser);   // GoalInstance+0x18
 
-    using UIntFn = void (*)(ReaderWriter*, uint32_t*, const char*);
-    reinterpret_cast<UIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(
-        rw, &_flags, nullptr);                                      // GoalInstance+0x10
+    AsRw(rw)->SerializeUInt(_flags, nullptr);                       // GoalInstance+0x10, +0x98
 
     DestroyCodec(rw);
 }

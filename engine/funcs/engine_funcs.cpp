@@ -467,7 +467,7 @@ fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing = nullptr;
 //   entity+0x30 = component pointer array (void**)
 //   entity+0x38 = component count (int32)
 //
-// Each component's vtable slot +0x10 (index 2) returns its type ID (int).
+// Each component's Object::Base::Type() (retail slot 2, +0x10) returns its type ID.
 // IsDerivedFrom confirms the match before storing.
 //
 // Decompiled from FUN_140004680 (fn_FindComponent_Build) and confirmed identical
@@ -488,10 +488,9 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
         void* comp = compArray[i];
         if (!comp) continue;
 
-        // vtable slot +0x10 (index 2) returns the component's type ID
-        void** vtable = *(void***)comp;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
+        // Object::Base::Type() (retail slot 2, +0x10) returns the component's type ID
+        int compTypeId = static_cast<int>(
+            static_cast<const ::Object::Base*>(comp)->Type());   // B.3.x bridge
 
         if ((uint32_t)compTypeId == targetTypeId) {
             // Confirm with IsDerivedFrom

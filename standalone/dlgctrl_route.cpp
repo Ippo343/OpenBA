@@ -140,6 +140,8 @@
 
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"     // Object::BaseTypeInfo (the exe records)
+#include "object/VSlot.h"        // Object::CompilerSlotOf (B3X W0)
+#include "ui/DialogController.h" // the three members whose slots are patched
 #include "options.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -156,18 +158,28 @@ namespace {
 // runtime/src/ui/dialog_controller_base.cpp, so this is a name-free but not an
 // address DOOR: the address is the identity of a body this tree already owns.
 // ---------------------------------------------------------------------------
+// The slot each spec patches is the COMPILER's slot of the named
+// UI::DialogController member (object/VSlot.h), never a literal: retail's
+// indices 5 / 6 / 10 (+0x28 / +0x30 / +0x50) are the compiler's only while
+// the class has no virtual destructor (B3X_RULES X3).
 struct SlotSpec {
-    int         index;      // vtable slot index
-    int         byteOff;    // for the log, so it can be matched to kCtrlVtbl*
     uintptr_t   dllAddr;
     const char* name;
 };
 constexpr SlotSpec kSpecs[] = {
-    {  5, 0x28, 0x1800cd2a0ull, "OnOpened"            },
-    {  6, 0x30, 0x1800cd290ull, "OnClosed"            },
-    { 10, 0x50, 0x1800cd250ull, "OnSerializeSettings" },
+    { 0x1800cd2a0ull, "OnOpened"            },   // retail [5]  +0x28
+    { 0x1800cd290ull, "OnClosed"            },   // retail [6]  +0x30
+    { 0x1800cd250ull, "OnSerializeSettings" },   // retail [10] +0x50
 };
 constexpr int kSpecCount = 3;
+
+long SpecSlot(int s) {
+    switch (s) {
+        case 0:  return ::Object::CompilerSlotOf(&UI::DialogController::OnOpened);
+        case 1:  return ::Object::CompilerSlotOf(&UI::DialogController::OnClosed);
+        default: return ::Object::CompilerSlotOf(&UI::DialogController::OnSerializeSettings);
+    }
+}
 
 // Resolved targets, filled at arm time.
 void* g_target[kSpecCount] = { nullptr, nullptr, nullptr };
@@ -288,13 +300,14 @@ void Visit(const ::Object::BaseTypeInfo& ti, void* /*ctx*/) {
     int  dn = 0;
     detail[0] = '\0';
     for (int s = 0; s < kSpecCount; ++s) {
-        const bool isStub = (vt[kSpecs[s].index] == stub);
+        const long slot = SpecSlot(s);
+        const bool isStub = (vt[slot] == stub);
         dn += std::snprintf(detail + dn, sizeof(detail) - (size_t)dn, "%s%s=%s",
                             dn ? " " : "", kSpecs[s].name,
                             isStub ? "stub" : "OVERRIDDEN");
         if (!isStub) continue;
         ++hits;
-        if (g_patchMode) vt[kSpecs[s].index] = kThunk[s];
+        if (g_patchMode) vt[slot] = kThunk[s];
     }
     printf("[DlgCtrlRoute] %-24s stub=%p (%d/%d slots) %s -> %s %d slot(s)\n",
                 typeName, stub, best, kScanSlots, detail,

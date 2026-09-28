@@ -236,24 +236,22 @@ bool PointList::Serialize(void* streamv) {
     _meshName.Serialize(&ser);
     _string28.Serialize(&ser);
 
-    using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
-    using ScalarFloatFn = void (*)(ReaderWriter*, float*, const char*);
-    using ArrayFloatFn  = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    auto scalarInt   = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
-    auto scalarFloat = reinterpret_cast<ScalarFloatFn>(rw->vtable[rt::io::rw_vtbl::kScalarFloat / 8]);
-    auto arrayFloat  = reinterpret_cast<ArrayFloatFn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8]);
+    // The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+    // interchangeable (Serializer.h). SerializeInt +0xa0, SerializeFloat +0x80,
+    // SerializeFloatArray +0x28.
+    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
 
     auto serializeArray = [&](Collection::Array<Point>* arr) {
         int32_t n = arr->_size;
-        scalarInt(rw, &n, nullptr);
+        rwc->SerializeInt(n, nullptr);
         if (stream->direction == 0) PointArraySetSize(arr, n);
         for (int32_t i = 0; i < n; ++i) {
             Point* p = &arr->_data[i];
             // `Point::name` keeps its raw-pointer type (PointList.h), so the
             // member call is spelled over the same eight bytes.
             reinterpret_cast<System::String*>(&p->name)->Serialize(&ser);
-            arrayFloat(rw, 3, p->pos, nullptr);
-            scalarFloat(rw, &p->radius, nullptr);
+            rwc->SerializeFloatArray(3, p->pos, nullptr);
+            rwc->SerializeFloat(p->radius, nullptr);
         }
     };
 
@@ -261,8 +259,7 @@ bool PointList::Serialize(void* streamv) {
     serializeArray(&_points);       // then this+0x30
 
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        rwc->DeletingDtor(1);
     }
     return true;
 }

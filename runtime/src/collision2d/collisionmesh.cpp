@@ -99,6 +99,12 @@ using Triple3 = CollisionMesh::Triple3;
 using Quad4   = CollisionMesh::Quad4;
 using Face    = CollisionMesh::Face;
 
+// The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
+// POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 // ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
 //
 // CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12). This file used to carry
@@ -193,15 +199,12 @@ void PlainArrayDtor(void* a, uintptr_t addr) {
 // the four calls here (the known indirect-call pitfall).
 void SerializeQuadsBody(Serializer* ser, int32_t count, Quad4* base) {
     if (count <= 0) return;
-    using ScalarUShortFn = void (*)(ReaderWriter*, uint16_t*, const char*);
-    ReaderWriter* rw = ser->readerWriter;
-    auto scalarUShort = reinterpret_cast<ScalarUShortFn>(
-        rw->vtable[rt::io::rw_vtbl::kScalarUShort / 8]);
-    for (int32_t i = 0; i < count; ++i) {
-        scalarUShort(rw, &base[i].a, nullptr);
-        scalarUShort(rw, &base[i].b, nullptr);
-        scalarUShort(rw, &base[i].c, nullptr);
-        scalarUShort(rw, &base[i].d, nullptr);
+    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
+    for (int32_t i = 0; i < count; ++i) {                  // SerializeUShort, +0xa8
+        rw->SerializeUShort(base[i].a, nullptr);
+        rw->SerializeUShort(base[i].b, nullptr);
+        rw->SerializeUShort(base[i].c, nullptr);
+        rw->SerializeUShort(base[i].d, nullptr);
     }
 }
 
@@ -212,26 +215,22 @@ void SerializeQuadsBody(Serializer* ser, int32_t count, Quad4* base) {
 // `*(int*)(ser->stream + 8) == 0`, i.e. Stream::direction.
 void SerializeFacesBody(Serializer* ser, int32_t count, Face* base) {
     if (count <= 0) return;
-    using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
-    using ArrayUShortFn = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    ReaderWriter* rw = ser->readerWriter;
-    auto scalarInt   = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
-    auto arrayUShort = reinterpret_cast<ArrayUShortFn>(rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
+    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
     const bool reading = (ser->stream->direction == 0);
     for (int32_t i = 0; i < count; ++i) {
         Face* f = &base[i];
-        scalarInt(rw, &f->field0, nullptr);
+        rw->SerializeInt(f->field0, nullptr);              // +0xa0
 
         int32_t quadCount = f->quads._size;
-        scalarInt(rw, &quadCount, nullptr);
+        rw->SerializeInt(quadCount, nullptr);
         if (reading) QuadArraySetSize(&f->quads, quadCount);
         SerializeQuadsBody(ser, quadCount, f->quads._data);
 
         int32_t tripleCount = f->triples._size;
-        scalarInt(rw, &tripleCount, nullptr);
+        rw->SerializeInt(tripleCount, nullptr);
         if (reading) TripleArraySetSize(&f->triples, tripleCount);
-        for (int32_t t = 0; t < tripleCount; ++t)
-            arrayUShort(rw, 3, &f->triples._data[t], nullptr);
+        for (int32_t t = 0; t < tripleCount; ++t)          // SerializeUShortArray, +0x50
+            rw->SerializeUShortArray(3, &f->triples._data[t].a, nullptr);
     }
 }
 
@@ -313,27 +312,27 @@ bool CollisionMesh::Serialize(void* streamv) {
     self->_name1.Serialize(&ser);
     self->_name2.Serialize(&ser);
 
-    using ScalarIntFn    = void (*)(ReaderWriter*, int32_t*, const char*);
-    using ArrayFloatFn   = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    auto scalarInt    = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
-    auto arrayFloat   = reinterpret_cast<ArrayFloatFn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8]);
+    // SerializeInt is +0xa0, SerializeFloatArray +0x28.
+    IO::ReaderWriter* rwc = AsRw(rw);
     const bool reading = (stream->direction == 0);
 
     // _ptsA
     int32_t nA = self->_ptsA._size;
-    scalarInt(rw, &nA, nullptr);
+    rwc->SerializeInt(nA, nullptr);
     if (reading) PtsASetSize(&self->_ptsA, nA);
-    for (int32_t i = 0; i < nA; ++i) arrayFloat(rw, 2, &self->_ptsA._data[i], nullptr);
+    for (int32_t i = 0; i < nA; ++i)
+        rwc->SerializeFloatArray(2, reinterpret_cast<float*>(&self->_ptsA._data[i]), nullptr);
 
     // _ptsB
     int32_t nB = self->_ptsB._size;
-    scalarInt(rw, &nB, nullptr);
+    rwc->SerializeInt(nB, nullptr);
     if (reading) PtsBSetSize(&self->_ptsB, nB);
-    for (int32_t i = 0; i < nB; ++i) arrayFloat(rw, 2, &self->_ptsB._data[i], nullptr);
+    for (int32_t i = 0; i < nB; ++i)
+        rwc->SerializeFloatArray(2, reinterpret_cast<float*>(&self->_ptsB._data[i]), nullptr);
 
     // _faces
     int32_t nF = self->_faces._size;
-    scalarInt(rw, &nF, nullptr);
+    rwc->SerializeInt(nF, nullptr);
     if (reading) FaceArraySetSize(&self->_faces, nF);
     // Retail CALLs 0x1800665c0 here rather than inlining the walk; so does
     // this, through the ported body, so the registered function is the one
@@ -342,7 +341,7 @@ bool CollisionMesh::Serialize(void* streamv) {
 
     // _surfaces (ExternalPtr<Collision2D::Surface>)
     int32_t nS = self->_surfaces._size;
-    scalarInt(rw, &nS, nullptr);
+    rwc->SerializeInt(nS, nullptr);
     if (reading) PtsBSetSize(&self->_surfaces, nS);
     const void* surfaceTypeInfo = &Collision2D::Surface::GetTypeInfo();   // retail: [0x1801fa820]
     for (int32_t i = 0; i < nS; ++i) {
@@ -351,8 +350,7 @@ bool CollisionMesh::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        rwc->DeletingDtor(1);
     }
     return true;
 }

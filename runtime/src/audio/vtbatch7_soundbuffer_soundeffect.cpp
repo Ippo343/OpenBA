@@ -138,7 +138,6 @@
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
-namespace rw_vtbl = rt::io::rw_vtbl;
 
 extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count, void* basev);
 
@@ -147,14 +146,10 @@ namespace {
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
-using ScalarFn = void (*)(ReaderWriter*, void*, const char*);
-using BytesFn  = void (*)(ReaderWriter*, int32_t, void*, const char*);
-
-void RwScalar(ReaderWriter* rw, int slot, void* p) {
-    reinterpret_cast<ScalarFn>(rw->vtable[slot / 8])(rw, p, nullptr);
-}
-void RwBytes(ReaderWriter* rw, int32_t count, void* data) {
-    reinterpret_cast<BytesFn>(rw->vtable[rw_vtbl::kSerializeBytes / 8])(rw, count, data, nullptr);
+// The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
+// POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
 }
 bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
 
@@ -171,8 +166,7 @@ ReaderWriter* MakeReaderWriter(Serializer* ser, Stream* stream) {
 }
 void DestroyReaderWriter(ReaderWriter* rw) {
     if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[0])(rw, 1);
+    AsRw(rw)->DeletingDtor(1);
 }
 // `?MemFree@MemoryAllocator@System@@` — retail tests for null OUTSIDE the call.
 void MemFreeIfSet(void* p) {
@@ -227,10 +221,8 @@ Object::Base* SoundBuffer::CreateInPlaceObject(void* place) {
 // (seek table, format window, audio data), in that exact order.
 void SoundBuffer::PlatformSerialize(void* serializer) {
     Serializer* ser = static_cast<Serializer*>(serializer);
-    ReaderWriter* rw = ser->readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarInt, &_length);
-    rw = ser->readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarInt, &_wmaLength);
+    AsRw(ser->readerWriter)->SerializeInt(_length, nullptr);        // +0xa0
+    AsRw(ser->readerWriter)->SerializeInt(_wmaLength, nullptr);     // +0xa0
 
     if (IsReading(ser->stream)) {
         MemFreeIfSet(_data);
@@ -239,12 +231,9 @@ void SoundBuffer::PlatformSerialize(void* serializer) {
         _wmaData = (_wmaLength > 0) ? static_cast<uint32_t*>(rtcoll::MemAlloc(_wmaLength, 4)) : nullptr;
     }
 
-    rw = ser->readerWriter;
-    RwBytes(rw, _wmaLength, _wmaData);
-    rw = ser->readerWriter;
-    RwBytes(rw, 0x28, _format);
-    rw = ser->readerWriter;
-    RwBytes(rw, _length, _data);
+    AsRw(ser->readerWriter)->SerializeBytes(_wmaLength, _wmaData, nullptr);   // +0xc8
+    AsRw(ser->readerWriter)->SerializeBytes(0x28, _format, nullptr);          // +0xc8
+    AsRw(ser->readerWriter)->SerializeBytes(_length, _data, nullptr);         // +0xc8
 }
 
 // [5] 0x1800e0480.
@@ -253,15 +242,14 @@ bool SoundBuffer::Serialize(void* streamv) {
     Serializer ser{};
     ReaderWriter* rw = MakeReaderWriter(&ser, stream);
 
-    RwScalar(rw, rw_vtbl::kScalarBool, &_loopForever);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarBool, &_streamed);
+    AsRw(rw)->SerializeBool(reinterpret_cast<bool&>(_loopForever), nullptr);   // +0x78, B.3.x bridge
+    AsRw(ser.readerWriter)->SerializeBool(reinterpret_cast<bool&>(_streamed), nullptr);
 
     // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930).
     _string28.Serialize(&ser);
     _streamPath.Serialize(&ser);
 
-    rw = ser.readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarFloat, &_durationSeconds);
+    AsRw(ser.readerWriter)->SerializeFloat(_durationSeconds, nullptr);        // +0x80
 
     PlatformSerialize(&ser);
 
@@ -423,13 +411,11 @@ bool SoundEffect::Serialize(void* streamv) {
     Serializer ser{};
     ReaderWriter* rw = MakeReaderWriter(&ser, stream);
 
-    RwScalar(rw, rw_vtbl::kScalarFloat, &_radius);
-    rw = ser.readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarFloat, &_innerRadius);
+    AsRw(rw)->SerializeFloat(_radius, nullptr);                     // +0x80
+    AsRw(ser.readerWriter)->SerializeFloat(_innerRadius, nullptr);  // +0x80
 
     int32_t n = _samples._size;
-    rw = ser.readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarInt, &n);
+    AsRw(ser.readerWriter)->SerializeInt(n, nullptr);               // +0xa0
     if (IsReading(stream)) {
         // 0x180053190 — kSpec_SfxBuffer18 (array.cpp), unexported Collection code.
         using SetSizeFn = void (*)(void*, int32_t);
@@ -442,12 +428,9 @@ bool SoundEffect::Serialize(void* streamv) {
     // and discards one legacy field via a throwaway CreateReader/CreateWriter
     // pair). retail: `if (rw->GetVersion() >= 1) ScalarInt64(self+0x28) else if
     // (writing) {} else { consume-and-release a temp }`.
-    using GetVersionFn = int32_t (*)(ReaderWriter*);
-    rw = ser.readerWriter;
-    const int32_t version = reinterpret_cast<GetVersionFn>(rw->vtable[rw_vtbl::kGetVersion / 8])(rw);
+    const int32_t version = AsRw(ser.readerWriter)->GetVersion();    // +0x08
     if (version >= 1) {
-        rw = ser.readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt64, &_maxLength);
+        AsRw(ser.readerWriter)->SerializeInt64(_maxLength, nullptr); // +0x90
     } else if (IsReading(stream)) {
         // retail (0x1800e0b88..0x1800e0bc3) calls vtable[0x20](this->encoding,
         // &ser, 0) to create ANOTHER throwaway ReaderWriter here, checks it for
@@ -502,10 +485,10 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
     using SetSizeFn = void (*)(void*, int32_t);
 
     for (int32_t i = 0; i < count; ++i, e += 0x18) {
-        RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, e + 0x00);
+        AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(e + 0x00), nullptr);
 
         int32_t n = *reinterpret_cast<int32_t*>(e + 0x10);     // 180053344
-        RwScalar(ser->readerWriter, rw_vtbl::kScalarInt, &n);  // 18005335a
+        AsRw(ser->readerWriter)->SerializeInt(n, nullptr);     // 18005335a
 
         if (IsReading(ser->stream))                            // 180053360
             RtAddr<SetSizeFn>(0x180052e60ull)(e + 0x08, n);    // 180053370
@@ -513,9 +496,9 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
         uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x08);   // 180053379
         for (int32_t k = 0; k < n; ++k, p += 0x18) {           // 180053390
             extSer(p + 0x00, ser);
-            RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, p + 0x08);
-            RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, p + 0x0c);
-            RwScalar(ser->readerWriter, rw_vtbl::kScalarFloat, p + 0x10);
+            AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x08), nullptr);
+            AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x0c), nullptr);
+            AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x10), nullptr);
         }
     }
 }

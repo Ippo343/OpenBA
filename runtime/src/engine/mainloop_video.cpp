@@ -372,17 +372,12 @@ void** MainLoopSlot() {
 }
 
 // ---------------------------------------------------------------------------
-// Raw vtable dispatch. The BYTE offset is the parameter, because that is what
-// the listing shows; converting to a slot index at each site would be a second
-// place to get the arithmetic wrong.
+// The two virtuals the listing dispatches, by name on the real classes. The
+// walk hands out the `RtObject::External` POD spelling of retail's
+// `Object::External`; the bytes are the same object.
 // ---------------------------------------------------------------------------
-inline uint32_t CallGetTypeId(const void* obj) {                 // [[obj] + 0x10]
-    void* const* vt = *reinterpret_cast<void* const* const*>(obj);
-    return reinterpret_cast<uint32_t (*)(const void*)>(vt[2])(obj);
-}
-inline void CallVSlot(void* obj, int byteOffset) {               // [[obj] + off]
-    void** vt = *reinterpret_cast<void***>(obj);
-    reinterpret_cast<void (*)(void*)>(vt[byteOffset / 8])(obj);
+inline uint32_t CallGetTypeId(const RtObject::External* obj) {   // [[obj] + 0x10]
+    return reinterpret_cast<const ::Object::Base*>(obj)->Type();   // B.3.x bridge
 }
 
 }  // namespace
@@ -591,7 +586,9 @@ void Engine::MainLoop::OnVideoError() {
     // ---- 4. release every recorded object -------------------------------------
     for (int i = 0; i < arr->_size; ++i) {
         VideoResource* const r = reinterpret_cast<VideoResource*>(arr->_data) + i;
-        CallVSlot(r->object, 0x38);            // unguarded in retail, kept
+        // [[obj] + 0x38] = External::Destruct. Every recorded object came off
+        // the ExternalFactory walk above, filtered by External's type id.
+        static_cast<::Object::External*>(r->object)->Destruct();   // unguarded in retail, kept; B.3.x bridge
     }
 
     // ---- 5. drop each SaveLoad entry's +0x60 -----------------------------------

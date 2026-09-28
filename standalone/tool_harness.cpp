@@ -118,11 +118,6 @@ constexpr int kOff_DragState = 0x28;
 constexpr int kOff_StartCell = 0x2c;
 constexpr int kOff_EndCell   = 0x30;
 
-// Vtable slot indices (byte-offset / 8).
-constexpr int kSlot_Startup  = 4;    // +0x20
-constexpr int kSlot_CalcPath = 13;   // +0x68
-constexpr int kSlot_CalcCost = 14;   // +0x70
-
 bool        s_initialized = false;
 bool        s_enabled     = false;
 bool        s_fired       = false;
@@ -176,7 +171,7 @@ void FireRemovalTool(void* entityUI) {
 
     // Startup (+0x20): finds RemovalDescription on description entity (+0x20,
     // null here) -> removalDesc=null. Safe, guarded downstream.
-    fprintf(stderr, "[ToolHarness] calling Startup (vtable[%d])...\n", kSlot_Startup);
+    fprintf(stderr, "[ToolHarness] calling Startup (retail slot 4, +0x20)...\n");
     rt->Startup();
 
     // CalcCost (+0x70): already reimplemented — computes the removal-area dims.
@@ -184,7 +179,7 @@ void FireRemovalTool(void* entityUI) {
     uint32_t outValid = 0xdead;
     int outB = -1, outA = -1;
     uint32_t outLen = 0xbeef;
-    fprintf(stderr, "[ToolHarness] calling CalcCost (vtable[%d])...\n", kSlot_CalcCost);
+    fprintf(stderr, "[ToolHarness] calling CalcCost (retail slot 14, +0x70)...\n");
     uint64_t cc = static_cast<uint64_t>(rt->CalcCost(startCell, endCell, &outValid, &outB, &outA,
                                                      reinterpret_cast<int*>(&outLen)));
     fprintf(stderr, "[ToolHarness] CalcCost -> ret=%llu valid=%u widthB=%d heightA=%d len=%u "
@@ -199,8 +194,7 @@ void FireRemovalTool(void* entityUI) {
     // BANISHED_GAME_PRELOAD=1 BANISHED_LIVE_TOOLS=1), which supplies a live descriptor.
     void* removalDesc = *reinterpret_cast<void**>(t + 0x38);
     if (removalDesc) {
-        fprintf(stderr, "[ToolHarness] calling CalcPath (vtable[%d]) = RemovalCalc_Slot13...\n",
-               kSlot_CalcPath);
+        fprintf(stderr, "[ToolHarness] calling CalcPath (retail slot 13, +0x68) = RemovalCalc_Slot13...\n");
         int cp = rt->CalcPath(startCell, endCell) ? 1 : 0;
         fprintf(stderr, "[ToolHarness] CalcPath -> ret=%d\n", cp);
     } else {
@@ -515,15 +509,20 @@ void FireRoadTool(void* entityUI) {
         if (run < 3) fprintf(stderr, "[ToolHarness][road] drag span: row=%d col=%d..%d startCell=%d endCell=%d\n",
                foundRow, foundCol, foundCol + kRun, startCell, endCell);
 
-        void** vt = *reinterpret_cast<void***>(tool);
+        // The tool at EntityUI+0x28 is the RoadTool: a DragTool (code/Game/Player).
+        DragTool* drag = static_cast<DragTool*>(tool);   // B.3.x bridge
 
-        // Slot 14 (+0x70) CalcCost — the per-frame preview call DragTool_OnKey makes while
-        // dragging. Signature: (self, start, end, &pathType, &tileH, &tileW, &extra) -> int
+        // DragTool::CalcCost (retail [14], +0x70) — the per-frame preview call
+        // DragTool_OnKey makes while dragging: (start, end, &pathType, &tileH,
+        // &tileW, &extra) -> int. The harness's local out-types are its own; the
+        // pointers are the same bytes.
         {
-            typedef int (*CalcCost_t)(void*, int, int, int*, uint32_t*, uint32_t*, uint64_t*);
             int pathType = 0; uint32_t tileH = 0, tileW = 0; uint64_t extra = 0;
-            int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell,
-                                          &pathType, &tileH, &tileW, &extra);
+            int rc = drag->CalcCost(startCell, endCell,
+                                    reinterpret_cast<uint32_t*>(&pathType),
+                                    reinterpret_cast<int*>(&tileH),
+                                    reinterpret_cast<int*>(&tileW),
+                                    reinterpret_cast<int*>(&extra));
             // RoadTool's CalcCost returns 0 on success / 3 on reject (it is NOT a count —
             // that differs from RemovalTool). The path length comes back in the out-params,
             // and param_4 is the validity: 1 = valid, 2 = invalid.
@@ -531,11 +530,10 @@ void FireRoadTool(void* entityUI) {
                    "(1=valid,2=invalid) pathLen=%u/%u\n", rc, pathType, tileH, tileW);
         }
 
-        // Slot 13 (+0x68) CalcPath — the COMMIT the drag-release makes. Returns true when
-        // the road was placed.
+        // DragTool::CalcPath (retail [13], +0x68) — the COMMIT the drag-release
+        // makes. Returns true when the road was placed.
         {
-            typedef bool (*CalcPath_t)(void*, int, int);
-            bool placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
+            bool placed = drag->CalcPath(startCell, endCell);
             if (placed) { ++laid; tiles += kRun + 1; }
             if (run < 3 || !placed)
                 fprintf(stderr, "[ToolHarness][road] CalcPath (commit) -> %d (1=road placed)\n", placed ? 1 : 0);
@@ -708,20 +706,19 @@ void FirePastureTool(void* entityUI) {
         *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
         *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
 
-        void** vt = *reinterpret_cast<void***>(tool);
+        // The FencedTool: a DragTool. CalcCost is retail [14] (+0x70), CalcPath [13] (+0x68).
+        DragTool* drag = static_cast<DragTool*>(tool);   // B.3.x bridge
         {
-            typedef int (*CalcCost_t)(void*, int, int, uint32_t*, int*, int*, int*);
             uint32_t outW = 0; int rectW = 0, rectH = 0, segs = 0;
-            int rc = ((CalcCost_t)vt[14])(tool, startCell, endCell, &outW, &rectW, &rectH, &segs);
+            int rc = drag->CalcCost(startCell, endCell, &outW, &rectW, &rectH, &segs);
             fprintf(stderr, "[ToolHarness][pasture] CalcCost -> rc=%d (0=ok,1=small,2=big,3=blocked) "
                    "w=%d h=%d perimeter=%d\n", rc, rectW, rectH, segs);
         }
         {
-            typedef uint64_t (*CalcPath_t)(void*, int64_t, int64_t);
-            uint64_t placed = ((CalcPath_t)vt[13])(tool, startCell, endCell);
-            if (placed & 0xff) ++fencedPlaced;
+            const bool placed = drag->CalcPath(startCell, endCell);   // AL = success
+            if (placed) ++fencedPlaced;
             if (frun < 3) fprintf(stderr, "[ToolHarness][pasture] CalcPath (commit) -> %d (1=pasture placed)\n",
-                   (int)(placed & 0xff));
+                   placed ? 1 : 0);
         }
     }
     fprintf(stderr, "[ToolHarness][pasture] sequence complete: %d/%d area(s) placed, side %d\n",
@@ -2632,8 +2629,8 @@ void FireBridgeTool(void* entityUI) {
         return 1u << (*reinterpret_cast<uint8_t*>(c + 0x29) & 0x1f);
     };
 
-    void** vt = *reinterpret_cast<void***>(tool);
-    typedef int (*CalcCost_t)(void*, int, int, int*, uint32_t*, uint32_t*, uint64_t*);
+    // The BridgeTool: a DragTool. CalcCost is retail [14] (+0x70).
+    DragTool* drag = static_cast<DragTool*>(tool);   // B.3.x bridge
 
     // Where the town is, so we cross NEAR it. The first crossable span on the map is
     // typically at the map edge, and builders then spend the whole job walking (and a
@@ -2760,8 +2757,9 @@ void FireBridgeTool(void* entityUI) {
         *reinterpret_cast<int32_t*>(t + 0x2c) = c.a;
         *reinterpret_cast<int32_t*>(t + 0x30) = c.b;
         int pathType = 0; uint32_t h = 0, wd = 0; uint64_t extra = 0;
-        int rc = reinterpret_cast<CalcCost_t>(vt[kSlot_CalcCost])(
-                     tool, c.a, c.b, &pathType, &h, &wd, &extra);
+        int rc = drag->CalcCost(c.a, c.b, reinterpret_cast<uint32_t*>(&pathType),
+                                reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&wd),
+                                reinterpret_cast<int*>(&extra));
         if (rc == 0 && pathType == 1) {
             startCell = c.a; endCell = c.b;
             fprintf(stderr, "[ToolHarness][bridge] span accepted after %d of %d candidates "
@@ -2793,13 +2791,11 @@ void FireBridgeTool(void* entityUI) {
     BridgeCommit(tool, startCell, endCell);
 }
 
-// Slot 13 — the commit a drag-release makes.
+// DragTool::CalcPath (retail [13], +0x68) — the commit a drag-release makes.
 void BridgeCommit(void* tool, int startCell, int endCell) {
-    void** vt = *reinterpret_cast<void***>(tool);
     uint8_t* t = static_cast<uint8_t*>(tool);
     *reinterpret_cast<uint8_t*>(t + 0x28) = 0;               // drag released
-    typedef bool (*CalcPath_t)(void*, int, int);
-    bool placed = reinterpret_cast<CalcPath_t>(vt[kSlot_CalcPath])(tool, startCell, endCell);
+    bool placed = static_cast<DragTool*>(tool)->CalcPath(startCell, endCell);   // B.3.x bridge
     fprintf(stderr, "[ToolHarness][bridge] CalcPath (commit) -> %d; master=%p segments=%d\n",
            placed ? 1 : 0, g_BridgeLastMaster, g_BridgeLastSegmentCount);
     if (!placed || g_BridgeLastSegmentCount == 0) {

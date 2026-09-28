@@ -99,25 +99,17 @@ static_assert(offsetof(UpdateLoop, _loadProgress)  == 0x24, "UpdateLoop::_loadPr
 
 // ---- the 12 base virtual slots ---------------------------------------------
 // Read out of ??_7UpdateLoop@Engine@@6B@ (0x180155ba0) and confirmed against
-// the three derived tables, which override the same slots in the same order.
-// Slot indices, not just offsets, because the ports call two of them by index:
-// Startup dispatches slot 12 (CreateDialog, derived-only) and Loader::Load
-// dispatches slot 11 (AllowsModChanges).
-enum : int {
-    kSlot_Destroy             = 0,   // +0x00  scalar deleting dtor, fn(this, flags)
-    kSlot_Startup             = 1,   // +0x08
-    kSlot_Shutdown            = 2,   // +0x10
-    kSlot_Update              = 3,   // +0x18  bool(this, const Time&)
-    kSlot_Draw                = 4,   // +0x20  void(this, float)
-    kSlot_DrawFailed          = 5,   // +0x28  base 0x180031740
-    kSlot_Load                = 6,   // +0x30
-    kSlot_SaveRestore         = 7,   // +0x38  base 0x180031750
-    kSlot_OnVideoError        = 8,   // +0x40  base 0x180031760
-    kSlot_OnVideoRestart      = 9,   // +0x48  base 0x180031770
-    kSlot_GetResourceFilename = 10,  // +0x50  base 0x180031780
-    kSlot_AllowsModChanges    = 11,  // +0x58  base 0x180031790
-    kSlot_CreateDialog        = 12,  // +0x60  DialogLoopT / DialogLoaderLoopT only
-};
+// the three derived tables, which override the same slots in the same order
+// (retail order; the class is runtime/types/engine/UpdateLoop.h's
+// Engine::UpdateLoop, every slot called by name):
+//   [0] +0x00 scalar deleting dtor   [1] +0x08 Startup   [2] +0x10 Shutdown
+//   [3] +0x18 Update(const Time&)    [4] +0x20 Draw(float)
+//   [5] +0x28 DrawFailed 0x180031740 [6] +0x30 Load
+//   [7] +0x38 SaveRestore 0x180031750 [8] +0x40 OnVideoError 0x180031760
+//   [9] +0x48 OnVideoRestart 0x180031770 [10] +0x50 GetResourceFilename 0x180031780
+//   [11] +0x58 AllowsModChanges 0x180031790 [12] +0x60 CreateDialog (DialogLoopT /
+//   DialogLoaderLoopT only)
+// (B3X W0: the `kSlot_*` index enum that stood here had no user and is gone.)
 
 // ============================================================================
 // Engine::Loader — 0x38 bytes, a System::Thread subclass

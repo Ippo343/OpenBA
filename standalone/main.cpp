@@ -533,9 +533,13 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
         } else {
             CrashLogf("  vtable in UNKNOWN module (heap? bad ptr?)\n");
         }
+        // A raw dump of the table's first 13 words, in COMPILER slot order (a
+        // class with `virtual ~T()` has two destructor words where retail has
+        // one, so compiler slot N >= 1 is retail slot N - 1 there).
         if (vt && !IsBadReadPtr((void*)vt, 13 * 8)) {
             for (int i = 0; i < 13; i++)
-                CrashLogf("  vtable[+0x%02X] = %p\n", i * 8, *((void**)vt + i));
+                CrashLogf("  vtable compiler slot %2d [+0x%02X] = %p\n", i, i * 8,
+                          *((void**)vt + i));
         }
         if (!IsBadReadPtr(target, 0x40)) {
             for (int i = 0; i < 8; i++)

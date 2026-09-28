@@ -87,6 +87,12 @@ using SubMesh  = Picking::PickingMesh::SubMesh;
 using Triangle = Picking::PickingMesh::Triangle;
 using UV16     = Picking::PickingMesh::UV16;
 
+// The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
+// POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 // ENDGAME B.3.9 PILOT: `InlineCtorStores` (Base / External / PickingMesh vptr
 // stamps from the MINT plus the zero stores) and the file's `CallSlot0` are
 // gone. The stores are the real constructor now (PickingMesh.h), the stamps
@@ -168,17 +174,13 @@ void SubMeshArrayDtor(Collection::Array<SubMesh>* a) {
 // kArrayUShort(n=3) per element, at +0x00 and +0x06. Its argument order is
 // (RCX = the Array, RDX = the Serializer) -- the OPPOSITE of 0x18007ac20's.
 void SerializeTrianglesBody(Collection::Array<Triangle>* arr, Serializer* ser) {
-    using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
-    using ArrayUShortFn = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    ReaderWriter* rw = ser->readerWriter;
+    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
     int32_t count = arr->_size;
-    reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
+    rw->SerializeInt(count, nullptr);                         // +0xa0
     if (ser->stream->direction == 0) TriArraySetSize(arr, count);
-    auto arrayUShort = reinterpret_cast<ArrayUShortFn>(
-        rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
-    for (int32_t i = 0; i < count; ++i) {
-        arrayUShort(rw, 3, &arr->_data[i].i0, nullptr);
-        arrayUShort(rw, 3, &arr->_data[i].j0, nullptr);
+    for (int32_t i = 0; i < count; ++i) {                     // SerializeUShortArray, +0x50
+        rw->SerializeUShortArray(3, &arr->_data[i].i0, nullptr);
+        rw->SerializeUShortArray(3, &arr->_data[i].j0, nullptr);
     }
 }
 
@@ -187,41 +189,39 @@ void SerializeTrianglesBody(Collection::Array<Triangle>* arr, Serializer* ser) {
 // third argument on most of these indirect calls.
 void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
     if (count <= 0) return;
-    using ScalarIntFn   = void (*)(ReaderWriter*, int32_t*, const char*);
-    using ArrayFloatFn  = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    using ArrayUShortFn = void (*)(ReaderWriter*, int32_t, void*, const char*);
-    ReaderWriter* rw = ser->readerWriter;
-    auto scalarInt   = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
-    auto arrayFloat  = reinterpret_cast<ArrayFloatFn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8]);
-    auto arrayUShort = reinterpret_cast<ArrayUShortFn>(rw->vtable[rt::io::rw_vtbl::kArrayUShort / 8]);
+    // SerializeInt +0xa0, SerializeFloatArray +0x28, SerializeUShortArray +0x50.
+    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
     const bool reading = (ser->stream->direction == 0);
 
     for (int32_t i = 0; i < count; ++i) {
         SubMesh* s = &base[i];
         // B.3.1 bridge: SubMesh::_name is a raw slot (PickingMesh.h says why).
         reinterpret_cast<System::String&>(s->_name).Serialize(ser);
-        scalarInt(rw, &s->_parent, nullptr);
-        arrayFloat(rw, 4, &s->_local.rotation, nullptr);
-        arrayFloat(rw, 3, &s->_local.translation, nullptr);
-        arrayFloat(rw, 3, &s->_aabb.min, nullptr);
-        arrayFloat(rw, 3, &s->_aabb.max, nullptr);
+        rw->SerializeInt(s->_parent, nullptr);
+        rw->SerializeFloatArray(4, reinterpret_cast<float*>(&s->_local.rotation), nullptr);
+        rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_local.translation), nullptr);
+        rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_aabb.min), nullptr);
+        rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_aabb.max), nullptr);
 
         int32_t vCount = s->_vertices._size;
-        scalarInt(rw, &vCount, nullptr);
+        rw->SerializeInt(vCount, nullptr);
         if (reading) VecArraySetSize(&s->_vertices, vCount);
-        for (int32_t v = 0; v < vCount; ++v) arrayFloat(rw, 3, &s->_vertices._data[v], nullptr);
+        for (int32_t v = 0; v < vCount; ++v)
+            rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_vertices._data[v]), nullptr);
 
         int32_t nCount = s->_normals._size;
-        scalarInt(rw, &nCount, nullptr);
+        rw->SerializeInt(nCount, nullptr);
         if (reading) VecArraySetSize(&s->_normals, nCount);
-        for (int32_t v = 0; v < nCount; ++v) arrayFloat(rw, 3, &s->_normals._data[v], nullptr);
+        for (int32_t v = 0; v < nCount; ++v)
+            rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_normals._data[v]), nullptr);
 
         SerializeTrianglesBody(&s->_triangles, ser);
 
         int32_t uvCount = s->_uvs._size;
-        scalarInt(rw, &uvCount, nullptr);
+        rw->SerializeInt(uvCount, nullptr);
         if (reading) UvArraySetSize(&s->_uvs, uvCount);
-        for (int32_t v = 0; v < uvCount; ++v) arrayUShort(rw, 2, &s->_uvs._data[v], nullptr);
+        for (int32_t v = 0; v < uvCount; ++v)
+            rw->SerializeUShortArray(2, &s->_uvs._data[v].u, nullptr);
     }
 }
 
@@ -291,16 +291,13 @@ bool PickingMesh::Serialize(void* streamv) {
     reinterpret_cast<System::String&>(_string20).Serialize(&ser);
     reinterpret_cast<System::String&>(_string28).Serialize(&ser);
 
-    using ScalarBoolFn   = void (*)(ReaderWriter*, bool*, const char*);
-    using ScalarIntFn    = void (*)(ReaderWriter*, int32_t*, const char*);
-    auto scalarBool   = reinterpret_cast<ScalarBoolFn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8]);
-    auto scalarInt    = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
+    IO::ReaderWriter* rwc = AsRw(rw);
     const bool reading = (stream->direction == 0);
 
-    scalarBool(rw, &_flag30, nullptr);
+    rwc->SerializeBool(_flag30, nullptr);                     // +0x78
 
     int32_t nodeCount = _nodes._size;
-    scalarInt(rw, &nodeCount, nullptr);
+    rwc->SerializeInt(nodeCount, nullptr);                    // +0xa0
     if (reading) SubMeshArraySetSize(&_nodes, nodeCount);
 
     // Retail CALLs 0x18007ac20 here rather than inlining the walk; so does
@@ -308,8 +305,7 @@ bool PickingMesh::Serialize(void* streamv) {
     SerializeSubMeshesBody(&ser, nodeCount, _nodes._data);
 
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        rwc->DeletingDtor(1);
     }
     return true;
 }
