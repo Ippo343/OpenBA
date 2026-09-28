@@ -43,6 +43,7 @@
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"
 #include "options.h"
+#include "object/TypeInfo.h"   // Object::IsDerivedFromNullSafe
 #include "ui/UserInterface.h"
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include <new>
@@ -156,7 +157,7 @@ void* FindComp(void* ent, uint32_t tid) {
         void* c = *slot;
         if (!c) continue;
         const uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
-        if (t == tid) return (!fn_IsDerivedFrom || fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+        if (t == tid) return Object::IsDerivedFromNullSafe(c, tid) ? c : nullptr;
     }
     return nullptr;
 }

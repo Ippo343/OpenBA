@@ -23,23 +23,24 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "options.h"
+#include "Component/exe_bodies.h"
+#include "Game/exe_constants.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <vector>
 
-extern "C" uint64_t CitizenComponent_HandleLifeEvent(void*, int, const char*); // 0x140116dd0
+// CitizenComponent_HandleLifeEvent (0x140116dd0) — Component/exe_bodies.h.
 // CitizenComponent_sub_1fa0 (0x140111fa0) — re-parent a citizen: detach from the current
 // guardian's family ring (+0x258 / the host's +0x260 ring) and attach to the new one.
 // Passing a null IBP is exactly what CitizenComponent::Update does when a grown child
-// finds its own home and moves out.
-extern void CitizenComp_sub_1fa0(int64_t selfV, void* param2);
+// finds its own home and moves out. Declared in Component/exe_bodies.h.
 // CitizenComponent_AssignWorkplace (0x1401163d0) — MISNAMED in retail: this is the
 // RESIDENCE assigner (sets +0x238 = home and rosters the citizen into the house's
 // ResidenceComponent). Update calls it right after the move-out with the house sub_0e70
 // found; the harness calls it with the house the citizen already lived in.
-extern "C" void CitizenComponent_AssignWorkplace(void* self, void* workplaceIBP, int slotIndex);
+// Declared in Component/exe_bodies.h.
 
 namespace {
 int  s_count       = -1;   // -1 = not yet read from the environment
@@ -137,12 +138,6 @@ inline bool HasFamily(int64_t c) {
 // Passing all ten is what seeds +0x4C = desc+0x58 and starts the countdown to a birth.
 //
 // n = how many per-citizen detail lines to print (the aggregate always prints when set).
-typedef void* (*fn_FindCompResidence_t)(int64_t entity, void* outIBP);
-typedef bool  (*fn_HouseholdFull_t)(int64_t residenceComp, int slotIdx);
-fn_FindCompResidence_t s_fnFindResidence = nullptr;
-fn_HouseholdFull_t     s_fnHouseholdFull = nullptr;
-float* s_pHungerFrac = nullptr;   // DAT_140172114
-float* s_pWarmthFrac = nullptr;   // DAT_140172100
 
 const char* const kGateName[12] = {
     "PASSES-ALL",       // 0
@@ -161,18 +156,9 @@ const char* const kGateName[12] = {
 
 void BirthGate(int frameNum, int64_t* list, int n) {
     if (s_birthTrace <= 0) return;
-    if (!s_fnFindResidence) {
-        // 0x140008090 is Entity::FindComponent<ResidenceComponent> (NOT storage — 0x140006270
-        // is the storage one; the two are a standing naming trap in this codebase).
-        s_fnFindResidence = reinterpret_cast<fn_FindCompResidence_t>(
-            ResolveAddr(Module::Exe, 0x140008090));
-        s_fnHouseholdFull = reinterpret_cast<fn_HouseholdFull_t>(
-            ResolveAddr(Module::Exe, 0x14012a4f0));
-        s_pHungerFrac = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-        s_pWarmthFrac = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172100));
-    }
-    const float hungerFrac = s_pHungerFrac ? *s_pHungerFrac : 0.5f;
-    const float warmthFrac = s_pWarmthFrac ? *s_pWarmthFrac : 0.5f;
+    // DAT_140172114 / DAT_140172100 (.rdata).
+    const float hungerFrac = kRdata_140172114;
+    const float warmthFrac = kRdata_140172100;
 
     int tally[12] = {0};
     int printed = 0;
@@ -222,11 +208,13 @@ void BirthGate(int frameNum, int64_t* list, int n) {
         else if (age < *reinterpret_cast<float*>(desc + 0x50) ||
                  age > *reinterpret_cast<float*>(desc + 0x54))         gate = 8;
         else {
+            // 0x140008090 is Entity::FindComponent<ResidenceComponent> (NOT storage — 0x140006270
+            // is the storage one; the two are a standing naming trap in this codebase).
             int64_t outIBP = 0;
-            void* res = s_fnFindResidence ? s_fnFindResidence(home, &outIBP) : nullptr;
+            void* res = CitizenComp_Entity_FindComponent_Storage(home, &outIBP);
             residence = res ? *reinterpret_cast<int64_t*>(res) : 0;
             if (!residence)                                            gate = 9;
-            else if (s_fnHouseholdFull && s_fnHouseholdFull(residence, slotIdx)) gate = 10;
+            else if (CitizenComp_helper_a4f0(residence, slotIdx))      gate = 10;
         }
         tally[gate]++;
 
@@ -510,7 +498,7 @@ void MoveOutGrownChildren(int frameNum) {
 //
 // Pair with BANISHED_BIRTH_TRACE=1 to get the [Birth] BABY BORN line and the newborn's
 // carry capacity, which is the point of the exercise.
-extern void CitizenComp_helper_1b90(int64_t selfV);
+// CitizenComp_helper_1b90 is declared in Component/exe_bodies.h.
 
 namespace {
 void ForceBirths(int frameNum) {

@@ -40,6 +40,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "Component/OrchardComponent.h"
+#include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent (0x140002e10)
 
 // The seat cascade (code/Game/Component/citizen_employ.cpp) — the headless equivalent of
 // the per-worker inner loop of CitizenComponent_impl_dd10.
@@ -108,14 +109,8 @@ void Fire(int frameNum) {
 
     // Shared component finder — the same one the pasture herder stand-in uses to reach a
     // WorkPlaceComponent from an entity (see reference_misnamed_component_finders: 0x140002e10
-    // is FindComponent_WorkPlace, whatever Ghidra called it).
-    typedef void* (*fn_FindWPC_t)(int64_t entity, void* outIBP);
-    uintptr_t f2e10 = ResolveAddr(Module::Exe, 0x140002e10);
-    if (!f2e10) {
-        fprintf(stderr, "[OrchardWorkers] frame=%d: FindComponent_WorkPlace (0x140002e10) "
-                        "unresolved — cannot staff\n", frameNum);
-        return;
-    }
+    // is FindComponent_WorkPlace, whatever Ghidra called it). Body:
+    // AttendanceComponent_GetJobHostComponent.
 
     int found = 0, considered = 0;
     for (int i = 0; i < n; ++i) {
@@ -141,7 +136,7 @@ void Fire(int frameNum) {
         ++considered;
 
         uint64_t wpcIBP = 0;
-        reinterpret_cast<fn_FindWPC_t>(f2e10)(reinterpret_cast<int64_t>(ent), &wpcIBP);
+        AttendanceComponent_GetJobHostComponent(ent, &wpcIBP);   // 0x140002e10
         if (!wpcIBP) {
             fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p has NO "
                             "WorkPlaceComponent — cannot staff\n", frameNum, orchComp);

@@ -37,6 +37,8 @@
 #include <vector>
 #include "Component/CitizenAIComponent.h"
 #include "Component/CitizenComponent.h"
+#include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent (0x140002e10)
+#include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050 (0x140003050)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <intrin.h>
@@ -314,20 +316,8 @@ void StaffPass(void* gw, int worldFrame) {
     if (!arr || n <= 0) return;
 
     // 0x140002e10 = FindComponent_WorkPlace, 0x140003050 = FindComponent_Work (both
-    // Ghidra-misnamed; see reference_misnamed_component_finders).
-    typedef void* (*fn_Find_t)(int64_t entity, void* outIBP);
-    static fn_Find_t findWPC = nullptr, findWork = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        findWPC  = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140002e10));
-        findWork = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003050));
-    }
-    if (!findWPC || !findWork) {
-        std::fprintf(stderr, "[Stress::staff] component finders unresolved (wpc=%p work=%p) — no staffing\n",
-                     (void*)findWPC, (void*)findWork);
-        return;
-    }
+    // Ghidra-misnamed; see reference_misnamed_component_finders). Bodies:
+    // AttendanceComponent_GetJobHostComponent, WorkBase_FindComponent_3050.
 
     struct Need { uint64_t prof; int want; int have; int buildings; };
     std::vector<Need> needs;
@@ -338,7 +328,7 @@ void StaffPass(void* gw, int worldFrame) {
         if (!ent) continue;
         if (*reinterpret_cast<uint32_t*>((uint8_t*)ent + 0x40) & 0x400) continue;   // removed
         uint64_t wpc = 0;
-        findWPC(reinterpret_cast<int64_t>(ent), &wpc);
+        AttendanceComponent_GetJobHostComponent(ent, &wpc);                    // 0x140002e10
         if (!wpc) continue;
         const uint64_t prof = *reinterpret_cast<uint64_t*>(wpc + 0x48);
         if (!prof) continue;
@@ -347,7 +337,7 @@ void StaffPass(void* gw, int worldFrame) {
         const int have = (int)*reinterpret_cast<uint32_t*>(wpc + 0x60);   // live roster
         int want = 1;
         uint64_t wc = 0;
-        findWork(reinterpret_cast<int64_t>(ent), &wc);
+        WorkBase_FindComponent_3050(reinterpret_cast<uintptr_t>(ent), &wc);  // 0x140003050
         if (wc) {
             const uintptr_t wd = *reinterpret_cast<uintptr_t*>(wc + 0x18);   // WorkDescription
             if (wd) {

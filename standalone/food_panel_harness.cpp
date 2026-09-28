@@ -41,6 +41,9 @@
 #include "Dialog/RadiusUI.h"
 #include "Dialog/ToolUI.h"
 #include "Dialog/WorkPlaceUI.h"
+#include "Dialog/exe_bodies.h"      // EntityUI_SetEditMode_Impl
+#include "Component/exe_bodies.h"   // CitizenComp_TryEnrolInSchool (0x140111840)
+#include "object/TypeInfo.h"        // Object::IsDerivedFromNullSafe
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -52,7 +55,7 @@ extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
 extern "C" bool  EditTool_IsEditTool(void* tool);
 extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+// EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
 // Retail close path (port of Entity_impl_cc90 0x1400fcc90) — destroys the
 // DialogInstance and runs every controller's teardown. C++ linkage taking EditTool*,
 // so the real declaration is needed for the mangled name to match.
@@ -474,7 +477,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         for (int i = 0; ctrlArr && i < cnt; ++i) {
             void* c = ctrlArr[i];
             if (!c) continue;
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidToolUI)) {
+            if (Object::IsDerivedFromNullSafe(c, tidToolUI)) {
                 toolUi = reinterpret_cast<ToolUI*>(c); break;   // B.3.8 bridge
             }
         }
@@ -705,11 +708,6 @@ void FollowUp(int frameNum) {
                     // sub_40f0 gate refuses" from "the edge simply has not fired yet",
                     // which a soak alone cannot separate.
                     if (minors > 0 && students == 0) {
-                        typedef char (*Enrol_t)(void*, int64_t*);
-                        static Enrol_t s_enrol = nullptr;
-                        static bool s_res = false;
-                        if (!s_res) { s_res = true;
-                            s_enrol = reinterpret_cast<Enrol_t>(ResolveAddr(Module::Exe, 0x140111840)); }
                         void* victim = nullptr;
                         for (int i = 0; i < czN && !victim; ++i) {
                             void** cs = reinterpret_cast<void**>(czArr + static_cast<uintptr_t>(i) * 8);
@@ -720,18 +718,19 @@ void FollowUp(int frameNum) {
                                          < *reinterpret_cast<float*>(rec + 0x44))
                                 victim = reinterpret_cast<void*>(cz);
                         }
-                        if (!s_enrol || !victim) {
+                        if (!victim) {
                             std::fprintf(stderr, "[FoodPanel]       enrol probe: %s\n",
-                                         !s_enrol ? "0x140111840 unresolved" : "no minor found");
+                                         "no minor found");
                         } else {
                             // Read the queue off the ATTENDANCE component the enroller
                             // picked (citizen+0x208), NOT off `w` — `w` is the
                             // WorkPlaceComponent, whose +0x30 is an unrelated field, and
                             // printing it made a successful enrolment read as "queue 0 -> 0".
                             int64_t seed = 0;
-                            if (fn_InternalBasePtr_Ctor) new (&seed) ::Object::InternalBasePtr(
-                                nullptr);   // B.3.3 bridge
-                            const char ok = s_enrol(victim, &seed);
+                            new (&seed) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                            // 0x140111840 (the enroller).
+                            const char ok = CitizenComp_TryEnrolInSchool(
+                                reinterpret_cast<CitizenComponent*>(victim), &seed);   // B.3.x bridge
                             uintptr_t att = *reinterpret_cast<uintptr_t*>(
                                                 reinterpret_cast<uintptr_t>(victim) + 0x208);
                             std::fprintf(stderr, "[FoodPanel]       enrol probe on minor %p: "
