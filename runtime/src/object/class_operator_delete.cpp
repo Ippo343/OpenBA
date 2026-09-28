@@ -47,65 +47,50 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
-#include "../../types/collection/Collection.h"   // rtcoll::MemFree
+#include "../../types/system/MemoryAllocator.h"
 
+// B3R W0-A0: the allocator's static, called directly (it went through
+// rtcoll::MemFree -> rtcoll::DoorFree(), which answers this same function).
 extern "C" void RtClass_OperatorDelete(void* p) {
-    rtcoll::MemFree(p);                     // if (p) { Enter; Free; Leave; }
+    System::MemoryAllocator::MemFree(p);    // if (p) { Enter; Free; Leave; }
 }
 
-namespace {
+// B3R W0-A0 (R3): the 28 rows that registered RtClass_OperatorDelete under these
+// names and addresses had NO reader by name or by address anywhere in the tree
+// (code lines, `ull`-suffixed and padded spellings included), so they are
+// deleted. The body stays (a body is provenance, R3); the table survives as the
+// record of what was read from the shipped DLL's export directory:
+//
+//   0x180065000  ??3CollisionMesh@Collision2D@@SAXPEAX@Z
+//   0x18001f040  ??3FrameCopyImageBuffer@Graphics@@SAXPEAX@Z
+//   0x1800010d0  ??3Achievement@0@SAXPEAX@Z  // Achievement::Achievement (self-named class)
+//   0x180022260  ??3ReflectionImageBuffer@Graphics@@SAXPEAX@Z
+//   0x1800163a0  ??3AnimationGroup@Graphics@@SAXPEAX@Z
+//   0x1800643b0  ??3SunLight@Graphics@@SAXPEAX@Z
+//   0x1800503d0  ??3SoundEffect@Audio@@SAXPEAX@Z
+//   0x180007400  ??3ExternalList@Object@@SAXPEAX@Z
+//   0x180012420  ??3GraphicsMesh@Graphics@@SAXPEAX@Z
+//   0x180017460  ??3EdgeMeshInstance@Graphics@@SAXPEAX@Z
+//   0x180020470  ??3ParticleSystem@Graphics@@SAXPEAX@Z
+//   0x18004e5f0  ??3VertexProgram@Video@@SAXPEAX@Z
+//   0x18004b600  ??3RenderState@Video@@SAXPEAX@Z
+//   0x180001850  ??3AchievementInstance@Achievement@@SAXPEAX@Z
+//   0x18000b940  ??3SoundBuffer@Audio@@SAXPEAX@Z
+//   0x180011960  ??3Material@Graphics@@SAXPEAX@Z
+//   0x18004e970  ??3PixelProgram@Video@@SAXPEAX@Z
+//   0x1800169c0  ??3MeshInstance@Graphics@@SAXPEAX@Z
+//   0x180064b00  ??3Surface@Collision2D@@SAXPEAX@Z
+//   0x180071b40  ??3PickingMesh@Picking@@SAXPEAX@Z
+//   0x180020b70  ??3ParticleSystemInstance@Graphics@@SAXPEAX@Z
+//   0x18004ece0  ??3VideoProgram@Video@@SAXPEAX@Z
+//   0x180012d20  ??3EdgeMesh@Graphics@@SAXPEAX@Z
+//   0x18004dd60  ??3VertexLayout@Video@@SAXPEAX@Z
+//   0x180063e00  ??3SpotLight@Graphics@@SAXPEAX@Z
+//   0x180058ed0  ??3AmbientLight@Graphics@@SAXPEAX@Z
+//   0x180070ed0  ??3PointList@Pathfinding@@SAXPEAX@Z
+//   0x180001ef0  ??3GoalInstance@Achievement@@SAXPEAX@Z
 
-struct OpDelRow {
-    uintptr_t   addr;
-    const char* mangled;
-};
-
-// 28 rows, in worklist order. Each `addr` was checked against the export
-// directory of the shipped Runtime-x64.dll (the name is the authority; the
-// address is what a by-address call site uses).
-const OpDelRow kRows[] = {
-    { 0x180065000ull, "??3CollisionMesh@Collision2D@@SAXPEAX@Z" },
-    { 0x18001f040ull, "??3FrameCopyImageBuffer@Graphics@@SAXPEAX@Z" },
-    { 0x1800010d0ull, "??3Achievement@0@SAXPEAX@Z" },  // Achievement::Achievement (self-named class)
-    { 0x180022260ull, "??3ReflectionImageBuffer@Graphics@@SAXPEAX@Z" },
-    { 0x1800163a0ull, "??3AnimationGroup@Graphics@@SAXPEAX@Z" },
-    { 0x1800643b0ull, "??3SunLight@Graphics@@SAXPEAX@Z" },
-    { 0x1800503d0ull, "??3SoundEffect@Audio@@SAXPEAX@Z" },
-    { 0x180007400ull, "??3ExternalList@Object@@SAXPEAX@Z" },
-    { 0x180012420ull, "??3GraphicsMesh@Graphics@@SAXPEAX@Z" },
-    { 0x180017460ull, "??3EdgeMeshInstance@Graphics@@SAXPEAX@Z" },
-    { 0x180020470ull, "??3ParticleSystem@Graphics@@SAXPEAX@Z" },
-    { 0x18004e5f0ull, "??3VertexProgram@Video@@SAXPEAX@Z" },
-    { 0x18004b600ull, "??3RenderState@Video@@SAXPEAX@Z" },
-    { 0x180001850ull, "??3AchievementInstance@Achievement@@SAXPEAX@Z" },
-    { 0x18000b940ull, "??3SoundBuffer@Audio@@SAXPEAX@Z" },
-    { 0x180011960ull, "??3Material@Graphics@@SAXPEAX@Z" },
-    { 0x18004e970ull, "??3PixelProgram@Video@@SAXPEAX@Z" },
-    { 0x1800169c0ull, "??3MeshInstance@Graphics@@SAXPEAX@Z" },
-    { 0x180064b00ull, "??3Surface@Collision2D@@SAXPEAX@Z" },
-    { 0x180071b40ull, "??3PickingMesh@Picking@@SAXPEAX@Z" },
-    { 0x180020b70ull, "??3ParticleSystemInstance@Graphics@@SAXPEAX@Z" },
-    { 0x18004ece0ull, "??3VideoProgram@Video@@SAXPEAX@Z" },
-    { 0x180012d20ull, "??3EdgeMesh@Graphics@@SAXPEAX@Z" },
-    { 0x18004dd60ull, "??3VertexLayout@Video@@SAXPEAX@Z" },
-    { 0x180063e00ull, "??3SpotLight@Graphics@@SAXPEAX@Z" },
-    { 0x180058ed0ull, "??3AmbientLight@Graphics@@SAXPEAX@Z" },
-    { 0x180070ed0ull, "??3PointList@Pathfinding@@SAXPEAX@Z" },
-    { 0x180001ef0ull, "??3GoalInstance@Achievement@@SAXPEAX@Z" },
-};
-
-constexpr int kRowCount = static_cast<int>(sizeof(kRows) / sizeof(kRows[0]));
-static_assert(kRowCount == 28, "the 28 rows of WORKLIST.md's A_operator_delete batch");
-
-}  // namespace
-
+// Now registers nothing; the coordinator removes its call (runtime/src/object/rt_object_port.cpp).
 int RtClassOperatorDeleteRegister() {
-    int n = 0;
-    for (const OpDelRow& r : kRows) {
-        RegisterRuntimeExport(r.mangled, (void*)&RtClass_OperatorDelete);
-        RegisterRuntimeAddr(r.addr, (void*)&RtClass_OperatorDelete);
-        ++n;
-    }
-    return n;
+    return 0;
 }

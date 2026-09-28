@@ -63,6 +63,7 @@
 
 #if !defined(BANISHED_UNIT_TEST)
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"
 #endif
 
 namespace Object {
@@ -126,16 +127,15 @@ uint32_t InternalRand(::Random* random) {
 
 #else
 
-typedef void*    (*InternalMemAllocFn)(uint64_t, int);
-typedef void     (*InternalMemFreeFn)(void*);
 typedef uint32_t (*InternalRandFn)(void*);
 
+// B3R W0-A0: the allocator's statics, called directly (they were resolved by
+// name through RT_EXPORT_ONCE, which was bound to these same two bodies).
 void* InternalMemAlloc(uint64_t bytes, int align) {
-    return RT_EXPORT_ONCE(InternalMemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);   // 0x1800c7a50
 }
 void InternalMemFree(void* p) {
-    RT_EXPORT_ONCE(InternalMemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    System::MemoryAllocator::MemFree(p);                      // 0x1800c7ad0
 }
 // Wave 2 ported this and proved it bit-exact over 16,035,064 calls.
 uint32_t InternalRand(::Random* random) {

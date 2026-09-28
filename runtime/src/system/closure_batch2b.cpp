@@ -58,24 +58,17 @@
 
 #include "../../funcs/rt_port.h"
 #include "string.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
 
 namespace rtclosure2b {
 
-// ---- the allocator boundary, by address (see the banner) -------------------
+// ---- the allocator boundary (B3R W0-A0: the statics, called directly; they
+// were resolved by address, 0x1800c7a50 / 0x1800c7ad0, bound to these two) ---
 void* MemAllocAt(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 void MemFreeAt(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);                                   // 0x1800c7ad0 re-tests null itself
+    System::MemoryAllocator::MemFree(p);     // 0x1800c7ad0 re-tests null itself
 }
 
 }  // namespace rtclosure2b
@@ -188,19 +181,13 @@ int RtClosure2bIoRegister();
 void RtClosureBatch2bPortInit() {
     int n = 0;
 
-    RegisterRuntimeExport("??3MaterialInstance@Graphics@@SAXPEAX@Z",
-                          (void*)&RtGraphics_MaterialInstance_OperatorDelete); ++n;
-    RegisterRuntimeAddr(0x1800028a0, (void*)&RtGraphics_MaterialInstance_OperatorDelete);
-    RegisterRuntimeExport("??3ImageBuffer@Video@@SAXPEAX@Z",
-                          (void*)&RtVideo_ImageBuffer_OperatorDelete); ++n;
-    RegisterRuntimeAddr(0x18001e990, (void*)&RtVideo_ImageBuffer_OperatorDelete);
-    RegisterRuntimeExport("??3PackageFile@IO@@SAXPEAX@Z",
-                          (void*)&RtIo_PackageFile_OperatorDelete); ++n;
-    RegisterRuntimeAddr(0x1800251e0, (void*)&RtIo_PackageFile_OperatorDelete);
+    // B3R W0-A0 (R3): the rows for ??3MaterialInstance@Graphics@@ (0x1800028a0),
+    // ??3ImageBuffer@Video@@ (0x18001e990), ??3PackageFile@IO@@ (0x1800251e0),
+    // the operator new copy 0x180011640 and LinkPrevBlock 0x180034d60 had NO
+    // reader by name or by address and are deleted; their bodies above stay
+    // (provenance, R3). 0x180061ae0 keeps its row: wave28_lane_partsys.cpp
+    // reads it by address.
     RegisterRuntimeAddr(0x180061ae0, (void*)&RtGraphics_Material_OperatorDelete); ++n;
-
-    RegisterRuntimeAddr(0x180011640, (void*)&RtSystem_OperatorNew_180011640);   ++n;
-    RegisterRuntimeAddr(0x180034d60, (void*)&RtSystem_MemoryAllocator_LinkPrevBlock); ++n;
 
     const int g = RtClosure2bGraphicsRegister();
     const int v = RtClosure2bVideoRegister();
