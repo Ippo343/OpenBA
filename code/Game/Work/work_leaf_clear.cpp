@@ -26,7 +26,9 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Action/exe_bodies.h"   // B3R: Pf_AvlRebalanceB_13480
+#include "Player/exe_bodies.h"   // B3R: PlayerPath_FindComponent_3ea0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include <cstdlib>   // qsort
@@ -34,32 +36,14 @@
 #include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 D5: ComponentEntity::TypeId()
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
-// 0x140003ea0 — entity-resolve behind an action IBP (registered).
-typedef void* (*fn_FindEntity_3ea0_t)(uintptr_t actionIBP, void* retIBP);
-static fn_FindEntity_3ea0_t s_fn_FindEntity_3ea0 = nullptr;
+// 0x140003ea0 — entity-resolve behind an action IBP: PlayerPath_FindComponent_3ea0
+// (Player/exe_bodies.h), called by name (B3R).
 
 // ============================================================
-// Shared lazily-resolved exe sub-callees (registered, snapshot-verified)
+// Shared exe sub-callees, called by name (B3R)
 // ============================================================
-// 0x14001ca60 — BST single-node remove + rebalance (TradeDescription_impl_ca60).
-typedef void* (*fn_BST_Remove_ca60_t)(void* bstRoot, void* node);
-static fn_BST_Remove_ca60_t s_fn_BST_Remove_ca60 = nullptr;
-
-// 0x140013480 — BST rebalance/fixup after insert (TradeDescription_impl_3480).
-typedef void (*fn_BST_Rebalance_3480_t)(void* bstRoot, void* nodeSlot);
-static fn_BST_Rebalance_3480_t s_fn_BST_Rebalance_3480 = nullptr;
-
-static bool s_leafResolved = false;
-static void EnsureLeafFuncs() {
-    if (s_leafResolved) return;
-    s_fn_BST_Remove_ca60 = reinterpret_cast<fn_BST_Remove_ca60_t>(
-        ResolveAddr(Module::Exe, 0x14001ca60));
-    s_fn_BST_Rebalance_3480 = reinterpret_cast<fn_BST_Rebalance_3480_t>(
-        ResolveAddr(Module::Exe, 0x140013480));
-    s_fn_FindEntity_3ea0 = reinterpret_cast<fn_FindEntity_3ea0_t>(
-        ResolveAddr(Module::Exe, 0x140003ea0));
-    s_leafResolved = true;
-}
+// 0x14001ca60 — BST single-node remove + rebalance: WorkCellBST_Remove_ca60 (Work/exe_bodies.h).
+// 0x140013480 — BST rebalance/fixup after insert: Pf_AvlRebalanceB_13480 (Action/exe_bodies.h).
 
 // ============================================================
 // 0x14011b390 — PlantArea_helper_b390
@@ -71,10 +55,8 @@ static void EnsureLeafFuncs() {
 // ABI: void fn(longlong self).
 // Closure: 0x140003ea0 (reg) + InternalBasePtr CheckPtr (engine). SAFE.
 void WorkLeaf_PlantArea_b390(uintptr_t self) {
-    EnsureLeafFuncs();
     uintptr_t ent = 0;
-    if (s_fn_FindEntity_3ea0)
-        s_fn_FindEntity_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
+    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
 
     char state = *reinterpret_cast<char*>(ent + 0x52);
     if (state < 0) state = *reinterpret_cast<char*>(ent + 0x50);
@@ -101,7 +83,6 @@ void WorkLeaf_PlantArea_b390(uintptr_t self) {
 // ABI: void fn(longlong* treeRootSlot, InternalBasePtr* key)
 // Closure: 0x14001ca60 (reg) + InternalBasePtr_CheckPtr (engine). SAFE.
 void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP) {
-    EnsureLeafFuncs();
     uint64_t* node = *reinterpret_cast<uint64_t**>(treeRootSlot);
     if (node == nullptr) return;
     do {
@@ -110,7 +91,7 @@ void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP) {
             node = reinterpret_cast<uint64_t*>(node[3]);       // left (+0x18)
         } else {
             if (*reinterpret_cast<uint64_t*>(keyIBP) <= *node) {
-                if (s_fn_BST_Remove_ca60) s_fn_BST_Remove_ca60(treeRootSlot, node);
+                WorkCellBST_Remove_ca60(static_cast<uintptr_t*>(treeRootSlot), node);
                 return;
             }
             node = reinterpret_cast<uint64_t*>(node[4]);       // right (+0x20)
@@ -126,7 +107,7 @@ void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP) {
 // MemAlloc (engine). Ported inline so 9920's closure is self-contained.
 static void* WorkLeaf_BstNewNode_9b40(const void* ibpPair, void* parent) {
     uint64_t* n = reinterpret_cast<uint64_t*>(
-        fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr);
+        System::MemoryAllocator::MemAlloc(0x30, 8));
     if (n == nullptr) return nullptr;
     const uint64_t* src = reinterpret_cast<const uint64_t*>(ibpPair);
     n[0] = 0; n[0] = src[0];           // key / IBP entity (+0x00)
@@ -150,7 +131,6 @@ static void* WorkLeaf_BstNewNode_9b40(const void* ibpPair, void* parent) {
 // ABI: undefined8* fn(longlong* treeRootSlot, undefined8* outNode, InternalBasePtr* ins)
 // Closure: 0x140029b40 (inlined) + 0x140013480 (reg) + MemAlloc/CheckPtr (engine). SAFE.
 void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* insIBP) {
-    EnsureLeafFuncs();
     uint64_t* selfSlot = reinterpret_cast<uint64_t*>(treeRootSlot);
     uint64_t* node = reinterpret_cast<uint64_t*>(selfSlot[0]);
     uint64_t* result;
@@ -158,7 +138,7 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* ins
     if (node == nullptr) {
         // Empty tree — allocate root directly (matches exe's open-coded alloc).
         uint64_t* n = reinterpret_cast<uint64_t*>(
-            fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr);
+            System::MemoryAllocator::MemAlloc(0x30, 8));
         result = nullptr;
         if (n != nullptr) {
             const uint64_t* src = reinterpret_cast<const uint64_t*>(insIBP);
@@ -206,8 +186,7 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* ins
             node = right;
         }
     inserted:
-        if (s_fn_BST_Rebalance_3480)
-            s_fn_BST_Rebalance_3480(treeRootSlot, &newChildSlotOwner);
+        Pf_AvlRebalanceB_13480(static_cast<int64_t*>(treeRootSlot), reinterpret_cast<int64_t*>(&newChildSlotOwner));
         *reinterpret_cast<uint64_t*>(outNode) = reinterpret_cast<uint64_t>(result);
     }
     *reinterpret_cast<int*>(selfSlot + 1) = static_cast<int>(selfSlot[1]) + 1;
@@ -247,13 +226,11 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
             void* ibpA = nullptr;
             void* ibpB = nullptr;
             reinterpret_cast<Object::InternalBasePtr*>(&ibpA)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-            if (ibpA != nullptr && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(ibpA, tidEntity)) {
+            if (ibpA != nullptr && !Object::IsDerivedFromNullSafe(ibpA, tidEntity)) {
                 ibpA = nullptr;
             }
             reinterpret_cast<Object::InternalBasePtr*>(&ibpB)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-            if (ibpB != nullptr && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(ibpB, tidCitizenAI)) {
+            if (ibpB != nullptr && !Object::IsDerivedFromNullSafe(ibpB, tidCitizenAI)) {
                 ibpB = nullptr;
             }
             // pair {ibpA, ibpB} laid out contiguously for the insert key.
@@ -275,15 +252,13 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
             // IBP A at node+0x00
             reinterpret_cast<Object::InternalBasePtr*>(node)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             void* a = *reinterpret_cast<void**>(node);
-            if (a != nullptr && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(a, tidEntity)) {
+            if (a != nullptr && !Object::IsDerivedFromNullSafe(a, tidEntity)) {
                 *reinterpret_cast<void**>(node) = nullptr;
             }
             // IBP B at node+0x08
             reinterpret_cast<Object::InternalBasePtr*>(node + 8)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             void* b = *reinterpret_cast<void**>(node + 8);
-            if (b != nullptr && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(b, tidCitizenAI)) {
+            if (b != nullptr && !Object::IsDerivedFromNullSafe(b, tidCitizenAI)) {
                 *reinterpret_cast<void**>(node + 8) = nullptr;
             }
             // in-order successor
@@ -375,9 +350,7 @@ void WorkLeaf_TileArrPush(uint64_t* arr, const int* rec) {
         if (newCount == oldCount + 1 && oldCount != 0) {
             *capPtr = newCount * 3;
         }
-        void* nb = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                                             static_cast<uint64_t>(*capPtr) << 4, 8)
-                               : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*capPtr) << 4, 8);
         arr[0] = reinterpret_cast<uint64_t>(nb);
     }
     int copyStart = (oldPtr == reinterpret_cast<void*>(arr[0])) ? oldCount : 0;
@@ -400,7 +373,7 @@ void WorkLeaf_TileArrPush(uint64_t* arr, const int* rec) {
         }
     }
     if (oldPtr != reinterpret_cast<void*>(arr[0])) {
-        if (fn_MemFree) fn_MemFree(g_pMemAllocSingleton, oldPtr);
+        System::MemoryAllocator::MemFree(oldPtr);
     }
 }
 }
@@ -453,7 +426,7 @@ void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h,
                 }
                 if (emit) {
                     uint64_t nullIBP = 0;
-                    if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                     int rec[4];
                     rec[0] = cellIdx;
                     rec[1] = 0;
