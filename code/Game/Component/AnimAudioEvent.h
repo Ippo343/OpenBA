@@ -48,7 +48,7 @@ public:
     bool              Serialize(void* stream) override;                  // [5] 0x140087ed0
     Object::External* Reconstruct() override;                            // [6] 0x140016fb0
     void              Destruct() override;                               // [7] 0x140001640
-    Object::External* Construct() override;                              // [8] 0x140087e40 PORT GAP (the trigger)
+    void              Construct(const Math::Transform& transform) override; // [8] 0x140087e40 PORT GAP (the trigger)
     virtual Object::External* ConstructInPlace();                        // [9] 0x140016f60
 
     // PUBLIC while the ported bodies read them (B38 decision 1).

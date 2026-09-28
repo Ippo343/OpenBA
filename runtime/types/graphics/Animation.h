@@ -257,7 +257,13 @@ public:
 public:
 
     // [8] +0x40 — `_purecall` in retail. RULE B5-16: introduced, so `virtual`.
-    virtual Object::External* Construct() = 0;
+    // The event's ACTION, fired by Animation::ApplyEvents: retail's one caller
+    // 0x1800faa53..5e passes RDX = the `const Math::Transform&` ApplyEvents
+    // received (R13) and ignores RAX; the one override, the exe's AnimAudioEvent
+    // 0x140087e40, keeps RDX (MOV RBX,RDX) and reads the translation at
+    // +0x10/+0x14/+0x18, returning nothing. The name `Construct` is the
+    // Runtime's historical spelling (the slot is pure: retail has no symbol).
+    virtual void Construct(const Math::Transform& transform) = 0;
 
     // ?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ 0x180011700
     // ?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x180011710

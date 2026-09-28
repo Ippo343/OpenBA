@@ -60,8 +60,10 @@ Object::External* AnimAudioEvent::Reconstruct() {
 void AnimAudioEvent::Destruct() { this->~AnimAudioEvent(); }
 // [8] 0x140087e40. PORT GAP (retail: the audio trigger — roll a random float,
 // and when it is under +0x28 play +0x20 at the event transform's position).
-// The hand-built table had a `return null` stub; kept.
-Object::External* AnimAudioEvent::Construct() { return nullptr; }
+// RDX is the transform ApplyEvents received (0x140087e54 MOV RBX,RDX); the
+// body returns nothing. Until the trigger is ported the body does nothing (the
+// old `return null` stub's value was never read: ApplyEvents ignores RAX).
+void AnimAudioEvent::Construct(const Math::Transform&) {}
 // [9] 0x140016f60 — placement construction on `this` (the createInPlace body).
 Object::External* AnimAudioEvent::ConstructInPlace() {
     return new (static_cast<void*>(this)) AnimAudioEvent();

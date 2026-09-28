@@ -165,7 +165,7 @@ struct RbAnimAudioEvent final : Graphics::AnimationEvent {
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
-    Object::External* Construct() override { return this; }
+    void Construct(const Math::Transform&) override {}   // retail slot 8: the transform (B3R owed 2)
 };
 
 // An array stand-in for a concrete product T: its destructor logs `this` once
