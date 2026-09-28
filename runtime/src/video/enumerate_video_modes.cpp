@@ -84,6 +84,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
 #include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
+#include "../../types/system/Debug.h"          // B3R W0-SM M2: System::Debug::_disableHandler
 
 using RtVideo::Adapter;
 using RtVideo::Device;
@@ -105,12 +106,6 @@ inline InterfaceSlot* SlotAt(Device* self, int i) {
         reinterpret_cast<uint8_t*>(self) + kSlot0 + static_cast<uintptr_t>(i) * 0x18);
 }
 
-// `?_disableHandler@Debug@System@@0_NA` @ 0x1801fc708, through the port-aware
-// door so a minted run and a DLL run land on the same byte.
-uint8_t* DebugDisableHandlerSlot() {
-    return RT_DATA_SLOT(uint8_t*, "?_disableHandler@Debug@System@@0_NA");
-}
-
 using CreateDeviceDataFn = void* (*)(Device*);
 // (B3X W0: the unused `EnumerateFn` / `DeletingDtorFn` slot typedefs and the
 // `VtblOf` vptr helper are deleted; the DeviceData calls are by name.)
@@ -127,8 +122,6 @@ using CreateDeviceDataFn = void* (*)(Device*);
 bool Video::Device::EnumerateVideoModes() {
     Video::Device::InitializeInterfaces();              // 0x1800f8627
 
-    uint8_t* const disableHandler = DebugDisableHandlerSlot();
-
     int created = 0, enumerated = 0;
     for (int i = 0; i < kSlotCount; ++i) {              // 0x1800f862e / 0x1800f8635
         InterfaceSlot* const s = &dllSlots[i];
@@ -141,7 +134,7 @@ bool Video::Device::EnumerateVideoModes() {
         void* data = create(this);                      // 0x1800f8667
         ++created;
 
-        if (disableHandler) *disableHandler = 1;        // 0x1800f8671
+        System::Debug::_disableHandler = true;          // 0x1800f8671
 
         // 0x1800f8678: `MOV RDX,[RAX]` — UNGUARDED. Retail relies on the SEH
         // region here, not on a null test; see the banner. The virtual call keeps
@@ -149,7 +142,7 @@ bool Video::Device::EnumerateVideoModes() {
         (void)reinterpret_cast<Video::DeviceData*>(data)->EnumerateInterfaces();  // B.3.5 bridge
         ++enumerated;
 
-        if (disableHandler) *disableHandler = 0;        // 0x1800f8697
+        System::Debug::_disableHandler = false;         // 0x1800f8697
 
         if (data != nullptr) {                          // 0x1800f869e — guarded HERE
             // 0x1800f86ab, the deleting flag.
