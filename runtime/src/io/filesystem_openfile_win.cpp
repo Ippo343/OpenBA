@@ -576,28 +576,3 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
 
 }  // namespace IO
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoFileSystemOpenFileRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-
-    RegisterRuntimeExport("?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z",
-                          (void*)&RtIo_FileSystem_ReadFile); ++n;
-    RegisterRuntimeAddr(0x1800ace00, (void*)&RtIo_FileSystem_ReadFile);
-
-
-
-    // The FileInfo copy ctor and operator= are UNEXPORTED, so they get the
-    // address door only — the same shape as lane Q's Collection helpers.
-
-    printf("[RtPort]   IO::FileSystem open/read (lane PKG2 rung 3): %d exports registered\n", n);
-
-    // DELIBERATELY ABSENT — §5.
-    //   ?CloseFile@FileSystem@IO@@   0x1800accc0  ord 1726   (the teardown half)
-    //   FUN_18007eefc  the CRT _stricmp      (called by address; this rung ADDS
-    //                  a second live caller of it — see the census note)
-    return n;
-}

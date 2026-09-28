@@ -654,26 +654,3 @@ FileSystem::~FileSystem() {
 
 }  // namespace IO
 
-// ============================================================================
-// Registration — BY NAME *AND* BY ADDRESS for every row.
-// `?CreateFileW@FileSystem@IO@@` and `?PlatformCloseFile@FileSystem@IO@@` are
-// exported under their mangled names but carry no ordinal in the table dump
-// above; the name door is the one their callers use and the address door is the
-// one an inlined caller would use.
-// ============================================================================
-int RtIoFileSystemCreateFileRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    RegisterRuntimeExport("?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z",
-                          (void*)&RtIo_FileSystem_CloseFile); ++n;
-    RegisterRuntimeAddr(0x1800accc0, (void*)&RtIo_FileSystem_CloseFile);
-
-    RegisterRuntimeExport("??1FileSystem@IO@@QEAA@XZ",
-                          (void*)&RtIo_FileSystem_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800ac6d0, (void*)&RtIo_FileSystem_Dtor);
-
-    printf("[RtPort]   IO::FileSystem create/close (wave 19 lane FILE): "
-           "%d exports registered\n", n);
-    return n;
-}

@@ -672,62 +672,6 @@ void RtIo_Modification_SaveList(void* selfv) {
     reinterpret_cast<IO::Modification*>(selfv)->SaveList();
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH DOORS for everything that has a name, RegisterRuntimeAddr alone for the
-// eleven internals that have none in either shipped build. A port reached by
-// address needs the address door too — that is the whole finding this lane was
-// created by, and registering only the export would leave
-// engine/funcs/engine_funcs.cpp resolving null at cutover with the name never
-// mentioned.
-//
-// NOT cutover-gated, unlike RegisterAllocatorAddresses(). That gate exists
-// because standalone/allocator_lock.cpp PATCHES the allocator at its address
-// and ResolveAddr consults the port registry FIRST, so registering early would
-// hand the patcher our own prologue. Nothing patches any address in this
-// cluster (grepped across standalone/ for each of the twenty), so registering
-// unconditionally is correct here and has the advantage of putting these bodies
-// under the diff oracle on a DLL-PRESENT run, which is the only way they get
-// verified at all.
-//
-// The mangled names are LITERALS, not constants: tools/runtime_census.py
-// matches `RegisterRuntimeExport("<literal>"` and cannot see through a named
-// constant (filesystem.cpp's banner has the full account).
-int RtIoModificationRefreshRegister();   // modification_refresh.cpp (lane MOD, 2nd pass)
-
-int RtIoModificationRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?SaveList@Modification@IO@@QEAAXXZ",
-                          (void*)&RtIo_Modification_SaveList); ++n;
-
-    RegisterRuntimeAddr(0x1800b05f0, (void*)&RtIo_Modification_SaveList);
-
-    // The unexported internals. Address door only — there is no name to
-    // register, in retail or in the profile build.
-    RegisterRuntimeAddr(0x180010110, (void*)&RtColl_ArrayModAssign_180010110);
-    RegisterRuntimeAddr(0x180011220, (void*)&RtColl_ArrayU8Assign_180011220);
-    // 0x180009c30 is NOT registered here any more -- it was registered by three
-    // files at once (this one, collection/linkedlist.cpp, system/allocator.cpp)
-    // and the registry's last binding won, so two bodies were dead code and
-    // which one survived depended on init order. Lane VID2 found it;
-    // runtime/src/system/allocator.cpp is the single owner and registers it
-    // unconditionally. This file's own `RtColl_SetNodeFree_180009c30` copy went
-    // with the B.3.2 closing pass: its last caller, the destroy-subtree walk,
-    // is now `Collection::Set<Filename>::DestroySubtree`, whose free is that
-    // same door.
-
-    printf("[RtPort]   IO::Modification (lane MOD): %d exports + 14 addresses\n", n);
-
-    // The second lane-MOD pass: ?RefreshList@ and the seven rows its closure
-    // needed (modification_refresh.cpp). Called from here rather than from
-    // rt_io_port.cpp so the two passes share ONE kill switch, the old DLL-era switch --
-    // an A/B that disables half a cluster is not a control.
-    n += RtIoModificationRefreshRegister();
-    return n;
-}
-
 }  // namespace RtIO
 
 // ============================================================================

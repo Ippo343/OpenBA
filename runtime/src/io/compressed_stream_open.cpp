@@ -151,19 +151,3 @@ extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
 
 }  // namespace RtIo
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoCompressedStreamOpenRegister() {
-    using namespace RtIo;
-    int n = 0;
-
-
-    RegisterRuntimeExport("?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z",
-                          (void*)&RtIo_CompressedStream_Open); ++n;
-    RegisterRuntimeAddr(0x1800aa560, (void*)&RtIo_CompressedStream_Open);
-
-    printf("[RtPort]   IO::CompressedStream SetWindowCount/Open "
-                "(lane PKG2 rung 4b-iii): %d exports registered\n", n);
-    return n;
-}

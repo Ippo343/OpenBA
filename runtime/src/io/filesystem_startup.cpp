@@ -133,16 +133,3 @@ bool FileSystem::Startup() {
 
 }  // namespace IO
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoFileSystemStartupRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Startup@FileSystem@IO@@QEAA_NXZ", (void*)&RtIo_FileSystem_Startup); ++n;
-    RegisterRuntimeAddr(0x1800abc50, (void*)&RtIo_FileSystem_Startup);
-
-    // DELIBERATELY ABSENT -- the two callees, both exported, both unported:
-    //   ?SetupDirectories@FileSystem@IO@@QEAAXXZ  0x1800abd00  ord 4029  722 instrs
-    //   ?LoadPackages@FileSystem@IO@@QEAAXXZ      0x1800ab460  ord 3209
-    return n;
-}
