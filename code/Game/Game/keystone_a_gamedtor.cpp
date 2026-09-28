@@ -21,13 +21,15 @@
 //   0x14001d400  Pf_BstFreeRecursive_d400     (reg_pf_pools; recursive cell-BST node free)
 //   0x14001e490  Pf_FreeArray30_e490          (reg_pf_pools; array-free stride 0x30)
 //
-// Runtime-DLL exports used (resolved by mangled name, identical strings to the import
-// name table behind exe IAT dispatch slots 0x14015252x/253x/255x/256x):
+// Runtime-DLL exports used (called by name since B3R; the import name table behind
+// exe IAT dispatch slots 0x14015252x/253x/255x/256x):
 //   ?YieldToThreads@Application@1@QEAAXXZ             (slot 0x140152560)
-//   ??1CriticalSection@System@@QEAA@XZ               (slot 0x140152530, a6720 inner dtor)
+//   ??1CriticalSection@System@@QEAA@XZ               (slot 0x140152530, a6720 inner dtor;
+//                                                     RtSystem_CriticalSection_Dtor)
 //   (the a6720 tail-call, ??1Thread@System@@ via slot 0x140152520, is the
 //    compiler's base chain since ENDGAME B.3.9 VS: a6720 is ~PathfinderThread)
-//   ??1Scene@Picking@@QEAA@XZ                         (slot 0x140151fb8, ed60 tail-call)
+//   ??1Scene@Picking@@QEAA@XZ                         (slot 0x140151fb8, ed60 tail-call;
+//                                                     the implicit Picking::Scene::~Scene)
 //
 // NOTE on the StackCriticalSection in 0x1400a6690: the original uses a stack-scoped
 // RAII guard (ctor=Lock at slot 0x140152538, dtor=Unlock at slot 0x140152548). The
@@ -56,7 +58,10 @@
 // header stores (a6720's [thread+0x158]) are not arrays and are untouched.
 #include "Game/PathfinderThread.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "picking/Scene.h"
+#include "Action/exe_bodies.h"   // Pf_BstFreeRecursive_d400, Pf_FreeArray30_e490
+#include "Work/exe_bodies.h"     // WorkBase_TreeNodeFree_e320 / _14c30
 #include "collection/Collection.h"
 #include <cstdint>
 #include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
@@ -65,40 +70,11 @@
 
 namespace {
 
-// ---- Runtime-DLL exports (resolved by mangled name; same strings as keystone_a_zone.cpp).
-typedef void (*fn_CSDtor_t)(void* cs);
-typedef void (*fn_SceneDtor_t)(void* scene);
+// B3R: the exe sub-callees are called by name -- WorkBase_TreeNodeFree_e320 /
+// _14c30 (Work/exe_bodies.h), Pf_BstFreeRecursive_d400 / Pf_FreeArray30_e490
+// (Action/exe_bodies.h) -- and so are the two Runtime dtors above.
 
-static fn_CSDtor_t        s_fn_CSDtor       = nullptr;
-static fn_SceneDtor_t     s_fn_SceneDtor    = nullptr;
-
-// ---- Already-registered exe sub-callees (resolved via the standalone registry). ----
-typedef void (*fn_TreeFreeE320_t)(void* avlHdr, void* node);   // 0x14000e320 (children +0x18/+0x20)
-typedef void (*fn_BstFreeRec_d400_t)(uintptr_t avlHdr, uint64_t* node); // 0x14001d400 (cell-BST recursive)
-typedef void (*fn_FreeArray30_e490_t)(uint64_t unused, uintptr_t base, int count); // 0x14001e490
-typedef void (*fn_TreeFree14c30_t)(void* slot, void* node);    // 0x140014c30 (children +0x10/+0x18)
-
-static fn_TreeFreeE320_t    s_fn_TreeFreeE320 = nullptr;
-static fn_BstFreeRec_d400_t s_fn_BstFreeD400  = nullptr;
-static fn_FreeArray30_e490_t s_fn_FreeArr30   = nullptr;
-static fn_TreeFree14c30_t   s_fn_TreeFree14c30 = nullptr;
-
-// ---- Application::_singleton exref (slot 0x140152368), for YieldToThreads. ----
-// engine_funcs.cpp resolves g_pAppSingleton from this slot; reuse it.
-static bool s_init = false;
-static void EnsureFns() {
-    if (s_init) return;
-    s_fn_CSDtor      = reinterpret_cast<fn_CSDtor_t>(ResolveExport("??1CriticalSection@System@@QEAA@XZ"));
-    s_fn_SceneDtor   = reinterpret_cast<fn_SceneDtor_t>(ResolveExport("??1Scene@Picking@@QEAA@XZ"));
-
-    s_fn_TreeFreeE320 = reinterpret_cast<fn_TreeFreeE320_t>(ResolveAddr(Module::Exe, 0x14000e320));
-    s_fn_BstFreeD400  = reinterpret_cast<fn_BstFreeRec_d400_t>(ResolveAddr(Module::Exe, 0x14001d400));
-    s_fn_FreeArr30    = reinterpret_cast<fn_FreeArray30_e490_t>(ResolveAddr(Module::Exe, 0x14001e490));
-    s_fn_TreeFree14c30 = reinterpret_cast<fn_TreeFree14c30_t>(ResolveAddr(Module::Exe, 0x140014c30));
-    s_init = true;
-}
-
-inline void MemFree(void* p) { if (fn_MemFreeStatic) fn_MemFreeStatic(p); }
+inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // B.3.2 bridge: the owning structs are still untyped bytes.
 inline rtcoll::ArrayHdr& Arr(int64_t base, int64_t off) {
@@ -120,7 +96,6 @@ inline rtcoll::ArrayHdr& Arr(int64_t base, int64_t off) {
 // 1:1 port of FUN_14001a5f0.
 // ============================================================================
 extern "C" void GameDtor_FreeListDtor_1a5f0(uint64_t* param_1) {
-    EnsureFns();
     uint64_t* node = reinterpret_cast<uint64_t*>(param_1[0]);   // [param_1]
     while (node != nullptr) {
         uint64_t* next = reinterpret_cast<uint64_t*>(node[2]);  // node[+0x10]
@@ -150,17 +125,14 @@ extern "C" void GameDtor_FreeListDtor_1a5f0(uint64_t* param_1) {
 // 1:1 port of FUN_14001a450.
 // ============================================================================
 extern "C" void GameDtor_TreeArrayDtor_1a450(int64_t param_1) {
-    EnsureFns();
     void** treeSlot = reinterpret_cast<void**>(param_1 + 0x28);
     void* root = *treeSlot;
     if (root != nullptr) {
         // FUN_14000e320(treeSlot, root->+0x18); FUN_14000e320(treeSlot, root->+0x20)
         void* childA = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(root) + 0x18);
         void* childB = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(root) + 0x20);
-        if (s_fn_TreeFreeE320) {
-            s_fn_TreeFreeE320(treeSlot, childA);
-            s_fn_TreeFreeE320(treeSlot, childB);
-        }
+        WorkBase_TreeNodeFree_e320(treeSlot, childA);   // 0x14000e320
+        WorkBase_TreeNodeFree_e320(treeSlot, childB);
         MemFree(root);
     }
     *treeSlot = nullptr;                                        // [+0x28] = 0
@@ -180,16 +152,13 @@ extern "C" void GameDtor_TreeArrayDtor_1a450(int64_t param_1) {
 // 1:1 port of BuildStructure_impl_ced0 (FUN_14001ced0).
 // ============================================================================
 extern "C" void GameDtor_CellBstClear_1ced0(int64_t* param_1) {
-    EnsureFns();
     int64_t* root = reinterpret_cast<int64_t*>(param_1[0]);    // *param_1
     if (root != nullptr) {
         // FUN_14001d400(param_1, root[3]); FUN_14001d400(param_1, root[4])
-        if (s_fn_BstFreeD400) {
-            s_fn_BstFreeD400(reinterpret_cast<uintptr_t>(param_1),
-                             reinterpret_cast<uint64_t*>(root[3]));   // root->+0x18
-            s_fn_BstFreeD400(reinterpret_cast<uintptr_t>(param_1),
-                             reinterpret_cast<uint64_t*>(root[4]));   // root->+0x20
-        }
+        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(param_1),
+                                 reinterpret_cast<uint64_t*>(root[3]));   // root->+0x18
+        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(param_1),
+                                 reinterpret_cast<uint64_t*>(root[4]));   // root->+0x20
         *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x2c) -= 1; // DEC [+0x2c]
         *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x30) += 1; // INC [+0x30]
         root[0] = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(param_1) + 0x18); // *root = [+0x18]
@@ -217,7 +186,6 @@ extern "C" void GameDtor_CellBstClear_1ced0(int64_t* param_1) {
 // 1:1 port of FUN_14001dac0.
 // ============================================================================
 extern "C" void GameDtor_FreeArray18_1dac0(int64_t* param_1) {
-    EnsureFns();
     int64_t base = param_1[0];                                 // *param_1
     int64_t count = static_cast<int>(param_1[1] & 0xffffffff); // (int)[+0x08], sign-extended
     if (count > 0) {
@@ -239,7 +207,6 @@ extern "C" void GameDtor_FreeArray18_1dac0(int64_t* param_1) {
 // 1:1 port of FUN_14001e3a0.
 // ============================================================================
 extern "C" void GameDtor_FreeArray20_1e3a0(int64_t* param_1) {
-    EnsureFns();
     int64_t base = param_1[0];                                 // *param_1
     int64_t count = static_cast<int>(param_1[1] & 0xffffffff); // (int)[+0x08]
     if (count > 0) {
@@ -270,7 +237,6 @@ extern "C" void GameDtor_FreeArray20_1e3a0(int64_t* param_1) {
 // 1:1 port of TradeComponent_impl_8570 (FUN_1400a8570).
 // ============================================================================
 extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
-    EnsureFns();
     GameDtor_FreeListDtor_1a5f0(reinterpret_cast<uint64_t*>(param_1 + 0xc8));
 
     Arr(param_1, 0xb8).~Array();   // MemFree [+0xb8]; [+0xb8]=[+0xc0]=0
@@ -280,9 +246,8 @@ extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
 
     GameDtor_FreeArray20_1e3a0(reinterpret_cast<int64_t*>(param_1 + 0x78));
 
-    if (s_fn_FreeArr30)
-        s_fn_FreeArr30(0, static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(param_1 + 0x68)),
-                       *reinterpret_cast<int*>(param_1 + 0x70));
+    Pf_FreeArray30_e490(0, static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(param_1 + 0x68)),
+                        *reinterpret_cast<int*>(param_1 + 0x70));   // 0x14001e490
 
     // The element step (1e490, stride 0x30) ran above; this is the outer header.
     Arr(param_1, 0x68).~Array();   // MemFree [+0x68]; [+0x68]=[+0x70]=0
@@ -322,7 +287,6 @@ extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
 // the minted row are retired.
 // ============================================================================
 PathfinderThread::~PathfinderThread() {
-    EnsureFns();
     const int64_t thread = reinterpret_cast<int64_t>(this);
 
     GameDtor_FreeArray18_1dac0(reinterpret_cast<int64_t*>(thread + 0x160));
@@ -347,7 +311,7 @@ PathfinderThread::~PathfinderThread() {
     *reinterpret_cast<int64_t*>(rsi) = 0;                    // [thread + 0x60] = 0
     *reinterpret_cast<int*>(rsi + 0x10) = 0;                 // [thread + 0x70] = 0
 
-    if (s_fn_CSDtor) s_fn_CSDtor(reinterpret_cast<void*>(thread + 0x30));
+    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(thread + 0x30));
     // tail-call: System::Thread::~Thread() -- the compiler's base chain.
 }
 
@@ -369,7 +333,6 @@ PathfinderThread::~PathfinderThread() {
 // (e.g. Thread::Start is a no-op), this would spin — see FINAL REPORT.
 // ============================================================================
 extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
-    EnsureFns();
     for (;;) {
         reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Lock();   // B.3.4b bridge
         int count = *reinterpret_cast<int*>(thread + 0x70);
@@ -407,8 +370,6 @@ extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
 // 1:1 port of FUN_14009ed60 (Game::Dtor).
 // ============================================================================
 extern "C" void Game_Dtor_9ed60(int64_t param_1) {
-    EnsureFns();
-
     int64_t queue = *reinterpret_cast<int64_t*>(param_1 + 0x68);
     if (queue != 0) {
         GameDtor_DrainQueue_a6690(queue);
@@ -438,10 +399,8 @@ extern "C" void Game_Dtor_9ed60(int64_t param_1) {
     if (node != nullptr) {
         void* childA = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(node) + 0x10);
         void* childB = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(node) + 0x18);
-        if (s_fn_TreeFree14c30) {
-            s_fn_TreeFree14c30(nodeSlot, childA);
-            s_fn_TreeFree14c30(nodeSlot, childB);
-        }
+        WorkBase_TreeNodeFree_14c30(nodeSlot, childA);   // 0x140014c30
+        WorkBase_TreeNodeFree_14c30(nodeSlot, childB);
         MemFree(node);
     }
     *nodeSlot = nullptr;                                        // [+0xe8] = 0
@@ -451,5 +410,5 @@ extern "C" void Game_Dtor_9ed60(int64_t param_1) {
 
     Arr(param_1, 0x80).~Array();   // free [+0x80]; [+0x80]=[+0x88]=0
 
-    if (s_fn_SceneDtor) s_fn_SceneDtor(reinterpret_cast<void*>(param_1 + 0x08)); // tail-call
+    reinterpret_cast<Picking::Scene*>(param_1 + 0x08)->Picking::Scene::~Scene();   // tail-call
 }

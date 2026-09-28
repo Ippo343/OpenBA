@@ -28,6 +28,7 @@
 
 #include "Game/WorldGeometry.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/GraphicsMesh.h"   // ENDGAME B.3.9 TR: GraphicsMesh::TypeId()
 #include "graphics/Particle.h"       // ENDGAME B.3.9 TR: Particle::TypeId()
 #include "Component/coll_bridge.h"
@@ -79,14 +80,14 @@ WorldGeometry::WorldGeometry() {
     _dirtyTreeCount = 0;                // dword +0xf0
     _terrainMaterial = nullptr;         // +0xf8
 
-    fn_Video_VertexBuffer_Ctor(&_vertexBuffer);   // +0x100 (ctor door, B4b-2)
-    fn_Video_IndexBuffer_Ctor(&_indexBuffer);     // +0x120
+    Video_VertexBuffer_Ctor(reinterpret_cast<Video::VertexBuffer*>(&_vertexBuffer));   // +0x100 (ctor body, B4b-2)
+    Video_IndexBuffer_Ctor(reinterpret_cast<Video::IndexBuffer*>(&_indexBuffer));      // +0x120
 
     _waterMaterialA = nullptr;          // +0x150
     _waterMaterialB = nullptr;          // +0x158
 
-    fn_Video_VertexBuffer_Ctor(&_waterVertexBuffer);   // +0x160
-    fn_Video_IndexBuffer_Ctor(&_waterIndexBuffer);     // +0x180
+    Video_VertexBuffer_Ctor(reinterpret_cast<Video::VertexBuffer*>(&_waterVertexBuffer));   // +0x160
+    Video_IndexBuffer_Ctor(reinterpret_cast<Video::IndexBuffer*>(&_waterIndexBuffer));      // +0x180
 
     for (Header& h : _arrays) { h.data = nullptr; h.sizeCap = 0; }   // +0x1a0..+0x228
 
@@ -362,8 +363,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
-    if (!fn_IsDerivedFrom ||
-        !::Object::ExternalFactory::_singleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Serialize_External<%s>] runtime primitives unwired — "

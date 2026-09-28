@@ -212,8 +212,7 @@ bool TerrainGenerator::Serialize(void* stream) {
     IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
 
     // Serialize ExternalPtr at +0x20
-    if (fn_ExternalPtr_Serialize2)
-        fn_ExternalPtr_Serialize2(&_field20, serializer);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
 
     // Serialize String at +0x28
     reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);
@@ -272,8 +271,6 @@ void* TerrainGenerator::CreateInPlaceObject(void* memory) {
 // (FUN_1400206b0 resize / FUN_140020870 serialize), so the ResolveAddr call
 // sites resolve them.
 void RegisterGameTerrainReimpls() {
-    RegisterExeAddr(0x1400206b0, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataResize));
-    RegisterExeAddr(0x140020870, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataSerialize));
 }
 
 DEFINE_EXE_TYPE(TerrainGenerator, "Object::External")

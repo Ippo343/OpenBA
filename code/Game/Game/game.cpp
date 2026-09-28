@@ -14,6 +14,7 @@
 
 #include "game.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/StorageComponent.h"   // ENDGAME B.3.9 TR
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 TR
 #include "Component/SelectDescription.h"   // ENDGAME B.3.9 TR
@@ -23,6 +24,7 @@
 #include <new>
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Game/exe_bodies.h"
+#include "Action/exe_bodies.h"   // Pf_StorageCanAccept_cd80, ActRm_StorageAdd_d000
 
 extern "C" void* Game_Ctor(void* self) {
     // Zero the entire 0xe0-byte struct, including the regions where the
@@ -45,7 +47,6 @@ extern "C" void* Game_Ctor(void* self) {
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void Game_TriggerDisasterByType_Impl(int disasterType) {
     if (!::Object::ExternalFactory::_singleton) return;   // ENDGAME B.3.9 SS2 (merged)
-    if (!fn_IsDerivedFrom) return;
 
     void* factory = ::Object::ExternalFactory::_singleton;
     void* gameWorld = *g_pGameWorldSingleton;
@@ -59,7 +60,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
         efactory->FindNext(ComponentDescription::TypeId(), nullptr)));
     while (ext != nullptr) {
         uintptr_t e = (uintptr_t)ext;
-        if (fn_IsDerivedFrom(ext, ComponentDescription::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(ext, ComponentDescription::TypeId())) {
             // Find SelectDescription sub-component
             int compCount = *(int*)(e + 0x30);
             uintptr_t compArray = *(uintptr_t*)(e + 0x28);
@@ -70,7 +71,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
                 void* comp = *(void**)(compArray + (uintptr_t)i * 8);
                 uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (typeId == SelectDescription::TypeId()) {
-                    if (fn_IsDerivedFrom(comp, SelectDescription::TypeId()) && comp != nullptr) {
+                    if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId()) && comp != nullptr) {
                         hasSelect = true;
                     }
                     break;
@@ -84,7 +85,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
                     void* comp = *(void**)(compArray + (uintptr_t)i * 8);
                     uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                     if (typeId == SelectDescription::TypeId()) {
-                        if (fn_IsDerivedFrom(comp, SelectDescription::TypeId())) {
+                        if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId())) {
                             selectDesc = comp;
                         }
                         break;
@@ -129,7 +130,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                     uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                     if (typeId == RawMaterialDescription::TypeId()) {
                         void* foundComp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
-                        bool isDerived = fn_IsDerivedFrom(foundComp, RawMaterialDescription::TypeId());
+                        bool isDerived = ::Object::IsDerivedFromNullSafe(foundComp, RawMaterialDescription::TypeId());
                         natResComp = nullptr;
                         if (isDerived) {
                             natResComp = foundComp;
@@ -158,7 +159,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                             if (oldArr != nullptr) {
                                 matchCapacity = newCount * 3;
                             }
-                            matchArr = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)matchCapacity * 8, 8);
+                            matchArr = System::MemoryAllocator::MemAlloc((uint64_t)matchCapacity * 8, 8);
                         }
 
                         // Copy old entries + append new entity
@@ -188,7 +189,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 
                         // Free old array if it was reallocated
                         if (oldArr != matchArr) {
-                            fn_MemFreeStatic(oldArr);
+                            System::MemoryAllocator::MemFree(oldArr);
                         }
                     }
                 }
@@ -230,7 +231,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                                 void* compIBP2 = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
                                 void* compVal = *(void**)compIBP2;
 
-                                bool isDerived = fn_IsDerivedFrom(compVal, StorageComponent::TypeId());
+                                bool isDerived = ::Object::IsDerivedFromNullSafe(compVal, StorageComponent::TypeId());
                                 storageComp = nullptr;
                                 if (isDerived) {
                                     storageComp = compVal;
@@ -257,12 +258,12 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                             // CheckPtr the storage IBP before use
 
                             // Call original exe CanAdd function (0x14012cd80)
-                            uint32_t canAdd = fn_StorageCanAdd((void*)storageIBP, (void*)*matchSlot, 1);
+                            uint32_t canAdd = Pf_StorageCanAccept_cd80(storageIBP, *matchSlot, 1);
                             if ((char)canAdd != '\0') {
                                 // CheckPtr again before AddItem
 
                                 // Call original exe AddItem function (0x14012d000)
-                                fn_StorageAddItem((void*)storageIBP, (void*)*matchSlot, 1);
+                                ActRm_StorageAdd_d000(static_cast<uintptr_t>(storageIBP), *matchSlot, 1);
                                 spawned++;
                                 anyAdded = true;
                             }
@@ -279,5 +280,5 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
     }
 
     // Free match array
-    fn_MemFreeStatic(matchArr);
+    System::MemoryAllocator::MemFree(matchArr);
 }

@@ -27,6 +27,7 @@
 // Default builds stay byte-unchanged.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
 #include <cstdint>
@@ -39,7 +40,7 @@ constexpr int kMaxLevels = 10;   // cap (4^10 -> ~350K cells per array); maps ar
 } // namespace
 
 extern "C" void CharManager_Seed() {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_MemAlloc) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     if (reinterpret_cast<GameUpdateLoop*>(gw)->m_characterGrid != nullptr) return;   // already seeded   // B.3.8 bridge
@@ -54,8 +55,7 @@ extern "C" void CharManager_Seed() {
     while ((1 << (levels - 1)) < dim && levels < kMaxLevels) ++levels;
 
     // implicit-quadtree level base-offset table: offset[L] = (4^L - 1)/3
-    int* offTbl = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton,
-                      static_cast<uint64_t>(levels) * sizeof(int), 4));
+    int* offTbl = reinterpret_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(levels) * sizeof(int), 4));
     if (!offTbl) return;
     int64_t acc = 0;
     for (int L = 0; L < levels; ++L) {
@@ -64,15 +64,13 @@ extern "C" void CharManager_Seed() {
     }
     int totalCells = static_cast<int>(acc);                 // = (4^levels - 1)/3
 
-    int* cellHead = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton,
-                        static_cast<uint64_t>(totalCells) * sizeof(int), 4));
-    int* cellOcc  = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton,
-                        static_cast<uint64_t>(totalCells) * sizeof(int), 4));
+    int* cellHead = reinterpret_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(totalCells) * sizeof(int), 4));
+    int* cellOcc  = reinterpret_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(totalCells) * sizeof(int), 4));
     if (!cellHead || !cellOcc) return;
     for (int i = 0; i < totalCells; ++i) { cellHead[i] = -1; cellOcc[i] = 0; }
 
     // allocate + zero the manager struct (0x60 covers all known fields up to +0x58)
-    uint8_t* m = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8));
+    uint8_t* m = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x60, 8));
     if (!m) return;
     std::memset(m, 0, 0x60);
     *reinterpret_cast<float*>(m + 0x00) = static_cast<float>(dim);            // worldSize

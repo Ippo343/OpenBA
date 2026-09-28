@@ -39,6 +39,7 @@
 #include "video/ImageBuffer.h"
 #include "video/Device.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "options.h"
 #include "resolve.h"
 #include <cstdint>
@@ -57,7 +58,7 @@ constexpr int kImageBufferAlign = 8;
 // raw pixel array at mapObj+srcOff into it. Returns the buffer (or null).
 void* CreateAndUploadOne(uint8_t* map, int dstOff, int srcOff, int width,
                          const char* tag, bool trace) {
-    void* img = fn_MemAlloc(g_pMemAllocSingleton, kImageBufferSize, kImageBufferAlign);
+    void* img = System::MemoryAllocator::MemAlloc(kImageBufferSize, kImageBufferAlign);
     if (!img) { if (trace) printf("[Minimap] %s: MemAlloc(0x68) failed\n", tag); return nullptr; }
 
     ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
@@ -99,13 +100,13 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj) {
     // ENDGAME B.3.5 batch K1: the CopyToTexture / Device::Lock / Device::Unlock terms
     // went with their call sites; B.3.9 EXA took the ImageBuffer ctor-door and
     // exe-table terms (the buffer is constructed as the real class).
-    if (!fn_MemAlloc || !g_pMemAllocSingleton ||
+    if (!System::MemoryAllocator::_singleton ||
         !::Video::Device::_singleton) {
         static bool warned = false;
         if (!warned) {
             printf("[Minimap] primitives unresolved — skipping upload "
-                   "(MemAlloc=%p dev=%p)\n",
-                   (void*)fn_MemAlloc,
+                   "(alloc=%p dev=%p)\n",
+                   (void*)System::MemoryAllocator::_singleton,
                    ::Video::Device::_singleton);
             fflush(stdout);
             warned = true;

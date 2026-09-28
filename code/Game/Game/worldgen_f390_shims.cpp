@@ -9,6 +9,7 @@
 //   - fn_Random_RandFloatTol   advances the engine RNG -> must hit the real Runtime export
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cmath>
@@ -29,14 +30,14 @@ void TradeComponent_helper_f9e0(void* dstElem, void* srcElem) {
     uint8_t* d = static_cast<uint8_t*>(dstElem);
     uint8_t* s = static_cast<uint8_t*>(srcElem);
     void* old = *reinterpret_cast<void**>(d + 0x00);
-    if (old) fn_MemFreeStatic(old);
+    if (old) System::MemoryAllocator::MemFree(old);
     *reinterpret_cast<int32_t*>(d + 0x08) = 0;
     *reinterpret_cast<void**>(d + 0x00) = nullptr;
     int32_t cnt = *reinterpret_cast<int32_t*>(s + 0x08);
     *reinterpret_cast<int32_t*>(d + 0x08) = cnt;
     if (cnt > 0) {
         *reinterpret_cast<int32_t*>(d + 0x0C) = cnt;
-        *reinterpret_cast<void**>(d + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cnt << 2, 4);
+        *reinterpret_cast<void**>(d + 0x00) = System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4);
         int32_t* dp = *reinterpret_cast<int32_t**>(d + 0x00);
         int32_t* sp = *reinterpret_cast<int32_t**>(s + 0x00);
         for (int32_t i = 0; i < cnt; ++i) dp[i] = sp[i];

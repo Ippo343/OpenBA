@@ -42,6 +42,7 @@
 //    +0xD0 = 0; that is a DIFFERENT call site, not a discrepancy with this one.)
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/String.h"
 #include "Game/GameLoaderLoop.h"   // ENDGAME B.3.8 LOOP
 #include "Game/GameLoadDialogLoopT.h"
@@ -60,10 +61,10 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     // which stamp the compiler tables and chain the Runtime base ctors
     // directly, so the by-address table globals and the base-ctor doors this
     // readiness test named are no longer read here.
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Time_Ctor_Float) {
+    if (!System::MemoryAllocator::_singleton) {
         printf("[WorldSetup::LoadFromSave] loop-chain allocator unresolved - aborting "
-                    "(alloc=%p time=%p)\n",
-                    (void*)fn_MemAlloc, (void*)fn_Time_Ctor_Float);
+                    "(alloc=%p)\n",
+                    (void*)System::MemoryAllocator::_singleton);
         return;
     }
 
@@ -73,7 +74,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 
     // --- Step 1: inner GameUpdateLoop (0x160) --------------------------------
     void* pGameLoop = nullptr;
-    void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+    void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (gameLoop) {
         // ENDGAME B.3.8 LOOP: the real class; its ctor is 0x140098060's body.
         // +0x28 is a copy of retail's `local_res8 = 0` empty System::String (a
@@ -88,10 +89,10 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 
     // --- Step 2: GameLoadDialogLoopT (0xb60) ---------------------------------
     void* pDlLoop = nullptr;
-    void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
+    void* dlLoop = System::MemoryAllocator::MemAlloc(0xb60, 4);
     if (dlLoop) {
         uint64_t delayTime[1];
-        fn_Time_Ctor_Float((void*)delayTime, 1.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(delayTime), 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // FUN_140099130, inline in engine_funcs.h
@@ -105,10 +106,10 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 
     // --- Step 3: outer LoaderLoop (0x48) -------------------------------------
     void* pOuterLoop = nullptr;
-    void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+    void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
     if (outerLoop) {
         uint64_t zeroTime[1];
-        fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
         // ENDGAME B.3.8 LOOP: the real class (its ctor = the LoaderLoop door's
         // body + the compiler's 0x1401588d0 stamp).
         pOuterLoop = ::new (outerLoop) GameLoaderLoop(

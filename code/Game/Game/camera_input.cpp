@@ -33,7 +33,7 @@
 #include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "options.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos
 #include <cstdint>
 #include <cstring>
 #include <cmath>
@@ -85,14 +85,7 @@ inline void* CamKeyMap() {
     return *(void**)l2;
 }
 
-// f3e0 = CharacterComponent_impl_f3e0 (0x14009f3e0) grid->world (registered).
-typedef float* (*fn_GridToWorld_t)(int* grid, float* out, float* in, char flag, void* extra);
-fn_GridToWorld_t GridToWorld() {
-    static fn_GridToWorld_t fn = nullptr;
-    static bool tried = false;
-    if (!tried) { tried = true; fn = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0)); }
-    return fn;
-}
+// f3e0 = 0x14009f3e0 grid->world: Reimpl_MapGetTerrainPos (Game/exe_bodies.h).
 
 // Video::Device (screen dims): retail reads **exref 0x140151a80; the class static
 // is that cell (ENDGAME B.3.9 SS2). +4=W, +8=H.
@@ -235,9 +228,8 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
 
     // ── follow/center-on-entity smooth move (only when +0xa4 flag set) ──
     if (*(char*)(ui + 0xa4) != 0) {
-        fn_GridToWorld_t g2w = GridToWorld();
         int* grid = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
-        if (g2w && grid) {
+        if (grid) {
             const int gw = grid[0];
             const float halfCell = (float)(gw >> 1) - kHalf;
             float worldA[3] = {0,0,0}, worldB[3] = {0,0,0};
@@ -245,8 +237,8 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
             int cellB = *(int*)(ui + 0xa8);
             float inA[3] = { (float)(cellA % gw) - halfCell, (float)(cellA / gw) - halfCell, 0.0f };
             float inB[3] = { (float)(cellB % gw) - halfCell, (float)(cellB / gw) - halfCell, 0.0f };
-            g2w(grid, worldA, inA, '\0', nullptr);
-            g2w(grid, worldB, inB, '\0', nullptr);
+            Reimpl_MapGetTerrainPos(grid, worldA, inA, '\0', nullptr);   // 0x14009f3e0
+            Reimpl_MapGetTerrainPos(grid, worldB, inB, '\0', nullptr);
             float midX = (worldA[0] + worldB[0]) * kHalf;
             float midY = (worldA[1] + worldB[1]) * kHalf;
             float* fx = (float*)(pc + 0x1c);

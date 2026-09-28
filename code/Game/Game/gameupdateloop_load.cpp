@@ -34,6 +34,7 @@
 #include "GameUpdateLoop.h"
 #include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -57,6 +58,12 @@
 #include "ui/StringTable.h"  // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Game/exe_bodies.h"
+#include "graphics/Camera.h"            // RtGraphics_Camera_Ctor / Renderer_Ctor
+#include "graphics/Animation.h"         // RtGraphics_AnimationManager_Ctor
+#include "picking/Scene.h"              // RtPicking_Scene_Ctor
+#include "ui/UserInterface.h"           // RtUi_UserInterface_Ctor
+#include "save/SaveLoad.h"              // RtSave_SaveLoad_Ctor / RtSave_SavedState_Dtor
+#include "utility/PerlinNoise.h"        // RtUtility_PerlinNoise_Ctor
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -80,18 +87,11 @@ extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);       
 // (ENDGAME B.3.9 TR: was a by-name resolve of the Runtime record, cached in a
 // namespace-scope atomic).
 
-typedef void* (*fn_Random_Seeded_Ctor_t)(void* self, uint32_t seed);
-static fn_Random_Seeded_Ctor_t s_fn_Random_Seeded_Ctor = nullptr;   // ??0Random@System@@QEAA@I@Z
-typedef void* (*fn_Picking_Scene_Ctor_t)(void* self);
-static fn_Picking_Scene_Ctor_t s_fn_Picking_Scene_Ctor = nullptr;   // ??0Scene@Picking@@QEAA@XZ
-typedef void* (*fn_UI_Ctor_t)(void* self);
-static fn_UI_Ctor_t s_fn_UI_Ctor = nullptr;                         // ??0UserInterface@UI@@QEAA@XZ
-typedef void* (*fn_AnimMgr_Ctor_t)(void* self);
-static fn_AnimMgr_Ctor_t s_fn_AnimMgr_Ctor = nullptr;               // ??0AnimationManager@Graphics@@QEAA@XZ
-typedef void* (*fn_SaveLoad_Ctor_t)(void* self);
-static fn_SaveLoad_Ctor_t s_fn_SaveLoad_Ctor = nullptr;             // ??0SaveLoad@Save@@QEAA@XZ
-typedef void (*fn_SavedState_Dtor_t)(void* self);
-static fn_SavedState_Dtor_t s_fn_SavedState_Dtor = nullptr;         // ??1SavedState@Save@@QEAA@XZ
+// B3R: the Runtime ctor/dtor doors Load used to resolve by name are called by name:
+// RtSystem_Random_CtorSeed (system/Value.h), RtPicking_Scene_Ctor (picking/Scene.h),
+// RtUi_UserInterface_Ctor (ui/UserInterface.h), RtGraphics_AnimationManager_Ctor
+// (graphics/Animation.h), RtSave_SaveLoad_Ctor / RtSave_SavedState_Dtor
+// (save/SaveLoad.h). The "[GUL::Load] resolves:" stderr line went with the cache.
 
 // code/Game/Game/gameupdateloop_serialize.cpp — the serializer roundtrip check;
 // the LOAD-FROM-SAVE branch below calls SaveRestoreOut (slot 7's body) directly.
@@ -190,8 +190,8 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
     // Retail's type gate: Graphics::Material's type id (ENDGAME B.3.9 TR: the class
     // accessor; was an RT_DATA_SLOT read of its ?_typeInfo@ record).
     bool isMat = false;
-    if (mat && fn_IsDerivedFrom)
-        isMat = fn_IsDerivedFrom(mat, Graphics::Material::TypeId());
+    if (mat)
+        isMat = ::Object::IsDerivedFromNullSafe(mat, Graphics::Material::TypeId());
     if (isMat) self->m_uiMaterial = mat;
 
     fprintf(stderr, "[GUL::UIMat] gw+0xb8=%p (loaded=%p isMaterial=%d)\n",
@@ -218,14 +218,14 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
     // Retail's type gate: Object::ExternalList's type id (retail reads it through the
     // exe import slot 0x140151ef0; ENDGAME B.3.9 TR: the class accessor).
     bool isList = false;
-    if (list && fn_IsDerivedFrom)
-        isList = fn_IsDerivedFrom(list, ::Object::ExternalList::TypeId());
+    if (list)
+        isList = ::Object::IsDerivedFromNullSafe(list, ::Object::ExternalList::TypeId());
     if (isList) self->m_helpTopics = list;
 
     fprintf(stderr, "[GUL::Help] gw+0xa0=%p (loaded=%p isExternalList=%d topics=%d)\n",
             self->m_helpTopics, list, (int)isList,
-            (isList && fn_ExternalList_GetResourceCount)
-                ? fn_ExternalList_GetResourceCount(list) : -1);
+            isList ? reinterpret_cast<const ::Object::ExternalList*>(list)->GetResourceCount()
+                   : -1);
     fflush(stderr);
 }
 
@@ -271,14 +271,12 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 
     // Retail's type gate (same ExternalList type id as the HelpTopics list).
     bool isList = false;
-    if (list && fn_IsDerivedFrom)
-        isList = fn_IsDerivedFrom(list, ::Object::ExternalList::TypeId());
+    if (list)
+        isList = ::Object::IsDerivedFromNullSafe(list, ::Object::ExternalList::TypeId());
     if (isList) self->m_diseaseList = list;
 
-    // The `fn_ExternalList_GetResourceCount` test is KEPT even though the call
-    // is now a member call: it is an existing behavioural gate and the pointer
-    // keeps its typedef/extern/initialiser until step 7's closing pass.
-    int count = (isList && fn_ExternalList_GetResourceCount)
+    // B3R: the `fn_ExternalList_GetResourceCount` readiness test went with the door.
+    int count = isList
                     ? reinterpret_cast<const ::Object::ExternalList*>(list)  // B.3.3 bridge
                           ->GetResourceCount()
                     : -1;
@@ -303,22 +301,6 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
                     (*(float*)(d + 0x40) == 0.0f) ? "  <== ZERO: deathChance is INFINITE" : "");
         }
     }
-    fflush(stderr);
-}
-
-static bool s_loadResolved = false;
-static void LoadEnsureInit() {
-    if (s_loadResolved) return;
-    s_loadResolved = true;
-    s_fn_Random_Seeded_Ctor = (fn_Random_Seeded_Ctor_t)ResolveExport("??0Random@System@@QEAA@I@Z");
-    s_fn_Picking_Scene_Ctor = (fn_Picking_Scene_Ctor_t)ResolveExport("??0Scene@Picking@@QEAA@XZ");
-    s_fn_UI_Ctor            = (fn_UI_Ctor_t)ResolveExport("??0UserInterface@UI@@QEAA@XZ");
-    s_fn_AnimMgr_Ctor       = (fn_AnimMgr_Ctor_t)ResolveExport("??0AnimationManager@Graphics@@QEAA@XZ");
-    s_fn_SaveLoad_Ctor      = (fn_SaveLoad_Ctor_t)ResolveExport("??0SaveLoad@Save@@QEAA@XZ");
-    s_fn_SavedState_Dtor    = (fn_SavedState_Dtor_t)ResolveExport("??1SavedState@Save@@QEAA@XZ");
-    fprintf(stderr, "[GUL::Load] resolves: RandSeed=%p Picking=%p UI=%p Anim=%p SaveLoad=%p\n",
-            (void*)s_fn_Random_Seeded_Ctor, (void*)s_fn_Picking_Scene_Ctor, (void*)s_fn_UI_Ctor,
-            (void*)s_fn_AnimMgr_Ctor, (void*)s_fn_SaveLoad_Ctor);
     fflush(stderr);
 }
 
@@ -404,14 +386,14 @@ static void* Reimpl_TradeComponent_helper_f9e0(void* dstElem, void* srcElem) {
     uint8_t* d = (uint8_t*)dstElem;
     uint8_t* s = (uint8_t*)srcElem;
     void* old = *(void**)(d + 0x00);
-    if (old) fn_MemFreeStatic(old);
+    if (old) System::MemoryAllocator::MemFree(old);
     *(int32_t*)(d + 0x08) = 0;
     *(void**)(d + 0x00) = 0;
     int32_t cnt = *(int32_t*)(s + 0x08);
     *(int32_t*)(d + 0x08) = cnt;
     if (cnt > 0) {
         *(int32_t*)(d + 0x0C) = cnt;
-        *(void**)(d + 0x00) = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cnt << 2, 4);
+        *(void**)(d + 0x00) = System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4);
     }
     int32_t newCnt = *(int32_t*)(d + 0x08);
     if (newCnt > 0) {
@@ -441,7 +423,7 @@ void InitIntAssocOuterL(uint8_t* d) {
 void DestroyIntAssocOuterL(void* /*ignoredThis*/, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i) {
         uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
-        fn_MemFreeStatic(*reinterpret_cast<void**>(e + 0x00));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(e + 0x00));
         *reinterpret_cast<uint64_t*>(e + 0x00) = 0;
         *reinterpret_cast<uint64_t*>(e + 0x08) = 0;
     }
@@ -550,8 +532,6 @@ extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform) {
 // FUN_1400985b0 — PlayerController camera-system ctor (+0xE0, 0x10c).
 static void* Reimpl_FUN_1400985b0(void* selfMem, void* frustum, float yaw, float pitch, float distance) {
     uint8_t* p = (uint8_t*)selfMem;
-    if (!fn_Graphics_Camera_Ctor)
-        return selfMem;
     // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
     *reinterpret_cast<Math::Transform*>(selfMem) = Math::Transform();
     *(uint64_t*)(p + 0x1c) = 0;
@@ -563,7 +543,8 @@ static void* Reimpl_FUN_1400985b0(void* selfMem, void* frustum, float yaw, float
     void* lt = Reimpl_FUN_1400983f0(selfMem, &localTransform);
     if (!lt) lt = &localTransform;
     Math::Transform3 t3 = reinterpret_cast<const Math::Transform*>(lt)->AsTransform3();
-    fn_Graphics_Camera_Ctor((void*)(p + 0x34), frustum, &t3, true);
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(p + 0x34),
+                           reinterpret_cast<const ::Frustum*>(frustum), &t3, true);
     return selfMem;
 }
 
@@ -596,7 +577,7 @@ static void* Reimpl_TradeComponent_impl_0a30(void* selfMem) {
     Reimpl_FUN_14000f090(p + 0x180, 2);
     Reimpl_FUN_140017640(p + 0x150, 0x47);
     *(int32_t*)(p + 0x1a8) = 0;
-    void* sub = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 4);
+    void* sub = System::MemoryAllocator::MemAlloc(0x28, 4);
     if (sub) {
         uint8_t* s = (uint8_t*)sub;
         *(void**)(s + 0x00) = nullptr;
@@ -612,7 +593,7 @@ static void* Reimpl_TradeComponent_impl_0a30(void* selfMem) {
 // FUN_14009ee70 — REAL Game ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8.
 static void* Reimpl_FUN_14009ee70(void* selfMem) {
     uint8_t* p = (uint8_t*)selfMem;
-    if (s_fn_Picking_Scene_Ctor) s_fn_Picking_Scene_Ctor((void*)(p + 8));
+    RtPicking_Scene_Ctor((void*)(p + 8));
     memset(p + 0x68, 0, 0xf8 - 0x68);         // zero +0x68..+0xf8 (preserves the embedded Scene at +8)
     *(uint8_t*)(p + 0xa2) = 1;
     *(uint64_t*)(p + 0xd0) = 8;
@@ -641,14 +622,12 @@ static void* Reimpl_FUN_140093f60(void* selfMem) {
     uint8_t rng1[2520];
     uint8_t rng2[2520];
     uint32_t seed1 = 0, seed2 = 0;
-    if (fn_Random_Default_Ctor) {
-        fn_Random_Default_Ctor(rng1);
-        seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // B.3.4b bridge
-        fn_Random_Default_Ctor(rng2);
-        seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // B.3.4b bridge
-    }
-    if (fn_PerlinNoise_Ctor)
-        fn_PerlinNoise_Ctor((void*)(p + 0x34), 0.25f, 4.0f, (int)seed2, (int)seed1);
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng1));
+    seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // B.3.4b bridge
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng2));
+    seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // B.3.4b bridge
+    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(p + 0x34),
+                               0.25f, 4.0f, (int)seed2, (int)seed1);
     *(uint64_t*)(p + 0x44) = 0;
     *(uint32_t*)(p + 0x4c) = 0xffffffffu;
     *(uint64_t*)(p + 0x50) = 0;
@@ -733,7 +712,9 @@ extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, flo
         fovX = atanf(halfW / den) * kTwo * kRad2Deg;
     }
     uint8_t frustum[0xC0];
-    void* fr = fn_Volume_Frustum_Ctor ? fn_Volume_Frustum_Ctor(frustum, &nearZ, &farZ, &fovX, &fovY) : nullptr;
+    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),
+        reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
+        reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
     reinterpret_cast<Graphics::Camera*>((uint8_t*)camera + 0x34)->SetFrustum(
         *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge
     return camera;
@@ -773,8 +754,8 @@ static void* Reimpl_FUN_1401025c0(void* selfMem) {
 // Small allocation helper
 // ============================================================
 static inline void* AllocSub(uint64_t size, int align) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    return fn_MemAlloc(g_pMemAllocSingleton, size, align);
+    if (!System::MemoryAllocator::_singleton) return nullptr;
+    return System::MemoryAllocator::MemAlloc(size, align);
 }
 
 // ============================================================
@@ -834,9 +815,9 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
 
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
-    if (fn_Time_Ctor_Float) {
+    {
         uint64_t timeObj = 0;
-        fn_Time_Ctor_Float(&timeObj, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeObj), 0.0f);
         // B.3.5 bridge — vtable+0x08 is slot 1 of `Graphics::Geometry`, i.e.
         // `Update(const System::Time&)`. The receiver is a PROVED MeshInstance:
         // 0x120 bytes from AllocSub, run through `??0MeshInstance@Graphics@@` above.
@@ -845,8 +826,8 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     }
     reinterpret_cast<Graphics::MeshInstance*>(mem)->_detailId = 0;   // +0x28  B.3.5 bridge
 
-    fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p (TimeCtor=%p)\n",
-            mem, meshRes, (void*)fn_Time_Ctor_Float);
+    fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p\n",
+            mem, meshRes);
     fflush(stderr);
 }
 
@@ -904,8 +885,6 @@ void GameUpdateLoop::Load() {
     fprintf(stderr, "[GUL::Load] build owner = tid=%lu for loop=%p\n", _tid, loopVoid);
     fflush(stderr);
 
-    LoadEnsureInit();
-
     fprintf(stderr, "[GUL::Load] ENTER self=%p seed=%d mapSize=%d climateGen=%p terrainGen=%p saved=%p\n",
             loopVoid, m_seed, m_mapSize,
             m_climateConfig, m_terrainConfig, m_savedState);
@@ -941,7 +920,7 @@ void GameUpdateLoop::Load() {
     // POINTERS (the profession BST is confirmed pointer-keyed), which ASLR reorders.
     {
         void* mem = AllocSub(0x9c4, 4);
-        if (mem && s_fn_Random_Seeded_Ctor) s_fn_Random_Seeded_Ctor(mem, static_cast<uint32_t>(m_seed));
+        if (mem) RtSystem_Random_CtorSeed(static_cast<System::Random*>(mem), static_cast<uint32_t>(m_seed));
         m_random = mem;
     }
 
@@ -957,7 +936,9 @@ void GameUpdateLoop::Load() {
         if (mem) {
             float nearZ = 2.0f, farZ = 70.0f, fovX = 60.0f, fovY = aspect * 60.0f;
             uint8_t frustum[0xC0] = {};
-            if (fn_Volume_Frustum_Ctor) fn_Volume_Frustum_Ctor(frustum, &nearZ, &farZ, &fovX, &fovY);
+            RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),
+                reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
+                reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
             Reimpl_FUN_1400985b0(mem, frustum, 0.0f, -40.0f, 25.0f);
         }
         m_playerController = mem;
@@ -966,7 +947,7 @@ void GameUpdateLoop::Load() {
     // Step 7 — Renderer (+0x90, 0x50).
     {
         void* mem = AllocSub(0x50, 4);
-        if (mem && fn_Graphics_Renderer_Ctor) fn_Graphics_Renderer_Ctor(mem);
+        if (mem) RtGraphics_Renderer_Ctor(static_cast<RtGraphics::Renderer*>(mem));
         m_renderer = mem;
     }
 
@@ -980,7 +961,7 @@ void GameUpdateLoop::Load() {
     // Step 9 — UserInterface (+0x98, 0x128).
     {
         void* mem = AllocSub(0x128, 4);
-        if (mem && s_fn_UI_Ctor) s_fn_UI_Ctor(mem);
+        if (mem) RtUi_UserInterface_Ctor(static_cast<UI::UserInterface*>(mem));
         m_userInterface = mem;
     }
 
@@ -1018,10 +999,8 @@ void GameUpdateLoop::Load() {
         if (mem) {
             uint8_t* d = (uint8_t*)mem;
             *(uint32_t*)d = 1;
-            if (fn_Time_Ctor_Float) {
-                fn_Time_Ctor_Float(d + 8, 0.0f);
-                fn_Time_Ctor_Float(d + 0x10, 3600.0f);
-            }
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(d + 8), 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(d + 0x10), 3600.0f);
         }
         m_dayCounter = mem;
     }
@@ -1073,21 +1052,21 @@ void GameUpdateLoop::Load() {
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
         void* mem = AllocSub(0x78, 8);
-        if (mem && fn_Graphics_Scene_Ctor) fn_Graphics_Scene_Ctor(mem);
+        if (mem) RtGraphics_Scene_Ctor(static_cast<RtGraphics::Scene*>(mem));
         m_graphicsScene = mem;
     }
 
     // Step 19 — Audio::Scene (+0x78, 0x38).
     {
         void* mem = AllocSub(0x38, 8);
-        if (mem && fn_AudioScene_Ctor) fn_AudioScene_Ctor(mem);
+        if (mem) RtAudio_Scene_Ctor(mem);
         m_audioScene = mem;
     }
 
     // Step 20 — Picking::Scene (+0x70, 0x60).
     {
         void* mem = AllocSub(0x60, 8);
-        if (mem && s_fn_Picking_Scene_Ctor) s_fn_Picking_Scene_Ctor(mem);
+        if (mem) RtPicking_Scene_Ctor(mem);
         m_pickingScene = mem;
     }
 
@@ -1101,7 +1080,7 @@ void GameUpdateLoop::Load() {
     // Step 22 — AnimationManager (+0x68, 0x9d8).
     {
         void* mem = AllocSub(0x9d8, 8);
-        if (mem && s_fn_AnimMgr_Ctor) s_fn_AnimMgr_Ctor(mem);
+        if (mem) RtGraphics_AnimationManager_Ctor(static_cast<RtGraphics::AnimationManager*>(mem));
         m_animationManager = mem;
     }
 
@@ -1149,7 +1128,7 @@ void GameUpdateLoop::Load() {
     // Step 25 — SaveLoad (+0x140, 0x90).
     {
         void* mem = AllocSub(0x90, 4);
-        if (mem && s_fn_SaveLoad_Ctor) s_fn_SaveLoad_Ctor(mem);
+        if (mem) RtSave_SaveLoad_Ctor(static_cast<Save::SaveLoad*>(mem));
         m_saveLoad = mem;
     }
 
@@ -1209,7 +1188,7 @@ void GameUpdateLoop::Load() {
                 void* ext = const_cast<::Object::External*>(
                     efactory->FindOrLoad(fname));                            // B.3.3 bridge
                 if (!ext) return nullptr;
-                if (stTid != 0 && fn_IsDerivedFrom && !fn_IsDerivedFrom(ext, stTid)) return nullptr;
+                if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;
                 return ext;
             };
 
@@ -1448,15 +1427,15 @@ void GameUpdateLoop::Load() {
                 }
                 if (wgeom)
                     fprintf(stderr, "[startTown::DIAG]   worldGeom+0xc0(dim)=%d\n", *(int32_t*)(wgeom + 0xc0));
-                // Keystone sanity: sample terrain height via the new fn_MapGetTerrainPos
+                // Keystone sanity: sample terrain height via Reimpl_MapGetTerrainPos
                 // (FUN_14009f3e0) at map centre + a few offsets. Banished valley => centre
                 // should be low/buildable, edges higher.
-                if (fn_MapGetTerrainPos) {
+                {
                     const float pts[4][2] = {{0,0},{-100,0},{100,100},{-120,-120}};
                     for (int i = 0; i < 4; ++i) {
                         float in[3] = { pts[i][0], pts[i][1], 0.0f };
                         float out[3] = {0,0,0};
-                        fn_MapGetTerrainPos(game, out, in, 1, nullptr);
+                        Reimpl_MapGetTerrainPos(game, out, in, 1, nullptr);
                         fprintf(stderr, "[startTown::DIAG]   height@(%.0f,%.0f) = %.3f\n",
                                 pts[i][0], pts[i][1], out[2]);
                     }
@@ -1488,8 +1467,8 @@ void GameUpdateLoop::Load() {
         // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
         GameUpdateLoop_SaveRoundtripCheck(this, savedState);
-        if (s_fn_SavedState_Dtor) s_fn_SavedState_Dtor(savedState);
-        if (fn_MemFreeStatic) fn_MemFreeStatic(savedState);
+        RtSave_SavedState_Dtor(static_cast<Save::SavedState*>(savedState));
+        System::MemoryAllocator::MemFree(savedState);
         m_savedState = nullptr;
         SetUnregPhase("postload");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
@@ -1567,16 +1546,13 @@ void GameUpdateLoop::Load() {
     m_scenarioInstance = nullptr;
     if (achievementId >= 0) {
         const uint32_t achTypeId = Achievement::Achievement::TypeId();
-        if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
-            !g_pKeyMapSingleton) {
-            fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved ("
-                            "alloc=%p ibp=%p reslist=%p)\n",
-                    (void*)fn_MemAlloc, (void*)fn_InternalBasePtr_Ctor,
+        if (!System::MemoryAllocator::_singleton || !g_pKeyMapSingleton) {
+            fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved (reslist=%p)\n",
                     (void*)g_pKeyMapSingleton);
             fflush(stderr);
         } else {
             void* instance = nullptr;
-            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+            void* mem = System::MemoryAllocator::MemAlloc(0x28, 8);
             if (mem) {
                 // ENDGAME B.3.8 LOOP (B38_RULES D8): retail runs the imported
                 // `??0AchievementInstance@Achievement@@` and then stamps the EXE's
@@ -1608,8 +1584,8 @@ void GameUpdateLoop::Load() {
             // through the .rdata slot at 0x140151f68, which points at the Runtime's
             // exported BaseTypeInfo for Achievement; its first dword IS the type id.
             void* checked = scenario;
-            if (scenario && fn_IsDerivedFrom && achTypeId)
-                checked = fn_IsDerivedFrom(scenario, achTypeId) ? scenario : nullptr;
+            if (scenario && achTypeId)
+                checked = ::Object::IsDerivedFromNullSafe(scenario, achTypeId) ? scenario : nullptr;
 
             void* inst = m_scenarioInstance;
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
