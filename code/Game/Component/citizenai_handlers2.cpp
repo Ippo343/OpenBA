@@ -72,6 +72,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "scene_watch.h"
+#include "Component/exe_bodies.h"
 
 namespace {
 

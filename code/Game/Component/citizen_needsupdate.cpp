@@ -48,6 +48,7 @@
 #include <cstring>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
+#include "Component/exe_bodies.h"
 
 // From citizencomponent.cpp (faithful port of 0x1401152e0).
 extern void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2);

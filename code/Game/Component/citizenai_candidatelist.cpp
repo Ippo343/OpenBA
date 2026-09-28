@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // 1. SortByPriority (0x14002fe10)

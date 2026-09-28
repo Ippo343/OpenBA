@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Action/Action.h"     // B.3.x W0: Action::Enter by name
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

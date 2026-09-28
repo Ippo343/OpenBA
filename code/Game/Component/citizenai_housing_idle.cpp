@@ -83,6 +83,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Work/Work.h"      // B.3.x W0 G-B: Work::Validate / Execute by name
+#include "Component/exe_bodies.h"
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
 extern "C" void* g_pBuildStructureWork;

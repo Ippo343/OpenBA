@@ -1,0 +1,205 @@
+address	body	defining_file	linkage	declared_in	note
+0x140001770	AmbientEmitterResize_Reimpl	code/Game/Component/ambientemittercomponent.cpp:81	C	code/Game/Component/exe_bodies.h	registered standalone/reg_component_visuals.cpp:20
+0x1400019a0	AmbientExternalPtrSerialize_Reimpl	code/Game/Component/ambient_externalptr_serialize.cpp:49	C	code/Game/Component/exe_bodies.h	registered code/Game/Component/ambient_externalptr_serialize.cpp:116
+0x140002540	AmbientArrayResize_Reimpl	code/Game/Component/ambientenvironmentdescription.cpp:66	C	code/Game/Component/exe_bodies.h	registered standalone/reg_component_visuals.cpp:19
+0x140002cc0	CemeteryListErase_Reimpl	code/Game/Component/cemeterycomponent.cpp:157	C	code/Game/Component/exe_bodies.h	registered standalone/reg_component_visuals.cpp:22
+0x140002e10	AttendanceComponent_GetJobHostComponent	code/Game/Component/attendancecomponent.cpp:199	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:91
+0x1400032e0	ImmigrationComp_DynArrayResize	code/Game/Component/immigrationcomponent.cpp:53	C++		DEAD row (no reader): not declared; registered standalone/reg_component_people.cpp:93
+0x140004680	FloorComponent_FindResData	code/Game/Component/floorcomponent.cpp:156	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:80
+0x140004740	InteractComponent_FindWorkplaceComponent	code/Game/Component/interactcomponent.cpp:96	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:97
+0x140005200	NaturalResourceComponent_FindComponentByType	code/Game/Component/naturalresourcecomponent.cpp:99	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:101
+0x140005840	Entity_FindComponent_Fire_5840	code/Game/Component/entity_finders_disaster.cpp:102	C	code/Game/Component/exe_bodies.h	registered standalone/reg_fire.cpp:83
+0x140007960	ResidenceComponent_CopyInnerArray	code/Game/Component/residencecomponent.cpp:158	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_B.cpp:85
+0x140008090	CitizenComp_Entity_FindComponent_Storage	code/Game/Component/citizenaicomponent.cpp:443	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:73
+0x140009790	Entity_FindComponent_Citizen_9790	code/Game/Component/entity_finders_disaster.cpp:108	C	code/Game/Component/exe_bodies.h	registered standalone/reg_fire.cpp:84
+0x140009f80	OrchardComponent_ResizeRefArray	code/Game/Component/orchardcomponent.cpp:92	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:85
+0x14000a230	OrchardComponent_SerializeRefEntries	code/Game/Component/orchardcomponent.cpp:129	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:86
+0x14000b630	Destroy_FindDecalComponent_b630	code/Game/Component/destroycomponent_state6.cpp:158	C	code/Game/Component/exe_bodies.h	registered standalone/reg_destroy_sm.cpp:71
+0x14000ca10	StorageDisplayComponent_MeshArrayResize	code/Game/Component/storagedisplaycomponent.cpp:275	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:63
+0x14000cbd0	StorageDisplay_EntityFindByType_cbd0	code/Game/Component/storagedisplaycomponent.cpp:355	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_B.cpp:82
+0x14000e360	CitizenAI_Reg_helper_e360	code/Game/Component/citizenai_housing_idle.cpp:841	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_housing_idle.cpp:58
+0x14000e760	TradeComponent_ResizeNames	code/Game/Component/tradecomponent.cpp:280	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:76
+0x14000e8d0	TradeComponent_ResizeItems	code/Game/Component/tradecomponent.cpp:340	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:55
+0x14000f090	StorageComponent_DynArrayResize	code/Game/Component/storagecomponent.cpp:197	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:67
+0x140017230	ResidenceComponent_impl_7230	code/Game/Component/keystone_a_restree.cpp:245	C	code/Game/Component/exe_bodies.h	registered standalone/reg_keystone_a_restree.cpp:41
+0x140017550	BuildComponent_FindInQueue	code/Game/Component/buildcomponent.cpp:84	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:74
+0x1400178c0	CitizenAI_sub_78c0	code/Game/Component/citizenai_findtarget.cpp:120	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_findtarget.cpp:34
+0x140018660	CharMgr_sub_8660	code/Game/Component/charmanager.cpp:161	C	code/Game/Component/exe_bodies.h	registered standalone/reg_charmanager.cpp:28
+0x140026a30	BuildComponent_FindStorage26a30	code/Game/Component/buildcomponent.cpp:316	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:58
+0x140028860	ToolbarDescription_StringArrayResize	code/Game/Component/toolbardescription.cpp:60	C	code/Game/Component/exe_bodies.h	registered code/Game/Component/toolbardescription.cpp:234
+0x14002f1d0	Pasture_FindLivestockComp	code/Game/Component/pasturecomponent_spawn.cpp:131	C	code/Game/Component/exe_bodies.h	registered standalone/reg_pasture_live.cpp:65
+0x14002fd50	CitizenAI_State_Leisure_sub_fd50_Reg	code/Game/Component/citizenai_leisure.cpp:803	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_leisure.cpp:39
+0x1400302a0	CitizenComp_SortByProfession_02a0	code/Game/Component/citizencomponent_lifecycle.cpp:220	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25.cpp:55
+0x1400335b0	CropFieldComponent_ResizeEntityList	code/Game/Component/cropfieldcomponent.cpp:169	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:105
+0x1400336c0	CropFieldComponent_SerializeEntityList	code/Game/Component/cropfieldcomponent.cpp:214	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:106
+0x140037ad0	ResidenceComponent_ResizeResidentArray	code/Game/Component/residencecomponent.cpp:193	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:57
+0x140037c50	ResidenceComponent_SerializeResidentArray	code/Game/Component/residencecomponent.cpp:258	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:58
+0x14003f010	CitizenAI_Reg_helper_3f010	code/Game/Component/citizenai_housing_idle.cpp:840	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_housing_idle.cpp:57
+0x140042960	Tornado_AudioMoveEmitters_42960	code/Game/Component/tornadocomponent.cpp:708	C	code/Game/Component/tornadocomponent_funcs.h:54	already declared, not redeclared; registered standalone/reg_tornado.cpp:45
+0x140042c60	FireComp_StartAudioEmitter_42c60	code/Game/Component/firecomponent_ignite.cpp:222	C	code/Game/Component/firecomponent_funcs.h:26	already declared, not redeclared; registered standalone/reg_fire.cpp:64
+0x140043f60	AttendanceComponent_ProcessQueue	code/Game/Component/attendancecomponent.cpp:229	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:92
+0x1400483a0	DiseaseComp_Infect	code/Game/Component/diseasecomponent.cpp:445	C	code/Game/Component/diseasecomponent_funcs.h:31	already declared, not redeclared; registered standalone/reg_component_cropdisease.cpp:63
+0x140049610	FireComponent_Ignite_610	code/Game/Component/firecomponent_ignite.cpp:347	C	code/Game/Component/firecomponent_funcs.h:19	already declared, not redeclared; registered standalone/reg_fire.cpp:58
+0x14004a300	FishingComponent_NotifyTile	code/Game/Component/happinesscomponent.cpp:187	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:106
+0x14004a720	CitizenAI_helper_a720_Reg	code/Game/Component/citizenai_leisure.cpp:807	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_leisure.cpp:40
+0x140051640	OrchardComponent_GetGrowth	code/Game/Component/orchardcomponent.cpp:256	C++	code/Game/Component/orchardcomponent_funcs.h:11	already declared, not redeclared; registered standalone/reg_orchard_growth.cpp:21
+0x140051830	OrchardComponent_ValidateRefs	code/Game/Component/orchardcomponent.cpp:158	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:87
+0x140052480	ParticleComponent_Setup	code/Game/Component/particlecomponent.cpp:432	C	code/Game/Component/particlecomponent_funcs.h:10	already declared, not redeclared; registered code/Game/Component/particlecomponent.cpp:969
+0x140052990	ParticleComponent_StopEmitter	code/Game/Component/particlecomponent.cpp:332	C	code/Game/Component/particlecomponent_funcs.h:12	already declared, not redeclared; registered code/Game/Component/particlecomponent.cpp:970
+0x140052a50	ParticleComponent_StartEmitter	code/Game/Component/particlecomponent.cpp:366	C	code/Game/Component/particlecomponent_funcs.h:13	already declared, not redeclared; registered code/Game/Component/particlecomponent.cpp:971
+0x140053660	ParticleComponent_StartEmitterFade	code/Game/Component/particlecomponent.cpp:407	C	code/Game/Component/particlecomponent_funcs.h:14	already declared, not redeclared; registered code/Game/Component/particlecomponent.cpp:972
+0x140053720	Tornado_ParticleReverse_53720	code/Game/Component/tornadocomponent.cpp:687	C	code/Game/Component/tornadocomponent_funcs.h:52	already declared, not redeclared; registered standalone/reg_tornado.cpp:44
+0x1400538c0	PopulationComponent_SmoothDensity_Reimpl	code/Game/Component/populationcomponent.cpp:89	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:82
+0x140053b50	PopulationComponent_ScanHabitability_Reimpl	code/Game/Component/populationcomponent.cpp:220	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:83
+0x140053f20	HerdComponent_CheckFood	code/Game/Component/herdcomponent.cpp:250	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:114
+0x140055780	SpawnComponent_DoSpawn	code/Game/Component/spawncomponent.cpp:273	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:103
+0x1400562b0	StorageDisplayComponent_SetDisplayMesh	code/Game/Component/storagedisplaycomponent.cpp:378	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:64
+0x14005ace0	TradeComponent_SpawnPurchasedLivestock	code/Game/Component/tradecomponent_livestock.cpp:134	C	code/Game/Component/exe_bodies.h	registered standalone/reg_tradeui_checkout.cpp:40
+0x14005c220	TradeComponent_Setup	code/Game/Component/tradecomponent.cpp:165	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:100
+0x140060290	Pasture_FillAllPastures	code/Game/Component/pasturecomponent_spawn.cpp:298	C	code/Game/Component/exe_bodies.h	registered standalone/reg_pasture_live.cpp:57
+0x14006c5b0	FrustumOutline_ProjectCorners	code/Game/Component/frustumoutlineelement.cpp:56	C	code/Game/Component/exe_bodies.h	registered code/Game/Component/frustumoutlinedescription.cpp:154
+0x140088a80	WellComp_AddCellEntry_88a80	code/Game/Component/wellcomponent.cpp:206	C++	code/Game/Component/wellcomponent_funcs.h:13	already declared, not redeclared; registered standalone/reg_component_gap_B.cpp:92
+0x140088e20	ZoneComponent_ZoneMapAdd	code/Game/Component/zonecomponent.cpp:71	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:90
+0x1400899d0	CitizenAI_State_Leisure_sub_99d0_Reg	code/Game/Component/citizenai_leisure.cpp:799	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_leisure.cpp:38
+0x14008c3d0	CitizenList_AssignWorker_c3d0	code/Game/Component/citizen_employ_cascade.cpp:610	C	code/Game/Component/exe_bodies.h	registered standalone/reg_townhallui.cpp:53
+0x14008c4b0	CitizenEmploy_Strat_c4b0	code/Game/Component/citizen_employ_cascade.cpp:556	C	code/Game/Component/exe_bodies.h	registered standalone/reg_townhallui.cpp:52
+0x14008c5f0	CitizenEmploy_Strat_c5f0	code/Game/Component/citizen_employ_cascade.cpp:553	C	code/Game/Component/exe_bodies.h	registered standalone/reg_townhallui.cpp:51
+0x14008ca20	CitizenEmploy_Strat_ca20	code/Game/Component/citizen_employ_cascade.cpp:550	C	code/Game/Component/exe_bodies.h	registered standalone/reg_townhallui.cpp:50
+0x14008cbf0	CitizenEmploy_Strat_cbf0	code/Game/Component/citizen_employ_cascade.cpp:547	C	code/Game/Component/exe_bodies.h	registered standalone/reg_townhallui.cpp:49
+0x14008dd30	CitizenAI_FindBestTarget_dd30	code/Game/Component/citizenai_findtarget.cpp:175	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_findtarget.cpp:33
+0x14008e370	CitizenAI_helper_e370	code/Game/Component/citizenai_findhelpers.cpp:331	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_findhelpers.cpp:39
+0x14008ec70	Entity_impl_ec70	code/Game/Component/citizenai_findhelpers.cpp:269	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_findhelpers.cpp:38
+0x14008ef40	CitizenComp_Entity_impl_ef40	code/Game/Component/citizencomponent.cpp:2364	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:82
+0x140091ba0	WellComp_UnregisterEntity_91ba0	code/Game/Component/wellcomponent.cpp:122	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_B.cpp:88
+0x140091e60	RawMaterialComponent_RegisterRawMaterial	code/Game/Component/rawmaterialcomponent.cpp:178	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:53
+0x140092990	Map_RadiusQuery_92990	code/Game/Component/citizen_updatehealth.cpp:368	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_updatehealth.cpp:36
+0x14009cba0	FloorComponent_RemoveFloorMesh	code/Game/Component/floorcomponent.cpp:180	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:81
+0x14009f770	MapGrid_StampCellRefs_9f770	code/Game/Component/pasturecomponent_states.cpp:935	C	code/Game/Component/exe_bodies.h	registered standalone/reg_pasture_live.cpp:62
+0x14009f990	FishingComponent_BrushTile	code/Game/Component/happinesscomponent.cpp:156	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_B.cpp:79
+0x1400a4d30	MapTerrainClear_Reimpl	code/Game/Component/mapcomponent.cpp:78	C	code/Game/Component/exe_bodies.h	registered standalone/reg_component_visuals.cpp:21
+0x1400a9660	StateMachine_TickReimpl	code/Game/Component/statemachinecomponent.cpp:280	C++	code/Game/Component/controller_state_table.h:60	already declared, not redeclared; registered standalone/reg_component_economy.cpp:109
+0x1400a9ac0	Imm_RequestStateTransition_9ac0	code/Game/Component/immigrationcomponent_states.cpp:706	C		DEAD row (no reader): not declared; registered standalone/reg_immigration.cpp:42
+0x1400aa440	StatusIconComponent_GeometrySetup	code/Game/Component/statusiconcomponent.cpp:83	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_C.cpp:28
+0x1400b0d00	DecalComponent_TerrainDecalRemove	code/Game/Component/decalcomponent.cpp:64	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_C.cpp:27
+0x1400ba6b0	CitizenAI_PlayAnimationCtor4_ba6b0	code/Game/Component/citizenai_actionctors.cpp:827	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:66
+0x1400bb490	CitizenAI_Pathfinding_WalkTowards_bb490	code/Game/Component/citizenai_actionctors.cpp:771	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:65
+0x1400bc790	CitizenAI_PerformWorkCtor11_bc790	code/Game/Component/citizenai_actionctors.cpp:631	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:63
+0x1400bccb0	CitizenAI_PerformWorkCtor10_bccb0	code/Game/Component/citizenai_actionctors.cpp:560	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:62
+0x1400bd070	CitizenAI_PerformWorkCtor5_bd070	code/Game/Component/citizenai_actionctors.cpp:397	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:59
+0x1400bd420	CitizenAI_PerformWorkCtor6_bd420	code/Game/Component/citizenai_actionctors.cpp:464	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:60
+0x1400bd790	CitizenAI_PerformWorkCtor8_bd790	code/Game/Component/citizenai_actionctors.cpp:516	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:61
+0x1400bda50	CitizenAI_Pathfinding_NavigateTo_bda50	code/Game/Component/citizenai_actionctors.cpp:727	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:64
+0x1400c1070	CitizenAI_PerformWorkCtor4_c1070	code/Game/Component/citizenai_actionctors.cpp:281	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_actionctors.cpp:58
+0x1400c2b70	ModelComponentNotify_Reimpl	code/Game/Component/modelcomponent.cpp:88	C	code/Game/Component/exe_bodies.h	registered standalone/reg_component_visuals.cpp:23
+0x1400c4c50	CitizenAI_ActionExecutor_c4c50	code/Game/Component/citizenai_executor.cpp:144	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_executor.cpp:33
+0x1400c4f80	Character_UpdateAnimation_Reimpl	code/Game/Component/charactercomponent.cpp:73	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:86
+0x1400d43b0	CitizenAssignCitizens	code/Game/Component/citizen_assign_citizens.cpp:317	C	code/Game/Component/exe_bodies.h	registered code/Game/Component/citizen_assign_citizens.cpp:493
+0x1400d62a0	PathGraph_ReassignWorkers	code/Game/Component/citizen_reassign_workers.cpp:219	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25_tick.cpp:43
+0x1400f7550	CitizenAI_Reg_helper_7550	code/Game/Component/citizenai_housing_idle.cpp:828	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_housing_idle.cpp:51
+0x1400f7830	CitizenAI_Reg_helper_7830	code/Game/Component/citizenai_housing_idle.cpp:829	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_housing_idle.cpp:52
+0x1400f79b0	CitizenAI_Reg_helper_79b0	code/Game/Component/citizenai_housing_idle.cpp:830	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_housing_idle.cpp:53
+0x1400f7b60	CitizenAI_Reg_helper_7b60	code/Game/Component/citizenai_housing_idle.cpp:833	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_housing_idle.cpp:54
+0x1400f7c90	CitizenAI_Reg_helper_7c90	code/Game/Component/citizenai_housing_idle.cpp:834	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_housing_idle.cpp:55
+0x1400f8000	CitizenAI_Reg_helper_8000	code/Game/Component/citizenai_housing_idle.cpp:837	C		DEAD row (no reader): not declared; registered standalone/reg_citizenai_housing_idle.cpp:56
+0x1400f8400	CitizenAI_WorkScheduler_Rekey	code/Game/Component/citizenai_work_scheduler.cpp:584	C	code/Game/Component/exe_bodies.h	registered code/Game/Component/citizenai_work_scheduler.cpp:692
+0x1400f88a0	CitizenAI_WorkScheduler_Insert	code/Game/Component/citizenai_work_scheduler.cpp:234	C	code/Game/Component/exe_bodies.h	registered code/Game/Component/citizenai_work_scheduler.cpp:690
+0x140103480	NomadComp_FUN_140103480	code/Game/Component/nomadcomponent.cpp:327	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:90
+0x140105e20	PastureComponent_AnimalSetBounds	code/Game/Component/pasturecomponent.cpp:138	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:73
+0x140105ed0	PastureComponent_Helper5ed0	code/Game/Component/pasturecomponent.cpp:199	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:110
+0x140106b10	HerdComponent_Helper6b10	code/Game/Component/herdcomponent.cpp:205	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:52
+0x140107320	AnimalComponent_UpdateBehavior	code/Game/Component/animalcomponent.cpp:319	C++	code/Game/Component/animalcomponent_funcs.h:19	already declared, not redeclared; registered standalone/reg_animal_update.cpp:42
+0x14010a2b0	CitizenAI_State_Wander	code/Game/Component/citizenai_handlers.cpp:210	C++	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_handlers.cpp:38
+0x14010a560	CitizenAI_State_Leisure	code/Game/Component/citizenai_leisure.cpp:382	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_leisure.cpp:37
+0x14010b2d0	CitizenAI_State_Idle	code/Game/Component/citizenai_housing_idle.cpp:813	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_housing_idle.cpp:50
+0x14010b340	CitizenAI_State_FindHousing	code/Game/Component/citizenai_housing_idle.cpp:801	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_housing_idle.cpp:49
+0x14010b3e0	CitizenAI_State_GatherResources2	code/Game/Component/citizenai_gather.cpp:548	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_gather.cpp:23
+0x14010bc90	CitizenAI_State_GatherResources	code/Game/Component/citizenai_gather.cpp:439	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_gather.cpp:22
+0x14010c360	CitizenAI_State_Education	code/Game/Component/citizenai_handlers2.cpp:155	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_handlers2.cpp:39
+0x14010c580	CitizenAI_State_SeekHappiness	code/Game/Component/citizenai_handlers2.cpp:230	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_handlers2.cpp:40
+0x14010c890	CitizenAI_State_GrowUp	code/Game/Component/citizenai_growup.cpp:491	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_growup.cpp:34
+0x14010cd80	CitizenAI_State_AdultTransition	code/Game/Component/citizenai_handlers3.cpp:227	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_handlers3.cpp:25
+0x14010d2c0	CitizenAI_State_ElderTransition	code/Game/Component/citizenai_handlers3.cpp:168	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_handlers3.cpp:26
+0x14010d560	CitizenAI_State_FindWork	code/Game/Component/citizenai_handlers2.cpp:361	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_handlers2.cpp:41
+0x14010d790	CitizenAI_State_Work	code/Game/Component/citizenai_handlers3.cpp:355	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); registered standalone/reg_citizenai_handlers3.cpp:24
+0x14010db20	CitizenAI_helper_db20	code/Game/Component/citizenai_findhelpers.cpp:211	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_findhelpers.cpp:37
+0x14010db90	CitizenComp_CitizenAIComponent_TransitionState	code/Game/Component/citizenaicomponent.cpp:551	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:77
+0x14010dca0	CitizenAI_BuildCandidateStateList	code/Game/Component/citizenai_candidatelist.cpp:394	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_candidatelist.cpp:30
+0x14010f1f0	CitizenAI_ValidateAndEnterState	code/Game/Component/citizenai_candidatelist.cpp:656	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_candidatelist.cpp:31
+0x14010f7a0	CitizenComp_CitizenAIComponent_CheckEducation	code/Game/Component/citizenaicomponent.cpp:587	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:78
+0x14010f890	CitizenComp_CitizenAIComponent_CheckAge	code/Game/Component/citizenaicomponent.cpp:615	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:79
+0x14010fde0	CitizenComp_helper_fde0	code/Game/Component/citizen_needsupdate.cpp:123	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25.cpp:49
+0x14010fe40	CitizenComp_helper_fe40	code/Game/Component/citizencomponent.cpp:1471	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:54
+0x14010ff80	CitizenComp_helper_ff80	code/Game/Component/citizencomponent.cpp:1725	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:55
+0x14010ffc0	CitizenComp_sub_ffc0	code/Game/Component/citizencomponent.cpp:1547	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:56
+0x140110470	CitizenComp_sub_0470	code/Game/Component/citizencomponent.cpp:1624	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:57
+0x140110e70	CitizenComp_Update_sub_0e70	code/Game/Component/citizencomponent.cpp:2139	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:58
+0x140111540	CitizenComp_helper_1540	code/Game/Component/citizen_needsupdate.cpp:165	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25.cpp:51
+0x140111590	CitizenComp_FindCareBuilding	code/Game/Component/citizencomponent.cpp:2787	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:92
+0x140111650	AttendanceComponent_ReleaseLink1650	code/Game/Component/attendancecomponent.cpp:188	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:98
+0x1401116f0	CitizenComp_FindStorage	code/Game/Component/citizencomponent.cpp:2845	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:93
+0x1401117a0	CitizenComp_helper_17a0	code/Game/Component/citizen_needsupdate.cpp:141	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25.cpp:50
+0x140111840	CitizenComp_TryEnrolInSchool	code/Game/Component/citizencomponent.cpp:2891	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:94
+0x140111b90	CitizenComp_helper_1b90	code/Game/Component/citizencomponent.cpp:1884	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:59
+0x140111ee0	CitizenComp_AssignHousing	code/Game/Component/citizencomponent.cpp:2583	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:95
+0x140111fa0	CitizenComp_sub_1fa0	code/Game/Component/citizencomponent.cpp:1504	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:60
+0x140112040	CitizenComp_LeaveRoster_2040	code/Game/Component/citizencomponent_lifecycle.cpp:100	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25.cpp:53
+0x1401127d0	CitizenComp_UpdateHealth	code/Game/Component/citizen_updatehealth.cpp:755	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_updatehealth.cpp:32
+0x140112990	CitizenComp_ConsumeFood	code/Game/Component/citizencomponent.cpp:2453	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:83
+0x140112ae0	CitizenComp_ConsumeFuel	code/Game/Component/citizencomponent.cpp:2492	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:84
+0x140113af0	CitizenComponent_PostLifeEvent	code/Game/Component/citizen_lifeevent.cpp:38	C	code/Game/Component/exe_bodies.h	registered standalone/reg_eventlog_citizen.cpp:30
+0x140115110	CitizenComponent_SetupYoung_Reimpl	code/Game/Component/citizenaicomponent.cpp:430	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_B.cpp:74
+0x1401151a0	CitizenComponent_SetupAdult_Reimpl	code/Game/Component/citizenaicomponent.cpp:433	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_B.cpp:75
+0x140115230	CitizenComponent_SetupElder_Reimpl	code/Game/Component/citizenaicomponent.cpp:436	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_B.cpp:76
+0x1401152e0	CitizenComp_ReleaseWorkplace	code/Game/Component/citizencomponent.cpp:2019	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:66
+0x1401158d0	CitizenComp_CheckWorkplaceValid	code/Game/Component/citizencomponent.cpp:2331	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:81
+0x1401159b0	AttendanceComponent_ReleaseLink59b0	code/Game/Component/attendancecomponent.cpp:191	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:99
+0x140115a50	AttendanceComponent_ReleasePartnerSlot	code/Game/Component/attendancecomponent.cpp:123	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_A.cpp:100
+0x140115be0	CitizenComp_CanFindHousing	code/Game/Component/citizencomponent.cpp:1828	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:67
+0x140115e60	CitizenAI_State_LongTermPlan	code/Game/Component/citizenai_growup.cpp:325	C	code/Game/Component/exe_bodies.h	CALLBACK: CitizenAI_ValidateAndEnterState state switch (citizenai_candidatelist.cpp); also read directly (engine_funcs fn_CitizenAI_LongTermPlan, Work); registered standalone/reg_citizenai_growup.cpp:35
+0x1401163d0	CitizenComponent_AssignWorkplace	code/Game/Component/citizen_assignworkplace.cpp:361	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_assignworkplace.cpp:26
+0x1401168a0	CitizenComp_JoinRoster_68a0	code/Game/Component/citizencomponent_lifecycle.cpp:140	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25.cpp:54
+0x140116b90	CitizenComp_Infect	code/Game/Component/citizen_updatehealth.cpp:472	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_updatehealth.cpp:33
+0x140116dd0	CitizenComponent_HandleLifeEvent	code/Game/Component/citizen_lifeevent_handler.cpp:346	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_lifeevent_handler.cpp:33
+0x140117080	CitizenComp_DeferredInit_117080	code/Game/Component/citizencomponent_lifecycle.cpp:238	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizen_25.cpp:56
+0x140118950	GrowthComponent_ModifyFlags	code/Game/Component/growthcomponent.cpp:258	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:73
+0x1401189b0	Component_SerializeReimpl	code/Game/Component/component.cpp:61	C++	code/Game/Component/Component.h:94	already declared, not redeclared; registered standalone/reg_component_economy.cpp:112
+0x14011aa20	CropFieldComponent_ValidateEntityRefs	code/Game/Component/cropfieldcomponent.cpp:124	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:104
+0x14011b410	CropFieldComponent_Maturity	code/Game/Component/cropfieldcomponent_states.cpp:346	C	code/Game/Component/exe_bodies.h	registered standalone/reg_food_typeid.cpp:27
+0x14011e690	FireComponent_IsBeingDemolished_11e690	code/Game/Component/firecomponent_smstate.cpp:133	C	code/Game/Component/firecomponent_funcs.h:32	already declared, not redeclared; registered standalone/reg_fire.cpp:67
+0x14011e7b0	FireComponent_BeginBurning_11e7b0	code/Game/Component/firecomponent_smstate.cpp:159	C	code/Game/Component/firecomponent_funcs.h:33	already declared, not redeclared; registered standalone/reg_fire.cpp:68
+0x14011ea10	FireComponent_StopBurning_11ea10	code/Game/Component/firecomponent_smstate.cpp:188	C	code/Game/Component/firecomponent_funcs.h:35	already declared, not redeclared; registered standalone/reg_fire.cpp:69
+0x14011f390	FloorComponent_SubF390	code/Game/Component/floorcomponent.cpp:197	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:82
+0x14011fba0	GrowthComponent_SpawnSubResource	code/Game/Component/growthcomponent.cpp:322	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:77
+0x140120410	GrowthComponent_GetResourceIndex	code/Game/Component/growthcomponent.cpp:270	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:74
+0x140120470	GrowthComponent_SetResourceAmount	code/Game/Component/growthcomponent.cpp:284	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:75
+0x140121450	HerdComponent_AdjustSize	code/Game/Component/herdcomponent.cpp:394	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:116
+0x140121980	HerdComponent_CheckMigrationDone	code/Game/Component/herdcomponent.cpp:367	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:115
+0x1401240a0	PastureComponent_ReassignEntityRef	code/Game/Component/pasturecomponent.cpp:245	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:111
+0x1401241b0	MapComponent_sub_41b0	code/Game/Component/keystone_a_map.cpp:388	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_keystone_a_map.cpp:24
+0x140124750	MapComponent_DetachOccupancy_4750	code/Game/Component/mapcomponent.cpp:287	C	code/Game/Component/exe_bodies.h	registered standalone/address_registry.cpp:635
+0x140126780	GrowthComponent_ResetGrowthState	code/Game/Component/growthcomponent.cpp:309	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:76
+0x140128570	PastureComponent_ComputeCapacity	code/Game/Component/pasturecomponent.cpp:160	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_nature.cpp:109
+0x140128670	Pasture_SpawnLivestock	code/Game/Component/pasturecomponent_spawn.cpp:170	C	code/Game/Component/exe_bodies.h	registered standalone/reg_pasture_live.cpp:56
+0x140128f50	PickingComponent_RegisterMesh	code/Game/Component/pickingcomponent.cpp:80	C++	code/Game/Component/pickingcomponent_funcs.h:13	already declared, not redeclared; registered standalone/reg_closeout_lane_d.cpp:60
+0x140129480	RawMaterialComponent_GetPickupCategory	code/Game/Component/rawmaterialcomponent.cpp:233	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:54
+0x140129ef0	ResidenceComponent_ResidenceInit	code/Game/Component/residencecomponent.cpp:293	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:59
+0x14012a4f0	CitizenComp_helper_a4f0	code/Game/Component/citizencomponent.cpp:1528	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:61
+0x14012a9d0	CitizenComp_Storage_GetResourceCount	code/Game/Component/citizenaicomponent.cpp:512	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:76
+0x14012ab00	Storage_GetResourceCount2	code/Game/Component/citizenai_gather.cpp:304	C	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_gather.cpp:24
+0x14012ac30	ResidenceCheck_2ac30	code/Game/Component/citizenai_findhelpers.cpp:194	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_citizenai_findhelpers.cpp:36
+0x14012c3f0	CitizenComp_FUN_14012c3f0	code/Game/Component/citizencomponent.cpp:1739	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:62
+0x14012ce70	StorageComponent_QueryAvailable	code/Game/Component/storagecomponent.cpp:160	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:75
+0x14012cf10	CitizenComp_StorageComponent_QueryCount	code/Game/Component/citizenaicomponent.cpp:469	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_people.cpp:74
+0x14012e510	HerdComponent_Impl_e510	code/Game/Component/herdcomponent.cpp:566	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:79
+0x14012ead0	WorkComponent_CheckWorkSlot	code/Game/Component/workcomponent.cpp:112	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:70
+0x14012eb50	WorkComponent_RegisterWorkSlot	code/Game/Component/workcomponent.cpp:138	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:71
+0x14012ec60	CitizenAI_WorkScheduler_Post	code/Game/Component/citizenai_work_scheduler.cpp:514	C	code/Game/Component/exe_bodies.h	registered code/Game/Component/citizenai_work_scheduler.cpp:691
+0x14012ee60	WorkPlaceComponent_OnCreateInit	code/Game/Component/workplacecomponent.cpp:553	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:81
+0x14012f520	WorkPlaceComponent_EnterBuilderProfession	code/Game/Component/destroycomponent_workerrelease.cpp:216	C	code/Game/Component/exe_bodies.h	registered standalone/reg_destroy_workers.cpp:38
+0x14012f670	WorkPlaceComponent_LeaveBuilderProfession	code/Game/Component/workplacecomponent.cpp:624	C	code/Game/Component/exe_bodies.h	registered standalone/reg_destroy_workers.cpp:37
+0x14012f7e0	WorkplaceComponent_Detach	code/Game/Component/workplacecomponent.cpp:184	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:69
+0x14012fa20	WorkplaceComponent_Attach	code/Game/Component/workplacecomponent.cpp:300	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_gap_D.cpp:70
+0x14012fb00	WorkPlaceComponent_SetMaxWorkers	code/Game/Component/destroycomponent_workerrelease.cpp:141	C	code/Game/Component/exe_bodies.h	registered standalone/reg_destroy_workers.cpp:39
+0x14012fc00	WorkPlaceComponent_SetAccepting	code/Game/Component/workplacecomponent.cpp:446	C++	code/Game/Component/exe_bodies.h	registered standalone/reg_component_economy.cpp:88
+0x140131090	CharacterComponent_Cosf_131090	code/Game/Component/character_trig.cpp:86	C		DEAD row (no reader): not declared; registered standalone/address_registry.cpp:1057
+0x140131c90	CharacterComponent_Sinf_131c90	code/Game/Component/character_trig.cpp:81	C		DEAD row (no reader): not declared; registered standalone/address_registry.cpp:1056

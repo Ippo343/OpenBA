@@ -42,6 +42,7 @@
 #include "Component/CharacterComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7078 cell class
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
 #include "Component/ModelDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7a88 cell class
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

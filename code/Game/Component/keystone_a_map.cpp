@@ -36,6 +36,7 @@
 #include "Component/coll_bridge.h"
 #include "Component/MapDescription.h"
 #include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
+#include "Component/exe_bodies.h"
 
 #include <cstdint>
 #include <cstdio>

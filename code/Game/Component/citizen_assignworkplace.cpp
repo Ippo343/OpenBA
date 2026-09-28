@@ -40,6 +40,7 @@
 #include <cstdlib>   // qsort
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Roster array record: storage+0x50 points at an array of these, indexed by

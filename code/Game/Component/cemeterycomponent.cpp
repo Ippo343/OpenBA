@@ -23,6 +23,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
 #include "Component/TombstoneComponent.h"   // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

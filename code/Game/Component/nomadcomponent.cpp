@@ -27,6 +27,7 @@
 #include "Player/Tool.h"          // Tool::TypeId()        (ENDGAME B.3.9 RF, cell 0x1401c6eb8)
 #include "Player/ToolSetting.h"   // ToolSetting::TypeId() (ENDGAME B.3.9 RF, cell 0x1401c6ef0)
 #include "object/TypeInfo.h"   // ENDGAME B.3.9 SS2: Object::Factory::_singleton
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers
