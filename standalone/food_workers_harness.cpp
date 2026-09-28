@@ -28,6 +28,8 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent (0x140002e10)
+#include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050 (0x140003050)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -113,14 +115,7 @@ void Fire(int frameNum) {
     for (int k = 0; k < kClassCount; ++k) tids[k] = ::Object::GetTypeIdByName(kClasses[k]);
 
     // 0x140002e10 is FindComponent_WorkPlace whatever Ghidra called it — see
-    // reference_misnamed_component_finders.
-    typedef void* (*fn_FindWPC_t)(int64_t entity, void* outIBP);
-    uintptr_t f2e10 = ResolveAddr(Module::Exe, 0x140002e10);
-    if (!f2e10) {
-        std::fprintf(stderr, "[FoodWorkers] frame=%d: FindComponent_WorkPlace (0x140002e10) "
-                     "unresolved — cannot staff\n", frameNum);
-        return;
-    }
+    // reference_misnamed_component_finders. Body: AttendanceComponent_GetJobHostComponent.
 
     int found = 0, considered = 0;
     for (int i = 0; i < n; ++i) {
@@ -156,11 +151,10 @@ void Fire(int frameNum) {
         // an undeserialized WorkDescription keeps min=1/max=100.
         {
             static long long s_dumpN = 0;
-            typedef void* (*fn_FindWork_t)(int64_t entity, void* outIBP);
-            uintptr_t f3050 = ResolveAddr(Module::Exe, 0x140003050);  // FindComponent_Work
-            if (f3050 && (s_dumpN++ % 5) == 0) {
+            if ((s_dumpN++ % 5) == 0) {
                 uint64_t wIBP = 0;
-                reinterpret_cast<fn_FindWork_t>(f3050)(reinterpret_cast<int64_t>(ent), &wIBP);
+                // 0x140003050 FindComponent_Work.
+                WorkBase_FindComponent_3050(reinterpret_cast<uintptr_t>(ent), &wIBP);
                 if (!wIBP) {
                     std::fprintf(stderr, "[JobArrowData] frame=%d: %s ent=%p has NO "
                                  "WorkComponent (0x140003050 found nothing) — the panel's "
@@ -202,7 +196,7 @@ void Fire(int frameNum) {
         ++considered;
 
         uint64_t wpcIBP = 0;
-        reinterpret_cast<fn_FindWPC_t>(f2e10)(reinterpret_cast<int64_t>(ent), &wpcIBP);
+        AttendanceComponent_GetJobHostComponent(ent, &wpcIBP);   // 0x140002e10
         if (!wpcIBP) {
             std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p has NO WorkPlaceComponent "
                          "— cannot staff\n", frameNum, foodName, foodComp);

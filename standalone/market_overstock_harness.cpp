@@ -52,6 +52,8 @@
 #include "Component/MarketDescription.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/StorageComponent.h"
+#include "Action/exe_bodies.h"   // ActRm_StorageAdd_d000 (0x14012d000)
+#include "object/TypeInfo.h"     // Object::IsDerivedFromNullSafe
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -103,20 +105,20 @@ static void* FindComponent(int64_t entity, uint32_t tid) {
         void* comp = *slot;
         if (!comp) continue;
         if (GetTypeIdOf(comp) == tid)
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) ? comp : nullptr;
+            return Object::IsDerivedFromNullSafe(comp, tid) ? comp : nullptr;
     }
     return nullptr;
 }
 
 // Description scan over a TEMPLATE entity (+0x28 raw array / +0x30 count).
 static void* FindDescOnTemplate(int64_t tmpl, uint32_t tid) {
-    if (!tmpl || !tid || !fn_IsDerivedFrom) return nullptr;
+    if (!tmpl || !tid) return nullptr;
     const int count = *reinterpret_cast<int*>(tmpl + 0x30);
     const int64_t arr = *reinterpret_cast<int64_t*>(tmpl + 0x28);
     for (int i = 0; i < count; ++i) {
         void* d = *reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
         if (d && GetTypeIdOf(d) == tid)
-            return fn_IsDerivedFrom(d, tid) ? d : nullptr;
+            return Object::IsDerivedFromNullSafe(d, tid) ? d : nullptr;
     }
     return nullptr;
 }
@@ -164,12 +166,6 @@ static inline void* TownMgr() {
 // The injection
 // ============================================================
 static void DoOverstock(int frameNum) {
-    typedef void (*fn_AddItem_t)(uintptr_t storage, int64_t material, int n);  // 0x14012d000
-    static fn_AddItem_t addItem = nullptr;
-    if (!addItem)
-        addItem = reinterpret_cast<fn_AddItem_t>(ResolveAddr(Module::Exe, 0x14012d000));
-    if (!addItem) { MO_LOG("AddItem(0x14012d000) unresolved — nothing injected"); return; }
-
     uintptr_t town = reinterpret_cast<uintptr_t>(TownMgr());
     if (!town) { MO_LOG("no town manager yet (frame %d)", frameNum); return; }
 
@@ -207,8 +203,8 @@ static void DoOverstock(int frameNum) {
     if (!marketComp) { MO_LOG("no MarketComponent in the world entity list (frame %d)", frameNum); return; }
 
     void* descRaw = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(marketComp) + 0x18);
-    void* marketDesc = (descRaw && fn_IsDerivedFrom &&
-                        fn_IsDerivedFrom(descRaw, tidMarketDesc)) ? descRaw : nullptr;
+    void* marketDesc = (descRaw &&
+                        Object::IsDerivedFromNullSafe(descRaw, tidMarketDesc)) ? descRaw : nullptr;
     void* storageComp = FindComponent(marketEntity, tidStorageComp);
     if (!marketDesc || !storageComp) {
         MO_LOG("market %p incomplete (desc=%p storage=%p)",
@@ -293,7 +289,7 @@ static void DoOverstock(int frameNum) {
     }
 
     const int units = (bestNeed + unitSize - 1) / unitSize;   // round UP past the trigger
-    addItem(reinterpret_cast<uintptr_t>(storageComp), tmpl, units);
+    ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storageComp), tmpl, units);   // 0x14012d000
 
     const int afterTotal = QueryCount(sc, tidRawMat);
     const int afterMask  = InMarketVolumeForMask(sc, mask, tidRawMat);

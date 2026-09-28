@@ -30,10 +30,7 @@
 #include "Component/OrchardComponent.h"
 #include "Dialog/OrchardUI.h"
 #include "Player/EditTool.h"
-
-// EntityUI::SetEditMode (code/Game/Dialog/entityui.cpp) — C++ linkage, matches the
-// declaration tool_harness.cpp already uses for the same function.
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+#include "Dialog/exe_bodies.h"   // EntityUI::SetEditMode (code/Game/Dialog/entityui.cpp): EntityUI_SetEditMode_Impl
 
 // EditTool select-by-entity harness hook (standalone/tool_harness.cpp) — opens the
 // entity's info dialog exactly like a real click, returns 1 if a dialog opened.

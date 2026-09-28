@@ -13,6 +13,7 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "Component/PastureComponent.h"
+#include "Component/exe_bodies.h"   // Pasture_FillAllPastures (0x140060290)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -125,14 +126,7 @@ extern "C" void PastureFillHarness_Tick(int frameNum) {
     if (s_fillFrame < 0 || frameNum < s_fillFrame ||
         ((frameNum - s_fillFrame) % kFillRetry) != 0) return;
 
-    typedef int (*fn_FillAllPastures_t)();
-    uintptr_t addr = ResolveAddr(Module::Exe, 0x140060290);
-    if (!addr) {
-        fprintf(stderr, "[PastureFill] frame %d: 0x140060290 unresolved — is "
-                "BANISHED_LIVE_PASTURE on?\n", frameNum);
-        return;
-    }
-    int n = reinterpret_cast<fn_FillAllPastures_t>(addr)();
+    int n = Pasture_FillAllPastures();   // 0x140060290
     fprintf(stderr, "[PastureFill] frame %d: fill pass ran (ret=%d) — see "
             "[Pasture] SPAWN/bind lines\n", frameNum, n);
     fflush(stderr);

@@ -108,7 +108,11 @@
 #include "Object/factory_registration.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Dialog/ui_panels.h"          // DebugUI, DebugUI_Slot9
-#include "Component/diseasecomponent_funcs.h"  // DiseaseComp_CheckCure (0x1400481b0)
+#include "Component/diseasecomponent_funcs.h"  // DiseaseComp_CheckCure (0x1400481b0), DiseaseComp_Infect
+#include "Component/firecomponent_funcs.h"     // FireComponent_Ignite_610 (0x140049610)
+#include "Component/exe_bodies.h"              // CitizenComp_Infect (0x140116b90)
+#include "Entity/componententity_funcs.h"      // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "object/TypeInfo.h"                   // Object::IsDerivedFromNullSafe
 #include "Game/Disease.h"
 #include <cstdint>
 #include <cstdio>
@@ -365,13 +369,6 @@ void ForceFire(int frameNum, int want) {
     DLOG("Fire", "house cluster centroid=(%d,%d); nearest house at (%d,%d) d2=%ld\n",
          cx, cy, cands[0].x, cands[0].y, cands[0].dist2);
 
-    if (!fn_FireComponent_Ignite) {
-        DLOG("Fire", "Ignite unresolved — port not landed (exe 0x140049610 has no "
-             "RegisterExeAddr entry, so ResolveAddr returned 0). %d house(s) were "
-             "selected and NONE was ignited.\n", nCand < want ? nCand : want);
-        return;
-    }
-
     // Snapshot before igniting: FireComponent::Ignite can register the entity into
     // other lists, and SpreadToNeighbors may add more burning entities on later ticks.
     const int take = (want < nCand) ? want : nCand;
@@ -381,7 +378,7 @@ void ForceFire(int frameNum, int want) {
     for (int i = 0; i < take; ++i) {
         DLOG("Fire", "igniting %d/%d house entity=%p fireComp=%p tile=(%d,%d)\n",
              i + 1, take, cands[i].entity, victims[i], cands[i].x, cands[i].y);
-        fn_FireComponent_Ignite(victims[i]);
+        FireComponent_Ignite_610(victims[i]);
     }
 
     // Outcome: FireComponent::Update treats +0x30 (burn timer) != 0 as "burning"
@@ -415,11 +412,10 @@ void ForceTornado(int frameNum, int want) {
     void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
     DLOG("Tornado", "frame %d: preconditions — CreateEntity=%p "
          "RegisterEntity=%p entityList=%p\n", frameNum,
-         reinterpret_cast<void*>(fn_EntityFactory_CreateEntity),
-         reinterpret_cast<void*>(fn_EntityList_RegisterEntity), entityList);
-    if (!fn_EntityFactory_CreateEntity ||
-        !fn_EntityList_RegisterEntity || !entityList) {
-        DLOG("Tornado", "spawn leaf unresolved — port not landed. Nothing spawned.\n");
+         reinterpret_cast<void*>(&ComponentEntity_CtorFromDescription),
+         reinterpret_cast<void*>(&EntityList_RegisterEntity_Impl), entityList);
+    if (!entityList) {
+        DLOG("Tornado", "entityList null. Nothing spawned.\n");
         return;
     }
 
@@ -486,7 +482,6 @@ void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
     void* externalList = *reinterpret_cast<void**>(gw + 0xa8);
     if (!externalList) return nullptr;
     *outListPresent = true;
-    if (!fn_ExternalList_GetResourceCount || !fn_IsDerivedFrom) return nullptr;
     if (!*outTypeId || *outTypeId == 0xFFFFFFFFu) return nullptr;
 
     const int count = reinterpret_cast<const ::Object::ExternalList*>(externalList)  // B.3.3 bridge
@@ -500,7 +495,7 @@ void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
     for (int i = 0; i < count; ++i) {
         void* res = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         if (!res) continue;
-        if (!fn_IsDerivedFrom(res, *outTypeId)) continue;
+        if (!Object::IsDerivedFromNullSafe(res, *outTypeId)) continue;
         if (*outFound == wantIdx) chosen = res;
         ++(*outFound);
     }
@@ -547,12 +542,6 @@ void ForceSick(int frameNum, int want) {
         return;
     }
 
-    if (!fn_DisasterComponent_Infect) {
-        DLOG("Sick", "CitizenComponent::Infect unresolved — port not landed (exe "
-             "0x140116b90). %d citizen(s) available and NONE infected.\n", n);
-        return;
-    }
-
     // Snapshot: infecting can move a citizen between town lists.
     const int take = (want < n) ? want : n;
     void* victims[64];
@@ -571,7 +560,7 @@ void ForceSick(int frameNum, int want) {
     for (int i = 0; i < picked; ++i) {
         DLOG("Sick", "infecting %d/%d citizen=%p disease=%p\n",
              i + 1, picked, victims[i], disease);
-        fn_DisasterComponent_Infect(victims[i], disease);
+        CitizenComp_Infect(victims[i], disease);
     }
     DLOG("Sick", "done — %d infection call(s) made. Pair with the citizen-disease lane's "
          "trace to confirm each took; a silent downstream means that lane's live gate is "
@@ -670,18 +659,11 @@ void ForceInfest(int frameNum, int want) {
         return;
     }
 
-    if (!fn_DiseaseComponent_Infect) {
-        DLOG("Infest", "DiseaseComponent::Infect unresolved — port not landed (exe "
-             "0x1400483a0 has no RegisterExeAddr entry). %d crop field(s) were selected "
-             "and NONE was infested.\n", nPick);
-        return;
-    }
-
     const int take = (want < nPick) ? want : nPick;
     for (int i = 0; i < take; ++i) {
         DLOG("Infest", "infesting %d/%d diseaseComp=%p field tile=(%d,%d)\n",
              i + 1, take, picks[i], pickTiles[i][0], pickTiles[i][1]);
-        fn_DiseaseComponent_Infect(picks[i]);
+        DiseaseComp_Infect(reinterpret_cast<DiseaseComponent*>(picks[i]));   // B.3.x bridge
     }
 
     // Outcome: retail FUN_140048840 (the active-disease tick) treats comp+0x30 > 0 as

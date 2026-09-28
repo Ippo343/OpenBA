@@ -20,13 +20,12 @@
 // Value: 1/on = dump every 600 frames, or a frame count. Test-only, opt-in.
 
 #include "resolve.h"
+#include "engine_funcs.h"   // g_pGameWorldSingleton (DAT_1401c3dd8)
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
-extern "C" void** g_pGameWorldSingleton;
 
 namespace {
 

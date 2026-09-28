@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
+#include "object/TypeInfo.h"   // Object::IsDerivedFromNullSafe
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -212,7 +213,7 @@ void DumpAll(int frame) {
                     const int dn = *reinterpret_cast<int32_t*>(dlist + 0x30);
                     void** da = *reinterpret_cast<void***>(dlist + 0x28);
                     for (int d = 0; d < dn && da; ++d)
-                        if (da[d] && fn_IsDerivedFrom && fn_IsDerivedFrom(da[d], tidRadius)) {
+                        if (da[d] && Object::IsDerivedFromNullSafe(da[d], tidRadius)) {
                             radius = *reinterpret_cast<int32_t*>(
                                 reinterpret_cast<uintptr_t>(da[d]) + 0x28);
                             break;
@@ -260,8 +261,8 @@ void DumpAll(int frame) {
                     {
                         void* d = *reinterpret_cast<void**>(
                             reinterpret_cast<uintptr_t>(comp) + 0x18);
-                        if (d && tidHerbDesc && fn_IsDerivedFrom &&
-                            fn_IsDerivedFrom(d, tidHerbDesc)) hdesc = d;
+                        if (d && tidHerbDesc &&
+                            Object::IsDerivedFromNullSafe(d, tidHerbDesc)) hdesc = d;
                     }
                     int accepted = -1, listN = 0;
                     if (hdesc) {

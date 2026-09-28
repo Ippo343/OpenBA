@@ -42,6 +42,7 @@
 #include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes
 #include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
 #include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Random
+#include "object/TypeInfo.h" // B3R: Object::IsDerivedFromNullSafe
 #include "object/External.h"                 // ENDGAME B.3.6 UI callers (K4)
 #include "runtime/types/ui/DialogInstance.h" // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                      // ENDGAME B.3.6 UI callers (K4)
@@ -100,8 +101,7 @@ void SetRandomLoadingTip(GameLoadDialogLoopT* self) {
     // dispatch slot, which is what sent the first port to LabelElement).
     // descText is a TextDescription, so IsDerivedFrom(elem, LabelElement)
     // was FALSE and the tip was skipped on every game-load splash.
-    if (fn_IsDerivedFrom &&
-        !fn_IsDerivedFrom(elem, UI::TextElement::TypeId())) {   // ENDGAME B.3.9 TR
+    if (!Object::IsDerivedFromNullSafe(elem, UI::TextElement::TypeId())) {   // ENDGAME B.3.9 TR
         TipBail("descText is not a TextElement", elem);
         return;
     }
@@ -154,7 +154,7 @@ GameLoadDialogLoopT::GameLoadDialogLoopT(const System::String& filename,
     _fadeColor1 = 0xff000000;
     _fadeColor2 = 0xff000000;
     _fadeDone   = 0;
-    fn_Random_Default_Ctor(&_random);   // ??0Random@System@@QEAA@XZ
+    RtSystem_Random_Ctor(&_random);     // ??0Random@System@@QEAA@XZ 0x1800c7f20
     _tipTimer   = 0;
     _autoAdvance = 0;
 }
