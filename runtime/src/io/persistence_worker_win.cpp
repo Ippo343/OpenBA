@@ -144,10 +144,6 @@ using RtIo::BinaryFileStream;
 using RtIo::FileStream;
 using RtSystem::String;
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-void*     ResolveExport(const char* mangled_name);
-
 namespace {
 
 // The FileSystem singleton, read exactly where retail reads it (the same
@@ -208,17 +204,8 @@ uint32_t Crc32Chunked(uint32_t crc, const uint8_t* data, uint32_t len, uint32_t 
     return crc;
 }
 
-// ---- allocator boundary -----------------------------------------------------
-// 0x1800c7ad0 — ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. Its first
-// instruction is `TEST RCX,RCX / JZ ret`, so the null test retail relies on
-// lives INSIDE it; the transcriptions below hand it a possibly-null pointer
-// exactly as the shipped bodies do.
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
+// B3R RT-IO: the file-local MemFree (a by-address door onto 0x1800c7ad0) had
+// no caller left and is deleted.
 
 // ---- Collection::Array<T> instantiations --------------------------------
 // ENDGAME B.3.2 step 2 (2026-09-13) — the five by-address forwarders that
@@ -815,18 +802,15 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 // with no check, and an `if (f)` here would convert "this arm is unported at
 // cutover" from a loud fault at address 0 into a SILENTLY SKIPPED SAVE. The
 // guard would not restore the behaviour, it would hide its absence — CLAUDE.md,
-// "Don't 'fix' a faithful crash with a null check". (Note this differs from the
-// `MemFree` helper at the top of this file, which guards because a missing
-// allocator is a tooling failure with no behaviour to preserve.)
+// "Don't 'fix' a faithful crash with a null check". B3R RT-IO: the four arms
+// are direct calls now, so there is no pointer left to test.
 // ============================================================================
 // ENDGAME B.3.9 IO (W2): slot 0 of the class's compiler table. The door that
 // stood here was registered BY ADDRESS (0x1800b7260) so the minted 0x180155860
 // table's unnamed slot 0 reached it; that table is retired. The four arms that
-// are not this file's resolve PER CALL (no function-local cache, B9-10).
+// are not this file's are called by name (B3R RT-IO; they were address doors).
 void IO::PersistenceWorker::Run() {
     void* const worker = this;
-
-    using JobFn = void (*)(void*);
 
     switch (_command) {
         case 0:   // SAVE — see the encoding note above (INFERRED, absence-based)
@@ -836,17 +820,17 @@ void IO::PersistenceWorker::Run() {
             RtIo_PersistenceWorker_SaveJob(worker);
             return;
         case 1:   // LOAD
-            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b6aa0))(worker);
-            return;   // retail tail-JMPs: NO null test, deliberately
+            RtIo_PersistenceWorker_Load(worker);          // 0x1800b6aa0, closure_batch2b_win.cpp
+            return;   // retail tail-JMPs
         case 2:   // DELETE
-            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b69c0))(worker);
-            return;   // retail tail-JMPs: NO null test, deliberately
+            RtIo_PersistenceWorker_Delete(worker);        // 0x1800b69c0, closure_batch2b_win.cpp
+            return;   // retail tail-JMPs
         case 3:   // GET SAVE INFO
-            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b65b0))(worker);
-            return;   // retail tail-JMPs: NO null test, deliberately
+            RtIo_PersistenceWorker_GetSaveInfo(worker);   // 0x1800b65b0, persistence_saveinfo_job.cpp
+            return;   // retail tail-JMPs
         case 4:   // GET SAVE LIST
-            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b6290))(worker);
-            return;   // retail tail-JMPs: NO null test, deliberately
+            RtIo_PersistenceWorker_GetSaveList(worker);   // 0x1800b6290, persistence_savelist_job.cpp
+            return;   // retail tail-JMPs
         default:
             // retail's `repz ret` — every other command value is a no-op.
             return;

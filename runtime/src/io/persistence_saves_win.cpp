@@ -35,9 +35,6 @@ using RtSystem::String;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 using RtIo::Persistence;
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // The port's own GetSaveFilename, from the sibling file. Called directly and
 // not through the registry: retail's 0x1800b789f is a direct rel32 CALL to
 // 0x1800b7c80, so a direct call is the faithful spelling, and it also means

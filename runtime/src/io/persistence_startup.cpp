@@ -83,15 +83,14 @@
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/system/String.h"
 #include "../system/pod_bridge.h"
+#include "../../types/system/Filename.h"
+#include <new>
 
 using RtIo::Persistence;
 using RtSystem::String;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
-
-typedef void    (*VoidThisFn)(void*);
-typedef String* (*GetSaveDirFn)(void* self, String* ret);
 
 // ?_singleton@FileSystem@IO@@0PEAV12@EA, ord 4811, retail 0x1801fc6a8.
 // Written by `??0FileSystem@IO@@QEAA@XZ`, which Wave 9 lane X ported; read here
@@ -121,25 +120,21 @@ extern "C" bool RtIo_Persistence_Startup(Persistence* self) {
 // Defined in `namespace IO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2); the file-local helper
 // lives in this translation unit's GLOBAL anonymous namespace and is reached as
-// `::FileSystemSingletonSlot` / `::VoidThisFn` / `::GetSaveDirFn`.
+// `::FileSystemSingletonSlot`.
 //
-// NOTHING ELSE CHANGED. `?ReadSettings@Persistence@IO@@` is STILL called by
-// NAME through RT_EXPORT_ONCE even though it is now a member of the same class:
-// retail's own CALL goes through the export, and a direct member call would
-// silently stop following a future promotion of that row. The unguarded
-// FileSystem-singleton DEREFERENCE stays unguarded and the guard on whether the
-// SLOT EXISTS stays exactly where it was.
+// B3R RT-IO: `ReadSettings` and `FileSystem::GetSaveDirectory` are called by
+// name (they were two RT_EXPORT_ONCE doors). The unguarded FileSystem-singleton
+// DEREFERENCE stays unguarded and the guard on whether the SLOT EXISTS stays
+// exactly where it was.
 namespace IO {
 
 bool Persistence::Startup() {
 
-    RT_EXPORT_ONCE(::VoidThisFn, "?ReadSettings@Persistence@IO@@QEAAXXZ")(
-        reinterpret_cast<RtIo::Persistence*>(this));
+    ReadSettings();
 
-    // GetSaveDirectory is reached by NAME through RT_EXPORT_ONCE (lane FS's
-    // class, unported at the time this row closed) and still fills a raw
-    // hidden-return-slot, so the value lands in a POD and is then stolen into
-    // the class -- a pure pointer steal, no AddRef, `tmpPod` left null.
+    // GetSaveDirectory's by-value Filename is constructed into the POD slot
+    // (as the door that stood here did) and then stolen into the class -- a
+    // pure pointer steal, no AddRef, `tmpPod` left null.
     RtSystem::String tmpPod{nullptr};
 
     // Retail dereferences FileSystem::_singleton without a check (0x1800b7f01
@@ -148,8 +143,8 @@ bool Persistence::Startup() {
     // exists only if the mint provides it. Our difference from retail, not a
     // guard over retail's logic.
     if (void** fsSlot = ::FileSystemSingletonSlot()) {
-        RT_EXPORT_ONCE(::GetSaveDirFn,
-            "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(*fsSlot, &tmpPod);
+        ::new (static_cast<void*>(&tmpPod)) System::Filename(          // B.3.x bridge
+            static_cast<const ::IO::FileSystem*>(*fsSlot)->GetSaveDirectory());
     }
     System::String tmp(std::move(::Sys(tmpPod)));
 
