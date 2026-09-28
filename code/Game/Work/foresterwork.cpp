@@ -63,7 +63,9 @@ typedef int   (*FW_CalcMaxWorkers_t)(uintptr_t matDesc);
 typedef float (*FW_Sqrtf_t)(float val);
 typedef void* (*FW_FindComp_NatResDesc_t)(uintptr_t compList, void* outPtr);
 typedef int   (*FW_Entity_GetGridCell_t)(void* entityIBP, float* outPos);
-typedef void  (*FW_Map_Invalidate_t)(int* mapGrid);
+// 0x14009c480 reads only RCX; it hands R9 through untouched to the flood fill
+// 0x14009c170. The registered body declares all four.
+typedef void  (*FW_Map_Invalidate_t)(int* mapGrid, void*, void*, int);
 typedef int   (*FW_Map_CalcDistance_t)(int* mapGrid, uint32_t cellA, uint32_t cellB);
 typedef int   (*FW_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
 typedef bool  (*FW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
@@ -616,7 +618,9 @@ int ForesterWork::Execute(void* entityIBP, void* /*context*/) {
 
             {
                 // Map invalidation for connectivity
-                s_fn_Map_Invalidate(mapGrid);
+                // Retail 0x1400eb303: `MOV RCX,R15; CALL 0x14009c480` -- only RCX is set,
+                // so R9 is whatever the preceding RandTol calls left; pass 0.
+                s_fn_Map_Invalidate(mapGrid, nullptr, nullptr, 0);
 
                 // Read fresh grid data after invalidation
                 uintptr_t gridData2 = *(uintptr_t*)(mapGrid + 0x20);
