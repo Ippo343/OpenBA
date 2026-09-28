@@ -237,25 +237,15 @@ void RuntimePortInit() {
     RtVolumePortInit();   // Wave 1: Volume
     RtSystemPortInit();   // Wave 2: System
     RtObjectPortInit();   // Wave 3: Object
-    RtIoPortInit();       // Wave 4: IO
-    RtAchievementPortInit();  // Wave 5: Achievement
     RtSavePortInit();     // Wave 5: Save
-    RtPickingPortInit();  // Wave 5: Picking
 
     // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
     // Pathfinding::PointList, Picking::PickingMesh. Each registers
     // unconditionally (DIRECTION.md #2: no waves/lanes/flags for a port).
-    { extern int RtCollision2DCollisionMeshRegister(); RtCollision2DCollisionMeshRegister(); }
-    { extern int RtCollision2DSurfaceRegister();       RtCollision2DSurfaceRegister(); }
-    { extern int RtPathfindingPointListRegister();     RtPathfindingPointListRegister(); }
-    { extern int RtPickingPickingMeshRegister();       RtPickingPickingMeshRegister(); }
     RtVideoPortInit();    // Wave 6: Video
     RtGraphicsPortInit(); // Wave 6: Graphics
     RtUiPortInit();       // Wave 7: UI
-    RtEnginePortInit();       // Wave 8: Engine (lanes A+B)
     RtAudioPortInit();        // Wave 8: Audio (lane C)
-    RtInputPortInit();        // Wave 8: Input (lane D)
-    RtApplicationPortInit();  // Wave 8: Application (lane E)
     RtUtilityPortInit();      // Wave 8: Utility (lane E)
 
     // (Wave 28 lane FACTREST's RtFactoriesPortInit went with its last row at
@@ -266,8 +256,6 @@ void RuntimePortInit() {
     // picking, ui, audio, achievement, engine and engine/funcs. Registering
     // them redirects all of those to us, so it happens at one identifiable
     // point in the init order rather than in the middle of it.
-    RtCollectionPortInit();   // Wave 9: Collection (lane Q)
-    RtCollectionDestroyPortInit();  // Wave 9: Collection destroy half (lane D2)
 
     // Cutover closure batch 2b (2026-09-12): the non-Collection half of one
     // WORKLIST.md batch — the four `operator delete` COMDAT copies, the
@@ -284,8 +272,6 @@ void RuntimePortInit() {
     // 0x18007b960 for the Picking grid) — those are lazy, so the order is not
     // load-bearing, but putting it after keeps the "registrations that
     // redirect existing address doors" together at one point in the sequence.
-    extern void RtClosureBatch2bPortInit();
-    RtClosureBatch2bPortInit();
 
     // (Wave 9 lane K's RtObjectDeletingDtorPortInit -- the RT_DELDTOR table
     // that filled slot 0 of the minted vtables -- went with the last minted
@@ -295,7 +281,6 @@ void RuntimePortInit() {
     // DATA export. AFTER every other wave because its probe calls our OWN
     // ??0Random@System@@QEAA@XZ through the port-aware door, which only reaches
     // the port once Wave 2 has run.
-    RtSingletonCtorsPortInit();  // Wave 9: singleton constructors (lane X)
 
     // B3R W0-SM: the seven addresses the deleted name->address mirror used to
     // serve. HERE, after every *PortInit() above, because each copies the body
@@ -303,8 +288,6 @@ void RuntimePortInit() {
     // RtGraphicsPortInit), and before the count below so the count includes them.
     // No other Register* call names these addresses, so nothing later can
     // change which body they hold. standalone/reg_rt_mirror16.cpp.
-    extern void RtMirror16Register();
-    RtMirror16Register();
 
     // Registration is complete; this only reports. (The mint -- Wave 9 lane
     // C2's minted exported DATA, RtDataMintInit() -- was deleted at B3R W0-SM

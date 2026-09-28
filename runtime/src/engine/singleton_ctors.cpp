@@ -898,11 +898,5 @@ void ControlMustDetect(size_t n) {
 // the conclusion (safe to land) still holds; its justification did not.
 // Evidence and the full crossing list: docs/runtime_port/WAVE22_LANE_ALLOC.md §2.2.
 // ---------------------------------------------------------------------------
-void RtSingletonCtorsPortInit() {
-    // B3R (registry teardown, W1 RT-Core): the fifteen ??0 / ??1 rows went --
-    // their one reader, engine_lifecycle.cpp, calls the bodies by name. This
-    // registers nothing; it stays defined only because
-    // standalone/resolve_standalone.cpp's RuntimePortInit() still calls it.
-}
 
 #undef LANEX_PROBE

@@ -3718,8 +3718,3 @@ void RtColl_ArraySetSize_180076a40(void* a) {
 //   other:             18002fd90 (Reserve)  180050e00 (Remove)
 //                      180065b70 1800734a0 (element copy ctors)
 // ---------------------------------------------------------------------------
-void RtCollectionPortInit() {
-    // B3R W2-RT: registers nothing (every row it carried went with its last
-    // reader). It stays defined only because standalone/resolve_standalone.cpp's
-    // RuntimePortInit() still calls it; the coordinator removes that call.
-}

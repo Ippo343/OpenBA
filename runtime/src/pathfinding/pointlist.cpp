@@ -306,6 +306,3 @@ extern "C" void* RtPathfinding_PointArray_Dtor(void* a) {
 // no reader by name or by address, so they went. It registers nothing and
 // stays defined only because standalone/resolve_standalone.cpp's
 // RuntimePortInit() still calls it (the coordinator removes the call).
-int RtPathfindingPointListRegister() {
-    return 0;
-}

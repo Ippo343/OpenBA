@@ -332,6 +332,3 @@ extern "C" void RtCollision2D_CollisionMesh_SerializeQuads(void* ser, int32_t co
 // no reader by name or by address, so they went. It registers nothing and
 // stays defined only because standalone/resolve_standalone.cpp's
 // RuntimePortInit() still calls it (the coordinator removes the call).
-int RtCollision2DCollisionMeshRegister() {
-    return 0;
-}

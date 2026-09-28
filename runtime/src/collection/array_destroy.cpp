@@ -1658,8 +1658,3 @@ J4_ENTRY(1800571b0, kAsgnD2_VPParam18, ArrayClearVPParam18)   // clear 0x1800566
 // address in code in ANY form, absent from both .inc files). Their provenance
 // comments are left standing above; a banner naming an address with no entry is
 // one of these.
-void RtCollectionDestroyPortInit() {
-    // B3R RT-Core: every row this registered lost its last reader. It registers
-    // nothing and stays defined only because standalone/resolve_standalone.cpp's
-    // RuntimePortInit() still calls it (the coordinator removes that call).
-}

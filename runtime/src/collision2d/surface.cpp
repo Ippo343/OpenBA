@@ -115,6 +115,3 @@ bool Surface::Serialize(void* streamv) {
 // no reader by name or by address, so they went. It registers nothing and
 // stays defined only because standalone/resolve_standalone.cpp's
 // RuntimePortInit() still calls it (the coordinator removes the call).
-int RtCollision2DSurfaceRegister() {
-    return 0;
-}

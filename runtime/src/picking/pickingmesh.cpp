@@ -327,6 +327,3 @@ extern "C" void RtPicking_PickingMesh_SerializeSubMeshes(void* ser, int32_t coun
 // no reader by name or by address, so they went. It registers nothing and
 // stays defined only because standalone/resolve_standalone.cpp's
 // RuntimePortInit() still calls it (the coordinator removes the call).
-int RtPickingPickingMeshRegister() {
-    return 0;
-}

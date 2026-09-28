@@ -137,20 +137,14 @@ void RtMathPortInit();     // runtime/src/math/
 void RtVolumePortInit();   // runtime/src/volume/
 void RtSystemPortInit();   // runtime/src/system/ — Wave 2
 void RtObjectPortInit();   // runtime/src/object/ — Wave 3
-void RtIoPortInit();       // runtime/src/io/ — Wave 4
-void RtAchievementPortInit(); // runtime/src/achievement/ — Wave 5
 void RtSavePortInit();     // runtime/src/save/ — Wave 5
-void RtPickingPortInit();  // runtime/src/picking/ — Wave 5
 void RtVideoPortInit();    // runtime/src/video/ — Wave 6
 void RtGraphicsPortInit(); // runtime/src/graphics/ — Wave 6
 void RtUiPortInit();       // runtime/src/ui/ - Wave 7
 // Wave 8 (Top). Lanes A+B share runtime/src/engine/rt_engine_port.cpp; C, D and E
 // each own their own aggregator. Save's Wave 8 remainder is registered from the
 // existing RtSavePortInit() above rather than a second Save aggregator.
-void RtEnginePortInit();      // runtime/src/engine/ — Wave 8 lanes A+B
 void RtAudioPortInit();       // runtime/src/audio/ — Wave 8 lane C
-void RtInputPortInit();       // runtime/src/input/ — Wave 8 lane D
-void RtApplicationPortInit(); // runtime/src/application/ — Wave 8 lane E
 void RtUtilityPortInit();     // runtime/src/utility/ — Wave 8 lane E
 // (Wave 28 lane FACTREST's interpreter -- RtFactoriesPortInit /
 // RtFactoriesSummary -- is deleted with its last row, ENDGAME B.3.9 OBJ: every
@@ -161,7 +155,6 @@ void RtUtilityPortInit();     // runtime/src/utility/ — Wave 8 lane E
 // 0x18007a0d0 and friends changes what ResolveAddr hands back at ~20 existing
 // call sites in the other waves, and running it last keeps that one effect at
 // one point in the init order.
-void RtCollectionPortInit();  // runtime/src/collection/ — Wave 9 lane Q
 // Wave 9 lane D2. The same header-only cluster one level deeper: ~Array for
 // non-trivially-destructible T (lane D's J2/J2b), the eleven per-element
 // destroy helpers those bodies call -- which turned out to be THREE bodies --
@@ -173,11 +166,9 @@ void RtCollectionPortInit();  // runtime/src/collection/ — Wave 9 lane Q
 // are order-independent -- array.cpp reaches this file's three shared helper
 // addresses through function-local `static Fn fn = ResolveAddr(...)`, which
 // initialises on first USE (a real Array call) and not at init.
-void RtCollectionDestroyPortInit();  // runtime/src/collection/ -- Wave 9 lane D2
 // Wave 9 lane X. The fourteen constructors that publish a `?_singleton@...`
 // DATA export. Cross-namespace on purpose: what the fourteen share is the
 // ACCEPTANCE CRITERION (the ctor must write its singleton -- now its class's
 // own static), not a namespace. It may run after the other waves. Its probe
 // runs at the end of it and only when the diff harness is on. (The mint it
 // used to precede went at B3R W0-SM M3.)
-void RtSingletonCtorsPortInit();      // runtime/src/engine/ -- Wave 9 lane X

@@ -165,14 +165,3 @@ extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
 // ============================================================================
 // The hook standalone/resolve_standalone.cpp calls.
 // ============================================================================
-void RtClosureBatch2bPortInit() {
-    // B3R W0-A0 (R3): the rows for ??3MaterialInstance@Graphics@@ (0x1800028a0),
-    // ??3ImageBuffer@Video@@ (0x18001e990), ??3PackageFile@IO@@ (0x1800251e0),
-    // the operator new copy 0x180011640 and LinkPrevBlock 0x180034d60 had NO
-    // reader by name or by address and are deleted; their bodies above stay
-    // (provenance, R3).
-    // B3R W2-RT: the graphics (0x18001be60) and save (0x180032f70) registrars
-    // went with their last rows, which had no reader. This registers nothing
-    // and stays defined only because RuntimePortInit() still calls it (the
-    // coordinator removes that call).
-}
