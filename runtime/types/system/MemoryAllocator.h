@@ -363,6 +363,14 @@ extern MemoryAllocatorInstrument g_memoryAllocatorInstrument;
 
 } // namespace System
 
+namespace rtalloc {
+// 0x180009c30 (unexported) -- `if (p) { Enter; Free(_singleton, p); Leave; }`
+// with a SECOND parameter: the first is IGNORED (retail's callers pass `this`
+// in RCX). runtime/src/system/allocator.cpp. B3R RT-Core: declared so its
+// readers call it by name.
+void FreeLockedIgnoringSelf(void* ignoredThis, void* p);
+}  // namespace rtalloc
+
 namespace rt {
 namespace system {
 

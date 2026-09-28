@@ -303,20 +303,3 @@ void Device::PlatformShutdown() {
 extern "C" void RtInput_Device_PlatformShutdown(void* self) {
     reinterpret_cast<Input::Device*>(self)->Input::Device::PlatformShutdown();
 }
-
-// ============================================================================
-// Registration. BOTH doors.
-// ============================================================================
-// The name is the PRIMARY door here (two call sites in our tree already spell
-// it), and `AEAA` does not change that: it means PRIVATE, and this DLL exports
-// its private members. The name's presence at ordinal 3395 was read out of the
-// shipped export directory, not inferred
-// (reference_resolveexport_phantom_names.md: a name the DLL does not contain
-// resolves NULL silently and the fallback hides it).
-// ============================================================================
-int RtInputPlatformShutdownRegister() {
-    RegisterRuntimeExport("?PlatformShutdown@Device@Input@@AEAAXXZ",
-                          (void*)&RtInput_Device_PlatformShutdown);
-    RegisterRuntimeAddr(0x1800e1b50, (void*)&RtInput_Device_PlatformShutdown);
-    return 1;
-}

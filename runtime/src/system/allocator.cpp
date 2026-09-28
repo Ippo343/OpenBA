@@ -1448,9 +1448,16 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 // B3R W0-A0: the static, called directly. The by-address door above was bound
 // to this same function (RegisterAllocatorAddresses), and the instrument seat
 // now lives inside it, so the "observed" property the banner asks for holds.
+// B3R RT-Core: external linkage, declared in runtime/types/system/
+// MemoryAllocator.h, so its readers call it by name.
+}  // namespace
+namespace rtalloc {
 void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
     MemoryAllocator::MemFree(p);
 }
+}  // namespace rtalloc
+using rtalloc::FreeLockedIgnoringSelf;
+namespace {
 
 // ============================================================================
 // 0x180009c30 -- ONE owner, unconditional. The SHADOWED-REGISTRATION fix.

@@ -464,31 +464,3 @@ bool Engine::Engine::PlatformStartup() {
 extern "C" bool RtEngine_Engine_PlatformStartup(void* self) {
     return reinterpret_cast<Engine::Engine*>(self)->Engine::Engine::PlatformStartup();  // B.3.7 bridge
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtApplicationPlatformStartupRegister() {
-    int n = 0;
-
-    // Every name below was verified against Runtime-x64.dll's export directory
-    // with pefile before use; the ordinals are quoted so a future reader can
-    // re-check without re-deriving. Literals, never named constants
-    // (reference_census_cannot_see_nonliteral_registrations.md).
-
-    // ...and the wall after Audio's: `?PlatformStartup@Device@Input@@AEAA_NXZ`
-    // (engine_lifecycle.cpp:741, g_startupFailAt == 13), plus the three
-    // exported message callbacks it installs, which are equally unreachable
-    // at cutover if only the outer function is ported.
-    {
-        extern int RtInputPlatformStartupRegister();
-        n += RtInputPlatformStartupRegister();
-    }
-
-    // THE BUILD IDENTITY LINE. Every measurement this lane reports is gated on
-    // finding this exact string in that run's OWN log — not on "I rebuilt",
-    // not on a file timestamp. Bump the revision when the bodies change.
-    printf("[LanePLAT] rev=PLAT-r5 registered=%d\n", n);
-
-    return n;
-}

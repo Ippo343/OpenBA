@@ -21,7 +21,6 @@
 // one-line doors. `KeyMap::Released` (0x1800a79b0) is new here.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -29,18 +28,12 @@
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "../../types/system/MemoryAllocator.h"   // rtalloc::FreeLockedIgnoringSelf
+#include "../collection/set_avl_e24.h"
 
 using Input::Binding;
 using Input::BindingNode;
 using State = Input::Device::State;
-
-// ----------------------------------------------------------------------------
-// ResolveAddr / Module, forward-declared rather than pulled in from
-// standalone/resolve.h — see rt_port.h's own comment on why (windows.h leaks
-// engine-colliding macros into a tree PLAN.md §4.1 wants platform-neutral).
-// Must stay byte-identical to resolve.h's declaration; the linker checks it.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // Already-ported Wave 4 IO::Persistence entry points (runtime/src/io/
 // persistence.cpp). Not declared in any header there; redeclared here with
@@ -123,26 +116,15 @@ State* DeviceArrayBase(const Input::Device* d, int32_t device, int32_t joystick)
 }
 
 // ---------------------------------------------------------------------------
-// RULE B6-5 door caches (ENDGAME B.3.7). ClearAll and RegisterInput reach four
-// unexported Collection::Set<E24> bodies by address. As free functions they
-// kept function-local `static` first-call caches; as members they may not, so
-// each is a namespace-scope `std::atomic<void*>` slot resolved with the
-// never-cache-a-null shape of runtime/src/ui/element_common.h's `AtomicAddr`.
-// The addresses and the bodies they reach are unchanged (set_avl_e24.cpp
-// registers 0x180023060/130/170, allocator.cpp 0x180009c30).
+// ClearAll and RegisterInput reach four unexported Collection::Set<E24> bodies
+// (set_avl_e24.cpp: 0x180023060 / 0x180023130 / 0x180023170; allocator.cpp:
+// 0x180009c30). B3R: called by name; the atomic by-address caches are gone.
 // ---------------------------------------------------------------------------
-std::atomic<void*> g_setDestroySubtree{nullptr};   // 0x180023130
-std::atomic<void*> g_setFreeNode{nullptr};         // 0x180009c30
-std::atomic<void*> g_setAllocNode{nullptr};        // 0x180023060
-std::atomic<void*> g_setRebalance{nullptr};        // 0x180023170
-
-inline void* AtomicAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
+rtsetavl24::Set* AsSet24(void* p) {
+    return reinterpret_cast<rtsetavl24::Set*>(p);   // B.3.x bridge
+}
+rtsetavl24::Node* AsNode24(BindingNode* n) {
+    return reinterpret_cast<rtsetavl24::Node*>(n);  // B.3.x bridge
 }
 
 // The three device-state readers of KeyMap (GetValue / Pressed / Released)
@@ -201,19 +183,12 @@ namespace Input {
 // `Collection::Set<Binding, ByteIdCompare>::Clear` could stand in for these
 // address doors. That is Collection-side policy work, not Input's.
 void KeyMap::ClearAll() {
-    using SetDestroySubtreeFn = void (*)(void* setPtr, BindingNode* node);
-    using SetFreeNodeFn       = void (*)(void* setPtr, BindingNode* node);
-    auto destroySubtree = reinterpret_cast<SetDestroySubtreeFn>(
-        AtomicAddr(g_setDestroySubtree, 0x180023130));
-    auto freeNode = reinterpret_cast<SetFreeNodeFn>(
-        AtomicAddr(g_setFreeNode, 0x180009c30));
-
     void* setPtr = &_root;
     BindingNode* root = _root;
     if (root) {
-        destroySubtree(setPtr, root->left);
-        destroySubtree(setPtr, root->right);
-        freeNode(setPtr, root);
+        rtsetavl24::DestroySubtree(AsSet24(setPtr), AsNode24(root->left));    // 0x180023130
+        rtsetavl24::DestroySubtree(AsSet24(setPtr), AsNode24(root->right));
+        rtalloc::FreeLockedIgnoringSelf(setPtr, root);                          // 0x180009c30
     }
     _count = 0;
     _root = nullptr;
@@ -268,12 +243,14 @@ void KeyMap::ClearInput(int32_t id, int32_t device, int32_t input) {
 // the node inherits whatever the stack held there -- faithful.
 void KeyMap::RegisterInput(int32_t id, int32_t device, int32_t input,
                            const char* name, bool exclusive) {
-    using SetAllocNodeFn = BindingNode* (*)(void* unused, const Binding* src, BindingNode* parent);
-    using SetRebalanceFn = void (*)(void* setPtr, BindingNode** parentSlot);
-    auto allocNode = reinterpret_cast<SetAllocNodeFn>(
-        AtomicAddr(g_setAllocNode, 0x180023060));
-    auto rebalance = reinterpret_cast<SetRebalanceFn>(
-        AtomicAddr(g_setRebalance, 0x180023170));
+    // 0x180023060 / 0x180023170 (set_avl_e24.cpp), called by name (B3R).
+    auto allocNode = [](void* unused, const Binding* src, BindingNode* parent) {
+        return reinterpret_cast<BindingNode*>(
+            rtsetavl24::AllocNode(unused, src, AsNode24(parent)));
+    };
+    auto rebalance = [](void* setPtr, BindingNode** parentSlot) {
+        rtsetavl24::Retrace(AsSet24(setPtr), reinterpret_cast<rtsetavl24::Node**>(parentSlot));
+    };
 
     BindingNode* root = _root;
     const uint8_t key = static_cast<uint8_t>(id);
@@ -582,63 +559,14 @@ int RtInputRegister() {
     RegisterRuntimeExport("??1Configuration@Input@@QEAA@XZ", (void*)&RtInput_Configuration_Dtor);
     RegisterRuntimeAddr(0x1800e0e10, (void*)&RtInput_Configuration_Dtor); ++n;
 
-    RegisterRuntimeExport("?ClearAll@KeyMap@Input@@QEAAXXZ", (void*)&RtInput_KeyMap_ClearAll);
-    RegisterRuntimeAddr(0x1800a7d20, (void*)&RtInput_KeyMap_ClearAll); ++n;
-
     // Wave 9: unblocked once FUN_180023060's first argument turned out not to
     // exist (see the port's header comment and WAVE8_LANE_D.md).
-    RegisterRuntimeExport("?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z",
-                          (void*)&RtInput_KeyMap_RegisterInput);
-    RegisterRuntimeAddr(0x1800a7e70, (void*)&RtInput_KeyMap_RegisterInput); ++n;
-
-    RegisterRuntimeExport("?ClearInput@KeyMap@Input@@QEAAXHH@Z", (void*)&RtInput_KeyMap_ClearInput_HH);
-    RegisterRuntimeAddr(0x1800a7d70, (void*)&RtInput_KeyMap_ClearInput_HH); ++n;
-
-    RegisterRuntimeExport("?ClearInput@KeyMap@Input@@QEAAXHHH@Z", (void*)&RtInput_KeyMap_ClearInput_HHH);
-    RegisterRuntimeAddr(0x1800a7db0, (void*)&RtInput_KeyMap_ClearInput_HHH); ++n;
-
-    RegisterRuntimeExport("?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z", (void*)&RtInput_KeyMap_GetDeviceForId);
-    RegisterRuntimeAddr(0x1800a7970, (void*)&RtInput_KeyMap_GetDeviceForId); ++n;
-
-    RegisterRuntimeExport("?GetInputForId@KeyMap@Input@@QEBAHHH@Z", (void*)&RtInput_KeyMap_GetInputForId);
-    RegisterRuntimeAddr(0x1800a7930, (void*)&RtInput_KeyMap_GetInputForId); ++n;
-
-    RegisterRuntimeExport("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z", (void*)&RtInput_KeyMap_GetIdForDeviceInput);
-    RegisterRuntimeAddr(0x1800a7890, (void*)&RtInput_KeyMap_GetIdForDeviceInput); ++n;
-
-    RegisterRuntimeExport("?GetValue@KeyMap@Input@@QEBAFHH@Z", (void*)&RtInput_KeyMap_GetValue);
-    RegisterRuntimeAddr(0x1800a7b60, (void*)&RtInput_KeyMap_GetValue); ++n;
-
-    RegisterRuntimeExport("?Pressed@KeyMap@Input@@QEBA_NHH@Z", (void*)&RtInput_KeyMap_Pressed);
-    RegisterRuntimeAddr(0x1800a7a80, (void*)&RtInput_KeyMap_Pressed); ++n;
 
     // ENDGAME B.3.7 block B5: ported (Pressed's body reading State +0x07).
-    RegisterRuntimeExport("?Released@KeyMap@Input@@QEBA_NHH@Z", (void*)&RtInput_KeyMap_Released);
-    RegisterRuntimeAddr(0x1800a79b0, (void*)&RtInput_KeyMap_Released); ++n;
-
-    RegisterRuntimeExport("?SetInput@KeyMap@Input@@QEAAXHHHH@Z", (void*)&RtInput_KeyMap_SetInput);
-    RegisterRuntimeAddr(0x1800a7e20, (void*)&RtInput_KeyMap_SetInput); ++n;
-
-    RegisterRuntimeExport("?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z", (void*)&RtInput_Device_GetValue);
-    RegisterRuntimeAddr(0x1800e1660, (void*)&RtInput_Device_GetValue); ++n;
-
-    RegisterRuntimeExport("?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z", (void*)&RtInput_Device_Pressed);
-    RegisterRuntimeAddr(0x1800e16c0, (void*)&RtInput_Device_Pressed); ++n;
-
-    RegisterRuntimeExport("?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z", (void*)&RtInput_Device_Released);
-    RegisterRuntimeAddr(0x1800e1720, (void*)&RtInput_Device_Released); ++n;
-
-    RegisterRuntimeExport("?ResetState@Device@Input@@QEAAXXZ", (void*)&RtInput_Device_ResetState);
-    RegisterRuntimeAddr(0x1800e0ef0, (void*)&RtInput_Device_ResetState); ++n;
 
     // Both doors, one body -- and that body is input_config_startup.cpp's. This
     // file keeps the registration because RtInputRegister is ungated, so the
     // export stays bound whatever RT_INPUTCFGSTART says.
-    RegisterRuntimeExport("?Load@Configuration@Input@@QEAAXXZ", (void*)&RtInput_Configuration_Load);
-    RegisterRuntimeAddr(0x1800e0c80, (void*)&RtInput_Configuration_Load); ++n;
-
-    RegisterRuntimeExport("?Save@Configuration@Input@@QEAAXXZ", (void*)&RtInput_Configuration_Save);
-    RegisterRuntimeAddr(0x1800e0c00, (void*)&RtInput_Configuration_Save); ++n;
 
     return n;
 }
