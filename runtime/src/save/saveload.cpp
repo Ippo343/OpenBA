@@ -1047,18 +1047,9 @@ Save::SaveLoad* Save::SaveLoad::Get() {
 int RtSaveLoadRegister() {
     int n = 0;
     // B3R W2-RT: ??0SaveLoad (name), 0x1800c3c90 (~SaveLoad's address) and
-    // 0x1800c3f40 (SaveInfo_Dtor) had no reader and went; the two names below
-    // stay while engine_funcs.cpp reads them.
-    RegisterRuntimeExport("??0SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Ctor); ++n;
-    // WAVE 9 LANE SYS2. `QEAA`, the NON-VIRTUAL spelling -- SaveLoad has no
-    // vtable (the header proves it: the ctor writes an int at +0x00 and the
-    // DLL exports no ??_7SaveLoad@Save@@6B@), so `UEAA` here would be a
-    // phantom name resolving NULL in silence
-    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md, which cost this
-    // project a skipped ~Internal on every teardown). Verified present in the
-    // shipped export table with pefile before this line was written:
-    // 0x1800c3c90, ordinal 666.
-    RegisterRuntimeExport("??1SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Dtor); ++n;
+    // 0x1800c3f40 (SaveInfo_Dtor) had no reader and went. B3R W2-EZ: so did
+    // ??0SavedState@Save@@QEAA@XZ and ??1SaveLoad@Save@@QEAA@XZ, whose one
+    // reader was EngineFuncsInit (deleted). This function registers nothing.
     return n;
 }
 

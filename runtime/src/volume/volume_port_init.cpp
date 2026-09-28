@@ -37,21 +37,11 @@ Vector3* RtVolume_Frustum_GetScreenDirection(const Frustum* self, Vector3* ret, 
 Matrix*  RtVolume_Frustum_Projection(const Frustum* self, Matrix* ret, bool zeroToOneDepth);
 
 void RtVolumePortInit() {
-    RegisterRuntimeExport("??0Box@Volume@@QEAA@XZ", (void*)&RtVolume_Box_Ctor);
-    RegisterRuntimeExport("??4Box@Volume@@QEAAAEAV01@AEBV01@@Z", (void*)&RtVolume_Box_Assign);
-    RegisterRuntimeExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z", (void*)&RtVolume_Box_Extend);
+    // B3R W2-EZ: the Box ctor / operator= / Extend and the Frustum ctor /
+    // operator* / Contains rows went: their one reader was EngineFuncsInit (deleted).
     RegisterRuntimeExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z", (void*)&RtVolume_Box_Intersect);
 
     RegisterRuntimeExport("??0Rectangle@Volume@@QEAA@XZ", (void*)&RtVolume_Rectangle_Ctor);
 
-    RegisterRuntimeExport("??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z",
-                           (void*)&RtVolume_Frustum_Ctor_Perspective);
-    RegisterRuntimeExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z",
-                           (void*)&RtVolume_Frustum_MulTransform3);
-    RegisterRuntimeExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z", (void*)&RtVolume_Frustum_Contains);
-    // Wave 9 lane P. Registered by NAME only: the one in-tree caller,
-    // runtime/src/graphics/renderer.cpp's RtFrustumProjection, already goes
-    // through ResolveExport, and no site reaches it by address.
-
-    printf("[RtVolume] 12 exports registered (Box x5, Rectangle x1, Frustum x6)\n");
+    printf("[RtVolume] 2 exports registered (Box::Intersect, Rectangle ctor)\n");
 }

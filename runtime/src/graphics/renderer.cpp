@@ -938,16 +938,9 @@ int RtGraphicsRendererRegister() {
     int count = 0;
 
     // B3R W2-RT: the three address rows (0x1800fe960, 0x180105180,
-    // 0x1800180a0) and the ??1Renderer name row had no reader and went. The two
-    // names below stay while engine_funcs.cpp reads them.
-
-    // --- Graphics::Camera ------------------------------------------------------
-    RegisterRuntimeExport("??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z",
-                          (void*)&RtGraphics_Camera_Ctor); ++count;
-
-    // --- Graphics::Renderer ----------------------------------------------------
-    RegisterRuntimeExport("??0Renderer@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_Renderer_Ctor); ++count;
+    // 0x1800180a0) and the ??1Renderer name row had no reader and went. B3R
+    // W2-EZ: so did the ??0Camera@ and ??0Renderer@ names, whose one reader was
+    // EngineFuncsInit (deleted). This function registers nothing.
 
     return count;
 }

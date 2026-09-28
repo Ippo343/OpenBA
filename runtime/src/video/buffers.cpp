@@ -1004,18 +1004,14 @@ bool Video_VertexBuffer_Set(VertexBuffer* self, int sizeBytes, int offsetBytes, 
 // Registration
 // ============================================================================
 int RtVideoBuffersRegister() {
-    int n = 0;
-
     // B3R W2-RT: the two address rows (0x1800f3490, 0x1800f55f0) had no
-    // reader and went; the names stay while engine_funcs.cpp reads them.
-    RegisterRuntimeExport("??0IndexBuffer@Video@@QEAA@XZ", (void*)&Video_IndexBuffer_Ctor);
-    n++;
-
-    RegisterRuntimeExport("??0VertexBuffer@Video@@QEAA@XZ", (void*)&Video_VertexBuffer_Ctor);
-    n++;
+    // reader and went. B3R W2-EZ: so did the ??0IndexBuffer@ / ??0VertexBuffer@
+    // names, whose one reader was EngineFuncsInit (deleted), and with them this
+    // function's "[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C):
+    // N exports registered" line, which would print 0. This function registers
+    // nothing.
 
     // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — HELD BACK, see above.
 
-    printf("[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): %d exports registered\n", n);
-    return n;
+    return 0;
 }

@@ -540,28 +540,12 @@ int RtObjectExternalRegister() {
     // Object::Factory::_singleton is the class static (FactorySingletonSlot()
     // above); nothing here resolves it.
 
-    int n = 0;
-
     // ENDGAME B.3.9 OBJ (B39_RULES D2): External's and CompiledExternal's
     // factory pairs are the classes' own statics (external_class.cpp), not
     // FACTREST rows.
-    RegisterRuntimeExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ",
-                          (void*)&RtObject_ExternalList_GetResourceCount); ++n;
-    // B3R W2-RT: the address row (0x180007650) had no reader and went.
-
-    // The Wave 3 banner named four deliberate omissions. All four have since
-    // been ported by other files and this line was still claiming otherwise:
-    //   Clean                     external_set.cpp        (Wave 9 lane RES)
-    //   FindOrLoad                external_compiled.cpp   (Wave 11 lane OBJEXT)
-    //   SaveText                  external_savetext_win.cpp (Wave 11 f/u 2)
-    //   SerializeReferenceTable   external_reftable.cpp   (Wave 11 f/u 3, AVL)
-    // A stale banner is how a lane gets sent to port what the tree already has
-    // (reference_grep_for_the_port_before_writing_it.md), so it is corrected
-    // here rather than left for the next reader.
-    printf("[RtPort]   External: %d exports. The four rows this line used to "
-           "call \"deliberately NOT ported\" -- Clean, FindOrLoad, SaveText, "
-           "SerializeReferenceTable -- are ALL ported now, in external_set.cpp, "
-           "external_compiled.cpp, external_savetext_win.cpp and "
-           "external_reftable.cpp respectively.\n", n);
-    return n;
+    // B3R W2-RT: the address row (0x180007650) had no reader and went. B3R W2-EZ:
+    // so did ?GetResourceCount@ExternalList@Object@@QEBAHXZ, whose one reader was
+    // EngineFuncsInit (deleted), and with it this function's "[RtPort]   External:
+    // N exports" line, which would print 0. This function registers nothing.
+    return 0;
 }
