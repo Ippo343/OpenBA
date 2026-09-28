@@ -42,7 +42,7 @@
 // Helper: get KeyMap from external reference
 // ============================================================
 static inline uint64_t GetKeyMap() {
-    return (uint64_t)***(void****)g_pInputConfigSingletonExref;
+    return (uint64_t)Input::Configuration::_singleton->_keyMap;
 }
 
 // 0x1400de950 — ~PathTool. After the leaf restamp (the compiler's), three

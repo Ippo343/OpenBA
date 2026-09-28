@@ -59,11 +59,6 @@
 #include <cstdlib>
 #include <new>
 
-// Defined in standalone/address_registry.cpp. Publishes the live KeyMap*
-// into the fake exref chain at slot 0x140151738 so that triple-deref reads
-// (g_pInputConfigSingletonExref) reach the real KeyMap inside Input::Configuration.
-extern "C" void SetStandaloneKeyMap(void* keyMap);
-
 // The exe cell 0x1401c3de0 (B3R STORAGE): GameMain's settings block
 // (Game/exe_bodies.h).
 int32_t* g_gameSettings = nullptr;
@@ -464,18 +459,18 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                            g_gameContainer);
                 }
 
-                // Wire the live Input::KeyMap into our fake exref chain so
-                // triple-deref reads of g_pInputConfigSingletonExref reach the real
-                // KeyMap. Engine::Startup constructed Input::Configuration at
-                // engine[0x6d8]; its first field is the KeyMap pointer
-                // (Input::Configuration::GetKeyMap is `return *(KeyMap**)this`).
+                // Engine::Startup constructed Input::Configuration at
+                // engine[0x6d8] (== Input::Configuration::_singleton); its first
+                // field is the KeyMap pointer. The KeyMap readers read
+                // Input::Configuration::_singleton->_keyMap (B3R STORAGE: the
+                // hand-built exref chain this used to fill is gone).
                 void* inputCfg = *reinterpret_cast<void**>(
                     reinterpret_cast<uintptr_t>(&engine) + 0x6d8);
                 void* keyMap = inputCfg ? *reinterpret_cast<void**>(inputCfg)
                                         : nullptr;
                 printf("[GameMain] InputConfig=%p  -> KeyMap=%p\n",
                        inputCfg, keyMap);
-                SetStandaloneKeyMap(keyMap);
+                (void)keyMap;   // the perf build strips the printf
 
                 // Populate KeyMap with default bindings (mirror of the original
                 // PlacementTool_Ctor's call to FUN_1400992f0). Must happen

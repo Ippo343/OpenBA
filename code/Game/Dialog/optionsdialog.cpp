@@ -192,8 +192,8 @@ extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface) {
 // [exref] -> [runtime global] -> [KeyMap ptr] = actual Input::KeyMap
 // Used for method calls (GetDeviceForId, GetInputForId, etc.)
 static inline void* GetActualKeyMap() {
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) return nullptr;
-    void* step2 = *(void**)*g_pInputConfigSingletonExref;
+    if (Input::Configuration::_singleton == nullptr) return nullptr;
+    void* step2 = Input::Configuration::_singleton;
     if (!step2) return nullptr;
     return *(void**)step2;
 }

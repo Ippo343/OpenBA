@@ -496,9 +496,9 @@ char EditTool::OnKey(char param2) {
         static int calls = 0;
         if (calls < 3) { calls++;
             printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p AtCell=%p "
-                   "keyExref=%p\n", calls, param2,
+                   "inputConfig=%p\n", calls, param2,
                    (void*)&PlayerRay_GetMouseRay_1005a0, (void*)&PlayerRay_TerrainMarch_aa530,
-                   (void*)&PlayerEdit_EntityAtCell_a0280, (void*)g_pInputConfigSingletonExref);
+                   (void*)&PlayerEdit_EntityAtCell_a0280, (void*)Input::Configuration::_singleton);
             fflush(stdout);
         }
     }
@@ -512,11 +512,10 @@ char EditTool::OnKey(char param2) {
         return 1;
     }
 
-    // Get KeyMap via triple deref of external reference
-    if (!g_pInputConfigSingletonExref) return 1;
-    uintptr_t keyMapExref = (uintptr_t)*g_pInputConfigSingletonExref;
-    uintptr_t keyMapPtr = *(uintptr_t*)keyMapExref;
-    uintptr_t keyMap = *(uintptr_t*)keyMapPtr;
+    // The KeyMap: Input::Configuration::_singleton->_keyMap (retail's triple
+    // deref of the import slot 0x140151738).
+    if (!Input::Configuration::_singleton) return 1;
+    uintptr_t keyMap = reinterpret_cast<uintptr_t>(Input::Configuration::_singleton->_keyMap);
 
     // Check KeyMap::Pressed(keyMap, 0, 5)
     bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge

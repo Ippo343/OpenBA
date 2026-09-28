@@ -111,15 +111,12 @@ void RegisterDefaultInputBindings() {
     // Resolve the actual KeyMap via the same triple-deref pattern the
     // original exe uses. See CLAUDE.md note about External reference
     // indirection levels.
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) {
-        printf("[InputBindings] FATAL: g_pInputConfigSingletonExref not initialized "
-               "(slot=%p, *slot=%p)\n",
-               (void*)g_pInputConfigSingletonExref,
-               g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
+    if (Input::Configuration::_singleton == nullptr) {
+        printf("[InputBindings] FATAL: Input::Configuration::_singleton not initialized\n");
         return;
     }
 
-    void* level2 = *(void**)*g_pInputConfigSingletonExref;
+    void* level2 = Input::Configuration::_singleton;
     if (!level2) {
         printf("[InputBindings] FATAL: KeyMap exref level-2 ptr is NULL\n");
         return;

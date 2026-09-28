@@ -232,13 +232,8 @@ extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
 
 // DAT_1401c3de8, the Game container (NOT the KeyMap): g_gameContainer
 // (code/Game/Game/game.h; B3R STORAGE).
-// Exe import slot 0x140151738 = ?_singleton@Configuration@Input@@0PEAV12@EA
-// (B37_RULES 6.3 defect 3: this global was named g_pInputConfigSingletonExref until the
-// B.3.7 close). Triple deref yields the Input::KeyMap*:
-//   slot -> &Configuration::_singleton -> Configuration* -> +0x00 _keyMap.
-// Standalone registers the slot with a two-link chain ending in the KeyMap
-// (standalone/address_registry.cpp, g_StandaloneKeyMapMid).
-extern void** g_pInputConfigSingletonExref;
+// Exe import slot 0x140151738 = ?_singleton@Configuration@Input@@0PEAV12@EA: the KeyMap
+// is Input::Configuration::_singleton->_keyMap (B3R STORAGE).
 
 
 // ============================================================

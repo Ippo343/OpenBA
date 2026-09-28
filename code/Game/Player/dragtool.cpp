@@ -71,7 +71,7 @@ DEFINE_EXE_ABSTRACT_TYPE(DragTool, "Tool")
 static inline void* GetKeyMap() {
     // Triple deref: slot → External ptr → wrapped ptr → KeyMap object
     // Original asm: MOV RAX,[slot]; MOV R8,[RAX]; MOV R14,[R8]
-    return ***(void****)g_pInputConfigSingletonExref;
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // ============================================================

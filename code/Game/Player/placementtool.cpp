@@ -75,7 +75,7 @@ static inline float Rdata_140172248() {
 // Helper: get KeyMap object from external reference (triple deref)
 // ============================================================
 static inline void* GetKeyMap() {
-    return ***(void****)g_pInputConfigSingletonExref;
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // ============================================================

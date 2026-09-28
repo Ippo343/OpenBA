@@ -69,7 +69,7 @@ void FencedTool::Shutdown() {
 // Helper: get KeyMap from external reference
 // ============================================================
 static inline void* GetKeyMap() {
-    return ***(void****)g_pInputConfigSingletonExref;
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // ============================================================
@@ -533,7 +533,7 @@ void FencedTool::Draw(void* context, char param3) {
         endCell   = this->endCell;
     } else {
         // Get cell under cursor
-        startCell = PlayerRay_ScreenToCell_101270((uintptr_t)***(void****)g_pInputConfigSingletonExref);
+        startCell = PlayerRay_ScreenToCell_101270((uintptr_t)Input::Configuration::_singleton->_keyMap);
         endCell = startCell;
     }
 

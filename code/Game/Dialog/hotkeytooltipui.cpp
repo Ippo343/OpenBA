@@ -53,8 +53,8 @@ namespace Game {
 // exref slot — identical to optionsdialog.cpp's GetActualKeyMap. Proven path:
 // SetStandaloneKeyMap publishes the Engine[+0x6d8] keymap into this chain.
 static void* GetActualKeyMap() {
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) return nullptr;
-    void* step2 = *(void**)*g_pInputConfigSingletonExref;
+    if (Input::Configuration::_singleton == nullptr) return nullptr;
+    void* step2 = Input::Configuration::_singleton;
     if (!step2) return nullptr;
     return *(void**)step2;
 }

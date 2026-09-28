@@ -21,35 +21,6 @@
 #include <cstdio>
 #include <cstdint>
 
-// ============================================================
-// KeyMap exref (slot 0x140151738) — fake External wrapper for standalone.
-//
-// Original exe layout: the slot at 0x140151738 holds an Object::ExternalPtr
-// wrapper that, when triple-dereffed, yields the live Input::KeyMap pointer.
-// The Runtime DLL fills this slot during type-registration plumbing in the
-// real game. In standalone we never go through that machinery, so the slot
-// stays zero and ButtonElement::Update faults inside Input::KeyMap::Pressed.
-//
-// We fake it with a 2-link chain matching the disasm
-//   MOV RAX,[0x140151738] ; MOV R8,[RAX] ; MOV R14,[R8]
-// where R14 = KeyMap*. Three derefs total from the slot address.
-//
-// After Engine::Startup (which constructs Input::Configuration with its
-// embedded KeyMap), RunGameMain calls SetStandaloneKeyMap(km) to fill
-// g_StandaloneKeyMapPtr with the real pointer. Game::RegisterDefaultInputBindings
-// then walks the same triple-deref chain the original code uses.
-// ============================================================
-extern "C" {
-    // Level 3 — actual KeyMap*. Filled at runtime after Engine::Startup.
-    void* g_StandaloneKeyMapPtr = nullptr;
-    // Level 2 — points to level-3 storage (constant).
-    void* g_StandaloneKeyMapMid = &g_StandaloneKeyMapPtr;
-}
-
-extern "C" void SetStandaloneKeyMap(void* keyMap) {
-    g_StandaloneKeyMapPtr = keyMap;
-}
-
 // Per-class vtable registration entry points. Each lives next to its class's
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
@@ -1095,20 +1066,9 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140151410,
         (uintptr_t)ResolveExport("?IsA@Base@Object@@QEBA_NI@Z"));
 
-    // Input::KeyMap exref. Slot stores a level-1 pointer to a "level-2 cell"
-    // whose contents are the real KeyMap*. See the comment near
-    // g_StandaloneKeyMapPtr above for the reasoning.
-    //
-    // Order: ResolveAddr(0x140151738) -> &slot_storage (uintptr_t)
-    //        *(void**)slot_storage = (void*)&g_StandaloneKeyMapMid  -- level 1
-    //        *(void**)&g_StandaloneKeyMapMid = g_StandaloneKeyMapMid
-    //                                        = &g_StandaloneKeyMapPtr -- level 2
-    //        *(void**)&g_StandaloneKeyMapPtr = g_StandaloneKeyMapPtr
-    //                                        = KeyMap* -- level 3
-    // Triple deref from the slot address yields the KeyMap, matching the
-    // original exe's disasm.
-    RegisterDispatchSlot(0x140151738,
-        reinterpret_cast<uintptr_t>(&g_StandaloneKeyMapMid));
+    // (0x140151738 `?_singleton@Configuration@Input@@`: the hand-built two-link
+    // KeyMap chain and its row went at B3R STORAGE -- every reader reads
+    // Input::Configuration::_singleton->_keyMap.)
 
     // ----------------------------------------------------------------
     // IO::Serializer reimpl wrappers (runtime/src/io/serializer.cpp)

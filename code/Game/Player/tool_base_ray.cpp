@@ -199,15 +199,11 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 //              +0x98..+0xc4 = 48-byte Transform3 (camera world matrix)
 // Caller signature: bool fn(void* /*param_1, ignored*/, float* outOrigin, float* outDir)
 extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOrigin, float* outDir) {
-    if (!g_pInputConfigSingletonExref) return 0;
+    if (!Input::Configuration::_singleton) return 0;
 
-    // KeyMap = triple-deref of the exref (matches the working dialog pattern
-    // ***(void****)g_pInputConfigSingletonExref: slot -> slot value -> exref -> object).
-    void* keyMap = nullptr;
-    {
-        void**** p = reinterpret_cast<void****>(g_pInputConfigSingletonExref);
-        if (p && *p && **p && ***p) keyMap = ***p;
-    }
+    // KeyMap = Input::Configuration::_singleton->_keyMap (retail's triple deref of
+    // the import slot 0x140151738: slot -> &_singleton -> _singleton -> _keyMap).
+    void* keyMap = Input::Configuration::_singleton->_keyMap;
     void* display = ::Video::Device::_singleton;        // Video::Device instance
     uintptr_t camHolder = reinterpret_cast<uintptr_t>(
         GameUpdateLoop::_singleton ? *reinterpret_cast<void**>(GameWorld() + 0xe0) : nullptr);

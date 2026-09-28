@@ -433,7 +433,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
     // (controller, Time&); the body ignores the Time arg. Idle cost is two flag
     // reads (+0x41/+0x4D, both 0 unless Slot9 armed a drag). Guard the KeyMap
     // exref + the Runtime fns the drag path dereferences unconditionally.
-    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref
+    if (Input::Configuration::_singleton == nullptr
         || GameUpdateLoop::_singleton == nullptr) return;
     uintptr_t s = (uintptr_t)this;
 
@@ -467,7 +467,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
 
     // Pending drag: check mouse movement threshold
     if (*(char*)(s + 0x4D) != 0) {
-        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
+        void* keyMap = Input::Configuration::_singleton->_keyMap;
 
         // Get mouse X, scaled by dialog scale factor
         void* dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
@@ -507,7 +507,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
 
     // Active drag: move dialog to follow mouse
     if (*(char*)(s + 0x41) != 0 && *(char*)(s + 0x40) != 0) {
-        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
+        void* keyMap = Input::Configuration::_singleton->_keyMap;
 
         if (!*(uintptr_t*)(s + 0x18)) { /* dialog instance null, skip drag */ }
         else {

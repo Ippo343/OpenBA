@@ -1175,7 +1175,7 @@ post_simulation:
     // Original asm at 0x1400966c1: triple deref from slot, dispatch call at 0x140151758
     // Match proven working pattern from dragtool/pathtool — no null guards (original has none).
     {
-        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
+        void* keyMap = Input::Configuration::_singleton->_keyMap;
 
         if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x21)) {  // B.3.7 bridge
             m_quickSavePressed = 1;

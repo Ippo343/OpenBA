@@ -133,7 +133,7 @@ char RoadTool::OnKey(char key) {
     DragTool::OnKey(key);
 
     // Read KeyMap::GetValue(0, 0x16) for the modifier flag
-    uint64_t keyMap = (uint64_t)***(void****)g_pInputConfigSingletonExref;
+    uint64_t keyMap = (uint64_t)Input::Configuration::_singleton->_keyMap;
     short val = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0x16);  // B.3.7 bridge
     modifierFlag = (val == 0) ? 1 : 0;
 

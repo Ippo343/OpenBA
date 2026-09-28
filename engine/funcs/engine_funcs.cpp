@@ -65,11 +65,6 @@ fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath = nullptr;
 
 
 // ============================================================
-// Game Singletons (Phase A3)
-// ============================================================
-void** g_pInputConfigSingletonExref = nullptr;
-
-// ============================================================
 // Common Exe Functions (Phase A4) — type ID globals for reimplemented FindComponent
 // ============================================================
 // FindComponent functions are now inline C++ (see engine_funcs.h).
@@ -659,12 +654,6 @@ bool EngineFuncsInit() {
 
 
     // ================================================================
-    // Phase A3: Game Singletons
-    // ================================================================
-    g_pInputConfigSingletonExref = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140151738));
-
-    // ================================================================
     // Phase A4: FindComponent type IDs (resolved from exe .rdata)
     // The old exe function pointers (fn_FindComponent_X) are eliminated.
     // All FindComponent variants are now inline C++ in engine_funcs.h.
@@ -1197,8 +1186,6 @@ bool EngineFuncsInit() {
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
     printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
     printf("[EngineFuncs] Phase A3 — Singletons:\n");
-    printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pInputConfigSingletonExref,
-           g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
 #endif
 
