@@ -57,16 +57,6 @@ NOTES = [
         "the header comment still sees it.",
         "grep -n '_f10' runtime/types/graphics/Animation.h",
     ),
-    (
-        "videointerface-false-alarm",
-        "standalone/video_interface.cpp",
-        ["EXPECTED, NOT A FAULT", "RtPortLookupExport"],
-        "At cutover the InitializeInterfaces detour cannot install and the old "
-        "message claimed the DX11 slot goes unfilled. It does not: the ported body "
-        "fills it. The message must keep asking the registry rather than asserting.",
-        "grep -n 'VideoInterfaceFillDx11Slot' runtime/src/video/video_interfaces_win.cpp "
-        "-- it is the first statement of RtVideo_Device_InitializeInterfaces.",
-    ),
 ]
 
 
