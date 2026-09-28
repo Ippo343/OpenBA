@@ -95,6 +95,10 @@ using rt::system::kTagPrevHiMask;
 using rt::system::kSizeBytesMask;
 using rt::system::kThisFreeShl2;
 
+// ?_singleton@MemoryAllocator@System@@0PEAV12@EA (0x1801fc718): BSS in retail,
+// zero until the ctor below runs (B3R W0-SM M1: was the mint's storage cell).
+System::MemoryAllocator* System::MemoryAllocator::_singleton = nullptr;
+
 // ---------------------------------------------------------------------------
 // Platform seam (see MemoryAllocator.h). Null until the host installs it.
 // ---------------------------------------------------------------------------
@@ -634,10 +638,7 @@ void Shutdown(MemoryAllocator* self) {
 }
 
 // --- ctor (0x1800c79a0) / dtor (0x1800c7960) -------------------------------
-// _singleton is the DLL's exported data slot while the DLL is loaded; after
-// cutover it becomes ours. Both are reached through SingletonSlot() below.
-MemoryAllocator** SingletonSlot();
-
+// Both write the class static System::MemoryAllocator::_singleton (0x1801fc718).
 void Construct(MemoryAllocator* self) {
     self->ranges = nullptr;
     self->rangeCount = 0;
@@ -651,26 +652,18 @@ void Construct(MemoryAllocator* self) {
     self->freeTagCount = 0;
     g_plat.lockInit(self->lock);
     std::memset(self->freeLists, 0, sizeof(self->freeLists));
-    if (MemoryAllocator** slot = SingletonSlot()) *slot = self;
+    MemoryAllocator::_singleton = self;
     self->pageSize = 0;                       // inlined PlatformConstruct
 }
 
 void Destruct(MemoryAllocator* self) {
-    if (MemoryAllocator** slot = SingletonSlot()) *slot = nullptr;
+    MemoryAllocator::_singleton = nullptr;
     g_plat.lockDelete(self->lock);
-}
-
-// --- the _singleton slot ---------------------------------------------------
-MemoryAllocator** SingletonSlot() {
-    MemoryAllocator** slot = RT_DATA_SLOT(MemoryAllocator**,
-        "?_singleton@MemoryAllocator@System@@0PEAV12@EA");
-    return slot;
 }
 
 // --- Get (0x1800534e0) -----------------------------------------------------
 MemoryAllocator* Get() {
-    MemoryAllocator** slot = SingletonSlot();
-    return slot ? *slot : nullptr;
+    return MemoryAllocator::_singleton;
 }
 
 // --- MemAlloc (0x1800c7a50) / MemFree (0x1800c7ad0) ------------------------

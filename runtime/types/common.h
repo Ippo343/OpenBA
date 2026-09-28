@@ -36,5 +36,5 @@ struct ExternalFactory;      // Object::ExternalFactory
 // System namespace
 // ============================================================
 
-struct MemoryAllocator;      // System::MemoryAllocator
+namespace System { class MemoryAllocator; }  // runtime/types/system/MemoryAllocator.h
 struct Filename;             // System::Filename

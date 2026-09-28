@@ -2,14 +2,13 @@
 // The minted exported DATA of Runtime-x64.dll: STORAGE rows only (ENDGAME
 // B.3.9 retired every minted vtable and BaseTypeInfo). Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 0 vtables, 0 BaseTypeInfo, 2 storage symbols.
-// Retired (ENDGAME B.3 step 9): 302 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 0 vtables, 0 BaseTypeInfo, 1 storage symbols.
+// Retired (ENDGAME B.3 step 9): 303 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Plain storage. All are BSS in the DLL — written only at runtime — so
 // there is nothing to copy: minting one means OWNING the bytes.
-alignas(16) static unsigned char kStorageBytes[32];  // one block, zero-initialised
+alignas(16) static unsigned char kStorageBytes[16];  // one block, zero-initialised
 static RtMintStorage kMintStorage[] = {
     { "?_disableHandler@Debug@System@@0_NA", 0x1801fc708ull, 1, &kStorageBytes[0], "bool -- suppresses the Debug top-level exception handler; gap-to-next-export=1 AND all 5 .text accesses are byte-width" },
-    { "?_singleton@MemoryAllocator@System@@0PEAV12@EA", 0x1801fc718ull, 8, &kStorageBytes[16], "singleton pointer" },
 };
 

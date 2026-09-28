@@ -133,37 +133,15 @@
 #include "../common.h"
 #include "../system/MemoryAllocator.h"
 
-// Retail addresses in Runtime-x64.dll (Ghidra space, image base 0x180000000).
-// Ordinals are from the shipped export directory, read with pefile.
-// Everything below lives in `RtEngine`, matching runtime/types/engine/UpdateLoop.h
-// (lane A) and the RtVideo / RtObject convention the earlier waves set. This is
-// NOT cosmetic: engine/types/MainLoop.h and engine/types/UpdateLoop.h define
-// GLOBAL `struct MainLoop` / `struct UpdateLoop`, `engine/types` is on the
-// include path AHEAD of `runtime/types`, and a global `struct Engine` here would
-// be a hard redefinition in any TU that included both trees.
-namespace RtEngine {
-
-namespace EngineAddr {
-    constexpr uintptr_t AllocatorSingleton = 0x1801fc718;  // same object, +0 view
-
-    constexpr uintptr_t Ctor               = 0x1800dbf00;  // ord 174
-    constexpr uintptr_t Dtor               = 0x1800dbec0;  // ord 586
-    constexpr uintptr_t Startup            = 0x1800db8a0;  // ord 4094
-    constexpr uintptr_t Shutdown           = 0x1800db4f0;  // ord 4047
-    constexpr uintptr_t Get                = 0x18000c7c0;  // ord 2413
-    constexpr uintptr_t GetMemoryAllocator = 0x18000c8b0;  // ord 2782, `return this`
-    constexpr uintptr_t PlatformConfigure  = 0x1800a1670;  // ord 3329
-    constexpr uintptr_t PlatformStartup    = 0x1800a2100;  // ord 3406
-    constexpr uintptr_t PlatformShutdown   = 0x1800a20f0;  // ord 3397
-    constexpr uintptr_t PlatformUpdate     = 0x1800a20e0;  // ord 3412
-
-    // The allocator's own ctor, called by Engine's ctor on `this`.
-    constexpr uintptr_t MemoryAllocatorCtor = 0x1800c79a0;
-    // The allocator's init, called by Engine::Startup after seeding +0x10/+0x18/+0x668.
-    constexpr uintptr_t MemoryAllocatorInit = 0x1800c7690;
-}
-
-}  // namespace RtEngine
+// (The `RtEngine::EngineAddr` address constants -- the allocator singleton
+// 0x1801fc718, the Engine ctor / dtor / Startup / Shutdown / Get / accessor /
+// Platform* exports and the allocator's ctor / AddNewMemoryRange -- had no
+// reader and went at B3R W0-SM M1; each address is on its declaration below.
+// The Engine ctor calls the allocator's ctor 0x1800c79a0 on `this`, and
+// Engine::Startup calls AddNewMemoryRange 0x1800c7690 after seeding
+// +0x10/+0x18/+0x668. `RtEngine` stays the namespace of the aliases at the
+// bottom: engine/types defines GLOBAL `struct MainLoop` / `struct UpdateLoop`
+// and is on the include path ahead of runtime/types.)
 
 // ############################################################################
 // Engine::Engine -- THE REAL CLASS (ENDGAME B.3 step 7, block B1)

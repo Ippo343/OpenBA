@@ -221,11 +221,29 @@ static_assert(offsetof(MemoryRange, base) == 0x00, "MemoryRange::base");
 static_assert(offsetof(MemoryRange, end) == 0x08, "MemoryRange::end");
 static_assert(offsetof(MemoryRange, committed) == 0x10, "MemoryRange::committed");
 
+} // namespace system
+} // namespace rt
+
+namespace System {
+
 // ---------------------------------------------------------------------------
 // MemoryAllocator — 0x670 bytes (operator= at 0x18007c0c0 memcpy's 0x670).
+//
+// B3R W0-SM M1: the class, with its one static. The member functions are still
+// the `rtalloc::*` bodies in runtime/src/system/allocator.cpp (`self` explicit);
+// making them members is W0-A0's step (B3R_RULES R9), so none is declared here
+// yet. `rt::system::MemoryAllocator` (below) names this class.
 // ---------------------------------------------------------------------------
-struct MemoryAllocator {
-    MemoryRange* ranges;         // +0x000 ctor, GetMemoryRange, Shutdown
+class MemoryAllocator {
+public:
+    // ?_singleton@MemoryAllocator@System@@0PEAV12@EA (0x1801fc718). Set by the
+    // ctor (0x1800c79a0), cleared by the dtor (0x1800c7960): non-null exactly
+    // while the Engine that embeds the allocator at +0 is alive. Defined in
+    // runtime/src/system/allocator.cpp. PUBLIC: foreign files read it directly
+    // (the crash log, the engine_funcs snapshot, RunStartupSelfTests).
+    static MemoryAllocator* _singleton;
+
+    rt::system::MemoryRange* ranges; // +0x000 ctor, GetMemoryRange, Shutdown
     int32_t      rangeCount;     // +0x008 ctor, AddNewMemoryRange
     int32_t      rangeCapacity;  // +0x00c ExpandMemoryRangeTable
     uint64_t     minRangeSize;   // +0x010 Startup arg1 << 20 (megabytes)
@@ -240,6 +258,14 @@ struct MemoryAllocator {
     uint8_t      lock[0x28];     // +0x640 CRITICAL_SECTION (x64 MSVC: 40 bytes)
     uint64_t     pageSize;       // +0x668 GetSystemInfo().dwPageSize
 };
+
+} // namespace System
+
+namespace rt {
+namespace system {
+
+using MemoryAllocator = ::System::MemoryAllocator;
+
 static_assert(sizeof(MemoryAllocator) == 0x670, "MemoryAllocator is 0x670 bytes");
 static_assert(offsetof(MemoryAllocator, ranges) == 0x000, "ranges");
 static_assert(offsetof(MemoryAllocator, rangeCount) == 0x008, "rangeCount");

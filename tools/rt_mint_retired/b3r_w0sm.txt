@@ -1,0 +1,5 @@
+# B3R W0-SM (the registry teardown: the mint) -- rows retired by block W0-SM.
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+?_singleton@MemoryAllocator@System@@0PEAV12@EA   W0-SM-M1   class static System::MemoryAllocator::_singleton (runtime/src/system/allocator.cpp), written by rtalloc::Construct/Destruct; the four by-address readers (main.cpp crash log and self-test refresh, game_main.cpp, engine_funcs.cpp) read the static; SingletonSlot / SlotMemoryAllocator (RT_DATA_SLOT) and RtEngine::EngineAddr deleted
