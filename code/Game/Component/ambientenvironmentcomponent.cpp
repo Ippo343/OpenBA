@@ -274,13 +274,6 @@ void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
     }
 }
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void AmbientEnvironmentComponent_InitFuncs() {
-    EnsureResolved();
-}
-
 // ============================================================================
 // ENDGAME B.3.8 CIT — AmbientEnvironmentComponent as a REAL class
 // (AmbientEnvironmentComponent.h).
