@@ -326,3 +326,31 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14
 
 // ---- zonecomponent.cpp
 void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV);  // 0x140088e20
+
+// ============================================================
+// Moved from engine/funcs/engine_funcs.h's "TO MOVE: Component" section (B3R G-CompD).
+// engine_funcs.h includes this header, so its includers still see them.
+// ============================================================
+
+// ---- storagecomponent.cpp
+// StorageComponent::QueryCount(storageComp) -> int
+// FUN_14012cf10: iterates +0x28 item array (count at +0x30). Each slot is 0x10 bytes:
+//   [0..7] = ptr to "item" struct (has +0x28=component ptr array, +0x30=comp count)
+//   [8..11] = item quantity count
+// For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
+// then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
+int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10
+
+// ---- workcomponent.cpp
+// FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —
+// i.e. the initial value of WorkComponent+0x30, the number of worker SLOTS the site opens
+// with. It is NOT the maximum the player can reach: the jobCount spinner raises +0x30 up
+// to WorkDescription+0x2c (_maxWorkerCount) via SetMaxWorkers (0x14012fb00).
+// param_1+0x18 = the WorkDescription (checks IsDerivedFrom at DAT_1401c80a8).
+// WorkDescription layout: +0x20 _allowCountChange, +0x24 _defaultWorkers,
+//   +0x28 _minWorkerCount, +0x2c _maxWorkerCount, +0x30 _maxArea, +0x34 _scaleWorkersWithSize.
+// If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
+// Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
+// Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
+int fn_StorageCountQuery(void* component);  // 0x14012e5c0 (NOT the registered body: that is
+                                            // WorkComponent_CalcMaxWorkers, tutorial_base.cpp; R5, two bodies)

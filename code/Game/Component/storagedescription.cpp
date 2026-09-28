@@ -70,7 +70,6 @@ StorageDescription::~StorageDescription() {
 
 // [5] 0x14012c9a0: stream order as retail.
 bool StorageDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_rawMaterialFlags, nullptr);   // rawMaterialFlags (enum, uint door)
     ser.Serialize(_flagA, nullptr);
@@ -93,7 +92,7 @@ bool StorageDescription::Serialize(void* stream) {
     }
     for (int i = 0; i < count; ++i, e += 0x10) {
         ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // int field, elem+8
-        fn_ExternalPtr_Serialize2(e, &ser);                        // External* ref (elem+0)
+        Reimpl_ExternalPtr_Serialize_StringTable(e, &ser);                        // External* ref (elem+0)
     }
     return true;
 }
