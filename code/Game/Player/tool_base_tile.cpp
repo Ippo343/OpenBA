@@ -16,7 +16,11 @@
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"
+#include "Component/exe_bodies.h"
+#include "Entity/componententity_funcs.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include "Object/factory_registration.h"
 #include "Component/ModelComponent.h"   // ModelComponent::TypeId (scoped find)
@@ -75,25 +79,13 @@ void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float
 //
 // 1:1 port of the Ghidra decompile (disasm-verified faithful). The index math and
 // the rotation switch are reproduced exactly.
-extern "C" {
-// f5d0 is registered (round 1); call via ResolveAddr.
-typedef bool (*ToolTile_f5d0_t)(int* param_1, int col, int row, unsigned int code,
-                                float p5, float p6, float p7, char p8, char p9,
-                                long long p10);
-}
-static ToolTile_f5d0_t s_fn_f5d0 = nullptr;
-static bool s_f5d0Init = false;
+// f5d0 = PlayerPath_CharComp_f5d0 (Player/exe_bodies.h), called by name.
 
 unsigned long long ToolTile_FootprintValidity_d580(
         int* param_1, int param_2, int param_3, int param_4, int param_5,
         unsigned int param_6, long long* param_7, long long* param_8,
         float param_9, float param_10, float param_11, char param_12,
         long long* param_13, int param_14, long long param_15) {
-    if (!s_f5d0Init) {
-        s_fn_f5d0 = reinterpret_cast<ToolTile_f5d0_t>(ResolveAddr(Module::Exe, 0x14009f5d0));
-        s_f5d0Init = true;
-    }
-
     int iVar1 = param_3 + param_5;        // row end
     int iVar4 = iVar1;
     if (param_3 < iVar1) {
@@ -133,11 +125,9 @@ unsigned long long ToolTile_FootprintValidity_d580(
                             *param_7 - 0xc0 +
                             static_cast<long long>(*reinterpret_cast<char*>(iVar8 + lVar2)) * 4);
                     }
-                    bool ok = false;
-                    if (s_fn_f5d0) {
-                        ok = s_fn_f5d0(param_1, iVar10, iVar14, param_6, param_9, param_10,
-                                       param_11, param_12, bVar13 ? 1 : 0, param_15);
-                    }
+                    bool ok = PlayerPath_CharComp_f5d0(param_1, iVar10, iVar14, param_6, param_9,
+                                                       param_10, param_11, param_12,
+                                                       bVar13 ? 1 : 0, param_15);
                     if (!ok) {
                         return 0;
                     }
@@ -165,34 +155,13 @@ unsigned long long ToolTile_FootprintValidity_d580(
 // fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr, fn_IsDerivedFrom.
 //
 // 1:1 port of the Ghidra decompile.
-typedef long long* (*ToolTile_resolveIBP_t)(long long self, void* outIBP); // 003f60 / 004680
-typedef void* (*ToolTile_copyCtor_t)(void* mem, void* src);                 // c3720
-typedef void (*ToolTile_1018d0_t)(long long a, int b, int c, int d, int e, long long f);
-typedef void* (*ToolTile_004680_t)(long long self, void* outIBP);
-typedef void (*ToolTile_c48a0_t)(void* entityList, void* ibp, int idx);
-typedef void (*ToolTile_c2b70_t)(long long modelComp, int flag);
-typedef unsigned long long (*ToolTile_subd960_t)(long long self);
-
-static ToolTile_1018d0_t  s_fn_1018d0  = nullptr;
-static ToolTile_copyCtor_t s_fn_copyCtor = nullptr;
-static ToolTile_004680_t  s_fn_004680  = nullptr;
-static ToolTile_resolveIBP_t s_fn_clearPathQ = nullptr; // 003f60
-static ToolTile_c48a0_t   s_fn_c48a0   = nullptr;
-static ToolTile_c2b70_t   s_fn_c2b70   = nullptr;
-static ToolTile_subd960_t s_fn_subd960 = nullptr;
-static bool s_d650Init = false;
-
-static void EnsureD650Deps() {
-    if (s_d650Init) return;
-    s_fn_1018d0    = reinterpret_cast<ToolTile_1018d0_t>(ResolveAddr(Module::Exe, 0x1401018d0));
-    s_fn_copyCtor  = reinterpret_cast<ToolTile_copyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_fn_004680    = reinterpret_cast<ToolTile_004680_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_clearPathQ= reinterpret_cast<ToolTile_resolveIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_c48a0     = reinterpret_cast<ToolTile_c48a0_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_fn_c2b70     = reinterpret_cast<ToolTile_c2b70_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
-    s_fn_subd960   = reinterpret_cast<ToolTile_subd960_t>(ResolveAddr(Module::Exe, 0x1400fd960));
-    s_d650Init = true;
-}
+// Called by name: 0x1401018d0 DragPlacementTool_ClearPathEntities_1018d0,
+// 0x1400fd960 PlacementToolPlace_FlipVariant_d960 (Player/exe_bodies.h);
+// 0x1400c3720 ComponentEntity_CtorFromDescription, 0x1400c48a0
+// EntityList_RegisterEntity_Impl (Entity/componententity_funcs.h); 0x140004680
+// FloorComponent_FindResData, 0x1400c2b70 ModelComponentNotify_Reimpl
+// (Component/exe_bodies.h); 0x140003f60 ActCNR_FindComponent_3f60 ("ClearPathQueue",
+// Action/exe_bodies.h).
 
 // Scoped ModelComponent finder. The shared component finder 003f60 resolves its
 // target type-id from raw .rdata 0x1401c7a50 (= ModelComponent), which is NULL in
@@ -285,8 +254,6 @@ static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
 unsigned long long ToolTile_ValidateCreate_fd650(
         long long param_1, int param_2, int param_3, int param_4, int param_5,
         const void* param_6, float param_7) {
-    EnsureD650Deps();
-
     // The exe global g_pGameWorldSingleton holds the gameWorld pointer value; in our
     // type system that value is *g_pGameWorldSingleton (engine_funcs declares it void**).
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -332,26 +299,25 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         piVar10 = reinterpret_cast<int*>(static_cast<long long>(col0));
     }
 
-    if (s_fn_1018d0) {
-        s_fn_1018d0(reinterpret_cast<long long>(piVar10), param_2, param_3, param_4, param_5,
-                    *reinterpret_cast<long long*>(
-                        *reinterpret_cast<long long*>(param_1 + 0x28) + 0x50));
-    }
+    DragPlacementTool_ClearPathEntities_1018d0(piVar10, param_2, param_3, param_4, param_5,
+                                               *reinterpret_cast<long long*>(
+                                                   *reinterpret_cast<long long*>(param_1 + 0x28) + 0x50));
 
     // Allocate + copy-construct the placed ComponentEntity.
-    void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* ptr = nullptr;
-    if (mem != nullptr && s_fn_copyCtor) {
-        ptr = s_fn_copyCtor(mem, *reinterpret_cast<void**>(param_1 + 0x20));
+    if (mem != nullptr) {
+        ptr = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
+                                                  *reinterpret_cast<void**>(param_1 + 0x20));
     }
 
     long long local_res8 = 0;
     void* local_48 = mem; // doubles as the out-IBP scratch (matches the exe stack reuse)
-    if (fn_InternalBasePtr_Ctor) new (&local_res8) ::Object::InternalBasePtr(
+    new (&local_res8) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
 
     // Resolve the placed-entity sub-component (004680) and write the footprint rect.
-    void* pIVar8 = s_fn_004680 ? s_fn_004680(local_res8, &local_48) : nullptr;
+    void* pIVar8 = FloorComponent_FindResData(reinterpret_cast<void*>(local_res8), &local_48);
     lVar3 = *reinterpret_cast<long long*>(pIVar8);
     *reinterpret_cast<short*>(lVar3 + 0x28) = static_cast<short>(param_2);
     *reinterpret_cast<short*>(lVar3 + 0x2a) = static_cast<short>(param_3);
@@ -364,7 +330,7 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     }
 
     // Resolve the model/geometry sub-component (ClearPathQueue == 003f60) and set its transform.
-    pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, &local_48)) : nullptr;
+    pIVar8 = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(local_res8), &local_48);
     long long modelComp = pIVar8 ? *reinterpret_cast<long long*>(pIVar8) : 0;
     // 003f60's c7a50 type-id is NULL in standalone → null component. Scoped fallback.
     if (modelComp == 0) modelComp = reinterpret_cast<long long>(ToolTile_FindModelComponentScoped(local_res8));
@@ -372,15 +338,13 @@ unsigned long long ToolTile_ValidateCreate_fd650(
 
     // Resolve again (different out-IBP) and fix up the model component.
     unsigned char local_38[16];
-    pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, local_38)) : nullptr;
+    pIVar8 = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(local_res8), local_38);
     long long* plVar4 = pIVar8 ? *reinterpret_cast<long long**>(pIVar8) : nullptr;
     // Same c7a50-NULL fallback as the transform site above.
     if (plVar4 == nullptr) plVar4 = reinterpret_cast<long long*>(ToolTile_FindModelComponentScoped(local_res8));
     if (plVar4 != nullptr) {
         int uVar2 = *reinterpret_cast<int*>(param_1 + 100);
-        if (fn_IsDerivedFrom) {
-            fn_IsDerivedFrom(reinterpret_cast<void*>(plVar4[3]), ModelDescription::TypeId());
-        }
+        (void)Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(plVar4[3]), ModelDescription::TypeId());
         *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x164) = static_cast<short>(uVar2);
         if (-1 < *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x166)) {
             reinterpret_cast<Component*>(plVar4)->OnRemove();   // B.3.x bridge (slot 7)
@@ -393,15 +357,13 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         // default = -1). Without the pipeline, force the finished mesh so the placed building
         // renders (the original "no completion flow -> model-less forever" guard).
         ToolTile_SetPlacedModel(reinterpret_cast<long long>(plVar4), true);
-        if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
+        ModelComponentNotify_Reimpl(reinterpret_cast<void*>(plVar4[2]), 0);
     }
 
     // Register the new entity in the world entity list.
     local_48 = reinterpret_cast<void*>(local_res8);
-    if (s_fn_c48a0) {
-        s_fn_c48a0(*reinterpret_cast<void**>(gameWorld + 0xe8), &local_48,
-                   *reinterpret_cast<int*>(*reinterpret_cast<long long*>(param_1 + 0x20) + 0x20));
-    }
+    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(gameWorld + 0xe8), &local_48,
+                                   *reinterpret_cast<int*>(*reinterpret_cast<long long*>(param_1 + 0x20) + 0x20));
 
     // Mesh-precise picking: register the placed building's (now-completed, forced above)
     // model mesh into Picking::Scene so it's clickable anywhere on the model — the same
@@ -438,6 +400,9 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     // that into the 41b0 call. See MapComponent_Slot12VSlot (mapcomponent.cpp), which is
     // where the occupancy write belongs.
 
-    unsigned long long uVar9 = s_fn_subd960 ? s_fn_subd960(param_1) : 0;
+    // 0x1400fd960's body is void: the door read the upper bytes of whatever it left in
+    // RAX. Every caller of this function reads only AL (= 1 here), so those bytes are 0.
+    PlacementToolPlace_FlipVariant_d960(reinterpret_cast<void*>(param_1));
+    unsigned long long uVar9 = 0;
     return (uVar9 & ~0xffULL) | 1ULL;
 }
