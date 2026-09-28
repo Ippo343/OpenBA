@@ -200,11 +200,4 @@ static_assert(offsetof(Serializer, m_stream)   == 0x00, "Serializer.m_stream @ 0
 static_assert(offsetof(Serializer, m_readerWriter) == 0x08, "Serializer.m_readerWriter @ 0x08");
 static_assert(sizeof(Serializer) == 0x10, "Serializer is 0x10 bytes");
 
-// Vtable slot offsets on the IO::Encoding at stream+0x10. Both are called with
-// THREE arguments -- (encoding, serializer, version) -- see the ctor note above.
-namespace factory_vtbl {
-    constexpr int kGetDecodeEncoding = 0x18; // -> BinaryReader (Runtime 0x1800a8120)
-    constexpr int kGetEncodeEncoding = 0x20; // -> BinaryWriter (Runtime 0x1800a8080)
-}
-
 } // namespace io
