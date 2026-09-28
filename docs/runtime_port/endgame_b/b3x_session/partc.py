@@ -1,7 +1,7 @@
 """partc.py -- the size of the NORMAL-VIRTUAL CUTOVER (INVENTORY_B Part C, re-measured on the B.3.9 close tree),
 plus the list the cutover really depends on: every place that still depends on a vtable SLOT INDEX.
 
-Run from the repo root:  python docs/runtime_port/endgame_b/b39_session/partc.py [--list PATTERN_NAME]
+Run from the repo root:  python docs/runtime_port/endgame_b/b3x_session/partc.py [--list PATTERN_NAME]
 Code lines only (comments stripped by codegrep.strip, strings kept); build*/ and obj/ excluded.
 Counts are per top-level area: code/Game/<Sub>, runtime/src/<ns>, runtime/types/<ns>, standalone, engine, dx11, tests.
 
@@ -48,6 +48,13 @@ PATTERNS = collections.OrderedDict([
     ('slot helpers (VSlot/SlotOf/VCall*/CallVSlot/Slot<N>)', re.compile(r'\b(?:VSlot\w*|SlotOf|VCall\w*|CallVSlot|VtSlot\w*|SlotFn\w*)\s*[<(]')),
     ('PMF-order test (PmfSlot)', re.compile(r'\bPmfSlot\w*\s*[<(]')),
     ('dx11 seam slot index', re.compile(r'\bkSlot\w*\b|\bSeam\w*Slot\w*\b')),
+    # --- shapes the B3X block-0 inventories found partc missing (INVENTORY_B1 6.2, R-IO / R-UI hand-ins) ---
+    ('B3X table[k / 8]', re.compile(r'\b\w*(?:vt|vtbl|vtable|Vtable|VTable)\w*\s*\[[^\]]*/\s*(?:8|sizeof\s*\(\s*void\s*\*\s*\))\s*\]')),
+    ('B3X named slot constant', re.compile(r'\b(?:rw_vtbl|programdata_vtbl|devicedata_vtbl|pdvt|ddvt)::k\w+|\bk(?:Rw|CtrlVtbl|DlgVtbl|Vt[A-Z]|StreamVtbl|FileStreamVtbl|InternalVtbl|StreamSlot)\w*|\bEL::kVtbl\w+|kExternalSerializeSlotBytes')),
+    ('B3X byte offset on a cast table', re.compile(r'reinterpret_cast\s*<\s*(?:const\s+)?(?:uint8_t|char|unsigned char)\s*\*\s*>\s*\(\s*[\w>.\-]*(?:vt|vtable|vtbl|vptr)\w*\s*\)\s*\+|reinterpret_cast\s*<\s*(?:const\s+)?(?:uint8_t|char|unsigned char)\s*\*\s*>\s*\(\s*\*\s*reinterpret_cast\s*<\s*(?:const\s+)?void\s*\*\s*(?:const\s*)?\*\s*>|\*reinterpret_cast<\w+\*>\(\s*\*reinterpret_cast<(?:const\s+)?uint8_t\s*\*\*>\([^)]*\)\s*\+\s*0x[0-9a-fA-F]+')),
+    ('B3X helper-returned table indexed', re.compile(r'\b(?:VTable\w*|VtblOf|Vtbl|RwVTable|VtOf)\s*\([^;]*?\)\s*\[')),
+    ('B3X slot helper names', re.compile(r'\b(?:VSlot|RwSlot|SourceSlot|ReadVtableSlot|CompanionSlot|ComSlot|Slot\d*|SlotFn\w*|RenderStateSlot\d*|SerializeBufferSlot|DeletingDtorOf|GetTypeIdVirtual|SerializeVirtual|CallGetTypeId|EncCall\w+|ComCall|DestroyReaderWriter|DeleteRw|SerScalar|RwScalar)\s*[<(]')),
+    ('B3X cast vptr indexed', re.compile(r'\(\s*\*\s*(?:static_cast|reinterpret_cast)\s*<\s*(?:const\s+)?\w+\s*\*\s*(?:const\s*)?\*\s*(?:const\s*)?\*?\s*>\s*\([^)]*\)\s*\)\s*\[|\(\s*\*\s*reinterpret_cast\s*<\s*\w+\s*\*\s*>\s*\(\s*\*\s*reinterpret_cast\s*<\s*(?:const\s+)?void\s*\*\s*(?:const\s*)?\*\s*>\s*\(')),
 ])
 
 counts = {k: collections.Counter() for k in PATTERNS}
@@ -55,7 +62,7 @@ hits = {k: [] for k in PATTERNS}
 for rel, lines in SRC.items():
     for i, l in enumerate(lines, 1):
         for k, pat in PATTERNS.items():
-            if pat.search(l):
+            if pat.search(l) and not (k.startswith('B3X') and 'static_assert' in l):
                 if k == 'dx11 seam slot index' and not rel.startswith('dx11/'): continue
                 counts[k][area(rel)] += 1
                 hits[k].append(f'{rel}:{i}: {l.strip()[:150]}')
