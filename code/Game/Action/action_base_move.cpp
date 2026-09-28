@@ -11,6 +11,7 @@
 // Wave 3 (Action) — MoveTo / PerformWork / PlayAnimation sub-batch. Each function is
 // a 1:1 port of the decompiled exe helper; do not "improve" behavior.
 //
+#include "Action/exe_bodies.h"
 
 #include "engine_funcs.h"
 #include "resolve.h"

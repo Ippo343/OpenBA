@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <new>
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

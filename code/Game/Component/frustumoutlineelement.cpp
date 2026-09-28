@@ -25,6 +25,7 @@
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Component/FrustumOutlineElement.h"
 #include <cstdint>
+#include "Component/exe_bodies.h"
 
 // UI::Element::GetAlignedPosition (member overload, Runtime 0x180115ff0). Computes the
 // element's aligned screen rect from its size (+0x60/+0x64), margins (+0x18..+0x24) and

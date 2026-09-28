@@ -4,6 +4,7 @@
 //
 // 0x14008d3c0 is called from Pickup::Execute (0x1400f2f00) BEFORE anything else
 // happens; if it answers false the whole pickup is abandoned ("no work available").
+#include "Work/exe_bodies.h"
 // It walks the town manager's storage-location list and asks, for each entry:
 // "does this storage location accept this resource category, and can it physically
 // take this amount?".

@@ -3,6 +3,7 @@
 //
 // Faithful 1:1 ports of exe sub-helpers referenced via ResolveAddr(Module::Exe,
 // 0xADDR) from code/Game/Work/{gatherrawmaterials,foresterwork}.cpp. They resolve
+#include "Work/exe_bodies.h"
 // to 0 (silently skipped) unless registered. This file provides the closure-safe subset only.
 //
 // CLOSURE-SAFETY: each function below was confirmed (snapshot notes/_reg_snapshot.txt)

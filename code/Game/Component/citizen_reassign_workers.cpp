@@ -81,6 +81,7 @@
 #include <vector>
 #include "Component/ResidenceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
 #include "Component/StorageComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7e78 cell class
+#include "Component/exe_bodies.h"
 
 // Build-time roster-only guard, shared with citizen_assign_citizens.cpp: while set,
 // the workplace/housing attach-detach helpers skip the Graphics::Scene mesh toggle

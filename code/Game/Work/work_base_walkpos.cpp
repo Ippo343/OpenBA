@@ -5,6 +5,7 @@
 //   0x140122be0  FUN_140122be0             — walkable-position search over one build-record array
 //   0x140122b00  FUN_140122b00             — recursive walkable-position search across children
 //   0x1400f6ef0  BuildStructure_impl_6ef0  — build-progress / time-budget step
+#include "Work/exe_bodies.h"
 //
 // These were deferred in the Work-tail wave because their exe sub-callee closure
 // (0x140003f60 ClearPathQueue, 0x1400a00f0 ValidateCell, 0x14009f810 MapPathCost) was

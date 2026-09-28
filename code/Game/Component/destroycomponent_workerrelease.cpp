@@ -61,6 +61,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved closure

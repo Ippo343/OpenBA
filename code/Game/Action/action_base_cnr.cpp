@@ -10,6 +10,7 @@
 //
 // Each function is a literal port of the decompiled exe helper — no behavior is
 // invented or "improved". Every exe sub-call is mirrored through a guarded
+#include "Action/exe_bodies.h"
 // ResolveAddr typedef'd pointer (closure-safe: an unregistered sub-callee simply
 // turns the call into a no-op).
 //

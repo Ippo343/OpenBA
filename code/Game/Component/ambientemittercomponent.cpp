@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

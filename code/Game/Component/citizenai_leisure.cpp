@@ -76,6 +76,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/exe_bodies.h"
 
 namespace {
 

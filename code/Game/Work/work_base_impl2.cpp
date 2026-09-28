@@ -1,5 +1,6 @@
 // code/Game/Work/work_base_impl2.cpp
 // Wave 2 (Work) — impl/geometry/math sub-batch.
+#include "Work/exe_bodies.h"
 //
 // Currently contains ONLY the closure-safe math helper:
 //   0x140132010  FUN_140132010  — sqrtf (NaN/Inf-aware)  [no sub-callees → safe to register]

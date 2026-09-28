@@ -4,6 +4,7 @@
 // These 4 exe helpers build the action sequence for a citizen work task: each
 // allocates a chain of Action objects (SendComponentMessage / CompleteTask /
 // ShowTool / PerformWork / MoveTo / *NaturalResource / inline PerformWork or
+#include "Work/exe_bodies.h"
 // PlayAnimation) and appends them to the CitizenAIComponent's task action list
 // (entity+0x278, list base +0x48). They are resolved via ResolveAddr(Module::Exe,
 // 0xADDR) from the Work .cpp call sites (cleararea / foresterwork / herbalistwork /

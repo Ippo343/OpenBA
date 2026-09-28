@@ -82,6 +82,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
+#include "Component/exe_bodies.h"
 
 namespace {
 

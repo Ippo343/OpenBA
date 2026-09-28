@@ -557,12 +557,11 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // Get() returning null, i.e. EnterCriticalSection(0x640). Two windows fit that stack
     // and only this value separates them: a NULL cell with a sane heap is W2 (Destruct
     // nulled it while another thread still allocates); a NULL cell with a corrupted free
-    // list is W2' (a wild write landed on the minted .bss cell). Diagnostic only.
+    // list is W2' (a wild write landed on the .bss cell). Diagnostic only.
     {
-        void** const cell = reinterpret_cast<void**>(
-            ResolveAddr(Module::Runtime, 0x1801fc718));  // ?_singleton@MemoryAllocator@System@@
+        System::MemoryAllocator** const cell = &System::MemoryAllocator::_singleton;  // 0x1801fc718
         CrashLogf("MemoryAllocator::_singleton cell=%p value=%p\n",
-                  static_cast<void*>(cell), cell ? *cell : nullptr);
+                  static_cast<void*>(cell), static_cast<void*>(*cell));
     }
 
     // Free-list poisoning diagnosis: walk the engine allocator's boundary tags
@@ -676,14 +675,12 @@ static bool RunFactorySelfTest(const char* typeName,
                                const FieldCheck* fields, size_t fieldCount) {
     printf("\n[SelfTest %s] start\n", typeName);
 
-    // Refresh g_pMemAllocSingleton from its Runtime DLL slot. The slot is
-    // populated by Engine::Engine::Engine; EngineFuncsInit ran before that
+    // Refresh g_pMemAllocSingleton from System::MemoryAllocator::_singleton. The
+    // static is set by Engine::Engine::Engine; EngineFuncsInit ran before that
     // and cached NULL. Without this refresh, factory MemAlloc returns NULL.
     {
-        void** slot = reinterpret_cast<void**>(
-            ResolveAddr(Module::Runtime, 0x1801fc718));
-        if (slot && *slot && !g_pMemAllocSingleton) {
-            g_pMemAllocSingleton = *slot;
+        if (System::MemoryAllocator::_singleton && !g_pMemAllocSingleton) {
+            g_pMemAllocSingleton = System::MemoryAllocator::_singleton;
             printf("[SelfTest %s]   refreshed g_pMemAllocSingleton = %p\n",
                    typeName, g_pMemAllocSingleton);
         }

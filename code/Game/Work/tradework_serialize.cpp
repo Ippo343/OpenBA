@@ -3,6 +3,7 @@
 //
 // These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from
 // TradeWork_Serialize. In standalone mode they resolve to 0 (silently skipped) unless
+#include "Work/exe_bodies.h"
 // registered. Registration point: RegisterWorkTailTradeBatch in
 // standalone/reg_work_tail_trade.cpp.
 //

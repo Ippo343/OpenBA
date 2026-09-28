@@ -22,6 +22,7 @@
 #include "Entity/ComponentEntity.h"                 // ENDGAME B.3.9 C1: 0x1401c5d70 cell class
 #include "Component/NaturalResourceComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7b30 cell class
 #include "Component/CropFieldDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7548 cell class
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

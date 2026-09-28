@@ -4,6 +4,7 @@
 // Faithful 1:1 ports of two exe helpers that build a citizen's work-action chain
 // and append it to the CitizenAIComponent task list (citizen+0x278 -> aiComp,
 // list base aiComp+0x48; the SendComponentMessage action is stored at aiComp+0x58
+#include "Work/exe_bodies.h"
 // after DeletePtr-ing the prior one). Each appended sub-action is allocated via the
 // MemAlloc static slot (0x140152b60) and wrapped in an InternalBasePtr before being
 // appended (FUN_1400c54e0) — exactly as the disassembly does.

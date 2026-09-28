@@ -76,6 +76,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7b68 cell class
 #include "Component/RawMaterialDescription.h"        // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
+#include "Component/exe_bodies.h"
 
 // Work reimpl resolvers — see the note in CF_MakeAreaWork.
 bool PlantArea_ResolveFuncs();

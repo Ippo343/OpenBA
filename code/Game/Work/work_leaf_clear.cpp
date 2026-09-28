@@ -3,6 +3,7 @@
 // code/Game/Work/{cleararea,harvestarea,plantarea}.cpp.
 //
 // Like the other work_base_*.cpp files, these are exe helpers resolved via
+#include "Work/exe_bodies.h"
 // ResolveAddr(Module::Exe, 0xADDR) from the Work class reimpls. They resolve to 0
 // (silently skipped) unless registered. This file provides faithful 1:1 ports so the call
 // sites fire real logic in the standalone exe. A single registration point lives

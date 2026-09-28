@@ -5,6 +5,7 @@
 // builder (~0x835 bytes) that constructs a pickup/dropoff/move action chain and stores
 // it on the citizen's CitizenAIComponent task list (entity+0x278, list base +0x48). It
 // is the "gather raw material" task builder: walk to a source, optional pickup, drop off
+#include "Work/exe_bodies.h"
 // raw material at a destination, do work, move on. SendComponentMessage is stored at
 // aiComp+0x58 (the prior one DeletePtr'd first).
 //

@@ -35,6 +35,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
+#include "Component/exe_bodies.h"
 
 // ---- deps ported elsewhere (link to them) ----
 class CitizenComponent;   // opaque — only for matching the AssignHousing mangled name

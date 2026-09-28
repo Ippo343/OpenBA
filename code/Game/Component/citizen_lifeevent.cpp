@@ -28,6 +28,7 @@
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 #include <new>
+#include "Component/exe_bodies.h"
 
 // code/Game/Game/eventlog.cpp
 extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,

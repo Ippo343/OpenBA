@@ -4,6 +4,7 @@
 // refresh. NONE is exercised on the autostart path, so a wrong transcription is
 // undetectable silent corruption — every offset is taken verbatim from the Ghidra
 // decompile. Do NOT "improve" or simplify.
+#include "Action/exe_bodies.h"
 //
 // Registration point: RegisterPfRootsRoadBatch() in standalone/reg_pf_roots_road.cpp.
 //

@@ -28,6 +28,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

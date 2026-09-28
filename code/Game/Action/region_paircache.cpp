@@ -4,6 +4,7 @@
 // Faithful 1:1 port of FUN_14001cca0 @ 0x14001cca0 (the region-pair ring-buffer
 // resize/init) plus a builder that replicates the pair-cache creation snippet from
 // CreateNaturalResource_impl_sub_e8c0 @ 0x14009e8c0 (the region-system builder).
+#include "Action/exe_bodies.h"
 //
 // The pair-cache caches region-to-region path lengths. It is a 0x38-byte object:
 //   q[0]  (qword) seq/link

@@ -36,6 +36,7 @@
 #include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 #include "input/Input.h"                      // ENDGAME B.3.7 callers (K3)
 #include "system/Error.h"                  // ENDGAME B.3.9 SS2: System::Error::_errorString
+#include "system/MemoryAllocator.h"        // B3R W0-SM M1: System::MemoryAllocator::_singleton
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::Device and
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
@@ -476,11 +477,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
         if (s_fn_MainLoop_Ctor && s_fn_MainLoop_Dtor && fn_MemAlloc && fn_MemFreeStatic) {
             // The MemoryAllocator singleton was NULL when EngineFuncsInit cached
-            // g_pMemAllocSingleton (Engine ctor hadn't run yet). Read it fresh
-            // from the Runtime DLL .data slot now.
-            void** memAllocSingletonPtr = reinterpret_cast<void**>(
-                ResolveAddr(Module::Runtime, 0x1801fc718));
-            void* memAllocSingleton = memAllocSingletonPtr ? *memAllocSingletonPtr : nullptr;
+            // g_pMemAllocSingleton (Engine ctor hadn't run yet). Read the class
+            // static fresh now.
+            void* memAllocSingleton = System::MemoryAllocator::_singleton;
             printf("[GameMain] MemAllocSingleton (fresh) = %p\n", memAllocSingleton);
 
             // Validate per-class factory registrations end-to-end now that

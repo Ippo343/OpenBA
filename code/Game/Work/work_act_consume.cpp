@@ -4,6 +4,7 @@
 // 1:1 reverse-engineering port of FUN_1400bef70 @ 0x1400bef70 (Application-x64.exe)
 // -> WorkAct_ConsumeProduceCtor_bef70. Referenced from consumeproduce.cpp
 // (s_fn_SetupWorkChain). Transcribed literally from the Ghidra disassembly; no
+#include "Work/exe_bodies.h"
 // refactoring / "improvement" of behavior.
 //
 // Builds the citizen's action chain on the CitizenAIComponent task list

@@ -25,6 +25,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/WorkPlaceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c80e0 cell class
 #include "Component/CitizenComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7158 cell class
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

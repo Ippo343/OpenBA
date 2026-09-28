@@ -2,6 +2,7 @@
 // Wave (Game-gap / Work-leaf) — Market/Trade leaf helpers.
 //
 // These are exe sub-helpers resolved via ResolveAddr(Module::Exe, 0xADDR) from
+#include "Work/exe_bodies.h"
 // code/Game/Work/marketwork.cpp and tradework.cpp. They resolve to 0 (silently
 // skipped) unless registered in standalone/address_registry.cpp. This file provides faithful 1:1
 // reimplementations so the standalone exe can fire real logic.

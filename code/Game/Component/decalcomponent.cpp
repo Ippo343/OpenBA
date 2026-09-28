@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <new>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

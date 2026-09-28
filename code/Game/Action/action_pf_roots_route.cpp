@@ -5,6 +5,7 @@
 // storage-drop selection. None is runtime-exercised on the autostart path, so a wrong port
 // is undetectable silent corruption (strictly worse than leaving the addr unregistered).
 // Transcribed literally from the Ghidra decompile; cross-checked against the disassembly.
+#include "Action/exe_bodies.h"
 //
 // Sub-callees resolved via ResolveAddr(Module::Exe, 0xADDR) into once-resolved static
 // fn-ptrs. Engine helpers (IBP/IsDerivedFrom/FindComponent) use the existing engine_funcs.h
