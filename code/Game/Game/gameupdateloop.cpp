@@ -28,6 +28,8 @@
 #include "video/Context.h"
 #include "video/Device.h"
 #include "video/ImageBuffer.h"
+#include "graphics/SunLight.h"      // B.3.x W0: Shutdown deletes m_sunLight by name
+#include "graphics/Mesh.h"          // B.3.x W0: Shutdown deletes m_skyMesh by name
 #include "sampler.h"
 #include "options.h"
 #include "Game/GameUpdateLoop.h"   // ENDGAME B.3.8 LOOP: the real class
@@ -2499,15 +2501,11 @@ void GameUpdateLoop::Shutdown() {
     }
     if (m_sunLight != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SunLight...\n");
-        typedef void (*ScalarDtor_t)(void* self, uint32_t flags);
-        ScalarDtor_t dtor = *(ScalarDtor_t*)(*(uintptr_t*)m_sunLight);
-        dtor(m_sunLight, 1);
+        static_cast<Graphics::SunLight*>(m_sunLight)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
     }
     if (m_skyMesh != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SkyMesh...\n");
-        typedef void (*ScalarDtor_t)(void* self, uint32_t flags);
-        ScalarDtor_t dtor = *(ScalarDtor_t*)(*(uintptr_t*)m_skyMesh);
-        dtor(m_skyMesh, 1);
+        static_cast<Graphics::MeshInstance*>(m_skyMesh)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
     }
 
     // AnimationManager

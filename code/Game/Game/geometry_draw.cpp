@@ -31,6 +31,7 @@
 #include "graphics/InterpolatedState.h"   // ENDGAME B.3.5 closing pass --
                                           // Graphics::InterpolatedState<Transform>
 #include "video/Context.h"
+#include "video/ImageBuffer.h"   // B.3.x W0: ~WorldGeometry deletes _heightImage by name
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -89,10 +90,9 @@ void FreeHeader(WorldGeometry::Header& h) {
 WorldGeometry::~WorldGeometry() {
     // +0x148: the height ImageBuffer, deleted through its own slot 0 with
     // flags 1 (retail: MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]). Bridge: the
-    // pointer is untyped and the call is the raw dispatch retail makes.
+    // field is untyped; the call is by name on the ImageBuffer.
     if (_heightImage) {
-        using DeletingDtorFn = void* (*)(void*, unsigned);
-        (*reinterpret_cast<DeletingDtorFn* const*>(_heightImage))[0](_heightImage, 1);
+        reinterpret_cast<Video::ImageBuffer*>(_heightImage)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
     }
     Object::detail::InternalMemFree(_heightBytes);          // +0x140 (not zeroed)
 

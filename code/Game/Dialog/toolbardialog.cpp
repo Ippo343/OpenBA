@@ -48,6 +48,8 @@
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
 #include "engine_funcs.h"
 #include "Player/EditTool.h"   // ENDGAME B.3.9 TR
+#include "Player/Tool.h"       // B.3.x W0: Tool::OnCancel by name
+#include "ui/DialogController.h"   // B.3.x W0: DialogController::OnCreated / OnOpened by name
 #include "Dialog/EntityUI.h"   // ENDGAME B.3.9 TR
 #include "system/String.h"
 #include "system/Filename.h"
@@ -243,9 +245,7 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
             void** buttonArray = *(void***)(s + 0xC0);
             void* elem = buttonArray[i];
             if (!elem) continue;
-            typedef void (*SetEnabled_t)(void* self, bool enabled);
-            SetEnabled_t fn = (SetEnabled_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
-            fn(elem, enabled);
+            reinterpret_cast<UI::Element*>(elem)->Enable(enabled);   // B.3.x bridge (slot 8)
         }
         else if (actionType == 4) {
             // FocusEntity: check if any entities of that type exist
@@ -268,9 +268,7 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
             }
 
             bool enabled = entityCount > 0;
-            typedef void (*SetEnabled_t)(void* self, bool enabled);
-            SetEnabled_t fn = (SetEnabled_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
-            fn(elem, enabled);
+            reinterpret_cast<UI::Element*>(elem)->Enable(enabled);   // B.3.x bridge (slot 8)
         }
     }
 }
@@ -729,8 +727,7 @@ static void HarnessDumpElemTree(void* elem, int depth, int* counter) {
     char* nameData = *reinterpret_cast<char**>(reinterpret_cast<uintptr_t>(elem) + 0x10);
     int len = nameData ? *reinterpret_cast<int*>(nameData - 8) : 0;
     uint32_t tid = 0;
-    { void** vt = *reinterpret_cast<void***>(elem);
-      if (vt && vt[2]) { typedef uint32_t(*G)(void*); tid = reinterpret_cast<G>(vt[2])(elem); } }
+    tid = reinterpret_cast<Object::Base*>(elem)->Type();   // B.3.x bridge (slot 2)
     printf("[ElemTree] %*selem=%p tid=%u name='%.*s'\n", depth * 2, "",
            elem, tid, len > 0 ? len : 0, nameData ? nameData : "");
     void** kids = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(elem) + 0xa0);
@@ -779,13 +776,11 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
         void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
         int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
         uint32_t dlgTid = 0;
-        { void** dvt = *reinterpret_cast<void***>(dialog);
-          if (dvt && dvt[2]) { typedef uint32_t(*G)(void*); dlgTid = reinterpret_cast<G>(dvt[2])(dialog); } }
+        dlgTid = reinterpret_cast<Object::Base*>(dialog)->Type();   // B.3.x bridge (slot 2)
         printf("[HarnessDrive] dialog[%d]=%p dlgTid=%u controllers=%d:", idx, dialog, dlgTid, cnt);
         for (int i = 0; ctrlArr && i < cnt && i < 16; i++) {
             void* c = ctrlArr[i]; uint32_t ctid = 0;
-            if (c) { void** vt = *reinterpret_cast<void***>(c);
-                if (vt && vt[2]) { typedef uint32_t(*G)(void*); ctid = reinterpret_cast<G>(vt[2])(c); } }
+            if (c) ctid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
             printf(" [%d]tid=%u", i, ctid);
         }
         printf("\n");
@@ -815,9 +810,17 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
             void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
             printf("[HarnessDrive] FOUND '%s' ctrl=%p in dialog[%d] — driving Slot%d\n",
                    controllerName, ctrl, idx, slotIndex);
-            void** vt = *reinterpret_cast<void***>(ctrl);
-            if (vt && vt[slotIndex]) { typedef void(*S)(void*); reinterpret_cast<S>(vt[slotIndex])(ctrl);
-                printf("[HarnessDrive] Slot%d done\n", slotIndex); }
+            // The caller (standalone/tool_harness.cpp) names the member by its
+            // RETAIL slot number: 4 = OnCreated, 5 = OnOpened (DialogController.h).
+            UI::DialogController* dc = reinterpret_cast<UI::DialogController*>(ctrl);   // B.3.x bridge
+            switch (slotIndex) {
+            case 4: dc->OnCreated(); break;
+            case 5: dc->OnOpened();  break;
+            default:
+                printf("[HarnessDrive] Slot%d is not a harness member (4 or 5)\n", slotIndex);
+                return;
+            }
+            printf("[HarnessDrive] Slot%d done\n", slotIndex);
             return;
         }
     }
@@ -870,10 +873,9 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     // Step 1: If there's an active tool controller at +0x28, close it via vtable[9]
     if (*(uintptr_t*)(gs + 0x28) != 0) {
         void* toolCtrl = *(void**)(gs + 0x28);
-        // vtable[9] = Close (offset 0x48)
-        typedef void (*VClose_t)(void* self);
-        VClose_t vClose = (VClose_t)(*(uintptr_t*)(*(uintptr_t*)toolCtrl + 0x48));
-        vClose(toolCtrl);
+        // The EntityUI's +0x28 active Tool (tool_activation_standalone.cpp reads
+        // the same slot as a Tool); result discarded.
+        reinterpret_cast<Tool*>(toolCtrl)->OnCancel();   // B.3.x bridge (slot 9)
     }
 
     // Step 2: Clear current tool group by calling ShowGroup(gameSubsys, 0)
@@ -1212,13 +1214,12 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
         ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(templateIndex));  // B.3.6 bridge
         void* templateElem = *(void**)templateBuf;
 
-        // Clone the template: virtual call at vtable[8] (offset 0x40)
-        // Element::Clone(this, retBuf, dialog) — member, non-trivial return
-        typedef void* (*CloneFn)(void* self, void* retBuf, const void* dialog);
+        // Instantiate the template (ElementDescription slot 8, RETSLOT: RCX = this,
+        // RDX = the return buffer, R8 = the dialog).
         uint8_t cloneBuf[16];
-        uintptr_t vtable = *(uintptr_t*)templateElem;
-        CloneFn cloneFn = (CloneFn)(*(uintptr_t*)(vtable + 0x40));
-        cloneFn(templateElem, cloneBuf, dialog);
+        reinterpret_cast<const UI::ElementDescription*>(templateElem)->CreateInstance(
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(dialog));   // B.3.x bridge (slot 8)
         void* newElement = *(void**)cloneBuf;
 
         // Push to buttonElements array at +0xC0.
@@ -1514,46 +1515,37 @@ void ToolbarDialog::OnUpdateLayout() {
             // SpeedUp: enable/disable based on whether current speed < max speed
             void* elem = *(void**)&buttonArray[i];
             if (!elem) continue;
-            // Virtual call: elem->vtable[8] = SetEnabled/SetChecked (vtable +0x40)
-            typedef void (*SetChecked_t)(void* self, bool checked);
-            SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
 
             // Check if current speed index < max speed entry
             int32_t speedCount = *(int32_t*)(s + 0x100);
             int32_t* speedVals = *(int32_t**)(s + 0xF8);
             bool canSpeedUp = (int32_t)gameSpeed < speedVals[speedCount - 1];
-            fn(elem, canSpeedUp);
+            reinterpret_cast<UI::Element*>(elem)->Enable(canSpeedUp);   // B.3.x bridge (slot 8)
         }
         else if (actionType == 6) {
             // SpeedDown: enable/disable based on whether current speed > min speed
             void* elem = *(void**)&buttonArray[i];
             if (!elem) continue;
-            typedef void (*SetChecked_t)(void* self, bool checked);
-            SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
 
             int32_t* speedVals = *(int32_t**)(s + 0xF8);
             bool canSpeedDown = speedVals[0] < (int32_t)gameSpeed;
-            fn(elem, canSpeedDown);
+            reinterpret_cast<UI::Element*>(elem)->Enable(canSpeedDown);   // B.3.x bridge (slot 8)
         }
         else if (actionType == 8) {
             // Unpause button: checked state = isPaused flag at gameSys->+0x30
             void* elem = *(void**)&buttonArray[i];
             if (!elem) continue;
-            typedef void (*SetChecked_t)(void* self, bool checked);
-            SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
 
             uint8_t isPaused = *(uint8_t*)(gameSys + 0x30);
-            fn(elem, isPaused);
+            reinterpret_cast<UI::Element*>(elem)->Enable(isPaused);   // B.3.x bridge (slot 8)
         }
         else if (actionType == 7) {
             // Pause button: checked state = NOT paused
             void* elem = *(void**)&buttonArray[i];
             if (!elem) continue;
-            typedef void (*SetChecked_t)(void* self, bool checked);
-            SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
 
             uint8_t isPaused = *(uint8_t*)(gameSys + 0x30);
-            fn(elem, isPaused == 0);
+            reinterpret_cast<UI::Element*>(elem)->Enable(isPaused == 0);   // B.3.x bridge (slot 8)
         }
         else if (actionType == 10) {
             // SpeedDisplay: get first child (text element), format speed as "%ix"

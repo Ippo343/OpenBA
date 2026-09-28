@@ -363,7 +363,7 @@ static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priori
 //       - Create PerformWork action to harvest
 // 7. If no work found, handle failure (idle animation or replan)
 //
-int HerbalistWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -723,7 +723,7 @@ int HerbalistWork::Cleanup() {
 // collects invalid ones, removes them from tree.
 // Returns true if tree becomes empty, false otherwise.
 // ============================================================
-int HerbalistWork::Validate(void* param2) {
+int HerbalistWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
@@ -747,7 +747,7 @@ int HerbalistWork::Validate(void* param2) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list — grow array if needed

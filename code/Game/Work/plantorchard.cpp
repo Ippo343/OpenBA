@@ -245,7 +245,7 @@ static int* BST_FindInt(void* root, int key) {
 // 6. Check pathfinding
 // 7. Create orchard planting action, assign work, insert into BST
 //
-int PlantOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -488,7 +488,7 @@ int PlantOrchard::Cleanup() {
 // PlantOrchard::Validate (Slot9) -- 0x1400f47f0
 // RemoveInvalid: identical pattern to PlantArea, but marks cells with 0.
 // ============================================================
-int PlantOrchard::Validate(void* param2) {
+int PlantOrchard::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -517,7 +517,7 @@ int PlantOrchard::Validate(void* param2) {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2);
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
+        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
 
         if (valid == 0) {
             uint32_t newCount = collectCount + 1;

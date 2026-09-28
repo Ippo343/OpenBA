@@ -46,11 +46,11 @@ public:
 
     Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a100
     void  Persist(void* stream) override;                           // [3]  0x1400e7350
-    int   Execute(void* citizenAI, void* time, uint64_t arg3) override;  // [4]  0x1400e6c50
+    int   Execute(void* citizenAI, void* time) override;  // [4]  0x1400e6c50
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400e6c30
     int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400e6c20
     int   Cleanup() override;                                       // [8]  0x1400e72a0
-    int   Validate(void* citizenAI) override;                       // [9]  0x1400e69f0
+    int   Validate() override;                       // [9]  0x1400e69f0
     void* GetTarget(void* retbuf) override;                         // [10] 0x1400e7330
     int   GetPriority() override;                                   // [11] 0x14002a0f0
 

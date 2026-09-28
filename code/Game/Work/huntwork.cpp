@@ -269,7 +269,7 @@ bool HuntWork_ResolveFuncs() {
 // 9. Create PerformWork action at valid position
 // 10. On failure: idle animation or replan
 //
-int HuntWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int HuntWork::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -574,7 +574,7 @@ int HuntWork::Cleanup() {
 // Returns true if all valid (removeCount == 0), false otherwise.
 // Hook DISABLED (bug class 3 -- MOV RAX,RSP).
 // ============================================================
-int HuntWork::Validate(void* param2) {
+int HuntWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
@@ -598,7 +598,7 @@ int HuntWork::Validate(void* param2) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed

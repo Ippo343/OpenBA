@@ -82,6 +82,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Work/Work.h"      // B.3.x W0 G-B: Work::Validate / Execute by name
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
 extern "C" void* g_pBuildStructureWork;
@@ -504,14 +505,11 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
         if (*reinterpret_cast<int*>(payload + 0x2c) != *reinterpret_cast<int*>(param_1 + 8)) {
             payload = *reinterpret_cast<int64_t*>(cur);
             // vtable +0x48 refresh
-            void** vt = *reinterpret_cast<void***>(payload);
-            typedef void (*fn48_t)(int64_t);
-            reinterpret_cast<fn48_t>(vt[0x48 / 8])(payload);
+            reinterpret_cast<Work*>(payload)->Validate();   // B.3.x bridge (slot 9; 0x1400f7bc3 RCX only)
             payload = *reinterpret_cast<int64_t*>(cur);
             int64_t citizen = reinterpret_cast<int64_t>(*param_2);  // local_res18[0] = *param_2 (citizen)
-            vt = *reinterpret_cast<void***>(payload);
-            typedef uint32_t (*fn20_t)(int64_t self, int64_t* citizenHolder, int64_t ctxArg);
-            uint32_t r = reinterpret_cast<fn20_t>(vt[0x20 / 8])(payload, &citizen, param_1 + 0x130);
+            uint32_t r = static_cast<uint32_t>(reinterpret_cast<Work*>(payload)->Execute(
+                &citizen, reinterpret_cast<void*>(param_1 + 0x130)));   // B.3.x bridge (slot 4; 0x1400f7be9)
             if (static_cast<int>(r) == 2) return 1;
             if (static_cast<int>(r) == 1) {
                 *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(cur) + 0x2c) = *reinterpret_cast<int*>(param_1 + 8);

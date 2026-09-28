@@ -235,7 +235,7 @@ void* TW_ScanDescComp(uint64_t obj, uint32_t tid) {
     int64_t arr = *reinterpret_cast<int64_t*>(obj + 0x28);
     for (int i = 0; i < n; i++) {
         void* c = *reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(c) + 0x10))(c);
+        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == tid)
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
     }
@@ -250,7 +250,7 @@ void* TW_ScanEntityComp(int64_t ent, uint32_t tid) {
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
         void* c = *slot;
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(c) + 0x10))(c);
+        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == tid) {
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
         }
@@ -309,9 +309,7 @@ static int TW_CommitAssign(TradeWork* self, void* param2, uint64_t resType, int 
 
     int64_t citizen = *reinterpret_cast<int64_t*>(param2);
 
-    typedef void* (*Slot10_t)(void* self, void* outIBP);
-    Slot10_t slot10 = *reinterpret_cast<Slot10_t*>(*reinterpret_cast<int64_t*>(self) + 0x50);
-    void* r = slot10(self, outBuf);
+    void* r = self->GetTarget(outBuf);   // slot 10, by name (B.3.x)
     int64_t slot10Ent = *reinterpret_cast<int64_t*>(r);
 
     *reinterpret_cast<int*>(citizen + 0x30) = taskId;
@@ -329,7 +327,7 @@ static int TW_CommitAssign(TradeWork* self, void* param2, uint64_t resType, int 
     return 2;
 }
 
-int TradeWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
+int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
     TradeWork_ResolveFuncs();
     TradeWork_Slot4_Resolve();
 
@@ -661,7 +659,7 @@ int TradeWork::Cleanup() {
 // Extended BST: +0x18=parent, +0x20=left, +0x28=right
 // Returns true if all valid, false otherwise.
 // ============================================================
-int TradeWork::Validate(void* param2) {
+int TradeWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)(selfAddr + 0x48);
 
@@ -685,7 +683,7 @@ int TradeWork::Validate(void* param2) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed

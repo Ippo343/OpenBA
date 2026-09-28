@@ -3401,9 +3401,9 @@ int DL_CollectAnimals(void* gridPtr, int wantType, std::vector<DL_AnimalPos>& ou
         for (int c = 0; comps && c < cnt && c < 64; ++c) {
             void* comp = comps[c];
             if (!comp) continue;
-            typedef int (*getId_t)(void*);
-            getId_t g = *reinterpret_cast<getId_t*>(*(uintptr_t*)comp + 0x10);
-            if (g && g(comp) == wantType) { match = true; break; }
+            if (static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type()) == wantType) {   // B.3.x bridge (slot 2)
+                match = true; break;
+            }
         }
         if (!match) continue;
         out.push_back({ *(const float*)((const uint8_t*)model + 0x158),

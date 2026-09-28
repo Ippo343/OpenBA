@@ -56,7 +56,7 @@ void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
         for (;;) {
             void** slot = reinterpret_cast<void**>(list + off);
             void* comp = *slot;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
@@ -86,7 +86,7 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
         for (;;) {
             void** slot = reinterpret_cast<void**>(list + off);
             void* comp = *slot;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
@@ -116,7 +116,7 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
         for (;;) {
             void** slot = reinterpret_cast<void**>(list + off);
             void* comp = *slot;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
@@ -148,7 +148,7 @@ void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
         for (;;) {
             // No CheckPtr in this variant.
             void* comp = *reinterpret_cast<void**>(off + *reinterpret_cast<uintptr_t*>(entity + 0x28));
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == tid) {
                 void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
@@ -184,7 +184,7 @@ bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self) {
         int64_t off = 0;
         for (;;) {
             void* comp = *reinterpret_cast<void**>(off + *reinterpret_cast<uintptr_t*>(entity + 0x28));
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (t == tid) {
                 void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
@@ -235,7 +235,7 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
             for (int j = 0; j < innerCount; ++j, innerOff += 8) {
                 uintptr_t* slot = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
                 void* comp = reinterpret_cast<void*>(*slot);
-                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (t == tidInner) {
                     uintptr_t* slot2 = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
                     void* c = reinterpret_cast<void*>(*slot2);

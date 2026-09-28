@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Work/Work.h"         // B.3.x W0: Work::GetTarget by name
 
 // Standalone profession-list data is not fully live (the CitizenAI +0x288 desc
 // backref and the ProfessionList entries can be garbage/-1). Mirror the
@@ -205,11 +206,9 @@ void FollowDialog::OnUpdateLayout() {
         if (homeRef != 0) {
             // Get profession description from home entity via vtable[10] (offset +0x50)
             uintptr_t homeEntity = homeRef;
-            typedef void* (*fn_VGetDesc_t)(void* self, void* retval);
-            void** homeVtable = *(void***)(void*)homeEntity;
-            fn_VGetDesc_t vGetDesc = (fn_VGetDesc_t)homeVtable[10];
             uint64_t descRef = 0;
-            vGetDesc((void*)homeEntity, &descRef);
+            // The gw+0x118 work tree's node payload is a Work (0x1400f88a0 fills it).
+            reinterpret_cast<Work*>(homeEntity)->GetTarget(&descRef);   // B.3.x bridge (slot 10)
             uintptr_t profDesc = *(uintptr_t*)(ai + 0x1F0);
             if (*(uintptr_t*)&descRef != profDesc) {
                 actionIndex = 0x10;  // profession mismatch — show "looking for work" string

@@ -152,8 +152,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
             uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(param_3 + 0x28);
             for (int i = 0; i < n; i++) {
                 void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(
-                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (t == tid) {
                     void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
                     if (fn_IsDerivedFrom) fn_IsDerivedFrom(c, tid);  // probe; result discarded

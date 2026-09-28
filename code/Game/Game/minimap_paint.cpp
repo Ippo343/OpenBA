@@ -155,9 +155,7 @@ void* MakeRenderTargetBuffer(int width, int usage, int format) {
 // Free an ImageBuffer via its scalar-deleting destructor (vtable[0](self, 1)).
 void FreeImageBuffer(void* img) {
     if (!img) return;
-    typedef void (*ScalarDtor_t)(void* self, int freeFlag);
-    ScalarDtor_t dtor = *reinterpret_cast<ScalarDtor_t*>(*reinterpret_cast<uintptr_t*>(img));
-    if (dtor) dtor(img, 1);
+    reinterpret_cast<Video::ImageBuffer*>(img)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
 }
 
 }  // namespace

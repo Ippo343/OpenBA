@@ -88,7 +88,7 @@ static inline uint32_t WorldToCell(float x, float z, int gridSize) {
 // sets up citizen pathfinding to carry items.
 //
 // Returns: 0 = failed validation, 1 = no work available (retry), 2 = work assigned
-int ClearStorage::Execute(void* citizenAI, void* time, uint64_t /*arg3*/) {
+int ClearStorage::Execute(void* citizenAI, void* time) {
     // Work base has entity ref at +0x10 (offset 2 in qword terms)
     uintptr_t workBase = (uintptr_t)this;
     void* entityRef = (void*)(workBase + 0x10);  // InternalBasePtr to entity
@@ -338,7 +338,7 @@ found_dest_storage:
 //
 // NOTE: Hook is DISABLED due to bug class 3 (MOV RAX,RSP in prologue).
 // This clean implementation exists for documentation and future standalone exe.
-int ClearStorage::Validate(void* citizenAI) {
+int ClearStorage::Validate() {
     uintptr_t base = (uintptr_t)this;
     void* bstRoot = (void*)(base + 0x58);  // BST root pointer
 
@@ -363,7 +363,7 @@ int ClearStorage::Validate(void* citizenAI) {
         uint64_t taskIBP = taskKey;
 
         // Check if task is still valid
-        bool canStart = fn_Work_CanStartWork(this, citizenAI, &taskIBP, nullptr);
+        bool canStart = fn_Work_CanStartWork(this, nullptr, &taskIBP, nullptr);
 
         if (!canStart) {
             // Need to add this node to remove list

@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/VSlot.h"   // B.3.x W0: Object::SlotAddressOf (the [JobArrow] probe)
 #include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
@@ -794,18 +795,21 @@ showUpDown:
             // these with nm against standalone/build/reimpl-x64.exe.
             void* bU = *(void**)(s + 0x50); void* bD = *(void**)(s + 0x58);
             void* bWU = *(void**)(s + 0x40); void* bWD = *(void**)(s + 0x48);
+            // The slot comes from the member, never a literal index (B3X_RULES X3).
+            auto enableSlot = [](void* b) -> void* {
+                return b ? Object::SlotAddressOf(b, &UI::Element::Enable) : nullptr;
+            };
             std::fprintf(stderr, "[JobArrow] jobType=%p wpMaxCount=%d min(+0x28)=%d "
                          "max(+0x2c)=%d -> upEnabled=%d downEnabled=%d | "
-                         "jobUp=%p vt=%p vt[8]=%p | jobDown=%p vt[8]=%p | "
-                         "wkUp=%p vt[8]=%p | wkDown=%p vt[8]=%p\n",
+                         "jobUp=%p vt=%p Enable=%p | jobDown=%p Enable=%p | "
+                         "wkUp=%p Enable=%p | wkDown=%p Enable=%p\n",
                          (void*)jobType, wpMaxCount, jobMinCount, jobMax,
                          wpMaxCount < jobMax ? 1 : 0,
                          (wpMaxCount != jobMinCount && wpMaxCount > jobMinCount) ? 1 : 0,
-                         bU, bU ? *(void**)bU : nullptr,
-                         bU ? (*(void***)bU)[8] : nullptr,
-                         bD, bD ? (*(void***)bD)[8] : nullptr,
-                         bWU, bWU ? (*(void***)bWU)[8] : nullptr,
-                         bWD, bWD ? (*(void***)bWD)[8] : nullptr);
+                         bU, bU ? *(void**)bU : nullptr, enableSlot(bU),
+                         bD, enableSlot(bD),
+                         bWU, enableSlot(bWU),
+                         bWD, enableSlot(bWD));
             std::fflush(stderr);
         }
     }

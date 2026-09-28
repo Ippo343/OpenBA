@@ -280,7 +280,7 @@ static long long g_ha_calls = 0, g_ha_auto = 0, g_ha_cap = 0, g_ha_wcap = 0,
 [[maybe_unused]] static long long g_ha_nopass = 0;
 [[maybe_unused]] static long long g_ha_nopath = 0, g_ha_ok = 0;
 
-int HarvestArea::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
     // Harvest-assignment census. State 11 posts this work; whether a citizen ever
     // ACCEPTS a harvest cell is the last unmeasured link before a deposit, and an
     // Execute that finds nothing looks exactly like an Execute that is never called.
@@ -684,7 +684,7 @@ int HarvestArea::Cleanup() {
 //
 // Iterates BST in-order, validates each entry via FUN_1400f7100,
 // collects invalid ones, then removes them from BST.
-int HarvestArea::Validate(void* param2) {
+int HarvestArea::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -714,7 +714,7 @@ int HarvestArea::Validate(void* param2) {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2); // IBP at +0x8
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
+        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
 
         if (valid == 0) {
             // Invalid -- add to collect list

@@ -257,7 +257,7 @@ static int* BST_FindInt(void* root, int key) {
 // 7. Create planting action, assign work, insert into BST
 // 8. If no cells remaining and count==0, mark crop description complete
 //
-int PlantArea::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int PlantArea::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -631,7 +631,7 @@ int PlantArea::Cleanup() {
 // RemoveInvalid: iterates BST, validates entries, removes dead ones.
 // Marks invalid cells as valid (available for re-planting).
 // ============================================================
-int PlantArea::Validate(void* param2) {
+int PlantArea::Validate() {
     PA_SlotHit("V");
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
@@ -661,7 +661,7 @@ int PlantArea::Validate(void* param2) {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2);  // IBP at +0x8
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
+        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
 
 
         if (valid == 0) {

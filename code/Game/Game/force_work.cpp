@@ -13,6 +13,7 @@
 #include <climits>
 #include <windows.h>   // VirtualQuery
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/VSlot.h"      // B.3.x W0: SafeGetTypeId's slot probe
 
 namespace ForceWork {
 
@@ -86,12 +87,14 @@ bool Executable(const void* p) {
 
 uint32_t SafeGetTypeId(void* obj) {
     if (!Readable(obj, 8)) return 0;
+    // Probe the vptr's table entry for Type() -- the slot is taken from the
+    // member, never a literal (B3X_RULES X3) -- then call it by name.
     uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);
-    if (!Readable(reinterpret_cast<void*>(vt + 0x10), 8)) return 0;
-    void* slot = *reinterpret_cast<void**>(vt + 0x10);
-    if (!Executable(slot)) return 0;
-    typedef uint32_t (*gt_t)(void*);
-    return reinterpret_cast<gt_t>(slot)(obj);
+    const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
+    if (typeSlot < 0) return 0;
+    if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;
+    if (!Executable(::Object::SlotAddressOf(obj, &::Object::Base::Type))) return 0;
+    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)
 }
 
 void* FindComp(void* entity, uint32_t tid) {

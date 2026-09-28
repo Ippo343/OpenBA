@@ -331,7 +331,7 @@ bool PastureWork_ResolveFuncs() {
 //
 // Decompiled from Ghidra at 0x1400F2370, all control flow matched to original.
 //
-int PastureWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int PastureWork::Execute(void* entityIBP, void* /*context*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
     void* citizenIBP = entityIBP;
@@ -762,7 +762,7 @@ int PastureWork::Cleanup() {
 // Identical to HuntWork::Slot9 -- BST traversal, validates, removes.
 // Hook DISABLED (bug class 3 -- MOV RAX,RSP).
 // ============================================================
-int PastureWork::Validate(void* param2) {
+int PastureWork::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
@@ -785,7 +785,7 @@ int PastureWork::Validate(void* param2) {
     while (node != nullptr) {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
-        bool stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             uint32_t newCount = removeCount + 1;

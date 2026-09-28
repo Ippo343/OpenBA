@@ -195,13 +195,13 @@ int BuildRoad::Cleanup() {
 // Checks if the assigned task (from field_48) is still valid.
 // Uses shared Work::ValidateTask helper (FUN_1400f7100).
 // ============================================================
-int BuildRoad::Validate(void* param2) {
+int BuildRoad::Validate() {
     uintptr_t entityRef = (uintptr_t)field_48;
 
     if (entityRef != 0) {
         // Call shared validate helper with entity ref
         uintptr_t ibpCopy[1] = { entityRef };
-        uint8_t result = WorkBase_ValidateTask_f7100(this, param2, ibpCopy, nullptr);
+        uint8_t result = WorkBase_ValidateTask_f7100(this, nullptr, ibpCopy, nullptr);
         if (result == 0) {
             // Task invalid — clear entity ref
             uintptr_t temp = 0;
@@ -301,7 +301,7 @@ long long g_brExecNatResWait   = 0;   // blocked by a natural resource (tree/sto
 long long g_brExecClearPath    = 0;   // the plain "walk there and build it" branch
 }
 
-int BuildRoad::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
     if (field_48 != nullptr) {
         return 1;
     }

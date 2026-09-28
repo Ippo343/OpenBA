@@ -372,9 +372,7 @@ extern "C" void Goals_SavePrepass_8270(void* selfV) {
     for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
         uint8_t* ibpField = node + 0x08;
         void* entity = *reinterpret_cast<void**>(ibpField);
-        void* vtbl = *reinterpret_cast<void**>(entity);
-        typedef void (*fn_Vtbl48_t)(void*);
-        reinterpret_cast<fn_Vtbl48_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtbl) + 0x48))(entity);
+        reinterpret_cast<Work*>(entity)->Validate();   // B.3.x bridge (slot 9; 0x1400f82b1 RCX only)
     }
 }
 
@@ -663,11 +661,10 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
             for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
                 uint8_t* ibpField = node + 0x08;
                 void* entity = *reinterpret_cast<void**>(ibpField);
-                void* vtbl = *reinterpret_cast<void**>(entity);
 
-                reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion(); // discarded, matches retail   // B.3.4 bridge
-                typedef void (*fn_Vtbl60_t)(void*);
-                reinterpret_cast<fn_Vtbl60_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtbl) + 0x60))(entity);
+                // 0x1400f9335..0x1400f9340: the version is passed as EDX to slot 12.
+                const int32_t slot12Ver = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+                reinterpret_cast<Work*>(entity)->Slot12(slot12Ver);   // B.3.x bridge (slot 12)
 
                 int32_t ver = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
                 if (ver == 2) {
@@ -723,9 +720,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                     for (int32_t c = 0; c < compCount; ++c) {
                         void** slot = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(compArrayBase) + c * 8);
                         void* comp = *slot;
-                        void* compVtbl = *reinterpret_cast<void**>(comp);
-                        typedef uint32_t (*fn_GetTypeId_t)(void*);
-                        uint32_t tid = reinterpret_cast<fn_GetTypeId_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(compVtbl) + 0x10))(comp);
+                        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                         if (tid == WorkComponent::TypeId()) {
                             void* obj = *slot;
                             bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, WorkComponent::TypeId());
@@ -788,9 +783,8 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 
                     uint8_t keyOutBuf[0x20];
                     std::memset(keyOutBuf, 0, sizeof(keyOutBuf));
-                    void* entityVtbl = *reinterpret_cast<void**>(entity);
-                    typedef uint64_t* (*fn_Vtbl50_t)(void*, void*);
-                    uint64_t* keyPtr = reinterpret_cast<fn_Vtbl50_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(entityVtbl) + 0x50))(entity, keyOutBuf);
+                    uint64_t* keyPtr = static_cast<uint64_t*>(
+                        reinterpret_cast<Work*>(entity)->GetTarget(keyOutBuf));   // B.3.x bridge (slot 10)
 
                     uint8_t* workTreeRoot = *reinterpret_cast<uint8_t**>(self + 0x120);
                     uint8_t* cNode = workTreeRoot;
@@ -828,9 +822,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
             for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
                 uint8_t* ibpField = node + 0x08;
                 void* entity = *reinterpret_cast<void**>(ibpField);
-                void* vtbl = *reinterpret_cast<void**>(entity);
-                typedef void (*fn_Vtbl48_t)(void*);
-                reinterpret_cast<fn_Vtbl48_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtbl) + 0x48))(entity);
+                reinterpret_cast<Work*>(entity)->Validate();   // B.3.x bridge (slot 9; 0x1400f99a4 RCX only)
             }
         }
 

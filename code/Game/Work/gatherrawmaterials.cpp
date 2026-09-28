@@ -395,7 +395,7 @@ void GatherRawMaterials::Persist(void* stream) {
 //
 // Returns: 0=fail, 1=retry/done, 2=action pushed.
 // ============================================================
-int GatherRawMaterials::Execute(void* entityIBP, void* context, uint64_t /*arg3*/) {
+int GatherRawMaterials::Execute(void* entityIBP, void* context) {
     // retail's param3 (R8) is a by-value scratch slot whose address the body takes
     uint64_t param3 = reinterpret_cast<uint64_t>(context);
     uintptr_t selfAddr = (uintptr_t)this;
@@ -764,7 +764,7 @@ int GatherRawMaterials::Cleanup() {
 //
 // Returns: true (nonzero) if nothing was removed, false if any removed.
 // ============================================================
-int GatherRawMaterials::Validate(void* param2) {
+int GatherRawMaterials::Validate() {
     uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t* selfQ = (uintptr_t*)this;
 
@@ -786,7 +786,7 @@ int GatherRawMaterials::Validate(void* param2) {
             uintptr_t taskIBP[1];
             taskIBP[0] = *(uintptr_t*)node;
 
-            char valid = s_fn_CanStartWork((void*)this, param2, taskIBP, nullptr);
+            char valid = s_fn_CanStartWork((void*)this, nullptr, taskIBP, nullptr);
 
             if (valid == '\0') {
                 // Invalid -- add to removal list
@@ -1013,7 +1013,7 @@ extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's param3 is a
 // scratch WpExt out-IBP (written internally) and param4 is unused, so 0/0 is safe.
 extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(citizenIBP, nullptr, 0);   // B.3.8 bridge
+    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(citizenIBP, nullptr);   // B.3.8 bridge
 }
 
 // Execute-readiness gate for the force harness. GatherRawMaterials_ResolveFuncs() also

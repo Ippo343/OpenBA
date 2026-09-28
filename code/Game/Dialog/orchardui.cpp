@@ -20,6 +20,7 @@
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/Component.h"   // B.3.x W0: Component::Command by name
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *TypeId_ProgressElement) before storing it at +0x38.
@@ -192,9 +193,7 @@ void OrchardUI::SetResource(int64_t param2) {
     // call initialization via vtable[14](comp, 2)
     int64_t currentResource = *(int64_t*)(orchardComp + 0x60);
     if (currentResource == 0 && param2 != 0) {
-        void** vtable = *(void***)(void*)orchardComp;
-        typedef void (*fn_InitProduction_t)(void*, int);
-        ((fn_InitProduction_t)vtable[14])((void*)orchardComp, 2);
+        reinterpret_cast<Component*>(orchardComp)->Command(2);   // B.3.x bridge (slot 14)
     }
 
     // Set the resource type

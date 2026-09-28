@@ -337,10 +337,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
             uint64_t* childSlot = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<int64_t*>(entIBP + 0x30) + off);
             void* child = reinterpret_cast<void*>(*childSlot);
-            // GetTypeId via vtable +0x10.
-            uint32_t (*getTypeId)(void*) =
-                *reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<int64_t*>(child) + 0x10);
-            uint32_t t = getTypeId(child);
+            uint32_t t = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
             if (t == typeId) {
                 uint64_t* sel = reinterpret_cast<uint64_t*>(
                     *reinterpret_cast<int64_t*>(entIBP + 0x30) + static_cast<int64_t>(idx) * 8);

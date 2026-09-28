@@ -102,10 +102,7 @@ static uint64_t FindChildElem(void* parentElem, const char* name) {
 // Helper: Virtual call to Element::SetColor(this, color) — vtable[10]
 // ============================================================
 static void Element_SetColor(void* elem, uint32_t color) {
-    void* rawElem = *(void**)&elem;
-    typedef void (*fn_SetColor_t)(void* self, uint32_t color);
-    void** vtable = *(void***)rawElem;
-    ((fn_SetColor_t)vtable[10])(rawElem, color);
+    reinterpret_cast<UI::Element*>(elem)->SetColor(color);   // B.3.x bridge (slot 10)
 }
 
 // ============================================================
@@ -148,18 +145,14 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         // Destroy MaterialInstance at +0x30 (scalar deleting destructor, vtable[0])
         void* matInst = *(void**)(entryBase + 0x30);
         if (matInst) {
-            typedef void (*fn_Dtor_t)(void* self, int flags);
-            void** vtable = *(void***)matInst;
-            ((fn_Dtor_t)vtable[0])(matInst, 1);  // 1 = free memory
+            reinterpret_cast<Graphics::MaterialInstance*>(matInst)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
         }
 
         // Destroy SpriteSheet at +0x38 if materialInstance was non-null
         if (*(void**)(entryBase + 0x30) != nullptr) {
             void* sheet = *(void**)(entryBase + 0x38);
             if (sheet) {
-                typedef void (*fn_Dtor_t)(void* self, int flags);
-                void** vtable = *(void***)sheet;
-                ((fn_Dtor_t)vtable[0])(sheet, 1);
+                reinterpret_cast<UI::SpriteSheet*>(sheet)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
             }
         }
     }

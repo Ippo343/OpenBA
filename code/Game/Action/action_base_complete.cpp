@@ -313,7 +313,7 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     //    remove the task node from the param_1+0x30 BST.
     {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
-        (*reinterpret_cast<void(**)(void*)>(*owner + 0x48))(owner);
+        reinterpret_cast<Work*>(owner)->Validate();   // B.3.x bridge (slot 9, RCX only)
     }
     {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);

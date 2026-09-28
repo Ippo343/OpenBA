@@ -45,14 +45,14 @@ public:
 
     Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a190
     void  Persist(void* stream) override;                           // [3]  0x1400e9020
-    int   Execute(void* entityIBP, void* context, uint64_t arg3) override;  // [4]  0x1400e7840
+    int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400e7840
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400e77c0
     int   OnCancel(void* param2, void* param3, int arg3) override;    // [7]  0x1400e7780
     int   Cleanup() override;                                       // [8]  0x1400e8f30
-    int   Validate(void* param2) override;                          // [9]  0x1400e7530
+    int   Validate() override;                          // [9]  0x1400e7530
     void* GetTarget(void* retbuf) override;                         // [10] 0x1400e8fb0
     int   GetPriority() override;                                   // [11] 0x14002a0f0
-    void  Slot12() override;                                        // [12] 0x1400e9010 (own RET 0)
+    void  Slot12(int version) override;                                      // [12] 0x1400e9010 (own RET 0)
 
     // --- ConsumeProduce fields (+0x48) ---
     uint8_t  field_48;           // +0x48: bool (serialized)

@@ -227,7 +227,7 @@ static inline int ClampToMap(int val, int mapSize) {
 //
 // Returns: 1 = not ready/retry, 2 = action pushed
 // ============================================================
-int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
+int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
     uintptr_t selfAddr = (uintptr_t)this;
     int64_t* selfQ = (int64_t*)this;  // for 8-byte indexed access matching Ghidra
 
@@ -644,9 +644,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
                         uintptr_t* s2 = (uintptr_t*)(compArray + (uintptr_t)k * 8);
                         uintptr_t c2 = *s2;
                         if (!c2) { std::fprintf(stderr, "[FishWork]     [%d] <null>\n", k); continue; }
-                        uintptr_t v2 = *(uintptr_t*)c2;
-                        typedef uint32_t (*GetTypeId_t)();
-                        uint32_t t2 = ((GetTypeId_t)(*(uintptr_t*)(v2 + 0x10)))();
+                        uint32_t t2 = reinterpret_cast<Object::Base*>(c2)->Type();   // B.3.x bridge (slot 2)
                         const char* n2 = ::Object::GetTypeNameById(t2);
                         std::fprintf(stderr, "[FishWork]     [%d] tid=0x%x %s\n",
                                      k, t2, n2 ? n2 : "(unregistered)");
@@ -679,7 +677,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
 //
 // Returns: 1 = all valid (or no citizens), 0 = some invalid
 // ============================================================
-int FishingWork::Validate(void* param2) {
+int FishingWork::Validate() {
     int64_t* selfQ = (int64_t*)this;
 
     int citizenCount = (int)selfQ[10];  // +0x50
@@ -701,7 +699,7 @@ int FishingWork::Validate(void* param2) {
         // Validate this citizen's task
         uintptr_t citizenIBP = citizenRef;
         uintptr_t outTask = 0;
-        char valid = (char)fn_Work_CanStartWork(this, param2, &citizenIBP, &outTask);
+        char valid = (char)fn_Work_CanStartWork(this, nullptr, &citizenIBP, &outTask);
 
         if (valid == '\0') {
             // Invalid — clear citizen slot

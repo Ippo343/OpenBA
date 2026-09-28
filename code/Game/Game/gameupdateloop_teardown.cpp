@@ -46,6 +46,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Player/Tool.h"       // B.3.x W0: ~EntityUI shuts the active tool down by name
 
 namespace {
 
@@ -377,13 +378,11 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
     EnsureResolved();
     uint8_t* self = B(selfV);
 
-    // Active tool controller (+0x28): Close() through vtbl+0x28, then drop the IBP.
+    // Active tool (+0x28): Tool slot 5 Shutdown (0x140102505: RCX only), then
+    // drop the IBP.
     if (P(self, 0x28) != nullptr) {
         void* tool = P(self, 0x28);
-        void* vtbl = P(tool, 0x00);
-        typedef void (*fn_Close_t)(void*);
-        fn_Close_t close = reinterpret_cast<fn_Close_t>(P(vtbl, 0x28));
-        if (close) close(tool);
+        reinterpret_cast<Tool*>(tool)->Shutdown();   // B.3.x bridge (slot 5)
         if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(self + 0x28)->DeletePtr(
             );   // B.3.3 bridge
     }

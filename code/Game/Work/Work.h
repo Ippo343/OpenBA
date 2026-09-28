@@ -24,8 +24,9 @@
 // SLOT NAMES 4-12 have no retail symbol; they are the tree's (the old
 // work_base_standalone.h). ARGUMENT LISTS: the union of the parameter lists the
 // 21 leaves' C bodies declared (every C body took `self` first, i.e. the member
-// ABI). The retail callers read so far: CitizenAI's work walk 0x1400f7b60
-// dispatches [4] as `(work, &citizen, ctx+0x130)` and [9] with RCX only;
+// ABI), corrected from retail for [4], [9] and [12] (B3X W0 G-B). The retail
+// callers read so far: CitizenAI's work walk 0x1400f7b60 and 0x1400f8620
+// dispatch [4] as `(work, &citizen, ctx+0x130)` and [9] with RCX only;
 // the scheduler dispatches [10] as `(work, retbuf)`. The other slots' callers
 // are NOT re-read (B38_RULES §6): a leaf ignores the registers it does not
 // read, exactly as its C body did.
@@ -55,17 +56,28 @@ public:
     // DEFINE_EXE_TYPE with retail's abstract factory); every leaf overrides both.
     // [1] TypeName 0x14002ca50 and [2] Type 0x14002ca40: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void        Persist(void* stream) override;                       // [3]  0x1400f7400
-    virtual int   Execute(void* citizen, void* context, uint64_t arg3) = 0;  // [4]  pure
+    // [4] retail passes TWO arguments: RDX = &citizen copy, R8 = scheduler
+    // +0x130 (0x1400f7bdd/0x1400f7be4 and 0x1400f86c7/0x1400f86ce; R9 is never
+    // set, and no body reads it -- BuildRoad 0x1400e4190 overwrites R8 unread).
+    virtual int   Execute(void* citizen, void* context) = 0;          // [4]  pure
     virtual int   Slot5(void* citizen, void* context);                // [5]  0x1400f7540 → 0
     virtual int   OnComplete(void* citizen, void* arg2, int arg3) = 0;// [6]  pure
     virtual int   OnCancel(void* citizen, void* arg2, int arg3) = 0;  // [7]  pure
     virtual int   Cleanup() = 0;                                      // [8]  pure
-    virtual int   Validate(void* citizen) = 0;                        // [9]  pure
+    // [9] retail passes `this` only: 0x1400f7bc3, 0x1400f86ad, 0x1400f86f4,
+    // 0x1400f82b1, 0x1400f99a4 set RCX and nothing else. Bodies (BuildRoad
+    // 0x1400e40c0, Pickup 0x1400f2e20) forward the stale RDX to
+    // Work::ValidateTask 0x1400f7100, which spills it to its home slot and
+    // overwrites it unread (0x1400f71a4) -- ClearArea 0x1400e5b10 never sets it.
+    virtual int   Validate() = 0;                                     // [9]  pure
     // [10] the "who can do this" key (a u64 written through the hidden return
     // buffer, returned as the buffer): retail RCX = this, RDX = retbuf.
     virtual void* GetTarget(void* retbuf) = 0;                        // [10] pure
     virtual int   GetPriority() = 0;                                  // [11] pure
-    virtual void  Slot12();                                           // [12] 0x140006b10 RET 0
+    // [12] retail passes EDX = the serializer version (Goals_Serialize
+    // 0x1400f9335..0x1400f9340: `CALL GetVersion; MOV EDX,EAX; MOV RCX,RDI;
+    // CALL [RSI+0x60]`). Every body in the tree is an empty `RET 0`.
+    virtual void  Slot12(int version);                                // [12] 0x140006b10 RET 0
 
     // ---- the 0x38 bytes Work adds, retail order ------------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
