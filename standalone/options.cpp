@@ -255,8 +255,6 @@ void OptionsInit() {
         o.syncEngineLoader = !(v && (v[0] == '0' || v[0] == 'f' || v[0] == 'F')); }
     {   const char* v = Raw("BANISHED_NO_FOL_LOCK");
         o.noFolLock = v && v[0] != '0'; }
-    {   const char* v = Raw("BANISHED_UNREG_CENSUS");
-        o.unregCensus = v && std::strcmp(v, "0") != 0; }
 
     // ── opt-in LIVE_* gates ──────────────────────────────────────────────────
     {   const char* v = Raw("BANISHED_LIVE_SEAT_SHUFFLE");
@@ -290,7 +288,6 @@ void OptionsInit() {
     o.fastTrig               = Raw("BANISHED_FAST_TRIG");
     o.treeGuards             = Raw("BANISHED_TREE_GUARDS");
     o.treePrefetch           = Raw("BANISHED_TREE_PREFETCH");
-    o.unregCensusFrames      = Int("BANISHED_UNREG_CENSUS", 0);
     o.mapTrace               = Raw("BANISHED_MAP_TRACE");
     o.movetickTrace          = Raw("BANISHED_MOVETICK_TRACE");
     o.plagueTrace            = Raw("BANISHED_PLAGUE_TRACE");
@@ -366,7 +363,6 @@ void OptionsInit() {
     o.panelHoldFrame        = Raw("BANISHED_PANEL_HOLD_FRAME");
     o.panelHoldClick        = Raw("BANISHED_PANEL_HOLD_CLICK");
     o.panelHoldClickEvery   = Raw("BANISHED_PANEL_HOLD_CLICK_EVERY");
-    o.dlgCtrlRoute          = Raw("BANISHED_DLGCTRL_ROUTE");
 
     o.mouseInject  = Raw("BANISHED_MOUSE_INJECT");
     o.mouseHold    = Raw("BANISHED_MOUSE_HOLD");

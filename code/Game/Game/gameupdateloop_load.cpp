@@ -1455,7 +1455,6 @@ void GameUpdateLoop::Load() {
     // (it IS our vtable +0x38 slot).
     if (m_savedState != nullptr) {
         void* savedState = m_savedState;
-        SetUnregPhase("load");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE branch: SaveRestore(load) state=%p\n",
                 savedState);
         fflush(stderr);
@@ -1472,7 +1471,6 @@ void GameUpdateLoop::Load() {
         RtSave_SavedState_Dtor(static_cast<Save::SavedState*>(savedState));
         System::MemoryAllocator::MemFree(savedState);
         m_savedState = nullptr;
-        SetUnregPhase("postload");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
         fflush(stderr);
 

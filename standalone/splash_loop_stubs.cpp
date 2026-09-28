@@ -180,19 +180,9 @@ void GameLoadDialogLoopT::Startup() {
     // the loaded External to _dialogExternal @ +0x50.
     if (!_dialogExternal) {
         StallDebug::Phase ownLoadPhase("SplashDLT own-rsc DialogLoaderLoopT::Load");
-        // Bracket the load so resolve_standalone logs every exe-side resolution
-        // and the bulk NullFactory marks any hits with [TRACE!]. _dialogFilename
-        // at self+0x48 is a wchar_t COW wrapper — too risky to deref blind, so
-        // we just tag with self pointer (each splash loop has a unique address).
-        char label[96];
-        std::snprintf(label, sizeof(label),
-                      "DialogLoaderLoopT::Load (Stub_Startup) self=%p",
-                      (void*)this);
-        TraceExeBegin(label);
         // QUALIFIED -- slot 6 is VIRTUAL on the base, so an unqualified call
         // would re-enter this class's own Load.
         Engine::DialogLoaderLoopT::Load();
-        TraceExeEnd(label);
         printf("[SplashDLT::Startup] DialogLoaderLoopT::Load returned, "
                "m_dialogExternal=%p\n", _dialogExternal);
     }

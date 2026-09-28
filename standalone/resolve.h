@@ -144,40 +144,9 @@ bool RuntimeExportIsRegistered(const char* mangled_name);
 void RecordResolveMiss(const char* mangled_name, uint16_t ordinal, void* caller);
 void DumpUnresolvedSymbols();
 
-// ---- Unregistered-address census (BANISHED_UNREG_CENSUS=1) ----------------
-// ResolveAddr's NOT IMPLEMENTED warning fires ONCE per address for the whole
-// process, so an address hit at boot AND again during a save load is only ever
-// attributed to boot. That makes the log useless for asking "which unregistered
-// slots does the LOAD path actually touch". The census records, per address,
-// the phase of the first hit and a per-phase hit count, and dumps the table
-// sorted at exit.
-//
-// Phase is a plain label pushed by the code that knows it has entered one;
-// UnregPhase() is the current label ("boot" until someone sets it).
-void SetUnregPhase(const char* phase);
-const char* UnregPhase();
-void DumpUnregCensus();
-
 // Query how many exe addresses are registered vs referenced (for progress tracking)
 struct RegistryStats {
     size_t registered;  // addresses with real implementations
     size_t stubs;       // addresses hitting NotImplemented stub
 };
 RegistryStats GetRegistryStats();
-
-// ---- Bracket-window callback tracer ---------------------------------------
-// When non-zero, ResolveAddr(Module::Exe, ...) prints a [TRACE] line for
-// EVERY resolution (registered + unimplemented), and the bulk NullFactory
-// stubs print [TRACE!] when hit. Counter (not bool) so nested brackets
-// nest cleanly — each setter increments, each unsetter decrements.
-//
-// Usage:
-//   TraceExeBegin("fn_DialogLoaderLoopT_Load(self=...)");
-//   fn_DialogLoaderLoopT_Load(self);
-//   TraceExeEnd("fn_DialogLoaderLoopT_Load");
-//
-// The label is echoed verbatim into the log so multiple bracketed regions
-// in one run can be distinguished.
-extern volatile int g_traceExeCallbacks;
-void TraceExeBegin(const char* label);
-void TraceExeEnd(const char* label);

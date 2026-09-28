@@ -51,78 +51,6 @@ static std::unordered_map<uintptr_t, uintptr_t>& GetRegistry() {
 static size_t g_stubHits = 0;
 static size_t g_uniqueStubs = 0;
 
-// ============================================================
-// Bracket-window tracer — bumped by TraceExeBegin/End in callers.
-// When > 0, ResolveAddr(Module::Exe, ...) logs every resolution.
-// ============================================================
-volatile int g_traceExeCallbacks = 0;
-
-void TraceExeBegin(const char* label) {
-    fprintf(stderr, "===== [TRACE BEGIN] %s =====\n", label ? label : "(null)");
-    fflush(stderr);
-    g_traceExeCallbacks++;
-}
-
-void TraceExeEnd(const char* label) {
-    if (g_traceExeCallbacks > 0) g_traceExeCallbacks--;
-    fprintf(stderr, "===== [TRACE END] %s =====\n", label ? label : "(null)");
-    fflush(stderr);
-}
-
-// ============================================================
-// Unregistered-address census (BANISHED_UNREG_CENSUS=1)
-// ============================================================
-// The NOT IMPLEMENTED warning below is once-per-address for the life of the
-// process. That is fine as a nag but useless for "which unregistered slots does
-// the LOAD path touch": a slot hit at boot and again mid-load is only ever
-// attributed to boot. The census keeps a per-address, per-phase hit count so
-// the load path can be read off directly.
-static const char* g_unregPhase = "boot";
-
-struct UnregEntry {
-    const char* firstPhase = nullptr;              // phase of the very first hit
-    std::unordered_map<const char*, size_t> hits;  // phase label -> count
-};
-static std::unordered_map<uintptr_t, UnregEntry>& GetUnregCensus() {
-    static std::unordered_map<uintptr_t, UnregEntry> c;
-    return c;
-}
-static bool CensusEnabled() {
-    return Opt().unregCensus;
-}
-
-void SetUnregPhase(const char* phase) {
-    if (!phase) return;
-    g_unregPhase = phase;
-    if (CensusEnabled()) {
-        fprintf(stderr, "[UnregCensus] phase -> %s\n", phase);
-        fflush(stderr);
-    }
-}
-const char* UnregPhase() { return g_unregPhase; }
-
-void DumpUnregCensus() {
-    if (!CensusEnabled()) return;
-    auto& c = GetUnregCensus();
-    // Sorted by address so two runs diff cleanly against each other.
-    std::vector<uintptr_t> addrs;
-    addrs.reserve(c.size());
-    for (auto& kv : c) addrs.push_back(kv.first);
-    std::sort(addrs.begin(), addrs.end());
-    fprintf(stderr, "[UnregCensus] ==== %zu distinct unregistered addresses ====\n",
-            addrs.size());
-    for (uintptr_t a : addrs) {
-        const UnregEntry& e = c[a];
-        size_t total = 0;
-        for (auto& h : e.hits) total += h.second;
-        fprintf(stderr, "[UnregCensus] 0x%llx first=%s total=%zu",
-                (unsigned long long)a, e.firstPhase ? e.firstPhase : "?", total);
-        for (auto& h : e.hits) fprintf(stderr, " %s=%zu", h.first, h.second);
-        fprintf(stderr, "\n");
-    }
-    fflush(stderr);
-}
-
 // NotImplemented stub — logs and returns 0
 // Safe for most calling conventions (returns 0/nullptr/false)
 static uintptr_t NotImplementedStub_impl(uintptr_t ghidra_addr) {
@@ -133,11 +61,6 @@ static uintptr_t NotImplementedStub_impl(uintptr_t ghidra_addr) {
                 (unsigned long long)ghidra_addr);
         warned[ghidra_addr] = true;
         g_uniqueStubs++;
-    }
-    if (CensusEnabled()) {
-        UnregEntry& e = GetUnregCensus()[ghidra_addr];
-        if (!e.firstPhase) e.firstPhase = g_unregPhase;
-        e.hits[g_unregPhase]++;
     }
     g_stubHits++;
     return 0;
@@ -319,22 +242,9 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         auto& reg = GetRegistry();
         auto it = reg.find(ghidra_addr);
         if (it != reg.end()) {
-            if (g_traceExeCallbacks > 0) {
-                fprintf(stderr,
-                    "[TRACE] ResolveAddr Exe 0x%llx -> 0x%llx (registered)\n",
-                    (unsigned long long)ghidra_addr,
-                    (unsigned long long)it->second);
-                fflush(stderr);
-            }
             return it->second;
         }
         // Not registered — warn and return 0 (callers should null-check)
-        if (g_traceExeCallbacks > 0) {
-            fprintf(stderr,
-                "[TRACE] ResolveAddr Exe 0x%llx -> NOT IMPLEMENTED\n",
-                (unsigned long long)ghidra_addr);
-            fflush(stderr);
-        }
         NotImplementedStub_impl(ghidra_addr);
         return 0;
     }

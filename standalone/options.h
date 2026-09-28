@@ -149,7 +149,6 @@ struct Options {
     bool        skipEngineLoader     = false;  // standalone/loader_loop_stubs.cpp [no tool reader]
     bool        syncEngineLoader     = true;   // standalone/loader_loop_stubs.cpp — default ON, "0"/"f" goes async
     bool        noFolLock            = false;  // standalone/res_load_lock.cpp — kill switch for the resource-load lock
-    bool        unregCensus          = false;  // tools/unreg_full.py — census of unregistered addresses
 
     // ── opt-in LIVE_* gates deliberately NOT in the default-on table ──────────────
     // (ENDGAME C.2 decides these: graduate with the run that proves them, or delete.)
@@ -185,7 +184,6 @@ struct Options {
     const char* fastTrig             = nullptr;// BANISHED_FAST_TRIG — code/Game/Component/character_trig.cpp
     const char* treeGuards           = nullptr;// BANISHED_TREE_GUARDS — code/Game/Entity/entitylist.cpp
     const char* treePrefetch         = nullptr;// BANISHED_TREE_PREFETCH — code/Game/Entity/entitylist.cpp
-    int         unregCensusFrames    = 0;      //   BANISHED_UNREG_CENSUS=<n> dump frame (gameupdateloop.cpp)
 
     // ── diagnostic traces still read from code/Game ──────────────────────────
     const char* mapTrace             = nullptr;// BANISHED_MAP_TRACE — minimap / map UI / tool UI
@@ -260,7 +258,6 @@ struct Options {
     const char* panelHoldFrame       = nullptr;// BANISHED_PANEL_HOLD_FRAME
     const char* panelHoldClick       = nullptr;// BANISHED_PANEL_HOLD_CLICK — "<control>:<id>"
     const char* panelHoldClickEvery  = nullptr;// BANISHED_PANEL_HOLD_CLICK_EVERY
-    const char* dlgCtrlRoute         = nullptr;// BANISHED_DLGCTRL_ROUTE ("probe" = observe only)
 
     // ── the mouse injector (standalone/mouse_inject.cpp) [no tool reader] ─────
     const char* mouseInject          = nullptr;// comma-separated step script

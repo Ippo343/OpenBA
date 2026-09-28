@@ -1467,9 +1467,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     printf("\n[Standalone] === ENTERING GameMain ===\n");
     int rc = Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "");
     printf("[Standalone] === GameMain returned %d ===\n", rc);
-    // Unregistered-address census (BANISHED_UNREG_CENSUS=1). Dumped here and
-    // not from atexit: the crash handler ends in ExitProcess, which skips it.
-    DumpUnregCensus();
     // Wave 9 lane F: symbols that resolved to NOTHING. Always on, prints only
     // when the list is non-empty. After lane G this is the missing-symbol list.
     DumpUnresolvedSymbols();

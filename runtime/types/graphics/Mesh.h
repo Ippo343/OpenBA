@@ -1036,3 +1036,9 @@ void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3);  //
 // ??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z
 void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags);  // 0x1800a2df0
 // ==== end B3R RT-VG ====
+
+// ==== B3R W2-RES: the body the 0x180100f20 address row held (graphics/mesh.cpp) ====
+// ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+// standalone/scene_watch.cpp's IsMeshInstance compares a vtable entry with it.
+extern "C" void RtGraphics_MeshInstance_AddDrawItems(const void* self, const void* scene,
+                                                     void* renderer);  // 0x180100f20
