@@ -362,7 +362,9 @@ using EffectSlot      = Audio::Scene::AttenutedEffect;
 using Configuration   = Audio::Configuration;
 }  // namespace RtAudio
 
-// ==== B3R S-Harness (R5: a declaration P0 did not write) ====
-// ---- audio/audio.cpp
-void* RtAudio_Scene_Ctor(void* selfPtr);  // 0x1800e0160 ??0Scene@Audio@@QEAA@XZ
-// ==== end B3R S-Harness ====
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+// ---- audio/audio.cpp (??0Scene@Audio@@QEAA@XZ)
+void* RtAudio_Scene_Ctor(void* selfPtr);
+// ---- audio/audio.cpp (??1Scene@Audio@@QEAA@XZ)
+void RtAudio_Scene_Dtor(void* selfPtr);
+// ==== end B3R G-Game ====

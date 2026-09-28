@@ -35,6 +35,7 @@
 
 #include "options.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/BuildComponent.h"   // caller batch CB6: TypeId()
 #include "resolve.h"
 #include "force_work.h"
@@ -112,7 +113,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     void* site = g_pConstructionDemoEntity;
     if (!site || !citizen) return false;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
-    if (!fn_InternalBasePtr_Ctor || !fn_MemAlloc || !g_pMemAllocSingleton) return false;
+    if (!System::MemoryAllocator::_singleton) return false;
 
     // Bind to the FIRST force-worked citizen only (single, observable subject).
     static void* s_owner = nullptr;

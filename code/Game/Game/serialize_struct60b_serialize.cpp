@@ -38,65 +38,27 @@
 #include "Object/factory_registration.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Serializer.h"     // ENDGAME B.3.4 caller batch B
+#include "Game/exe_bodies.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
-// External reimpl entry from serialize_externals_typed.cpp — used by
-// Struct60B_Serialize_Body for each element's typed-ExternalPtr at +0x00.
-extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
-    void* refField, void* serializer);
+// Reimpl_ExternalPtr_Serialize_Typed_7140 (serialize_externals_typed.cpp, 0x140007140)
+// serializes each element's typed-ExternalPtr at +0x00: Game/exe_bodies.h.
 
 namespace {
 
 constexpr size_t kStruct60B_Size = 0x60;
 
 // ============================================================
-// Dispatch-slot typedefs for per-primitive serialize calls
+// IO::Serializer primitives
 // ============================================================
-//
-// The original ffa0 calls a handful of IO::Serializer dispatch slots that
-// aren't yet exposed in engine_funcs (only a subset is wired today). We
-// resolve them lazily via ResolveAddr and treat each as cascade-safe:
-// missing slot -> one-shot warn -> skip that primitive (NOT skip the
-// outer loop). We do NOT add them as long-lived externs in engine_funcs.h
-// because the address registry hasn't classified all of these slots yet.
-//
-// Slot map (from ffa0 / f9c0 / sub_0150 disassembly):
-//   0x140152ac8 — Serialize(int*, name)        [used 12 times in ffa0]
-//   0x140152410 — Serialize(uchar*, name)      [byte primitive]
-//   0x140152a58 — Serialize(bool*, name)       [also g_fn_Serialize_Bool]
-//   0x140152a60 — Serialize(float*, name)
-//   0x140152a48 — GetVersion()
-//   0x140152488 — Serialize(count, ushort*, name)  [bulk uint16 array]
-//   0x1401523f8 — Serialize(int size, void* ptr, name)  [fixed-byte raw]
-//   0x140152400 — Serialize(int size, void* ptr, name)  [variant]
-typedef void (*FnSerInt_t)(void* serializer, int32_t* field, const char* name);
-typedef void (*FnSerByte_t)(void* serializer, uint8_t* field, const char* name);
-typedef void (*FnSerBool_t)(void* serializer, bool* field, const char* name);
-typedef void (*FnSerFloat_t)(void* serializer, float* field, const char* name);
-typedef int  (*FnGetVer_t)(void* serializer);
-typedef void (*FnSerUShortArray_t)(void* serializer, int32_t count, uint16_t* data, const char* name);
-typedef void (*FnSerSizedRaw_t)(void* serializer, int32_t bytes, void* ptr, const char* name);
-
-// One-shot resolver helpers. We hold cached pointers per-translation-unit so
-// we don't ResolveAddr on every call.
-template <typename Fn>
-Fn ResolveSlot(uintptr_t exeAddr, Fn& cache, bool& triedOnce) {
-    if (cache) return cache;
-    if (triedOnce) return nullptr;
-    triedOnce = true;
-    void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, exeAddr));
-    if (slot && *slot) {
-        cache = reinterpret_cast<Fn>(*slot);
-    } else {
-        printf("[Struct60B::Serialize] dispatch slot 0x%llx unresolved — "
-               "skipping that primitive\n",
-               static_cast<unsigned long long>(exeAddr));
-        fflush(stdout);
-    }
-    return cache;
-}
+// The original ffa0 / f9c0 call IO::Serializer through PE import slots
+// (0x140152ac8 Serialize(int&), 0x140152410 Serialize(uchar&), 0x140152a58
+// Serialize(bool&), 0x140152a60 Serialize(float&), 0x140152a48 GetVersion,
+// 0x140152488 Serialize(count, ushort*), 0x1401523f8 / 0x140152400 Serialize(size,
+// short* / uchar*)). The calls are IO::Serializer members (ENDGAME B.3.4); the
+// slot resolves that only gated them went with B3R (every slot is registered).
 
 // ============================================================
 // Helper sub_f9c0 — uint16-stride sub-array serialize (~30 instr)
@@ -127,23 +89,12 @@ Fn ResolveSlot(uintptr_t exeAddr, Fn& cache, bool& triedOnce) {
 void Struct60B_Sub_F9C0_Body(void* arrayHeaderPtr, void* serializer) {
     if (!arrayHeaderPtr || !serializer) return;
 
-    // Cached slot pointers — first-call resolution.
-    static FnSerInt_t      s_serInt   = nullptr;
-    static FnSerSizedRaw_t s_serRawA  = nullptr;  // 0x1401523f8
-    static FnSerSizedRaw_t s_serRawB  = nullptr;  // 0x140152400
-    static bool s_triedInt = false;
-    static bool s_triedRawA = false;
-    static bool s_triedRawB = false;
-
     auto* hdr = reinterpret_cast<uint8_t*>(arrayHeaderPtr);
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 0x08);
 
     // Serialize the count (acts as both count-out and count-in based on mode).
     int32_t local_count = count;
-    FnSerInt_t serInt = ResolveSlot(0x140152ac8, s_serInt, s_triedInt);
-    if (serInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, nullptr);   // B.3.4 bridge
 
     // Loading branch: resize the buffer to local_count.
     int innerCheck = *reinterpret_cast<int*>(
@@ -151,17 +102,7 @@ void Struct60B_Sub_F9C0_Body(void* arrayHeaderPtr, void* serializer) {
     if (innerCheck == 0) {
         // sub_ee40 (0x14001ee40) = stride-0x14 array resize. Reuse existing
         // session-5 wrapper which targets the same primitive shape.
-        if (fn_Array_Resize_Stride14) {
-            fn_Array_Resize_Stride14(arrayHeaderPtr, local_count);
-        } else {
-            static bool s_warned = false;
-            if (!s_warned) {
-                printf("[Struct60B::sub_f9c0] fn_Array_Resize_Stride14 unresolved — "
-                       "loading skipped\n");
-                fflush(stdout);
-                s_warned = true;
-            }
-        }
+        Reimpl_Array_Resize_Stride14(arrayHeaderPtr, local_count);
     }
 
     if (local_count <= 0) return;
@@ -169,23 +110,15 @@ void Struct60B_Sub_F9C0_Body(void* arrayHeaderPtr, void* serializer) {
     void* dataPtr = *reinterpret_cast<void**>(hdr + 0x00);
     if (!dataPtr) return;
 
-    FnSerSizedRaw_t serRawA = ResolveSlot(0x1401523f8, s_serRawA, s_triedRawA);
-    FnSerSizedRaw_t serRawB = ResolveSlot(0x140152400, s_serRawB, s_triedRawB);
-    if (!serRawA && !serRawB) return;
-
     // Walk stride-0x14 elements. The original disassembly indexes from base+0x10
     // and uses RBX-0x10/-0x8/+0x00 for each subfield, but the absolute offsets
     // within the element are the same as base+0x00/+0x08/+0x10.
     auto* elemBase = reinterpret_cast<uint8_t*>(dataPtr);
     for (int i = 0; i < local_count; ++i) {
         uint8_t* elem = elemBase + static_cast<size_t>(i) * 0x14;
-        if (serRawA) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(elem + 0x00), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(elem + 0x08), nullptr);   // B.3.4 bridge
-        }
-        if (serRawB) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<unsigned char*>(elem + 0x10), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(elem + 0x00), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(elem + 0x08), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<unsigned char*>(elem + 0x10), nullptr);   // B.3.4 bridge
     }
 }
 
@@ -225,28 +158,6 @@ void Struct60B_Sub_F9C0_Body(void* arrayHeaderPtr, void* serializer) {
 void Struct60B_Serialize_Body(void* serializer, int count, void* arrayBase) {
     if (!serializer || count <= 0 || !arrayBase) return;
 
-    // Cached slot pointers.
-    static FnSerInt_t        s_serInt   = nullptr;
-    static FnSerByte_t       s_serByte  = nullptr;
-    static FnSerBool_t       s_serBool  = nullptr;
-    static FnSerFloat_t      s_serFloat = nullptr;
-    static FnGetVer_t        s_getVer   = nullptr;
-    static FnSerUShortArray_t s_serUSArr = nullptr;
-    static bool s_triedInt = false;
-    static bool s_triedByte = false;
-    static bool s_triedBool = false;
-    static bool s_triedFloat = false;
-    static bool s_triedGetVer = false;
-    static bool s_triedUSArr = false;
-
-    FnSerInt_t   serInt   = ResolveSlot(0x140152ac8, s_serInt,   s_triedInt);
-    FnSerByte_t  serByte  = ResolveSlot(0x140152410, s_serByte,  s_triedByte);
-    FnSerBool_t  serBool  = ResolveSlot(0x140152a58, s_serBool,  s_triedBool);
-    FnSerFloat_t serFloat = ResolveSlot(0x140152a60, s_serFloat, s_triedFloat);
-    FnGetVer_t   getVer   = ResolveSlot(0x140152a48, s_getVer,   s_triedGetVer);
-    FnSerUShortArray_t serUSArr =
-        ResolveSlot(0x140152488, s_serUSArr, s_triedUSArr);
-
     auto* base = reinterpret_cast<uint8_t*>(arrayBase);
     for (int i = 0; i < count; ++i) {
         uint8_t* elem = base + static_cast<size_t>(i) * kStruct60B_Size;
@@ -255,51 +166,39 @@ void Struct60B_Serialize_Body(void* serializer, int count, void* arrayBase) {
         Reimpl_ExternalPtr_Serialize_Typed_7140(elem + 0x00, serializer);
 
         // 2. 5 ints at +0x28..+0x38.
-        if (serInt) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x28), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x2c), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x30), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x34), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x38), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x28), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x2c), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x30), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x34), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x38), nullptr);   // B.3.4 bridge
 
         // 3. 1 byte at +0x3c.
-        if (serByte) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(elem + 0x3c), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(elem + 0x3c), nullptr);   // B.3.4 bridge
 
         // 4. 1 int at +0x40.
-        if (serInt) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x40), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x40), nullptr);   // B.3.4 bridge
 
         // 5. 1 bool at +0x44.
-        if (serBool) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x44), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x44), nullptr);   // B.3.4 bridge
 
         // 6. 5 floats at +0x48..+0x58.
-        if (serFloat) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x48), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x4c), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x50), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x54), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x58), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x48), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x4c), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x50), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x54), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x58), nullptr);   // B.3.4 bridge
 
         // 7. 1 bool at +0x5c.
-        if (serBool) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x5c), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x5c), nullptr);   // B.3.4 bridge
 
         // 8. Version-gated bool at +0x5d (versions >= 2).
-        int version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 0;   // B.3.4 bridge
-        if (version >= 2 && serBool) {
+        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+        if (version >= 2) {
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x5d), nullptr);   // B.3.4 bridge
         }
 
         // 9. Version-gated sub-array work (versions >= 1).
-        version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 0;   // B.3.4 bridge
+        version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
         if (version >= 1) {
             // Sub-array at elem+0x08 (stride-0x14): per-element raw serialize.
             Struct60B_Sub_F9C0_Body(elem + 0x08, serializer);
@@ -308,28 +207,16 @@ void Struct60B_Serialize_Body(void* serializer, int count, void* arrayBase) {
             // The original reads local_count from *(int*)(elem + 0x20)
             // (= the count slot of the +0x18 ArrayHeader16).
             int32_t local_count = *reinterpret_cast<int32_t*>(elem + 0x20);
-            if (serInt) {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, nullptr);   // B.3.4 bridge
-            }
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, nullptr);   // B.3.4 bridge
             // If loading, resize the +0x18 sub-array to local_count.
             int innerCheck = *reinterpret_cast<int*>(
                 reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
             if (innerCheck == 0) {
-                if (fn_Array_Resize_Stride02) {
-                    fn_Array_Resize_Stride02(elem + 0x18, local_count);
-                } else {
-                    static bool s_warned = false;
-                    if (!s_warned) {
-                        printf("[Struct60B::Serialize] fn_Array_Resize_Stride02 unresolved — "
-                               "uint16 sub-array load skipped\n");
-                        fflush(stdout);
-                        s_warned = true;
-                    }
-                }
+                Reimpl_Array_Resize_Stride02(elem + 0x18, local_count);
             }
             // Bulk uint16 serialize of the data buffer.
             uint16_t* data16 = *reinterpret_cast<uint16_t**>(elem + 0x18);
-            if (serUSArr && data16) {
+            if (data16) {
                 reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, reinterpret_cast<unsigned short*>(data16), nullptr);   // B.3.4 bridge
             }
         }
@@ -352,8 +239,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
-    if (!fn_IsDerivedFrom ||
-        !::Object::ExternalFactory::_singleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Serialize_External<MaterialInstance>] runtime primitives "

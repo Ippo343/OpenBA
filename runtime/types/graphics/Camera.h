@@ -752,7 +752,9 @@ static_assert(offsetof(Renderer, _pad_4c)            == 0x4c, "Renderer::+0x4c i
 
 }  // namespace Graphics
 
-// ==== B3R S-Harness (R5: a declaration P0 did not write) ====
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
 // ---- graphics/renderer.cpp
-extern "C" void RtGraphics_Renderer_Dtor(RtGraphics::Renderer* self);  // 0x1800180a0 ??1Renderer@Graphics@@QEAA@XZ
-// ==== end B3R S-Harness ====
+extern "C" RtGraphics::Camera* RtGraphics_Camera_Ctor(RtGraphics::Camera* self, const ::Frustum* frustum, const Math::Transform3* cameraToWorld, bool swapZUpToYUp);  // 0x1800fe960
+extern "C" RtGraphics::Renderer* RtGraphics_Renderer_Ctor(RtGraphics::Renderer* self);  // 0x180105180
+extern "C" void RtGraphics_Renderer_Dtor(RtGraphics::Renderer* self);  // 0x1800180a0
+// ==== end B3R G-Game ====

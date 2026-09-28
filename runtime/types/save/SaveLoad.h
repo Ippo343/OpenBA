@@ -539,7 +539,7 @@ extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src);  // 0x18
 void RtSave_SaveLoad_Dtor(Save::SaveLoad* self);  // 0x1800c3c90
 // ==== end B3R W0-P0c ====
 
-// ==== B3R S-Harness (R5: a declaration P0 did not write) ====
-// ---- save/saveload.cpp
-Save::SaveLoad* RtSave_SaveLoad_Ctor(Save::SaveLoad* self);  // 0x1800c3d30 ??0SaveLoad@Save@@QEAA@XZ
-// ==== end B3R S-Harness ====
+// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
+Save::SaveLoad* RtSave_SaveLoad_Ctor(Save::SaveLoad* self);  // 0x1800c3d30
+void RtSave_SavedState_Dtor(Save::SavedState* self);
+// ==== end B3R G-Game ====

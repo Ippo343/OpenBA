@@ -94,7 +94,7 @@ bool Weather::Serialize(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ExternalPtr material (+0x20)
-    fn_ExternalPtr_Serialize3(&material, serializer);
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&material, serializer);
 
     // int particleCount (+0x28) — declared int32_t == int door type: cast dropped
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(particleCount, nullptr);   // B.3.4 bridge

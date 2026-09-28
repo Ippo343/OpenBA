@@ -189,7 +189,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
             uint64_t ibp0 = static_cast<uint64_t>(arr[0]);
             void* desc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ibp0) + 0x18);
             uint32_t tid = CitizenDescriptionTypeId();
-            if (!(fn_IsDerivedFrom && tid && fn_IsDerivedFrom(desc, tid))) desc = nullptr;
+            if (!(tid && ::Object::IsDerivedFromNullSafe(desc, tid))) desc = nullptr;
             // Faithful: retail derefs `desc` here with no null test (ASSERT path).
             uint8_t* d = reinterpret_cast<uint8_t*>(desc);
             moodA = (moodA / static_cast<float>(count)) / *reinterpret_cast<float*>(d + 0x70);

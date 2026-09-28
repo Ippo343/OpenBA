@@ -57,6 +57,7 @@
 #include "video/ImageBuffer.h"
 #include "video/Device.h"       // ENDGAME B.3.5 batch K1 — Video::Device::{Lock,Unlock}
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -114,7 +115,7 @@ constexpr int kGridSizeOffset         = 0xC0;     // self+0xC0 = grid edge
 extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
     if (!self) return;
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+    if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[sub_c780] MemAlloc/singleton unavailable — skipping image upload "
@@ -139,7 +140,7 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
     uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
 
     // (1) Allocate a 0x68-byte ImageBuffer with 8-byte alignment.
-    void* img = fn_MemAlloc(g_pMemAllocSingleton, kImageBufferSize, kImageBufferAlign);
+    void* img = System::MemoryAllocator::MemAlloc(kImageBufferSize, kImageBufferAlign);
     if (!img) {
         static bool s_warned = false;
         if (!s_warned) {

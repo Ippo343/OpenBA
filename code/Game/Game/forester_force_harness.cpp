@@ -116,7 +116,7 @@ static void* VerifyLodgeForester(void* lodge, bool dump) {
     // ForesterDescription via IsDerivedFrom; verify that holds before we let it run.
     void* desc = Readable(fc, 0x20) ? *reinterpret_cast<void**>((uintptr_t)fc + 0x18) : nullptr;
     if (!desc) return nullptr;
-    if (fn_IsDerivedFrom && tidForesterDesc && !fn_IsDerivedFrom(desc, tidForesterDesc))
+    if (tidForesterDesc && !::Object::IsDerivedFromNullSafe(desc, tidForesterDesc))
         return nullptr;
     return fc;
 }
@@ -129,7 +129,6 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     void* lodge = g_pForceWorkBuilding;
     if (!lodge || !citizen) return false;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
-    if (!fn_InternalBasePtr_Ctor) return false;
 
     // Bind to the FIRST force-worked citizen only (single, observable subject).
     static void* s_owner = nullptr;
