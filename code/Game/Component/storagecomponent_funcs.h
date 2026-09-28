@@ -21,4 +21,3 @@ int StorageComponent_QueryCount(void* storageComp);
 uint32_t StorageComponent_Helper_c560(void* param_1, void* param_2);
 
 // Init: resolve all internal function pointers (called once at startup)
-void StorageComponent_InitFuncs();

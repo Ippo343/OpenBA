@@ -12,8 +12,13 @@
 #   make sa-run-og-menu   - -Og build + copy + launch, stop at main menu
 #   make clean            - remove build artifacts
 
-# Enable parallel builds by default (override with make -j1 for sequential)
+# Enable parallel builds by default (override with make -j1 for sequential).
+# Only when NO -j was given: an unconditional append overrode the caller's -jN in
+# every SUB-make (standalone-perf, standalone-og), so `make -j3 standalone-perf`
+# compiled at -j16 and several such builds at once ran the machine out of memory.
+ifeq (,$(findstring -j,$(MAKEFLAGS))$(findstring jobserver,$(MAKEFLAGS)))
 MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 4)
+endif
 
 CXX = ccache g++
 CC = ccache gcc

@@ -17,6 +17,7 @@
 #include "Component/StorageDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -25,45 +26,13 @@
 #include <cstdlib>
 #include <new>
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"   // ActRm_StorageAdd_d000
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// FUN_140002340 — serialize External reference (item type ptr)
-typedef void (*fn_SerializeExternalRef_t)(void* refPtr, void* serializer);
-static fn_SerializeExternalRef_t s_fn_SerializeExternalRef = nullptr;
-
-// IO::Serializer vtable slot +0x98 — serialize via vtable call (for field3c)
-// This is a virtual call: (*(code**)(serializer_vtable + 0x98))(serializer, field, name)
-// We call it indirectly through the serializer's vtable.
-
-// fn_IsDerivedFrom — already in engine_funcs.h
-
-// FUN_14012d000 — add storage slot entry
-typedef void (*fn_StorageAddSlot_t)(void* self, uintptr_t materialType, int count);
-static fn_StorageAddSlot_t s_fn_StorageAddSlot = nullptr;
-
-// FUN_140004680 — FindComponent (MapComponent type)
-typedef void* (*fn_FindComponent_Map_t)(uintptr_t entity, void* retval);
-static fn_FindComponent_Map_t s_fn_FindComponent_Map = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_SerializeExternalRef = reinterpret_cast<fn_SerializeExternalRef_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    s_fn_StorageAddSlot = reinterpret_cast<fn_StorageAddSlot_t>(
-        ResolveAddr(Module::Exe, 0x14012d000));
-
-    s_fn_FindComponent_Map = reinterpret_cast<fn_FindComponent_Map_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-
-    s_initialized = true;
-}
+// Exe helpers, by retail address:
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable (item type External ref)
+//   0x14012d000 ActRm_StorageAdd_d000 (add storage slot entry)
+//   0x140004680 FloorComponent_FindResData (MapComponent)
+// IO::Serializer vtable slot +0x98 (field3c) is the member Serialize(unsigned int&).
 
 // ============================================================
 // Effective type-ids — cells 0x1401c7eb0 (StorageDescription) and 0x1401c7cb8
@@ -81,14 +50,13 @@ static uint32_t EffTid_RawMaterialDescription() {
 // Helper: Get StorageDescription sibling component
 // ============================================================
 static void* GetStorageDescription(StorageComponent* self) {
-    EnsureHelpers();
     uint32_t tid = EffTid_StorageDescription();
-    if (!fn_IsDerivedFrom || tid == 0) return nullptr;
+    if (tid == 0) return nullptr;
 
     void* obj = self->_description;
     if (!obj) return nullptr;
 
-    bool derived = fn_IsDerivedFrom(obj, tid);
+    bool derived = Object::IsDerivedFromNullSafe(obj, tid);
     return derived ? obj : nullptr;
 }
 
@@ -101,7 +69,7 @@ static void* GetStorageDescription(StorageComponent* self) {
 // ============================================================
 static void* FindRawMatDescription(uintptr_t materialEntity) {
     uint32_t tid = EffTid_RawMaterialDescription();
-    if (!materialEntity || !fn_IsDerivedFrom || tid == 0) return nullptr;
+    if (!materialEntity || tid == 0) return nullptr;
     int compCount = *(int*)(materialEntity + 0x30);
     uintptr_t compArray = *(uintptr_t*)(materialEntity + 0x28);
     for (int i = 0; i < compCount; i++) {
@@ -109,7 +77,7 @@ static void* FindRawMatDescription(uintptr_t materialEntity) {
         uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (typeId == tid) {
             // Original: IsDerivedFrom-narrow, then break either way.
-            return fn_IsDerivedFrom(comp, tid) ? comp : nullptr;
+            return Object::IsDerivedFromNullSafe(comp, tid) ? comp : nullptr;
         }
     }
     return nullptr;
@@ -207,8 +175,7 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
         if (newCount == oldCount + 1 && oldCount != 0) {
             *(int*)((uintptr_t)field + 0xc) = newCount * 3;
         }
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
         field[0] = (int64_t)nb;
     }
 
@@ -231,21 +198,8 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
     }
 
     if (oldBuf != (int64_t*)field[0]) {
-        if (oldBuf) fn_MemFreeStatic(oldBuf);
+        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void StorageComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[StorageComponent] Funcs resolved: "
-           "StorageAddSlot=%p TypeId_StorageDesc=%u\n",
-           (void*)s_fn_StorageAddSlot,
-           StorageDescription::TypeId());
-#endif
 }
 
 // ============================================================================
@@ -289,8 +243,6 @@ StorageComponent::StorageComponent()
 //   Serializer_Dtor(local)
 
 void StorageComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
@@ -321,9 +273,7 @@ void StorageComponent::Persist(void* stream) {
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x08), nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x0C), nullptr);   // B.3.4 bridge
             // Serialize External reference at slot+0x00
-            if (s_fn_SerializeExternalRef) {
-                s_fn_SerializeExternalRef((void*)slotEntry, serializer);
-            }
+            Reimpl_ExternalPtr_Serialize_StringTable((void*)slotEntry, serializer);   // 0x140002340
         }
     }
 
@@ -385,8 +335,6 @@ void StorageComponent::Startup() {}
 //      Call StorageAddSlot(self, materialType, count) for each
 
 void StorageComponent::OnAdded() {
-    EnsureHelpers();
-
     // Get StorageDescription
     void* storageDesc = GetStorageDescription(this);
     if (!storageDesc) return;
@@ -407,10 +355,10 @@ void StorageComponent::OnAdded() {
     int tileArea = 1;
     if (*(uint8_t*)(descAddr + 0x20) != 0) {
         // Find MapComponent on entity, get tile dimensions
-        if (s_fn_FindComponent_Map) {
+        {
             uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
             uintptr_t mapCompBuf[2];
-            s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
+            FloorComponent_FindResData((void*)entity, (void*)mapCompBuf);   // 0x140004680
             uintptr_t mapComp = mapCompBuf[0];
             if (mapComp) {
                 int16_t w = *(int16_t*)(mapComp + 0x2c);
@@ -436,12 +384,12 @@ void StorageComponent::OnAdded() {
     uintptr_t templateArray = *(uintptr_t*)(descAddr + 0x30);
     int templateCount = *(int*)(descAddr + 0x38);
 
-    if (templateCount > 0 && s_fn_StorageAddSlot) {
+    if (templateCount > 0) {
         for (int i = 0; i < templateCount; i++) {
             uintptr_t entry = templateArray + (uintptr_t)i * 0x10;
             uintptr_t materialType = *(uintptr_t*)entry;
             int count = *(int*)(entry + 8);
-            s_fn_StorageAddSlot((void*)this, materialType, count);
+            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(this), static_cast<int64_t>(materialType), count);   // 0x14012d000
         }
     }
 }
@@ -479,7 +427,7 @@ int fn_StorageComponent_QueryCount(void* storageComp) {
             void* comp = *(void**)(compArray + (uintptr_t)j * 8);
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (typeId == RawMaterialDescription::TypeId()) {
-                if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
+                if (Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
                     resourceType = comp;
                 }
                 break;

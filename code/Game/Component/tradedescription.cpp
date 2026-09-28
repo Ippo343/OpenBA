@@ -8,7 +8,7 @@
 //   int   @ +0x6c = 3
 // Serialize (vtable +0x28, 0x14005c7f0) — Serializer ctor with version=1, stream order
 // (verified disasm CALLs at 0x14005c7f0):
-//   ExternalPtr @ +0x30  (FUN_140002340 -> fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x30  (FUN_140002340 -> Reimpl_ExternalPtr_Serialize_StringTable)
 //   int count   @ +0x50 -> resize +0x48 merchant array (element 0x48), per merchant:
 //        ExternalPtr @+0x00 (FUN_14000bf40)
 //        String      @+0x08
@@ -18,8 +18,8 @@
 //        enum @+0x10, enum @+0x14, enum @+0x18 (encoding vcall +0x98)
 //   int count   @ +0x60 -> resize +0x58 array (element stride 0x14), per element:
 //        int @+0x00, float @+0x04, float @+0x08, int @+0x0c, int @+0x10
-//   ExternalPtr @ +0x20  (FUN_14000bd30 -> fn_ExternalPtr_BuildSerialize)
-//   ExternalPtr @ +0x28  (FUN_14000bf40 -> fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x20  (FUN_14000bd30 -> Reimpl_ExternalPtr_Serialize_StringTable)
+//   ExternalPtr @ +0x28  (FUN_14000bf40 -> Reimpl_ExternalPtr_Serialize_StringTable)
 //   int count   @ +0x40 -> resize +0x38 array (element stride 0x18), per element:
 //        enum @+0x00 (encoding vcall +0x98), String @+0x08, String @+0x10
 //   float @ +0x68
@@ -38,6 +38,7 @@
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "system/MemoryAllocator.h"
 #include <cstring>
 #include <cstdint>
 #include <new>
@@ -61,7 +62,7 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
 namespace {
 // Allocate + zero a count*stride array into *basePtr. Returns the buffer.
 void* TD_AllocArray(void* basePtr, int n, uint64_t stride) {
-    void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * stride, 8);
+    void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * stride, 8);
     *(void**)basePtr = buf;
     if (buf) for (uint64_t b = 0; b < (uint64_t)n * stride; ++b) ((uint8_t*)buf)[b] = 0;
     return buf;
@@ -91,31 +92,29 @@ TradeDescription::TradeDescription()
 // dtor (slot 0 0x14000dc50 minus the stamps): frees the merchant (and its inner arrays/Strings), string-pair and price arrays.
 // The compiler then chains ~Description -> ~External.
 TradeDescription::~TradeDescription() {
-    if (fn_MemFreeStatic) {
-        // merchant array (free its inner arrays + strings first; the tree walks
-        // the CAPACITY field, which the load path never sets)
-        int merchN = _merchantCap;
-        uint8_t* m = static_cast<uint8_t*>(_merchants);
-        if (m) {
-            for (int i = 0; i < merchN; ++i, m += 0x48) {
-                if (*(void**)(m + 0x20)) fn_MemFreeStatic(*(void**)(m + 0x20));
-                if (*(void**)(m + 0x30)) fn_MemFreeStatic(*(void**)(m + 0x30));
-                reinterpret_cast<System::String*>(m + 0x08)->~String();  // B.3.1 bridge
-            }
-            fn_MemFreeStatic(_merchants);
+    // merchant array (free its inner arrays + strings first; the tree walks
+    // the CAPACITY field, which the load path never sets)
+    int merchN = _merchantCap;
+    uint8_t* m = static_cast<uint8_t*>(_merchants);
+    if (m) {
+        for (int i = 0; i < merchN; ++i, m += 0x48) {
+            if (*(void**)(m + 0x20)) System::MemoryAllocator::MemFree(*(void**)(m + 0x20));
+            if (*(void**)(m + 0x30)) System::MemoryAllocator::MemFree(*(void**)(m + 0x30));
+            reinterpret_cast<System::String*>(m + 0x08)->~String();  // B.3.1 bridge
         }
-        // string-pair array (free strings first)
-        int spN = _pairCap;
-        uint8_t* sp = static_cast<uint8_t*>(_pairs);
-        if (sp) {
-            for (int i = 0; i < spN; ++i, sp += 0x18) {
-                reinterpret_cast<System::String*>(sp + 0x08)->~String();  // B.3.1 bridge
-                reinterpret_cast<System::String*>(sp + 0x10)->~String();  // B.3.1 bridge
-            }
-            fn_MemFreeStatic(_pairs);
-        }
-        if (_prices) fn_MemFreeStatic(_prices);
+        System::MemoryAllocator::MemFree(_merchants);
     }
+    // string-pair array (free strings first)
+    int spN = _pairCap;
+    uint8_t* sp = static_cast<uint8_t*>(_pairs);
+    if (sp) {
+        for (int i = 0; i < spN; ++i, sp += 0x18) {
+            reinterpret_cast<System::String*>(sp + 0x08)->~String();  // B.3.1 bridge
+            reinterpret_cast<System::String*>(sp + 0x10)->~String();  // B.3.1 bridge
+        }
+        System::MemoryAllocator::MemFree(_pairs);
+    }
+    if (_prices) System::MemoryAllocator::MemFree(_prices);
     _merchants = nullptr;
     _pairs = nullptr;
     _prices = nullptr;
@@ -123,9 +122,8 @@ TradeDescription::~TradeDescription() {
 
 // [5] 0x14005c7f0: stream order as retail.
 bool TradeDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_ref30, &ser);   // ExternalPtr +0x30
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);   // ExternalPtr +0x30
     
     // merchant array @ +0x48 (count @ +0x50, element stride 0x48)
     ser.Serialize(_merchantCount, nullptr);
@@ -134,7 +132,7 @@ bool TradeDescription::Serialize(void* stream) {
     if (merchN > 0) {
         uint8_t* m = static_cast<uint8_t*>(_merchants);
         for (int i = 0; i < merchN && m; ++i, m += 0x48) {
-            fn_ExternalPtr_BuildSerialize(m + 0x00, &ser);                      // ExternalPtr
+            Reimpl_ExternalPtr_Serialize_StringTable(m + 0x00, &ser);                      // ExternalPtr
             reinterpret_cast<System::String*>(m + 0x08)->Serialize(&ser);      // B.3.1 bridge: String
             // ext-ref array @ m+0x20 (count @ m+0x28, stride 8)
             ser.Serialize(*reinterpret_cast<int*>(m + 0x28), nullptr);
@@ -170,8 +168,8 @@ bool TradeDescription::Serialize(void* stream) {
         }
     }
     
-    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);   // ExternalPtr +0x20
-    fn_ExternalPtr_BuildSerialize(&_ref28, &ser);   // ExternalPtr +0x28
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);   // ExternalPtr +0x20
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);   // ExternalPtr +0x28
     
     // string-pair array @ +0x38 (count @ +0x40, element stride 0x18)
     ser.Serialize(_pairCount, nullptr);

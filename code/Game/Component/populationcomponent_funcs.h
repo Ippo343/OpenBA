@@ -18,4 +18,3 @@ void PopulationComponent_OnRemove(void* self);
 // the slot-3 Serialize body in animalwave_serialize.cpp (load-side resize).
 void PopulationComponent_ResizeCells(int64_t* arr, int newCount);
 
-void PopulationComponent_InitFuncs();

@@ -23,4 +23,3 @@ void StatusIconComponent_Serialize(StatusIconComponent* self);
 void StatusIconComponent_OnUpdate2(StatusIconComponent* self);
 
 // Init: resolve all internal function pointers (called once at startup)
-void StatusIconComponent_InitFuncs();

@@ -17,7 +17,7 @@
 //   +0x40: int32  _valHead        (serialized 2nd)                  (default 0)
 //
 // Per-element layout (stride 0x28):
-//   +0x00: Object::Type  (4B, serialized via Object::Type::Serialize IAT 0x1401516b0)
+//   +0x00: Object::Type  (4B, serialized via Object::Type::Serialize, import slot 0x1401516b0)
 //   +0x08: ExternalPtr   (FUN_140027ad0 — identical stream)
 //   +0x10: ExternalPtr   (FUN_140039840 — identical stream)
 //   +0x18: ExternalPtr   (FUN_140027ad0 — identical stream)
@@ -46,6 +46,8 @@
 #include "resolve.h"
 #include "options.h"
 #include "system/String.h"
+#include "system/MemoryAllocator.h"
+#include "object/Type.h"          // RtObject::RtObject_Type_Serialize (import slot 0x1401516b0)
 #include <cstdio>
 #include <cstdint>
 #include <new>
@@ -97,7 +99,7 @@ UIDescription::~UIDescription() {
         uint8_t* e = buf;
         for (int i = 0; i < n; ++i, e += 0x28) reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
     }
-    if (fn_MemFreeStatic) fn_MemFreeStatic(buf);
+    System::MemoryAllocator::MemFree(buf);
     _entries = nullptr;
     _entryCount = 0;
     _entryCap = 0;
@@ -105,18 +107,11 @@ UIDescription::~UIDescription() {
 
 // [5] 0x14012de80: stream order as retail.
 bool UIDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    // Object::Type::Serialize via IAT dispatch slot 0x1401516b0 — resolved per
-    // call (was a non-atomic first-call cache; B6-5, the loader thread loads these).
-    typedef void (*fn_Type_Serialize_t)(void* type, void* serializer);
-    fn_Type_Serialize_t typeSer = nullptr;
-    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401516b0))
-        typeSer = *reinterpret_cast<fn_Type_Serialize_t*>(slot);
-    
+
     // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
     //    to the registered Serialize2 (typeId trusted in standalone).
-    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
     // 2. int (+0x40)
     ser.Serialize(_valHead, nullptr);
     // 3. count (+0x38)
@@ -134,19 +129,17 @@ bool UIDescription::Serialize(void* stream) {
     int cap = _entryCap;
     uint8_t* arr = static_cast<uint8_t*>(_entries);
     if (count > 0 && (arr == nullptr || cap < count)) {
-        if (fn_MemAlloc && g_pMemAllocSingleton) {
-            void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 0x28, 8);
-            _entries = buf;
-            _entryCap = buf ? count : 0;
-            if (buf) {
-                uint8_t* e = reinterpret_cast<uint8_t*>(buf);
-                for (int i = 0; i < count; ++i, e += 0x28) {
-                    *(uint64_t*)(e + 0x00) = 0;
-                    *(uint64_t*)(e + 0x08) = 0;
-                    *(uint64_t*)(e + 0x10) = 0;
-                    *(uint64_t*)(e + 0x18) = 0;
-                    *(uint64_t*)(e + 0x20) = 0;  // String (empty)
-                }
+        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)count * 0x28, 8);
+        _entries = buf;
+        _entryCap = buf ? count : 0;
+        if (buf) {
+            uint8_t* e = reinterpret_cast<uint8_t*>(buf);
+            for (int i = 0; i < count; ++i, e += 0x28) {
+                *(uint64_t*)(e + 0x00) = 0;
+                *(uint64_t*)(e + 0x08) = 0;
+                *(uint64_t*)(e + 0x10) = 0;
+                *(uint64_t*)(e + 0x18) = 0;
+                *(uint64_t*)(e + 0x20) = 0;  // String (empty)
             }
         }
     }
@@ -160,10 +153,10 @@ bool UIDescription::Serialize(void* stream) {
     if (buf) {
         uint8_t* e = buf;
         for (int i = 0; i < count; ++i, e += 0x28) {
-            if (typeSer) typeSer(e + 0x00, &ser);
-            fn_ExternalPtr_Serialize2(e + 0x08, &ser);
-            fn_ExternalPtr_Serialize2(e + 0x10, &ser);
-            fn_ExternalPtr_Serialize2(e + 0x18, &ser);
+            RtObject::RtObject_Type_Serialize(e + 0x00, &ser);   // import slot 0x1401516b0
+            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x08, &ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x10, &ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x18, &ser);
             reinterpret_cast<System::String*>(e + 0x20)->Serialize(&ser);  // B.3.1 bridge
         }
     }

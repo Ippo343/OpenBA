@@ -13,4 +13,3 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self);
 // Print the DoSpawn attempt/outcome tallies under a caller-supplied tag.
 extern "C" void SpawnComponent_ReportDoSpawnCensus(const char* tag);
 
-void SpawnComponent_InitFuncs();

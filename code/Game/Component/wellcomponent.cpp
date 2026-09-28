@@ -29,41 +29,21 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
-
-// FUN_140091ba0 — on entity (un)register, scan the manager's entity array for the
-// matching IBP and, if found, clear its natural-resource grid mark + null the slot.
-// (Despite the legacy "ArrayPushEntity" name, it is a remove-by-IBP, not a push.)
-typedef void (*fn_ArrayPushEntity_t)(void* manager, void* internalBasePtr);
-static fn_ArrayPushEntity_t s_fn_ArrayPushEntity = nullptr;
-
-// Game world/population manager singleton
-static void** s_pWorldManager = nullptr;
-
-static bool s_initialized = false;
-
-// FUN_140003110 — dynamic 8-byte-element array set-count + insert (ported in
-// action_base_hunt.cpp, registered). Used here for the IBP-array append.
-
-// System::MemoryAllocator::MemAlloc/MemFree, the STATIC (size, align) pair behind
-// dispatch slots 0x140152b60 / 0x140152b68.
-typedef void* (*fn_MemAllocStatic_t)(size_t size, int align);
-typedef void  (*fn_MemFreeStatic_t)(void* p);
-static fn_MemAllocStatic_t s_fn_MemAllocStatic = nullptr;
-static fn_MemFreeStatic_t  s_fn_MemFreeStatic  = nullptr;
-
-typedef bool     (*fn_WellIsDerived_t)(const void* obj, uint32_t tid);
-static fn_WellIsDerived_t s_fn_WellIsDerived = nullptr;
-
-
-
-
-// FUN_140004680 — MapComponent/resData finder used by the remove scan (registered).
-typedef void* (*fn_FindMapResData_t)(int64_t resData, void* outIBP);
-static fn_FindMapResData_t s_fn_FindMapResData = nullptr;
+// FUN_140091ba0 WellComp_UnregisterEntity_91ba0 (below) — on entity unregister, scan
+//   the manager's entity array for the matching IBP and, if found, clear its
+//   natural-resource grid mark + null the slot (a remove-by-IBP, not a push).
+// The GameWorld cell 0x1401c3dd8 is read through g_pGameWorldSingleton.
+// FUN_140003110 — dynamic 8-byte-element array set-count + insert (GameColl
+//   SetSizeFill). Used here for the IBP-array append.
+// System::MemoryAllocator::MemAlloc/MemFree, the STATIC (size, align) pair.
+// Import slot 0x140152a98 — Object::Base::IsDerivedFrom.
+// FUN_140004680 FloorComponent_FindResData — the MapComponent/resData finder used by
+//   the remove scan.
 
 // ============================================================
 // Reimpl of FUN_1400889e0 (Component reg wave B — WELL cluster).
@@ -132,7 +112,7 @@ void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
                 *reinterpret_cast<int64_t*>(manager + 0xe0) + (int64_t)idx * 8);
             int64_t entry = *reinterpret_cast<int64_t*>(*slot + 0x10);
             int64_t resData = 0;
-            if (s_fn_FindMapResData) s_fn_FindMapResData(entry, &resData);
+            FloorComponent_FindResData(reinterpret_cast<void*>(entry), &resData);   // 0x140004680
             int rx = (int)*reinterpret_cast<int16_t*>(resData + 0x28);
             int ry = (int)*reinterpret_cast<int16_t*>(resData + 0x2a);
             WellComp_RemoveCellEntry_889e0(manager, rx, ry, -1 - idx);
@@ -144,31 +124,6 @@ void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
         idx++;
         off += 8;
     } while (idx < *reinterpret_cast<int*>(manager + 0xe8));
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void WellComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-    s_fn_ArrayPushEntity = reinterpret_cast<fn_ArrayPushEntity_t>(
-        ResolveAddr(Module::Exe, 0x140091ba0));
-    s_fn_FindMapResData = reinterpret_cast<fn_FindMapResData_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-    s_pWorldManager = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_fn_MemAllocStatic = reinterpret_cast<fn_MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_WellIsDerived = *reinterpret_cast<fn_WellIsDerived_t*>(slot);
-
-    s_initialized = true;
 }
 
 // ============================================================
@@ -206,13 +161,7 @@ void WellComponent_InitFuncs() {
 // ============================================================
 void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
     // This helper is shared: CitizenList_PostLoad_8f580 (0x14008f580) calls it for
-    // every residence cell on a LOAD, long before any well reaches its state-2
-    // enter — the only other place that used to run WellComponent_InitFuncs. With
-    // the allocator pointer still null the growth branch bailed after having
-    // already written the new capacity, leaving a record with cap>0 and a NULL
-    // data pointer; the next insert into that same cell then saw cap >= newCount,
-    // skipped the alloc entirely and wrote through the null. Resolve our own deps.
-    WellComponent_InitFuncs();
+    // every residence cell on a LOAD, long before any well reaches its state-2 enter.
     void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
     if (!world) return;
     const int mapW = *reinterpret_cast<int*>(*reinterpret_cast<int**>(
@@ -234,8 +183,8 @@ void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
         int newCap = newCount;
         if (count != 0) newCap = newCount * 3;
         *reinterpret_cast<int*>(rec + 0x0c) = newCap;
-        if (!s_fn_MemAllocStatic) { *reinterpret_cast<int*>(rec + 0x08) = count; return; }
-        data = reinterpret_cast<int*>(s_fn_MemAllocStatic(static_cast<size_t>(newCap) * 4, 4));
+        data = reinterpret_cast<int*>(
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) * 4, 4));
         *reinterpret_cast<int**>(rec) = data;
     }
     // Rows below the old count come from the OLD buffer; the new row takes `value`.
@@ -243,7 +192,7 @@ void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
     for (int i = (oldData == data) ? count : 0; i < newCount; ++i)
         data[i] = (i >= count) ? value : oldData[i];
 
-    if (oldData != data && s_fn_MemFreeStatic) s_fn_MemFreeStatic(oldData);
+    if (oldData != data) System::MemoryAllocator::MemFree(oldData);
 }
 
 // ============================================================
@@ -289,12 +238,12 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
         if (!comp) continue;
         if (reinterpret_cast<Object::Base*>(comp)->Type() != tidMap) continue;   // B.3.8 bridge
         // Retail re-reads the slot and confirms with IsDerivedFrom before accepting.
-        if (s_fn_WellIsDerived && s_fn_WellIsDerived(comp, tidMap)) mapComp = comp;
+        if (reinterpret_cast<const Object::Base*>(comp)->IsDerivedFrom(tidMap)) mapComp = comp;
         break;
     }
 
     int64_t pos = 0;
-    if (fn_InternalBasePtr_Ctor) new (&pos) ::Object::InternalBasePtr(
+    new (&pos) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
     if (pos == 0) {
         // Retail derefs this unguarded -- it relies on every registered water source
@@ -331,11 +280,10 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
 // Enter walk continues past this node.
 // ============================================================
 extern "C" char WellComponent_EnterBuilt(void* comp, void* /*sm*/) {
-    WellComponent_InitFuncs();
-    if (!fn_InternalBasePtr_Ctor || !s_pWorldManager || !*s_pWorldManager) return 0;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
     uint8_t ibp[24] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-    void* gw = *s_pWorldManager;
+    void* gw = *g_pGameWorldSingleton;
     int64_t townMgr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(gw) + 0xf0);
     if (!townMgr) return 0;
     WellComp_RegisterEntity_91cb0(townMgr, ibp);
@@ -399,10 +347,6 @@ WellComponent::WellComponent() : _controller(this) {
 // Component_Serialize + two empty serializer blocks (controller compat).
 
 void WellComponent::Persist(void* stream) {
-    // Slot 3 is the FIRST call into this class on a load-from-save (PersistObject
-    // creates the object and dispatches slot 3 before Startup): the lazy resolver
-    // runs here so OnRemove finds its helpers.
-    WellComponent_InitFuncs();
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // First empty serializer block (component section)
@@ -432,16 +376,15 @@ void WellComponent::OnRemove() {
     // (slot 7 was never installed); it matters now that the FireWork spiral search
     // depends on wells being findable in the gw+0xf0 entity index.
     uint8_t basePtr[24];
-    if (fn_InternalBasePtr_Ctor)
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
 
     // *(GameWorld + 0xF0) is the TownManager itself -- not a "water source array".
     // 0x140091ba0 takes the manager and indexes its own +0xe0/+0xe8 pair.
-    if (s_pWorldManager && *s_pWorldManager && s_fn_ArrayPushEntity) {
-        void* gameWorld = *s_pWorldManager;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        void* gameWorld = *g_pGameWorldSingleton;
         void* townMgr = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
-        s_fn_ArrayPushEntity(townMgr, basePtr);
+        WellComp_UnregisterEntity_91ba0(reinterpret_cast<int64_t>(townMgr), basePtr);   // 0x140091ba0
     }
 }
 

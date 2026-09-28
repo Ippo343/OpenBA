@@ -30,46 +30,15 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
-
-// IsDerivedFrom -- dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// FUN_140002cc0 -- DynArray8_EraseByValue: remove an InternalBasePtr from the
-// 8-byte-element list at entity+0x38. (Append is FUN_140003110, a different fn.)
-typedef void (*fn_EraseFromComponentList_t)(void* listBase, void* ibpPtr);
-static fn_EraseFromComponentList_t s_fn_EraseFromComponentList = nullptr;
-
-// Object::InternalBasePtr::Ctor(retbuf, rawPtr) -- creates IBP from raw pointer
-typedef void (*fn_IBP_Ctor_t)(void* retbuf, void* rawPtr);
-static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    uintptr_t slot;
-
-    // Dispatch slots
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // InternalBasePtr::Ctor -- global
-    s_fn_IBP_Ctor = reinterpret_cast<fn_IBP_Ctor_t>(
-        reinterpret_cast<uintptr_t>(fn_InternalBasePtr_Ctor));
-
-    // FUN_140002cc0 -- erase from component list
-    s_fn_EraseFromComponentList = reinterpret_cast<fn_EraseFromComponentList_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_helpersResolved = true;
-}
+// Import slot 0x140152a98 -- Object::Base::IsDerivedFrom.
+// FUN_140002cc0 CemeteryListErase_Reimpl -- DynArray8_EraseByValue: remove an
+//   InternalBasePtr from the 8-byte-element list at entity+0x38. (Append is
+//   FUN_140003110, a different fn.)
 
 // 0x14012e300 door: registered by address (standalone/reg_animal_serialize.cpp).
 void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
@@ -100,19 +69,6 @@ void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
 // drains with no regrowth. "OnRemove is installed" is not evidence it is
 // dispatched; count both arms.
 static long long g_war_calls = 0, g_war_noHerd = 0;
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void WildAnimalComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[WildAnimalComponent] Funcs resolved: "
-           "EraseFromList=%p HerdTypeId=%u\n",
-           (void*)s_fn_EraseFromComponentList,
-           HerdComponent::TypeId());
-#endif
-}
 
 // ===== ENDGAME B.3.8 CIT — WildAnimalComponent as a REAL class (WildAnimalComponent.h) =====
 // Before: a 48-slot hand-built WildAnimalComponent_LiveVtable filled at every
@@ -145,8 +101,6 @@ WildAnimalComponent::WildAnimalComponent() : data28(0) {
 //   IO::Serializer::~Serializer(local)
 
 void WildAnimalComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
@@ -159,12 +113,10 @@ void WildAnimalComponent::Persist(void* stream) {
 
     // Post-deserialize type validation
     if (data28 != 0) {
-        if (s_fn_IsDerivedFrom_dispatch) {
-            bool valid = s_fn_IsDerivedFrom_dispatch(
-                reinterpret_cast<void*>(data28), HerdComponent::TypeId());
-            if (!valid) {
-                data28 = 0;
-            }
+        bool valid = reinterpret_cast<const Object::Base*>(data28)->IsDerivedFrom(
+            HerdComponent::TypeId());   // import slot 0x140152a98
+        if (!valid) {
+            data28 = 0;
         }
     }
 
@@ -172,8 +124,6 @@ void WildAnimalComponent::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 void WildAnimalComponent::OnRemove() {
-    EnsureHelpers();
-
     if (data28 == 0) ++g_war_noHerd;
     ++g_war_calls;
     const bool trace = (g_war_calls % 10) == 1;
@@ -183,18 +133,14 @@ void WildAnimalComponent::OnRemove() {
     if (data28 != 0) {
         // Create InternalBasePtr from self (the component)
         uint64_t ibp = 0;
-        if (s_fn_IBP_Ctor) {
-            s_fn_IBP_Ctor(&ibp, this);
-        }
+        new (&ibp) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
 
         // CheckPtr on entity reference
 
         // Erase self from the herd entity's component list at entity+0x38
-        if (s_fn_EraseFromComponentList) {
-            uintptr_t entity = static_cast<uintptr_t>(data28);
-            s_fn_EraseFromComponentList(
-                reinterpret_cast<void*>(entity + 0x38), &ibp);
-        }
+        uintptr_t entity = static_cast<uintptr_t>(data28);
+        CemeteryListErase_Reimpl(reinterpret_cast<void*>(entity + 0x38), &ibp);   // 0x140002cc0
     }
 
     if (trace) {
