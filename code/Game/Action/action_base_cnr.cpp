@@ -2,17 +2,14 @@
 // CreateNaturalResource / AnimateNaturalResource / RemoveNaturalResource
 // shared exe sub-helpers (Wave 3, Action).
 //
-// These exe helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from the
-// per-class Action .cpp files (createnaturalresource.cpp, animatenaturalresource.cpp,
-// removenaturalresource.cpp). They resolve to 0 (silently skipped) unless registered.
-// This file provides faithful 1:1 ports and a single registration point
-// (RegisterActionCnrBatch in standalone/reg_action_cnr.cpp).
+// The per-class Action .cpp files (createnaturalresource.cpp, animatenaturalresource.cpp,
+// removenaturalresource.cpp) call these by name through Action/exe_bodies.h (B3R); the
+// registration (RegisterActionCnrBatch in standalone/reg_action_cnr.cpp) stays for
+// readers other blocks still have.
 //
 // Each function is a literal port of the decompiled exe helper — no behavior is
-// invented or "improved". Every exe sub-call is mirrored through a guarded
+// invented or "improved". Every exe sub-call is a call of its body by name.
 #include "Action/exe_bodies.h"
-// ResolveAddr typedef'd pointer (closure-safe: an unregistered sub-callee simply
-// turns the call into a no-op).
 //
 
 // The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
@@ -21,7 +18,14 @@
 #include "graphics/Geometry.h"
 #include "graphics/Mesh.h"      // ENDGAME B.3.5 batch K1: reaches Volume.h, so BEFORE resolve.h
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"              // WorkBase_FindComponent_3050, WorkAcc_FindComponent_*
+#include "Component/exe_bodies.h"         // FloorComponent_FindResData, ModelComponentNotify_Reimpl
+#include "Player/exe_bodies.h"            // RemovalCalc_helper_8d50
+#include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
+#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Game/exe_constants.h"           // kRdata_*
+#include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
+#include <cstring>
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
@@ -34,119 +38,30 @@
 #include "Component/NaturalResourceDescription.h"
 
 // ============================================================
-// Lazily-resolved exe sub-helpers and type-ID globals (shared by this batch).
+// Exe sub-helpers and constants (shared by this batch), called by name (B3R).
+//   0x140003f60 ActCNR_FindComponent_3f60 (this file)   0x140003050 WorkBase_FindComponent_3050
+//   0x140004680 FloorComponent_FindResData               0x1400c2b70 ModelComponentNotify_Reimpl
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470        0x140006330 WorkAcc_FindComponent_6330
+// 0x1401260f0 closure sub-helpers:
+//   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0          0x140003110 ActHunt_DynArraySetCount_3110
+//   0x1400f8d50 RemovalCalc_helper_8d50 (RemovalTool_helper_8d50)
+//   0x1400c3720 ComponentEntity_CtorFromDescription (ComponentEntity_CopyCtor)
+//   0x1400223c0 ActRm_FindComponent_223c0                0x140129760 ActRm_PositionEntity_9760
+//   0x140022480 FUN_140022480 -- NOT PORTED (PORT GAP, below)
+//   0x140088ef0 ActRm_RegisterRawMaterial_88ef0          0x1400c48a0 EntityList_RegisterEntity_Impl
+//   0x140022520 WorkAcc_FindComponent_22520              0x140044810 ActRm_DynArrayPush4_44810
+// 0x140126540 closure: 0x14009f3e0 Reimpl_MapGetTerrainPos (CharacterComponent_impl_f3e0)
+// 0x140126440 closure: 0x1401250f0 ActMvDep_AnimHelper_50f0 (AnimalComponent_helper_50f0)
+// Import slots: 0x140152958 Math::Vector4::Vector4(const Scalar&), 0x140152b00
+// System::Time::Time(float) = RtSystem_Time_Ctor.
+// Float constants (Game/exe_constants.h): 0x1401720f4 (divisor in FUN_140120db0, a bit
+// pattern), 0x140172234 (time scale in FUN_140120db0), 0x140172114 (half-bias in
+// Entity_impl_6540), 0x140172220 (yaw scale in Entity_impl_6540 / 6440), 0x140172204
+// (amount scale in FUN_1401260f0), 0x14017214c (g_fUVScale).
 // ============================================================
 namespace {
 
-// Exe sub-helpers used by the complex ports.
-typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retIBP);   // member ABI RCX,RDX
-typedef void  (*fn_ModelComp2b70_t)(void* comp, uint32_t arg);
-typedef void  (*fn_NotifyChanged_t)(void* internal);              // FUN_1400c3470
-typedef void* (*fn_FindComp_3050_t)(uintptr_t entity, void* retIBP);
-
-fn_FindComp_t       s_fn_FindComp_3f60     = nullptr;  // 0x140003f60 (this file)
-fn_FindComp_t       s_fn_FindComp_3050     = nullptr;  // 0x140003050
-fn_FindComp_t       s_fn_FindComp_4680     = nullptr;  // 0x140004680
-fn_ModelComp2b70_t  s_fn_ModelComp_2b70    = nullptr;  // 0x1400c2b70
-fn_NotifyChanged_t  s_fn_NotifyChanged     = nullptr;  // 0x1400c3470
-
-// 0x140125320 helper (subvariant count) — used by 0x1401260f0? no; standalone use of FUN_140006330.
-typedef void* (*fn_GetMeshDesc_6330_t)(uintptr_t descObj, void* retbuf);  // FUN_140006330
-fn_GetMeshDesc_6330_t s_fn_GetMeshDesc_6330 = nullptr;
-
-// 0x1401260f0 closure sub-helpers.
-typedef void  (*fn_c2ea0_t)(uintptr_t internal);                                 // FUN_1400c2ea0
-typedef void  (*fn_003110_t)(int64_t* tree, int key, void* ibp);                 // FUN_140003110
-typedef void  (*fn_8d50_t)(int64_t map, void* retIBP, int cell);                 // RemovalTool_helper_8d50
-typedef void* (*fn_c3720_t)(void* mem, void* desc);                              // ComponentEntity_CopyCtor
-typedef void  (*fn_0223c0_t)(int64_t entity, void* retIBP);                      // FUN_1400223c0
-typedef void  (*fn_9760_t)(int64_t comp, int cell, float amount);              // CreateRawMaterial_helper_9760
-typedef void  (*fn_022480_t)(int64_t target, void* ibp);                        // FUN_140022480
-typedef void  (*fn_88ef0_t)(int64_t mgr, void* retIBP, char flag, int64_t desc, int amount); // CreateRawMaterial_helper_8ef0
-typedef void  (*fn_c48a0_t)(void** list, void* ibp, int group);                 // FUN_1400c48a0
-typedef void  (*fn_022520_t)(int64_t self, void* retIBP);                        // FUN_140022520
-typedef void  (*fn_044810_t)(int64_t a, uint32_t b);                            // FUN_140044810
-
-fn_c2ea0_t   s_fn_c2ea0   = nullptr;
-fn_003110_t  s_fn_003110  = nullptr;
-fn_8d50_t    s_fn_8d50    = nullptr;
-fn_c3720_t   s_fn_c3720   = nullptr;
-fn_0223c0_t  s_fn_0223c0  = nullptr;
-fn_9760_t    s_fn_9760    = nullptr;
-fn_022480_t  s_fn_022480  = nullptr;
-fn_88ef0_t   s_fn_88ef0   = nullptr;
-fn_c48a0_t   s_fn_c48a0   = nullptr;
-fn_022520_t  s_fn_022520  = nullptr;
-fn_044810_t  s_fn_044810  = nullptr;
-
-// 0x140126540 closure sub-helpers.
-typedef float* (*fn_f3e0_t)(int* mapGrid, float* outA, float* inCell, char flag, void* extra); // CharacterComponent_impl_f3e0
-fn_f3e0_t        s_fn_f3e0        = nullptr;
-
-// 0x140126440 closure sub-helpers.
-typedef void (*fn_50f0_t)(int64_t comp, uint32_t animIdx, float a, float b, float c); // AnimalComponent_helper_50f0
-fn_50f0_t s_fn_50f0 = nullptr;
-
-// Runtime dispatch-slot helpers (resolved through the .rdata slots, matching the
-// way the existing call sites read IAT slots).
-typedef void  (*fn_Vec4_t)(void* outVec4, const void* scalar);                  // Math::Vector4::Vector4 (slot 0x140152958)
-typedef void  (*fn_Time_t)(void* outTime, float seconds);                       // System::Time::Time (slot 0x140152b00)
-fn_Vec4_t    s_fn_Vec4    = nullptr;
-fn_Time_t    s_fn_Time    = nullptr;
-
-// Float constants from the exe .rdata (read as globals).
-const float* s_p_DAT_1401720f4 = nullptr;  // divisor in FUN_140120db0
-const float* s_p_DAT_140172234 = nullptr;  // time scale in FUN_140120db0
-const float* s_p_DAT_140172114 = nullptr;  // half-bias in Entity_impl_6540
-const float* s_p_DAT_140172220 = nullptr;  // yaw scale in Entity_impl_6540 / 6440
-const float* s_p_DAT_140172204 = nullptr;  // amount scale in FUN_1401260f0
-
-bool s_resolved = false;
-
-template <class T>
-static inline T R(uintptr_t a) { return reinterpret_cast<T>(ResolveAddr(Module::Exe, a)); }
-
-// Resolve a runtime function pointer stored in an exe .rdata dispatch slot.
-static inline void* RSlot(uintptr_t slotAddr) {
-    uintptr_t slot = ResolveAddr(Module::Exe, slotAddr);
-    return slot ? *reinterpret_cast<void**>(slot) : nullptr;
-}
-
-void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-
-    s_fn_FindComp_3f60  = R<fn_FindComp_t>(0x140003f60);
-    s_fn_FindComp_3050  = R<fn_FindComp_t>(0x140003050);
-    s_fn_FindComp_4680  = R<fn_FindComp_t>(0x140004680);
-    s_fn_ModelComp_2b70 = R<fn_ModelComp2b70_t>(0x1400c2b70);
-    s_fn_NotifyChanged  = R<fn_NotifyChanged_t>(0x1400c3470);
-    s_fn_GetMeshDesc_6330 = R<fn_GetMeshDesc_6330_t>(0x140006330);
-
-    s_fn_c2ea0   = R<fn_c2ea0_t>(0x1400c2ea0);
-    s_fn_003110  = R<fn_003110_t>(0x140003110);
-    s_fn_8d50    = R<fn_8d50_t>(0x1400f8d50);
-    s_fn_c3720   = R<fn_c3720_t>(0x1400c3720);
-    s_fn_0223c0  = R<fn_0223c0_t>(0x1400223c0);
-    s_fn_9760    = R<fn_9760_t>(0x140129760);
-    s_fn_022480  = R<fn_022480_t>(0x140022480);
-    s_fn_88ef0   = R<fn_88ef0_t>(0x140088ef0);
-    s_fn_c48a0   = R<fn_c48a0_t>(0x1400c48a0);
-    s_fn_022520  = R<fn_022520_t>(0x140022520);
-    s_fn_044810  = R<fn_044810_t>(0x140044810);
-
-    s_fn_f3e0    = R<fn_f3e0_t>(0x14009f3e0);
-    s_fn_50f0    = R<fn_50f0_t>(0x1401250f0);
-
-    s_fn_Vec4         = reinterpret_cast<fn_Vec4_t>(RSlot(0x140152958));
-    s_fn_Time         = reinterpret_cast<fn_Time_t>(RSlot(0x140152b00));
-
-    s_p_DAT_1401720f4 = R<const float*>(0x1401720f4);
-    s_p_DAT_140172234 = R<const float*>(0x140172234);
-    s_p_DAT_140172114 = R<const float*>(0x140172114);
-    s_p_DAT_140172220 = R<const float*>(0x140172220);
-    s_p_DAT_140172204 = R<const float*>(0x140172204);
-}
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 // Generic FindComponent body (matches WorkBase_FindComponent / the exe decompile):
 // scan entity's component list (ptr array at entity+0x30, count int at entity+0x38),
@@ -162,11 +77,11 @@ void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            found = ::Object::IsDerivedFromNullSafe(c, typeId) ? c : nullptr;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -182,7 +97,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 // animatenaturalresource.cpp as GetModelComp.)
 // ============================================================
 void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP) {
-    EnsureResolved();
     return FindComponentByTypeId(entity, retIBP, ModelComponent::TypeId());
 }
 
@@ -190,7 +104,6 @@ void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP) {
 // Reimpl of FUN_14000c460 — FindComponent, type 0x1401c77b0 (GrowthComponent).
 // ============================================================
 void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP) {
-    EnsureResolved();
     return FindComponentByTypeId(entity, retIBP, GrowthComponent::TypeId());
 }
 
@@ -203,7 +116,6 @@ void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP) {
 // children at node[4]=+0x10 and node[6]=+0x18).
 // ============================================================
 uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex) {
-    EnsureResolved();
     uintptr_t mg = reinterpret_cast<uintptr_t>(mapGrid);
     uintptr_t rec = static_cast<int64_t>(cellIndex) * 0x30 + *reinterpret_cast<int64_t*>(mg + 0x80);
     uint32_t passBits = 1u << (*reinterpret_cast<uint8_t*>(rec + 0x29) & 0x1f);
@@ -231,10 +143,9 @@ uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex) {
 // self (param_1) = GrowthComponent; entity-IBPs at +0x10 (parent), +0x28, +0x38.
 // ============================================================
 void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
-    EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     float growth = progress * *reinterpret_cast<float*>(s + 0x4c);
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;
     *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x28) = growth;
     float clamped = (uvScale < growth) ? uvScale : growth;
     *reinterpret_cast<float*>(s + 0x48) = clamped;
@@ -243,17 +154,15 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
         float g = (growth <= uvScale) ? growth : uvScale;
         int64_t target = *reinterpret_cast<int64_t*>(s + 0x30);
         float scalar = g;
-        uint8_t vec4[64];
-        if (s_fn_Vec4) {
-            s_fn_Vec4(vec4, &scalar);
-            const uint32_t* pv = reinterpret_cast<const uint32_t*>(vec4);
-            *reinterpret_cast<uint32_t*>(target + 0x134) = pv[0];
-            *reinterpret_cast<uint32_t*>(target + 0x138) = pv[1];
-            *reinterpret_cast<uint32_t*>(target + 0x13c) = pv[2];
-            *reinterpret_cast<uint32_t*>(target + 0x140) = pv[3];
+        {
+            Math::Vector4 vec4((Math::Scalar(scalar)));   // slot 0x140152958
+            *reinterpret_cast<float*>(target + 0x134) = vec4.x;
+            *reinterpret_cast<float*>(target + 0x138) = vec4.y;
+            *reinterpret_cast<float*>(target + 0x13c) = vec4.z;
+            *reinterpret_cast<float*>(target + 0x140) = vec4.w;
         }
     } else {
-        float divisor = s_p_DAT_1401720f4 ? *s_p_DAT_1401720f4 : 1.0f;
+        float divisor = RdataF(kRdata_1401720f4);   // 0x1401720f4
         float scaled = clamped / divisor;
         float lo = 0.0f;
         if ((0.0f <= scaled) && (lo = scaled, uvScale < scaled)) lo = uvScale;
@@ -269,16 +178,16 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
     int64_t desc = *reinterpret_cast<int64_t*>(s + 0x38);
     void* rng = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
     float rf = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-    float timeScale = s_p_DAT_140172234 ? *s_p_DAT_140172234 : 1.0f;
+    float timeScale = kRdata_140172234;   // 0x140172234
     uint8_t timeObj[8] = {0};
-    if (s_fn_Time) s_fn_Time(timeObj, rf * static_cast<float>(*reinterpret_cast<int*>(desc + 0x50)) * timeScale);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), rf * static_cast<float>(*reinterpret_cast<int*>(desc + 0x50)) * timeScale);   // slot 0x140152b00
 
     uint32_t flagsOld = *reinterpret_cast<uint32_t*>(s + 0x20);
     *reinterpret_cast<uint64_t*>(s + 0x40) = *reinterpret_cast<uint64_t*>(timeObj);
     uint32_t flagsNew = flagsOld & 0xffffffef;
     *reinterpret_cast<uint32_t*>(s + 0x20) = flagsNew;
     if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (*reinterpret_cast<int64_t*>(s + 0x10) != 0)) {
-        if (s_fn_NotifyChanged) s_fn_NotifyChanged(*reinterpret_cast<void**>(s + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(s + 0x10));   // 0x1400c3470
     }
 }
 
@@ -287,9 +196,8 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
 // Reads description at comp+0x18, type-gates against 0x1401c7a88, returns desc+0x28.
 // ============================================================
 uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp) {
-    EnsureResolved();
     void* desc = *reinterpret_cast<void**>(static_cast<uintptr_t>(comp) + 0x18);
-    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, ModelDescription::TypeId())) ? desc : nullptr;
+    void* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId())) ? desc : nullptr;
     return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(d) + 0x28);
 }
 
@@ -298,9 +206,8 @@ uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp) {
 // desc at comp+0x18, type-gated; reads *(desc+0x20) + 0x10 + variant*0x18.
 // ============================================================
 uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant) {
-    EnsureResolved();
     void* desc = *reinterpret_cast<void**>(static_cast<uintptr_t>(comp) + 0x18);
-    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, ModelDescription::TypeId())) ? desc : nullptr;
+    void* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId())) ? desc : nullptr;
     int64_t arr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
     return *reinterpret_cast<uint32_t*>(arr + 0x10 + static_cast<int64_t>(variant) * 0x18);
 }
@@ -313,11 +220,10 @@ uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant) {
 // finally refreshes the model child at comp[2] via ModelComponent_helper_2b70(.,0).
 // ============================================================
 void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant) {
-    EnsureResolved();
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
     // type-gate the description at comp+0x18 (RDI[0x18]); return value unused here.
     void* desc = *reinterpret_cast<void**>(c + 0x18);
-    if (fn_IsDerivedFrom) fn_IsDerivedFrom(desc, ModelDescription::TypeId());
+    ::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId());
 
     *reinterpret_cast<uint16_t*>(c + 0x164) = variant;
     if (*reinterpret_cast<int16_t*>(c + 0x166) >= 0) {
@@ -332,7 +238,7 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
         //   sub = *(arr + variant*0x18 + 8)   (per-variant sub-array)
         //   mesh= *(sub + subVariant*8)
         void* descMesh = *reinterpret_cast<void**>(c + 0x18);
-        void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(descMesh, ModelDescription::TypeId())) ? descMesh : nullptr;
+        void* d = (::Object::IsDerivedFromNullSafe(descMesh, ModelDescription::TypeId())) ? descMesh : nullptr;
         int16_t sub = *reinterpret_cast<int16_t*>(c + 0x166);
         int16_t var = *reinterpret_cast<int16_t*>(c + 0x164);
         int64_t arr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
@@ -344,7 +250,7 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
         // vtable +0x30 — show/activate model (RCX = comp)
         reinterpret_cast<Component*>(comp)->OnAdded();   // B.3.x bridge (slot 6)
     }
-    if (s_fn_ModelComp_2b70) s_fn_ModelComp_2b70(*reinterpret_cast<void**>(c + 0x10), 0);
+    ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(c + 0x10), 0);   // 0x1400c2b70
 }
 
 // ============================================================
@@ -357,27 +263,26 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
 //   and on a low-16-bit flag change with non-null parent, notify changed.
 // ============================================================
 void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
-    EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     void* desc = *reinterpret_cast<void**>(s + 0x18);
-    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
+    void* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
 
     if (*reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(d) + 100) == 0) {
         if (((*reinterpret_cast<uint32_t*>(s + 0x20) >> 0x15) & 1) != 0) {
             int64_t nullIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             ActCNR_RemoveNatRes_1260f0(self, &nullIBP, 0);
         }
     } else {
         int64_t modelIBP = 0;
-        if (s_fn_FindComp_3f60) s_fn_FindComp_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);
-        float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
-        if (s_fn_50f0) s_fn_50f0(modelIBP, animIdx, 0.0f, 0.0f, uvScale);
+        ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);   // 0x140003f60
+        float uvScale = kRdata_14017214c;
+        ActMvDep_AnimHelper_50f0(static_cast<uintptr_t>(modelIBP), animIdx, 0.0f, 0.0f, uvScale);   // 0x1401250f0
         uint32_t flagsOld = *reinterpret_cast<uint32_t*>(s + 0x20);
         uint32_t flagsNew = flagsOld | 4;
         *reinterpret_cast<uint32_t*>(s + 0x20) = flagsNew;
         if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (*reinterpret_cast<int64_t*>(s + 0x10) != 0)) {
-            if (s_fn_NotifyChanged) s_fn_NotifyChanged(*reinterpret_cast<void**>(s + 0x10));
+            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(s + 0x10));   // 0x1400c3470
         }
     }
 }
@@ -388,7 +293,6 @@ void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
 // model + transform component at the cell, with per-resource jitter.
 // ============================================================
 uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
-    EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     void* desc = *reinterpret_cast<void**>(s + 0x18);
@@ -396,10 +300,10 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
     int gridW = *mapGrid;
 
-    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
+    void* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
     float jitter = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(d) + 0x60);
 
-    float halfBias = s_p_DAT_140172114 ? *s_p_DAT_140172114 : 0.0f;
+    float halfBias = kRdata_140172114;   // 0x140172114
     float half = static_cast<float>(*mapGrid >> 1) - halfBias;
     float cellX = static_cast<float>(cellIndex % *mapGrid) - half;
     float cellY = static_cast<float>(cellIndex / *mapGrid) - half;
@@ -407,20 +311,20 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     // CharacterComponent_impl_f3e0 fills a Vector3 (local_a8/a4/a0) for the cell.
     float inCell[2] = { cellX, cellY };
     float outPos[3] = { 0.0f, 0.0f, 0.0f };
-    if (s_fn_f3e0) s_fn_f3e0(mapGrid, outPos, inCell, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, outPos, inCell, '\0', nullptr);   // 0x14009f3e0
 
     float r1 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
     float r2 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
     float worldX = r1 * jitter + outPos[1];
     float worldY = r2 * jitter + outPos[0];
     float worldZ = outPos[2] + 0.0f;
-    float yawScale = s_p_DAT_140172220 ? *s_p_DAT_140172220 : 1.0f;
+    float yawScale = kRdata_140172220;   // 0x140172220
     float yaw = reinterpret_cast<System::Random*>(rng)->RandFloatTol() * yawScale;   // B.3.4b bridge
 
     int64_t posIBP = 0;
     int64_t modelIBP = 0;
-    if (s_fn_FindComp_4680) s_fn_FindComp_4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
-    if (s_fn_FindComp_3f60) s_fn_FindComp_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(s + 0x10), &posIBP);   // 0x140004680
+    ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);   // 0x140003f60
 
     *reinterpret_cast<int16_t*>(posIBP + 0x28) = static_cast<int16_t>(cellIndex % gridW);
     *reinterpret_cast<int16_t*>(posIBP + 0x2a) = static_cast<int16_t>(cellIndex / gridW);
@@ -453,7 +357,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // ValidateEntityRefs demoted to state 2. This is the only path that removes a
     // natural resource, so counting it (and its harvest flag) says whether something is
     // actively clearing the field's own crops and whether it produces anything.
-    EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     int64_t parent = *reinterpret_cast<int64_t*>(s + 0x10);
@@ -462,10 +365,9 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // Detach model from the build queue when not already queued (bit 10 of +0x40).
     if (parent != 0) {
         if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) == 0) {
-            if (s_fn_c2ea0) s_fn_c2ea0(parent);
-            if (s_fn_003110)
-                s_fn_003110(reinterpret_cast<int64_t*>(entityList + 0xd0),
-                            *reinterpret_cast<int*>(entityList + 0xd8) + 1, &parent);
+            ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(parent));   // 0x1400c2ea0
+            ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(entityList + 0xd0),   // 0x140003110
+                                          *reinterpret_cast<int*>(entityList + 0xd8) + 1, &parent);
         }
     }
 
@@ -474,26 +376,24 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     }
 
     void* desc = *reinterpret_cast<void**>(s + 0x18);
-    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
+    void* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
     int64_t descArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
     if (descArr == 0) {
         return;
     }
 
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;
     float frac = uvScale;
     if (*reinterpret_cast<float*>(s + 0x28) <= uvScale) frac = *reinterpret_cast<float*>(s + 0x28);
 
     int amount;
     if (*reinterpret_cast<int8_t*>(s + 0x2c) == 0) {
         void* meshDesc[4] = {0};
-        void** pd = s_fn_GetMeshDesc_6330
-                    ? reinterpret_cast<void**>(s_fn_GetMeshDesc_6330(descArr, meshDesc)) : nullptr;
+        void** pd = reinterpret_cast<void**>(WorkAcc_FindComponent_6330(static_cast<uintptr_t>(descArr), meshDesc));   // 0x140006330
         amount = pd ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(*pd) + 0x40) : 0;
     } else {
         int64_t tmp = 0;
-        void** pd = s_fn_GetMeshDesc_6330
-                    ? reinterpret_cast<void**>(s_fn_GetMeshDesc_6330(descArr, &tmp)) : nullptr;
+        void** pd = reinterpret_cast<void**>(WorkAcc_FindComponent_6330(static_cast<uintptr_t>(descArr), &tmp));   // 0x140006330
         amount = pd ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(*pd) + 0x44) : 0;
     }
     amount = static_cast<int>(static_cast<float>(amount) * frac);
@@ -503,12 +403,12 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 
     // Compute the cell index from the model's grid position.
     int64_t posIBP = 0;
-    if (s_fn_FindComp_4680) s_fn_FindComp_4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(s + 0x10), &posIBP);   // 0x140004680
     int cell = static_cast<int>(*reinterpret_cast<int16_t*>(posIBP + 0x2a)) *
                    **reinterpret_cast<int**>(gameWorld + 0xf8) +
                static_cast<int>(*reinterpret_cast<int16_t*>(posIBP + 0x28));
     // Mirrors the original's reused stack slot (local_res8 low32 = cell). 022480 reads
-    // this slot by pointer; keep it live in a dedicated 8-byte local.
+    // this slot by pointer (see the PORT GAP below).
     int64_t cellSlot = static_cast<int64_t>(static_cast<uint32_t>(cell));
 
     // ── ECONOMY ACCOUNTING (always) ─────────────────────────────────────────
@@ -516,40 +416,43 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // consumes. RegisterRawMaterial needs only the citizen/work IBP, the resource description
     // and the yield amount; NOT the spawned physical item entity, so it runs unconditionally.
     int64_t regIBP = *reinterpret_cast<int64_t*>(citizenIBP);
-    if (s_fn_88ef0)
-        s_fn_88ef0(*reinterpret_cast<int64_t*>(gameWorld + 0xf0), &regIBP, harvestFlag,
-                   *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20), amount);
+    ActRm_RegisterRawMaterial_88ef0(*reinterpret_cast<int64_t*>(gameWorld + 0xf0), &regIBP, harvestFlag,   // 0x140088ef0
+                                    *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20), amount);
 
     // Query the existing surface tile at the cell (for its material id at +0x24).
     int64_t surfIBP = 0;
-    if (s_fn_8d50) s_fn_8d50(*reinterpret_cast<int64_t*>(gameWorld + 0x118), &surfIBP, cell);
+    RemovalCalc_helper_8d50(*reinterpret_cast<int64_t*>(gameWorld + 0x118), reinterpret_cast<void**>(&surfIBP), cell);   // 0x1400f8d50
     uint32_t surfMatId = 0xffffffff;
     if (surfIBP != 0) {
         surfMatId = *reinterpret_cast<uint32_t*>(surfIBP + 0x24);
     }
 
     // Spawn a new raw-material entity cloned from the resource description's template.
-    void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
-    void* newEntity = (mem && s_fn_c3720)
-                      ? s_fn_c3720(mem, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(d) + 0x20))
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    void* newEntity = mem
+                      ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),   // 0x1400c3720
+                            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(d) + 0x20))
                       : nullptr;
     int64_t newIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&newIBP) ::Object::InternalBasePtr(
+    new (&newIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     int64_t rawMatIBP = 0;
-    if (s_fn_0223c0) s_fn_0223c0(newIBP, &rawMatIBP);
+    ActRm_FindComponent_223c0(static_cast<uintptr_t>(newIBP), &rawMatIBP);   // 0x1400223c0
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
     int rt = reinterpret_cast<System::Random*>(rng)->RandTol(2);   // B.3.4b bridge
-    // DAT_140172204 = 90.0f (rotation scale). It resolves NULL in standalone (raw .rdata
-    // constant) — use the real value, not 0 (see reference_standalone_rdata_null_fallback).
-    float amtScale = s_p_DAT_140172204 ? *s_p_DAT_140172204 : 90.0f;
-    if (s_fn_9760 && rawMatIBP != 0) s_fn_9760(rawMatIBP, cell, static_cast<float>(rt) * amtScale);
+    // DAT_140172204 = 90.0f (rotation scale).
+    float amtScale = kRdata_140172204;   // 0x140172204
+    if (rawMatIBP != 0) ActRm_PositionEntity_9760(rawMatIBP, cell, static_cast<float>(rt) * amtScale);   // 0x140129760
 
     if (*reinterpret_cast<int64_t*>(citizenIBP) != 0) {
         int64_t cit28 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(citizenIBP) + 0x28);
-        // Original: FUN_140022480(*(citizen+0x28), &local_res8) where local_res8 = cell.
-        if (s_fn_022480) s_fn_022480(cit28, &cellSlot);
+        // PORT GAP 0x140022480 FUN_140022480: not ported; retail calls it here,
+        // FUN_140022480(*(citizen+0x28), &local_res8) where local_res8 = cell. It was never
+        // registered, so this file's pointer to it was always null and the call was skipped:
+        // the null arm (no call) is the code.
+        (void)cit28;
+        (void)cellSlot;
     }
 
     if (rawMatIBP != 0) {
@@ -559,13 +462,12 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 
     if (surfIBP != 0) {
         int64_t nrIBP = 0;
-        void* p = s_fn_FindComp_3050 ? s_fn_FindComp_3050(newIBP, &nrIBP) : nullptr;
+        void* p = WorkBase_FindComponent_3050(static_cast<uintptr_t>(newIBP), &nrIBP);   // 0x140003050
         if (p) *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(p) + 0x2c) = surfMatId;
     }
 
     int64_t listIBP = newIBP;
-    if (s_fn_c48a0)
-        s_fn_c48a0(*reinterpret_cast<void***>(gameWorld + 0xe8), &listIBP,
+    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(gameWorld + 0xe8), &listIBP,   // 0x1400c48a0
                    *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20) + 0x20));
 
     // ── GRID CLAIM (dc20's net effect, scoped to this pile) ──────────────────
@@ -595,7 +497,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // the grid cannot keep pointing at a freed pile.
     if (newIBP != 0) {
         uintptr_t mapIBP = 0;
-        if (s_fn_FindComp_4680) s_fn_FindComp_4680(newIBP, &mapIBP);
+        FloorComponent_FindResData(reinterpret_cast<void*>(newIBP), &mapIBP);   // 0x140004680
         uint8_t* mc = reinterpret_cast<uint8_t*>(mapIBP);
         uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf8);
         uint8_t* cells = mapGrid ? *reinterpret_cast<uint8_t**>(mapGrid + 0x80) : nullptr;
@@ -610,12 +512,12 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 
     if ((harvestFlag != 0) && (*reinterpret_cast<int64_t*>(citizenIBP) != 0)) {
         int64_t out = 0;
-        if (s_fn_022520) s_fn_022520(*reinterpret_cast<int64_t*>(citizenIBP), &out);
+        WorkAcc_FindComponent_22520(*reinterpret_cast<uintptr_t*>(citizenIBP), &out);   // 0x140022520
         if (out != 0) {
             int64_t nrIBP2 = 0;
-            void* p = s_fn_FindComp_3050 ? s_fn_FindComp_3050(newIBP, &nrIBP2) : nullptr;
+            void* p = WorkBase_FindComponent_3050(static_cast<uintptr_t>(newIBP), &nrIBP2);   // 0x140003050
             uint32_t v = p ? *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(p) + 0x28) : 0;
-            if (s_fn_044810) s_fn_044810(out, v);
+            ActRm_DynArrayPush4_44810(static_cast<uintptr_t>(out), v);   // 0x140044810
         }
     }
 }

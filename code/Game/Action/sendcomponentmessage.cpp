@@ -11,7 +11,7 @@
 
 #include "SendComponentMessage.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "object/Type.h"   // RtObject::RtObject_Type_Serialize
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Game/force_work.h"   // ForceWork::Readable — stale action-target guard
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic filter)
@@ -24,39 +24,10 @@
 #include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 C4: ComponentEntity::TypeId()
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h — SendComponentMessage-specific helpers)
+// Helpers, called by name (B3R)
+//   import slot 0x1401516b0 ?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z ->
+//               RtObject::RtObject_Type_Serialize (object/Type.h)
 // ============================================================
-
-// Object::Type::Serialize(this, serializer) — via dispatch slot at 0x1401516b0
-static void (*s_fn_Type_Serialize)(void* typeField, void* serializer) = nullptr;
-
-static bool s_funcs_resolved = false;
-
-// ============================================================
-// Resolution — called once from Install
-// ============================================================
-bool SendComponentMessage_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-    // Object::Type::Serialize via dispatch slot
-    uintptr_t slotTypeSer = ResolveAddr(Module::Exe, 0x1401516b0);
-    if (slotTypeSer) s_fn_Type_Serialize = *reinterpret_cast<void(**)(void*, void*)>(slotTypeSer);
-
-    bool ok = s_fn_Type_Serialize &&
-              fn_IsDerivedFrom &&
-              fn_InternalBasePtr_DeletePtr && fn_InternalBasePtr_Ctor &&
-              fn_MemFreeStatic;
-
-#ifdef _DEBUG
-    printf("[SendComponentMessage] ResolveFuncs: TypeSer=%p\n",
-           (void*)s_fn_Type_Serialize);
-    if (!ok) printf("[SendComponentMessage] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Serialize (0x1400cb000, vtable slot 3)
@@ -64,10 +35,6 @@ bool SendComponentMessage_ResolveFuncs() {
 // message ID, and two uint params.
 // ============================================================
 void SendComponentMessage::Persist(void* stream) {
-    // Reached through the registered vtable, which the factory path never
-    // has to touch — an exe-ctor-built action arrives here with the file
-    // statics still null. Lazy-resolve like the other entry points do.
-    SendComponentMessage_ResolveFuncs();
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
@@ -82,7 +49,7 @@ void SendComponentMessage::Persist(void* stream) {
     // Target entity ref (+0x20) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(this->_field20, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(this->_field20, ComponentEntity::TypeId())) {
             this->_field20 = nullptr;
         }
     }
@@ -90,13 +57,13 @@ void SendComponentMessage::Persist(void* stream) {
     // Source entity ref (+0x28) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->_field28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(this->_field28, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(this->_field28, ComponentEntity::TypeId())) {
             this->_field28 = nullptr;
         }
     }
 
     // Component type (+0x30) — Object::Type::Serialize
-    s_fn_Type_Serialize(&this->_field30, ser2);
+    RtObject::RtObject_Type_Serialize(&this->_field30, ser2);   // slot 0x1401516b0
 
     // Message ID (+0x34) — int
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->_field34), nullptr);   // B.3.4 bridge
@@ -116,7 +83,6 @@ void SendComponentMessage::Persist(void* stream) {
 // Returns 0 on success, 2 if component not found.
 // ============================================================
 int  SendComponentMessage::AbstractImpl(void* actionStack) {
-    SendComponentMessage_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
 
     uint32_t componentTypeId = this->_field30;
@@ -240,7 +206,6 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
 // Returns true if param matches entity at +0x20 or +0x28.
 // ============================================================
 bool SendComponentMessage::GetTarget(void* param) {
-    SendComponentMessage_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     // CheckPtr on +0x20, then compare [param] directly (no CheckPtr on param)
     if (*(void**)param == this->_field20) {
         return true;
@@ -274,13 +239,11 @@ SendComponentMessage::SendComponentMessage()
 // [9] 0x1400cae80
 
 void* SendComponentMessage::CreateNewObject() {
-    SendComponentMessage_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(SendComponentMessage), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) SendComponentMessage());
 }
 void* SendComponentMessage::CreateInPlaceObject(void* storage) {
-    SendComponentMessage_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) SendComponentMessage());
 }

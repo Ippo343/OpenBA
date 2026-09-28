@@ -55,6 +55,10 @@
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "Dialog/exe_bodies.h"
+#include "Component/exe_bodies.h"   // B3R: CitizenEmploy_Strat_*
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Action/exe_bodies.h"   // B3R: Pf_AvlRebalanceB_13480
+#include "Work/exe_bodies.h"   // B3R: WorkBase_TreeNodeFree_14c30
 
 // ============================================================
 // Helpers
@@ -86,7 +90,7 @@ static uint64_t TownHall_FindElem(void* dialogElem, const char* name, uint32_t t
 
     void* castElem = nullptr;
     if (elem) {
-        if (fn_IsDerivedFrom(elem, typeId)) castElem = elem;
+        if (::Object::IsDerivedFromNullSafe(elem, typeId)) castElem = elem;
     }
 
     uint64_t result = 0;
@@ -114,10 +118,10 @@ void TownHallUI_InitGeneral(TownHallUI* self) {
     self->percentEducated = TownHall_FindElemRaw(dialogElem, "percentEducated");
 
     uint64_t heartsElem = TownHall_FindElemRaw(dialogElem, "groupHearts");
-    fn_GroupRating_Init((void*)(s + 0xB0), &heartsElem);
+    TownHall_GroupRatingInit((void*)(s + 0xB0), &heartsElem);   // 0x14006abf0
 
     uint64_t starsElem = TownHall_FindElemRaw(dialogElem, "groupStars");
-    fn_GroupRating_Init((void*)(s + 0xD0), &starsElem);
+    TownHall_GroupRatingInit((void*)(s + 0xD0), &starsElem);   // 0x14006abf0
 }
 
 // ============================================================
@@ -162,14 +166,14 @@ void TownHallUI_InitGraph(TownHallUI* self) {
         void* ext = const_cast<::Object::External*>(
             ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
-        self->graphYearsTable = (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
+        self->graphYearsTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
     }
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphTypes");
         void* ext = const_cast<::Object::External*>(
             ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
-        self->graphTypesTable = (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
+        self->graphTypesTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
     }
 
     // Populate time combo
@@ -213,7 +217,7 @@ void TownHallUI_InitGraph(TownHallUI* self) {
 // ============================================================
 static void* CastElement(void* elem, uint32_t typeId) {
     if (!elem) return nullptr;
-    if (fn_IsDerivedFrom(elem, typeId)) return elem;
+    if (::Object::IsDerivedFromNullSafe(elem, typeId)) return elem;
     return nullptr;
 }
 
@@ -342,7 +346,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
         if (curNode == nullptr) {
             // Allocate first BST node (0x30 bytes)
-            uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+            uint64_t* newNode = (uint64_t*)System::MemoryAllocator::MemAlloc(0x30, 8);
             if (newNode) {
                 newNode[0] = profTypeId;          // +0x00: key
                 newNode[1] = (uint64_t)i;         // +0x08: index
@@ -361,7 +365,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
                 if (profTypeId < curNode[0]) {
                     // Go left
                     if (curNode[3] == 0) {
-                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+                        uint64_t* newNode = (uint64_t*)System::MemoryAllocator::MemAlloc(0x30, 8);
                         if (newNode) {
                             newNode[0] = profTypeId;
                             newNode[1] = (uint64_t)i;
@@ -372,7 +376,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
                         }
                         parent[3] = (uint64_t)newNode;
                         // Rebalance
-                        fn_BST_Rebalance_0x30((void*)pBSTRoot, (void*)&curNode);
+                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(pBSTRoot), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = (uint64_t*)curNode[3];
@@ -380,7 +384,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
                 } else if (profTypeId > curNode[0]) {
                     // Go right
                     if (curNode[4] == 0) {
-                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+                        uint64_t* newNode = (uint64_t*)System::MemoryAllocator::MemAlloc(0x30, 8);
                         if (newNode) {
                             newNode[0] = profTypeId;
                             newNode[1] = (uint64_t)i;
@@ -390,7 +394,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
                             *(uint32_t*)(newNode + 5) = 0;
                         }
                         parent[4] = (uint64_t)newNode;
-                        fn_BST_Rebalance_0x30((void*)pBSTRoot, (void*)&curNode);
+                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(pBSTRoot), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = (uint64_t*)curNode[4];
@@ -441,10 +445,10 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         reinterpret_cast<UI::Element*>(btnIBP)->SetElementId(i + 0x1999);  // B.3.6 bridge
 
         // Push profession entry into dynamic array at +0x40
-        fn_ProfArrayPush((void*)(s + 0x40), *(int*)(s + 0x48) + 1, profEntry);
+        TownHall_ProfArrayPush((void*)(s + 0x40), *(int*)(s + 0x48) + 1, profEntry);   // 0x140015800
 
         // Free entity list if allocated (profEntry+0x30 was zeroed, so nothing to free)
-        fn_MemFreeStatic(*(void**)(profEntry + 0x30));
+        System::MemoryAllocator::MemFree(*(void**)(profEntry + 0x30));
         *(uint64_t*)(profEntry + 0x30) = 0;
         *(uint64_t*)(profEntry + 0x38) = 0;
     }
@@ -499,7 +503,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         }
 
         // Push entry into production limits array at +0xF0
-        fn_ProdArrayPush((void*)(s + 0xf0), *(int*)(s + 0xf8) + 1, entry);
+        TownHall_ProdArrayPush((void*)(s + 0xf0), *(int*)(s + 0xf8) + 1, entry);   // 0x1400159b0
 
         childBase += colCount;  // advance to next row
     }
@@ -522,7 +526,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(fnameBuf));
     uint64_t yearsTable = 0;
-    if (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) {
+    if (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId())) {
         yearsTable = (uint64_t)ext;
     }
 
@@ -637,7 +641,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(fnameBuf));
     uint64_t invTypeTable = 0;
-    if (extST && fn_IsDerivedFrom(extST, UI::StringTable::TypeId())) {
+    if (extST && ::Object::IsDerivedFromNullSafe(extST, UI::StringTable::TypeId())) {
         invTypeTable = (uint64_t)extST;
     }
 
@@ -696,7 +700,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     while (buildDesc) {
         // Cast to ComponentDescription (IsDerivedFrom check)
         void* buildComp = nullptr;
-        if (fn_IsDerivedFrom(buildDesc, buildTypeId)) {
+        if (::Object::IsDerivedFromNullSafe(buildDesc, buildTypeId)) {
             buildComp = buildDesc;
         }
 
@@ -714,7 +718,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
                 if (subTypeId == (int)selectDescId) {
                     // Found a SelectDescription sub-component
                     void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
-                    if (fn_IsDerivedFrom(subObj, selectDescId) && subObj) {
+                    if (::Object::IsDerivedFromNullSafe(subObj, selectDescId) && subObj) {
                         // Insert buildComp into agriculture BST at +0x1D8
                         uint64_t* pBSTRoot = (uint64_t*)(s + 0x1D8);
                         uint64_t key = (uint64_t)buildComp;
@@ -722,7 +726,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
 
                         if (curNode == nullptr) {
                             // First node (0x28 bytes)
-                            uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+                            uint64_t* newNode = (uint64_t*)System::MemoryAllocator::MemAlloc(0x28, 8);
                             if (newNode) {
                                 newNode[0] = key;
                                 newNode[1] = 0;  // parent
@@ -740,7 +744,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
                                 parent = curNode;
                                 if (key < curNode[0]) {
                                     if (curNode[2] == 0) {
-                                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+                                        uint64_t* newNode = (uint64_t*)System::MemoryAllocator::MemAlloc(0x28, 8);
                                         if (newNode) {
                                             newNode[0] = key;
                                             newNode[1] = (uint64_t)parent;
@@ -749,14 +753,14 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
                                             *(uint32_t*)(newNode + 4) = 0;
                                         }
                                         parent[2] = (uint64_t)newNode;
-                                        fn_BST_Rebalance_0x28((void*)pBSTRoot, (void*)&curNode);
+                                        TownHall_AvlRebalance28((void*)pBSTRoot, (void*)&curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = (uint64_t*)curNode[2];
                                     }
                                 } else if (key > curNode[0]) {
                                     if (curNode[3] == 0) {
-                                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+                                        uint64_t* newNode = (uint64_t*)System::MemoryAllocator::MemAlloc(0x28, 8);
                                         if (newNode) {
                                             newNode[0] = key;
                                             newNode[1] = (uint64_t)parent;
@@ -765,7 +769,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
                                             *(uint32_t*)(newNode + 4) = 0;
                                         }
                                         parent[3] = (uint64_t)newNode;
-                                        fn_BST_Rebalance_0x28((void*)pBSTRoot, (void*)&curNode);
+                                        TownHall_AvlRebalance28((void*)pBSTRoot, (void*)&curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = (uint64_t*)curNode[3];
@@ -1073,22 +1077,22 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
     // Hearts (happiness) and Stars (health) ratings
     if (totalCitizens < 1) {
-        fn_GroupRating_Update((void*)(s + 0xb0), 0.0f, 1.0f);
-        fn_GroupRating_Update((void*)(s + 0xd0), 0.0f, 1.0f);
+        TownHall_GroupRatingUpdate((void*)(s + 0xb0), 0.0f, 1.0f);   // 0x14006aed0
+        TownHall_GroupRatingUpdate((void*)(s + 0xd0), 0.0f, 1.0f);   // 0x14006aed0
     } else {
         uintptr_t firstCitizen = **(uintptr_t**)(gameData + 0xa0);
         void* desc = *(void**)(firstCitizen + 0x18);
-        void* citizenDesc = fn_IsDerivedFrom(desc, CitizenDescription::TypeId()) ? desc : nullptr;
+        void* citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId()) ? desc : nullptr;
 
-        fn_GroupRating_Update((void*)(s + 0xb0), happinessSum * perCitizen,
+        TownHall_GroupRatingUpdate((void*)(s + 0xb0), happinessSum * perCitizen,
                               *(float*)((uintptr_t)citizenDesc + 0x70));
 
         // Re-read first citizen for health max
         firstCitizen = **(uintptr_t**)(gameData + 0xa0);
         desc = *(void**)(firstCitizen + 0x18);
-        citizenDesc = fn_IsDerivedFrom(desc, CitizenDescription::TypeId()) ? desc : nullptr;
+        citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId()) ? desc : nullptr;
 
-        fn_GroupRating_Update((void*)(s + 0xd0), healthAvg,
+        TownHall_GroupRatingUpdate((void*)(s + 0xd0), healthAvg,
                               *(float*)((uintptr_t)citizenDesc + 0xa4));
     }
 }
@@ -1144,12 +1148,12 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
             reinterpret_cast<UI::NumberElement*>(*(void**)entry)->SetValue(static_cast<int32_t>(stock));  // B.3.6 bridge
 
             uintptr_t prodData = *(uintptr_t*)(gameData + 0x170);
-            int usedCur = fn_QueryProductionStat((void*)gameData, resIdx - 1, currentYearTick, endTick);
+            int usedCur = TownHall_QueryProductionStat((void*)gameData, resIdx - 1, currentYearTick, endTick);   // 0x140090f20
             int usedStock = *(int*)(prodData + 0xc + dataOff);
-            int prodCur = fn_QueryProductionStat((void*)gameData, resIdx, currentYearTick, endTick);
+            int prodCur = TownHall_QueryProductionStat((void*)gameData, resIdx, currentYearTick, endTick);   // 0x140090f20
             int prodStock = *(int*)(prodData + 0x10 + dataOff);
-            int usedPrev = fn_QueryProductionStat((void*)gameData, resIdx - 1, prevStart, prevEnd);
-            int prodPrev = fn_QueryProductionStat((void*)gameData, resIdx, prevStart, prevEnd);
+            int usedPrev = TownHall_QueryProductionStat((void*)gameData, resIdx - 1, prevStart, prevEnd);   // 0x140090f20
+            int prodPrev = TownHall_QueryProductionStat((void*)gameData, resIdx, prevStart, prevEnd);   // 0x140090f20
 
             uintptr_t arr = *(uintptr_t*)(s + 0xf0);
             reinterpret_cast<UI::NumberElement*>(*(void**)(arr + entryOff + 8))->SetValue(static_cast<int32_t>(usedCur + usedStock));  // B.3.6 bridge
@@ -1273,7 +1277,7 @@ static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
         }
         int id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)id == typeId) {
-            bool derived = fn_IsDerivedFrom(comp, typeId);
+            bool derived = ::Object::IsDerivedFromNullSafe(comp, typeId);
             if (derived)
                 return comp;
             break;
@@ -1310,7 +1314,7 @@ static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId
 
         int id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)id == typeId) {
-            bool derived = fn_IsDerivedFrom(comp, typeId);
+            bool derived = ::Object::IsDerivedFromNullSafe(comp, typeId);
             if (derived)
                 return comp;
             break;
@@ -1409,10 +1413,10 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
     const int  entryCount = entryArr.GetSize();
     if (sortComboIdx == 0) {
         if (entryCount > 1)
-            fn_InventorySort_Asc(entries, entryCount, &sortComboIdx, nullptr);
+            TownHall_InventorySortAsc(entries, entryCount, &sortComboIdx, nullptr);   // 0x140015200
     } else {
         if (entryCount > 1)
-            fn_InventorySort_Desc(entries, entryCount, &sortComboIdx, nullptr);
+            TownHall_InventorySortDesc(entries, entryCount, &sortComboIdx, nullptr);   // 0x140015500
     }
 
     // Update UI elements for each entry
@@ -1515,7 +1519,7 @@ void TownHallUI_UpdateAgriculture(TownHallUI* self) {
 
         if (!tempBSTRoot) {
             // First node — allocate root
-            void* node = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+            void* node = System::MemoryAllocator::MemAlloc(0x28, 8);
             if (node) {
                 *(uint64_t*)node = entityPtr;
                 *(uint64_t*)((uintptr_t)node + 0x08) = 0; // parent
@@ -1538,7 +1542,7 @@ void TownHallUI_UpdateAgriculture(TownHallUI* self) {
                     current = *(void**)((uintptr_t)current + 0x18);
             }
             // Allocate new node
-            void* node = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+            void* node = System::MemoryAllocator::MemAlloc(0x28, 8);
             if (node) {
                 *(uint64_t*)node = entityPtr;
                 *(uint64_t*)((uintptr_t)node + 0x08) = (uint64_t)parent;
@@ -1551,7 +1555,7 @@ void TownHallUI_UpdateAgriculture(TownHallUI* self) {
                     *(void**)((uintptr_t)parent + 0x18) = node;
                 // Rebalance
                 uint64_t newNodeAddr = (uint64_t)node;
-                fn_BST_Rebalance_0x28(&tempBSTRoot, (void*)&newNodeAddr);
+                TownHall_AvlRebalance28(&tempBSTRoot, (void*)&newNodeAddr);   // 0x1400149a0
             }
         }
         tempBSTCount++;
@@ -1630,9 +1634,9 @@ next_entity: ;
 
     // Free temporary BST
     if (tempBSTRoot) {
-        fn_BST_FreeNodes(&tempBSTRoot, *(void**)((uintptr_t)tempBSTRoot + 0x10));
-        fn_BST_FreeNodes(&tempBSTRoot, *(void**)((uintptr_t)tempBSTRoot + 0x18));
-        fn_MemFreeStatic(tempBSTRoot);
+        WorkBase_TreeNodeFree_14c30(&tempBSTRoot, *(void**)((uintptr_t)tempBSTRoot + 0x10));   // 0x140014c30
+        WorkBase_TreeNodeFree_14c30(&tempBSTRoot, *(void**)((uintptr_t)tempBSTRoot + 0x18));   // 0x140014c30
+        System::MemoryAllocator::MemFree(tempBSTRoot);
     }
 }
 
@@ -1655,7 +1659,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
         *(int*)(profEntry + 0x00) = 0;  // worker count = 0
         *(int*)(profEntry + 0x04) = 0;  // secondary count = 0
         // Resize entity ptr array at +0x30 to 0 elements
-        fn_DynArray_Resize((void*)(profEntry + 0x30), 0);
+        Reimpl_Array_Resize_Byte((void*)(profEntry + 0x30), 0);   // 0x14000a590
     }
 
     // Phase 2: For each profession, iterate entity BST at gameData+0x100
@@ -1830,7 +1834,8 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
             entry.val1 = 0;
             entry.val2 = 0;
             uint64_t retNode = 0;
-            fn_BST_Insert_0x14((void*)(s + 0x138), &retNode, &entry);
+            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(s + 0x138), reinterpret_cast<void**>(&retNode),
+                                          reinterpret_cast<uint64_t*>(&entry));   // 0x140014890
         }
     }
 
@@ -1957,32 +1962,32 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
             uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0) + 0x20 + (uintptr_t)index * 8);
 
             uint64_t retBuf[2] = {0, 0};
-            fn_CitizenList_RequestWorker(citizenList, retBuf, profId);
+            FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             uint64_t slot = retBuf[0];
 
             // Try idle -> working -> student -> any
             uint64_t slotCopy = slot;
             uint8_t findBuf[8] = {0};
-            void* result = fn_CitizenList_FindIdle(citizenList, findBuf, &slotCopy, profId);
+            void* result = CitizenEmploy_Strat_cbf0(reinterpret_cast<int64_t>(citizenList), findBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008cbf0
             uint64_t found = *(uint64_t*)result;
 
             if (found == 0) {
                 if (slot != 0) {
                     slotCopy = slot;
                     uint8_t fb2[8] = {0};
-                    result = fn_CitizenList_FindWorking(citizenList, fb2, (void*)&slotCopy, profId);
+                    result = CitizenEmploy_Strat_ca20(reinterpret_cast<int64_t>(citizenList), fb2, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008ca20
                     found = *(uint64_t*)result;
                     if (found != 0) continue;
                 }
                 slotCopy = slot;
                 uint8_t fb3[8] = {0};
-                result = fn_CitizenList_FindStudent(citizenList, fb3, (void*)&slotCopy, profId);
+                result = CitizenEmploy_Strat_c5f0(reinterpret_cast<int64_t>(citizenList), fb3, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c5f0
                 found = *(uint64_t*)result;
 
                 if (found == 0) {
                     slotCopy = slot;
                     uint64_t anyBuf = 0;
-                    fn_CitizenList_FindAny(citizenList, &anyBuf, (void*)&slotCopy, profId);
+                    CitizenEmploy_Strat_c4b0(reinterpret_cast<int64_t>(citizenList), &anyBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c4b0
                 }
             }
         }
@@ -1993,7 +1998,7 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
         for (int i = 0; i < toRemove; i++) {
             void* citizenList = *(void**)(*(uintptr_t*)g_pGameSingleton + 0xf0);
             uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0) + 0x20 + (uintptr_t)index * 8);
-            fn_CitizenList_RemoveWorker(citizenList, profId);
+            TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
         }
     }
 
@@ -2016,19 +2021,15 @@ namespace townhallui_sa {
 //   DAT   0x1401c7d98 "TypeId_StateMachineComponent_FC" -> StateMachineComponent
 //   DAT   0x1401c4b80 "TypeId_TradeComponent_FC"   -> TradeComponent
 //   DAT   0x1401c7318 "TypeId_ComponentDescription_FC"      -> ComponentDescription
-void EnsureGlobals() {
-    // ENDGAME B.3.9 TR: the ValueDescription by-name lazy fill is gone -- the readers
-    // use ValueDescription::TypeId() (cell 0x1401c4bf0, which was registered).
-}
+// ENDGAME B.3.9 TR: the ValueDescription by-name lazy fill is gone -- the readers
+// use ValueDescription::TypeId() (cell 0x1401c4bf0, which was registered). B3R:
+// the empty EnsureGlobals that was left went with its calls.
 
 // Every global/function the Serialize+Startup+per-frame paths dereference
-// unguarded must be live, or a null-deref faults (no SEH under MinGW).
+// unguarded must be live, or a null-deref faults (no SEH under MinGW). B3R: the
+// twelve engine_funcs door pointers this tested were always non-null and are
+// called by name now; only the ExternalFactory singleton is left.
 bool Ready() {
-    if (!(fn_GroupRating_Init && fn_GroupRating_Update && fn_ProfArrayPush &&
-          fn_ProdArrayPush && fn_BST_Rebalance_0x30 && fn_BST_Rebalance_0x28 &&
-          fn_BST_Insert_0x14 && fn_BST_FreeNodes && fn_QueryProductionStat &&
-          fn_InventorySort_Asc && fn_InventorySort_Desc && fn_DynArray_Resize))
-        return false;
     if (!(::Object::ExternalFactory::_singleton)) return false;
     return true;
 }
@@ -2072,31 +2073,15 @@ inline bool Bound(void* self) {
 // TownHallSA_Diag (gameupdateloop.cpp) so the dialog-independent gates are
 // visible without opening the panel.
 void DiagPrint(const char* where, void* self) {
-    struct N { const char* n; void* p; };
-    const N fns[] = {
-        {"fn_GroupRating_Init",   (void*)fn_GroupRating_Init},
-        {"fn_GroupRating_Update", (void*)fn_GroupRating_Update},
-        {"fn_ProfArrayPush",      (void*)fn_ProfArrayPush},
-        {"fn_ProdArrayPush",      (void*)fn_ProdArrayPush},
-        {"fn_BST_Rebalance_0x30", (void*)fn_BST_Rebalance_0x30},
-        {"fn_BST_Rebalance_0x28", (void*)fn_BST_Rebalance_0x28},
-        {"fn_BST_Insert_0x14",    (void*)fn_BST_Insert_0x14},
-        {"fn_BST_FreeNodes",      (void*)fn_BST_FreeNodes},
-        {"fn_QueryProductionStat",(void*)fn_QueryProductionStat},
-        {"fn_InventorySort_Asc",  (void*)fn_InventorySort_Asc},
-        {"fn_InventorySort_Desc", (void*)fn_InventorySort_Desc},
-        {"fn_DynArray_Resize",    (void*)fn_DynArray_Resize},
-    };
     // ENDGAME B.3.9 CG2 / TR: every type-id entry this diagnostic used to list
-    // retired — their class statics always answer.
+    // retired — their class statics always answer. B3R: so did the twelve
+    // "MISSING fn" door-pointer entries (never null; the bodies are called by name).
     fprintf(stderr, "[TownHallSA] %s: self=%p bound=%d built=%d ready=%d town=%d extFactory=%d\n",
             where, self,
             self ? (Bound(self) ? 1 : 0) : -1,
             self ? (Built(self) ? 1 : 0) : -1,
             Ready() ? 1 : 0, TownReady() ? 1 : 0,
             (::Object::ExternalFactory::_singleton) ? 1 : 0);
-    for (const N& f : fns)
-        if (!f.p) fprintf(stderr, "[TownHallSA]   MISSING fn: %s\n", f.n);
     if (g_pGameSingleton && *g_pGameSingleton) {
         uintptr_t gw = *(uintptr_t*)g_pGameSingleton;
         uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);
@@ -2132,19 +2117,19 @@ void FreeBST_10_18(void* node) {
     if (!node) return;
     FreeBST_10_18(*(void**)((uintptr_t)node + 0x10));
     FreeBST_10_18(*(void**)((uintptr_t)node + 0x18));
-    fn_MemFreeStatic(node);
+    System::MemoryAllocator::MemFree(node);
 }
 void FreeBST_20_28(void* node) {
     if (!node) return;
     FreeBST_20_28(*(void**)((uintptr_t)node + 0x20));
     FreeBST_20_28(*(void**)((uintptr_t)node + 0x28));
-    fn_MemFreeStatic(node);
+    System::MemoryAllocator::MemFree(node);
 }
 void FreeBST_18_20(void* node) {
     if (!node) return;
     FreeBST_18_20(*(void**)((uintptr_t)node + 0x18));
     FreeBST_18_20(*(void**)((uintptr_t)node + 0x20));
-    fn_MemFreeStatic(node);
+    System::MemoryAllocator::MemFree(node);
 }
 }  // namespace townhallui_sa
 
@@ -2153,7 +2138,6 @@ void FreeBST_18_20(void* node) {
 // ============================================================
 // [4] 0x140081000
 void TownHallUI::OnCreated() {
-    townhallui_sa::EnsureGlobals();
     if (!townhallui_sa::Bound(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) { townhallui_sa::Trace("Serialize SKIP", this); return; }
     if (townhallui_sa::Built(this)) return;   // idempotence: the framework or self-heal already built
     townhallui_sa::Trace("Serialize", this);
@@ -2165,7 +2149,7 @@ void TownHallUI::OnCreated() {
     void* element = *(void**)foundBuf;
 
     void* tabElement = nullptr;
-    if (element && fn_IsDerivedFrom(element, UI::TabElement::TypeId())) {
+    if (element && ::Object::IsDerivedFromNullSafe(element, UI::TabElement::TypeId())) {
         tabElement = element;
     }
 
@@ -2186,7 +2170,6 @@ void TownHallUI::OnCreated() {
 // ============================================================
 // [10] 0x140080db0
 void TownHallUI::OnSerializeSettings(void* stream) {
-    townhallui_sa::EnsureGlobals();
     if (!stream || !townhallui_sa::Built(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
     uintptr_t s = (uintptr_t)this;
 
@@ -2229,7 +2212,6 @@ void TownHallUI::OnSerializeSettings(void* stream) {
 // ============================================================
 // [7] 0x14007d550
 void TownHallUI::OnUpdateLayout() {
-    townhallui_sa::EnsureGlobals();
     if (!townhallui_sa::Bound(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
     if (!townhallui_sa::Built(this)) TownHallUI::OnCreated();
     if (!townhallui_sa::Built(this)) return;
@@ -2244,7 +2226,6 @@ void TownHallUI::OnUpdateLayout() {
 // ============================================================
 // [8] 0x14007e550
 void TownHallUI::OnUpdate(const System::Time& /*time*/) {
-    townhallui_sa::EnsureGlobals();
     static bool s_diagOnce = false;
     if (!s_diagOnce) { s_diagOnce = true; townhallui_sa::DiagPrint("first OnUpdate", this); }
     if (!townhallui_sa::Bound(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
@@ -2274,7 +2255,6 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
 // [9] 0x14007c180
 void TownHallUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
                                 int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    townhallui_sa::EnsureGlobals();
     if (!townhallui_sa::Built(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
     uintptr_t gameSingleton = *(uintptr_t*)g_pGameSingleton;
     int profCount = *(int*)(*(uintptr_t*)(gameSingleton + 0xb0) + 0x28);
@@ -2346,7 +2326,9 @@ extern "C" void TownHallSA_Diag(int frameNum) {
     static bool s_done = false;
     if (s_done || frameNum < 120) return;
     s_done = true;
-    townhallui_sa::EnsureGlobals();   // load-bearing publish — deliberately ungated
+    // B3R: the publish this called (townhallui_sa::EnsureGlobals) had been emptied at
+    // B.3.9 -- every global it filled is a class static now -- and is deleted. The
+    // entry point stays while gameupdateloop.cpp calls it.
 }
 
 // ~TownHallUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
@@ -2355,24 +2337,24 @@ extern "C" void TownHallSA_Diag(int frameNum) {
 TownHallUI::~TownHallUI() {
     void* self = this;
     uintptr_t s = (uintptr_t)self;
-    if (fn_MemFreeStatic) {
+    {
         townhallui_sa::FreeBST_10_18(*(void**)(s + 0x1D8));
         *(uint64_t*)(s + 0x1D8) = 0; *(uint32_t*)(s + 0x1E0) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0x1C8));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0x1C8));
         *(uint64_t*)(s + 0x1C8) = 0; *(uint64_t*)(s + 0x1D0) = 0;
         townhallui_sa::FreeBST_20_28(*(void**)(s + 0x138));
         *(uint64_t*)(s + 0x138) = 0; *(uint32_t*)(s + 0x140) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0x118));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0x118));
         *(uint64_t*)(s + 0x118) = 0; *(uint64_t*)(s + 0x120) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xF0));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xF0));
         *(uint64_t*)(s + 0xF0) = 0; *(uint64_t*)(s + 0xF8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xE0));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xE0));
         *(uint64_t*)(s + 0xE0) = 0; *(uint64_t*)(s + 0xE8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xD0));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xD0));
         *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xC0));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xC0));
         *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xB0));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xB0));
         *(uint64_t*)(s + 0xB0) = 0; *(uint64_t*)(s + 0xB8) = 0;
         townhallui_sa::FreeBST_18_20(*(void**)(s + 0x50));
         *(uint64_t*)(s + 0x50) = 0; *(uint32_t*)(s + 0x58) = 0;
@@ -2380,10 +2362,10 @@ TownHallUI::~TownHallUI() {
         uintptr_t profArr = *(uintptr_t*)(s + 0x40);
         for (int i = 0; i < profRows && profArr; i++) {
             uintptr_t rowList = profArr + (uintptr_t)i * 0x40 + 0x30;
-            fn_MemFreeStatic(*(void**)rowList);
+            System::MemoryAllocator::MemFree(*(void**)rowList);
             *(uint64_t*)rowList = 0; *(uint64_t*)(rowList + 8) = 0;
         }
-        fn_MemFreeStatic(*(void**)(s + 0x40));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0x40));
         *(uint64_t*)(s + 0x40) = 0; *(uint64_t*)(s + 0x48) = 0;
     }
 }

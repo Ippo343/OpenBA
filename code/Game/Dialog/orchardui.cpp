@@ -21,6 +21,7 @@
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Component/Component.h"   // B.3.x W0: Component::Command by name
+#include "Component/orchardcomponent_funcs.h"   // B3R: OrchardComponent_GetGrowth
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *TypeId_ProgressElement) before storing it at +0x38.
@@ -79,7 +80,7 @@ void OrchardUI::OnCreated() {
     // if it really is a ProgressElement (see the type-id note at the top of the file —
     // this check used to be skipped, which is safe but unfaithful).
     void* rawElem = (void*)findResult;
-    void* checked = fn_IsDerivedFrom(rawElem, OrchardUI_ProgressElementTypeId())
+    void* checked = ::Object::IsDerivedFromNullSafe(rawElem, OrchardUI_ProgressElementTypeId())
                         ? rawElem : nullptr;
     uint64_t basePtrVal = 0;
     new (&basePtrVal) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -119,7 +120,7 @@ void OrchardUI::OnUpdateLayout() {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
@@ -138,7 +139,7 @@ void OrchardUI::OnUpdateLayout() {
     if (!*(uint64_t*)(s + 0x30) || !*(uint64_t*)(s + 0x38)) return;
 
     // Get average growth ratio (0.0 - 1.0)
-    float growth = fn_OrchardGetGrowth((void*)orchardComp);
+    float growth = OrchardComponent_GetGrowth((void*)orchardComp);   // 0x140051640
 
     // Set progress bar value directly at element+0x128
     void* yieldElem = (void*)*(uint64_t*)(s + 0x38);
@@ -174,7 +175,7 @@ void OrchardUI::SetResource(int64_t param2) {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;
@@ -216,7 +217,7 @@ void* OrchardUI::GetResource(void* param2) {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
     uint64_t entityBasePtr = 0;

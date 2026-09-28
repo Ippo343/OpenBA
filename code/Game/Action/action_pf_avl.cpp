@@ -8,10 +8,9 @@
 // height fixups). None of this is exercised on the autostart path — a wrong port would be
 // undetectable silent corruption — so it is a LITERAL transcription, not an "improvement".
 //
-// In standalone, every exe sub-callee resolves to 0 (silently skipped) unless registered;
-// the rotations are registered in this same batch (standalone/reg_pf_avl.cpp ->
-// RegisterPfAvlBatch()), so the rebalance drivers and inserts call them via
-// ResolveAddr(Module::Exe, 0xADDR) rather than inlining them.
+// The rebalance drivers and inserts call the rotations / allocators / rebalances of this
+// batch by name (Action/exe_bodies.h, B3R) rather than inlining them; the registration
+// (standalone/reg_pf_avl.cpp -> RegisterPfAvlBatch()) stays for readers other blocks have.
 //
 // ===========================================================================
 // TWO node layouts (both AVL, different field offsets):
@@ -40,7 +39,8 @@
 // ===========================================================================
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Component/exe_bodies.h"      // CitizenAI_Reg_helper_e360
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
 
 namespace {
@@ -300,30 +300,10 @@ extern "C" int64_t Pf_AvlRotateR_14da0(int64_t* root, int64_t node)
 
 // ===========================================================================
 // Rebalance drivers — walk up from the inserted node toward the root, recompute
-// height/balance, and apply rotations on imbalance. Call the rotations via
-// ResolveAddr (they are registered in this batch).
+// height/balance, and apply rotations on imbalance. The rotations are called by name:
+// Layout B (0x30-node) 0x14000e450 Pf_AvlRotateB_e450 / 0x14000e580 Pf_AvlRotateB_e580,
+// Layout A (0x28-node) 0x140014c70 Pf_AvlRotateL_14c70 / 0x140014da0 Pf_AvlRotateR_14da0.
 // ===========================================================================
-
-namespace {
-typedef int64_t (*fn_rot_t)(int64_t* root, int64_t node);
-
-// Layout B rotations (0x30-node).
-static fn_rot_t s_rot_e450 = nullptr;   // 0x14000e450
-static fn_rot_t s_rot_e580 = nullptr;   // 0x14000e580
-// Layout A rotations (0x28-node).
-static fn_rot_t s_rot_14c70 = nullptr;  // 0x140014c70
-static fn_rot_t s_rot_14da0 = nullptr;  // 0x140014da0
-static bool s_rotInit = false;
-
-static void EnsureRots() {
-    if (s_rotInit) return;
-    s_rot_e450  = reinterpret_cast<fn_rot_t>(ResolveAddr(Module::Exe, 0x14000e450));
-    s_rot_e580  = reinterpret_cast<fn_rot_t>(ResolveAddr(Module::Exe, 0x14000e580));
-    s_rot_14c70 = reinterpret_cast<fn_rot_t>(ResolveAddr(Module::Exe, 0x140014c70));
-    s_rot_14da0 = reinterpret_cast<fn_rot_t>(ResolveAddr(Module::Exe, 0x140014da0));
-    s_rotInit = true;
-}
-} // namespace
 
 // 0x140013480 — AVL rebalance driver for Layout B (0x30-node). Walks from *node up to
 // the root, recomputing balance/height and applying e450 (left) / e580 (right) rotations,
@@ -335,7 +315,6 @@ extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node)
     int16_t s3, s4, s5;
     int64_t cur;   // lVar6
 
-    EnsureRots();
 
     lVar1 = *node;
     while (lVar1 != 0) {
@@ -353,10 +332,10 @@ extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node)
             lVar2 = P64((uintptr_t)cur, 0x20);      // right child
             if (lVar2 != 0) {
                 if ((P16((uintptr_t)lVar2, 0x28) < 1) && (P16((uintptr_t)lVar2, 0x28) < 0)) {
-                    s_rot_e580(root, lVar2);
+                    Pf_AvlRotateB_e580(root, lVar2);
                     cur = *node;
                 }
-                s_rot_e450(root, cur);
+                Pf_AvlRotateB_e450(root, cur);
             }
         }
         cur = *node;
@@ -364,10 +343,10 @@ extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node)
             lVar2 = P64((uintptr_t)cur, 0x18);      // left child
             if (lVar2 != 0) {
                 if ((-1 < P16((uintptr_t)lVar2, 0x28)) && (0 < P16((uintptr_t)lVar2, 0x28))) {
-                    s_rot_e450(root, lVar2);
+                    Pf_AvlRotateB_e450(root, lVar2);
                     cur = *node;
                 }
-                s_rot_e580(root, cur);
+                Pf_AvlRotateB_e580(root, cur);
             }
         }
         *node = lVar1;
@@ -383,7 +362,6 @@ extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node)
     int16_t s3, s4, s5;
     int64_t cur;
 
-    EnsureRots();
 
     lVar1 = *node;
     while (lVar1 != 0) {
@@ -401,10 +379,10 @@ extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node)
             lVar2 = P64((uintptr_t)cur, 0x18);      // right child
             if (lVar2 != 0) {
                 if ((P16((uintptr_t)lVar2, 0x20) < 1) && (P16((uintptr_t)lVar2, 0x20) < 0)) {
-                    s_rot_14da0(root, lVar2);
+                    Pf_AvlRotateR_14da0(root, lVar2);
                     cur = *node;
                 }
-                s_rot_14c70(root, cur);
+                Pf_AvlRotateL_14c70(root, cur);
             }
         }
         cur = *node;
@@ -412,10 +390,10 @@ extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node)
             lVar2 = P64((uintptr_t)cur, 0x10);      // left child
             if (lVar2 != 0) {
                 if ((-1 < P16((uintptr_t)lVar2, 0x20)) && (0 < P16((uintptr_t)lVar2, 0x20))) {
-                    s_rot_14c70(root, lVar2);
+                    Pf_AvlRotateL_14c70(root, lVar2);
                     cur = *node;
                 }
-                s_rot_14da0(root, cur);
+                Pf_AvlRotateR_14da0(root, cur);
             }
         }
         *node = lVar1;
@@ -430,7 +408,7 @@ extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node)
 // Returns the new node, or null on OOM.
 extern "C" uint32_t* Pf_AvlNewNodeA_a680(uint64_t /*param_1*/, uint32_t* param_2, uint64_t param_3)
 {
-    uint32_t* node = reinterpret_cast<uint32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+    uint32_t* node = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
     if (node == nullptr) {
         return nullptr;
     }
@@ -447,7 +425,7 @@ extern "C" uint32_t* Pf_AvlNewNodeA_a680(uint64_t /*param_1*/, uint32_t* param_2
 // param_3 -> parent. Returns the new node, or null on OOM.
 extern "C" uint32_t* Pf_AvlNewNodeB_cc40(uint64_t /*param_1*/, uint32_t* param_2, uint64_t param_3)
 {
-    uint32_t* node = reinterpret_cast<uint32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+    uint32_t* node = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (node == nullptr) {
         return nullptr;
     }
@@ -465,27 +443,9 @@ extern "C" uint32_t* Pf_AvlNewNodeB_cc40(uint64_t /*param_1*/, uint32_t* param_2
 // Inserts
 // ===========================================================================
 
-namespace {
-typedef uint32_t* (*fn_newB_t)(uint64_t, uint32_t*, uint64_t);   // cc40
-typedef uint32_t* (*fn_newA_t)(uint64_t, uint32_t*, uint64_t);   // a680
-typedef void (*fn_rebB_t)(int64_t*, int64_t*);                   // 13480
-typedef void (*fn_rebA_t)(int64_t*, int64_t*);                   // a8c0
-
-static fn_newB_t s_new_cc40 = nullptr;
-static fn_rebB_t s_reb_13480 = nullptr;
-static fn_newA_t s_new_a680 = nullptr;
-static fn_rebA_t s_reb_a8c0 = nullptr;
-static bool s_insInit = false;
-
-static void EnsureInsDeps() {
-    if (s_insInit) return;
-    s_new_cc40  = reinterpret_cast<fn_newB_t>(ResolveAddr(Module::Exe, 0x14001cc40));
-    s_reb_13480 = reinterpret_cast<fn_rebB_t>(ResolveAddr(Module::Exe, 0x140013480));
-    s_new_a680  = reinterpret_cast<fn_newA_t>(ResolveAddr(Module::Exe, 0x14001a680));
-    s_reb_a8c0  = reinterpret_cast<fn_rebA_t>(ResolveAddr(Module::Exe, 0x14001a8c0));
-    s_insInit = true;
-}
-} // namespace
+// The inserts call 0x14001cc40 Pf_AvlNewNodeB_cc40 / 0x140013480 Pf_AvlRebalanceB_13480
+// (Layout B) and 0x14001a680 Pf_AvlNewNodeA_a680 / 0x14001a8c0 Pf_AvlRebalanceA_a8c0
+// (Layout A) by name.
 
 // 0x14001c940 — BST insert + rebalance for Layout B (0x30-node). param_1 = tree head
 // (root ptr at [0], count int at [1] == +0x08); param_2 = out-node; param_3 = key prefix
@@ -500,10 +460,9 @@ extern "C" uint64_t* Pf_BstInsertB_c940(int64_t* param_1, uint64_t* param_2, uin
     uint32_t* nn;      // puVar6
     int32_t*  local_res8;
 
-    EnsureInsDeps();
 
     if (reinterpret_cast<int32_t*>(*param_1) == nullptr) {
-        fresh = reinterpret_cast<uint32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+        fresh = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
         if (fresh == nullptr) {
             *param_1 = 0;
             *param_2 = 0;
@@ -538,17 +497,17 @@ extern "C" uint64_t* Pf_BstInsertB_c940(int64_t* param_1, uint64_t* param_2, uin
                 }
                 walk = *reinterpret_cast<int32_t**>(local_res8 + 8);   // +0x20 right
                 if (*reinterpret_cast<int32_t**>(local_res8 + 8) == nullptr) {
-                    nn = s_new_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+                    nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
                     *reinterpret_cast<uint32_t**>(cur + 8) = nn;       // cur->right = nn
                     goto LAB_14001ca2a;
                 }
             }
             walk = *reinterpret_cast<int32_t**>(local_res8 + 6);       // +0x18 left
         } while (*reinterpret_cast<int32_t**>(local_res8 + 6) != nullptr);
-        nn = s_new_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+        nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
         *reinterpret_cast<uint32_t**>(cur + 6) = nn;                   // cur->left = nn
 LAB_14001ca2a:
-        s_reb_13480(param_1, reinterpret_cast<int64_t*>(&local_res8));
+        Pf_AvlRebalanceB_13480(param_1, reinterpret_cast<int64_t*>(&local_res8));
         *param_2 = reinterpret_cast<uint64_t>(nn);
     }
     *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08
@@ -567,10 +526,9 @@ extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uin
     uint32_t* nn;      // puVar5
     int32_t*  local_res8;
 
-    EnsureInsDeps();
 
     if (reinterpret_cast<int32_t*>(*param_1) == nullptr) {
-        fresh = reinterpret_cast<uint32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+        fresh = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
         if (fresh == nullptr) {
             *param_1 = 0;
             *param_2 = 0;
@@ -597,17 +555,17 @@ extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uin
                 }
                 walk = *reinterpret_cast<int32_t**>(local_res8 + 6);   // +0x18 right
                 if (*reinterpret_cast<int32_t**>(local_res8 + 6) == nullptr) {
-                    nn = s_new_a680((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+                    nn = Pf_AvlNewNodeA_a680((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
                     *reinterpret_cast<uint32_t**>(cur + 6) = nn;       // cur->right = nn
                     goto LAB_14001a5b5;
                 }
             }
             walk = *reinterpret_cast<int32_t**>(local_res8 + 4);       // +0x10 left
         } while (*reinterpret_cast<int32_t**>(local_res8 + 4) != nullptr);
-        nn = s_new_a680((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+        nn = Pf_AvlNewNodeA_a680((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
         *reinterpret_cast<uint32_t**>(cur + 4) = nn;                   // cur->left = nn
 LAB_14001a5b5:
-        s_reb_a8c0(param_1, reinterpret_cast<int64_t*>(&local_res8));
+        Pf_AvlRebalanceA_a8c0(param_1, reinterpret_cast<int64_t*>(&local_res8));
         *param_2 = reinterpret_cast<uint64_t>(nn);
     }
     *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08
@@ -623,20 +581,8 @@ LAB_14001a5b5:
 // (code/Game/Entity/citizenbehavior.cpp), registered via
 // standalone/reg_citizen_25_tick.cpp.
 
-namespace {
-typedef void (*fn_rebE_t)(int64_t*, int64_t*);   // e360 (AVL rebalance walker, Layout B)
-
-static fn_newB_t s_pg_new_cc40 = nullptr;   // 0x14001cc40
-static fn_rebE_t s_pg_reb_e360 = nullptr;   // 0x14000e360
-static bool s_pgInit = false;
-
-static void EnsurePgDeps() {
-    if (s_pgInit) return;
-    s_pg_new_cc40 = reinterpret_cast<fn_newB_t>(ResolveAddr(Module::Exe, 0x14001cc40));
-    s_pg_reb_e360 = reinterpret_cast<fn_rebE_t>(ResolveAddr(Module::Exe, 0x14000e360));
-    s_pgInit = true;
-}
-} // namespace
+// PathBST_Insert calls 0x14001cc40 Pf_AvlNewNodeB_cc40 and 0x14000e360
+// CitizenAI_Reg_helper_e360 (the AVL rebalance walker, Layout B) by name.
 
 // 0x140025a10 — PathBST_Insert: insert-or-find in the region-pair cost-cache tree
 // at pg+0x18 (Layout B 0x30-node). param_1 = tree head {root@+0, count@+8};
@@ -653,10 +599,9 @@ extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, u
     uint32_t* nn;
     int32_t*  local_res8;
 
-    EnsurePgDeps();
 
     if (reinterpret_cast<int32_t*>(*param_1) == nullptr) {
-        fresh = reinterpret_cast<uint32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+        fresh = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
         if (fresh == nullptr) {
             *param_1 = 0;
             *param_2 = 0;
@@ -691,17 +636,17 @@ extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, u
                 }
                 walk = *reinterpret_cast<int32_t**>(local_res8 + 8);   // +0x20 right
                 if (*reinterpret_cast<int32_t**>(local_res8 + 8) == nullptr) {
-                    nn = s_pg_new_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+                    nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
                     *reinterpret_cast<uint32_t**>(cur + 8) = nn;       // cur->right = nn
                     goto LAB_140025afa;
                 }
             }
             walk = *reinterpret_cast<int32_t**>(local_res8 + 6);       // +0x18 left
         } while (*reinterpret_cast<int32_t**>(local_res8 + 6) != nullptr);
-        nn = s_pg_new_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
+        nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
         *reinterpret_cast<uint32_t**>(cur + 6) = nn;                   // cur->left = nn
 LAB_140025afa:
-        s_pg_reb_e360(param_1, reinterpret_cast<int64_t*>(&local_res8));
+        CitizenAI_Reg_helper_e360(param_1, reinterpret_cast<int64_t*>(&local_res8));   // 0x14000e360
         *param_2 = reinterpret_cast<uint64_t>(nn);
     }
     *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08

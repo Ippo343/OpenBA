@@ -49,6 +49,9 @@
 #include "engine/UpdateLoop.h"   // B.3.x W0: UpdateLoop::Update by name
 #include "system/Value.h"        // System::Time
 #include "Dialog/exe_bodies.h"
+#include "Game/exe_bodies.h"      // B3R: GameSettings_Save / _Load
+#include "Game/inputbindings.h"   // B3R: Game::RegisterDefaultInputBindings
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // Element IDs assigned in Startup, dispatched in OnEvent
@@ -226,7 +229,7 @@ static void SetInputBindButtonText(void* elementPtr, int deviceType, uint32_t ke
 
     // Check it's a TextElement
     void* foundObj = (void*)found;
-    if (!fn_IsDerivedFrom(foundObj, UI::TextElement::TypeId()))
+    if (!::Object::IsDerivedFromNullSafe(foundObj, UI::TextElement::TypeId()))
         return;
 
     // Get the key name as UI::String, then set as text
@@ -258,7 +261,7 @@ static void* LoadStringTable(const char* path) {
             ->FindOrLoad(filenameObj));
     if (!ext) return nullptr;
 
-    if (fn_IsDerivedFrom(ext, UI::StringTable::TypeId()))
+    if (::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
         return ext;
     return nullptr;
 }
@@ -864,31 +867,33 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
 
     // Iterate all open dialogs and update autosave timer on each
     UI::UserInterface* userInterface = *(UI::UserInterface**)((uintptr_t)self + 0x10);
-    fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d isA=%p isDerived=%p restartFn=%p tid=%u\n",
-            gs[1], (void*)fn_IsA, (void*)fn_IsDerivedFrom,
-            (void*)fn_UpdateAutoSaveTimer, AutoSaveDialog::TypeId());
+    // B3R: IsA / IsDerivedFrom / the restart (0x14005e120 AutoSaveDialog_Slot4) are
+    // called by name, so the log line's two door-pointer fields (isA / isDerived) are
+    // gone and restartFn is the body's address.
+    fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d restartFn=%p tid=%u\n",
+            gs[1], (void*)&AutoSaveDialog_Slot4, AutoSaveDialog::TypeId());
     fflush(stderr);
-    if (fn_IsA && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer) {
+    {
         uint32_t typeId = AutoSaveDialog::TypeId();
         // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150, whose
         // whole body is `*retval = this->_dialogs._head`); the iterator is the
         // bare node pointer, so `it.node` is what retail hands to CheckPtr.
         for (auto it = userInterface->_dialogs.GetFirst(); it; ++it) {
             void* dialog = it.node->element;
-            if (fn_IsA(dialog, typeId)) {
+            if (reinterpret_cast<const ::Object::Base*>(dialog)->IsA(typeId)) {   // B.3.x bridge (?IsA@Base@Object@@)
                 void* obj = it.node->element;
-                bool isDerived = fn_IsDerivedFrom(obj, typeId);
+                bool isDerived = ::Object::IsDerivedFromNullSafe(obj, typeId);
                 void* target = isDerived ? obj : nullptr;
                 fprintf(stderr, "[AutoSave]   MATCH obj=%p derived=%d -> restart %s\n",
                         obj, (int)isDerived, target ? "YES" : "NO(null target)");
                 fflush(stderr);
-                if (target) fn_UpdateAutoSaveTimer(target);
+                if (target) AutoSaveDialog_Slot4(static_cast<AutoSaveDialog*>(target));   // 0x14005e120
             }
         }
     }
 
     // Persist game settings
-    if (fn_SaveGameSettings) fn_SaveGameSettings(gs);
+    GameSettings_Save(gs);   // 0x140098970
 
     // Apply key map config to UI. Was an inline copy of ApplyKeyMapToUI_Impl's body
     // as a fallback; now just calls it, so the OK path and the two pointer-driven
@@ -904,7 +909,7 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     if (gameWorld) {
         // System::Time::Time(0.0f)
         uint8_t timeVal[8] = {};
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeVal, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 0.0f);
         // UpdateLoop slot 3, dispatched through the loop's own table (the world
         // is a GameUpdateLoop).
         reinterpret_cast<Engine::UpdateLoop*>(gameWorld)->Update(
@@ -1096,8 +1101,8 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
         reinterpret_cast<IO::Persistence*>(persistence)->ReadSettings();   // B.3.4 bridge
 
     // Re-read game settings from persistence
-    if (fn_ReadGameSettings && g_pGameSettingsPtr && *g_pGameSettingsPtr)
-        fn_ReadGameSettings(*g_pGameSettingsPtr);
+    if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
+        GameSettings_Load(*g_pGameSettingsPtr);   // 0x140098b60
 
     // Restore last tab
     if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
@@ -1106,8 +1111,8 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
     // Re-apply keymap config to UI
     void* keyMap = GetKeyMapContainer();
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    if (keyMap && fn_ApplyKeyMapToUI)
-        fn_ApplyKeyMapToUI(keyMap, userInterface);
+    if (keyMap)
+        ApplyKeyMapToUI_Impl(keyMap, userInterface);   // 0x140099260
 }
 
 // ============================================================
@@ -1158,8 +1163,7 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
         ::IO::Persistence::_singleton->ReadSettings();   // B.3.4 bridge
 
     // Re-register default input bindings and load saved config
-    if (fn_RegisterDefaultInputBindings)
-        fn_RegisterDefaultInputBindings();
+    Game::RegisterDefaultInputBindings();   // 0x1400992f0
 
     // Reload input configuration
     if (::Input::Configuration::_singleton)
@@ -1214,7 +1218,7 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
         if (eventData >= kInputBind_Base) {
             // FUN_140010460: IsDerivedFrom(elem, UIElementBase type) — returns elem if valid, else null
             void* clickedElem = *(void**)element;
-            bool isUIElement = fn_IsDerivedFrom(clickedElem, UI::ButtonElement::TypeId());
+            bool isUIElement = ::Object::IsDerivedFromNullSafe(clickedElem, UI::ButtonElement::TypeId());
             void* parent = isUIElement ? clickedElem : nullptr;
             uint8_t parentPtr[16];
             new (parentPtr) ::Object::InternalBasePtr(
@@ -1381,7 +1385,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 
             if (textElem) {
                 void* textObj = (void*)textElem;
-                if (fn_IsDerivedFrom(textObj, UI::TextElement::TypeId())) {
+                if (::Object::IsDerivedFromNullSafe(textObj, UI::TextElement::TypeId())) {
                     // Get input name from KeyMap container's name table at +0xC8
                     uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
                     uint8_t uiStr[16];
@@ -1438,18 +1442,18 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     // Type check the external resource
     void* external = nullptr;
     if (extResult) {
-        bool isDerived = fn_IsDerivedFrom(extResult, UI::Dialog::TypeId());
+        bool isDerived = ::Object::IsDerivedFromNullSafe(extResult, UI::Dialog::TypeId());
         if (isDerived) external = extResult;
     }
 
     // Allocate and construct OptionInputBindDialog
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 200, 8);  // 0xC8 = 200 bytes
+    void* mem = System::MemoryAllocator::MemAlloc(200, 8);  // 0xC8 = 200 bytes
     void* dialog = nullptr;
     if (mem) {
         uint8_t nullPtr[8] = {};
         new (nullPtr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         void* userInterface = *(void**)((uintptr_t)self + 0x10);
-        dialog = fn_OptionInputBindDialog_Ctor(mem, userInterface, external, nullPtr);
+        dialog = OptionInputBindDialog_Ctor_Standalone(mem, userInterface, external, nullPtr);   // 0x140071d30
     }
 
     // Wrap in InternalPtr
@@ -1516,17 +1520,17 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
                 ->FindOrLoad(fnameObj2));
         void* external2 = nullptr;
         if (extResult2) {
-            if (fn_IsDerivedFrom(extResult2, UI::Dialog::TypeId())) external2 = extResult2;
+            if (::Object::IsDerivedFromNullSafe(extResult2, UI::Dialog::TypeId())) external2 = extResult2;
         }
 
         // Allocate and construct MessageDialog (0xC0 bytes)
-        void* mem2 = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+        void* mem2 = System::MemoryAllocator::MemAlloc(0xC0, 8);
         void* dialog2 = nullptr;
         if (mem2) {
             uint8_t nullPtr2[8] = {};
             new (nullPtr2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             void* ui = *(void**)((uintptr_t)self + 0x10);
-            dialog2 = fn_MessageDialog_Ctor(mem2, ui, external2, nullPtr2);
+            dialog2 = MessageDialog_Ctor_Standalone(mem2, ui, external2, nullPtr2);   // 0x14006d300
         }
 
         uint64_t dialog2Ptr = 0;

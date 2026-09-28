@@ -19,7 +19,11 @@
 #include "Work/ConsumeProduce.h"
 #include "Work/consumeproduce_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "object/Type.h"            // B3R: RtObject_Type_Serialize
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
@@ -39,141 +43,26 @@
 #include "Component/CitizenComponent.h"            // ENDGAME B.3.9 D5
 
 // ============================================================
-// Local function pointers resolved at init time
-// (only those NOT already declared in engine_funcs.h)
+// Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
 // ============================================================
+//   slot 0x1401516b0 Object::Type::Serialize     RtObject_Type_Serialize (object/Type.h)
+//   0x1400f7100 Work::ValidateTask                 WorkBase_ValidateTask_f7100
+//   0x1400c5400 task list cleanup                  WorkBase_TaskListCleanup_c5400
+//   0x140002e10 FindComponent (DWORD_1401c80e0)    AttendanceComponent_GetJobHostComponent
+//   0x14012c3f0 ModelComponent::SetActiveState     CitizenComp_FUN_14012c3f0
+//   0x1401193a0 ConsumeProduceAction_helper_93a0   WorkLeaf_ConsumeProduce_93a0
+//               (the caller reads the low byte, as retail's AL)
+//   0x14012b310 ConsumeProduceAction_helper_b310   WorkLeaf_ConsumeProduce_b310
+//   0x14009c480 Map_RecalcZones (4 args)           Pf_ZoneRefresh_9c480
+//   0x1400bef70 SetupConsumeProduceWorkChain       WorkAct_ConsumeProduceCtor_bef70
+// Object::Internal ctor/dtor (IAT 0x140152768 / 0x140152770) and Work::Serialize
+// (0x1400f7400) are the real base classes. 0x1400032e0 / 0x1400021d0 are
+// GameColl::AsArray<T> member calls (ENDGAME B.3.2 step 2).
 
-// Object::Internal::Internal(this) -- via IAT at 0x140152768
-
-// Object::Internal::~Internal(this) -- via IAT at 0x140152770
-
-// Work::Serialize(this, stream) -- base class serialize at 0x1400f7400
-
-// Object::Type::Serialize(type*, serializer) -- via IAT at 0x1401516b0
-static void (*s_fn_Type_Serialize)(void* type, void* serializer) = nullptr;
-
-// 0x1400032e0 (Array<Ptr8>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
-// exe-side Collection::Array<T> monomorphisations -- ENDGAME B.3.2 step 2 converted
-// their two call sites below to GameColl::AsArray<T> member calls, so their
-// resolved-pointer stand-ins are gone.
-
-// FUN_1400f7100 -- Work::ValidateTask helper
-static uint8_t (*s_fn_Work_ValidateTask)(void* self, void* param2, void* ibp, void** outTask) = nullptr;
-
-// FUN_1400c5400 -- task list cleanup (removes pending work entries)
-static void (*s_fn_TaskListCleanup)(void* taskList) = nullptr;
-
-// FUN_140002e10 -- FindComponent (type DWORD_1401c80e0) on entity, returns IBP
-// Signature: (entity, outIBP*) -> outIBP* (member function ABI: RCX=entity, RDX=outIBP)
-static void* (*s_fn_FindPositionComponent)(void* entity, void* outIBP) = nullptr;
-
-// Cached vtable addresses
-
-// FUN_14012c3f0 -- ModelComponent::SetActiveState(component, stateIndex, enabled)
-// Toggles visibility state bits on a model/mesh component.
-typedef void (*s_fn_ModelComp_SetActiveState_t)(void* component, uint8_t stateIndex, char enabled);
-static s_fn_ModelComp_SetActiveState_t s_fn_ModelComp_SetActiveState = nullptr;
-
-// FUN_1401193a0 -- ConsumeProduceAction_helper_93a0(stateMachineComp)
-// Checks if production count is below threshold. Returns bool-as-uint64.
-typedef uint64_t (*s_fn_CheckProduceThreshold_t)(uintptr_t smComponent);
-static s_fn_CheckProduceThreshold_t s_fn_CheckProduceThreshold = nullptr;
-
-// FUN_14012b310 -- ConsumeProduceAction_helper_b310(stateMachineComp)
-// Resets production state, sets field +0x48 = 1, transitions state machine.
-typedef void (*s_fn_ResetProductionState_t)(uintptr_t smComponent);
-static s_fn_ResetProductionState_t s_fn_ResetProductionState = nullptr;
-
-// FUN_14009c480 -- Map_RecalcZones(mapGrid, vec3, param3, param4)
-typedef void (*s_fn_Map_RecalcZones_t)(int* mapGrid, float* vec3, uint64_t param3, uint32_t param4);
-static s_fn_Map_RecalcZones_t s_fn_Map_RecalcZones = nullptr;
-
-// FUN_1400bef70 -- SetupConsumeProduceWorkChain (13 params)
-// Creates the action chain for resource hauling + production work.
-typedef void (*s_fn_SetupWorkChain_t)(
-    void* citizenIBP, int priority, void* entityIBP, float* destPos,
-    float heading, uintptr_t componentData, uint64_t productType,
-    uint32_t flags, int* actionRef, uint32_t field54, int slotIndex,
-    float produceTime, uint32_t packedParams);
-static s_fn_SetupWorkChain_t s_fn_SetupWorkChain = nullptr;
-
-static bool s_resolved = false;
-
-// ============================================================
-// Resolution -- called once
-// ============================================================
+// B3R: resolves nothing. Kept only because resourceproduce_creatework.cpp (another
+// block's file) still calls it; delete it with that call.
 bool ConsumeProduce_ResolveFuncs() {
-    if (s_resolved) return true;
-
-    // Object::Type::Serialize -- via IAT at 0x1401516b0
-    uintptr_t iatTypeSer = ResolveAddr(Module::Exe, 0x1401516b0);
-    if (iatTypeSer) s_fn_Type_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatTypeSer);
-
-    // Work::ValidateTask (FUN_1400f7100)
-    s_fn_Work_ValidateTask = reinterpret_cast<uint8_t(*)(void*, void*, void*, void**)>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-
-    // Task list cleanup (FUN_1400c5400)
-    s_fn_TaskListCleanup = reinterpret_cast<void(*)(void*)>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-
-    // FindPositionComponent (FUN_140002e10)
-    s_fn_FindPositionComponent = reinterpret_cast<void*(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-
-    // Execute-specific helpers
-    s_fn_ModelComp_SetActiveState = reinterpret_cast<s_fn_ModelComp_SetActiveState_t>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-
-    s_fn_CheckProduceThreshold = reinterpret_cast<s_fn_CheckProduceThreshold_t>(
-        ResolveAddr(Module::Exe, 0x1401193a0));
-
-    s_fn_ResetProductionState = reinterpret_cast<s_fn_ResetProductionState_t>(
-        ResolveAddr(Module::Exe, 0x14012b310));
-
-    s_fn_Map_RecalcZones = reinterpret_cast<s_fn_Map_RecalcZones_t>(
-        ResolveAddr(Module::Exe, 0x14009c480));
-
-    s_fn_SetupWorkChain = reinterpret_cast<s_fn_SetupWorkChain_t>(
-        ResolveAddr(Module::Exe, 0x1400bef70));
-
-    bool ok = s_fn_Type_Serialize &&
-              s_fn_Work_ValidateTask && s_fn_TaskListCleanup &&
-              s_fn_FindPositionComponent &&
-              s_fn_ModelComp_SetActiveState && s_fn_CheckProduceThreshold &&
-              s_fn_ResetProductionState && s_fn_Map_RecalcZones &&
-              s_fn_SetupWorkChain &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && fn_MemFreeStatic &&
-              fn_GetActiveProductIndex &&
-              fn_FindStorageForResource && fn_Map_CheckPassable &&
-              fn_Storage_FindSlot &&
-              fn_Entity_GetPosition && fn_Entity_FindComponent_Position &&
-              fn_CitizenAI_LongTermPlan && fn_TryAssignWorkplace &&
-              fn_Pathfinding_FindPath &&
-              g_pGameWorldSingleton;
-    // The six *Description/*Component type-ids this file's callers use
-    // (ConsumeProduceComponent/Description, StatusIconComponent, StorageComponent,
-    // RawMaterialDescription, WorkComponent) are read through X::TypeId() at each
-    // call site (D5) -- always resolved, so they dropped out of this gate.
-
-#ifdef _DEBUG
-    printf("[ConsumeProduce] ResolveFuncs: TypeSer=%p\n",
-           (void*)s_fn_Type_Serialize);
-    printf("[ConsumeProduce]   ValidateTask=%p TaskClean=%p\n",
-           (void*)s_fn_Work_ValidateTask, (void*)s_fn_TaskListCleanup);
-    printf("[ConsumeProduce]   FindPos=%p\n",
-           (void*)s_fn_FindPositionComponent);
-    printf("[ConsumeProduce]   SetActiveState=%p CheckThresh=%p ResetProd=%p\n",
-           (void*)s_fn_ModelComp_SetActiveState, (void*)s_fn_CheckProduceThreshold,
-           (void*)s_fn_ResetProductionState);
-    printf("[ConsumeProduce]   RecalcZones=%p SetupWorkChain=%p\n",
-           (void*)s_fn_Map_RecalcZones, (void*)s_fn_SetupWorkChain);
-    if (!ok) printf("[ConsumeProduce] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_resolved = ok;
-    return ok;
+    return true;
 }
 
 // ============================================================
@@ -181,8 +70,7 @@ bool ConsumeProduce_ResolveFuncs() {
 // Object::Internal::Internal() -> Work fields -> ConsumeProduce vtable + fields
 // ============================================================
 // The Work base init and the two stamps are the compiler's. field_48 (bool) and
-// field_4c/field_54 (ints) are NOT initialized by retail's ctor. ResolveFuncs wires
-// the file's helper pointers for the members (the old factory resolved them first).
+// field_4c/field_54 (ints) are NOT initialized by retail's ctor.
 ConsumeProduce::ConsumeProduce()
     : Work(),
       field_50(0),         // Type
@@ -192,20 +80,19 @@ ConsumeProduce::ConsumeProduce()
       field_68(nullptr),   // int DynArray data ptr
       field_70(0),         // int DynArray count
       field_74(0) {        // int DynArray capacity
-    ConsumeProduce_ResolveFuncs();
 }
 
 // BaseDtor 0x1400e9190. The stamps (ConsumeProduce, then Work) and the `~Internal`
 // tail call are the compiler's.
 ConsumeProduce::~ConsumeProduce() {
     // Free the int DynArray at +0x68 (original uses 8-byte writes to zero count+capacity)
-    fn_MemFreeStatic(field_68);
+    System::MemoryAllocator::MemFree(field_68);
     field_68 = nullptr;
     field_70 = 0;
     field_74 = 0;
 
     // Free the IBP DynArray at +0x58 (original uses 8-byte writes to zero count+capacity)
-    fn_MemFreeStatic(field_58);
+    System::MemoryAllocator::MemFree(field_58);
     field_58 = nullptr;
     field_60 = 0;
     field_64 = 0;
@@ -270,7 +157,7 @@ void ConsumeProduce::Persist(void* stream) {
         // Same both-pointer-and-value shape as completetask.cpp's reader.
         void* ptr = (void*)ibpArray[i];
         if (ptr != nullptr) {
-            bool valid = fn_IsDerivedFrom(ptr, CitizenComponent::TypeId());  // DAT_1401c7158
+            bool valid = Object::IsDerivedFromNullSafe(ptr, CitizenComponent::TypeId());  // DAT_1401c7158
             if (!valid) {
                 ibpArray[i] = 0;  // null out invalid refs
             }
@@ -297,7 +184,7 @@ void ConsumeProduce::Persist(void* stream) {
     // --- Serialize ConsumeProduce fields ---
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // bool at +0x48   (B.3.4 bridge)
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_4c), nullptr);    // int at +0x4C   (B.3.4 bridge)
-    s_fn_Type_Serialize(&field_50, serializerBuf);            // Type at +0x50
+    RtObject::RtObject_Type_Serialize(&field_50, serializerBuf);            // Type at +0x50
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_54), nullptr);    // int at +0x54   (B.3.4 bridge)
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
@@ -331,7 +218,7 @@ static void* FindDescriptionOnObject(uintptr_t obj, uint32_t typeId) {
         void* c = *(void**)(arr + (uintptr_t)i * 8);
         uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
-            return fn_IsDerivedFrom(c, typeId) ? c : nullptr;
+            return Object::IsDerivedFromNullSafe(c, typeId) ? c : nullptr;
         }
     }
     return nullptr;
@@ -347,7 +234,7 @@ static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
         uint32_t compType = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (compType == typeId) {
             void* found = (void*)*compPtr;
-            if (fn_IsDerivedFrom(found, typeId)) {
+            if (Object::IsDerivedFromNullSafe(found, typeId)) {
                 return found;
             }
             break;
@@ -394,7 +281,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
 
     // --- Find PositionComponent on work entity ---
     uintptr_t posIBP = 0;
-    fn_Entity_FindComponent_Position(*(uintptr_t*)entityFieldPtr, &posIBP);
+    WorkBase_FindComponent_2ed0(*(uintptr_t*)entityFieldPtr, &posIBP);
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) on work entity ---
     uintptr_t smCompIBP = 0;
@@ -402,7 +289,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
 
     // --- Get ConsumeProduceDescription from ConsumeProduceComponent's entity +0x18 ---
     void* descBase = *(void**)(smCompIBP + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descBase, ConsumeProduceDescription::TypeId());
+    bool isDerived = Object::IsDerivedFromNullSafe(descBase, ConsumeProduceDescription::TypeId());
     void* cpDesc = isDerived ? descBase : nullptr;  // ConsumeProduceDescription*
 
     // --- Find Unknown7ee8 component (for storage slot lookup) ---
@@ -412,7 +299,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
     // --- Check resource depletion (bVar6) ---
     // Get active product index from ConsumeProduce component
     bool resourcesDepleted = false;
-    int activeProductIdx = fn_GetActiveProductIndex((void*)smCompIBP);
+    int activeProductIdx = WeightedRandomIndex_119470(reinterpret_cast<int64_t>((void*)smCompIBP));
 
     uintptr_t cpDescAddr = (uintptr_t)cpDesc;
 
@@ -451,7 +338,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
     new (&meshCompIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(meshComp));   // B.3.3 bridge
 
     // Set active state = 2, enabled = resourcesDepleted
-    s_fn_ModelComp_SetActiveState((void*)meshCompIBP, 2, resourcesDepleted ? '\x01' : '\0');
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)meshCompIBP), 2, resourcesDepleted ? '\x01' : '\0');
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) for produce check ---
     entity = *(uintptr_t*)((uintptr_t)this + 0x10);
@@ -461,7 +348,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
     new (&smComp2IBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(smComp2));   // B.3.3 bridge
 
     // Check produce threshold
-    uint64_t canProduce = s_fn_CheckProduceThreshold(smComp2IBP);
+    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(smComp2IBP);
     // [CPWork] the gate that decides whether the tavern is allowed to make more at
     // all (retail 0x1401193a0 -- a stock-vs-limit test against the "Alcohol Limit 500"
     // the panel shows). Printed on CHANGE only; a permanent 0 here means the work runs
@@ -627,7 +514,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
 
                 if (available == 0) {
                     // No resources available -- replan citizen
-                    fn_CitizenAI_LongTermPlan(*(void**)entityIBP);
+                    CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)entityIBP));
                     return 2;
                 }
 
@@ -638,14 +525,14 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
                 uintptr_t entityRef = *(uintptr_t*)entityFieldPtr;
 
                 uintptr_t foundEntity = 0;
-                fn_FindStorageForResource(
-                    worldEntityList, &foundEntity,
+                Pf_PickBestDropTarget_8d590(
+                    reinterpret_cast<int64_t**>(worldEntityList), reinterpret_cast<int64_t*>(&foundEntity),
                     *(uint32_t*)((uintptr_t)this + 0x28), matEntity,
-                    available, '\x01', searchPos, (void*)((uintptr_t)this + 0x10));
+                    available, '\x01', reinterpret_cast<uint32_t*>(searchPos), (void*)((uintptr_t)this + 0x10));
 
                 if (foundEntity != 0) {
                     // Check passability
-                    uint64_t passable = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)citizenCell,
+                    uint64_t passable = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)citizenCell,
                                                              *(uint32_t*)((uintptr_t)this + 0x28));
                     if ((char)passable == '\0') {
                         return 1;
@@ -655,7 +542,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
                     float terrainPos[4] = {};
                     if (unkCompIBP == 0) {
                         if (posIBP != 0) {
-                            fn_Entity_GetPosition((void*)posIBP, (void*)&foundEntity, 0, 0, nullptr);
+                            Pf_EntityResolvePos_2e20((void*)posIBP, reinterpret_cast<float*>((void*)&foundEntity), 0, 0, nullptr);
                             terrainPos[0] = *(float*)&foundEntity;
                             terrainPos[1] = ((float*)&foundEntity)[1];
                             terrainPos[2] = ((float*)&foundEntity)[2];
@@ -670,18 +557,18 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
                         if (slotCellY < 0) slotCellY = 0;
                         if (slotCellY >= slotMapSize) slotCellY = slotMapSize - 1;
 
-                        int slotResult = fn_Storage_FindSlot(
-                            (void*)unkCompIBP, slotMapSize * slotCellY + slotCellX,
+                        int slotResult = Pf_FindBestAdjacentCell_d5d0(
+                            reinterpret_cast<int64_t>((void*)unkCompIBP), slotMapSize * slotCellY + slotCellX,
                             (float*)&terrainPos, *(uint32_t*)((uintptr_t)this + 0x28));
                         if (slotResult >= 0) {
                             // Set up pathfinding and create work action
                             uintptr_t destEntity = foundEntity;
                             uintptr_t destEntityRef = *(uintptr_t*)entityIBP;
 
-                            fn_Pathfinding_FindPath(
+                            WorkAct_GatherRawMatCtor_bf790(
                                 &worldEntityList, &destEntityRef,
                                 *(int*)((uintptr_t)this + 0x20), &destEntity,
-                                searchPos, &entityRef, (float*)&terrainPos,
+                                searchPos, reinterpret_cast<void**>(&entityRef), (float*)&terrainPos,
                                 (int64_t)matEntity, available, slot, 0, '\x01', 0, 0);
 
                             int priority = *(int*)((uintptr_t)this + 0x20);
@@ -737,9 +624,9 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
                 if (by >= mapSize) by = mapSize - 1;
 
                 uintptr_t foundStorage = 0;
-                fn_FindStorageForResource(
-                    worldEntityList, (void*)&foundStorage,
-                    mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
+                Pf_PickBestDropTarget_8d590(
+                    reinterpret_cast<int64_t**>(worldEntityList), reinterpret_cast<int64_t*>((void*)&foundStorage),
+                    mapSize * by + bx, matEntity2, 1, '\0', reinterpret_cast<uint32_t*>(searchPos2),
                     (void*)((uintptr_t)this + 0x10));
 
                 if (foundStorage != 0) {
@@ -770,7 +657,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
                                         // Storage empty -- set up path to fetch material
                                         uintptr_t fetchDest = foundStorage;
                                         float fetchPos[4] = {};
-                                        fn_Entity_GetPosition((void*)posIBP, fetchPos, 0, slot, nullptr);
+                                        Pf_EntityResolvePos_2e20((void*)posIBP, fetchPos, 0, slot, nullptr);
 
                                         uintptr_t pathSrc = *(uintptr_t*)entityFieldPtr;
 
@@ -784,10 +671,10 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
                                         // call at 0x1400e83f4 passes.
                                         uintptr_t pathCitizen = *(uintptr_t*)entityIBP;
 
-                                        fn_Pathfinding_FindPath(
+                                        WorkAct_GatherRawMatCtor_bf790(
                                             &foundStorage, &pathCitizen,
                                             *(int*)((uintptr_t)this + 0x20), &pathSrc,
-                                            (float*)&fetchPos, &fetchDest, searchPos2,
+                                            (float*)&fetchPos, reinterpret_cast<void**>(&fetchDest), searchPos2,
                                             (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);
 
                                         int priority2 = *(int*)((uintptr_t)this + 0x20);
@@ -817,7 +704,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
 
         for (int posIdx = 0; posIdx < totalPositions; posIdx++) {
             float posVec[3];
-            fn_Entity_GetPosition((void*)posIBP, posVec, 2, posIdx, nullptr);
+            Pf_EntityResolvePos_2e20((void*)posIBP, posVec, 2, posIdx, nullptr);
 
             mapSize = *mapGrid;
             halfMap = mapSize >> 1;
@@ -861,7 +748,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
         // --- Check each position for workplace assignment ---
         for (int posIdx2 = 0; posIdx2 < totalPositions; posIdx2++) {
             float checkPos[3];
-            fn_Entity_GetPosition((void*)posIBP, checkPos, 2, posIdx2, nullptr);
+            Pf_EntityResolvePos_2e20((void*)posIBP, checkPos, 2, posIdx2, nullptr);
 
             mapSize = *mapGrid;
             halfMap = mapSize >> 1;
@@ -886,7 +773,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
 
                     uintptr_t citizenRef3 = *(uintptr_t*)entityIBP;
                     uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
-                    uint64_t assigned = fn_TryAssignWorkplace(
+                    uint64_t assigned = WorkGrid_TryAssignWorkplace_f8620(
                         assignMgr, &citizenRef3, *(int*)(locCompIBP + 0x28), '\x01');
                     if ((char)assigned != '\0') {
                         return 2;
@@ -907,13 +794,13 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
         uintptr_t meshComp2IBP = 0;
         new (&meshComp2IBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(meshComp2));   // B.3.3 bridge
-        s_fn_ModelComp_SetActiveState((void*)meshComp2IBP, 3, !allInputsAvailable ? '\x01' : '\0');
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)meshComp2IBP), 3, !allInputsAvailable ? '\x01' : '\0');
 
         if (allInputsAvailable) {
             // Get position for the output slot
             float producePos[3];
             float produceHeading[2] = {};
-            fn_Entity_GetPosition((void*)posIBP, producePos, 0, slot, produceHeading);
+            Pf_EntityResolvePos_2e20((void*)posIBP, producePos, 0, slot, produceHeading);
 
             mapSize = *mapGrid;
             halfMap = mapSize >> 1;
@@ -925,7 +812,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
             if (prodCellX >= mapSize) prodCellX = mapSize - 1;
 
             // Recalculate map zones
-            s_fn_Map_RecalcZones(mapGrid, producePos, 0, slot);
+            Pf_ZoneRefresh_9c480(mapGrid, producePos, 0, slot);
 
             // Get cell structs for passability check
             uintptr_t structBase3 = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
@@ -963,7 +850,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
                 uintptr_t workEntityRef = *(uintptr_t*)((uintptr_t)this + 0x10);
                 int actionPriority = (int)*(int64_t*)((uintptr_t)this + 0x50);
 
-                s_fn_SetupWorkChain(
+                WorkAct_ConsumeProduceCtor_bef70(
                     &citizenRef4,
                     *(int*)((uintptr_t)this + 0x20),
                     &workEntityRef,
@@ -1021,11 +908,11 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
     // The !depleted && !canProduce path (the goto above) still reaches b310, since
     // canProduce == 0 there — which is retail's intent: nothing to make, so stand down.
     if ((char)canProduce == '\0') {
-        s_fn_ResetProductionState(smCompIBP);
+        WorkLeaf_ConsumeProduce_b310(smCompIBP);
     }
 
     // Set active state = 3, disabled
-    s_fn_ModelComp_SetActiveState((void*)meshCompIBP, 3, '\0');
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)meshCompIBP), 3, '\0');
 
     return 1;
 }
@@ -1110,7 +997,7 @@ int ConsumeProduce::Cleanup() {
         uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
 
         // Call task list cleanup on the SM component's task list (+0x48)
-        s_fn_TaskListCleanup((void*)(smComp + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
     }
     return 0;
 }
@@ -1140,7 +1027,7 @@ int ConsumeProduce::Validate() {
         // Validate task for this citizen
         uintptr_t taskResult = 0;
         uintptr_t ibpBuf = entityIBP;
-        uint8_t valid = s_fn_Work_ValidateTask(this, nullptr, &ibpBuf, (void**)&taskResult);
+        uint8_t valid = WorkBase_ValidateTask_f7100(this, nullptr, &ibpBuf, (void**)&taskResult);
 
         if (valid == 0) {
             // Task invalid -- clear citizen from slot
@@ -1160,7 +1047,7 @@ int ConsumeProduce::Validate() {
                     if (validCount != 0) {
                         newCap = newCount * 3;
                     }
-                    int* newArr = (int*)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 4, 4);
+                    int* newArr = (int*)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 4, 4);
                     // Copy old data if buffer changed
                     int startIdx = (tempTypes == newArr) ? validCount : 0;
                     for (int j = startIdx; j < newCount; j++) {
@@ -1171,7 +1058,7 @@ int ConsumeProduce::Validate() {
                         }
                     }
                     if (tempTypes != newArr) {
-                        fn_MemFreeStatic(tempTypes);
+                        System::MemoryAllocator::MemFree(tempTypes);
                     }
                     tempTypes = newArr;
                     tempCapacity = newCap;
@@ -1208,7 +1095,7 @@ int ConsumeProduce::Validate() {
         }
     }
 
-    fn_MemFreeStatic(tempTypes);
+    System::MemoryAllocator::MemFree(tempTypes);
     return allValid ? 1 : 0;
 }
 
@@ -1222,7 +1109,7 @@ void* ConsumeProduce::GetTarget(void* retbuf) {
 
     // Find the position/work component (type 0x1401c80e0) on the entity
     uintptr_t componentIBP = 0;
-    s_fn_FindPositionComponent(field_10, &componentIBP);
+    AttendanceComponent_GetJobHostComponent(field_10, &componentIBP);
 
     // CheckPtr on the found component
 

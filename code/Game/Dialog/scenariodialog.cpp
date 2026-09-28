@@ -38,6 +38,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Game/Scenario.h"   // X::TypeId() (B.3.9 CG2)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // ScenarioDialog::Slot4 (vtable +0x20) — Setup
@@ -119,7 +120,7 @@ void ScenarioDialog::OnOpened() {
         // scaffolding for the unresolved global and goes with the conversion.
         // This rejection used to be silent, which made an empty scenario table
         // indistinguishable from "no scenarios installed". Report it once.
-        bool isScenario = fn_IsDerivedFrom(resource, Scenario::TypeId());
+        bool isScenario = ::Object::IsDerivedFromNullSafe(resource, Scenario::TypeId());
         void* scenario = isScenario ? resource : nullptr;
         if (!scenario) {
             fprintf(stderr, "[ScenarioDialog] resource[%d]=%p rejected by IsDerivedFrom(typeId=%u)\n", i, resource, Scenario::TypeId());
@@ -398,9 +399,14 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
         // Call original FUN_1400b4540 directly — constructs GameUpdateLoop ->
         // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
-        fn_StartNewGame(parentCtrl, &displayNameStr, seedVal, terrainSizeVal,
-                        disasterOff, mapGen, terrainGen, climateGen,
-                        scenarioResIdx, nullIBP);
+        // 0x1400b4540 StartNewGame_Reg. The door typedef passed seed / terrainSize as
+        // uint32 values; the body takes pointer-width slots and reads their low dword
+        // ((uint32_t)(uintptr_t)), so the zero-extended value is the same bits (B3R).
+        StartNewGame_Reg(parentCtrl, &displayNameStr,
+                         reinterpret_cast<void*>(static_cast<uintptr_t>(seedVal)),
+                         reinterpret_cast<void*>(static_cast<uintptr_t>(terrainSizeVal)),
+                         disasterOff, mapGen, terrainGen, climateGen,
+                         scenarioResIdx, nullIBP);
         printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
     } else {
         fflush(stderr);
@@ -409,7 +415,6 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
             if (!::Save::SaveLoad::_singleton) missing = "SaveLoad singleton";
             else if (!::IO::Persistence::_singleton) missing = "Persistence singleton";
             else if (!::IO::FileSystem::_singleton) missing = "FileSystem singleton";
-            else if (!fn_Time_Ctor_Float) missing = "Time::Time(float)";
             if (missing) {
                 fprintf(stderr, "[ScenarioDialog] SAVED branch ABORTED - %s is NULL\n", missing);
                 fflush(stderr);
@@ -463,7 +468,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         int loopCount = 0;
         while (operation != 0) {
             uint8_t zeroTime[8];
-            fn_Time_Ctor_Float(zeroTime, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
             reinterpret_cast<Save::SaveLoad*>(saveLoad)->Update(*reinterpret_cast<const System::Time*>(zeroTime));  // B.3.7 bridge
             operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
             loopCount++;
@@ -492,8 +497,8 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
 
         // Use fn_LoadScenarioFromSave for the complex loop construction
-        fn_LoadScenarioFromSave(parentCtrl, savedState,
-                                 (void*)(uintptr_t)scenarioResIdx, nullIBP);
+        WorldSetup_LoadFromSave(parentCtrl, savedState,   // 0x1400b49f0
+                                (void*)(uintptr_t)scenarioResIdx, nullIBP);
         // retail: String::~String(local_res10) — savePathBuf's scope ends here, matching.
     }
 }
@@ -576,7 +581,7 @@ ScenarioDialog::ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 // free the +0xD8 scenario entry array (entries are plain-copy 7 x u64, no
 // per-entry String dtor), clear its header.
 ScenarioDialog::~ScenarioDialog() {
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dataD8));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dataD8));
     dataD8 = 0;
     dataE0 = 0;
 }

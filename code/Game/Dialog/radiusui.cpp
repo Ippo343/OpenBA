@@ -14,6 +14,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/RadiusDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Player/exe_bodies.h"      // B3R: Player_HighlightAdd_55430
+#include "Component/exe_bodies.h"   // B3R: DecalComponent_TerrainDecalRemove
 
 // ============================================================
 // RadiusUI::Slot6 (vtable +0x30) — Remove radius overlay
@@ -43,7 +45,7 @@ void RadiusUI::OnOpened() {
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
-    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
         checkedEntity = entity;
     }
 
@@ -74,7 +76,7 @@ void RadiusUI::OnOpened() {
         // means "args unknown", NOT "no args"; the callee still reads `this` from RCX.
         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (typeId == (int)radiusTypeId) {
-            if (fn_IsDerivedFrom(comp, radiusTypeId)) {
+            if (::Object::IsDerivedFromNullSafe(comp, radiusTypeId)) {
                 radiusComp = comp;
             }
             break;
@@ -105,7 +107,9 @@ void RadiusUI::OnOpened() {
     int tileIndex = centerY * gridSize + centerX;
 
     // Calculate radius and store display index
-    this->data30 = fn_RadiusCalc(radiusComp, tileIndex);
+    // The door was named fn_RadiusCalc; it is bound to 0x140055430
+    // Player_HighlightAdd_55430 (B3R: the binding decides, INVENTORY_E §5.8).
+    this->data30 = Player_HighlightAdd_55430(reinterpret_cast<int64_t>(radiusComp), tileIndex);
 
 }
 
@@ -124,7 +128,9 @@ void RadiusUI::OnClosed() {
         // Game/World singleton +0x110 = RadiusDisplayManager
         void* gameWorld = *g_pGameWorldSingleton;
         void* radiusMgr = *(void**)((uintptr_t)gameWorld + 0x110);
-        fn_RadiusDisplay_Remove(radiusMgr, this->data30);
+        // The door was named fn_RadiusDisplay_Remove; it is bound to 0x1400b0d00
+        // DecalComponent_TerrainDecalRemove (B3R: the binding decides).
+        DecalComponent_TerrainDecalRemove(radiusMgr, this->data30);
     }
     this->data30 = -1;
 }

@@ -54,7 +54,8 @@
 // ============================================================================
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"          // WorkImpl_Sqrtf_132010
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/coll_bridge.h"
 #include "system/Thread.h"     // ENDGAME B.3.4b System callers
 #include <cstdint>
@@ -68,56 +69,24 @@ typedef unsigned short ushort;
 
 namespace {
 
-// ---- Exe sub-callees in our closure (all registered elsewhere). Resolve lazily. ----
+// ---- Exe sub-callees in our closure, called by name (B3R). ----
 // 1d320 — A* relax/insert (THIS FILE). 1d550 — AVL delete (THIS FILE).
 // 1d450 — AVL insert (THIS FILE). 1d040 — A* core (THIS FILE). 1ce00 — run+trace (THIS FILE).
 // dcd0 — region A* (THIS FILE). dc00 — region run (THIS FILE).
-typedef void  (*fn_BstFreeRec_t)(uintptr_t avlHdr, uint64_t* node);         // 0x14001d400 (reg)
-typedef void* (*fn_BstAlloc30_t)(uintptr_t avlHdr, uint32_t* key, uint64_t parent); // 0x14001d730 (reg)
-typedef void  (*fn_AvlRebalance_t)(int64_t* avlHdr, int64_t* node);         // 0x140013480 (reg)
-typedef int   (*fn_MoveHeuristic_t)(uintptr_t ctx, int cell, int dir);      // 0x1400a6030 (reg)
-typedef int   (*fn_NeighbourTile_t)(uintptr_t ctx, int cell, int dir);      // 0x1400a5ec0 (reg)
-typedef float (*fn_Sqrtf_t)(float x);                                       // 0x140132010 (reg)
+//   0x14001d400 Pf_BstFreeRecursive_d400    0x14001d730 Pf_NodePoolAlloc30_d730
+//   0x140013480 Pf_AvlRebalanceB_13480      0x1400a6030 Pf_MoveHeuristic_6030
+//   0x1400a5ec0 Pf_NeighbourTile_5ec0       0x140132010 WorkImpl_Sqrtf_132010
+//   0x14001a9b0 Pf_NodePoolAlloc18_a9b0     0x14001d940 Pf_VectorResize18Dup_d940
+//   0x140152b60 ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z -> System::MemoryAllocator::MemAlloc
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::I32NoInit> member call, so its resolved-pointer stand-in
 // is gone. I32NoInit, not I32: 0x1400021d0 copies only the OLD prefix and leaves a grown
 // tail as the allocation found it.
-typedef void* (*fn_FloodNodeAlloc_t)(uintptr_t avlHdr, uint32_t* key);      // 0x14001a9b0 (reg)
-typedef void  (*fn_TradeSlotResize_t)(int64_t* vec, int count, uint8_t* tmp); // 0x14001d940 (reg)
-
-static fn_BstFreeRec_t      s_fn_BstFreeRec   = nullptr;
-static fn_BstAlloc30_t      s_fn_BstAlloc30   = nullptr;
-static fn_AvlRebalance_t    s_fn_AvlRebalance = nullptr;
-static fn_MoveHeuristic_t   s_fn_MoveHeur     = nullptr;
-static fn_NeighbourTile_t   s_fn_Neighbour    = nullptr;
-static fn_Sqrtf_t           s_fn_Sqrtf        = nullptr;
-static fn_FloodNodeAlloc_t  s_fn_FloodAlloc   = nullptr;
-static fn_TradeSlotResize_t s_fn_TradeResize  = nullptr;
-
-// ---- Runtime-DLL exports (the IAT dispatch slots the originals read). ----
-// 0x140152b60 ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z  (static: size,align)
-typedef void* (*fn_MemAllocSA_t)(uint64_t size, int align);
-
-static fn_MemAllocSA_t  s_fn_MemAllocSA = nullptr;
-
-static bool s_init = false;
-static void EnsureFns() {
-    if (s_init) return;
-    s_fn_BstFreeRec   = reinterpret_cast<fn_BstFreeRec_t>(ResolveAddr(Module::Exe, 0x14001d400));
-    s_fn_BstAlloc30   = reinterpret_cast<fn_BstAlloc30_t>(ResolveAddr(Module::Exe, 0x14001d730));
-    s_fn_AvlRebalance = reinterpret_cast<fn_AvlRebalance_t>(ResolveAddr(Module::Exe, 0x140013480));
-    s_fn_MoveHeur     = reinterpret_cast<fn_MoveHeuristic_t>(ResolveAddr(Module::Exe, 0x1400a6030));
-    s_fn_Neighbour    = reinterpret_cast<fn_NeighbourTile_t>(ResolveAddr(Module::Exe, 0x1400a5ec0));
-    s_fn_Sqrtf        = reinterpret_cast<fn_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_fn_FloodAlloc   = reinterpret_cast<fn_FloodNodeAlloc_t>(ResolveAddr(Module::Exe, 0x14001a9b0));
-    s_fn_TradeResize  = reinterpret_cast<fn_TradeSlotResize_t>(ResolveAddr(Module::Exe, 0x14001d940));
-
-    s_fn_MemAllocSA  = reinterpret_cast<fn_MemAllocSA_t>(ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_init = true;
-}
 
 } // namespace
+
+// Forward declares} // namespace
 
 // Forward declares — these are members of THIS closure that call each other.
 void  Pf_AstarRelax_d320(int* ctx, int cell, uint32_t parent, uint32_t gcost, uint32_t fcost);
@@ -221,7 +190,7 @@ void Pf_AvlDelete_d550(int64_t* param_1, int64_t* param_2) {
             if (local_res8 == 0) {
                 plVar5 = local_res10;
             }
-            if (s_fn_AvlRebalance) s_fn_AvlRebalance(param_1, plVar5);
+            Pf_AvlRebalanceB_13480(param_1, plVar5);
             return;
         }
         lVar2 = param_2[2];
@@ -245,10 +214,10 @@ void Pf_AvlDelete_d550(int64_t* param_1, int64_t* param_2) {
     *param_2 = param_1[3];
     param_1[3] = reinterpret_cast<int64_t>(param_2);
     if (local_res10[0] == 0) {
-        if (s_fn_AvlRebalance) s_fn_AvlRebalance(param_1, &local_res8);
+        Pf_AvlRebalanceB_13480(param_1, &local_res8);
         return;
     }
-    if (s_fn_AvlRebalance) s_fn_AvlRebalance(param_1, local_res10);
+    Pf_AvlRebalanceB_13480(param_1, local_res10);
     (void)local_res8;
 }
 
@@ -267,7 +236,7 @@ int64_t* Pf_AvlInsert_d450(int64_t* param_1, int64_t* param_2, uint32_t* param_3
     int64_t local_res8;
 
     if (*param_1 == 0) {
-        puVar5 = s_fn_BstAlloc30 ? s_fn_BstAlloc30(reinterpret_cast<uintptr_t>(param_1), param_3, 0) : nullptr;
+        puVar5 = Pf_NodePoolAlloc30_d730(reinterpret_cast<uintptr_t>(param_1), param_3, 0);   // 0x14001d730
         *reinterpret_cast<int*>(param_1 + 1) = static_cast<int>(param_1[1]) + 1;
         *param_1 = reinterpret_cast<int64_t>(puVar5);
         *param_2 = reinterpret_cast<int64_t>(puVar5);
@@ -282,7 +251,7 @@ int64_t* Pf_AvlInsert_d450(int64_t* param_1, int64_t* param_2, uint32_t* param_3
                (iVar1 <= iVar2 && *reinterpret_cast<int*>(local_res8 + 4) < static_cast<int>(param_3[1]))) {
             lVar4 = *reinterpret_cast<int64_t*>(local_res8 + 0x18);
             if (*reinterpret_cast<int64_t*>(local_res8 + 0x18) == 0) {
-                puVar5 = s_fn_BstAlloc30 ? s_fn_BstAlloc30(reinterpret_cast<uintptr_t>(param_1), param_3, local_res8) : nullptr;
+                puVar5 = Pf_NodePoolAlloc30_d730(reinterpret_cast<uintptr_t>(param_1), param_3, local_res8);   // 0x14001d730
                 *reinterpret_cast<void**>(lVar3 + 0x18) = puVar5;
                 goto LAB_14001d519;
             }
@@ -294,10 +263,10 @@ int64_t* Pf_AvlInsert_d450(int64_t* param_1, int64_t* param_2, uint32_t* param_3
         }
         lVar4 = *reinterpret_cast<int64_t*>(local_res8 + 0x20);
     } while (*reinterpret_cast<int64_t*>(local_res8 + 0x20) != 0);
-    puVar5 = s_fn_BstAlloc30 ? s_fn_BstAlloc30(reinterpret_cast<uintptr_t>(param_1), param_3, local_res8) : nullptr;
+    puVar5 = Pf_NodePoolAlloc30_d730(reinterpret_cast<uintptr_t>(param_1), param_3, local_res8);   // 0x14001d730
     *reinterpret_cast<void**>(lVar3 + 0x20) = puVar5;
 LAB_14001d519:
-    if (s_fn_AvlRebalance) s_fn_AvlRebalance(param_1, &local_res8);
+    Pf_AvlRebalanceB_13480(param_1, &local_res8);
     *reinterpret_cast<int*>(param_1 + 1) = static_cast<int>(param_1[1]) + 1;
     *param_2 = reinterpret_cast<int64_t>(puVar5);
     return param_2;
@@ -398,8 +367,8 @@ uint64_t Pf_AstarCore_d040(int* param_1, int param_2, int param_3) {
 
     puVar3 = *reinterpret_cast<uint64_t**>(param_1 + 6);
     if (puVar3 != nullptr) {
-        if (s_fn_BstFreeRec) s_fn_BstFreeRec(reinterpret_cast<uintptr_t>(param_1 + 6), reinterpret_cast<uint64_t*>(puVar3[3]));
-        if (s_fn_BstFreeRec) s_fn_BstFreeRec(reinterpret_cast<uintptr_t>(param_1 + 6), reinterpret_cast<uint64_t*>(puVar3[4]));
+        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(param_1 + 6), reinterpret_cast<uint64_t*>(puVar3[3]));
+        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(param_1 + 6), reinterpret_cast<uint64_t*>(puVar3[4]));
         param_1[0x11] = param_1[0x11] + -1;
         param_1[0x12] = param_1[0x12] + 1;
         *puVar3 = *reinterpret_cast<uint64_t*>(param_1 + 0xc);
@@ -409,7 +378,7 @@ uint64_t Pf_AstarCore_d040(int* param_1, int param_2, int param_3) {
     param_1[7] = 0;
     param_1[8] = 0;
     param_1[1] = 0;
-    iVar10 = s_fn_MoveHeur ? s_fn_MoveHeur(reinterpret_cast<uintptr_t>(param_1), param_2, param_3) : 0;
+    iVar10 = Pf_MoveHeuristic_6030(reinterpret_cast<uintptr_t>(param_1), param_2, param_3);   // 0x1400a6030
     Pf_AstarRelax_d320(param_1, param_2, 0xffffffff, 0, iVar10);
     uVar13 = 0;  // d320's RAX-on-exit only ever flows to the masked (&...ff00) return below
     iVar10 = param_1[8];
@@ -443,7 +412,7 @@ uint64_t Pf_AstarCore_d040(int* param_1, int param_2, int param_3) {
         iVar19 = 0;
         if (iVar18 != 0) {
             do {
-                iVar11 = s_fn_Neighbour ? s_fn_Neighbour(reinterpret_cast<uintptr_t>(param_1), iVar10, iVar19) : -1;
+                iVar11 = Pf_NeighbourTile_5ec0(reinterpret_cast<uintptr_t>(param_1), iVar10, iVar19);   // 0x1400a5ec0
                 uVar13 = static_cast<uint64_t>(static_cast<uint32_t>(iVar11));
                 if (-1 < iVar11) {
                     iVar21 = param_1[0x36];
@@ -589,8 +558,8 @@ uint64_t Pf_RegionAstarCore_dcd0(int* param_1, int param_2, uint param_3) {
     piVar1 = param_1 + 6;
     uVar18 = static_cast<uint64_t>(static_cast<int>(param_3));
     if (puVar2 != nullptr) {
-        if (s_fn_BstFreeRec) s_fn_BstFreeRec(reinterpret_cast<uintptr_t>(piVar1), reinterpret_cast<uint64_t*>(puVar2[3]));
-        if (s_fn_BstFreeRec) s_fn_BstFreeRec(reinterpret_cast<uintptr_t>(piVar1), reinterpret_cast<uint64_t*>(puVar2[4]));
+        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(piVar1), reinterpret_cast<uint64_t*>(puVar2[3]));
+        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(piVar1), reinterpret_cast<uint64_t*>(puVar2[4]));
         param_1[0x11] = param_1[0x11] + -1;
         param_1[0x12] = param_1[0x12] + 1;
         *puVar2 = *reinterpret_cast<uint64_t*>(param_1 + 0xc);
@@ -657,7 +626,7 @@ uint64_t Pf_RegionAstarCore_dcd0(int* param_1, int param_2, uint param_3) {
                         lVar4 = *reinterpret_cast<int64_t*>(param_1 + 0x1a);
                         iVar13 = *reinterpret_cast<int*>(lVar4 + 4 + lVar19 * 0x30) - *reinterpret_cast<int*>(lVar17 + 4 + lVar4);
                         iVar16 = *reinterpret_cast<int*>(lVar4 + lVar19 * 0x30) - *reinterpret_cast<int*>(lVar17 + lVar4);
-                        fVar20 = s_fn_Sqrtf ? s_fn_Sqrtf(static_cast<float>(iVar13 * iVar13 + iVar16 * iVar16)) : 0.0f;
+                        fVar20 = WorkImpl_Sqrtf_132010(static_cast<float>(iVar13 * iVar13 + iVar16 * iVar16));   // 0x140132010
                         Pf_AstarRelax_d320(param_1, iVar12, iVar8, iVar9, static_cast<int>(fVar20) + iVar9);
                         uVar10 = 0;  // d320 return only used as dead loop accumulator
                     }
@@ -814,7 +783,7 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
 namespace {
 static void EnqueueNode(int64_t self, uint32_t* localCmd) {
     reinterpret_cast<System::CriticalSection*>(self + 0x30)->Lock();   // B.3.4b bridge
-    uint32_t* node = s_fn_MemAllocSA ? reinterpret_cast<uint32_t*>(s_fn_MemAllocSA(0x20, 8)) : nullptr;
+    uint32_t* node = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x20, 8));
     if (node != nullptr) {
         node[0] = localCmd[0];
         node[1] = localCmd[1];
@@ -840,7 +809,6 @@ static void EnqueueNode(int64_t self, uint32_t* localCmd) {
 
 // 0x1400a6fe0 — enqueue cmd type 2 (set walk-cost byte field). (Ghidra: FUN_1400a6fe0.)
 void Pf_EnqueueCmd2_a6fe0(int64_t param_1, uint32_t param_2, void* param_3, void* param_4) {
-    EnsureFns();
     uint32_t local[4];
     local[0] = 2;
     local[1] = param_2;
@@ -856,7 +824,6 @@ void Pf_EnqueueCmd2_a6fe0(int64_t param_1, uint32_t param_2, void* param_3, void
 // 0x1400a68b0 — enqueue cmd type 4 (3 bool flags). (Ghidra: RoadTool_sub_ce00_sub_68b0.)
 //   Only enqueues if any of the three byte fields at self+0x1f4/0x1f5/0x1f6 changed.
 void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t param_2, void* param_3, void* param_4) {
-    EnsureFns();
     uint8_t TVar6 = static_cast<uint8_t>(reinterpret_cast<uint64_t>(param_4));
     uint8_t TVar5 = static_cast<uint8_t>(reinterpret_cast<uint64_t>(param_3));
     uint8_t* pSelf = reinterpret_cast<uint8_t*>(param_1);
@@ -880,7 +847,6 @@ void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t param_2, void* param_3, void*
 // 0x1400a6a30 — enqueue cmd type 1 (set per-index int field self+0x170[idx]).
 // (Ghidra: FUN_1400a6a30.) Only if changed.
 void Pf_EnqueueCmd1_a6a30(int64_t param_1, int param_2, void* param_3, void* param_4) {
-    EnsureFns();
     int iVar3 = static_cast<int>(reinterpret_cast<uint64_t>(param_3));
     if (*reinterpret_cast<int*>(param_1 + static_cast<int64_t>(param_2) * 4 + 0x170) != iVar3) {
         *reinterpret_cast<int*>(param_1 + static_cast<int64_t>(param_2) * 4 + 0x170) = iVar3;
@@ -900,7 +866,6 @@ void Pf_EnqueueCmd1_a6a30(int64_t param_1, int param_2, void* param_3, void* par
 // 0x1400a6b20 — enqueue cmd type 0 (set self+0x148-equivalent self+0x1f0). (Ghidra: FUN_1400a6b20.)
 //   Only if changed. NOTE: the original branches the "on-worker-thread" case FIRST.
 void Pf_EnqueueCmd0_a6b20(int64_t param_1, int param_2, void* param_3, void* param_4) {
-    EnsureFns();
     if (*reinterpret_cast<int*>(param_1 + 0x1f0) != param_2) {
         *reinterpret_cast<int*>(param_1 + 0x1f0) = param_2;
         uint32_t local[4];
@@ -921,7 +886,6 @@ void Pf_EnqueueCmd0_a6b20(int64_t param_1, int param_2, void* param_3, void* par
 //   enqueues a type-5 command carrying {start=arg1, goal=arg2, slotId=*param_2}.
 //   Returns param_2.
 int* Pf_EnqueueTradeRoute_a6c10(int64_t param_1, int* param_2, void* param_3, void* param_4) {
-    EnsureFns();
     uint32_t uVar5 = static_cast<uint32_t>(reinterpret_cast<uint64_t>(param_4));
     uint32_t uVar4 = static_cast<uint32_t>(reinterpret_cast<uint64_t>(param_3));
     Pf_AllocTradeSlot_a6240(param_1, param_2);
@@ -974,12 +938,11 @@ int* Pf_AllocTradeSlot_a6240(int64_t param_1, int* param_2) {
     }
     reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
     for (int i = 0; i < 0x18; ++i) local_30[i] = 0;   // {flag,token,vec.ptr,vec.count,vec.cap} = 0
-    if (s_fn_TradeResize)
-        s_fn_TradeResize(reinterpret_cast<int64_t*>(param_1 + 0x160),
+    Pf_VectorResize18Dup_d940(reinterpret_cast<int64_t*>(param_1 + 0x160),   // 0x14001d940
                          *reinterpret_cast<int*>(param_1 + 0x168) + 1, local_30);
     // MemFree the template's own vec.ptr (template+8) after the resize cloned it (faithful
     // to the original's MemFree(local_28)). It is null here, so this is a harmless no-op.
-    fn_MemFreeStatic(*reinterpret_cast<void**>(local_30 + 8));
+    System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(local_30 + 8));
     *reinterpret_cast<void**>(local_30 + 8) = nullptr;
     *reinterpret_cast<uint64_t*>(local_30 + 0x10) = 0;
     reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Unlock();   // B.3.4b bridge
@@ -1030,17 +993,12 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, 
     uint32_t local_res10[4];
     int local_res20[2];
 
-    // Standalone fix: this is a cross-TU entry point (reached from Pf_ZoneRefresh_9c480
-    // in action_pf_roots_road.cpp, which has its OWN EnsureFns). Without resolving our
-    // own s_fn_FloodAlloc (the 0x14001a9b0 node-pool alloc) first, it stays null, the
-    // BFS enqueues a null queue node, and the head-deref below faults (READ of 0x0).
-    EnsureFns();
 
 
     plVar1 = reinterpret_cast<int64_t*>(param_1 + 0x2a);
     local_res10[0] = param_2;
     local_res20[0] = param_4;
-    puVar5 = s_fn_FloodAlloc ? reinterpret_cast<uint64_t*>(s_fn_FloodAlloc(reinterpret_cast<uintptr_t>(plVar1), local_res10)) : nullptr;
+    puVar5 = reinterpret_cast<uint64_t*>(Pf_NodePoolAlloc18_a9b0(reinterpret_cast<uintptr_t>(plVar1), local_res10));   // 0x14001a9b0
     if (*plVar1 == 0) {
         *reinterpret_cast<uint64_t**>(param_1 + 0x2c) = puVar5;
     } else {
@@ -1129,7 +1087,7 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, 
                     lVar14 = static_cast<int64_t>(local_res20[0]) * 0x30 + *reinterpret_cast<int64_t*>(param_1 + 0x20);
                     if ((*reinterpret_cast<short*>(lVar14 + 0x26) == 0) &&
                         ((1 << (*reinterpret_cast<uint8_t*>(lVar14 + 0x29) & 0x1f) & 0xe1fU) != 0)) {
-                        puVar5 = s_fn_FloodAlloc ? reinterpret_cast<uint64_t*>(s_fn_FloodAlloc(reinterpret_cast<uintptr_t>(plVar1), reinterpret_cast<uint32_t*>(local_res20))) : nullptr;
+                        puVar5 = reinterpret_cast<uint64_t*>(Pf_NodePoolAlloc18_a9b0(reinterpret_cast<uintptr_t>(plVar1), reinterpret_cast<uint32_t*>(local_res20)));   // 0x14001a9b0
                         if (*plVar1 == 0) {
                             *reinterpret_cast<uint64_t**>(param_1 + 0x2c) = puVar5;
                         } else {
@@ -1147,7 +1105,7 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, 
                     lVar14 = static_cast<int64_t>(local_res20[0]) * 0x30 + *reinterpret_cast<int64_t*>(param_1 + 0x20);
                     if ((*reinterpret_cast<short*>(lVar14 + 0x26) == 0) &&
                         ((1 << (*reinterpret_cast<uint8_t*>(lVar14 + 0x29) & 0x1f) & 0xe1fU) != 0)) {
-                        puVar5 = s_fn_FloodAlloc ? reinterpret_cast<uint64_t*>(s_fn_FloodAlloc(reinterpret_cast<uintptr_t>(plVar1), reinterpret_cast<uint32_t*>(local_res20))) : nullptr;
+                        puVar5 = reinterpret_cast<uint64_t*>(Pf_NodePoolAlloc18_a9b0(reinterpret_cast<uintptr_t>(plVar1), reinterpret_cast<uint32_t*>(local_res20)));   // 0x14001a9b0
                         if (*plVar1 == 0) {
                             *reinterpret_cast<uint64_t**>(param_1 + 0x2c) = puVar5;
                         } else {

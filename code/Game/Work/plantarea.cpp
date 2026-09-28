@@ -21,8 +21,12 @@
 #include "Work/PlantArea.h"
 #include "Work/plantarea_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -32,195 +36,31 @@
 #include "Component/CropFieldComponent.h"   // ENDGAME B.3.9 D5: CropFieldComponent::TypeId()
 
 // ============================================================
-// Local function pointers (resolved once by PlantArea_ResolveFuncs)
+// Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
+//   0x140003050  WorkBase_FindComponent_3050
+//   0x140005380  WorkAcc_FindComponent_5380
+//   0x140002f90  WorkBase_FindComponent_2f90
+//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x14009ccf0  WorkGrid_FindCell_9ccf0
+//   0x1400a00f0  WorkBase_ValidateCell_a00f0
+//   0x14009f3e0  Reimpl_MapGetTerrainPos
+//   0x1400bdd20  WorkAct_ShowToolCtor3_bdd20
+//   0x140029a40  WorkCellBST_Insert_9a40
+//   0x14001ca60  WorkCellBST_Remove_ca60
+//   0x140029de0  WorkCellBST_Serialize_9de0
+//   0x14000e320  WorkBase_TreeNodeFree_e320
+//   0x1400f7100  WorkBase_ValidateTask_f7100
+//   0x1400c5400  WorkBase_TaskListCleanup_c5400
+//   0x140002e10  AttendanceComponent_GetJobHostComponent
+//   0x140002340  Reimpl_ExternalPtr_Serialize_StringTable
+//   0x14011b390  WorkLeaf_PlantArea_b390
+//   0x140172114  kRdata_140172114 (.rdata)
 
-// All typedefs prefixed with PAW_ to avoid conflicts
-
-// FindComponent helpers
-typedef void* (*PAW_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
-typedef void* (*PAW_FindComp_CropDesc_t)(uintptr_t entity, void* outIBP);  // 0x140005380
-typedef void* (*PAW_FindComp_MeshInstance_t)(uintptr_t entity, void* outIBP);
-
-static PAW_FindComp_MatDesc_t     s_fn_FindComp_MatDesc = nullptr;      // 0x140003050
-static PAW_FindComp_CropDesc_t    s_fn_FindComp_CropDesc = nullptr;     // 0x140005380
-static PAW_FindComp_MeshInstance_t s_fn_FindComp_MeshInstance = nullptr; // 0x140002f90
-
-// CalcMaxWorkers(matDesc) -> int
-typedef int (*PAW_CalcMaxWorkers_t)(uintptr_t matDesc);
-static PAW_CalcMaxWorkers_t s_fn_CalcMaxWorkers = nullptr;  // 0x14012e5c0
-
-// Map functions
-typedef int  (*PAW_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
-typedef bool (*PAW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
-static PAW_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr;  // 0x14009ccf0
-static PAW_Map_CanPathTo_t          s_fn_Map_CanPathTo = nullptr;             // 0x1400a00f0
-
-// GetTerrainPos
-typedef float* (*PAW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
-                                      char param4, uint32_t* outNormal);
-static PAW_GetTerrainPos_t s_fn_GetTerrainPos = nullptr;  // 0x14009f3e0
-
-// ShowTool_Action_Ctor3 -- creates planting action chain for crop areas
-// 12 parameters (RCX,RDX,R8,R9 + 8 stack params)
-typedef void (*PAW_PlantAction_Ctor_t)(void* citizenIBP, int priority, void* externalPtr,
-                                       uint32_t zero, float* position, int harvestMode,
-                                       int* srcCellIdxPtr, uint32_t packedCellInfo,
-                                       void* entityRefPtr, uint32_t* typeConstPtr,
-                                       uint64_t unused, void* packedCellPairPtr);
-static PAW_PlantAction_Ctor_t s_fn_PlantAction_Ctor = nullptr;  // 0x1400bdd20
-
-// BST operations
-typedef void* (*PAW_BST_Insert_t)(void* treeRoot, void* outResult, uint32_t* keyData);
-typedef void  (*PAW_BST_Remove_t)(void* treeRoot, void* node);
-typedef void  (*PAW_BST_Serialize_t)(void* treeRoot, void* serializer);
-typedef void  (*PAW_BST_RecursiveFree_t)(void* treeRoot, void* node);
-static PAW_BST_Insert_t       s_fn_BST_Insert = nullptr;        // 0x140029a40
-static PAW_BST_Remove_t       s_fn_BST_Remove = nullptr;        // TradeDescription_impl_ca60
-static PAW_BST_Serialize_t    s_fn_BST_Serialize = nullptr;      // TradeDescription_impl_9de0
-static PAW_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr; // 0x14000e320
-
-// Work validate task helper
-typedef uint8_t (*PAW_ValidateTask_t)(uintptr_t self, uintptr_t param2, void* ibp, void** outTask);
-static PAW_ValidateTask_t s_fn_ValidateTask = nullptr;  // 0x1400f7100
-
-// Cancel work/task cleanup
-typedef void (*PAW_TaskCancel_t)(void* taskList);
-static PAW_TaskCancel_t s_fn_TaskCancel = nullptr;  // 0x1400c5400
-
-// FindSubEntity (FindPositionComponent)
-typedef void* (*PAW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
-static PAW_FindSubEntity_t s_fn_FindSubEntity = nullptr;  // 0x140002e10
-
-// Work::Serialize base
-typedef void (*PAW_Work_Serialize_t)(void* self, void* stream);
-
-// ExternalRef serialize (FUN_140002340)
-typedef void (*PAW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
-static PAW_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;  // 0x140002340
-
-// Resize byte array (FUN_14000a590)
-// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
-// is gone.
-
-// MemAlloc / MemFree
-typedef void* (*PAW_MemAlloc_t)(int64_t size, int align);
-static PAW_MemAlloc_t s_fn_MemAlloc = nullptr;
-static void* PAW_MemAllocViaSingleton(int64_t size, int align) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
-}
-
-// CropDesc completion helper (called when count == 0 and all planted)
-typedef void (*PAW_CropDescComplete_t)(uintptr_t cropDescComp);
-static PAW_CropDescComplete_t s_fn_CropDescComplete = nullptr;  // 0x14011b390
-
-// Float constants from .rdata
-static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
-
-// Type constant (DAT_1401c7510)
-
-// Vtable pointers for dtor chain
-
-static bool s_pa_funcs_resolved = false;
-
-
-// ============================================================
-// Resolution -- called once during hook installation
-// ============================================================
+// B3R: resolves nothing. Kept only because cropfieldcomponent_states.cpp (another
+// block's file) still calls it; delete it with that call.
 bool PlantArea_ResolveFuncs() {
-    if (s_pa_funcs_resolved) return true;
-
-    // Direct exe function addresses
-    s_fn_FindComp_MatDesc = reinterpret_cast<PAW_FindComp_MatDesc_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_FindComp_CropDesc = reinterpret_cast<PAW_FindComp_CropDesc_t>(
-        ResolveAddr(Module::Exe, 0x140005380));
-    s_fn_FindComp_MeshInstance = reinterpret_cast<PAW_FindComp_MeshInstance_t>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-    s_fn_CalcMaxWorkers = reinterpret_cast<PAW_CalcMaxWorkers_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_fn_Map_FindNearestPassable = reinterpret_cast<PAW_Map_FindNearestPassable_t>(
-        ResolveAddr(Module::Exe, 0x14009ccf0));
-    s_fn_Map_CanPathTo = reinterpret_cast<PAW_Map_CanPathTo_t>(
-        ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_GetTerrainPos = reinterpret_cast<PAW_GetTerrainPos_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_PlantAction_Ctor = reinterpret_cast<PAW_PlantAction_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400bdd20));
-    s_fn_BST_Insert = reinterpret_cast<PAW_BST_Insert_t>(
-        ResolveAddr(Module::Exe, 0x140029a40));
-    s_fn_BST_Remove = reinterpret_cast<PAW_BST_Remove_t>(
-        ResolveAddr(Module::Exe, 0x14001ca60));  // was 0x140029a60 (mid-function; true remove entry is 0x14001ca60)
-    s_fn_BST_Serialize = reinterpret_cast<PAW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140029de0));
-    s_fn_BST_RecursiveFree = reinterpret_cast<PAW_BST_RecursiveFree_t>(
-        ResolveAddr(Module::Exe, 0x14000e320));
-    s_fn_ValidateTask = reinterpret_cast<PAW_ValidateTask_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_TaskCancel = reinterpret_cast<PAW_TaskCancel_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_FindSubEntity = reinterpret_cast<PAW_FindSubEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_ExternalRef_Serialize = reinterpret_cast<PAW_ExternalRef_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-    s_fn_CropDescComplete = reinterpret_cast<PAW_CropDescComplete_t>(
-        ResolveAddr(Module::Exe, 0x14011b390));
-
-    // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
-    // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
-    // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
-    // Validate slot called it: EXEC of 0 the first harvest season a field had stale
-    // tasks (BANISHED_STRESS town at 10x, 2026-09-03). Allocate through the real
-    // allocator singleton instead; fn_MemFreeStatic pairs with it.
-    s_fn_MemAlloc = &PAW_MemAllocViaSingleton;
-
-    // Float constant
-    s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-
-    // Vtable pointers for dtor
-
-    // Verify critical pointers
-    bool ok = s_fn_FindComp_MatDesc && s_fn_FindComp_CropDesc &&
-              s_fn_FindComp_MeshInstance && s_fn_CalcMaxWorkers &&
-              s_fn_Map_FindNearestPassable && s_fn_Map_CanPathTo &&
-              s_fn_GetTerrainPos &&
-              s_fn_PlantAction_Ctor && s_fn_BST_Insert &&
-              s_fn_BST_Remove && s_fn_BST_Serialize &&
-              s_fn_BST_RecursiveFree && s_fn_ValidateTask &&
-              s_fn_TaskCancel && s_fn_FindSubEntity &&
-              s_fn_ExternalRef_Serialize &&
-              s_fn_CropDescComplete &&
-              fn_MemFreeStatic &&
-              g_pGameWorldSingleton && s_fHalfCellOffset;
-
-    s_pa_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[PlantArea] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_FindComp_MatDesc) printf("  MISSING: FindComp_MatDesc\n");
-        if (!s_fn_FindComp_CropDesc) printf("  MISSING: FindComp_CropDesc\n");
-        if (!s_fn_FindComp_MeshInstance) printf("  MISSING: FindComp_MeshInstance\n");
-        if (!s_fn_CalcMaxWorkers) printf("  MISSING: CalcMaxWorkers\n");
-        if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
-        if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
-        if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_PlantAction_Ctor) printf("  MISSING: PlantAction_Ctor\n");
-        if (!s_fn_BST_Insert) printf("  MISSING: BST_Insert\n");
-        if (!s_fn_BST_Remove) printf("  MISSING: BST_Remove\n");
-        if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
-        if (!s_fn_BST_RecursiveFree) printf("  MISSING: BST_RecursiveFree\n");
-        if (!s_fn_ValidateTask) printf("  MISSING: ValidateTask\n");
-        if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
-        if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
-        if (!s_fn_CropDescComplete) printf("  MISSING: CropDescComplete\n");
-    }
-#endif
-
-    return ok;
+    return true;
 }
 
 
@@ -263,15 +103,15 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/) {
 
     // Step 1: Find components on workplace entity
     uintptr_t matDescIBP = 0;
-    s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
+    WorkBase_FindComponent_3050(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
 
     uintptr_t cropDescIBP = 0;
-    s_fn_FindComp_CropDesc(*(uintptr_t*)(selfAddr + 0x10), &cropDescIBP);
+    WorkAcc_FindComponent_5380(*(uintptr_t*)(selfAddr + 0x10), &cropDescIBP);
 
     // Step 2: Check max workers vs current tree count
     int treeCount = (int)selfQ[10];  // self->field_50
     if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
     // ── Plant-search census (BANISHED_PLANTAREA_TRACE) ───────────────────────────
@@ -354,12 +194,12 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/) {
             }
 
             // Check pathfinding
-            int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
+            int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
             if (nearestCell < 0) {
                 continue;
             }
 
-            bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
+            bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the door read AL
             if (!canPath) {
                 continue;
             }
@@ -372,14 +212,14 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/) {
             packedCells[0] = (uint32_t)i;
             packedCells[1] = (uint32_t)pairedIdx;
 
-            float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
+            float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
             Math::Vector3 targetPos(
                 (float)(nearestCell % *mapGrid) - halfOffset,
                 (float)(nearestCell / *mapGrid) - halfOffset,
                 0.0f);
 
             float pathPos[4];
-            s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
+            Reimpl_MapGetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
             // Get citizen entity for action
             uintptr_t citizenBuf = *(uintptr_t*)entityIBP;
@@ -388,19 +228,19 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/) {
             uint32_t packedCellInfo = ((uint32_t)pairedIdx << 16) | (uint32_t)i;
 
             // Call ShowTool_Action_Ctor3 (0x1400bdd20) with 12 params
-            s_fn_PlantAction_Ctor(
+            WorkAct_ShowToolCtor3_bdd20(
                 &citizenBuf,                      // RCX: citizenIBP
                 (int)selfQ[4],                    // EDX: priority
-                (void*)selfQ[0xd],                // R8: self->field_68 (ExternalPtr)
+                reinterpret_cast<uint32_t*>((void*)selfQ[0xd]),                // R8: self->field_68 (ExternalPtr)
                 0,                                // R9D: 0
                 pathPos,                          // [RSP+0x20]: position
                 harvestMode,                      // [RSP+0x28]: 1=single, 2=paired
-                cellPair,                         // [RSP+0x30]: ptr to {cell, pairedCell}
+                reinterpret_cast<uint32_t*>(cellPair),                         // [RSP+0x30]: ptr to {cell, pairedCell}
                 packedCellInfo,                   // [RSP+0x38]: packed cell indices
-                &entityRef,                       // [RSP+0x40]: entity ref from field_10
+                reinterpret_cast<int64_t*>(&entityRef),                       // [RSP+0x40]: entity ref from field_10
                 &typeConstVal,                    // [RSP+0x48]: type constant
                 0,                                // [RSP+0x50]: unused
-                packedCells                       // [RSP+0x58]: packed cell pair values
+                reinterpret_cast<int64_t>(packedCells)   // [RSP+0x58]: packed cell pair values
             );
 
             // Assign work and register with AI
@@ -431,7 +271,7 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/) {
             insertKey[1] = 0;
             insertKey[2] = (uint32_t)citizenIBPVal;
             insertKey[3] = (uint32_t)(citizenIBPVal >> 32);
-            s_fn_BST_Insert((void*)(selfAddr + 0x48), insertResult, insertKey);
+            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult, insertKey);
 
             // Mark primary cell as used (not available)
             validityArray[i] = 0;
@@ -445,7 +285,7 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/) {
                 insertKey2[1] = 0;
                 insertKey2[2] = (uint32_t)citizenIBPVal2;
                 insertKey2[3] = (uint32_t)(citizenIBPVal2 >> 32);
-                s_fn_BST_Insert((void*)(selfAddr + 0x48), insertResult2, insertKey2);
+                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult2, insertKey2);
                 validityArray[pairedIdx] = 0;
             }
 
@@ -461,7 +301,7 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/) {
 
     // If tree count is 0 and we exhausted all cells, mark crop desc as complete
     if ((int)selfQ[10] == 0) {
-        s_fn_CropDescComplete(cropDescIBP);
+        WorkLeaf_PlantArea_b390(cropDescIBP);
     }
 
     return 1;
@@ -507,7 +347,7 @@ int PlantArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
         } else if ((int)primaryIdx > *node) {
             node = *(int**)(node + 8);
         } else {
-            s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
             break;
         }
     }
@@ -538,7 +378,7 @@ int PlantArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
             } else if ((int)pairedIdx > *node2) {
                 node2 = *(int**)(node2 + 8);
             } else {
-                s_fn_BST_Remove((void*)(selfAddr + 0x48), node2);
+                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node2);
                 break;
             }
         }
@@ -569,7 +409,7 @@ int PlantArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
         } else if ((int)primaryIdx > *node) {
             node = *(int**)(node + 8);
         } else {
-            s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
             break;
         }
     }
@@ -590,7 +430,7 @@ int PlantArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
             } else if ((int)pairedIdx > *node2) {
                 node2 = *(int**)(node2 + 8);
             } else {
-                s_fn_BST_Remove((void*)(selfAddr + 0x48), node2);
+                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node2);
                 return 0;
             }
         }
@@ -618,7 +458,7 @@ int PlantArea::Cleanup() {
 
         // Cancel work via citizen AI
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
     }
@@ -661,7 +501,7 @@ int PlantArea::Validate() {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2);  // IBP at +0x8
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
+        uint8_t valid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), uintptr_t{0}, (void*)&ibpData, nullptr);
 
 
         if (valid == 0) {
@@ -675,7 +515,7 @@ int PlantArea::Validate() {
                         newCap = newCount * 3;
                     }
                     collectCapacity = newCap;
-                    newArray = (int*)s_fn_MemAlloc((int64_t)newCap << 2, 4);
+                    newArray = (int*)System::MemoryAllocator::MemAlloc((int64_t)newCap << 2, 4);
                     currentArray = newArray;
                 }
 
@@ -691,7 +531,7 @@ int PlantArea::Validate() {
                     }
                 }
                 if (collectArray != newArray) {
-                    fn_MemFreeStatic(collectArray);
+                    System::MemoryAllocator::MemFree(collectArray);
                 }
                 collectArray = newArray;
                 collectCount = newCount;
@@ -737,14 +577,14 @@ cleanup:
                 } else if (collectArray[k] > *bstNode) {
                     bstNode = *(int**)(bstNode + 8);
                 } else {
-                    s_fn_BST_Remove(bstRootPtr, bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(bstRootPtr), bstNode);
                     break;
                 }
             }
         }
     }
 
-    fn_MemFreeStatic(currentArray ? currentArray : collectArray);
+    System::MemoryAllocator::MemFree(currentArray ? currentArray : collectArray);
     return collectCount == 0;
 }
 
@@ -759,7 +599,10 @@ void* PlantArea::GetTarget(void* outPtr) {
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
-    void* result = s_fn_FindSubEntity(entity, subIBP);
+    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
+    // so the returned pointer is the out buffer itself.
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entity), subIBP);
+    void* result = subIBP;
 
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)result + 0x48);
 
@@ -792,7 +635,7 @@ void PlantArea::Persist(void* stream) {
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at +0x48
-    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializerBuf);
 
     // Serialize field cell count at +0x60
     int cellCountBuf[2] = { *(int*)(selfAddr + 0x60), 0 };
@@ -828,7 +671,7 @@ void PlantArea::Persist(void* stream) {
         cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
 
     // Serialize ExternalRef at +0x68
-    s_fn_ExternalRef_Serialize((void*)(selfAddr + 0x68), serializerBuf);
+    Reimpl_ExternalPtr_Serialize_StringTable((void*)(selfAddr + 0x68), serializerBuf);
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
@@ -844,16 +687,16 @@ PlantArea::~PlantArea() {
     uintptr_t selfAddr = (uintptr_t)this;
 
     // Free validity array at +0x58
-    fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
+    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x58));
     *(uintptr_t*)(selfAddr + 0x58) = 0;
     *(uintptr_t*)(selfAddr + 0x60) = 0;
 
     // Free BST at +0x48
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
-        fn_MemFreeStatic(bstRoot);
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
+        System::MemoryAllocator::MemFree(bstRoot);
     }
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
@@ -864,12 +707,10 @@ PlantArea::~PlantArea() {
 
 
 // Ctor 0x1400f4770 (factory variant): `??0Internal`, the Work base fields, the leaf
-// fields zeroed (the two stamps are the compiler's). PlantArea_ResolveFuncs wires the
-// file's helper pointers (the old factory did the same).
+// fields zeroed (the two stamps are the compiler's).
 PlantArea::PlantArea()
     : Work(), field_48(nullptr), field_50(0), field_58(nullptr), field_60(0), _pad64{},
       field_68(nullptr) {
-    PlantArea_ResolveFuncs();
 }
 
 // ============================================================

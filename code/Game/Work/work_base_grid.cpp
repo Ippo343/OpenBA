@@ -111,17 +111,9 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
 // to assign a citizen (TryAssignWorkplace) — return 2 on success, else keep scanning; if NOT
 // found, compact the cell out of the list and re-examine the shifted-in slot.
 // Caller: int fn(uintptr_t self, void* citizenRef)
-typedef void (*fn_FindAutoPickup_t)(uintptr_t entity, void* outIBP);
-static fn_FindAutoPickup_t s_fn_FindAutoPickup = nullptr;
-static bool s_findAutoPickupInit = false;
-
 int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
-    if (!s_findAutoPickupInit) {
-        s_fn_FindAutoPickup = reinterpret_cast<fn_FindAutoPickup_t>(ResolveAddr(Module::Exe, 0x140022520));
-        s_findAutoPickupInit = true;
-    }
     uintptr_t apComp = 0;
-    if (s_fn_FindAutoPickup) s_fn_FindAutoPickup(*reinterpret_cast<uintptr_t*>(self + 0x10), &apComp);
+    WorkAcc_FindComponent_22520(*reinterpret_cast<uintptr_t*>(self + 0x10), &apComp);
     if (apComp == 0 || *reinterpret_cast<char*>(apComp + 0x28) == '\0') return 0;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
     uintptr_t mgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x118);
@@ -140,7 +132,7 @@ int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
             } else {
                 if (cellId <= *node) {   // found
                     uintptr_t citizenCopy = *reinterpret_cast<uintptr_t*>(citizenRef);
-                    uint64_t r = fn_TryAssignWorkplace ? fn_TryAssignWorkplace(mgr, &citizenCopy, cellId, '\x01') : 0;
+                    uint64_t r = WorkGrid_TryAssignWorkplace_f8620(mgr, &citizenCopy, cellId, '\x01');
                     if (static_cast<char>(r) != '\0') return 2;
                     keepElement = true;
                     break;

@@ -12,7 +12,9 @@
 #include "buildroad_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: StorageComponent_QueryAvailable, CitizenAI_State_LongTermPlan
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -112,14 +114,14 @@ void BuildRoad::Persist(void* stream) {
     // Validate entity ref type after deserialize
     if (field_48 != nullptr) {
         // TypeId at DAT_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell).
-        bool valid = fn_IsDerivedFrom(field_48, CitizenComponent::TypeId());
+        bool valid = Object::IsDerivedFromNullSafe(field_48, CitizenComponent::TypeId());
         if (!valid) {
             field_48 = nullptr;
         }
     }
 
     // ExternalPtr serialize for building description (+0x50)
-    fn_ExternalPtr_BuildSerialize(&field_50, serializerBuf);
+    Reimpl_ExternalPtr_Serialize_StringTable(&field_50, serializerBuf);
 
     // Version-dependent fields
     int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
@@ -305,7 +307,7 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
 
     int targetCell = field_58;
 
-    uint64_t passResult = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)cellIndex, targetCell);
+    uint64_t passResult = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)cellIndex, targetCell);
     if ((char)passResult == '\0') {
         return 1;
     }
@@ -316,11 +318,11 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
     if (structEntity != 0) {
         ++g_brExecStructOnCell;
         uint64_t rawMatComp = 0;
-        fn_FindComponent_RawMaterialC(structEntity, &rawMatComp);
+        ActRm_FindComponent_223c0(structEntity, &rawMatComp);
 
         if (rawMatComp != 0) {
             uint64_t workComp = 0;
-            fn_FindComponent_WorkC(structEntity, &workComp);
+            WorkBase_FindComponent_3050(structEntity, &workComp);
 
             // WorkComponent+0x28 = the scheduler work id for the pile blocking this
             // cell, NOT a worker count; it is what gets handed to the scheduler below.
@@ -328,7 +330,7 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 
             uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
-            uint64_t assignResult = fn_TryAssignWorkplace(assignMgr, &citizenRef, workId, '\0');
+            uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;
             }
@@ -336,14 +338,14 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         }
 
         uint64_t natResComp = 0;
-        fn_FindComponent_NaturalResourceC(structEntity, &natResComp);
+        WorkBase_FindComponent_52c0(structEntity, &natResComp);
 
         if (natResComp == 0) {
             return 1;
         }
         ++g_brExecNatResWait;
 
-        fn_FindComponent_NaturalResourceC(structEntity, &natResComp);
+        WorkBase_FindComponent_52c0(structEntity, &natResComp);
 
         uint32_t bsFlags = *(uint32_t*)(*(uintptr_t*)&natResComp + 0x20);
         if ((bsFlags >> 20) & 1) {
@@ -355,12 +357,12 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         heightU32 = *(uint32_t*)(posData + 0x160);
         cellIndex = PosToCellIndex(mapGrid, posData);
 
-        int adjacentCell = fn_Map_FindNearestPassable(mapGrid, targetCell, cellIndex, 0xe07);
+        int adjacentCell = WorkGrid_FindCell_9ccf0(mapGrid, targetCell, cellIndex, 0xe07);
         if (adjacentCell < 0) {
             return 1;
         }
 
-        passResult = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)adjacentCell, cellIndex);
+        passResult = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)adjacentCell, cellIndex);
         if ((char)passResult == '\0') {
             return 1;
         }
@@ -368,12 +370,12 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         Math::Vector3 worldPos = CellToWorldVec3(mapGrid, adjacentCell);
 
         float terrainPos[4] = {};
-        fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
         uint64_t targetRef = natResComp;
         uint64_t citizenRef = *(uint64_t*)entityIBP;
 
-        fn_PerformWork_Action_Ctor3(
+        WorkAct_PerformWorkCtor_c1eb0(
             &citizenRef, field_20, &targetRef, terrainPos, 0, 0);
 
         int priority = field_20;
@@ -389,15 +391,15 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
 
         float terrainPos[4] = {};
-        fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
         uint64_t citizenRef = *(uint64_t*)entityIBP;
 
-        fn_PerformWork_Action_Ctor(
-            &citizenRef, field_20, (void*)terrainPos,
+        WorkAct_PerformWorkCtor_bffd0(
+            &citizenRef, field_20, reinterpret_cast<uint32_t*>((void*)terrainPos),
             (uint64_t)(uint32_t)targetCell,
             *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1, 0, 0,
-            velocity, &actionRef);
+            velocity, reinterpret_cast<int64_t*>(&actionRef));
 
         int priority = field_20;
         return FinalizeAction(this, entityIBP, &actionRef, priority);
@@ -408,7 +410,7 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         uint64_t storageComp = 0;
         fn_FindComponent_Storage((void*)(uintptr_t)homeEntity, &storageComp);
 
-        int available = fn_BuildRoad_QueryStorage(storageComp, (int64_t)field_50);
+        int available = StorageComponent_QueryAvailable(reinterpret_cast<void*>(storageComp), (int64_t)field_50);
 
         if (available > 0) {
             uint64_t actionRef = 0;
@@ -418,15 +420,15 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
             Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
 
             float terrainPos[4] = {};
-            fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
+            Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 
-            fn_PerformWork_Action_Ctor(
-                &citizenRef, field_20, (void*)terrainPos,
+            WorkAct_PerformWorkCtor_bffd0(
+                &citizenRef, field_20, reinterpret_cast<uint32_t*>((void*)terrainPos),
                 (uint64_t)(uint32_t)targetCell,
                 *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1,
-                (int64_t)field_50, 0, velocity, &actionRef);
+                (int64_t)field_50, 0, velocity, reinterpret_cast<int64_t*>(&actionRef));
 
             int priority = field_20;
             return FinalizeAction(this, entityIBP, &actionRef, priority);
@@ -444,24 +446,24 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
             uint64_t foundStorageIBP = 0;
 
             uint64_t foundEntity = 0;
-            fn_FindStorageForResource(
-                citizenList, &foundEntity,
+            Pf_PickBestDropTarget_8d590(
+                reinterpret_cast<int64_t**>(citizenList), reinterpret_cast<int64_t*>(&foundEntity),
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
-                (int64_t)field_50, 1, '\0', velocity, &foundStorageIBP);
+                (int64_t)field_50, 1, '\0', reinterpret_cast<uint32_t*>(velocity), &foundStorageIBP);
 
             // 0x140006330 — scans the RawMaterialDescription list for field_50's
             // entry. This is NOT the entity component finder (0x1400223c0) used above;
             // both were called fn_FindComponent_RawMaterialC before the rename.
-            fn_FindDescription_RawMaterial((int64_t)field_50, &foundStorageIBP);
+            WorkAcc_FindComponent_6330((int64_t)field_50, &foundStorageIBP);
 
             if (foundEntity == 0) {
                 return 1;
             }
 
-            int remainingCapacity = fn_GetRemainingCapacity(*(uintptr_t*)entityIBP);
+            int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(*(uintptr_t*)entityIBP);
 
             if (remainingCapacity < *(int32_t*)(foundStorageIBP + 0x48)) {
-                fn_CitizenAI_LongTermPlan(*(void**)entityIBP);
+                CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)entityIBP));
                 return 2;
             }
 
@@ -470,15 +472,15 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
             Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
 
             float terrainPos[4] = {};
-            fn_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
+            Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 
-            fn_PerformWork_Action_Ctor(
-                &citizenRef, field_20, (void*)terrainPos,
+            WorkAct_PerformWorkCtor_bffd0(
+                &citizenRef, field_20, reinterpret_cast<uint32_t*>((void*)terrainPos),
                 (uint64_t)(uint32_t)targetCell,
                 *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1,
-                (int64_t)field_50, 1, velocity, &foundStorageIBP);
+                (int64_t)field_50, 1, velocity, reinterpret_cast<int64_t*>(&foundStorageIBP));
 
             int priority = field_20;
             return FinalizeAction(this, entityIBP, &foundStorageIBP, priority);
@@ -511,6 +513,7 @@ void* BuildRoad::CreateInPlaceObject(void* storage) {
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
+#include "resolve.h"   // RegisterExeAddr (the BuildRoadAddr::CtorParams row stays for W2)
 
 extern "C" void RegisterBuildRoadVtable() {
     // The parameterised ctor RoadTool's commit path calls by address (FUN_14009c960).

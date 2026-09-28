@@ -32,6 +32,7 @@
 #include <cstddef>
 #include "Component/CitizenDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/StatusIconComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
 // are now in the shared header: Dialog/citizen_icon_helpers.h
@@ -66,18 +67,15 @@ namespace statusbarui_sa {
 
 // ENDGAME B.3.9 CG2: TypeId_StatusIconComponent (cell 0x1401c7e08) ->
 // StatusIconComponent::TypeId(), TypeId_CitizenDescription -> CitizenDescription::
-// TypeId(). Both class statics always answer, so the backfill retires.
-void EnsureGlobals() {
-}
+// TypeId(). Both class statics always answer, so the backfill retires (and the
+// empty EnsureGlobals that was left went with B3R).
 
 // Every function/global the Draw+Startup+event paths dereference unguarded must
-// be live, or a null-deref faults (no SEH under MinGW).
+// be live, or a null-deref faults (no SEH under MinGW). B3R: the engine_funcs door
+// readiness tests were always true and are gone; the allocator singleton (the old
+// g_pMemAllocSingleton snapshot) is read live.
 bool Ready() {
-    if (!(fn_IsDerivedFrom &&
-          fn_InternalBasePtr_Ctor &&
-          fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
-        return false;
-    return true;
+    return System::MemoryAllocator::_singleton != nullptr;
 }
 
 // The world-side data Startup reads unguarded: townMgr (gw+0xf0) with its
@@ -160,7 +158,6 @@ static void DiagStockOnce(void) {
 
 // [5] 0x14007a3d0
 void StatusBarUI::OnOpened() {
-    statusbarui_sa::EnsureGlobals();
     if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
     if (statusbarui_sa::Built(this)) return;   // idempotence
     uintptr_t s = (uintptr_t)this;
@@ -286,7 +283,6 @@ void StatusBarUI::OnOpened() {
 
 // [7] 0x1400798d0
 void StatusBarUI::OnUpdateLayout() {
-    statusbarui_sa::EnsureGlobals();
     if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
     if (!statusbarui_sa::Built(this)) StatusBarUI::OnOpened();
     if (!statusbarui_sa::Built(this)) return;
@@ -341,7 +337,7 @@ void StatusBarUI::OnUpdateLayout() {
 
             if (typeId == (int)StatusIconComponent::TypeId()) {
                 void* pComp = compArray[j];
-                bool isDerived = fn_IsDerivedFrom(pComp, StatusIconComponent::TypeId());
+                bool isDerived = ::Object::IsDerivedFromNullSafe(pComp, StatusIconComponent::TypeId());
                 happyComp = nullptr;
                 if (isDerived) {
                     happyComp = pComp;
@@ -386,7 +382,7 @@ found_happiness:
         uintptr_t firstCitizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0));
         void* desc = *(void**)(firstCitizen + 0x18);
         void* citizenDesc = nullptr;
-        if (fn_IsDerivedFrom(desc, CitizenDescription::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())) {
             citizenDesc = desc;
         }
         CitizenUI_UpdateIconDisplay_Impl(s + 0x108,
@@ -397,7 +393,7 @@ found_happiness:
         firstCitizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0));
         desc = *(void**)(firstCitizen + 0x18);
         citizenDesc = nullptr;
-        if (fn_IsDerivedFrom(desc, CitizenDescription::TypeId())) {
+        if (::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())) {
             citizenDesc = desc;
         }
         happySum = happySum / (float)citizenCount;
@@ -635,7 +631,7 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
 
                 if ((uint32_t)compTypeId == StatusIconComponent::TypeId()) {
                     // Confirm with IsDerivedFrom
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, StatusIconComponent::TypeId())) {
+                    if (::Object::IsDerivedFromNullSafe(comp, StatusIconComponent::TypeId())) {
                         happinessComp = comp;
                     }
                     break;
@@ -719,7 +715,6 @@ next:
 void StatusBarUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventId,
                                  int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     void* param2 = element;
-    statusbarui_sa::EnsureGlobals();
     if (!statusbarui_sa::Built(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
     (void)param2;
 
@@ -771,10 +766,10 @@ void StatusBarUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int3
 StatusBarUI::~StatusBarUI() {
     void* self = this;
     uintptr_t s = (uintptr_t)self;
-    if (fn_MemFreeStatic) {
+    {
         static const uintptr_t kIconArrays[4] = { 0x108, 0x118, 0x128, 0x138 };
         for (uintptr_t off : kIconArrays) {
-            fn_MemFreeStatic(*(void**)(s + off));
+            System::MemoryAllocator::MemFree(*(void**)(s + off));
             *(uint64_t*)(s + off) = 0;
             *(uint64_t*)(s + off + 8) = 0;   // count/capacity pair
         }
@@ -790,7 +785,6 @@ void StatusBarUI::OnCreated() {
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void StatusBarUI::OnUpdate(const System::Time& /*time*/) {
-    statusbarui_sa::EnsureGlobals();
     statusbarui_sa::DiagOnce(this);
     if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
     if (!statusbarui_sa::Built(this)) {

@@ -30,7 +30,8 @@
 
 #include "PickupStoredRawMaterial.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActRm_* helpers
+#include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -42,56 +43,13 @@
 #include "Entity/ComponentEntity.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- PickupStoredRawMaterial-specific helpers)
+// Helpers, called by name (B3R)
+//   0x14012d150 ActRm_StorageSubtract_d150 -- StorageComponent::SubtractItem(storage, itemType,
+//               count); if the count reaches 0, removes the slot
+//   0x14012d000 ActRm_StorageAdd_d000      -- StorageComponent::AddItem(storage, itemType, count)
+//   0x14000da70 ActRm_ArrayResize16_da70   -- array resize for 16-byte elements (material list)
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable -- ExternalPtr serialize
 // ============================================================
-
-// FUN_14012d150 -- StorageComponent::SubtractItem(storage, itemType, count)
-// Subtracts count of itemType from storage. If count reaches 0, removes the slot.
-typedef void (*s_fn_Storage_SubtractItem_t)(void* storageComp, int64_t itemType, int count);
-static s_fn_Storage_SubtractItem_t s_fn_Storage_SubtractItem = nullptr;
-
-// FUN_14012d000 -- StorageComponent::AddItem(storage, itemType, count)
-typedef void (*s_fn_Storage_AddItem_t)(void* storageComp, int64_t itemType, int count);
-static s_fn_Storage_AddItem_t s_fn_Storage_AddItem = nullptr;
-
-// FUN_14000da70 -- Array resize for 16-byte elements (material list)
-typedef void (*s_fn_ArrayResize16_t)(void* arrayBase, int newCount);
-static s_fn_ArrayResize16_t s_fn_ArrayResize16 = nullptr;
-
-static bool s_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool PickupStoredRawMaterial_ResolveFuncs() {
-    if (s_funcs_resolved) return true;
-
-    s_fn_Storage_SubtractItem = reinterpret_cast<s_fn_Storage_SubtractItem_t>(
-        ResolveAddr(Module::Exe, 0x14012d150));
-
-    s_fn_Storage_AddItem = reinterpret_cast<s_fn_Storage_AddItem_t>(
-        ResolveAddr(Module::Exe, 0x14012d000));
-
-    s_fn_ArrayResize16 = reinterpret_cast<s_fn_ArrayResize16_t>(
-        ResolveAddr(Module::Exe, 0x14000da70));
-
-    bool ok = s_fn_Storage_SubtractItem && s_fn_Storage_AddItem &&
-              s_fn_ArrayResize16 &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom &&
-              fn_ExternalPtr_BuildSerialize;
-
-#ifdef _DEBUG
-    printf("[PickupStoredRawMaterial] ResolveFuncs: SubItem=%p AddItem=%p Resize16=%p\n",
-           (void*)s_fn_Storage_SubtractItem, (void*)s_fn_Storage_AddItem,
-           (void*)s_fn_ArrayResize16);
-    if (!ok) printf("[PickupStoredRawMaterial] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Helper: FindComponent by type ID on an entity's component array
@@ -116,7 +74,7 @@ static void* FindComponentByTypeId(void* entity, uint32_t wantTypeId,
 
         if (typeId == wantTypeId) {
             void* found = *compIBP;
-            if (fn_IsDerivedFrom(found, wantTypeId)) {
+            if (::Object::IsDerivedFromNullSafe(found, wantTypeId)) {
                 return found;
             }
             return nullptr;
@@ -131,11 +89,6 @@ static void* FindComponentByTypeId(void* entity, uint32_t wantTypeId,
 //             material count(+0x38), material list(+0x30), partial flag(+0x40)
 // ============================================================
 void PickupStoredRawMaterial::Persist(void* stream) {
-    // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
-    // was the one that never got it, so a save taken while one of these actions was
-    // in flight called a null serializer pointer (EXEC of 0). Found live on
-    // CompleteRoad once roads started being built; these four are the same shape.
-    PickupStoredRawMaterial_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
@@ -151,7 +104,7 @@ void PickupStoredRawMaterial::Persist(void* stream) {
     // Serialize target building (+0x20) with type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field20, CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -159,7 +112,7 @@ void PickupStoredRawMaterial::Persist(void* stream) {
     // Serialize pickup entity (+0x28) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(_field28, ComponentEntity::TypeId())) {
+        if (!::Object::IsDerivedFromNullSafe(_field28, ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }
@@ -170,7 +123,7 @@ void PickupStoredRawMaterial::Persist(void* stream) {
 
     // If loading (version check: ser2 internal stream offset+8 == 0), resize material array
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        s_fn_ArrayResize16((void*)(s + 0x30), (int)matCount);
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(s + 0x30), (int)matCount);   // 0x14000da70
     }
 
     // Serialize each material entry (ExternalPtr + int count, 0x10 bytes each)
@@ -179,7 +132,7 @@ void PickupStoredRawMaterial::Persist(void* stream) {
         uint64_t remaining = (uint64_t)matCount;
         do {
             // Serialize ExternalPtr (material type)
-            fn_ExternalPtr_BuildSerialize(matList, ser2);
+            Reimpl_ExternalPtr_Serialize_StringTable(matList, ser2);   // 0x140002340
             // Serialize count (int at +0x08)
             reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(((uintptr_t)matList + 8)), nullptr);   // B.3.4 bridge
             matList = (uintptr_t*)((uintptr_t)matList + 0x10);
@@ -207,7 +160,6 @@ void PickupStoredRawMaterial::Persist(void* stream) {
 // Returns 0 on success, 2 on insufficient materials.
 // ============================================================
 int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
-    PickupStoredRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
@@ -305,7 +257,7 @@ int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
 
         // Subtract from citizen's storage via SubtractItem
         uintptr_t matList4 = *(uintptr_t*)(s + 0x30);
-        s_fn_Storage_SubtractItem((void*)storageIBP, *(int64_t*)(matList4 + (int64_t)matIdx * 0x10), requestedCount);
+        ActRm_StorageSubtract_d150(storageIBP, *(int64_t*)(matList4 + (int64_t)matIdx * 0x10), requestedCount);   // 0x14012d150
 
         // Add to target building's parent storage
         uintptr_t matList5 = *(uintptr_t*)(s + 0x30);
@@ -319,7 +271,7 @@ int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
         uintptr_t parentStorageIBP2[2];
         new (parentStorageIBP2) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(parentStorage));   // B.3.3 bridge
-        s_fn_Storage_AddItem((void*)parentStorageIBP2[0], itemType, requestedCount);
+        ActRm_StorageAdd_d000(parentStorageIBP2[0], itemType, requestedCount);   // 0x14012d000
 
         matOffset += 0x10;
         matIdx++;
@@ -334,7 +286,6 @@ int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
 // Iterates material list, subtracts reserved amounts from citizen's storage.
 // ============================================================
 void PickupStoredRawMaterial::CheckEntity() {
-    PickupStoredRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Find storage component on pickup entity (+0x28)
@@ -376,7 +327,6 @@ void PickupStoredRawMaterial::CheckEntity() {
 // matches the parent entity (+0x10) of the building at +0x20.
 // ============================================================
 bool PickupStoredRawMaterial::GetTarget(void* param) {
-    PickupStoredRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Check match with pickup entity at +0x28
@@ -426,13 +376,11 @@ PickupStoredRawMaterial::~PickupStoredRawMaterial() {
 // [9] 0x1400c9bf0
 
 void* PickupStoredRawMaterial::CreateNewObject() {
-    PickupStoredRawMaterial_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(PickupStoredRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PickupStoredRawMaterial());
 }
 void* PickupStoredRawMaterial::CreateInPlaceObject(void* storage) {
-    PickupStoredRawMaterial_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PickupStoredRawMaterial());
 }

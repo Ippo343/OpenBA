@@ -27,7 +27,8 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"        // B3R: WorkAcc_FindComponent_5380
+#include "Component/exe_bodies.h"   // B3R: CropFieldComponent_Maturity
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -40,33 +41,22 @@
 
 namespace {
 
-typedef void* (*CropFindComp_t)(int64_t entity, void* outIBP);
-typedef float (*CropMaturity_t)(void* comp);
-
-CropFindComp_t s_findCropComp = nullptr;   // FUN_140005380
-CropMaturity_t s_cropMaturity = nullptr;   // FUN_14011b410
-
-void EnsureFuncs() {
-    if (!s_findCropComp)
-        s_findCropComp = reinterpret_cast<CropFindComp_t>(ResolveAddr(Module::Exe, 0x140005380));
-    if (!s_cropMaturity)
-        s_cropMaturity = reinterpret_cast<CropMaturity_t>(ResolveAddr(Module::Exe, 0x14011b410));
-}
+// FUN_140005380 = WorkAcc_FindComponent_5380, FUN_14011b410 =
+// CropFieldComponent_Maturity: called by name (B3R).
 
 // Resolve the CropFieldComponent behind this panel's entity. Mirrors the retail
 // prologue shared by idx7/idx11/idx12: entity(+0x28) -> IsDerivedFrom(ComponentEntity)
 // -> InternalBasePtr -> FUN_140005380.
 void* FindComp(void* self) {
-    EnsureFuncs();
-    if (!s_findCropComp || !self) return nullptr;
+    if (!self) return nullptr;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* entity = *reinterpret_cast<void**>(s + 0x28);
     uint32_t entTid = ComponentEntity::TypeId();
-    void* checked = fn_IsDerivedFrom(entity, entTid) ? entity : nullptr;
+    void* checked = ::Object::IsDerivedFromNullSafe(entity, entTid) ? entity : nullptr;
     uint64_t entIbp = 0;
     new (&entIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     uint64_t comp = 0;
-    s_findCropComp(static_cast<int64_t>(entIbp), &comp);
+    WorkAcc_FindComponent_5380(static_cast<uintptr_t>(entIbp), &comp);   // 0x140005380
     return reinterpret_cast<void*>(comp);
 }
 
@@ -139,7 +129,7 @@ void CropUI::OnCreated() {
     }
 
     void* raw = reinterpret_cast<void*>(found);
-    void* checked = fn_IsDerivedFrom(raw, ProgressElementTypeId()) ? raw : nullptr;
+    void* checked = ::Object::IsDerivedFromNullSafe(raw, ProgressElementTypeId()) ? raw : nullptr;
     uint64_t ibp = 0;
     new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(s + 0x38) = ibp;
@@ -168,8 +158,7 @@ void CropUI::OnUpdateLayout() {
     void* comp = FindComp(this);
     if (!comp) return;
 
-    EnsureFuncs();
-    float maturity = s_cropMaturity ? s_cropMaturity(comp) : 0.0f;
+    float maturity = CropFieldComponent_Maturity(comp);   // 0x14011b410
 
     void* yieldElem = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x38));
     *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(yieldElem) + 0x128) = maturity;

@@ -31,6 +31,7 @@
 
 #include "Work/marketwork_bst_b290.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
@@ -71,15 +72,8 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 //              g_BaseTypeInfo_CitizenComponent; other ports in this tree call the same
 //              global "work entity type" (completetask.cpp) — the label is not
 //              load-bearing here, only the DWORD value is.
-// MemAlloc/MemFree are dispatch slots 0x140152b60/0x140152b68 in retail; we reach the
-// same Runtime exports through the canonical fn_MemAllocStatic / fn_MemFreeStatic
-// wrappers, exactly as work_leaf_market.cpp does.
-static bool               s_resolved = false;
-
-static void MarketBst_b290_ResolveFuncs() {
-    if (s_resolved) return;
-    s_resolved = true;
-}
+// MemAlloc/MemFree are dispatch slots 0x140152b60/0x140152b68 in retail; we call
+// System::MemoryAllocator::MemAlloc / MemFree by name (B3R).
 
 // `*(int32*)(*(void**)serializer + 8) == 0` is the engine-wide "am I loading?" test
 // (0 = loading, non-zero = saving). Same idiom as decaldescription.cpp et al.
@@ -108,7 +102,6 @@ static const int kPayloadStride = 0x10;
 // On LOAD the array is resized to the stored count BEFORE the element loop; on SAVE
 // the resize is skipped and the existing buffer is written out.
 void MarketBst_b5f0(int64_t* arr, void* serializer) {
-    MarketBst_b290_ResolveFuncs();
 
     // 14002b5fa..b612: copy the count into a stack slot and serialize it in place.
     // The stack slot is what gets read back on load — the array's own count field is
@@ -153,7 +146,7 @@ static inline uintptr_t NodeRight(uintptr_t n)  { return *reinterpret_cast<uintp
 // Returns 0 when MemAlloc fails — retail then links the NULL in anyway (see callers).
 static uintptr_t MarketBst_MakeNode(uintptr_t key, int64_t* srcArray, uintptr_t parent) {
     // 14002b3ed: MOV EDX,0x8 / LEA ECX,[RDX+0x30] -> MemAlloc(size=0x38, align=8)
-    void* mem = fn_MemAllocStatic(0x38, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x38, 8);
     if (mem == nullptr) return 0;
     uintptr_t n = reinterpret_cast<uintptr_t>(mem);
     *reinterpret_cast<uintptr_t*>(n + 0x00) = 0;
@@ -179,7 +172,6 @@ static uintptr_t MarketBst_MakeNode(uintptr_t key, int64_t* srcArray, uintptr_t 
 //   tree [RCX] : { node* root @+0x00, int32 count @+0x08 }  == MarketWork+0x48
 //   serializer [RDX]
 void MarketBst_b290(int64_t* tree, void* serializer) {
-    MarketBst_b290_ResolveFuncs();
 
     uintptr_t hdr = reinterpret_cast<uintptr_t>(tree);
 
@@ -203,7 +195,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // expected type. Retail overwrites the key with 0 on a type mismatch and
             // still inserts the node — a null-keyed node, not a skipped one.
             reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
+            if (key != 0 && !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
                 key = 0;
             }
 
@@ -260,7 +252,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // insert paths the node owns a CLONE (d9d0), so this frees the temporary;
             // on the duplicate path it drops the record entirely. Both zero stores are
             // 8 bytes wide.
-            fn_MemFreeStatic(reinterpret_cast<void*>(static_cast<uintptr_t>(
+            System::MemoryAllocator::MemFree(reinterpret_cast<void*>(static_cast<uintptr_t>(
                 static_cast<uint64_t>(payload[0]))));
             payload[0] = 0;
             payload[1] = 0;
@@ -278,7 +270,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // faithful, and deliberate in retail (it is how stale refs get culled).
             reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             uintptr_t key = NodeKey(node);
-            if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
+            if (key != 0 && !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
                 *reinterpret_cast<uintptr_t*>(node + 0x00) = 0;
             }
 

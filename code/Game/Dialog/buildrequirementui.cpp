@@ -85,7 +85,7 @@ static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
         int compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (compTypeId == (int)typeId) {
-            if (fn_IsDerivedFrom(comp, typeId)) {
+            if (::Object::IsDerivedFromNullSafe(comp, typeId)) {
                 return comp;
             }
             break;
@@ -106,7 +106,7 @@ static void* FindDialogElem(void* dialogInst, const char* name) {
 // Helper: find element by name, wrap as InternalBasePtr
 static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
     void* raw = FindDialogElem(dialogInst, name);
-    bool isInternal = fn_IsDerivedFrom(raw, UI::Element::TypeId());
+    bool isInternal = ::Object::IsDerivedFromNullSafe(raw, UI::Element::TypeId());
     void* checked = isInternal ? raw : nullptr;
     uint8_t bpBuf[8];
     new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -166,26 +166,26 @@ void BuildRequirementUI::OnCreated() {
     // dialog can leave +0x28 NULL. Skip all three IsDerivedFrom probes when null — the
     // desc stays unresolved and the function returns cleanly at `if (!desc)` below.
     // Try path 1: datasource IsA BuildComponent
-    bool isBuild = dataSource && fn_IsDerivedFrom(dataSource, ComponentDescription::TypeId());
+    bool isBuild = dataSource && ::Object::IsDerivedFromNullSafe(dataSource, ComponentDescription::TypeId());
     if (isBuild && dataSource) {
         // Re-verify (matches original double-check pattern)
-        isBuild = fn_IsDerivedFrom(dataSource, ComponentDescription::TypeId());
+        isBuild = ::Object::IsDerivedFromNullSafe(dataSource, ComponentDescription::TypeId());
         void* desc = isBuild ? dataSource : nullptr;
         *(void**)(s + 0x30) = desc;
     }
     // Try path 2: datasource IsA ComponentEntity
     else {
-        bool isEntity = dataSource && fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+        bool isEntity = dataSource && ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
         if (isEntity && dataSource) {
             // Re-verify and extract description at entity+0x28
-            isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+            isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
             void* entity = isEntity ? dataSource : nullptr;
             *(void**)(s + 0x30) = *(void**)((uintptr_t)entity + 0x28);
         }
         // Try path 3: datasource IsA Object::Internal (UI Element)
         else {
             uint32_t internalTypeId = UI::Element::TypeId();
-            bool isInternal = dataSource && fn_IsDerivedFrom(dataSource, internalTypeId);
+            bool isInternal = dataSource && ::Object::IsDerivedFromNullSafe(dataSource, internalTypeId);
             void* internalObj = isInternal ? dataSource : nullptr;
 
             uint8_t bpBuf[8];
@@ -198,7 +198,7 @@ void BuildRequirementUI::OnCreated() {
                 // Element_GetUserData can return NULL (element carries no user data);
                 // Runtime IsDerivedFrom has no null-this check (crash READ 0x0 at +0xC039A),
                 // so guard exactly as the +0x28 datasource probes above do.
-                isBuild = userData && fn_IsDerivedFrom(userData, ComponentDescription::TypeId());
+                isBuild = userData && ::Object::IsDerivedFromNullSafe(userData, ComponentDescription::TypeId());
                 void* descResolved = isBuild ? userData : nullptr;
                 // Standalone divergence: the in-game Toolbar sub-item buttons store
                 // their building DESCRIPTION entity as userData (toolbardialog.cpp
@@ -258,7 +258,7 @@ void BuildRequirementUI::OnCreated() {
         void* imageElem = FindDialogElem(dialogInst, "imageIcon");
 
         // Check if element is an Object::Internal for InternalBasePtr wrapping
-        bool isInternal = fn_IsDerivedFrom(imageElem, UI::Element::TypeId());
+        bool isInternal = ::Object::IsDerivedFromNullSafe(imageElem, UI::Element::TypeId());
         void* checked = isInternal ? imageElem : nullptr;
         uint8_t ibpBuf[8];
         new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -286,7 +286,7 @@ void BuildRequirementUI::OnCreated() {
     {
         void* textElem = FindDialogElem(dialogInst, "textTitle");
 
-        bool isInternal = fn_IsDerivedFrom(textElem, UI::Element::TypeId());
+        bool isInternal = ::Object::IsDerivedFromNullSafe(textElem, UI::Element::TypeId());
         void* checked = isInternal ? textElem : nullptr;
         uint8_t ibpBuf[8];
         new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -331,7 +331,7 @@ void BuildRequirementUI::OnCreated() {
         while (labelElem) {
 
             // Wrap as InternalBasePtr
-            bool isInternal = fn_IsDerivedFrom(labelElem, UI::Element::TypeId());
+            bool isInternal = ::Object::IsDerivedFromNullSafe(labelElem, UI::Element::TypeId());
             void* checked = isInternal ? labelElem : nullptr;
             uint8_t ibpBuf[8];
             new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge

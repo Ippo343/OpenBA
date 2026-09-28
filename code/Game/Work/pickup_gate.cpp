@@ -23,7 +23,9 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"      // B3R: 0x14012cd80
+#include "object/Internal.h"
+#include <new>
 #include <cstdint>
 #include "Object/factory_registration.h"
 #include "Component/StorageLocationDescription.h"   // ENDGAME B.3.8 CB3: StorageLocationDescription::TypeId()
@@ -33,28 +35,9 @@
 
 namespace {
 
-typedef void*    (*PG_IbpCtor_t)(void* ibp, void* obj);
-typedef bool     (*PG_IsDerivedFrom_t)(void* obj, uint32_t tid);
-typedef void*    (*PG_FindStorage_t)(int64_t entityInner, void* retIBP);      // 0x140006270
-typedef char     (*PG_CanAdd_t)(void* storageComp, int64_t resEntity, int qty); // 0x14012cd80
-
-PG_IbpCtor_t       s_pg_IbpCtor     = nullptr;
-PG_IsDerivedFrom_t s_pg_IsDerived   = nullptr;
-PG_FindStorage_t   s_pg_FindStorage = nullptr;
-PG_CanAdd_t        s_pg_CanAdd      = nullptr;
-
-bool s_pg_init = false;
-
-void Ensure_PickupGate() {
-    if (s_pg_init) return;
-    s_pg_init = true;
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_pg_IbpCtor   = *reinterpret_cast<PG_IbpCtor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a98)) s_pg_IsDerived = *reinterpret_cast<PG_IsDerivedFrom_t*>(s);
-    if (!s_pg_IbpCtor)   s_pg_IbpCtor   = reinterpret_cast<PG_IbpCtor_t>(fn_InternalBasePtr_Ctor);
-    if (!s_pg_IsDerived) s_pg_IsDerived = reinterpret_cast<PG_IsDerivedFrom_t>(fn_IsDerivedFrom);
-    s_pg_FindStorage = reinterpret_cast<PG_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_pg_CanAdd      = reinterpret_cast<PG_CanAdd_t>(ResolveAddr(Module::Exe, 0x14012cd80));
-}
+// B3R: slot 0x140152a90 is ??0InternalBasePtr (placement new below), slot 0x140152a98
+// is the raw member Object::Base::IsDerivedFrom; 0x140006270 and 0x14012cd80 are
+// called by name.
 
 // ⚠️ THE TWO SEARCHES BELOW WALK DIFFERENT STRUCTURES WITH DIFFERENT LAYOUTS. They look
 // interchangeable and are NOT — sharing one helper crashed twice, once per call site:
@@ -77,7 +60,7 @@ void* PG_FindCompByTid(uintptr_t entity, uint32_t tid) {
         if (!comp) continue;
         if (reinterpret_cast<Object::Base*>(comp)->Type() != tid) continue;   // B.3.8 bridge
         void* c = *slot;
-        return (s_pg_IsDerived && s_pg_IsDerived(c, tid)) ? c : nullptr;
+        return reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(tid) ? c : nullptr;
     }
     return nullptr;
 }
@@ -93,7 +76,7 @@ void* PG_FindDescByTid(uintptr_t descObj, uint32_t tid) {
         if (!d) continue;
         if (reinterpret_cast<Object::Base*>(d)->Type() != tid) continue;   // B.3.8 bridge
         void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        return (s_pg_IsDerived && s_pg_IsDerived(c, tid)) ? c : nullptr;
+        return reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(tid) ? c : nullptr;
     }
     return nullptr;
 }
@@ -109,7 +92,6 @@ void* PG_FindDescByTid(uintptr_t descObj, uint32_t tid) {
 // without re-deriving why the original is safe here.
 // ============================================================
 int PickupGate_AcceptMask_12d560(int64_t self) {
-    Ensure_PickupGate();
     uintptr_t s = static_cast<uintptr_t>(self);
 
     void* obj = *reinterpret_cast<void**>(s + 0x18);
@@ -118,14 +100,12 @@ int PickupGate_AcceptMask_12d560(int64_t self) {
     // StorageLocationDescription::TypeId() call, so calling it directly is not a
     // behaviour change (ENDGAME B.3.9 D5 note).
     uint32_t tidDesc = StorageLocationDescription::TypeId();
-    void* desc = (s_pg_IsDerived && s_pg_IsDerived(obj, tidDesc)) ? obj : nullptr;
+    void* desc = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(tidDesc) ? obj : nullptr;
 
     int mask = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
     if (mask == 0) {
         void* storIBP = nullptr;
-        void* ret = s_pg_FindStorage
-                        ? s_pg_FindStorage(*reinterpret_cast<int64_t*>(s + 0x10), &storIBP)
-                        : nullptr;
+        void* ret = WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(s + 0x10), &storIBP);
         mask = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(ret) + 0x3c);
     }
     return mask;
@@ -140,7 +120,6 @@ int PickupGate_AcceptMask_12d560(int64_t self) {
 // when the component is absent. Kept faithful.
 // ============================================================
 uint64_t PickupGate_Accepts_12d990(int64_t slComp, int64_t resEntity) {
-    Ensure_PickupGate();
 
     uint32_t tidRawDsc = RawMaterialDescription::TypeId();
     // NOTE: description-list layout (+0x28/+0x30), NOT the component layout — see the
@@ -166,7 +145,6 @@ uint64_t PickupGate_Accepts_12d990(int64_t slComp, int64_t resEntity) {
 // loop does run; the "empty list" hypothesis was ruled out by probe, not assumed.
 // ============================================================
 uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amount) {
-    Ensure_PickupGate();
     uintptr_t tm = static_cast<uintptr_t>(townMgr);
 
     // `if (0 < (int)param_1[1])` — count is read as the low 32 bits of field[1].
@@ -183,17 +161,18 @@ uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amou
         if (!ent) continue;
         void* slComp = PG_FindCompByTid(ent, tidSLComp);
         void* slIbp = nullptr;
-        if (s_pg_IbpCtor) s_pg_IbpCtor(&slIbp, slComp);
+        new (&slIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(slComp));
 
         // The original re-reads the list entry (and re-CheckPtrs) for the second scan.
         ent = *reinterpret_cast<uintptr_t*>(slot);
         if (!ent) continue;
         void* stComp = PG_FindCompByTid(ent, tidStor);
         void* stIbp = nullptr;
-        if (s_pg_IbpCtor) s_pg_IbpCtor(&stIbp, stComp);
+        new (&stIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(stComp));
 
         if (PickupGate_Accepts_12d990(reinterpret_cast<int64_t>(slIbp), resEntity)) {
-            if (s_pg_CanAdd && s_pg_CanAdd(stIbp, resEntity, amount)) return 1u;
+            if (static_cast<char>(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(stIbp), resEntity, amount)))   // the door read AL
+                return 1u;
         }
     }
     return 0u;

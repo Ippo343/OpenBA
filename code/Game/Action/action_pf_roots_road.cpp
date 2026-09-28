@@ -8,22 +8,24 @@
 //
 // Registration point: RegisterPfRootsRoadBatch() in standalone/reg_pf_roots_road.cpp.
 //
-// Sub-callees (all called via ResolveAddr(Module::Exe, ...); none duplicated here):
-//   0x14009c170 Pf_FloodFillRegion (registered — PF A* batch)
-//   0x1400a8c90 fine-cell dirty    (registered — PF road batch)
-//   0x1400a6fe0 enqueue cmd2       (registered — PF A* batch)
-//   0x1400ab150 region-dirty       (registered — PF road batch)
-//   0x14009f3e0 grid->world        (registered — move/CNR wave)
-//   0x14001a6e0 BST/AVL delete     (registered — Work BST wave)
-//   0x14009f2f0 / 0x14009e0e0      (THIS file — registered in this batch)
-//   0x1400af370 road-mesh rebuild  (NOT YET registered — DEFERRED; called via
-//                                   ResolveAddr per brief, no-op until its own pass)
+// Sub-callees (called by name, B3R; none duplicated here):
+//   0x14009c170 Pf_FloodFillRegion_9c170 (PF A* batch)
+//   0x1400a8c90 Pf_FineCellDirty_a8c90   (PF road batch)
+//   0x1400a6fe0 Pf_EnqueueCmd2_a6fe0     (PF A* batch)
+//   0x1400ab150 Pf_RegionDirty4_b150     (PF road batch)
+//   0x14009f3e0 Reimpl_MapGetTerrainPos  (grid->world)
+//   0x14001a6e0 WorkBST_BSTRemove_a6e0   (BST/AVL delete, Work BST wave)
+//   0x14009f2f0 / 0x14009e0e0            (THIS file)
+//   0x1400af370 Pf_RoadMeshRebuild_f370  (road-mesh rebuild, PF road batch)
 //
 // g_pGameWorldSingleton + X  ==  (uintptr_t)*g_pGameWorldSingleton + X.
 
 #include "engine_funcs.h"
 #include "perf_terrain.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"       // WorkBST_BSTRemove_a6e0
+#include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
+#include "Game/exe_constants.h"    // kRdata_*
+#include <cstring>
 #include "math/Math.h"
 #include <cstdint>
 
@@ -32,45 +34,15 @@ typedef unsigned short ushort;
 
 namespace {
 
-// Exe sub-callees (resolved lazily; all registered except af370 which is deferred).
-typedef void  (*fn_FloodFill_t)(int* map, uint32_t cell, uint16_t label, int seed);  // 0x14009c170
-typedef void  (*fn_FineCellDirty_t)(int64_t obj, int x, int y);                       // 0x1400a8c90
-typedef void  (*fn_EnqueueCmd2_t)(int64_t self, uint32_t a, void* b, void* c);        // 0x1400a6fe0
-typedef void  (*fn_RegionDirty_t)(int64_t game, int x, int y);                        // 0x1400ab150
-typedef float* (*fn_GridToWorld_t)(int* map, float* out, float* in, char flag, void* p); // 0x14009f3e0
-typedef void  (*fn_BstDelete_t)(int64_t* hdr, void* node);                            // 0x14001a6e0
-typedef void  (*fn_RoadMeshRebuild_t)(int64_t game, uint* map);                       // 0x1400af370
-
-static fn_FloodFill_t      s_fn_Flood       = nullptr;
-static fn_FineCellDirty_t  s_fn_FineDirty   = nullptr;
-static fn_EnqueueCmd2_t    s_fn_EnqCmd2     = nullptr;
-static fn_RegionDirty_t    s_fn_RegionDirty = nullptr;
-static fn_GridToWorld_t    s_fn_GridToWorld = nullptr;
-static fn_BstDelete_t      s_fn_BstDelete   = nullptr;
-static fn_RoadMeshRebuild_t s_fn_RoadMesh   = nullptr;
-
-// Float constants from the exe .rdata (used by e0e0's tile-centre math).
-static const float* s_pDAT_172230 = nullptr;  // 0x140172230
-static const float* s_pDAT_172114 = nullptr;  // 0x140172114 (0.5f cell-centre half)
-
-static bool s_init = false;
-static void EnsureFns() {
-    if (s_init) return;
-    s_fn_Flood       = reinterpret_cast<fn_FloodFill_t>(ResolveAddr(Module::Exe, 0x14009c170));
-    s_fn_FineDirty   = reinterpret_cast<fn_FineCellDirty_t>(ResolveAddr(Module::Exe, 0x1400a8c90));
-    s_fn_EnqCmd2     = reinterpret_cast<fn_EnqueueCmd2_t>(ResolveAddr(Module::Exe, 0x1400a6fe0));
-    s_fn_RegionDirty = reinterpret_cast<fn_RegionDirty_t>(ResolveAddr(Module::Exe, 0x1400ab150));
-    s_fn_GridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_BstDelete   = reinterpret_cast<fn_BstDelete_t>(ResolveAddr(Module::Exe, 0x14001a6e0));
-    s_fn_RoadMesh    = reinterpret_cast<fn_RoadMeshRebuild_t>(ResolveAddr(Module::Exe, 0x1400af370));
-    s_pDAT_172230    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172230));
-    s_pDAT_172114    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_init = true;
-}
+// Float constants (Game/exe_constants.h) used by e0e0's tile-centre math:
+// 0x140172230 (256.0f, a bit pattern) and 0x140172114 (0.5f cell-centre half).
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 } // namespace
 
-// Forward declares for the two same-file helpers 9c640 calls via ResolveAddr.
+// Forward declares} // namespace
+
+// Forward declares for the two same-file helpers 9c640 calls.
 void Pf_SetTileRoadFlag_9f2f0(int* param_1, int param_2, uint param_3);
 void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int param_4, int param_5);
 
@@ -84,7 +56,6 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
 // param_4 = the seed/scratch passed through to 9c170.
 // ============================================================
 void Pf_ZoneRefresh_9c480(int* param_1, void* param_2, void* param_3, int param_4) {
-    EnsureFns();
     uint uVar1;
     uint64_t uVar2;
     uint64_t uVar3;
@@ -112,7 +83,7 @@ void Pf_ZoneRefresh_9c480(int* param_1, void* param_2, void* param_3, int param_
             do {
                 if (((1 << (*reinterpret_cast<uint8_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x20) + 0x29 + uVar5) & 0x1f) & 0xe1fU) != 0) &&
                     (*reinterpret_cast<short*>(*reinterpret_cast<int64_t*>(param_1 + 0x20) + 0x26 + uVar5) == 0)) {
-                    if (s_fn_Flood) s_fn_Flood(param_1, static_cast<int>(uVar2), static_cast<uint16_t>(sVar6), param_4);
+                    Pf_FloodFillRegion_9c170(param_1, static_cast<uint32_t>(static_cast<int>(uVar2)), static_cast<uint16_t>(sVar6), param_4);   // 0x14009c170
                     sVar6 = sVar6 + 1;
                 }
                 uVar5 = uVar5 + 0x30;
@@ -135,7 +106,6 @@ void Pf_ZoneRefresh_9c480(int* param_1, void* param_2, void* param_3, int param_
 //   (a6fe0) on the worker thread @map+0x1a carrying (param_2, param_3, uVar6).
 // ============================================================
 void Pf_SetTileRoadFlag_9f2f0(int* param_1, int param_2, uint param_3) {
-    EnsureFns();
     uint8_t bVar1;
     uint8_t bVar2;
     int64_t lVar3;
@@ -162,11 +132,11 @@ void Pf_SetTileRoadFlag_9f2f0(int* param_1, int param_2, uint param_3) {
     if ((((uVar5 & 0xe1f) != 0) && ((1u << (bVar4 & 0x1f) & 0x1e0U) != 0)) ||
         (((uVar5 & 0x1e0) != 0) &&
          (uVar5 = 1u << (bVar4 & 0x1f), uVar6 = static_cast<uint64_t>(uVar5), (uVar5 & 0xe1f) != 0))) {
-        if (s_fn_FineDirty)
-            s_fn_FineDirty(*reinterpret_cast<int64_t*>(param_1 + 0x1c), param_2 % *param_1, param_2 / *param_1);
+        Pf_FineCellDirty_a8c90(   // 0x1400a8c90
+            *reinterpret_cast<int64_t*>(param_1 + 0x1c), param_2 % *param_1, param_2 / *param_1);
     }
-    if (s_fn_EnqCmd2)
-        s_fn_EnqCmd2(*reinterpret_cast<int64_t*>(param_1 + 0x1a), static_cast<uint32_t>(param_2),
+    Pf_EnqueueCmd2_a6fe0(   // 0x1400a6fe0
+        *reinterpret_cast<int64_t*>(param_1 + 0x1a), static_cast<uint32_t>(param_2),
                      reinterpret_cast<void*>(static_cast<uint64_t>(param_3)), reinterpret_cast<void*>(uVar6));
 }
 
@@ -182,7 +152,6 @@ void Pf_SetTileRoadFlag_9f2f0(int* param_1, int param_2, uint param_3) {
 //   the coarse offset uses local_88/local_84 (the SECOND Vector3 built after f3e0).
 // ============================================================
 void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int param_4, int param_5) {
-    EnsureFns();
     uint uVar1;
     int64_t lVar2;
     float fVar3;
@@ -199,8 +168,8 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
     Math::Vector3 co;   // co.x=local_88, co.y=local_84, co.z=local_80
     Math::Vector3 local_78;  // Ghidra `Vector3 local_78 [80]` — only [0] was ever used (B.3.1: one Vector3)
 
-    fVar4 = s_pDAT_172230 ? *s_pDAT_172230 : 0.0f;
-    fVar3 = s_pDAT_172114 ? *s_pDAT_172114 : 0.0f;
+    fVar4 = RdataF(kRdata_140172230);   // 0x140172230
+    fVar3 = kRdata_140172114;           // 0x140172114
     lVar2 = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110);
     for (; param_3 <= param_5; param_3 = param_3 + 1) {
         if (param_2 <= param_4) {
@@ -212,22 +181,20 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
                 local_78 = Math::Vector3(
                                     static_cast<float>(iVar5 % static_cast<int>(uVar1)) - fVar7,
                                     static_cast<float>(iVar5 / static_cast<int>(uVar1)) - fVar7, 0.0f);
-                if (s_fn_GridToWorld)
-                    s_fn_GridToWorld(reinterpret_cast<int*>(param_1), gw, reinterpret_cast<float*>(&local_78), '\0', nullptr);   // B.3.1 bridge
+                Reimpl_MapGetTerrainPos(reinterpret_cast<int*>(param_1), gw, reinterpret_cast<float*>(&local_78), '\0', nullptr);   // B.3.1 bridge
                 *reinterpret_cast<uint32_t*>(&gw[2]) = 0;  // original: local_90 = 0 (4-byte zero into the z slot)
                 fVar7 = static_cast<float>(*reinterpret_cast<int*>(lVar2 + 0xc0) >> 1);
                 co = Math::Vector3(gw[0] + fVar7, gw[1] + fVar7, 0.0f);
                 *reinterpret_cast<short*>(*reinterpret_cast<int64_t*>(lVar2 + 0xd8) +
                     ((static_cast<int64_t>(*reinterpret_cast<int*>(lVar2 + 0xd0)) * static_cast<int64_t>(static_cast<int>(co.y)) +
                       static_cast<int64_t>(static_cast<int>(co.x))) * 2)) = static_cast<short>(static_cast<int>(fVar4 * 0.0f));
-                if (s_fn_RegionDirty)
-                    s_fn_RegionDirty(lVar2, static_cast<int>(co.x), static_cast<int>(co.y));
+                Pf_RegionDirty4_b150(lVar2, static_cast<int>(co.x), static_cast<int>(co.y));   // 0x1400ab150
                 iVar6 = iVar6 + 1;
             } while (iVar6 <= param_4);
         }
     }
-    if (s_fn_RoadMesh)
-        s_fn_RoadMesh(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110), param_1);
+    Pf_RoadMeshRebuild_f370(   // 0x1400af370
+        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110), param_1);
 }
 
 // ============================================================
@@ -244,7 +211,6 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
 // ============================================================
 
 void Pf_FinalizeRoadTile_9c640(uint* param_1, int param_2, uint8_t param_3, uint param_4) {
-    EnsureFns();
     int* piVar1;
     int iVar2;
     int iVar3;
@@ -269,7 +235,7 @@ void Pf_FinalizeRoadTile_9c640(uint* param_1, int param_2, uint8_t param_3, uint
         }
         if (*piVar1 <= param_2) {
             if (param_2 <= *piVar1) {
-                if (s_fn_BstDelete) s_fn_BstDelete(reinterpret_cast<int64_t*>(param_1 + 0x3a), piVar1);
+                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(param_1 + 0x3a), piVar1);   // 0x14001a6e0
                 goto LAB_14009c6d2;
             }
             piVar1 = *reinterpret_cast<int**>(piVar1 + 6);   // right child (+0x18)
@@ -278,6 +244,6 @@ void Pf_FinalizeRoadTile_9c640(uint* param_1, int param_2, uint8_t param_3, uint
         piVar1 = *reinterpret_cast<int**>(piVar1 + 4);       // left child (+0x10)
     } while (true);
 LAB_14009c6d2:
-    if (s_fn_RoadMesh)
-        s_fn_RoadMesh(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110), param_1);
+    Pf_RoadMeshRebuild_f370(   // 0x1400af370
+        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x110), param_1);
 }

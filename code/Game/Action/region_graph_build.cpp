@@ -25,7 +25,7 @@
 //   an empty array) NEITHER f9e0 NOR e420 is reached.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 
 // Sub-callee in code/Game/Action/action_pf_pools.cpp (exe 0x14000f9e0).
@@ -36,9 +36,9 @@ namespace {
 // MemAlloc/MemFree shorthands matching the decompile's
 // System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr) free-function form.
 static inline void* MemAlloc(int64_t size, int align) {
-    return fn_MemAlloc(g_pMemAllocSingleton, size, align);
+    return System::MemoryAllocator::MemAlloc(size, align);
 }
-static inline void MemFree(void* p) { fn_MemFreeStatic(p); }
+static inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 } // namespace
 

@@ -22,8 +22,12 @@
 #include "Work/HarvestOrchard.h"
 #include "Work/harvestorchard_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_constants.h"     // B3R: kRdata_140172114
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -38,204 +42,30 @@ extern "C" void OrchardDiag_NoteHarvestConstructed();
 extern "C" void OrchardDiag_NoteHarvestExecuted();
 
 // ============================================================
-// Local function pointers (resolved once by HarvestOrchard_ResolveFuncs)
+// Sub-functions, called by name (B3R; Work/Action/Component/Tutorial/Game headers)
 // ============================================================
-
-typedef int (*HO_AutoPickup_CheckAssignments_t)(uintptr_t self, void* citizenRef);
-typedef void* (*HO_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
-typedef void* (*HO_FindComp_MeshInstance_t)(uintptr_t entity, void* outIBP);
-typedef void* (*HO_FindComp_OrchardDesc_t)(uintptr_t entity, void* outIBP);  // FUN_140005440
-typedef void* (*HO_FindComp_NatRes_t)(uintptr_t entity, void* outIBP);
-typedef void* (*HO_FindComp_DescComp_t)(uintptr_t entity, void* outIBP);     // FUN_14000a0b0
-typedef void  (*HO_MeshInstance_SetVisible_t)(void* meshInst, uint8_t group, char visible);
-typedef int   (*HO_CalcMaxWorkers_t)(uintptr_t matDesc);
-typedef int   (*HO_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
-typedef bool  (*HO_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
-typedef float*(*HO_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
-                                     char param4, uint32_t* outNormal);
-typedef void* (*HO_FindComp_RawMaterial_t)(uintptr_t compList, void* outPtr);
-
-// FUN_1400bb7b0 -- builds the gather-raw-material action chain on the citizen's AI task list.
-// Signature taken from the PORTED body (code/Game/Work/work_act_rawmat.cpp, which was
-// reversed from 0x1400bb7b0 itself), not from this call site:
-//   (citizenIBP, workId u32, workEntity int64*, worldPos float*, rawMatP2 u64,
-//    flag6 char, rawMatP3 FLOAT, rawMatP8 u32, param9 u32)
-// ⚠ The last three used to be declared (u32, int, float) here — one slot out of step with
-// the callee on both type and meaning. Args 5+ travel in 8-byte stack slots, so nothing
-// crashed; the callee simply read a float's bit pattern as a count and an int slot as a
-// float. Fixed 2026-08-10 together with the three call-site arguments below.
-typedef void (*HO_OrchardHarvest_Ctor_t)(void* citizenIBP, uint32_t workId, void* workEntity,
-                                          float* worldPos, uintptr_t rawMatP2, char flag6,
-                                          float rawMatP3, uint32_t rawMatP8, uint32_t param9);
-static HO_OrchardHarvest_Ctor_t s_fn_OrchardHarvest_Ctor = nullptr;
-
-// BST operations
-typedef void* (*HO_BST_Insert_t)(void* treeRoot, void* outResult, uint32_t* keyData);
-typedef void  (*HO_BST_Remove_t)(void* treeRoot, void* node);
-typedef void  (*HO_BST_Serialize_t)(void* treeRoot, void* serializer);
-typedef uint8_t (*HO_ValidateTask_t)(uintptr_t self, uintptr_t param2, void* ibp, void** outTask);
-typedef void  (*HO_TaskCancel_t)(void* taskList);
-typedef void* (*HO_FindPosComp_t)(uintptr_t entity, void* outIBP);
-// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
-// is gone.
-typedef void  (*HO_BST_RecursiveFree_t)(void* treeRoot, void* node);
-typedef void* (*HO_MemAlloc_t)(int64_t size, int align);
-
-static HO_AutoPickup_CheckAssignments_t s_fn_AutoPickup_CheckAssignments = nullptr;
-static HO_FindComp_MatDesc_t s_fn_FindComp_MatDesc = nullptr;
-static HO_FindComp_MeshInstance_t s_fn_FindComp_MeshInstance = nullptr;
-static HO_FindComp_OrchardDesc_t s_fn_FindComp_OrchardDesc = nullptr;
-static HO_FindComp_NatRes_t s_fn_FindComp_NatRes = nullptr;
-static HO_FindComp_DescComp_t s_fn_FindComp_DescComp = nullptr;
-static HO_MeshInstance_SetVisible_t s_fn_MeshInstance_SetVisible = nullptr;
-static HO_CalcMaxWorkers_t s_fn_CalcMaxWorkers = nullptr;
-static HO_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr;
-static HO_Map_CanPathTo_t s_fn_Map_CanPathTo = nullptr;
-static HO_GetTerrainPos_t s_fn_GetTerrainPos = nullptr;
-static HO_FindComp_RawMaterial_t s_fn_FindComp_RawMaterial = nullptr;
-static HO_BST_Insert_t s_fn_BST_Insert = nullptr;
-static HO_BST_Remove_t s_fn_BST_Remove = nullptr;
-static HO_BST_Serialize_t s_fn_BST_Serialize = nullptr;
-static HO_ValidateTask_t s_fn_ValidateTask = nullptr;
-static HO_TaskCancel_t s_fn_TaskCancel = nullptr;
-static HO_FindPosComp_t s_fn_FindPosComp = nullptr;
-static HO_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
-static HO_MemAlloc_t s_fn_MemAlloc = nullptr;
-static void* HO_MemAllocViaSingleton(int64_t size, int align) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
-}
-
-// Type IDs
-
-// Float constants
-static float* s_fHalfCellOffset = nullptr;
-
-// Vtable pointers
-
-static bool s_ho_funcs_resolved = false;
-
-// ============================================================
-// Resolution
-// ============================================================
-bool HarvestOrchard_ResolveFuncs() {
-    if (s_ho_funcs_resolved) return true;
-
-    s_fn_AutoPickup_CheckAssignments = reinterpret_cast<HO_AutoPickup_CheckAssignments_t>(
-        ResolveAddr(Module::Exe, 0x1400e3db0));
-    s_fn_FindComp_MatDesc = reinterpret_cast<HO_FindComp_MatDesc_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_FindComp_MeshInstance = reinterpret_cast<HO_FindComp_MeshInstance_t>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-    s_fn_FindComp_OrchardDesc = reinterpret_cast<HO_FindComp_OrchardDesc_t>(
-        ResolveAddr(Module::Exe, 0x140005440));
-    s_fn_FindComp_NatRes = reinterpret_cast<HO_FindComp_NatRes_t>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-    s_fn_FindComp_DescComp = reinterpret_cast<HO_FindComp_DescComp_t>(
-        ResolveAddr(Module::Exe, 0x14000a0b0));
-    s_fn_MeshInstance_SetVisible = reinterpret_cast<HO_MeshInstance_SetVisible_t>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_fn_CalcMaxWorkers = reinterpret_cast<HO_CalcMaxWorkers_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_fn_Map_FindNearestPassable = reinterpret_cast<HO_Map_FindNearestPassable_t>(
-        ResolveAddr(Module::Exe, 0x14009ccf0));
-    s_fn_Map_CanPathTo = reinterpret_cast<HO_Map_CanPathTo_t>(
-        ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_GetTerrainPos = reinterpret_cast<HO_GetTerrainPos_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_FindComp_RawMaterial = reinterpret_cast<HO_FindComp_RawMaterial_t>(
-        ResolveAddr(Module::Exe, 0x140006330));
-    s_fn_OrchardHarvest_Ctor = reinterpret_cast<HO_OrchardHarvest_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400bb7b0));
-    s_fn_BST_Insert = reinterpret_cast<HO_BST_Insert_t>(
-        ResolveAddr(Module::Exe, 0x140029a40));
-    s_fn_BST_Remove = reinterpret_cast<HO_BST_Remove_t>(
-        ResolveAddr(Module::Exe, 0x14001ca60));  // was 0x140029a60 (mid-function; true remove entry is 0x14001ca60)
-    s_fn_BST_Serialize = reinterpret_cast<HO_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140029de0));
-    s_fn_ValidateTask = reinterpret_cast<HO_ValidateTask_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_TaskCancel = reinterpret_cast<HO_TaskCancel_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_FindPosComp = reinterpret_cast<HO_FindPosComp_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_BST_RecursiveFree = reinterpret_cast<HO_BST_RecursiveFree_t>(
-        ResolveAddr(Module::Exe, 0x14000e320));
-
-    // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
-    // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
-    // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
-    // Validate slot called it: EXEC of 0 the first harvest season a field had stale
-    // tasks (BANISHED_STRESS town at 10x, 2026-09-03). Allocate through the real
-    // allocator singleton instead; fn_MemFreeStatic pairs with it.
-    s_fn_MemAlloc = &HO_MemAllocViaSingleton;
-
-    // Float constants
-    s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-
-    // Vtable pointers
-    // ⚠ These two were 0x140161380 / 0x140161300, which are NOT vtables: the bytes there
-    // read {0x140006b10, "ForesterWork\0"} and {0x140006b10, "FishingWork\0"} — the RTTI
-    // type descriptors that sit 0x20 in front of those classes' real vtables. An adjacency
-    // error. They resolved to 0 (harmless), but registering them under these names would
-    // have installed a pointer to ASCII string data as this object's vtable during the
-    // dtor chain. The real base vtables are 0x140160fa0 / 0x140161a80 — the values
-    // AutoPickupWork.h has carried all along, byte-verified against retail Work_Ctor25
-    // (0x1400f730a: LEA RAX,[0x140161a80]).
-
-    bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
-              s_fn_FindComp_MeshInstance && s_fn_FindComp_OrchardDesc &&
-              s_fn_FindComp_NatRes && s_fn_FindComp_DescComp &&
-              s_fn_MeshInstance_SetVisible && s_fn_CalcMaxWorkers &&
-              s_fn_Map_FindNearestPassable && s_fn_Map_CanPathTo &&
-              s_fn_GetTerrainPos &&
-              s_fn_FindComp_RawMaterial && s_fn_OrchardHarvest_Ctor &&
-              s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
-              s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
-              s_fn_BST_RecursiveFree &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && g_pGameWorldSingleton && s_fHalfCellOffset;
-
-    s_ho_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[HarvestOrchard] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    // The MISSING list must cover EVERY term of `ok`. It used to print 9 of 35, so a
-    // failure in any of the other 26 reported "FAILED" with no reason at all — which is
-    // exactly what state 11's first live run hit (see reference_diagnostics_must_report_outcomes).
-    if (!ok) {
-        #define HO_MISS(cond, name) do { if (!(cond)) printf("  MISSING: %s\n", name); } while (0)
-        HO_MISS(s_fn_AutoPickup_CheckAssignments, "AutoPickup_CheckAssignments");
-        HO_MISS(s_fn_FindComp_MatDesc, "FindComp_MatDesc");
-        HO_MISS(s_fn_FindComp_MeshInstance, "FindComp_MeshInstance");
-        HO_MISS(s_fn_FindComp_OrchardDesc, "FindComp_OrchardDesc");
-        HO_MISS(s_fn_FindComp_NatRes, "FindComp_NatRes");
-        HO_MISS(s_fn_FindComp_DescComp, "FindComp_DescComp");
-        HO_MISS(s_fn_MeshInstance_SetVisible, "MeshInstance_SetVisible");
-        HO_MISS(s_fn_CalcMaxWorkers, "CalcMaxWorkers");
-        HO_MISS(s_fn_Map_FindNearestPassable, "Map_FindNearestPassable");
-        HO_MISS(s_fn_Map_CanPathTo, "Map_CanPathTo");
-        HO_MISS(s_fn_GetTerrainPos, "GetTerrainPos");
-        HO_MISS(s_fn_FindComp_RawMaterial, "FindComp_RawMaterial");
-        HO_MISS(s_fn_OrchardHarvest_Ctor, "OrchardHarvest_Ctor");
-        HO_MISS(s_fn_BST_Insert, "BST_Insert");
-        HO_MISS(s_fn_BST_Remove, "BST_Remove");
-        HO_MISS(s_fn_BST_Serialize, "BST_Serialize");
-        HO_MISS(s_fn_ValidateTask, "ValidateTask");
-        HO_MISS(s_fn_TaskCancel, "TaskCancel");
-        HO_MISS(s_fn_FindPosComp, "FindPosComp");
-        HO_MISS(s_fn_BST_RecursiveFree, "BST_RecursiveFree");
-        HO_MISS(fn_InternalBasePtr_Ctor, "fn_InternalBasePtr_Ctor");
-        HO_MISS(fn_IsDerivedFrom, "fn_IsDerivedFrom");
-        HO_MISS(g_pGameWorldSingleton, "g_pGameWorldSingleton");
-        HO_MISS(s_fHalfCellOffset, "fHalfCellOffset (0x140172114)");
-        #undef HO_MISS
-    }
-#endif
-
-    return ok;
-}
+//   AutoPickupWork::CheckAssignments (0x1400e3db0)  WorkGrid_AutoPickup_e3db0
+//   0x140003050 FindComponent MaterialDesc          WorkBase_FindComponent_3050
+//   0x140002f90 FindComponent MeshInstance          WorkBase_FindComponent_2f90
+//   0x140005440 FindComponent OrchardDescription    WorkAcc_FindComponent_5440
+//   0x1400052c0 FindComponent NaturalResource       WorkBase_FindComponent_52c0
+//   0x14000a0b0 FindComponent (description comp)    WorkLeaf_FindComp_a0b0
+//   0x14012c3f0 MeshInstance set visible            CitizenComp_FUN_14012c3f0
+//   0x14012e5c0 CalcMaxWorkers                      WorkComponent_CalcMaxWorkers
+//   0x14009ccf0 Map_FindNearestPassable             WorkGrid_FindCell_9ccf0
+//   0x1400a00f0 Map_CanPathTo                       WorkBase_ValidateCell_a00f0
+//               (a uint64 whose low byte is the bool; read through uint8_t)
+//   0x14009f3e0 GetTerrainPos                       Reimpl_MapGetTerrainPos
+//   0x140006330 FindComponent RawMaterial           WorkAcc_FindComponent_6330
+//   0x1400bb7b0 orchard harvest action ctor         WorkAct_GatherWorkCtor_bb7b0
+//   0x140029a40 / 0x14001ca60 / 0x140029de0 cell BST insert / remove / serialize
+//                                                   WorkCellBST_Insert_9a40 / _Remove_ca60 / _Serialize_9de0
+//   0x1400f7100 ValidateTask                        WorkBase_ValidateTask_f7100
+//   0x1400c5400 cancel work                         WorkBase_TaskListCleanup_c5400
+//   0x140002e10 FindPositionComponent               AttendanceComponent_GetJobHostComponent
+//   0x14000e320 BST recursive free                  WorkBase_TreeNodeFree_e320
+//   MemAlloc                                        System::MemoryAllocator::MemAlloc
+//   DAT_140172114 = 0.5f                            kRdata_140172114
 
 
 // ============================================================
@@ -277,7 +107,7 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
 
     // Step 1: Check auto-pickup
     uintptr_t checkRef = citizenRef;
-    int checkResult = s_fn_AutoPickup_CheckAssignments(selfAddr, &checkRef);
+    int checkResult = WorkGrid_AutoPickup_e3db0(selfAddr, &checkRef);
     if (checkResult == 2) {
         return 2;
     }
@@ -285,20 +115,20 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
     // Step 2: Find components
     uintptr_t* workEntityPtr = (uintptr_t*)(selfAddr + 0x10);
     uintptr_t matDescIBP = 0;
-    s_fn_FindComp_MatDesc(*workEntityPtr, &matDescIBP);
+    WorkBase_FindComponent_3050(*workEntityPtr, &matDescIBP);
 
     uintptr_t orchardDescIBP[2] = {0};
-    s_fn_FindComp_OrchardDesc(*workEntityPtr, orchardDescIBP);
+    WorkAcc_FindComponent_5440(*workEntityPtr, orchardDescIBP);
 
     // Get OrchardDescription object
     void* descObj = *(void**)(orchardDescIBP[0] + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descObj, OrchardDescription::TypeId());
+    bool isDerived = Object::IsDerivedFromNullSafe(descObj, OrchardDescription::TypeId());
     void* orchardDesc = isDerived ? descObj : nullptr;
 
     // Check tree count vs max workers
     int treeCount = (int)selfQ[10]; // _field50
     if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
     if (treeCount > *(int*)(matDescIBP + 0x30)) {
@@ -314,8 +144,8 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
     bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
 
     uintptr_t meshIBP[2] = {0};
-    s_fn_FindComp_MeshInstance(*workEntityPtr, meshIBP);
-    s_fn_MeshInstance_SetVisible((void*)(*(uintptr_t*)meshIBP), 2, atCapacity ? 1 : 0);
+    WorkBase_FindComponent_2f90(*workEntityPtr, meshIBP);
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)(*(uintptr_t*)meshIBP)), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
         return 1;
@@ -370,14 +200,14 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
                 } else {
                     // Check pathfinding
                     int srcCellIdx = *(int*)(*(uintptr_t*)(orchardDescIBP[0] + 0x50) + (uintptr_t)i * 0x28);
-                    int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
+                    int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {
-                        uint64_t canPath = (uint64_t)s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
+                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
                         if ((char)canPath != 0) {
                             // Check NaturalResource component
                             uintptr_t natResIBP = 0;
-                            s_fn_FindComp_NatRes(entityAtCell, &natResIBP);
+                            WorkBase_FindComponent_52c0(entityAtCell, &natResIBP);
 
                             if (natResIBP == 0) {
                                 validityArray[i] = 0;
@@ -389,18 +219,18 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
 
                                 // Get description component from entity
                                 uintptr_t descCompIBP = 0;
-                                s_fn_FindComp_DescComp(entityAtCell, &descCompIBP);
+                                WorkLeaf_FindComp_a0b0(entityAtCell, &descCompIBP);
 
                                 void* descCompObj = *(void**)(descCompIBP + 0x18);
                                 // DAT_1401c4288 = FruitDescription (ENDGAME B.3.9 D5: by
                                 // cell, not the legacy variable name "DescComp").
-                                bool isDescDerived = fn_IsDerivedFrom(descCompObj, FruitDescription::TypeId());
+                                bool isDescDerived = Object::IsDerivedFromNullSafe(descCompObj, FruitDescription::TypeId());
                                 void* descComp = isDescDerived ? descCompObj : nullptr;
 
                                 // Get raw material reference
                                 uintptr_t rawMatRef = *(uintptr_t*)((uintptr_t)descComp + 0x30);
                                 uintptr_t rawMatIBP = 0;
-                                s_fn_FindComp_RawMaterial(rawMatRef, &rawMatIBP);
+                                WorkAcc_FindComponent_6330(rawMatRef, &rawMatIBP);
 
                                 // Arg 7 of the action ctor. Read from the DESCRIPTION-COMPONENT
                                 // holder (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the
@@ -414,14 +244,14 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
                                 float rawMatAmount = *(float*)(descCompIBP + 0x30);
 
                                 // Calculate world position
-                                float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
+                                float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
                                 Math::Vector3 targetPos(
                                     (float)(nearestCell % *mapGrid) - halfOffset,
                                     (float)(nearestCell / *mapGrid) - halfOffset,
                                     0.0f);
 
                                 float pathPos[4];
-                                s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
+                                Reimpl_MapGetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
                                 // Get entity ref from orchard description
                                 uintptr_t entityRef = *(uintptr_t*)(orchardDescIBP[0] + 0x10);
@@ -456,10 +286,10 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
                                     }
                                 }
 
-                                s_fn_OrchardHarvest_Ctor(
+                                WorkAct_GatherWorkCtor_bb7b0(
                                     actionBuf,                     // citizenIBP
                                     (uint32_t)selfQ[4],            // work id / priority (self+0x20)
-                                    &entityRef,                    // entity ref ptr
+                                    reinterpret_cast<int64_t*>(&entityRef),                    // entity ref ptr
                                     pathPos,                       // position
                                     rawMatRef,                     // raw material ref
                                     altCellFlag,                   // alternating-cell flag
@@ -497,7 +327,7 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
                                 uintptr_t citizenIBPVal = *(uintptr_t*)citizenIBP;
                                 keyBuf[2] = (uint32_t)citizenIBPVal;
                                 keyBuf[3] = (uint32_t)(citizenIBPVal >> 32);
-                                s_fn_BST_Insert((void*)(selfAddr + 0x48), insertResult, keyBuf);
+                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult, keyBuf);
 
                                 // Mark cell as used
                                 validityArray[i] = 0;
@@ -548,7 +378,7 @@ int HarvestOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
         } else if (param4 > *node) {
             node = *(int**)(node + 8);
         } else {
-            s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
             break;
         }
     }
@@ -576,7 +406,7 @@ int HarvestOrchard::OnCancel(void* /*param2*/, void* /*param3*/, int param4) {
         } else if (param4 > *node) {
             node = *(int**)(node + 8);
         } else {
-            s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
             break;
         }
     }
@@ -604,7 +434,7 @@ int HarvestOrchard::Cleanup() {
         }
 
         uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
 
         count = *(int*)(selfAddr + 0x50);
     }
@@ -645,7 +475,7 @@ int HarvestOrchard::Validate() {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2);
 
-        uint8_t valid = s_fn_ValidateTask(selfAddr, uintptr_t{0}, (void*)&ibpData, nullptr);
+        uint8_t valid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), uintptr_t{0}, (void*)&ibpData, nullptr);
 
         if (valid == 0) {
             uint32_t newCount = collectCount + 1;
@@ -656,7 +486,7 @@ int HarvestOrchard::Validate() {
                         newCap = newCount * 3;
                     }
                     collectCapacity = newCap;
-                    int* newArray = (int*)s_fn_MemAlloc((int64_t)newCap << 2, 4);
+                    int* newArray = (int*)System::MemoryAllocator::MemAlloc((int64_t)newCap << 2, 4);
                     currentArray = newArray;
 
                     uint32_t copyStart = 0;
@@ -671,7 +501,7 @@ int HarvestOrchard::Validate() {
                         }
                     }
                     if (collectArray != newArray) {
-                        fn_MemFreeStatic(collectArray);
+                        System::MemoryAllocator::MemFree(collectArray);
                     }
                     collectArray = newArray;
                 } else {
@@ -719,14 +549,14 @@ cleanup:
                 } else if (collectArray[k] > *bstNode) {
                     bstNode = *(int**)(bstNode + 8);
                 } else {
-                    s_fn_BST_Remove(root, bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);
                     break;
                 }
             }
         }
     }
 
-    fn_MemFreeStatic(currentArray ? currentArray : collectArray);
+    System::MemoryAllocator::MemFree(currentArray ? currentArray : collectArray);
     return collectCount == 0 ? 1 : 0;
 }
 
@@ -740,7 +570,7 @@ void* HarvestOrchard::GetTarget(void* outPtr) {
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t posCompIBP[2] = {0};
-    s_fn_FindPosComp(entity, posCompIBP);
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entity), posCompIBP);
 
     *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)posCompIBP + 0x48);
 
@@ -763,7 +593,7 @@ void HarvestOrchard::Persist(void* stream) {
     alignas(8) uint8_t serializerBuf2[16];
     ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf2);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializerBuf2);
 
     int cellCount = *(int*)(selfAddr + 0x60);
     int cellCountBuf[2] = { cellCount, 0 };
@@ -801,15 +631,15 @@ void HarvestOrchard::Persist(void* stream) {
 HarvestOrchard::~HarvestOrchard() {
     uintptr_t selfAddr = (uintptr_t)this;
 
-    fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
+    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x58));
     *(uintptr_t*)(selfAddr + 0x58) = 0;
     *(uintptr_t*)(selfAddr + 0x60) = 0;
 
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
-        s_fn_BST_RecursiveFree((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
-        fn_MemFreeStatic(bstRoot);
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
+        System::MemoryAllocator::MemFree(bstRoot);
     }
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
@@ -824,11 +654,9 @@ int HarvestOrchard::GetPriority() {
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The three stamps are the compiler's. HarvestOrchard_ResolveFuncs
-// wires the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The three stamps are the compiler's.
 HarvestOrchard::HarvestOrchard()
     : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(nullptr) {
-    HarvestOrchard_ResolveFuncs();
 }
 
 // ============================================================

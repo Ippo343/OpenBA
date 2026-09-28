@@ -30,7 +30,7 @@
 // ============================================================================
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Thread.h"     // ENDGAME B.3.4b System callers
@@ -41,44 +41,15 @@ typedef unsigned int  uint;
 
 namespace {
 
-// ---- Runtime-DLL exports (resolved by mangled name, exactly as action_pf_astar.cpp).
-typedef void* (*fn_MemAllocSA_t)(uint64_t size, int align);
+// ---- Exe sub-callees in this batch's closure, called by name (B3R):
+// 0x1400a6a30 Pf_EnqueueCmd1_a6a30, 0x1400a68b0 Pf_EnqueueCmd4_a68b0,
+// 0x1400a6b20 Pf_EnqueueCmd0_a6b20, 0x1400a6c10 Pf_EnqueueTradeRoute_a6c10,
+// 0x1400a6d50 ActMv_CopyPathFromFinder_a6d50, 0x1400a6430 Pf_WorkerApplyCmd_a6430.
 
-static fn_MemAllocSA_t    s_fn_MemAllocSA  = nullptr;
-
-// ---- Exe sub-callees in this batch's closure (all registered elsewhere). ----
-// 0x1400a6a30 Pf_EnqueueCmd1 (reg), 0x1400a68b0 Pf_EnqueueCmd4 (reg),
-// 0x1400a6b20 Pf_EnqueueCmd0 (reg), 0x1400a6c10 Pf_EnqueueTradeRoute (reg),
-// 0x1400a6d50 ActMv_CopyPathFromFinder (reg).
-typedef void (*fn_EnqCmd1_t)(int64_t self, int idx, void* val, void* p4);          // 0x1400a6a30
-typedef void (*fn_EnqCmd4_t)(int64_t self, uint8_t a, void* b, void* c);           // 0x1400a68b0
-typedef void (*fn_EnqCmd0_t)(int64_t self, int v, void* p3, void* p4);             // 0x1400a6b20
-typedef int* (*fn_EnqTrade_t)(int64_t self, int* ret, void* a2, void* a3);         // 0x1400a6c10
-typedef int  (*fn_CopyPath_t)(void* self, void* ret, void* p5, int p6);            // 0x1400a6d50
-
-static fn_EnqCmd1_t  s_fn_EnqCmd1  = nullptr;
-static fn_EnqCmd4_t  s_fn_EnqCmd4  = nullptr;
-static fn_EnqCmd0_t  s_fn_EnqCmd0  = nullptr;
-static fn_EnqTrade_t s_fn_EnqTrade = nullptr;
-static fn_CopyPath_t s_fn_CopyPath = nullptr;
-
-static bool s_init = false;
-static void EnsureFns() {
-    if (s_init) return;
-    s_fn_MemAllocSA  = reinterpret_cast<fn_MemAllocSA_t>(ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-
-    s_fn_EnqCmd1  = reinterpret_cast<fn_EnqCmd1_t>(ResolveAddr(Module::Exe, 0x1400a6a30));
-    s_fn_EnqCmd4  = reinterpret_cast<fn_EnqCmd4_t>(ResolveAddr(Module::Exe, 0x1400a68b0));
-    s_fn_EnqCmd0  = reinterpret_cast<fn_EnqCmd0_t>(ResolveAddr(Module::Exe, 0x1400a6b20));
-    s_fn_EnqTrade = reinterpret_cast<fn_EnqTrade_t>(ResolveAddr(Module::Exe, 0x1400a6c10));
-    s_fn_CopyPath = reinterpret_cast<fn_CopyPath_t>(ResolveAddr(Module::Exe, 0x1400a6d50));
-    s_init = true;
-}
-
-// ---- Shared enqueue tail: identical to action_pf_astar.cpp's EnqueueNode. ----
+// ---- Shared enqueue tail// ---- Shared enqueue tail: identical to action_pf_astar.cpp's EnqueueNode. ----
 static void EnqueueNode(int64_t self, uint32_t* localCmd) {
     reinterpret_cast<System::CriticalSection*>(self + 0x30)->Lock();   // B.3.4b bridge
-    uint32_t* node = s_fn_MemAllocSA ? reinterpret_cast<uint32_t*>(s_fn_MemAllocSA(0x20, 8)) : nullptr;
+    uint32_t* node = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x20, 8));
     if (node != nullptr) {
         node[0] = localCmd[0];
         node[1] = localCmd[1];
@@ -120,7 +91,6 @@ static void EnqueueNode(int64_t self, uint32_t* localCmd) {
 // changes nothing else. See reference_discarded_return_reenables_gated_branch.
 int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
                          void* param_4, int64_t param_5, int param_6) {
-    EnsureFns();
     // The request slot is TWO ADJACENT ints, not two independent locals: a6c10 ->
     // TradeComponent_impl_6240 (0x1400a6240) writes BOTH `*param_2` (slot index, retail
     // [RSP+0x30]) and `param_2[1]` (slot key, [RSP+0x34]) through the single pointer it
@@ -133,15 +103,13 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
     int& slotKey   = slot[1];
 
     // FUN_1400a6b20(param_1, (int)param_4, param_3, param_4)
-    if (s_fn_EnqCmd0)
-        s_fn_EnqCmd0(param_1, static_cast<int>(reinterpret_cast<uint64_t>(param_4)),
-                     reinterpret_cast<void*>(param_3), param_4);
+    Pf_EnqueueCmd0_a6b20(param_1, static_cast<int>(reinterpret_cast<uint64_t>(param_4)),
+                         reinterpret_cast<void*>(param_3), param_4);
 
     // TradeComponent_impl_6c10(param_1, slot, param_2, param_3 & 0xffffffff)
-    if (s_fn_EnqTrade)
-        s_fn_EnqTrade(param_1, slot,
-                      reinterpret_cast<void*>(static_cast<uint64_t>(param_2)),
-                      reinterpret_cast<void*>(param_3 & 0xffffffff));
+    Pf_EnqueueTradeRoute_a6c10(param_1, slot,
+                               reinterpret_cast<void*>(static_cast<uint64_t>(param_2)),
+                               reinterpret_cast<void*>(param_3 & 0xffffffff));
 
     do {
         if (slotIndex < *reinterpret_cast<int*>(param_1 + 0x168)) {
@@ -149,9 +117,8 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
             if (*reinterpret_cast<int*>(base + 4 + static_cast<int64_t>(slotIndex) * 0x18) == slotKey &&
                 *reinterpret_cast<char*>(base + static_cast<int64_t>(slotIndex) * 0x18) != '\0') {
                 // MoveTo_helper_6d50(param_1, slot, param_5, param_6)
-                if (!s_fn_CopyPath) return 0;
-                return s_fn_CopyPath(reinterpret_cast<void*>(param_1), slot,
-                                     reinterpret_cast<void*>(param_5), param_6);
+                return ActMv_CopyPathFromFinder_a6d50(reinterpret_cast<void*>(param_1), slot,
+                                                      reinterpret_cast<void*>(param_5), param_6);
             }
         }
         // Application::Application::YieldToThreads(*g_pAppSingleton)
@@ -171,7 +138,6 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
 // signature: (Thread* param_1, uint32 param_2, uint64 param_3, void* param_4)
 // ============================================================================
 void Pf_EnqueueCmd3_a6f00(int64_t param_1, uint32_t param_2, uint64_t param_3, void* param_4) {
-    EnsureFns();
     uint32_t local[4];
     local[0] = 3;
     local[1] = param_2;
@@ -181,11 +147,8 @@ void Pf_EnqueueCmd3_a6f00(int64_t param_1, uint32_t param_2, uint64_t param_3, v
         EnqueueNode(param_1, local);
     } else {
         // FUN_1400a6430(param_1, &local, param_3, param_4) — apply directly on worker.
-        // a6430 lives in action_pf_astar.cpp; call via its registered exe address.
-        typedef void (*fn_Apply_t)(int64_t, uint32_t*, void*, void*);
-        static fn_Apply_t s_apply = nullptr;
-        if (!s_apply) s_apply = reinterpret_cast<fn_Apply_t>(ResolveAddr(Module::Exe, 0x1400a6430));
-        if (s_apply) s_apply(param_1, local, reinterpret_cast<void*>(param_3), param_4);
+        // a6430 lives in action_pf_astar.cpp.
+        Pf_WorkerApplyCmd_a6430(param_1, local, reinterpret_cast<void*>(param_3), param_4);
     }
 }
 
@@ -197,7 +160,7 @@ void Pf_EnqueueCmd3_a6f00(int64_t param_1, uint32_t param_2, uint64_t param_3, v
 //   write enqueues a type-3 worker command (Pf_EnqueueCmd3_a6f00).
 //   param_8 is the rotation selector (0x5a / 0xb4 / 0x10e).
 //   param_1 is int*; BYTE offsets: *param_1 (row stride), +0x80 grid base.
-//   Closure: fn_InternalBasePtr_Ctor (engine_funcs) + 0x1400a6f00 (this file).
+//   Closure: Object::InternalBasePtr ctor + 0x1400a6f00 (this file).
 // signature mirrors the decompile:
 //   (int* param_1, longlong* param_2, int param_3, int param_4, uint param_5,
 //    int param_6, longlong* param_7, int param_8)
@@ -298,32 +261,29 @@ LAB_clear:
 // ============================================================================
 void RoadTool_sub_ce00(int64_t param_1, uint param_2, uint param_3, uint64_t param_4,
                        void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8) {
-    EnsureFns();
     int64_t pTVar1 = *reinterpret_cast<int64_t*>(param_1 + 0x68);
     uint64_t uVar2 = param_4;
     void* p4 = reinterpret_cast<void*>(param_4);
     void* p4b = reinterpret_cast<void*>(uVar2);
-    if (s_fn_EnqCmd1) {
-        s_fn_EnqCmd1(pTVar1, 0, reinterpret_cast<void*>(1), p4);
-        s_fn_EnqCmd1(pTVar1, 1, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 2, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 3, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 4, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 5, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 6, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 7, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 8, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 9, reinterpret_cast<void*>(1), p4b);
-        s_fn_EnqCmd1(pTVar1, 10, reinterpret_cast<void*>(1), p4b);
+    {
+        Pf_EnqueueCmd1_a6a30(pTVar1, 0, reinterpret_cast<void*>(1), p4);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 1, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 2, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 3, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 4, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 5, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 6, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 7, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 8, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 9, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 10, reinterpret_cast<void*>(1), p4b);
     }
     // RoadTool_sub_ce00_sub_68b0(self, 0, 0, 0)
-    if (s_fn_EnqCmd4)
-        s_fn_EnqCmd4(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0, nullptr, nullptr);
+    Pf_EnqueueCmd4_a68b0(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0, nullptr, nullptr);
     // RoadTool_sub_ce00_sub_68b0(self, 0, param_7, param_8)
-    if (s_fn_EnqCmd4)
-        s_fn_EnqCmd4(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0,
-                     reinterpret_cast<void*>(static_cast<uint64_t>(param_7)),
-                     reinterpret_cast<void*>(static_cast<uint64_t>(param_8)));
+    Pf_EnqueueCmd4_a68b0(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0,
+                         reinterpret_cast<void*>(static_cast<uint64_t>(param_7)),
+                         reinterpret_cast<void*>(static_cast<uint64_t>(param_8)));
     // RoadTool_helper_6e30(self, param_3, param_4 & 0xffffffff, param_2, param_6, 0x800)
     RoadTool_helper_6e30(*reinterpret_cast<int64_t*>(param_1 + 0x68),
                          param_3, param_4 & 0xffffffff,

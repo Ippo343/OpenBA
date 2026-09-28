@@ -30,7 +30,9 @@
 #include "MoveTo.h"
 #include "engine_funcs.h"
 #include "perf_terrain.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActMv_*, Pf_SpatialProximityQuery_92260
+#include "Work/exe_bodies.h"     // WorkImpl_Sqrtf_132010
+#include "Game/exe_constants.h"  // kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "math/Math.h"
 #include <cstdio>
@@ -42,18 +44,15 @@
 #include "Component/PopulationComponent.h"
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h -- MoveTo-specific helpers)
+// Helpers, called by name (B3R)
 // ============================================================
 
 // ENDGAME B.3.1 step 2: Math::Vector3::Serialize was read from the IAT slot at
 // 0x140152a68; it is now a direct member call on Math::Vector3.
 
-// FUN_140022970 -- ExternalPtr serialize (path description)
-static void (*s_fn_ExternalPtr_Serialize)(void* extPtr, void* serializer) = nullptr;
-
-// fn_IsDerivedFrom via IAT at 0x140152a98
-static bool (*s_fn_IsDerivedFrom)(void* obj, uint32_t typeId) = nullptr;
+//   0x140022970 ActMv_ExternalPtrSerialize_22970 -- ExternalPtr serialize (path description)
+//   import slot 0x140152a98 ?IsDerivedFrom@Base@Object@@QEBA_NI@Z -> Object::Base::IsDerivedFrom
+//               (both readers test the object for null first)
 
 // ENDGAME B.3.1 step 2: the Math value-type helpers below used to be read from the
 // exe's IAT dispatch slots, each with the DLL boundary's (this, hidden-retptr, args)
@@ -72,138 +71,24 @@ static bool (*s_fn_IsDerivedFrom)(void* obj, uint32_t typeId) = nullptr;
 // "other" operand garbage and produced NaN distances) cannot recur: the operand is
 // now a real function parameter.
 
-// FUN_140132010 -- sqrtf implementation
-static float (*s_fn_Sqrtf)(float val) = nullptr;
+//   0x140132010 WorkImpl_Sqrtf_132010      -- sqrtf implementation
+//   0x14010a1f0 ActMv_SetAnimation_a1f0    (AnimalComponent_impl_a1f0) -- set animation on
+//               entity (entity_ptr, animId, param3_float, param4_float)
+//   0x140092260 Pf_SpatialProximityQuery_92260 -- bridge entity query near position
+//               (mapBridges, outResult, position, radius, flags, excludeEntity)
+//   0x1400c8c10 ActMv_PathSetup_c8c10      (MoveTo_helper_8c10) -- path setup (world pos to
+//               cell, A* query)
+//   0x1400c8d20 ActMv_UpdateFacing_c8d20   (MoveTo_sub_8d20) -- update facing direction
+//               toward next waypoint
+//   0x14009e550 ActMv_SetTerrainCosts_e550 / 0x14009cfb0 ActMv_PathfinderQuery_9cfb0 (not
+//               called in this file)
+//   0x1400a6d50 ActMv_CopyPathFromFinder_a6d50 (MoveTo_helper_6d50) -- copy path from
+//               pathfinder result into path array
 
-// AnimalComponent_impl_a1f0 -- set animation on entity
-// (entity_ptr, animId, param3_float, param4_float)
-static void (*s_fn_SetAnimation)(void* entity, uint32_t animId, float p3, float p4) = nullptr;
-
-// FUN_140092260 -- bridge entity query near position
-// (mapBridges, outResult, position, radius, flags, excludeEntity)
-static void* (*s_fn_BridgeQuery)(void* mapBridges, void* outResult, void* position,
-                                  void* radius, int flags, void* excludeEntity) = nullptr;
-
-// MoveTo_helper_8c10 -- path setup (world pos to cell, A* query)
-static void* (*s_fn_PathSetup)(void* self, void* worldPos, void* param3, void* param4) = nullptr;
-
-// MoveTo_sub_8d20 -- update facing direction toward next waypoint
-static void (*s_fn_UpdateFacing)(void* self) = nullptr;
-
-// MoveTo_helper_e550 -- set pathfinder terrain costs based on bridge flag
-static void (*s_fn_SetTerrainCosts)(void* mapGrid, void* pathfinder, int bridgeFlag, void* param4) = nullptr;
-
-// FUN_14009cfb0 -- pathfinder query (start->end cell, with terrain flags)
-static void* (*s_fn_PathfinderQuery)(void* mapGrid, void* outResult, uint64_t terrainFlags,
-                                      uint32_t startCell, uint32_t endCell) = nullptr;
-
-// MoveTo_helper_6d50 -- copy path from pathfinder result into path array
-static int (*s_fn_CopyPathFromFinder)(void* pathfinder, void* slotIdPtr,
-                                       void* pathArray, int maxNodes) = nullptr;
-
-// fn_MapGetTerrainPos -- already in engine_funcs.h but we resolve locally too
-// CharacterComponent_impl_f3e0 -- same function as fn_MapGetTerrainPos
-
-// Constants
+// Constants (Game/exe_constants.h)
 // DAT_1401720d4 = 0.05f (minimum distance threshold)
 // DAT_140172114 = 0.5f (half-cell offset for cell-to-world conversion)
 // DAT_14017214c = 1.0f (g_fUVScale, used for animation params)
-static float* s_fMinDistSq = nullptr;   // 0x1401720d4 = 0.05f
-static float* s_fHalfCell = nullptr;    // 0x140172114 = 0.5f
-
-static bool s_moveto_funcs_resolved = false;
-static bool s_moveto_funcs_attempted = false;
-
-// ============================================================
-// Resolution -- called once from Install
-// ============================================================
-bool MoveTo_ResolveFuncs() {
-    // PERF (critical): cache after the FIRST attempt, not only on full success.
-    // MoveTo_Execute lazy-calls this every frame (the action is built by the exe
-    // action-ctor path, not our ctor). In standalone two pointers in the `ok` set —
-    // the type-id globals 0x1401c7078 / 0x1401c4790, used ONLY by Serialize, never by
-    // the per-frame Execute/AbstractImpl path — are "NOT IMPLEMENTED" and never
-    // resolve, so `ok` stayed false and `s_moveto_funcs_resolved` never latched. That
-    // made this whole ~30-lookup (ResolveAddr + ResolveExport) resolver re-run on EVERY
-    // MoveTo_Execute call → ~2.8 ms per citizen per frame, which alone dragged the live
-    // citizen sim to ~15 fps. Latching on "attempted" makes it run exactly once.
-    if (s_moveto_funcs_attempted) return s_moveto_funcs_resolved;
-    s_moveto_funcs_attempted = true;
-
-    uintptr_t iat;
-
-    // ExternalPtr serialize (FUN_140022970)
-    s_fn_ExternalPtr_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x140022970));
-
-    // IsDerivedFrom via IAT at 0x140152a98
-    iat = ResolveAddr(Module::Exe, 0x140152a98);
-    if (iat) s_fn_IsDerivedFrom = *reinterpret_cast<bool(**)(void*, uint32_t)>(iat);
-
-    // (B.3.1: the Math::Vector2/Vector3 slots that used to be resolved here are
-    //  direct member calls now — see the header comment above.)
-
-    // sqrtf (FUN_140132010)
-    s_fn_Sqrtf = reinterpret_cast<float(*)(float)>(
-        ResolveAddr(Module::Exe, 0x140132010));
-
-    // SetAnimation (AnimalComponent_impl_a1f0 at 0x14010a1f0)
-    s_fn_SetAnimation = reinterpret_cast<void(*)(void*, uint32_t, float, float)>(
-        ResolveAddr(Module::Exe, 0x14010a1f0));
-
-    // BridgeQuery (FUN_140092260)
-    s_fn_BridgeQuery = reinterpret_cast<void*(*)(void*, void*, void*, void*, int, void*)>(
-        ResolveAddr(Module::Exe, 0x140092260));
-
-    // PathSetup (MoveTo_helper_8c10 at 0x1400c8c10)
-    s_fn_PathSetup = reinterpret_cast<void*(*)(void*, void*, void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400c8c10));
-
-    // UpdateFacing (MoveTo_sub_8d20 at 0x1400c8d20)
-    s_fn_UpdateFacing = reinterpret_cast<void(*)(void*)>(
-        ResolveAddr(Module::Exe, 0x1400c8d20));
-
-    // SetTerrainCosts (MoveTo_helper_e550 at 0x14009e550)
-    s_fn_SetTerrainCosts = reinterpret_cast<void(*)(void*, void*, int, void*)>(
-        ResolveAddr(Module::Exe, 0x14009e550));
-
-    // PathfinderQuery (FUN_14009cfb0)
-    s_fn_PathfinderQuery = reinterpret_cast<void*(*)(void*, void*, uint64_t, uint32_t, uint32_t)>(
-        ResolveAddr(Module::Exe, 0x14009cfb0));
-
-    // CopyPathFromFinder (MoveTo_helper_6d50 at 0x1400a6d50)
-    s_fn_CopyPathFromFinder = reinterpret_cast<int(*)(void*, void*, void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400a6d50));
-
-    // Constants
-    s_fMinDistSq = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720d4));
-    s_fHalfCell = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-
-    bool ok = s_fn_ExternalPtr_Serialize &&
-              s_fn_IsDerivedFrom &&
-              s_fn_Sqrtf && s_fn_SetAnimation &&
-              s_fn_BridgeQuery && s_fn_PathSetup && s_fn_UpdateFacing &&
-              s_fn_SetTerrainCosts && s_fn_PathfinderQuery && s_fn_CopyPathFromFinder &&
-              s_fMinDistSq && s_fHalfCell &&
-              g_pGameWorldSingleton && g_fUVScale;
-
-#ifdef _DEBUG
-    printf("[MoveTo] ResolveFuncs: ExtPtrSer=%p IsDerived=%p\n",
-           (void*)s_fn_ExternalPtr_Serialize, (void*)s_fn_IsDerivedFrom);
-    printf("[MoveTo]   Sqrt=%p SetAnim=%p BridgeQ=%p PathSetup=%p UpdFace=%p\n",
-           (void*)s_fn_Sqrtf, (void*)s_fn_SetAnimation,
-           (void*)s_fn_BridgeQuery, (void*)s_fn_PathSetup, (void*)s_fn_UpdateFacing);
-    printf("[MoveTo]   SetCost=%p PFQuery=%p CopyPath=%p\n",
-           (void*)s_fn_SetTerrainCosts, (void*)s_fn_PathfinderQuery,
-           (void*)s_fn_CopyPathFromFinder);
-    printf("[MoveTo]   minDist=%p halfCell=%p\n",
-           (void*)s_fMinDistSq, (void*)s_fHalfCell);
-    if (!ok) printf("[MoveTo] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_moveto_funcs_resolved = ok;
-    return ok;
-}
 
 // ============================================================
 // Helper: clamp int to [0, mapSize-1]
@@ -234,7 +119,6 @@ static inline int WorldToCell(int mapSize, float worldX, float worldY) {
 //   +0x478 speedMultiplier
 // ============================================================
 void MoveTo::Persist(void* stream) {
-    MoveTo_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser0[24];
     alignas(8) uint8_t ser1[24];
@@ -250,14 +134,14 @@ void MoveTo::Persist(void* stream) {
     // Target entity IBP (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        bool valid = s_fn_IsDerivedFrom(_field28, CharacterComponent::TypeId());
+        bool valid = reinterpret_cast<Object::Base*>(_field28)->IsDerivedFrom(CharacterComponent::TypeId());   // B.3.x bridge
         if (!valid) {
             _field28 = nullptr;
         }
     }
 
     // Path description ExternalPtr (+0x30)
-    s_fn_ExternalPtr_Serialize(s + 0x30, ser1);
+    ActMv_ExternalPtrSerialize_22970(s + 0x30, ser1);   // 0x140022970
 
     // Path node count (+0x64) and current index (+0x60) as ints
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x64), nullptr);   // B.3.4 bridge
@@ -285,7 +169,7 @@ void MoveTo::Persist(void* stream) {
         void* tempIBP = nullptr;
         reinterpret_cast<Object::InternalBasePtr*>(&tempIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
         if (tempIBP != nullptr) {
-            s_fn_IsDerivedFrom(tempIBP, PopulationComponent::TypeId());
+            reinterpret_cast<Object::Base*>(tempIBP)->IsDerivedFrom(PopulationComponent::TypeId());   // B.3.x bridge
         }
     } else {
         // Version > 0: serialize bridge flag (+0x470)
@@ -310,7 +194,6 @@ void MoveTo::Persist(void* stream) {
 // Otherwise sets up A* path and returns 1 (moving) or 2 (no path).
 // ============================================================
 int  MoveTo::AbstractImpl(void* actionStack) {
-    MoveTo_ResolveFuncs();   // lazy-resolve: action may be built by Pf_MoveToCtor_9170 (pf_ctors), which never calls our ctor's ResolveFuncs
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
@@ -331,10 +214,10 @@ int  MoveTo::AbstractImpl(void* actionStack) {
     float dy = curY - destY;
     Math::Vector2 vec2(dx, dy);
     float dotResult = vec2.Dot(vec2).v;        // this-dot → dx²+dy²
-    float dist = s_fn_Sqrtf(dotResult);
+    float dist = WorkImpl_Sqrtf_132010(dotResult);
 
     // If already close enough, return 0 (arrived)
-    if (dist < *s_fMinDistSq) {
+    if (dist < kRdata_1401720d4) {
         return 0;
     }
 
@@ -349,7 +232,7 @@ int  MoveTo::AbstractImpl(void* actionStack) {
 
     // Set up A* path from current position to destination
     // param3 reuses the vec2 pointer, param4 comes from actionStack (R9 in original)
-    s_fn_PathSetup(this, worldPos, &vec2, actionStack);
+    ActMv_PathSetup_c8c10(this, worldPos, &vec2, actionStack);   // 0x1400c8c10
 
     // Check path setup result
     int32_t pathVersion = *(int32_t*)(s + 0x24);
@@ -370,12 +253,12 @@ int  MoveTo::AbstractImpl(void* actionStack) {
     }
 
     // Path is ready -- update facing direction toward first waypoint
-    s_fn_UpdateFacing(this);
+    ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
 
     // Set walk animation on the target entity
     targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x468);
-    s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
+    ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
 
     return 1;
 }
@@ -411,7 +294,6 @@ static inline bool InlBoxIsect(const void* a, const void* b) {
 }
 
 int  MoveTo::Execute(void* actionStack, void* time) {
-    MoveTo_ResolveFuncs();
     (void)time;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
@@ -457,7 +339,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
                 }
 
                 // Copy path nodes from pathfinder into our local array
-                int nodeCount = s_fn_CopyPathFromFinder(
+                int nodeCount = ActMv_CopyPathFromFinder_a6d50(   // 0x1400a6d50
                     (void*)pathfinder, s + 0x20, s + 0x68, 0x100);
                 *(int32_t*)(s + 0x64) = nodeCount;
 
@@ -469,12 +351,12 @@ int  MoveTo::Execute(void* actionStack, void* time) {
                 _field60 = 1;
 
                 // Update facing direction
-                s_fn_UpdateFacing(this);
+                ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
 
                 // Set walk animation
                 targetEntity = *(uintptr_t*)(s + 0x28);
                 uint32_t walkAnimId = *(uint32_t*)(s + 0x468);
-                s_fn_SetAnimation((void*)targetEntity, walkAnimId, *g_fUVScale, *g_fUVScale);
+                ActMv_SetAnimation_a1f0((void*)targetEntity, walkAnimId, kRdata_14017214c, kRdata_14017214c);
                 return 1;
             }
         }
@@ -509,9 +391,9 @@ int  MoveTo::Execute(void* actionStack, void* time) {
 
         Math::Vector2 dotVec(diffVec.x, diffVec.y);
         float dotOut = dotVec.Dot(dotVec).v;   // this-dot → dx²+dy²
-        float distToGoal = s_fn_Sqrtf(dotOut);
+        float distToGoal = WorkImpl_Sqrtf_132010(dotOut);
 
-        if (distToGoal < *s_fMinDistSq) {
+        if (distToGoal < kRdata_1401720d4) {
             // Close enough -- arrived
             return 0;
         }
@@ -562,7 +444,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
         // Path exhausted -- set idle animation and reset path
         targetEntity = *(uintptr_t*)(s + 0x28);
         uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
-        s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
+        ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
         _field60 = -1;
         return 1;
     }
@@ -597,7 +479,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
             speed = *(float*)(pathData + 0x38);
         } else {
             // Default speed (e.g., grass) -- use g_fUVScale (1.0)
-            speed = *g_fUVScale;
+            speed = kRdata_14017214c;
         }
     }
 
@@ -622,7 +504,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
     _field60 = pathIndex + 1;
 
     // Update facing direction for next segment
-    s_fn_UpdateFacing(this);
+    ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
 
     return 1;
 }
@@ -633,7 +515,6 @@ int  MoveTo::Execute(void* actionStack, void* time) {
 // is found facing the same direction, sets the road flag (+0x474).
 // ============================================================
 void MoveTo::Enter(void*, void*) {
-    MoveTo_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Get target entity's character component position
@@ -647,14 +528,15 @@ void MoveTo::Enter(void*, void*) {
     position[2] = *(float*)(charComp + 0x160);
 
     // Query for nearby bridge entities
-    float radius = *s_fHalfCell;   // 0.5f search radius
+    float radius = kRdata_140172114;   // 0.5f search radius
     uintptr_t bridgeResult = 0;
     void* bridgeMgr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x88);
     uintptr_t excludeEntity = *(uintptr_t*)(s + 0x28);
     uint8_t bridgeExclude[8];
     *(uintptr_t*)bridgeExclude = excludeEntity;
 
-    s_fn_BridgeQuery(bridgeMgr, &bridgeResult, position, &radius, 0, bridgeExclude);
+    Pf_SpatialProximityQuery_92260(static_cast<float*>(bridgeMgr), reinterpret_cast<int64_t*>(&bridgeResult),   // 0x140092260
+                                   position, &radius, 0, bridgeExclude);
 
     if (bridgeResult != 0) {
         // Found a nearby entity -- check if it's closer (not the target entity)
@@ -691,13 +573,12 @@ void MoveTo::Enter(void*, void*) {
 // Reset character animation to idle (walk anim at +0x46c).
 // ============================================================
 void MoveTo::Exit(void* actionStack) {
-    MoveTo_ResolveFuncs();
     (void)actionStack;
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
-    s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
+    ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
 }
 
 // ============================================================
@@ -705,12 +586,11 @@ void MoveTo::Exit(void* actionStack) {
 // Same body as Exit -- reset character animation to idle.
 // ============================================================
 void MoveTo::CheckEntity() {
-    MoveTo_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
-    s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
+    ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
 }
 
 // ============================================================
@@ -719,7 +599,6 @@ void MoveTo::CheckEntity() {
 // the entity at target->+0x10.
 // ============================================================
 bool MoveTo::GetTarget(void* param) {
-    MoveTo_ResolveFuncs();
     uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
@@ -769,13 +648,11 @@ MoveTo::MoveTo()
 // [9] 0x1400c8480
 
 void* MoveTo::CreateNewObject() {
-    MoveTo_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(MoveTo), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MoveTo());
 }
 void* MoveTo::CreateInPlaceObject(void* storage) {
-    MoveTo_ResolveFuncs();
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MoveTo());
 }

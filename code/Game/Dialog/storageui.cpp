@@ -38,6 +38,7 @@
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // StorageUI::Startup is the per-frame content refresh (driven via the +0x40
 // W_OnUpdate hack in standalone). Its _DEBUG bring-up logs used to fire every
@@ -69,11 +70,9 @@ namespace storageui_sa {
 
 // ENDGAME B.3.9 CG2: TypeId_ComponentEntity -> ComponentEntity::TypeId(),
 // TypeId_RawMaterialDescription -> RawMaterialDescription::TypeId(). Both class
-// statics always answer, so the lazy-fill retires.
-void EnsureGlobals() {
-    // g_pExternalFactorySingleton is filled by engine_funcs init in standalone.
-    // (ENDGAME B.3.9 TR: fn_FindComponent_Storage reads StorageComponent::TypeId().)
-}
+// statics always answer, so the lazy-fill retires. (ENDGAME B.3.9 TR:
+// fn_FindComponent_Storage reads StorageComponent::TypeId().) B3R: the empty
+// EnsureGlobals that was left is gone with its calls.
 
 // All globals StorageUI_Serialize/Startup dereference must be live before we run,
 // or a null-deref would fault (MinGW has no __try/__except to catch it).
@@ -108,7 +107,6 @@ static void Trace(const char* what, void* self) {
 
 // [4] 0x1400b8820
 void StorageUI::OnCreated() {
-    storageui_sa::EnsureGlobals();
     if (!storageui_sa::Ready() || !SA_DialogEntityAlive(this)) { storageui_sa::Trace("Serialize SKIP", this); return; }
     storageui_sa::Trace("Serialize", this);
     uintptr_t s = (uintptr_t)this;
@@ -223,13 +221,12 @@ void StorageUI::OnCreated() {
 
 // [7] 0x1400b8450
 void StorageUI::OnUpdateLayout() {
-    storageui_sa::EnsureGlobals();
     if (!storageui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Get entity, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -273,7 +270,7 @@ void StorageUI::OnUpdateLayout() {
                     void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
                     int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                     if (typeId == (int)RawMaterialDescription::TypeId()) {
-                        if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
+                        if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
                             resType = comp;
                         }
                         break;
@@ -290,7 +287,7 @@ void StorageUI::OnUpdateLayout() {
                 // B.3.2 SKIPPED: this array's header is not a contiguous struct
                 // field (unlike +0x30 above) but four independent locals
                 // (sortedItems/currentItems/itemCount/itemCapacity), and its
-                // lifetime is threaded through fn_MemFreeStatic(currentItems) far
+                // lifetime is threaded through System::MemoryAllocator::MemFree(currentItems) far
                 // below (StorageUI_Startup's tail) plus a read/sort call in
                 // between. Wrapping it in Collection::Array<T> would need a
                 // restructure (a local ArrayHdr-shaped object whose destructor
@@ -303,8 +300,7 @@ void StorageUI::OnUpdateLayout() {
                         if (itemCount != 0) {
                             itemCapacity = newCount * 3;
                         }
-                        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton,
-                                                    (uint64_t)itemCapacity * 0x18, 8);
+                        void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)itemCapacity * 0x18, 8);
                         sortedItems = newBuf;
                     }
 
@@ -322,7 +318,7 @@ void StorageUI::OnUpdateLayout() {
                         }
                     }
                     if (currentItems != sortedItems) {
-                        fn_MemFreeStatic(currentItems);
+                        System::MemoryAllocator::MemFree(currentItems);
                     }
                     currentItems = sortedItems;
                     itemCount = newCount;
@@ -399,7 +395,7 @@ void StorageUI::OnUpdateLayout() {
     }
 
     // Free temp sorted items array
-    fn_MemFreeStatic(currentItems);
+    System::MemoryAllocator::MemFree(currentItems);
 }
 
 // ============================================================
@@ -628,7 +624,7 @@ StorageUI::~StorageUI() {
     // Free the cached row-element array at +0x30 (mirrors the exe ScalarDtor).
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* rows = *reinterpret_cast<void**>(s + 0x30);
-    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
+    if (rows) System::MemoryAllocator::MemFree(rows);
     *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
 }
@@ -637,7 +633,6 @@ StorageUI::~StorageUI() {
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void StorageUI::OnUpdate(const System::Time& /*time*/) {
-    storageui_sa::EnsureGlobals();
     if (!storageui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     if (*reinterpret_cast<int*>(s + 0x38) == 0) {
