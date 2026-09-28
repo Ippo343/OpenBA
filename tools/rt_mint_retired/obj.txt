@@ -15,3 +15,6 @@
 
 # -- W3: Object::External (INVENTORY_A row 55, RT_DELDTOR row 0x180006640) --
 ??_7External@Object@@6B@   OBJ   no stamper left (every External-derived class a real class); External::DeletingDtor carries both arms; RT_DELDTOR row 0x180006640, ??0/??1 doors, 3 slot doors (Type, TypeName, Compile), UI VtBase/VtExternal (dead) deleted
+
+# -- W3: Object::Base (INVENTORY_A row 12, RT_DELDTOR row 0x1800065b0) -- LAST
+??_7Base@Object@@6B@   OBJ   no stamper left; Base::DeletingDtor carries both arms; RT_DELDTOR row 0x1800065b0 (the last: the RT_DELDTOR machinery deleted), ??1Base door (deleting_dtor_leaves.cpp deleted), ?Type@Base slot door deleted

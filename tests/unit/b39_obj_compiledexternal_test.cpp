@@ -144,3 +144,39 @@ UNIT_TEST(b39_obj_external_deletingdtor_both_arms) {
     ::new (block + 8 + 0x40) TestPlainExternal();
     CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
 }
+
+// ---- Object::Base (ENDGAME B.3.9 OBJ W3, vtable row 12) --------------------
+// Base's slot 0 carries both arms of the retired RT_DELDTOR row 0x1800065b0
+// (element 8), driven through a leaf that overrides only the pure TypeName.
+namespace {
+class TestBaseLeaf : public Object::Base {
+public:
+    const char* TypeName() const override { return "TestBaseLeaf"; }
+};
+static_assert(sizeof(TestBaseLeaf) == 8, "one vtable pointer");
+}  // namespace
+
+UNIT_TEST(b39_obj_base_deletingdtor_both_arms) {
+    CHECK(!std::is_destructible<Object::Base>::value);
+    CHECK(!std::has_virtual_destructor<Object::Base>::value);
+    CHECK_EQ(CeSlotOffset(&Object::Base::DeletingDtor), (uintptr_t)0x00);   // 0x1800065b0
+    CHECK_EQ(CeSlotOffset(&Object::Base::TypeName),     (uintptr_t)0x08);   // _purecall
+    CHECK_EQ(CeSlotOffset(&Object::Base::Type),         (uintptr_t)0x10);   // 0x1800c0380
+
+    void* p = Object::detail::InternalMemAlloc(sizeof(TestBaseLeaf), 8);
+    CHECK(p != nullptr);
+    Object::Base* one = ::new (p) TestBaseLeaf();
+    CHECK_EQ(one->Type(), 0u);                    // `XOR EAX,EAX; RET`
+    CHECK(one->DeletingDtor(1) == one);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 4 * 8, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 4;
+    std::memcpy(block, &cookie, sizeof cookie);
+    TestBaseLeaf* e0 = nullptr;
+    for (int i = 0; i < 4; ++i) {
+        TestBaseLeaf* e = ::new (block + 8 + i * 8) TestBaseLeaf();
+        if (i == 0) e0 = e;
+    }
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+}

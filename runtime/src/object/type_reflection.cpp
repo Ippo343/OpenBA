@@ -90,23 +90,20 @@ void  TypeChildFree(void* p)                    { TypeTreeFree(p); }
 //
 // Transcribed from the disassembly. Retail's two arms:
 //
-//   TEST DL,0x2   -> the ARRAY arm (0x1800065c4): reads the element count at
-//                    `this - 8`, calls the EH vector destructor helper
-//                    (0x18007ec98) with elemSize 8 and ~Base, and returns
-//                    `this - 8`. `Object::Destroy` never takes it (it passes
-//                    flags 1) and nothing in retail ever new[]s a Base, so it
-//                    is transcribed as the faithful UNREACHABLE it is rather
-//                    than reimplemented against an array cookie our allocator
-//                    does not write. Taking it would be a bug upstream, and it
-//                    faults loudly at `this - 8` exactly as retail would.
+//   TEST DL,0x2   -> the ARRAY arm (0x1800065c4): reads the SIGNED int32
+//                    element count at `this - 8`, destroys the elements
+//                    DOWNWARD with elemSize 8 and ~Base (the EH vector
+//                    destructor helper 0x18007ec98), frees `this - 8` on
+//                    `& 1` and returns it. `Object::Destroy` never takes it (it
+//                    passes flags 1) and nothing in retail ever new[]s a Base;
+//                    taking it on a scalar object faults at `this - 8` exactly
+//                    as retail would.
 //   else          -> 0x180006601: `LEA RAX,[0x180154788]; MOV [RCX],RAX` (the
 //                    ~Base body: restamp Base's vptr), then
 //                    `TEST DL,0x1 / CALL 0x180006a10` (free), then RAX = this.
 //
 // The vptr restamp is what a real destructor chain does for us — GCC emits the
-// store on entry to `~Base()`. It is left as a plain `this->~Base()` rather
-// than a hand-written store because a hand-written store would name the MINTED
-// table address, and a converted object carries the COMPILER's table.
+// store on entry to `~Base()`.
 //
 // 0x180006a10 is `MemFree` verbatim: `if (p) { Enter(lock); Free(p); Leave; }`,
 // instruction for instruction `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`
@@ -115,16 +112,20 @@ void  TypeChildFree(void* p)                    { TypeTreeFree(p); }
 // through this file's existing allocator seam rather than pinning a 89th copy
 // of the same body.
 //
-// NOTHING IN PRODUCTION REACHES THIS YET: no class in the tree derives from
-// `Object::Base` at step 4. Every live object still carries the MINTED
-// `??_7Base@Object@@6B@` (0x180154788, 83 files stamp it) whose slot 0 is
-// `RtDelDtor_Base` from the RT_DELDTOR table. The two are slot-compatible —
-// tests/unit/object_vtable_abi_test.cpp proves it in both directions — which is
-// what lets them coexist until each class converts.
+// ENDGAME B.3.9 OBJ: both arms are the retired RT_DELDTOR row 0x1800065b0's;
+// the minted `??_7Base@Object@@6B@`, that row and the `??1Base` door are gone.
 // ============================================================================
 Base* Base::DeletingDtor(unsigned flags) {
+    if (flags & 2u) {                                          // 0x1800065c4
+        uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+        const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+        for (int32_t i = count; --i >= 0;)
+            reinterpret_cast<Base*>(self + static_cast<int64_t>(i) * 8)->~Base();
+        if (flags & 1u) TypeTreeFree(self - 8);
+        return reinterpret_cast<Base*>(self - 8);
+    }
     this->~Base();                       // 0x180006601, the vptr restamp
-    if (flags & 1) TypeTreeFree(this);   // 0x18000660e / CALL 0x180006a10
+    if (flags & 1u) TypeTreeFree(this);  // 0x18000660e / CALL 0x180006a10
     return this;                         // RAX = RBX at 0x180006615
 }
 

@@ -45,12 +45,6 @@ extern int RtObjectExternalFindRegister(); // external_find.cpp     (Wave 9 lane
 // ?Serialize@ElementDescription@UI@@ (runtime/src/ui/elementdescription_serialize.cpp).
 extern int RtObjectExternalPtrSerializeRegister();  // external_ptr_serialize.cpp
 extern int RtObjectInternalPtrArraySerializeRegister();  // internal_ptr_array_serialize.cpp
-// Wave 11 lane OBJDATA: the seven `?Type@` / `?TypeName@` accessors that were
-// the entire TRAP set of four minted `??_7…@Object@@6B@` vtable rows. Not
-// nested under TYPESYS/INTERNAL/EXTERNAL because the seven span all three
-// (Base, Internal, External, CompiledExternal) and the row they unblock is one
-// per class; its own switch keeps the four rows A/B-able together.
-extern int RtObjectTypeInfoAccessorsRegister();     // object_typeinfo_accessors.cpp
 // Wave 11 lane OBJLIFE: the three Object FACTORY destructors (~Factory,
 // ~InternalFactory, ~ExternalFactory) plus the five unexported helper bodies
 // they reach. Its own switch because all three are reachable only from
@@ -114,12 +108,8 @@ void RtObjectPortInit() {
     // the way to A/B ?Serialize@ElementDescription@ against its callees.
         n += RtObjectExternalPtrSerializeRegister();
     n += RtObjectInternalPtrArraySerializeRegister();   // internal_ptr_array_serialize.cpp
-    // Wave 11 lane OBJDATA. the old DLL-era switch leaves all seven
-    // accessors on the DLL, which re-traps two slots each in
-    // ??_7CompiledExternal / ??_7External / ??_7Internal and one in ??_7Base —
-    // the same switch coupling reg_mint_promoted.cpp records for
-    // ??_7SpriteSheet and the old DLL-era switch, and for the same reason.
-        n += RtObjectTypeInfoAccessorsRegister();
+    // (Wave 11 lane OBJDATA's seven Object slot accessors went with the four
+    // minted ??_7...@Object@@6B@ rows at ENDGAME B.3.9 OBJ, their only reader.)
         n += RtObjectFactoryDtorsRegister();
     // Wave 11 lane OBJEXT. Nested under the old DLL-era switch because both are
     // ExternalFactory state and behaviour, each with its own switch so its

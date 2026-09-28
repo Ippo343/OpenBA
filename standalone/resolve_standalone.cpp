@@ -337,13 +337,9 @@ void RuntimePortInit() {
     extern void RtClosureBatch2bPortInit();
     RtClosureBatch2bPortInit();
 
-    // Wave 9 lane K: the 37 unnamed deleting destructors that are slot 0 of
-    // (almost) every vtable the mint below is about to fill. Last of the port
-    // inits, because it resolves each ~Class through the port registry and its
-    // probe runs at the end of it -- so every other wave's destructors must
-    // already be registered. Before RtDataMintInit(), which consumes the
-    // registrations it makes.
-    RtObjectDeletingDtorPortInit();  // Wave 9: deleting destructors (lane K)
+    // (Wave 9 lane K's RtObjectDeletingDtorPortInit -- the RT_DELDTOR table
+    // that filled slot 0 of the minted vtables -- went with the last minted
+    // vtable at ENDGAME B.3.9 OBJ: every class declares its own DeletingDtor.)
 
     // Wave 9 lane X: the fourteen constructors that publish a `?_singleton@...`
     // DATA export. Here, between lane K and the mint, for two reasons. It must

@@ -3,26 +3,13 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 1 vtables, 103 BaseTypeInfo, 10 storage symbols.
-// Retired (ENDGAME B.3 step 9): 190 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 0 vtables, 103 BaseTypeInfo, 10 storage symbols.
+// Retired (ENDGAME B.3 step 9): 191 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
-RT_MINT_TRAP(0,0)
-RT_MINT_TRAP(0,1)
-RT_MINT_TRAP(0,2)
-
-// ??_7Base@Object@@6B@  DLL 0x180154788  3 slots  [adjacent-export:??_7External@Object@@6B@]
-static const RtMintVSlot kVSlots0[] = {
-    { nullptr, 0x1800065b0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?Type@Base@Object@@UEBAIXZ", 0x1800c0380ull, RT_MINT_NAMED },
-};
-static void* kVTable0[3];
-static const RtMintTrapFn kVTraps0[] = { &RtMintTrapStub_0_0, &RtMintTrapStub_0_1, &RtMintTrapStub_0_2 };
 
 static RtMintVtable kMintVtables[] = {
-    { "??_7Base@Object@@6B@", 0x180154788ull, 3, kVSlots0, kVTable0, kVTraps0, "adjacent-export:??_7External@Object@@6B@" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from
