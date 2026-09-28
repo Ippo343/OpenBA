@@ -289,9 +289,13 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
         }
 
         PerfX::TerrainInvalidate();   // [PerfX] the whole array was just streamed in
-        if (fn_Map_Invalidate) {
-            fn_Map_Invalidate(reinterpret_cast<int*>(selfPtr));
-        }
+        // 0x14009c480 zone refresh. Retail's call (0x14009f29e) sets only RCX = this;
+        // the body reads no other argument register: RDX / R8D are written before any
+        // read (0x14009c4bd, 0x14009c520/524) and R9 never, and the flood fill it calls
+        // (0x14009c170) spills R9D to a home slot that is rewritten before it is read
+        // (0x14009c365 / 0x14009c3e8) and overwrites R9D at 0x14009c26f. The port's
+        // three trailing parameters carry nothing, so they are passed as null / 0.
+        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(selfPtr), nullptr, nullptr, 0);
 
         // PORT GAP 0x14009e8c0 RegionSystem build: not ported; retail calls it here
         // (0x14009f2a6, RCX = this grid). The null arm is: nothing.
