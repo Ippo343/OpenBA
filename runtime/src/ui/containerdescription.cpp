@@ -38,7 +38,6 @@
 // ctor door the members reach are cached in namespace-scope std::atomic slots,
 // never in a function-local static.
 // ============================================================================
-#include <atomic>
 #include <new>
 
 #include "description_common.h"
@@ -98,10 +97,9 @@ bool ContainerDescription::Serialize(void* streamv) {
     rw->SerializeInt(_requestedHeight, nullptr);            // 1800ccf43
     rw->SerializeInt(_barSize, nullptr);                    // 1800ccf58
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[0], &ser);   // 1800ccf5e
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[1], &ser);   // 1800ccf6c
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[2], &ser);   // 1800ccf7d
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[0]), IoSer(&ser));   // 1800ccf5e
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[1]), IoSer(&ser));   // 1800ccf6c
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[2]), IoSer(&ser));   // 1800ccf7d
 
     rw->SerializeBool(reinterpret_cast<bool&>(_clampWidth), nullptr); // 1800ccf9d
     rw->SerializeBool(reinterpret_cast<bool&>(_clampHeight), nullptr); // 1800ccfaf
@@ -201,8 +199,7 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
     slot = clip;                                            // 1800ccdca
     clipElem->_parent = container;                          // 1800ccdcf
     {
-        using PushFn = void (*)(void*, int, const void*);
-        RtAddr<PushFn>(0x180076900ull)(
+        rtcoll::RtColl_ArraySetSizeFill_180076900(
             &container->_children, container->_children.GetSize() + 1, &slot);  // 1800ccdea
         container->SetNeedsSizeCalc();                      // 1800ccdf2
     }
@@ -243,24 +240,6 @@ Object::Base* ContainerDescription::CreateInPlaceObject(void* place) {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door and
-// the FACTUI1 ??0 door are gone. Their only readers were the minted
-// `??_7ContainerDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
-// ============================================================================
-int RtUiContainerDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ContainerDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ContainerDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ContainerDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x1800399c0ull, (void*)&UI::ContainerDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ContainerDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ContainerDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180039a40ull, (void*)&UI::ContainerDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ContainerDescription's own type record, built at CRT init

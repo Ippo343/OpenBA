@@ -51,15 +51,11 @@
 #include "../../types/ui/Sprite.h"
 #include "../../types/system/String.h"
 #include "../../types/video/Context.h"   // Video::Viewport
+#include "../../types/object/External.h"
+#include "../../types/collection/Collection.h"
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -122,10 +118,9 @@ Object::Base* SpriteCapture::CreateInPlaceObject(void* place) {
 // this same body by hand.
 SpriteCapture::~SpriteCapture() {
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180037310ull)(p + 0x40);           // 1800d91d4  ~Array<Sprite>
-    RtAddr<ArrayDtorFn>(0x18003e4a0ull)(p + 0x30);           // 1800d91de  ~Array<CaptureEntry>
-    RtAddr<ArrayDtorFn>(0x18003da00ull)(p + 0x20);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>
+    rtcoll::RtColl_ArrayDtor_180037310(p + 0x40);           // 1800d91d4  ~Array<Sprite>
+    rtcoll::RtColl_ArrayDtorElem_18003e4a0(p + 0x30);           // 1800d91de  ~Array<CaptureEntry>
+    rtcoll::RtColl_ArrayDtor_18003da00(p + 0x20);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>
 }
 
 }  // namespace UI
@@ -182,13 +177,11 @@ bool SpriteCapture::Serialize(void* streamv) {
     int32_t n = _sheets.size;       // 1800d9586  _sheets._size
     rw->SerializeInt(n, nullptr);                            // 1800d959b
 
-    using SetSizeFn = void (*)(void* array, int n);
-    using WalkFn    = void (*)(Serializer* ser, int count, void* data);
 
     if (ser.stream->mode == 0) {                             // 1800d95a5 (re-read)
-        RtAddr<SetSizeFn>(0x18003ea50ull)(&_sheets, n);      // 1800d95b2
+        rtcoll::RtColl_ArraySetSize_18003ea50(&_sheets, n);      // 1800d95b2
     }
-    RtAddr<WalkFn>(0x18003eb60ull)(&ser, n, _sheets.data);
+    RtObject_ExternalPtrArraySerialize_SpriteSheet(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_sheets.data));
 
     rw->SerializeInt(_width, nullptr);                       // 1800d95d5  _width
     rw->SerializeInt(_height, nullptr);                      // 1800d95e9  _height
@@ -197,12 +190,12 @@ bool SpriteCapture::Serialize(void* streamv) {
     rw->SerializeInt(n, nullptr);                            // 1800d9604
 
     if (ser.stream->mode == 0) {                             // 1800d960e (re-read)
-        RtAddr<SetSizeFn>(0x18004ba90ull)(&_entries, n);      // 1800d961b
+        rtcoll::RtColl_ArraySetSize_18004ba90(&_entries, n);      // 1800d961b
     }
-    RtAddr<WalkFn>(0x18004c0d0ull)(&ser, n, _entries.data);
+    RtUi_SpriteCapture_SerializeEntries(&ser, n, _entries.data);   // 0x18004c0d0
 
     if (stream->mode == 0) {                                 // 1800d9630  the ORIGINAL stream
-        RtAddr<SetSizeFn>(0x1800370c0ull)(
+        rtcoll::RtColl_ArraySetSize_1800370c0(
             &_sprites, _entries.size);         // 1800d9642
 
         for (int32_t i = 0; i < _sprites.size; ++i) {
@@ -410,9 +403,6 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void*
     Serializer* ser = static_cast<Serializer*>(serv);
     uint8_t*    e   = static_cast<uint8_t*>(basev);
 
-    using StrSerFn = void (*)(void* str, Serializer* ser);
-    StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
-
     // Re-read before every call (see above), then dispatched by name.
     auto rw = [ser]() { return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter); };  // B.3.x bridge
     auto i32 = [](uint8_t* p) -> int32_t& { return *reinterpret_cast<int32_t*>(p); };
@@ -420,7 +410,7 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void*
     for (int i = 0; i < count; ++i, e += 0x28) {
         rw()->SerializeInt(i32(e + 0x00), nullptr);
 
-        strSer(e + 0x08, ser);                                // 18004c10b
+        reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);   // 18004c10b 0x1800c9930
 
         rw()->SerializeInt(i32(e + 0x10), nullptr);
         rw()->SerializeInt(i32(e + 0x14), nullptr);
@@ -429,28 +419,6 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void*
         rw()->SerializeFloat(*reinterpret_cast<float*>(e + 0x20), nullptr);
         rw()->SerializeUInt(*reinterpret_cast<uint32_t*>(e + 0x24), nullptr);
     }
-}
-
-int RtUiSpriteCaptureClassRegister() {
-    int n = 0;
-
-    // Batch D1. Unexported in both builds (a file-static of the Serialize
-    // translation unit), so the address is the only door.
-    RegisterRuntimeAddr(0x18004c0d0ull, (void*)&RtUi_SpriteCapture_SerializeEntries); ++n;
-
-    // ENDGAME B.3.9 UI-D: the factory pair, the class's own (B39_RULES D2).
-    RegisterRuntimeExport("?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SpriteCapture::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003c900ull, (void*)&UI::SpriteCapture::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SpriteCapture::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003c9c0ull, (void*)&UI::SpriteCapture::CreateInPlaceObject);
-
-    RegisterRuntimeExport("?Draw@SpriteCapture@UI@@QEBAXAEAVSpriteContext@2@HH@Z",
-                          (void*)&RtUi_SpriteCapture_Draw);                 ++n;
-    RegisterRuntimeAddr(0x1800d9230ull, (void*)&RtUi_SpriteCapture_Draw);
-
-    return n;
 }
 
 // ============================================================================

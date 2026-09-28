@@ -66,20 +66,6 @@ DialogControllerConfig::~DialogControllerConfig() {}
 }  // namespace UI
 
 // ============================================================================
-// Registration
-// ============================================================================
-int RtUiDialogControllerConfigRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::DialogControllerConfig::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003b480ull, (void*)&UI::DialogControllerConfig::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::DialogControllerConfig::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003b490ull, (void*)&UI::DialogControllerConfig::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::DialogControllerConfig's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@DialogControllerConfig@UI@@ (0x1801f9e80): name "DialogControllerConfig", parent

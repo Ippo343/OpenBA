@@ -50,7 +50,6 @@
 // doors and the ??1 door, read only by the retired minted table and its
 // RT_DELDTOR row, are gone.
 // ============================================================================
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <new>
@@ -114,12 +113,11 @@ bool AnimatedImageDescription::Serialize(void* streamv) {
     rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 1800cb62f (re-read)
-        using SetSizeFn = void (*)(void* array, int n);
-        rtdesc::RtAddr<SetSizeFn>(0x180029a80ull)(&_frameNames, n);   // 1800cb645
+        rtcoll::RtColl_ArraySetSize_180029a80(&_frameNames, n);    // 1800cb645
     }
 
-    using StrArrayFn = void (*)(rtdesc::Serializer* ser, int count, void* data);
-    rtdesc::RtAddr<StrArrayFn>(0x180029bb0ull)(&ser, n, _frameNames._data);
+    // 0x180029bb0 reads three arguments; the body's fourth is unused.
+    RtIo_SerializeStringArray(&ser, n, _frameNames._data, nullptr);
 
     rw->SerializeInt(_framesPerSecond, nullptr);
 
@@ -163,8 +161,7 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
 
     const int32_t frames = _frameNames._size;
 
-    using SetSizeFn = void (*)(void* array, int n);
-    rtdesc::RtAddr<SetSizeFn>(0x1800370c0ull)(&elem->_frames, frames);   // 1800cb51f
+    rtcoll::RtColl_ArraySetSize_1800370c0(&elem->_frames, frames);   // 1800cb51f
 
     for (int32_t i = 0; i < frames; ++i) {                     // 1800cb524 / 1800cb578
         void* const sheet = _spriteSheet;                      // 1800cb530, re-read
@@ -208,8 +205,7 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
 // array (no element destroy, MemFree(null)).
 namespace UI {
 AnimatedImageDescription::~AnimatedImageDescription() {
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(&_frameNames);             // 1800cb6d4
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_frameNames);          // 1800cb6d4
 }
 }  // namespace UI
 
@@ -228,21 +224,6 @@ Object::Base* AnimatedImageDescription::CreateInPlaceObject(void* place) {
     return ::new (place) AnimatedImageDescription();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2). The slot doors and the
-// ??1 door (and FACTUI1's ??0 door) are gone.
-// ============================================================================
-int RtUiAnimatedImageDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::AnimatedImageDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x1800367c0ull, (void*)&UI::AnimatedImageDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::AnimatedImageDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180036840ull, (void*)&UI::AnimatedImageDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::AnimatedImageDescription's own type record, built at CRT init

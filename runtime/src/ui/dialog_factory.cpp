@@ -144,15 +144,3 @@ Object::Base* Dialog::CreateNewObject() {
 }
 
 }  // namespace UI
-
-int RtUiDialogFactoryRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::Dialog::CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180038610, (void*)&UI::Dialog::CreateInPlaceObject);  ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::Dialog::CreateNewObject);
-    RegisterRuntimeAddr(0x180038530, (void*)&UI::Dialog::CreateNewObject);      ++n;
-    return n;
-}

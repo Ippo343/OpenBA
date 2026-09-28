@@ -49,7 +49,6 @@
 // TextElement fields are TextElement's). The registered doors delegate with a
 // QUALIFIED call. Font / SpriteContext / Sprite calls are direct member calls.
 // ============================================================================
-#include <atomic>
 
 #include "element_common.h"
 #include "../../types/ui/LabelElement.h"
@@ -332,20 +331,6 @@ Object::Base* LabelElement::CreateInPlaceObject(void* place) {
     return ::new (place) LabelElement();
 }
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiLabelElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::LabelElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x1800428e0ull, (void*)&UI::LabelElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::LabelElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180042960ull, (void*)&UI::LabelElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::LabelElement's own type record, built at CRT init

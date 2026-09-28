@@ -31,7 +31,6 @@
 // ui_factory_wave28.cpp's row, are gone.
 // ============================================================================
 
-#include <atomic>
 #include <cstring>
 
 #include "widget_common.h"
@@ -121,7 +120,7 @@ void RadioElement::Update(const System::Time& time, UserInterface* ui,
     ev.mouseY    = state.mouseY;
     ev.value     = value;
     ev.tail      = 0;
-    RtAddr<ArraySetSizeFillFn>(0x180033690ull)(
+    rtcoll::RtColl_ArraySetSizeFill_180033690(
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 
@@ -150,20 +149,6 @@ Object::Base* RadioElement::CreateInPlaceObject(void* place) {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiRadioElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::RadioElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180047af0ull, (void*)&UI::RadioElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::RadioElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180047ba0ull, (void*)&UI::RadioElement::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::RadioElement's own type record, built at CRT init

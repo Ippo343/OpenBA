@@ -47,17 +47,15 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/SliderDescription.h"
 #include "../../types/ui/SliderElement.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
+#include "../../types/ui/SpriteSheet.h"
 
-#include <atomic>
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -76,7 +74,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 
-using MemFreeFn = void (*)(void*);
 
 // The refcounted-String release retail inlines six times in ~SliderDescription,
 // with its usual asymmetry: on the last reference the FIELD is moved to
@@ -86,7 +83,7 @@ void ReleaseStringField(char** field) {
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*field);
+        System::MemoryAllocator::MemFree(*field);
     } else {
         *field = nullptr;
     }
@@ -100,23 +97,10 @@ void ReleaseStringField(char** field) {
 // The MEMBERS
 // ============================================================================
 namespace {
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_getSpriteIndex{nullptr};
-// ?GetSpriteIndexFromName@SpriteSheet@UI@@ — block D's class, a door.
+// ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
 int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
-    return reinterpret_cast<GetIdxFn>(AtomicExport(
-        g_getSpriteIndex,
-        "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"))(sheet, nameStr);
+    return static_cast<const UI::SpriteSheet*>(sheet)                       // B.3.x bridge
+        ->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
 }
 // A raw 4-byte copy: retail moves the two floats through EAX, not an XMM register.
 template <typename D, typename S>
@@ -159,14 +143,13 @@ bool SliderDescription::Serialize(void* streamArg) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                              // 1800d78da
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_childDescription, &ser);       // 1800d78e8 ExternalPtr<ElementDescription>
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 1800d78f6 ExternalPtr<SpriteSheet>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_trackStartName, &ser);         // 1800d7904
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_trackMiddleName, &ser);        // 1800d7915
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_trackEndName, &ser);           // 1800d7926
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_thumbName, &ser);              // 1800d7937
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_thumbHotName, &ser);           // 1800d7948
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800d78e8 ExternalPtr<ElementDescription>
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800d78f6 ExternalPtr<SpriteSheet>
+    reinterpret_cast<System::String*>(&_trackStartName)->Serialize(&ser);         // 1800d7904
+    reinterpret_cast<System::String*>(&_trackMiddleName)->Serialize(&ser);        // 1800d7915
+    reinterpret_cast<System::String*>(&_trackEndName)->Serialize(&ser);           // 1800d7926
+    reinterpret_cast<System::String*>(&_thumbName)->Serialize(&ser);              // 1800d7937
+    reinterpret_cast<System::String*>(&_thumbHotName)->Serialize(&ser);           // 1800d7948
 
     rw->SerializeInt(_trackOffsetY, nullptr);
     rw->SerializeInt(_thumbMargin, nullptr);
@@ -201,8 +184,7 @@ bool SliderDescription::Serialize(void* streamArg) {
 // stable across the calls and neither does this.
 Object::InternalPtr<Element>* SliderDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x130, 8);          // 1800d7679 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0x130, 8);          // 1800d7679 (inlined)
 
     SliderElement* elem = static_cast<SliderElement*>(raw);
     if (raw != nullptr)                                                 // 1800d76a3
@@ -215,16 +197,19 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
         reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     {   // the single child, from +0x68. UI::Dialog::CreateElement — block B's door.
-        using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-        void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(
-            dialog, &slot, _childDescription);                          // 1800d76cb
+        // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+        // placed in the caller's slot.                          // 1800d76cb
+        void** made = &slot;
+        new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
+            static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
+                Object::ExternalPtr<UI::ElementDescription>(
+                    static_cast<UI::ElementDescription*>(_childDescription))));
 
         Element* child = *reinterpret_cast<Element**>(made);            // 1800d76d0
         if (child != nullptr)
             child->_parent = elem;                                      // 1800d76d8
 
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                        elem->_children.GetSize() + 1,
                                        made);                           // 1800d76ee
 
@@ -298,19 +283,6 @@ Object::Base* SliderDescription::CreateInPlaceObject(void* place) {
 // `??_7SliderDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
 // SliderDescription now wears the compiler's table.
 // ============================================================================
-
-int RtUiSliderDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@SliderDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SliderDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180049840ull, (void*)&UI::SliderDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SliderDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x1800498c0ull, (void*)&UI::SliderDescription::CreateInPlaceObject);
-    return n;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::SliderDescription's own type record, built at CRT init

@@ -88,26 +88,23 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../funcs/rt_libm.h"   // rtcrt::StrICmp
 #include "../../types/ui/DocumentTextElement.h"
 #include "../../types/ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
 #include "../../types/system/String.h"
+#include "../../types/system/Filename.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/object/External.h"
+#include "../../types/collection/Collection.h"
+#include "../../types/ui/Font.h"
+#include "../../types/ui/SpriteSheet.h"
+#include "../../types/ui/String.h"
 
-#include <atomic>
-
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — resolve.h drags in <windows.h> and PLAN.md §4.1 keeps it out of
-// runtime/src/. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace O = UI::DocumentTextElementOffsets;
 using UI::DocumentItem;
 
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // ---- field accessors -------------------------------------------------------
 inline uint8_t* B(void* p, int off) { return reinterpret_cast<uint8_t*>(p) + off; }
@@ -134,24 +131,8 @@ inline void Store16(void* dst, uint16_t v) { __builtin_memcpy(dst, &v, sizeof v)
 inline int32_t& RefCount(char* s) { return *reinterpret_cast<int32_t*>(s - 4); }
 inline int32_t  Length(const char* s) { return *reinterpret_cast<const int32_t*>(s - 8); }
 
-// RULE B6-5: the pipeline runs inside members, and UI is built on the loader
-// thread, so every export resolved here lives in a namespace-scope atomic.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_memFree{nullptr};
-
-using MemFreeFn = void (*)(void*);
-void MemFree(void* p) {
-    reinterpret_cast<MemFreeFn>(
-        AtomicExport(g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
-}
+// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0), called directly.
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // Retail's String release, open-coded at fourteen sites in this file and
 // IDENTICAL at every one of them — including the asymmetry the GroupDescription
@@ -183,50 +164,35 @@ void AssignString(char** slot, char* value) {
 }
 
 // ---- the Runtime helpers these bodies call ---------------------------------
+// A System::String / Filename held in a raw slot.
+System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge
+const System::String& Str(char* const* slot) {
+    return *reinterpret_cast<const System::String*>(slot);                            // B.3.x bridge
+}
+System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // B.3.x bridge
+
 // ?SubString@String@System@@QEBA?AV12@HH@Z — 0x1800c9230. The last argument is
 // the INCLUSIVE end index, not a length: its body computes `end - start + 1`
-// and reserves that many characters (0x1800c9262). `ret` is zeroed on entry, so
-// an uninitialised local is what retail passes.
-using SubStringFn = char** (*)(char* const* self, char** ret, int start, int endInclusive);
+// and reserves that many characters (0x1800c9262). `ret` is the hidden return
+// slot the member's prvalue is placed in.
 char** SubString(char* const* self, char** ret, int start, int endInclusive) {
-    return RtAddr<SubStringFn>(0x1800c9230ull)(self, ret, start, endInclusive);
+    new (static_cast<void*>(ret)) System::String(Str(self).SubString(start, endInclusive));
+    return ret;
 }
 // ?ToInteger@String@System@@SAHPEBD@Z — 0x18003f620, a static taking the raw
 // char*, not the String.
-using ToIntegerFn = int32_t (*)(const char*);
-int32_t ToInteger(const char* s) { return RtAddr<ToIntegerFn>(0x18003f620ull)(s); }
+int32_t ToInteger(const char* s) { return System::String::ToInteger(s); }
 
-// ?AdjustDelimiters@Filename@System@@ — 0x1800c6970, in place on a String slot.
-using AdjustDelimitersFn = void (*)(char** self);
-// ?GetPath@External@Object@@ — 0x180006250, hidden return slot in RDX.
-using GetPathFn = char** (*)(const void* self, char** ret);
-// ?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z — 0x1800c6740, hidden return
-// slot in RDX, `stripExtension` in R8B.
-using GetPathFilenameFn = char** (*)(char* const* self, char** ret, bool stripExtension);
-// ?IsDerivedFrom@Base@Object@@ — 0x1800c0390.
-using IsDerivedFromFn = bool (*)(const void* self, uint32_t typeId);
-// The CRT _stricmp at 0x18007eefc. Ghidra prints this call with ONE argument
-// because RDX was already loaded by the length comparison two instructions
-// earlier (0x1800ce9f4) and is not re-loaded — the documented dropped-argument
-// trap. It is two arguments. runtime/src/crt/msvc_stricmp.cpp already owns this
-// address, so RtAddr reaches our port rather than the DLL.
-using StrICmpFn = int (*)(const char* a, const char* b);
-// ?ComputeLineLayout@Font@UI@@ — 0x180116c70, eight arguments (four register,
-// four stack). Retail passes (font, text, length, 0, 0, -1, 0, nullptr).
-using ComputeLineLayoutFn = int32_t (*)(void* font, const char* text, int32_t length,
-                                        int32_t a3, int32_t a4, int32_t a5,
-                                        int32_t a6, void* layout);
-// ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z — 0x1800c92d0, `String + const char*`
-// with a hidden return slot in RCX.
-using ConcatCStrFn = char** (*)(char** ret, char* const* lhs, const char* rhs);
-// ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z — 0x1800031f0
-using GetSpriteIndexFn = int32_t (*)(const void* sheet, char* const* name);
-// ?GetIndexFromName@StringTable@UI@@ — 0x180002470
-using GetIndexFromNameFn = int32_t (*)(const void* table, char* const* name);
-// Array<DocumentItem>::SetSize(n, fill) — 0x18003df80 (element 0x24).
-using ItemArrayPushFn = void (*)(void* array, int32_t n, const DocumentItem* fill);
-// Array<Link>::SetSize(n, fill) — 0x18003e1a0 (element 0x18).
-using LinkArrayPushFn = void (*)(void* array, int32_t n, const void* fill);
+// Called by name below: Filename::AdjustDelimiters (0x1800c6970, private, in
+// place), External::GetPath (0x180006250) and Filename::GetPathFilename
+// (0x1800c6740) through their hidden return slots, the CRT _stricmp
+// (0x18007eefc: TWO arguments, although Ghidra prints one -- RDX was loaded by
+// the length comparison at 0x1800ce9f4 and is not re-loaded), Font::
+// ComputeLineLayout (0x180116c70; retail passes (text, length, 0, 0, -1, 0,
+// nullptr)), String + const char* (0x1800c92d0, retslot), SpriteSheet::
+// GetSpriteIndexFromName (0x1800031f0), UI::String -> System::String
+// (0x180035020, retslot) and the two Array SetSize-fill bodies 0x18003df80
+// (DocumentItem, 0x24) and 0x18003e1a0 (Link, 0x18).
 
 // The whitespace set the parser recognises, read out of the 64-bit BT mask
 // `0x100002600` that all three scan loops materialise: bits 9, 10, 13 and 32 —
@@ -294,7 +260,7 @@ void DocumentTextElement::EndLink() {
     _openLink.lastItem = items;                       // 1800cde22
     if (first < items) {                                       // 1800cde28
         void* array = &_linksData;
-        RtAddr<LinkArrayPushFn>(0x18003e1a0ull)(
+        rtcoll::RtColl_ArraySetSizeFill_18003e1a0(
             array, I32(array, 0x08) + 1, &_openLink); // 1800cde3f
     }
 
@@ -509,7 +475,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
             // contributes already includes the gap to the next one. That is
             // why no caller ever adds a space width of its own.
             char* measured = nullptr;
-            RtAddr<ConcatCStrFn>(0x1800c92d0ull)(&measured, &word, " ");   // 1800ceeb7
+            new (static_cast<void*>(&measured)) System::String(Str(&word) + " ");   // 1800ceeb7
             ReleaseString(&word);                              // 1800ceebd..1800ceeea
 
             void* font = reinterpret_cast<void* const*>(_fontsData)
@@ -518,8 +484,8 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
             Store64(&out->width, 0);                           // 1800cef02  ONE QWORD
 
             const int32_t measuredLen = measured ? Length(measured) : 0;   // 1800cef0b
-            out->width = RtAddr<ComputeLineLayoutFn>(0x180116c70ull)(
-                font, measured, measuredLen, 0, 0, -1, 0, nullptr);        // 1800cef34
+            out->width = static_cast<const UI::Font*>(font)->ComputeLineLayout(   // 1800cef34
+                measured, measuredLen, 0, 0, -1, 0, nullptr);
             out->height = I32(font, O::kFontLineHeight);       // 1800cef40
             out->first  = _textPos;              // 1800cef46
             out->last   = end - 1;                             // 1800cef4f
@@ -818,7 +784,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     wanted = sub;
                     ++RefCount(sub);                            // 1800ce944
                 }
-                RtAddr<AdjustDelimitersFn>(0x1800c6970ull)(&wanted);   // 1800ce94c
+                System::FilenamePrivateAccess::AdjustDelimiters(Path(&wanted));   // 1800ce94c
                 ReleaseString(&sub);                            // 1800ce952..1800ce97f
                 _textPos = ws;                    // 1800ce97f
 
@@ -833,8 +799,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                         void* obj = *reinterpret_cast<void* const*>(
                             B(PTR(_resourceList, 0x20), 0) + off);   // 1800ce9ab
 
-                        const bool isCapture = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(
-                            obj, UI::SpriteCapture::TypeId());        // 1800ce9b8
+                        const bool isCapture = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(UI::SpriteCapture::TypeId());        // 1800ce9b8
                         // Retail NULLS the pointer when the type does not match
                         // and then calls GetPath on it anyway (0x1800ce9ce
                         // takes RCX unchanged). Not a guard we get to add: the
@@ -843,16 +808,18 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                         found = isCapture ? obj : nullptr;      // 1800ce9c1  CMOVNZ
 
                         char* path = nullptr;
-                        RtAddr<GetPathFn>(0x180006250ull)(found, &path);       // 1800ce9ce
+                        new (static_cast<void*>(&path)) System::Filename(       // 1800ce9ce
+                            static_cast<const Object::External*>(found)->GetPath());
                         char* base = nullptr;
-                        RtAddr<GetPathFilenameFn>(0x1800c6740ull)(&path, &base, true);  // 1800ce9de
+                        new (static_cast<void*>(&base)) System::Filename(       // 1800ce9de
+                            Path(&path).GetPathFilename(true));
 
                         const int32_t baseLen   = base   ? Length(base)   : 0; // 1800ce9e7
                         const int32_t wantedLen = wanted ? Length(wanted) : 0; // 1800ce9f9
                         if (baseLen != wantedLen) {             // 1800cea05
                             match = false;                      // 1800cea09
                         } else {
-                            match = RtAddr<StrICmpFn>(0x18007eefcull)(base, wanted) == 0;
+                            match = rtcrt::StrICmp(base, wanted) == 0;   // 0x18007eefc
                         }
 
                         ReleaseString(&base);                   // 1800cea1a..1800cea47
@@ -902,7 +869,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 void* sheet = reinterpret_cast<void* const*>(_sheetsData)[slot];
                 int32_t sprite = -1;
                 if (sheet != nullptr) {                         // 1800ceb69
-                    sprite = RtAddr<GetSpriteIndexFn>(0x1800031f0ull)(sheet, &name);
+                    sprite = static_cast<const UI::SpriteSheet*>(sheet)->GetSpriteIndexFromName(Str(&name));
                 }
                 if (sheet != nullptr && sprite >= 0) {          // 1800ceb80
                     const uint8_t* data = static_cast<const uint8_t*>(
@@ -961,8 +928,8 @@ void DocumentTextElement::GenerateItems() {
         *reinterpret_cast<const int32_t*>(
             reinterpret_cast<const uint8_t*>(&_text) + 8) >= 0) {   // 1800cf090  index
         char* resolved = nullptr;
-        using UiStringToStringFn = char** (*)(void* uiString, char** ret);
-        RtAddr<UiStringToStringFn>(0x180035020ull)(&_text, &resolved);
+        new (static_cast<void*>(&resolved)) System::String(      // 0x180035020, retslot
+            reinterpret_cast<const UI::String*>(&_text)->operator System::String());   // B.3.x bridge
         AssignString(&_sourceText, resolved);  // 1800cf0a4..1800cf0f7
         ReleaseString(&resolved);                               // 1800cf0fa..1800cf133
     }
@@ -989,7 +956,7 @@ void DocumentTextElement::GenerateItems() {
             FlushRow(this);                                     // 1800cf1ba..1800cf1ea
         _rowPenX += w;                            // 1800cf1f0
 
-        RtAddr<ItemArrayPushFn>(0x18003df80ull)(
+        rtcoll::RtColl_ArraySetSizeFill_18003df80(
             &_itemsData, _itemsCount + 1, &item);  // 1800cf20a
 
         if (item.kind == 0) {                                   // 1800cf20f
@@ -1067,42 +1034,4 @@ extern "C" void RtUi_DocumentTextElement_GenerateItems(void* self) {
 extern "C" void* RtUi_DocumentTextElement_LinkAssign(void* dst, const void* src) {
     return &(reinterpret_cast<DocumentTextElement::Link*>(dst)->operator=(
         *reinterpret_cast<const DocumentTextElement::Link*>(src)));
-}
-
-int RtUiDocumentTextRegister() {
-    int n = 0;
-
-    // Batch D1: the Link record's assignment operator. No exported name in
-    // either build (a compiler-generated member of a private nested struct), so
-    // the address door is the only one.
-    RegisterRuntimeAddr(0x18003c760ull, (void*)&RtUi_DocumentTextElement_LinkAssign);
-    ++n;
-
-
-    RegisterRuntimeExport("?FindNextWhiteSpace@DocumentTextElement@UI@@AEAAHXZ",
-                          (void*)&RtUi_DocumentTextElement_FindNextWhiteSpace);   ++n;
-    RegisterRuntimeAddr(0x1800cefd0ull, (void*)&RtUi_DocumentTextElement_FindNextWhiteSpace);
-
-    RegisterRuntimeExport("?EndLink@DocumentTextElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_DocumentTextElement_EndLink);              ++n;
-    RegisterRuntimeAddr(0x1800cde00ull, (void*)&RtUi_DocumentTextElement_EndLink);
-
-    RegisterRuntimeExport("?BeginLink@DocumentTextElement@UI@@AEAAXAEBVString@System@@@Z",
-                          (void*)&RtUi_DocumentTextElement_BeginLink);            ++n;
-    RegisterRuntimeAddr(0x1800cdeb0ull, (void*)&RtUi_DocumentTextElement_BeginLink);
-
-    RegisterRuntimeExport("?LayoutRow@DocumentTextElement@UI@@AEAAHXZ",
-                          (void*)&RtUi_DocumentTextElement_LayoutRow);            ++n;
-    RegisterRuntimeAddr(0x1800cdbc0ull, (void*)&RtUi_DocumentTextElement_LayoutRow);
-
-    RegisterRuntimeExport("?GetNextItem@DocumentTextElement@UI@@AEAA_NAEAUDocumentItem@12@@Z",
-                          (void*)&RtUi_DocumentTextElement_GetNextItem);          ++n;
-    RegisterRuntimeAddr(0x1800cdf40ull, (void*)&RtUi_DocumentTextElement_GetNextItem);
-
-    RegisterRuntimeExport("?GenerateItems@DocumentTextElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_DocumentTextElement_GenerateItems);        ++n;
-    RegisterRuntimeAddr(0x1800cf060ull, (void*)&RtUi_DocumentTextElement_GenerateItems);
-
-
-    return n;
 }
