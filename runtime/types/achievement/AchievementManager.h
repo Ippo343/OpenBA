@@ -88,8 +88,13 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                    // [1] 0x180001040
-    uint32_t    Type() const override;                        // [2] 0x180001020
+    // [1] 0x180001040 TypeName / [2] 0x180001020 Type, the static TypeId
+    // 0x180001030, `_TypeName` 0x180001000 / `_ParentTypeName` 0x180001010
+    // and the factory pair 0x180001130 / 0x1800011f0 (achievement_manager.cpp):
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/achievement/achievement_type_records.cpp.
+    DECLARE_TYPE(Achievement)
+public:
     int32_t     GetFileVersion() const override;              // [3] 0x18009e170
     //          Compile                                       // [4] External's, inherited
     bool        Serialize(void* stream) override;             // [5] 0x18009e070 (IO::Stream&)
@@ -109,18 +114,14 @@ public:
     // ?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@… 0x18009df80
     Object::InternalPtr<AchievementInstance> CreateInstance() const;
 
-    // 0x180001030 — `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@Achievement@1@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
     static void* operator new(std::size_t bytes);             // 0x180001050 — not ported
     static void* operator new(std::size_t bytes, void* place);// 0x1800010c0 — not ported
     static void  operator delete(void* p);                    // 0x1800010d0 — not ported
     // 0x180001130 / 0x1800011f0 — retail's factory pair (B39_RULES D2):
     // MemAlloc(0x58, 8) + the ctor, and the null-tested in-place ctor
     // (achievement_manager.cpp). The class declares its own placement new:
-    // placement construction spells `::new (p) Achievement()`.
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* place);
+    // placement construction spells `::new (p) Achievement()`. (Declared by
+    // DECLARE_TYPE above.)
     Achievement(const Achievement& other);                    // 0x180001470 — not ported
     Achievement& operator=(const Achievement& other);         // 0x180001550 — not ported
 
@@ -132,12 +133,6 @@ protected:
     // `_title` (the two ExternalPtrs are trivial) — which is exactly retail's
     // order, then runs ~External().
     ~Achievement();
-
-private:
-    //   0x180001000  ?_TypeName@Achievement@1@       -> "Achievement"
-    //   0x180001010  ?_ParentTypeName@Achievement@1@ -> "Object::External"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     Object::ExternalPtr<UI::StringTable> _stringTable;   // +0x20  GetStringTable 0x180001380
@@ -191,8 +186,14 @@ public:
         if (flags & 1) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                    // [1] 0x1800017c0
-    uint32_t    Type() const override;                        // [2] 0x1800017a0
+    // [1] 0x1800017c0 TypeName / [2] 0x1800017a0 Type, the static TypeId
+    // 0x1800017b0, `_TypeName` 0x180001780 / `_ParentTypeName` 0x180001790 and
+    // CreateNewObject 0x1800018b0: retail's macro (ENDGAME B.3.9 TI-REST); the
+    // record is `DEFINE_TYPE`d in achievement_type_records.cpp. Retail's
+    // record's in-place half is the SHARED ?CreateInPlaceObject@Internal@Object@@
+    // (0x1800070c0); the macro's CreateInPlaceObject forwards to it there.
+    DECLARE_TYPE(AchievementInstance)
+public:
     void        Persist(void* stream) override;               // [3] 0x18009e4a0 (IO::Stream&)
 
     // ?GetAchievement@AchievementInstance…QEBA?AV?$ExternalPtr@VAchievement@1@… 0x180001950
@@ -205,15 +206,12 @@ public:
     // — ExternalPtr by value arrives BARE in RDX (B7-5): a register value here.
     void SetAchievement(Object::ExternalPtr<Achievement> achievement);
 
-    // 0x1800017b0 — `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@AchievementInstance@Achievement@@` record (D6 step 1).
-    static uint32_t TypeId();
     static void* operator new(std::size_t bytes);             // 0x1800017d0 — not ported
     static void* operator new(std::size_t bytes, void* place);// 0x180001840 — not ported
     static void  operator delete(void* p);                    // 0x180001850 — not ported
     // 0x1800018b0 — MemAlloc(0x28, 8) + the ctor (achievement_manager.cpp,
-    // B39_RULES D2); the in-place half is Internal's shared one.
-    static Object::Base* CreateNewObject();
+    // B39_RULES D2; declared by DECLARE_TYPE); the in-place half is Internal's
+    // shared one.
     AchievementInstance(const AchievementInstance& other);    // 0x180001970 — not ported
     AchievementInstance& operator=(const AchievementInstance& other);  // 0x1800019f0 — not ported
 
@@ -229,12 +227,6 @@ protected:
     // the compiler destroys `_goalList` (a real GoalList — its ~GoalList
     // deletes every instance) and then runs ~Internal().
     ~AchievementInstance();
-
-private:
-    //   0x180001780  ?_TypeName@AchievementInstance@…       -> "AchievementInstance"
-    //   0x180001790  ?_ParentTypeName@AchievementInstance@… -> "Object::Internal"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     GoalList                         _goalList;      // +0x10 .. +0x1f  held BY VALUE (B7-8)

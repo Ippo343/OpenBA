@@ -20,3 +20,9 @@
 # -- Collision2D --
 ?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Collision2D::CollisionMesh, "Object::External", nullptr); RT_DATA_SLOT accessor in collisionmesh.cpp deleted
 ?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Collision2D::Surface, "Object::External", nullptr); RT_DATA_SLOT accessors (surface.cpp, collisionmesh.cpp _surfaces serialize) and the EXTPTR_ARRAY_THUNK read converted
+
+# -- Achievement --
+?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::Achievement, "Object::External", nullptr); RT_DATA_SLOT accessor (achievement_typeinfo_accessors.cpp) and the EXTPTR_THUNK read converted
+?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::AchievementInstance, "Object::Internal", nullptr); RT_DATA_SLOT accessor and the INTPTR_ARRAY_THUNK read converted
+?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::Goal, "Object::External", nullptr); RT_DATA_SLOT accessor and the two EXTPTR thunk reads converted
+?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::GoalInstance, "Object::Internal", nullptr); RT_DATA_SLOT accessors (accessors, goal_list.cpp) and the INTPTR_ARRAY_THUNK read converted

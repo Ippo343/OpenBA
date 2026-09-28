@@ -167,6 +167,8 @@
 #include "../../types/audio/SoundBuffer.h"     // ENDGAME B.3.9 TI-REST: the thunks' records
 #include "../../types/audio/SoundEffect.h"
 #include "../../types/collision2d/Surface.h"
+#include "../../types/achievement/AchievementManager.h"
+#include "../../types/achievement/Goal.h"
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -482,8 +484,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Dialog,
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_StringTable,
              "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A")
 // 0x180005dc0 — Achievement::GoalInstance+0x18. The oracle route; see the banner.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Goal,
-             "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Goal, Achievement::Goal)
 // 0x180004590 — Achievement::Achievement+0x38 (WAVE 26 LANE INT33). The FIFTH,
 // and it is registered for the same reason the fourth was: it is on an ORACLE
 // route that already exists. See the registration block below.
@@ -520,8 +521,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationGroup,
 // back-reference (`@Achievement@1@`), which is why a grep for
 // `Achievement@Achievement@@` finds nothing; the name below is verified against
 // the export directory and is the same key the mint uses.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Achievement,
-             "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Achievement, Achievement::Achievement)
 // The four Video::VideoProgram fields (runtime/src/video/videoprogram.cpp):
 // 0x180055090 VertexLayout, 0x1800542a0 VertexProgram, 0x180055380 PixelProgram,
 // 0x180055670 RenderState. Reached only through VideoProgram's Serialize slot,
@@ -631,8 +631,7 @@ extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
                    "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A")
 // 0x180005220 — Achievement::Goal
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Goal,
-                   "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Goal, Achievement::Goal)
 // 0x1800493d0 — UI::ElementDescription
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_ElementDescription,
                    "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")

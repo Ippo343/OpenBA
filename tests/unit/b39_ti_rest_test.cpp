@@ -50,6 +50,8 @@
 #include "../../runtime/types/audio/SoundEffect.h"
 #include "../../runtime/types/collision2d/CollisionMesh.h"
 #include "../../runtime/types/collision2d/Surface.h"
+#include "../../runtime/types/achievement/AchievementManager.h"
+#include "../../runtime/types/achievement/Goal.h"
 
 // ===========================================================================
 // Factory-pair markers (see the banner).
@@ -65,6 +67,12 @@ TIR_FACTORY_MARKERS(Audio::SoundBuffer)
 TIR_FACTORY_MARKERS(Audio::SoundEffect)
 TIR_FACTORY_MARKERS(Collision2D::CollisionMesh)
 TIR_FACTORY_MARKERS(Collision2D::Surface)
+TIR_FACTORY_MARKERS(Achievement::Achievement)
+TIR_FACTORY_MARKERS(Achievement::Goal)
+// The two Object::Internal subclasses: only CreateNewObject is the class's;
+// the in-place half is the real forwarder in achievement_type_records.cpp.
+::Object::Base* Achievement::AchievementInstance::CreateNewObject() { return nullptr; }
+::Object::Base* Achievement::GoalInstance::CreateNewObject() { return nullptr; }
 
 namespace {
 
@@ -97,6 +105,11 @@ std::vector<Expect> Rows() {
         // ---- Collision2D ----
         TIR_ROW(Collision2D::CollisionMesh, "CollisionMesh", "External",   0x99753590u),
         TIR_ROW(Collision2D::Surface,       "Surface",       "External",   0x20B1860Cu),
+        // ---- Achievement ----
+        TIR_ROW(Achievement::Achievement,         "Achievement",         "External", 0x96F8B310u),
+        TIR_ROW(Achievement::AchievementInstance, "AchievementInstance", "Internal", 0x709F0D32u),
+        TIR_ROW(Achievement::Goal,                "Goal",                "External", 0xF50A1DDFu),
+        TIR_ROW(Achievement::GoalInstance,        "GoalInstance",        "Internal", 0x9C8C89CCu),
     };
 }
 

@@ -64,8 +64,6 @@ void NoteDtor(const void* self) {
 // Markers (see the banner).
 // ===========================================================================
 namespace Achievement {
-const char* Achievement::TypeName() const { return "Achievement"; }
-uint32_t    Achievement::Type() const { return 0; }
 int32_t     Achievement::GetFileVersion() const { return 3; }
 bool        Achievement::Serialize(void*) { return true; }
 Object::External* Achievement::Reconstruct() { return this; }
@@ -73,20 +71,14 @@ void        Achievement::Destruct() {}
 Object::External* Achievement::Construct() { return this; }
 Achievement::~Achievement() { NoteDtor(this); }
 
-const char* AchievementInstance::TypeName() const { return "AchievementInstance"; }
-uint32_t    AchievementInstance::Type() const { return 0; }
 void        AchievementInstance::Persist(void*) {}
 AchievementInstance::~AchievementInstance() { ++g_aiDtorRuns; }
 
-const char* Goal::TypeName() const { return "Goal"; }
-uint32_t    Goal::Type() const { return 0; }
 int32_t     Goal::GetFileVersion() const { return 0x10000; }
 bool        Goal::Serialize(void*) { return true; }
 Object::Type* Goal::GetInstanceType(Object::Type* ret) const { return ret; }
 Goal::~Goal() { NoteDtor(this); }
 
-const char* GoalInstance::TypeName() const { return "GoalInstance"; }
-uint32_t    GoalInstance::Type() const { return 0; }
 void        GoalInstance::Persist(void*) {}
 void        GoalInstance::Startup() {}
 void        GoalInstance::Update(const System::Time&, const GoalList&) {}
