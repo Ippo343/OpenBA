@@ -751,3 +751,14 @@ static_assert(offsetof(Renderer, _detailId)          == 0x48, "Renderer::_detail
 static_assert(offsetof(Renderer, _pad_4c)            == 0x4c, "Renderer::+0x4c is never written by the ctor (RULE B5-13)");
 
 }  // namespace Graphics
+
+// ==== B3R RT-VG ====
+// The copy door `??0Camera@Graphics@@QEAA@AEBV01@@Z` (retail 0x180017a70), which
+// copies +0x00..+0xd4 and leaves the +0xd5..+0xd7 hole retail does not touch
+// (the defaulted `Graphics::Camera` copy ctor would copy the hole too).
+namespace rtgfxd {
+// ---- graphics/wave9_lane_gfxd.cpp
+RtGraphics::Camera* RtGraphics_Camera_CopyCtor(RtGraphics::Camera* self,
+                                               const RtGraphics::Camera* src);  // 0x180017a70
+}  // namespace rtgfxd
+// ==== end B3R RT-VG ====

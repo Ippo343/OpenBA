@@ -127,6 +127,8 @@
 // `standalone/resolve.h`: no `<windows.h>` is in this translation unit, so
 // `Volume::Rectangle` does not collide with `<wingdi.h>`'s `Rectangle`.
 #include "../../types/graphics/ParticleInstance.h"
+#include "../../types/collection/Collection.h"
+#include "../../types/system/MemoryAllocator.h"
 
 using RtGraphics::AnimationEvent;
 using RtGraphics::AnimationManager;
@@ -142,28 +144,7 @@ using RtGraphics::ParticleSystemInstance;
 using RtGraphics::ParticleResource;
 using RtGraphics::ParticleBoundsRecord;
 
-// ----------------------------------------------------------------------------
-// ResolveAddr / the raw DLL door, forward-declared rather than pulled in from
-// standalone/resolve.h -- same reasoning rt_port.h gives (resolve.h drags in
-// <windows.h>, which collides with the engine's own type/member names). This
-// declaration must stay byte-identical to resolve.h's.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-// ============================================================================
-// Mangled names, each its own literal at the registration call for
-// tools/runtime_census.py (reference_census_cannot_see_nonliteral_registrations.md);
-// kept as named constants here only for the diff-oracle the raw DLL door<> calls.
-// ============================================================================
-const char* const kAnimMgrCtor     = "??0AnimationManager@Graphics@@QEAA@XZ";
-const char* const kAnimMgrDtor     = "??1AnimationManager@Graphics@@QEAA@XZ";
-const char* const kPIupdate        = "?Update@ParticleInstance@Graphics@@QEAA_NXZ";
-const char* const kPIincrement     = "?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ";
-// ENDGAME B.3.5 caller batch: `kSetBounds` is gone with its door — the member call
-// spells the name it no longer needs.
 
 // ENDGAME B.3.9 block GFX: `RtParticleInstanceVtable` /
 // `RtParticleSystemInstanceVtable` (the two minted tables, rebased, with lazy
@@ -273,12 +254,9 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
     // passed as if it were an `LPCRITICAL_SECTION`, per the banner above. There
     // is no `Collection::Array`/`LinkedList`/`Set` member here to name — the
     // shared address is coincidental reuse of one small function, not two
-    // views of the same container — so this stays the by-address call onto
-    // the SAME ported body (registry-first, so it already reaches
-    // `RtColl_ArrayDtorElem_18005bf60`, not the DLL's).
-    using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005bf60));
-    fn(self);
+    // views of the same container — so this is a call of that SAME ported
+    // body, `rtcoll::RtColl_ArrayDtorElem_18005bf60`, by name (B3R).
+    rtcoll::RtColl_ArrayDtorElem_18005bf60(self);
 
 }
 
@@ -645,20 +623,18 @@ int RtGraphicsAnimationRegister() {
 // elements are NOT nulled in the array (retail does not).
 // ============================================================================
 void Graphics::Particle::ReleaseFields() {
-    using MemFreeFn = void (*)(void*);
-    MemFreeFn const memFree =
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
+
     uint8_t* const self = reinterpret_cast<uint8_t*>(this);
     for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x40); ++i) {
         uint8_t* const rec =
             (*reinterpret_cast<uint8_t* const* const*>(self + 0x38))[i];
         if (rec == nullptr) continue;
-        if (void* const buf = *reinterpret_cast<void* const*>(rec + 0x18)) memFree(buf);
+        if (void* const buf = *reinterpret_cast<void* const*>(rec + 0x18)) System::MemoryAllocator::MemFree(buf);
         *reinterpret_cast<void**>(rec + 0x18) = nullptr;
         *reinterpret_cast<uint64_t*>(rec + 0x20) = 0;
-        memFree(rec);
+        System::MemoryAllocator::MemFree(rec);
     }
-    if (void* const data = *reinterpret_cast<void* const*>(self + 0x38)) memFree(data);
+    if (void* const data = *reinterpret_cast<void* const*>(self + 0x38)) System::MemoryAllocator::MemFree(data);
     *reinterpret_cast<void**>(self + 0x38) = nullptr;
     *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
 }

@@ -19,15 +19,13 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/io/Serializer.h"   // IO::ReaderWriter (B3X W0)
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/graphics/Camera.h"          // rtgfxd::RtGraphics_Camera_CopyCtor
+#include "../../types/collection/Collection.h"    // rtcoll:: the array instantiations
 
 namespace {
 
 // `Array<Geometry*>::operator=` — retail 0x18001b1a0, the CALL at 0x180015b8b.
-// By address, registry-first: batch 2 ported it in
-// runtime/src/collection/array_destroy.cpp, so this lands on our body.
+// Batch 2 ported it in runtime/src/collection/array_destroy.cpp; called by name.
 //
 // ENDGAME B.3.2 step 2 (callers) — NOT converted to `dst->_attached =
 // src->_attached`. `Geometry::_attached` is a real `Collection::Array<
@@ -37,20 +35,15 @@ namespace {
 // bitwise copier converts). Rewriting this call as a member assignment would
 // silently swap the deep, allocator-owning assign for a shallow one.
 void ArrayGeometryPtrAssign(void* dst, const void* src) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001b1a0));
-    fn(dst, src);
+    rtcoll::RtColl_ArrayAssign_18001b1a0(dst, src);
 }
 
 // `Graphics::Camera::Camera(const Camera&)` — retail 0x180017a70, read from
 // 0x18001be7e / 0x18001be91 rather than resolved by a mangled name this file
 // would have had to guess (reference_resolveexport_phantom_names.md).
 void CameraCopyCtor(void* dst, const void* src) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180017a70));
-    fn(dst, src);
+    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<RtGraphics::Camera*>(dst),
+                                       static_cast<const RtGraphics::Camera*>(src));
 }
 
 // The per-element copy constructor the eh_vector iterator is handed at
@@ -67,10 +60,7 @@ void CameraCopyCtor(void* dst, const void* src) {
 // of `RendererDrawGroup::items[i]`), a real, named C++ type — the missing
 // piece is only the class's copy constructor, not the element type.
 void InnerArrayCopyCtor(void* dst, const void* src) {
-    using Fn = void* (*)(void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001c620));
-    fn(dst, src);
+    rtcoll::RtColl_ArrayCopyCtor_18001c620(dst, src);
 }
 
 }  // namespace

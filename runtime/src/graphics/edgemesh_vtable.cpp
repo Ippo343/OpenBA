@@ -68,6 +68,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
 #include "../../types/io/Serializer.h"    // IO::ReaderWriter (B3X W0)
+#include "../../types/object/External.h"  // RtObject_ExternalPtrSerialize_*
 #include "../collection/array_internal.h"
 
 // Same local declaration mesh.cpp, array.cpp and deleting_dtor.cpp carry, and
@@ -182,33 +183,20 @@ constexpr size_t kVideoBufferSerialize = 0x30;
 //                `RtTriListArrayResize()`. Deliberately resolved the same way
 //                here rather than re-derived, so there is ONE place to repoint.
 // ---------------------------------------------------------------------------
-using ExtPtrSerializeFn = void (*)(void* extPtrSlot, SerializeCtx* ctx);
-using TriListArrayFn    = void (*)(SerializeCtx* ctx, int count, void* data);
-
-// THE ADDRESS LITERAL IS SPELLED AT THE ResolveAddr CALL, ONE ACCESSOR PER
-// HELPER, RATHER THAN PASSED INTO A SHARED `RtAddrOnce(va)` TEMPLATE. That is
-// not style. tools/addr_door_audit.py harvests by-address doors with the regex
-//     ResolveAddr\s*\(\s*Module::Runtime\s*,\s*(0x[0-9a-fA-F]+)
-// (addr_door_audit.py:47), so an address handed to a wrapper as a PARAMETER is
-// invisible to it -- the door exists and no audit can see it, which is the same
-// blind spot reference_literal_grep_blind_to_variables.md has now recorded four
-// times. Written this way, all four of these doors appear in that audit's
-// UNREGISTERED list, where they belong: three of them are unported DLL
-// internals and SHOULD be listed until somebody ports them.
-ExtPtrSerializeFn RtSerializeExternalPtrBase() {
-    static ExtPtrSerializeFn f = reinterpret_cast<ExtPtrSerializeFn>(
-        ResolveAddr(Module::Runtime, 0x180014230));
-    return f;
+// B3R: all three are ported and called by name —
+// RtObject_ExternalPtrSerialize_GraphicsMesh (0x180014230),
+// RtObject_ExternalPtrSerialize_MaterialInstance (0x180014520), both in
+// object/external_ptr_serialize.cpp (declared in types/object/External.h), and
+// RtGraphics_EdgeMesh_SerializeTriangleListArray (0x180014850,
+// graphics/closure_batch2b.cpp, declared in types/graphics/Mesh.h).
+// B.3.x bridge: `SerializeCtx` is this file's view of an rt::io::Serializer.
+inline void ExtBase(void* slot, SerializeCtx* ctx) {
+    RtObject_ExternalPtrSerialize_GraphicsMesh(
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(ctx));
 }
-ExtPtrSerializeFn RtSerializeExternalPtrMaterial() {
-    static ExtPtrSerializeFn f = reinterpret_cast<ExtPtrSerializeFn>(
-        ResolveAddr(Module::Runtime, 0x180014520));
-    return f;
-}
-TriListArrayFn RtSerializeTriangleListArray() {
-    static TriListArrayFn f = reinterpret_cast<TriListArrayFn>(
-        ResolveAddr(Module::Runtime, 0x180014850));
-    return f;
+inline void ExtMat(void* slot, SerializeCtx* ctx) {
+    RtObject_ExternalPtrSerialize_MaterialInstance(
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(ctx));
 }
 // ENDGAME B.3.2 step 2 (callers) — the 0x1800136f0 ArrayResizeFn forwarder
 // that used to sit here is GONE: `self` here is a raw `void*` with no
@@ -369,18 +357,15 @@ bool EdgeMesh::Serialize(void* stream) {
         ctx.encoding = make(factory, &ctx, 0);
     }
 
-    ExtPtrSerializeFn extBase     = RtSerializeExternalPtrBase();
-    ExtPtrSerializeFn extMat      = RtSerializeExternalPtrMaterial();
-    TriListArrayFn    triArray    = RtSerializeTriangleListArray();
 
     // The +0x20 qword no getter names, then the four materials IN FIELD ORDER
     // (mask, skinMask, edge, skinEdge — see Mesh.h's note; the FIELD order and
     // the SetMaterials ARGUMENT order are two groupings of the same four).
-    extBase(&_reserved20,      &ctx);
-    extMat (&_maskMaterial,     &ctx);
-    extMat (&_skinMaskMaterial, &ctx);
-    extMat (&_edgeMaterial,     &ctx);
-    extMat (&_skinEdgeMaterial, &ctx);
+    ExtBase(&_reserved20,      &ctx);
+    ExtMat (&_maskMaterial,     &ctx);
+    ExtMat (&_skinMaskMaterial, &ctx);
+    ExtMat (&_edgeMaterial,     &ctx);
+    ExtMat (&_skinEdgeMaterial, &ctx);
 
     // `ctx.encoding` is the ReaderWriter the factory made (see SerializeCtx).
     IO::ReaderWriter* const rw =
@@ -392,7 +377,7 @@ bool EdgeMesh::Serialize(void* stream) {
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
             // retail 0x1800136f0 — Array<GraphicsMesh::TriangleList>::SetSize(n).
             rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_triangleLists)->SetSize(n);
-        triArray(&ctx, n, _triangleLists._data);
+        RtGraphics_EdgeMesh_SerializeTriangleListArray(&ctx, n, _triangleLists._data);
     }
     {   // step 6 — the edge lists, +0x158 data / +0x160 size
         int32_t n = _edgeLists._size;
@@ -400,7 +385,7 @@ bool EdgeMesh::Serialize(void* stream) {
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
             // Same door, same spec: the edge-list array shares 0x1800136f0.
             rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_edgeLists)->SetSize(n);
-        triArray(&ctx, n, _edgeLists._data);
+        RtGraphics_EdgeMesh_SerializeTriangleListArray(&ctx, n, _edgeLists._data);
     }
 
     {   // step 7 — eight Video buffers, INDEX BEFORE VERTEX in each pair,
