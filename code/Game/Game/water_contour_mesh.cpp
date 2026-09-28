@@ -88,6 +88,7 @@
 // `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "video/Buffers.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -131,7 +132,7 @@ constexpr float kMinArcGate = 0.001f;    // DAT_1401720b8 (avg-edge degenerate g
 struct Vec { void* data; int32_t count; int32_t cap; };
 
 void* MemAllocA(uint64_t bytes, int align) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, bytes, align) : nullptr;
+    return (System::MemoryAllocator::_singleton) ? System::MemoryAllocator::MemAlloc(bytes, align) : nullptr;
 }
 
 // Append one element of `stride` bytes; mirrors the inlined resize (count+1).
@@ -143,7 +144,7 @@ void VecPush(Vec* v, const void* elem, int stride, int align) {
         if (!nb) return;
         if (v->data && v->count > 0)
             std::memcpy(nb, v->data, (size_t)v->count * stride);
-        if (v->data) fn_MemFreeStatic(v->data);
+        if (v->data) System::MemoryAllocator::MemFree(v->data);
         v->data = nb;
         v->cap = newCap;
     }
@@ -164,7 +165,7 @@ void RangeResize(Vec* v, int n) {
             int keep = (oldCount < n) ? oldCount : n;
             std::memcpy(nb, oldData, (size_t)keep * 0x10);
         }
-        if (oldData && oldData != nb) fn_MemFreeStatic(oldData);
+        if (oldData && oldData != nb) System::MemoryAllocator::MemFree(oldData);
         v->data = nb;
     }
 }
@@ -205,7 +206,7 @@ void WeldInit(WeldSet* s, int stride, int estimate) {
 void WeldFree(WeldSet* s) {
     if (s->buckets) std::free(s->buckets);
     if (s->chain) std::free(s->chain);
-    if (s->verts.data) fn_MemFreeStatic(s->verts.data);
+    if (s->verts.data) System::MemoryAllocator::MemFree(s->verts.data);
     s->buckets = nullptr; s->chain = nullptr; s->verts.data = nullptr;
 }
 
@@ -606,8 +607,8 @@ void b260_Phase1(uint8_t* geom, uint8_t* hf) {
         {
             fb00_BuildBody_Faithful(hf, body, &vtxOut, &idxOut);
             if (vtxOut.count == 0) {   // degenerate body -> approximation fallback
-                if (vtxOut.data) fn_MemFreeStatic(vtxOut.data);
-                if (idxOut.data) fn_MemFreeStatic(idxOut.data);
+                if (vtxOut.data) System::MemoryAllocator::MemFree(vtxOut.data);
+                if (idxOut.data) System::MemoryAllocator::MemFree(idxOut.data);
                 vtxOut = Vec{ nullptr, 0, 0 };
                 idxOut = Vec{ nullptr, 0, 0 };
                 fb00_BuildBody(hf, body, &vtxOut, &idxOut);
@@ -641,8 +642,8 @@ void b260_Phase1(uint8_t* geom, uint8_t* hf) {
         for (int i = 0; i < idxOut.count; ++i)
             VecPush(idxAcc, &oi[i], 2, 2);
 
-        if (vtxOut.data) fn_MemFreeStatic(vtxOut.data);
-        if (idxOut.data) fn_MemFreeStatic(idxOut.data);
+        if (vtxOut.data) System::MemoryAllocator::MemFree(vtxOut.data);
+        if (idxOut.data) System::MemoryAllocator::MemFree(idxOut.data);
     }
 }
 
@@ -783,7 +784,7 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
 // ============================================================
 extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf) {
     if (!self || !hf) return;
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
+    if (!System::MemoryAllocator::_singleton) {
         fprintf(stderr, "[water_contour] MemAlloc/Free unavailable — skipping\n");
         fflush(stderr);
         return;

@@ -27,6 +27,7 @@
 #include "options.h"
 #include <windows.h>
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Object/factory_registration.h"
 #include <atomic>
 #include <cstdint>
@@ -37,6 +38,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 #include "Entity/exe_bodies.h"
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable
 
 // TownManager::AbortCitizenActionsFor (exe 0x140089e30) - ported in
 // code/Game/Component/destroycomponent_state6.cpp.
@@ -160,12 +162,12 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
 
         // Create IBP for new component and owner
         uintptr_t newIBP = 0;
-        if (fn_InternalBasePtr_Ctor) {
+        {
             new ((void*)&newIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(newComp));   // B.3.3 bridge
         }
         uintptr_t ownerIBP = 0;
-        if (fn_InternalBasePtr_Ctor) {
+        {
             new ((void*)&ownerIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
         }
@@ -236,9 +238,8 @@ ComponentEntity::~ComponentEntity() {
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
         if (townMgr) {
             void* entityIbp = nullptr;
-            if (fn_InternalBasePtr_Ctor) new (&entityIbp) ::Object::InternalBasePtr(
+            new (&entityIbp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            else                         entityIbp = this;
             TownMgr_AbortCitizenActionsFor_89e30(reinterpret_cast<void*>(townMgr),
                                                  &entityIbp);
         }
@@ -253,11 +254,11 @@ ComponentEntity::~ComponentEntity() {
             // Save old IBP value
             uintptr_t oldIBP = *(uintptr_t*)ibpAddr;
             // Construct null IBP in place
-            if (fn_InternalBasePtr_Ctor) {
+            {
                 new ((void*)ibpAddr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             }
             // Delete old IBP (releases the component)
-            if (fn_InternalBasePtr_DeletePtr) {
+            {
                 reinterpret_cast< ::Object::InternalBasePtr*>((void*)&oldIBP)->DeletePtr();   // B.3.3 bridge
             }
         }
@@ -265,8 +266,8 @@ ComponentEntity::~ComponentEntity() {
 
     // Free component array memory
     if (_components) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(_components);
+        {
+            System::MemoryAllocator::MemFree(_components);
         }
     }
     _components = nullptr;
@@ -361,7 +362,7 @@ void ComponentEntity::RefreshEntityFlags() {
             // EntityList +0x88 = update entity array, +0x90 = update count
             int updateCount = *(int*)(entityListPtr + 0x90) + 1;
             uintptr_t ibp = 0;
-            if (fn_InternalBasePtr_Ctor) {
+            {
                 new ((void*)&ibp) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             }
@@ -376,7 +377,7 @@ void ComponentEntity::RefreshEntityFlags() {
             // EntityList +0x98 = draw entity array, +0xa0 = draw count
             int drawCount = *(int*)(entityListPtr + 0xa0) + 1;
             uintptr_t ibp = 0;
-            if (fn_InternalBasePtr_Ctor) {
+            {
                 new ((void*)&ibp) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             }
@@ -405,9 +406,7 @@ void ComponentEntity::Persist(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
 
     // Serialize description ExternalPtr at +0x28
-    if (fn_ExternalPtr_BuildSerialize) {
-        fn_ExternalPtr_BuildSerialize(&_description, &ser);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(&_description, &ser);
 
     // Serialize component count
     uint32_t compCount = (uint32_t)_componentCount;
@@ -561,8 +560,8 @@ void ComponentEntity::Persist(void* stream) {
             // Verify component is derived from Component base; null out if not
             void* comp = *(void**)ibpAddr;
             if (comp != nullptr) {
-                if (fn_IsDerivedFrom) {
-                    bool isDerived = fn_IsDerivedFrom(comp, Component::TypeId());   // cell 0x1401c72a8
+                {
+                    bool isDerived = ::Object::IsDerivedFromNullSafe(comp, Component::TypeId());   // cell 0x1401c72a8
                     if (!isDerived) {
                         *(void**)ibpAddr = nullptr;
                     }
@@ -617,15 +616,15 @@ void ComponentEntity::Persist(void* stream) {
 
                 // Verify it's a Component
                 void* newComp = nullptr;
-                if (newObj && fn_IsDerivedFrom) {
-                    if (fn_IsDerivedFrom(newObj, Component::TypeId())) {   // cell 0x1401c72a8
+                if (newObj) {
+                    if (::Object::IsDerivedFromNullSafe(newObj, Component::TypeId())) {   // cell 0x1401c72a8
                         newComp = newObj;
                     }
                 }
 
                 // Create IBP for new component
                 uintptr_t newIBP = 0;
-                if (fn_InternalBasePtr_Ctor) {
+                {
                     new ((void*)&newIBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(newComp));   // B.3.3 bridge
                 }
@@ -635,7 +634,7 @@ void ComponentEntity::Persist(void* stream) {
 
                 // Create IBP for owner (this entity)
                 uintptr_t ownerIBP = 0;
-                if (fn_InternalBasePtr_Ctor) {
+                {
                     new ((void*)&ownerIBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
                 }
@@ -701,7 +700,7 @@ void ComponentEntity::RegisterUpdateDraw(uint32_t oldFlags) {
     if ((changed & 4) != 0) {
         int updateCount = *(int*)(el + 0x90) + 1;
         uintptr_t ibp = 0;
-        if (fn_InternalBasePtr_Ctor) new ((void*)&ibp) ::Object::InternalBasePtr(
+        new ((void*)&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
@@ -711,7 +710,7 @@ void ComponentEntity::RegisterUpdateDraw(uint32_t oldFlags) {
     if ((changed & 0x10) != 0) {
         int drawCount = *(int*)(el + 0xa0) + 1;
         uintptr_t ibp = 0;
-        if (fn_InternalBasePtr_Ctor) new ((void*)&ibp) ::Object::InternalBasePtr(
+        new ((void*)&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
@@ -756,7 +755,7 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
     if (!el || !entityIBP) return;
 
     if (*(int8_t*)(el + 0xE0) != 0) {                  // list closed → drop the entity
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(entityIBP)->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(entityIBP)->DeletePtr(
             );   // B.3.3 bridge
         return;
     }

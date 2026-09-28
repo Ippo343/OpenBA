@@ -39,6 +39,7 @@
 // three extern "C" entry points into the kFullPipeline branch separately.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
@@ -396,9 +397,9 @@ extern "C" void wg_f390_carve(void* hfv) {
         }
     }
 
-    if (fn_MemFreeStatic) {
-        fn_MemFreeStatic(subHdr.data);   // frees local_90 first (matches disasm order)
-        fn_MemFreeStatic(mulHdr.data);   // then local_a0
+    {
+        System::MemoryAllocator::MemFree(subHdr.data);   // frees local_90 first (matches disasm order)
+        System::MemoryAllocator::MemFree(mulHdr.data);   // then local_a0
     }
 }
 
@@ -479,5 +480,5 @@ extern "C" void wg_f390_smooth(void* hfv) {
         for (int i = 0; i < cellCount; ++i) hm[i] = tmp[i];
     }
 
-    if (fn_MemFreeStatic) fn_MemFreeStatic(tmpHdr.data);
+    System::MemoryAllocator::MemFree(tmpHdr.data);
 }

@@ -14,10 +14,6 @@
 // GameUpdateLoop::Update. The original fn_EntityList_Update (0x1400c4090)
 // HANGS due to a spinlock issue — our custom reimpl is used instead.
 
-// Initialize all EntityList function pointers.
-// Must be called after ResolveInit() succeeds (called from gameupdateloop init).
-void EntityList_InitFuncs();
-
 // ============================================================
 // EntityList::Update (0x1400c4090 — CUSTOM REIMPL, original hangs)
 // ============================================================

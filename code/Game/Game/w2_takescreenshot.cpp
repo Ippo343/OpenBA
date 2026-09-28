@@ -53,13 +53,9 @@
 //    with tools/dispatch_slot_map.py on 0x1401520b0 / 0x1401520b8), and the
 //    teardown does exactly what slot 0 does: dtor, then MemFree.
 //
-// 2. The retail body derefs `this` unguarded after a failed MemAlloc, and
-//    calls seven Runtime methods through loader-filled .rdata slots that
-//    cannot be null in retail. Ours resolves them at runtime and could get a
-//    null, so there is one up-front resolve gate. That is the CLAUDE.md
-//    exception (our build genuinely differs from retail), not a guard over a
-//    faithful crash — and the gate still performs the +0xC0 clear, because
-//    leaving the flags set re-enters this path every frame forever.
+// 2. (Gone with B3R.) The body once resolved its Runtime methods by export name
+//    behind one up-front resolve gate; they are called by name now, so there is
+//    no gate and, like retail, no null to test.
 // ---------------------------------------------------------------------------
 
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::ImageBuffer is a real class
@@ -72,6 +68,7 @@
 #include "video/ImageBuffer.h"
 #include "graphics/FrameCopyImageBuffer.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/FileSystem.h"      // ENDGAME B.3.4a closing 4/4
 #include "system/Filename.h"
 #include <new>
@@ -86,102 +83,21 @@
 namespace {
 
 // --- Runtime primitives, all named PE imports of the retail exe -------------
-// System::MemoryAllocator::MemAlloc / MemFree are the STATIC overloads here
-// (?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z), not the singleton-taking
-// Allocate that engine_funcs.h exposes as fn_MemAlloc. The call site passes
-// two registers (ECX=size, EDX=alignment), so it must be the static pair.
-typedef void* (*MemAllocS_t)(uint64_t size, int alignment);          // 0x140152b60
-typedef void  (*MemFreeS_t)(void* ptr);                              // 0x140152b68
-
-// ENDGAME B.3.9 GFX: the FrameCopyImageBuffer ??0 / ??1 door typedefs
-// (0x140151f40 / 0x140151f48) are gone -- the class is built by its real ctor
-// and destroyed through its own slot 0.
-
-// ENDGAME B.3.5 closing pass: the `Create` (0x1401520b0) and `Generate`
-// (0x1401520b8) door typedefs and their two caches are GONE with the last thing
-// that read them -- both are virtual members of `Graphics::FrameCopyImageBuffer`
-// now (batch K1 converted the calls; the closing pass took the readiness terms and
-// the diagnostic that still printed the two addresses). The registrations and the
-// exe dispatch slots are unaffected.
-
-// ENDGAME B.3.4a closing 4/4: the GetSaveDirectory and Exists door typedefs,
-// their file-statics, their resolver lines, their two `s_ok` conjuncts and
-// their two diagnostic `%p`s are gone TOGETHER with the calls they served --
-// both are `IO::FileSystem` members now. The dispatch slots 0x1401520c0 /
-// 0x1401520d0 stay bound in the address registry (B34_RULES 6.5(g)).
-
-// ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z  — FREE operator+(String, char const*)
-// RCX = return buffer, RDX = lhs, R8 = cstr.                        // 0x140151a08
-typedef void* (*StrPlusCStr_t)(void* retStr, const void* lhs, const char* rhs);
-// ??HSystem@@YA?AVString@0@AEBV10@0@Z     — FREE operator+(String, String)
-typedef void* (*StrPlusStr_t)(void* retStr, const void* lhs, const void* rhs); // 0x140151a10
-// ?Format@String@System@@SA?AV12@PEBDZZ   — STATIC varargs, RCX = return buffer
-typedef void* (*StrFormat_t)(void* retStr, const char* fmt, ...);    // 0x140151560
-typedef void  (*StrDtor_t)(void* self);                              // 0x140152af0
-
-typedef void* (*FN_CtorDefault_t)(void* self);                       // 0x140151d40
-typedef void* (*FN_CtorString_t)(void* self, const void* str);       // 0x140151d68
-typedef void* (*FN_AssignString_t)(void* self, const void* str);     // 0x1401520c8
-typedef void  (*FN_Dtor_t)(void* self);                              // 0x1401529e8
-
-// ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — STATIC
-// Door typedef and cache GONE in the closing pass: it is a class static of the
-// real `Video::ImageBuffer` and the call site below spells it so.
-
-MemAllocS_t           s_MemAlloc          = nullptr;
-MemFreeS_t            s_MemFree           = nullptr;
-StrPlusCStr_t         s_StrPlusCStr       = nullptr;
-StrPlusStr_t          s_StrPlusStr        = nullptr;
-StrFormat_t           s_StrFormat         = nullptr;
-StrDtor_t             s_StrDtor           = nullptr;
-FN_CtorDefault_t      s_Filename_Ctor     = nullptr;
-FN_CtorString_t       s_Filename_CtorStr  = nullptr;
-FN_AssignString_t     s_Filename_Assign   = nullptr;
-FN_Dtor_t             s_Filename_Dtor     = nullptr;
-
-bool s_resolved = false;
-bool s_ok       = false;
-
-bool ResolveFuncs() {
-    if (s_resolved) return s_ok;
-    s_resolved = true;
-
-    s_MemAlloc         = (MemAllocS_t)          ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-    s_MemFree          = (MemFreeS_t)           ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-    s_StrPlusCStr      = (StrPlusCStr_t)        ResolveExport("??HSystem@@YA?AVString@0@AEBV10@PEBD@Z");
-    s_StrPlusStr       = (StrPlusStr_t)         ResolveExport("??HSystem@@YA?AVString@0@AEBV10@0@Z");
-    s_StrFormat        = (StrFormat_t)          ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ");
-    s_StrDtor          = (StrDtor_t)            ResolveExport("??1String@System@@QEAA@XZ");
-    s_Filename_Ctor    = (FN_CtorDefault_t)     ResolveExport("??0Filename@System@@QEAA@XZ");
-    s_Filename_CtorStr = (FN_CtorString_t)      ResolveExport("??0Filename@System@@QEAA@AEBVString@1@@Z");
-    s_Filename_Assign  = (FN_AssignString_t)    ResolveExport("??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z");
-    s_Filename_Dtor    = (FN_Dtor_t)            ResolveExport("??1Filename@System@@QEAA@XZ");
-
-    // ENDGAME B.3.5 closing pass: the `Create`, `Generate` and `SaveImageToFile`
-    // readiness terms are gone with their caches. Batch K1 converted all three call
-    // sites and kept the caches only because this `s_ok` chain and the printf below
-    // still read the pointers; a readiness test on a door nobody calls, and a
-    // diagnostic that prints its address, are not users worth keeping a cache for.
-    // ENDGAME B.3.9 GFX: the FrameCopyImageBuffer ctor / dtor doors went too (the
-    // class is real). Every System::String / Filename / MemoryAllocator term, not this step's.
-    s_ok = s_MemAlloc && s_MemFree && s_StrPlusCStr &&
-           s_StrPlusStr && s_StrFormat && s_StrDtor && s_Filename_Ctor &&
-           s_Filename_CtorStr && s_Filename_Assign && s_Filename_Dtor;
-           // ENDGAME B.3.9 SS2: the FileSystem / Video::Device / MainLoop door
-           // terms went with the doors; those cells are class statics now.
-
-    if (!s_ok) {
-        printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
-                    "  alloc=%p free=%p\n"
-                    "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p\n",
-                    (void*)s_MemAlloc, (void*)s_MemFree,
-                    (void*)s_StrPlusCStr, (void*)s_StrPlusStr, (void*)s_StrFormat,
-                    (void*)s_StrDtor, (void*)s_Filename_Ctor, (void*)s_Filename_CtorStr,
-                    (void*)s_Filename_Assign, (void*)s_Filename_Dtor);
-        std::fflush(stdout);
-    }
-    return s_ok;
-}
+// Called by name (B3R): the STATIC System::MemoryAllocator::MemAlloc / MemFree pair
+// (0x140152b60 / 0x140152b68; ECX=size, EDX=alignment), and the System::String /
+// System::Filename members the ten export doors were registered to (the RtSystem_*
+// shims of runtime/src/system/{string,filename}.cpp construct into the caller's raw
+// slot with placement new; the calls below do the same):
+//   ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z   operator+(String, char const*)   0x140151a08
+//   ??HSystem@@YA?AVString@0@AEBV10@0@Z      operator+(String, String)        0x140151a10
+//   ?Format@String@System@@SA?AV12@PEBDZZ    String::Format (static varargs)  0x140151560
+//   ??1String@System@@QEAA@XZ                ~String                          0x140152af0
+//   ??0Filename@System@@QEAA@XZ              Filename()                       0x140151d40
+//   ??0Filename@System@@QEAA@AEBVString@1@@Z Filename(const String&)          0x140151d68
+//   ??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z  Filename::operator=(String) 0x1401520c8
+//   ??1Filename@System@@QEAA@XZ              ~Filename                        0x1401529e8
+// ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z is a class
+// static of the real `Video::ImageBuffer` and the call site below spells it so.
 
 // System::String and System::Filename are both 8-byte handles (a pointer to
 // refcounted character data). Confirmed two ways: engine_funcs.h:1939 documents
@@ -197,13 +113,6 @@ struct alignas(8) StringHandle { void* p; };
 // ============================================================================
 extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
 
-    if (!ResolveFuncs()) {
-        // See departure (2) in the header comment: consume the request anyway,
-        // or Draw re-enters this branch on every frame for the rest of the run.
-        if (self) *reinterpret_cast<uint16_t*>(reinterpret_cast<uintptr_t>(self) + 0xC0) = 0;
-        return;
-    }
-
     void* device   = ::Video::Device::_singleton;                   // Video::Device*
     void* mainLoop = ::Engine::MainLoop::_singleton;                 // Engine::MainLoop*
     void* videoCtx = mainLoop ? *reinterpret_cast<void**>(
@@ -214,7 +123,7 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     const int height = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(device) + 8);
 
     // --- Grab the back buffer into a FrameCopyImageBuffer ---------------------
-    void* frameCopy = s_MemAlloc(0x88, 8);
+    void* frameCopy = System::MemoryAllocator::MemAlloc(0x88, 8);
     if (frameCopy) {
         // ENDGAME B.3.9 GFX (B9-13): the real class's ctor, not the ??0 door.
         // Retail's exe-side table copy 0x14015e370 is what the object then
@@ -244,18 +153,19 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
 
     // ENDGAME B.3.4a closing: onto IO::FileSystem::GetSaveDirectory, which
     // became a member in this same commit. `saveDir` stays a raw StringHandle
-    // and is still released by `s_Filename_Dtor` below, because that is what
+    // and is still released by `~Filename` below, because that is what
     // the door did: it filled the 8 raw bytes of a hidden return slot. The
     // member's by-value return fills the same slot through the same ABI, so
     // the construction/release pairing and its ORDER are unchanged.
     ::new (&saveDir) System::Filename(
         reinterpret_cast<const IO::FileSystem*>(fileSys)->GetSaveDirectory());   // B.3.4 bridge
-    s_StrPlusCStr(&joined, &saveDir, "\\Screenshots\\Screenshot");   // exe 0x14015e520
-    s_Filename_CtorStr(&base, &joined);
-    s_StrDtor(&joined);
-    s_Filename_Dtor(&saveDir);
+    ::new (&joined) System::String(
+        *reinterpret_cast<const System::String*>(&saveDir) + "\\Screenshots\\Screenshot");   // exe 0x14015e520
+    ::new (&base) System::Filename(*reinterpret_cast<const System::String*>(&joined));
+    reinterpret_cast<System::String*>(&joined)->~String();
+    reinterpret_cast<System::Filename*>(&saveDir)->~Filename();
 
-    s_Filename_Ctor(&path);
+    ::new (&path) System::Filename();
 
     int index = 0;
     do {
@@ -263,18 +173,19 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
         StringHandle full{};
         // exe 0x14015e238 = "%i.%s", exe 0x14015e518 = "bmp" (62 6d 70 00) —
         // BMP, not PNG.
-        s_StrFormat(&suffix, "%i.%s", index, "bmp");
-        s_StrPlusStr(&full, &base, &suffix);
-        s_Filename_Assign(&path, &full);
+        ::new (&suffix) System::String(System::String::Format("%i.%s", index, "bmp"));
+        ::new (&full) System::String(*reinterpret_cast<const System::String*>(&base) +
+                                     *reinterpret_cast<const System::String*>(&suffix));
+        *reinterpret_cast<System::Filename*>(&path) = *reinterpret_cast<const System::String*>(&full);
         ++index;
-        s_StrDtor(&full);
-        s_StrDtor(&suffix);
+        reinterpret_cast<System::String*>(&full)->~String();
+        reinterpret_cast<System::String*>(&suffix)->~String();
     } while (reinterpret_cast<const IO::FileSystem*>(fileSys)->Exists(
                  *reinterpret_cast<const RtSystem::Filename*>(&path)));   // B.3.4 bridge
 
     // --- Read the pixels back and write the file -----------------------------
     unsigned int* pixels = reinterpret_cast<unsigned int*>(
-        s_MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(height * width)) << 2, 4));
+        System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(height * width)) << 2, 4));
     // B.3.5 bridge — ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z.
     // `frameCopy` is a FrameCopyImageBuffer, which derives from Video::ImageBuffer
     // at offset 0 (GeneratedImageBuffer.h's chain), so the base member applies.
@@ -287,7 +198,7 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     Video::ImageBuffer::SaveImageToFile(
         *reinterpret_cast<const System::Filename*>(&path),
         width, height, pixels);   // B.3.5 bridge
-    s_MemFree(pixels);
+    System::MemoryAllocator::MemFree(pixels);
 
 
     // --- Teardown: exactly what the exe vtable's slot 0 (0x140019d50) does ----
@@ -298,6 +209,6 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     // a single 16-bit zero over both bytes at self+0xC0.
     *reinterpret_cast<uint16_t*>(reinterpret_cast<uintptr_t>(self) + 0xC0) = 0;
 
-    s_Filename_Dtor(&path);
-    s_Filename_Dtor(&base);
+    reinterpret_cast<System::Filename*>(&path)->~Filename();
+    reinterpret_cast<System::Filename*>(&base)->~Filename();
 }

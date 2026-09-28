@@ -46,6 +46,7 @@
 // `struct Rectangle`) is kept so a later include change cannot break it silently.
 #include "video/Buffers.h"   // Video::{Vertex,Index}Buffer
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <new>               // ENDGAME B.3.4a closing: placement-new of IO::Serializer
@@ -62,58 +63,14 @@
 // forward link — the menu heap-crash signature. Aborts (0x124) naming the tag.
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
 
-// External reimpl entry points from sibling sessions.
-extern "C" void  Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);
-extern "C" void  Reimpl_Struct60B_Serialize(void* serializer, int count, void* arrayBase);
-extern "C" void  Reimpl_Array_Serialize_External_MaterialInstance(
-    void* serializer, int count, void* arrayBase);
-extern "C" void  Reimpl_ExternalPtr_Serialize_Typed_7140(void* refField, void* serializer);
-extern "C" void  Reimpl_TradeWork_sub_c1e0(void* self);
-extern "C" void  Reimpl_TradeWork_sub_c780(void* self);
-extern "C" void  Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);
-extern "C" void  Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);
-extern "C" void  Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount);
-extern "C" void  Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);
-extern "C" void  Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount);
+// The reimpl entry points of sibling files are declared in Game/exe_bodies.h.
 
 namespace {
 
-// ============================================================
-// Dispatch-slot typedefs (lazy-resolved per call)
-// ============================================================
-//
-// All slots in the 0x14015xxxx range. We resolve them via ResolveAddr at
-// first use and cache. This pattern matches session 4 / session 6 etc.
-
-typedef void  (*FnVector2Ser_t   )(void* self, void* serializer);
-// ENDGAME B.3.5 batch K1: the two buffer-Create typedefs went with their caches.
-
 // Slot map (verified via Ghidra MCP `disassemble_function 0x1400b04d0 CALL`):
-// ENDGAME B.3.4a closing: every Serializer row is gone with its cache — the
-// calls are real IO::Serializer members. The rows below are the non-Serializer
-// doors this body still goes through. The PE import slots themselves stay
-// registered in standalone/address_registry.cpp (B34_RULES §6.5(g)).
-constexpr uintptr_t kSlot_Vector2Ser       = 0x1401526b8;  // Math::Vector2::Serialize
-// 0x140152668 (Video::VertexBuffer::Create) and 0x140152660 (Video::IndexBuffer::Create)
-// were here until ENDGAME B.3.5 batch K1; both are members now. The PE import slots
-// themselves stay registered in standalone/address_registry.cpp (B34_RULES 6.5(g)).
-
-template <typename Fn>
-Fn ResolveSlot(uintptr_t exeAddr, Fn& cache, bool& triedOnce, const char* tag) {
-    if (cache) return cache;
-    if (triedOnce) return nullptr;
-    triedOnce = true;
-    void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, exeAddr));
-    if (slot && *slot) {
-        cache = reinterpret_cast<Fn>(*slot);
-    } else {
-        printf("[Geometry::Serialize] dispatch slot 0x%llx (%s) unresolved — "
-               "step will soft-fail\n",
-               static_cast<unsigned long long>(exeAddr), tag ? tag : "?");
-        fflush(stdout);
-    }
-    return cache;
-}
+// every import-slot door of this body is a member call now -- the IO::Serializer
+// rows (ENDGAME B.3.4a), Video::VertexBuffer / IndexBuffer::Create (B.3.5 K1) and
+// Math::Vector2::Serialize (slot 0x1401526b8, B3R).
 
 // Helper: read the inner load/save flag.
 //
@@ -165,14 +122,6 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     // Local Serializer scratch (24 bytes).
     uint64_t local_ser[3] = {0, 0, 0};
     void* serializer = static_cast<void*>(local_ser);
-
-    // Resolve the remaining non-Serializer dispatch slots — cached statics,
-    // one-shot warnings.
-    static FnVector2Ser_t    s_vec2Ser = nullptr;       static bool t_vec2Ser = false;
-    // ENDGAME B.3.5 batch K1: the VertexBuffer::Create / IndexBuffer::Create caches,
-    // their typedefs, their two `kSlot_*` constants and their ResolveSlot lines went
-    // with their last callers in Step 14, which call the members.
-    FnVector2Ser_t   vec2Ser   = ResolveSlot(kSlot_Vector2Ser,       s_vec2Ser,   t_vec2Ser,   "Vector2::Serialize");
 
     auto serIntField = [&](void* field) {
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
@@ -233,8 +182,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     if (streamInner == 0) {
         // Loading path: build mesh + allocate heightmap.
         Reimpl_TradeWork_sub_c1e0(self);
-        if (fn_MemAlloc && g_pMemAllocSingleton && byteCount > 0) {
-            heightBuf = fn_MemAlloc(g_pMemAllocSingleton, byteCount, 4);
+        if (System::MemoryAllocator::_singleton && byteCount > 0) {
+            heightBuf = System::MemoryAllocator::MemAlloc(byteCount, 4);
             *reinterpret_cast<void**>(selfBytes + 0x140) = heightBuf;
         }
     } else {
@@ -379,11 +328,9 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
                     if (SerializerInner(serializer) == 0) {
                         // FUN_1400203a0 — 8-byte Vector2 stride resize. Use the
                         // session-prior stride-08 wrapper.
-                        if (fn_Array_Resize_Stride08) {
-                            fn_Array_Resize_Stride08(outerElem, innerCount);
-                        }
+                        Reimpl_Array_Resize_Stride08(outerElem, innerCount);
                     }
-                    if (vec2Ser && innerCount > 0) {
+                    if (innerCount > 0) {
                         void* innerData = reinterpret_cast<void*>(outerElem[0]);
                         if (innerData) {
                             uint8_t* vec2 = reinterpret_cast<uint8_t*>(innerData);
@@ -391,7 +338,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
                                 // Original disasm increments `this` by 8 (one Vector2)
                                 // BUT the decompile says `this + 8` which Ghidra mis-renders;
                                 // the actual increment is 8 bytes per Math::Vector2 element.
-                                vec2Ser(vec2, serializer);
+                                reinterpret_cast<Math::Vector2*>(vec2)->Serialize(serializer);   // slot 0x1401526b8
                                 vec2 += 8;
                             }
                         }
@@ -442,9 +389,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     if (version < 5 && SerializerInner(serializer) == 0) {
         // FUN_140001bb0 — resize stride-08 array. Use prior session helper.
         int32_t srcCount = *reinterpret_cast<int32_t*>(selfBytes + 0x208);
-        if (fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
-        }
+        Reimpl_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
         int32_t dstCount = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         if (dstCount > 0) {
             void* srcBase = *reinterpret_cast<void**>(selfBytes + 0x200);
@@ -473,9 +418,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         int32_t c = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         serIntField(&c);
         if (SerializerInner(serializer) == 0) {
-            if (fn_Array_Resize_Stride08) {
-                fn_Array_Resize_Stride08(selfBytes + 0x210, c);
-            }
+            Reimpl_Array_Resize_Stride08(selfBytes + 0x210, c);
         }
         void* arrBase = *reinterpret_cast<void**>(selfBytes + 0x210);
         // CASCADE: MaterialInstance — session 4 reimpl handles typeInfo null.
@@ -506,8 +449,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
 
         int32_t c218 = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         int32_t c228 = *reinterpret_cast<int32_t*>(selfBytes + 0x228);
-        if (c218 != c228 && fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(selfBytes + 0x210, c228);
+        if (c218 != c228) {
+            Reimpl_Array_Resize_Stride08(selfBytes + 0x210, c228);
         }
     }
 
@@ -569,9 +512,7 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
     int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version < 3 && SerializerInner(serializer) == 0) {
         int32_t srcCount = *reinterpret_cast<int32_t*>(selfBytes + 0x208);
-        if (fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
-        }
+        Reimpl_Array_Resize_Stride08(selfBytes + 0x210, srcCount);
         int32_t dstCount = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         int32_t gridSize = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
         void* srcBase = *reinterpret_cast<void**>(selfBytes + 0x200);
@@ -596,9 +537,7 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
         int32_t c = *reinterpret_cast<int32_t*>(selfBytes + 0x218);
         serIntField(&c);
         if (SerializerInner(serializer) == 0) {
-            if (fn_Array_Resize_Stride08) {
-                fn_Array_Resize_Stride08(selfBytes + 0x210, c);
-            }
+            Reimpl_Array_Resize_Stride08(selfBytes + 0x210, c);
         }
         void* base = *reinterpret_cast<void**>(selfBytes + 0x210);
         Reimpl_Array_Serialize_External_MaterialInstance(serializer, c, base);

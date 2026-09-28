@@ -32,6 +32,7 @@
 // Field offsets verified against Ghidra disassembly of Application-x64.exe.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -89,27 +90,19 @@ static constexpr uint32_t kSignMask   = 0x80000000u;// 0x1401722c0  (float-negat
 //   Math::Vector2::LengthSquared() const -> float
 //   Math::Vector2::Normalize()     -> Vector2& (returns self ptr; normalizes in place)
 // ============================================================
-typedef float    (*fn_Vec2Length_t)(void* self);
-typedef float    (*fn_Vec2LengthSq_t)(void* self);
-typedef void*    (*fn_Vec2Normalize_t)(void* self);
-
-static fn_Vec2Length_t    s_Vec2Length    = nullptr;
-static fn_Vec2LengthSq_t  s_Vec2LengthSq  = nullptr;
-static fn_Vec2Normalize_t s_Vec2Normalize = nullptr;
-static bool s_coastResolved = false;
-
 // The three ResolveExport calls below used to look up mangled names that DO
 // NOT EXIST in Runtime-x64.dll's export table (verified with pefile 2026-09-06):
 //   "?Length@Vector2@Math@@QEBAMXZ"        (assumed a plain-float return)
 //   "?LengthSquared@Vector2@Math@@QEBAMXZ" (assumed a plain-float return)
 //   "?Normalize@Vector2@Math@@QEAAAEAV12@XZ" (assumed an in-place, non-const overload)
-// So s_Vec2Length/LengthSq/Normalize always resolved null and every call
-// silently ran the fallback above instead of the DLL. The real exports exist
+// So the three lookups always resolved null and every call silently ran the
+// fallback instead of the DLL. The real exports exist
 // under different signatures (Length/LengthSquared return Math::Scalar via a
 // hidden RDX return-slot pointer, per the ABI note in
 // runtime/types/math/Math.h; Normalize has NO in-place overload, only a
-// by-value one). These adapters resolve the real exports and preserve this
-// file's existing call-site shape (float return / in-place self-mutation).
+// by-value one). These adapters call the real members and preserve this file's
+// existing call-site shape (float return / in-place self-mutation); they are
+// called by name (B3R: the pointer cache and its init went).
 static float coast_vec2len_real(void* self) {
     return reinterpret_cast<const Math::Vector2*>(self)->Length().v;
 }
@@ -121,18 +114,6 @@ static void* coast_vec2norm_real(void* self) {
     Math::Vector2 out = reinterpret_cast<const Math::Vector2*>(self)->Normalize();
     *reinterpret_cast<Math::Vector2*>(self) = out;
     return self;
-}
-
-static void coastline_EnsureInit() {
-    if (s_coastResolved) return;
-    s_coastResolved = true;
-    s_Vec2Length    = &coast_vec2len_real;
-    s_Vec2LengthSq  = &coast_vec2lensq_real;
-    s_Vec2Normalize = &coast_vec2norm_real;
-    fprintf(stderr, "[worldgen] coastline resolves: "
-            "Vec2Norm=%p Vec2Len=%p Vec2LenSq=%p\n",
-            (void*)s_Vec2Normalize, (void*)s_Vec2Length, (void*)s_Vec2LengthSq);
-    fflush(stderr);
 }
 
 // Helper: bit-cast negate (float XOR 0x80000000), matching the original's
@@ -216,7 +197,7 @@ static void* coastline_DeepCopyPath_24ac0(void* dst, void* src) {
     uint8_t* d = (uint8_t*)dst;
     uint8_t* s = (uint8_t*)src;
 
-    if (*(void**)(d + 0x00)) fn_MemFreeStatic(*(void**)(d + 0x00));
+    if (*(void**)(d + 0x00)) System::MemoryAllocator::MemFree(*(void**)(d + 0x00));
     *(int*)(d + 0x08) = 0;          // count
     *(void**)(d + 0x00) = nullptr;  // data
 
@@ -224,7 +205,7 @@ static void* coastline_DeepCopyPath_24ac0(void* dst, void* src) {
     *(int*)(d + 0x08) = n;
     if (n > 0) {
         *(int*)(d + 0x0c) = n;      // cap
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * PATHPT_STRIDE, 4);
+        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)n * PATHPT_STRIDE, 4);
         *(void**)(d + 0x00) = nb;
 
         uint8_t* dd = (uint8_t*)nb;
@@ -351,13 +332,13 @@ static void coastline_Subdivide_cc510(void* self, void** arrPtr, int lo, int hi,
     float midY = (hiY + loY) * kHalf;
 
     // Length(d) is computed by the original (call it to preserve parity / state).
-    if (s_Vec2Length) { float dvec[2] = { dX, dY }; (void)s_Vec2Length(dvec); }
+    { float dvec[2] = { dX, dY }; (void)coast_vec2len_real(dvec); }
 
     // Perpendicular (left normal): n = normalize( (-dY, dX) )  via integer XOR.
     float nvec[2];
     nvec[0] = fnegate(dY);
     nvec[1] = dX;
-    if (s_Vec2Normalize) s_Vec2Normalize(nvec);
+    coast_vec2norm_real(nvec);
     float nX = nvec[0], nY = nvec[1];
 
     float negLimA = fnegate(limA);
@@ -373,7 +354,7 @@ static void coastline_Subdivide_cc510(void* self, void** arrPtr, int lo, int hi,
 
             eHi[0] = hiX - candX;  eHi[1] = hiY - candY;
             eLo[0] = loX - candX;  eLo[1] = loY - candY;
-            if (s_Vec2Normalize) { s_Vec2Normalize(eHi); s_Vec2Normalize(eLo); }
+            coast_vec2norm_real(eHi); coast_vec2norm_real(eLo);
 
             // inner do/while continues while (cand.x < negLimA)
             innerOK = !(candX < negLimA);
@@ -544,8 +525,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
                 float dvx = pa[0] - pb[0];
                 float dvy = pa[1] - pb[1];
                 float lensq;
-                if (s_Vec2LengthSq) { float v[2] = { dvx, dvy }; lensq = s_Vec2LengthSq(v); }
-                else lensq = dvx * dvx + dvy * dvy;
+                { float v[2] = { dvx, dvy }; lensq = coast_vec2lensq_real(v); }
                 if (lensq < best) { best = lensq; bestIdx = j; }
             }
             if (bestIdx != prevPick + 2 && bestIdx != prevPick) { rejected = true; break; }
@@ -640,7 +620,6 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
 // consume the ring to carve the heightmap; the height change happens THERE.
 // ============================================================
 extern "C" void wg_f390_coastline(void* hf) {
-    coastline_EnsureInit();
     if (!hf) return;
 
     uint8_t* h = (uint8_t*)hf;
@@ -648,7 +627,7 @@ extern "C" void wg_f390_coastline(void* hf) {
 
     // Guard: without the allocator the rejection sampler can't make progress;
     // bail rather than spin forever.
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!System::MemoryAllocator::_singleton) return;
 
     // branchSel = -NAN in the original (negative-as-int). Use -1.0f:
     // (int)(-1.0f) = -1 < 0 selects the closed-ring branch.
