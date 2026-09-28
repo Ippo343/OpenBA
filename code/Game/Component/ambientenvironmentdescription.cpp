@@ -48,6 +48,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <new>
+#include "Component/exe_bodies.h"
 
 // exe helper FUN_140002540 — resize 0x28-byte-element array {ptr@arr+0, count@arr+8, cap@arr+0xc}.
 typedef void (*fn_AmbientArrayResize_t)(void* arrayBase, int newCount);

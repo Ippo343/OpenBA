@@ -24,6 +24,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <new>
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

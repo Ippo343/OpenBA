@@ -26,6 +26,7 @@
 #include "Component/HappinessDescription.h"     // ENDGAME B.3.9 C1: 0x1401c42f8 cell class
 #include "Component/RadiusDescription.h"        // ENDGAME B.3.9 C1: 0x1401c4870 cell class
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

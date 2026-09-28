@@ -31,6 +31,7 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Pile-rendering bring-up (BANISHED_LIVE_STORAGEDISPLAY, default OFF)

@@ -89,6 +89,7 @@
 #include <cstdlib>
 #include "scene_watch.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/exe_bodies.h"
 
 namespace {
 

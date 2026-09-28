@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

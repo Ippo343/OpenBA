@@ -40,6 +40,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
+#include "Component/exe_bodies.h"
 
 // Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
 // name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.

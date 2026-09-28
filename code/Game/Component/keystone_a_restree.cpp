@@ -44,6 +44,7 @@
 
 #include "resolve.h"
 #include <cstdint>
+#include "Component/exe_bodies.h"
 
 // Shared AVL retrace/rebalance — 0x140014b40, ported in tool_base_highlight.cpp.
 //   param_1 = &tree (root at [0]); param_2 = &cursor (start node; climbs to root).

@@ -25,6 +25,7 @@
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Resolved helpers

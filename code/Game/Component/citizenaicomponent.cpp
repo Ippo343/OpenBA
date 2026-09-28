@@ -33,6 +33,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/exe_bodies.h"
 
 // Force-work harness target: the first start-town structure (StorageBarn), captured
 // in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
