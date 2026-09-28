@@ -71,3 +71,35 @@ routes.
 Every free bypassed the instrument, so its live-bytes figure only grew. Fixed 2026-09-28 by the
 registry teardown's W0-A0 block (`behaviour:` commit `33d73c9a`): the instrument sits on the
 allocator's hook and sees `MemFree`. Diagnostic only; the game was never affected.
+
+## 5. Door typedefs that disagree with their body's parameter WIDTH or sign — SUSPECTED (a list)
+
+When the registry teardown turned door calls into direct calls, the compiler exposed doors whose
+typedef did not match the body. Each call keeps the bits the door passed (a cast at the call), so
+behaviour is unchanged; none has been read against retail's call site yet.
+
+| where | address | mismatch |
+|---|---|---|
+| `code/Game/Action/action_base_move.cpp` | `0x1400a6a30`, `0x1400a68b0`, `0x14009c480`, `0x1400a6b20`, `0x1400a6c10` | the door passed `int` arguments; the bodies take pointer-width parameters |
+| `code/Game/Action/action_pf_road.cpp` | `0x1400aa810` | the door took a `uint64` bit pattern where the body takes a pointer |
+| `code/Game/Action/action_pf_region.cpp` | `0x14001dc00` | `param_4` goes through a `void*` cast |
+| `code/Game/Action/` | `0x14012c560`, `0x140087fb0` | return type `int` against `uint32_t` |
+| `code/Game/Component/` (G-CompD) | `0x14011e710` | the body returns `uint64_t`; the door read AL (kept: cast to `char`) |
+
+**What a fix must do.** Per row: read retail's call site (argument registers and their width), then
+correct the BODY's declaration or the call, as a `behaviour:` commit only if a value changes.
+
+## 6. Body names that disagree with how their address is used — naming only
+
+Not bugs: the address and the binding are right, the NAME misleads. Rename when the class gets its
+members (B.4).
+
+| address | body name | used as |
+|---|---|---|
+| `0x140004680` | `FloorComponent_FindResData` | the `MapComponent` finder |
+| `0x140026a30` | `BuildComponent_FindStorage26a30` | the `PickingComponent` finder |
+| `0x14012ee60` | `WorkPlaceComponent_OnCreateInit` | the worker-release loop |
+| `0x140124750` | `MapComponent_DetachOccupancy_4750` (registered) vs `CreateNaturalResource_impl_4750` (a second body) | — |
+
+The 19 misnamed `engine_funcs` globals of `b3r_session/INVENTORY_E_ENGINE_FUNCS.md` §5.8 die with
+the globals and are not repeated here.
