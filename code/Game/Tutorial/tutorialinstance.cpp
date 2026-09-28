@@ -14,6 +14,7 @@
 
 #include "Tutorial/TutorialInstance.h"
 #include "engine_funcs.h"
+#include "Tutorial/exe_bodies.h"   // 0x1400262b0 TutWave_SerializeTutorialRef
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -57,9 +58,7 @@ void TutorialInstance::Persist(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // 1. Serialize ExternalPtr<Tutorial> at +0x30
-    if (fn_ExternalPtr_SerializeTutorial) {
-        fn_ExternalPtr_SerializeTutorial(reinterpret_cast<void*>(s + 0x30), serializer);
-    }
+    TutWave_SerializeTutorialRef(reinterpret_cast<void*>(s + 0x30), serializer);   // 0x1400262b0
 
     // 2. Serialize int32_t currentStep at +0x10
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(currentStep, nullptr);   // B.3.4 bridge

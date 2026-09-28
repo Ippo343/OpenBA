@@ -14,7 +14,8 @@
 
 #include "Tutorial/Tutorial.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"
+#include "Tutorial/exe_bodies.h"
 #include "collection/Collection.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
@@ -23,27 +24,11 @@
 #include <new>
 
 // ============================================================
-// Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5: the loader thread
-// serializes tutorial resources; no first-call cache)
+// Exe helpers, called by name: 0x140001bb0 DynArray resize (Reimpl_Array_Resize_Stride08)
+// and 0x140002340 ExternalPtr serialize (Reimpl_ExternalPtr_Serialize_StringTable, the
+// body registered there), Game/exe_bodies.h; 0x140026fb0 TutBase_SerializeStepArray,
+// Tutorial/exe_bodies.h.
 // ============================================================
-
-// DynArray resize helper (0x140001bb0) -- resize 8-byte element array
-typedef void (*fn_DynArrayResize_t)(void* arrayField, int newCount);
-static fn_DynArrayResize_t DynArrayResizeFn() {
-    return reinterpret_cast<fn_DynArrayResize_t>(ResolveAddr(Module::Exe, 0x140001bb0));
-}
-
-// Tutorial_helper_6fb0 (0x140026fb0) -- serialize array of ExternalPtr<TutorialStep>
-typedef void (*fn_SerializeStepArray_t)(void* serializer, int count, void* arrayData, void* p4);
-static fn_SerializeStepArray_t SerializeStepArrayFn() {
-    return reinterpret_cast<fn_SerializeStepArray_t>(ResolveAddr(Module::Exe, 0x140026fb0));
-}
-
-// FUN_140002340 -- serialize the single ExternalPtr at +0x20
-typedef void (*fn_ExternalPtrSerialize_Setup_t)(void* fieldPtr, void* serializer);
-static fn_ExternalPtrSerialize_Setup_t ExternalPtrSerializeSetupFn() {
-    return reinterpret_cast<fn_ExternalPtrSerialize_Setup_t>(ResolveAddr(Module::Exe, 0x140002340));
-}
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -101,21 +86,15 @@ bool Tutorial::Serialize(void* stream) {
 
     // 2. On load: resize steps array
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        if (auto resize = DynArrayResizeFn()) {
-            resize(reinterpret_cast<void*>(s + 0x28), localCount);
-        }
+        Reimpl_Array_Resize_Stride08(reinterpret_cast<void*>(s + 0x28), localCount);   // 0x140001bb0
     }
 
     // 3. Serialize steps array (ExternalPtr<TutorialStep>[])
     void* stepsData = *reinterpret_cast<void**>(s + 0x28);
-    if (auto serializeSteps = SerializeStepArrayFn()) {
-        serializeSteps(serializer, localCount, stepsData, nullptr);
-    }
+    TutBase_SerializeStepArray(serializer, localCount, stepsData, nullptr);   // 0x140026fb0
 
     // 4. Serialize the ExternalPtr at +0x20
-    if (auto serializeSetup = ExternalPtrSerializeSetupFn()) {
-        serializeSetup(reinterpret_cast<void*>(s + 0x20), serializer);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(s + 0x20), serializer);   // 0x140002340
 
     // 5. Serialize currentStep at +0x38
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(currentStep, nullptr);   // B.3.4 bridge
