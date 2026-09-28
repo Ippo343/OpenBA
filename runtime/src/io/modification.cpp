@@ -708,7 +708,6 @@ int RtIoModificationRegister() {
     // register, in retail or in the profile build.
     RegisterRuntimeAddr(0x180010110, (void*)&RtColl_ArrayModAssign_180010110);
     RegisterRuntimeAddr(0x180011220, (void*)&RtColl_ArrayU8Assign_180011220);
-    RegisterRuntimeAddr(0x1800112a0, (void*)&RtColl_ArrayU8Dtor_1800112a0);
     // 0x180009c30 is NOT registered here any more -- it was registered by three
     // files at once (this one, collection/linkedlist.cpp, system/allocator.cpp)
     // and the registry's last binding won, so two bodies were dead code and

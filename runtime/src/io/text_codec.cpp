@@ -571,15 +571,3 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
         ::System::MemoryAllocator::MemFree(tmp);                   // 0x180029e14
     }
 }
-
-// ============================================================================
-// Registration — ADDRESS ONLY, unconditional (DIRECTION.md §2).
-// Every call site in this tree already reaches these five through
-// `ResolveAddr(Module::Runtime, <literal>)`, and that resolver consults the
-// port registry first, so no call site changes.
-// ============================================================================
-int RtIoTextCodecRegister() {
-    RegisterRuntimeAddr(0x1800c9fc0, (void*)&RtIo_TextCodec_DecodeOne);
-    RegisterRuntimeAddr(0x180029bb0, (void*)&RtIo_SerializeStringArray);
-    return 5;
-}

@@ -195,11 +195,6 @@ void RtIoPortInit() {
     //   modification_setupfilesystem.cpp ?SetupFileSystem@Modification@ 0x1800aebb0
     extern int RtIoModificationSetupFileSystemRegister();
     n += RtIoModificationSetupFileSystemRegister();
-
-    // ---- BATCH 8b (2026-09-12) --------------------------------------------
-    //   text_codec.cpp                  the text-codec internals
-    extern int RtIoTextCodecRegister();
-    n += RtIoTextCodecRegister();
     n += RtIoCompressedStreamWriteRegister();
 
     // VTABLE BATCH 9's compressedcopyfilestream.cpp (IO::CompressedCopyFileStream
