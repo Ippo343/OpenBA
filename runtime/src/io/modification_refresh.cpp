@@ -186,12 +186,10 @@
 #include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 closing pass
+#include "../../types/system/MemoryAllocator.h"
 #include "../system/pod_bridge.h"
-
-// Byte-identical to standalone/resolve.h; see modification.cpp's note on why
-// resolve.h is not included directly (windows.h drags in `Rectangle`/`near`).
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../funcs/rt_libm.h"        // rtcrt::StrICmp
+#include "../../types/system/Configuration.h"   // RtSystem_ConfigMap_Find
 
 namespace RtIO {
 
@@ -212,8 +210,6 @@ using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 // than re-implemented: two copies of a refcount idiom is how one of them
 // drifts — the near-miss modification.cpp §4 records about RtString_AdoptInline.
 // ---------------------------------------------------------------------------
-void* ModMemAlloc(uint64_t bytes, int align);
-void  ModMemFree(void* p);
 void  AssignShared(char** dst, char* src);
 void* RtColl_ArrayModDtor_180010b80(void* av);                          // 0x180010b80
 void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv);    // 0x180010110
@@ -238,7 +234,7 @@ static void ReleaseInto(char** slot) {
     if (p == nullptr) return;
     if (--RefCount(p) == 0) {
         *slot = p - 8;
-        ModMemFree(*slot);          // the null test lives inside 0x1800c7ad0
+        ::System::MemoryAllocator::MemFree(*slot);          // the null test lives inside 0x1800c7ad0
     } else {
         *slot = nullptr;
     }
@@ -401,10 +397,7 @@ extern "C" void RtColl_SetInsertFixup_1800274c0(void* rootv, void* cursorv) {
 // families). A differently-cased path is the SAME key here.
 // ---------------------------------------------------------------------------
 int ModStrICmp(const char* a, const char* b) {
-    using Fn = int (*)(const char*, const char*);
-    static Fn fn = nullptr;
-    if (fn == nullptr) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007eefc));
-    return fn(a, b);
+    return rtcrt::StrICmp(a, b);   // 0x18007eefc (B3R RT-IO: by name)
 }
 
 }  // namespace RtIO  (reopened below)
@@ -521,7 +514,7 @@ extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void
         a->capacity = n;
         if (n == oldSize + 1 && oldSize != 0)
             a->capacity = n + n * 2;                    // LEA EAX,[R14+R14*2]
-        a->data = ModMemAlloc(
+        a->data = ::System::MemoryAllocator::MemAlloc(
             static_cast<uint64_t>(static_cast<int64_t>(a->capacity)) << 7, 8);
     }
 
@@ -539,7 +532,7 @@ extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void
     if (oldData != newData) {                           // CMP RBP,[R15] ; JZ
         for (int32_t k = 0; k < oldSize; ++k)           // TEST ESI,ESI ; JLE
             RtIo_Mod_Dtor_180011460(oldData + static_cast<size_t>(k) * 0x80);
-        ModMemFree(oldData);                            // retail's TEST RBP,RBP is inside
+        ::System::MemoryAllocator::MemFree(oldData);                            // retail's TEST RBP,RBP is inside
     } else if (oldSize > n) {                           // CMP ESI,R14D ; JLE
         const int32_t drop = oldSize - n;
         for (int32_t k = 0; k < drop; ++k)
@@ -595,51 +588,10 @@ extern "C" int RtCrt_ParseInt10_18007f034(const char* s) {
 // PART 5 — 0x1800af5f0, ?RefreshList@Modification@IO@@QEAAXXZ
 // ===========================================================================
 
-// Cross-file callees, BY ADDRESS. `ResolveAddr(Module::Runtime, …)` consults
-// the PORT REGISTRY FIRST (reference_resolveaddr_consults_port_registry_first),
-// so each reaches the owning lane's port where there is one and the DLL only
-// where there is not — which is exactly the dependency graph retail has, since
-// every one of these is a CALL in the instruction stream.
-//
-// Never-cache-a-null, per attempt 14: a caller that runs before the owning
-// lane's registration must not freeze a null in for the life of the process.
-//
-// EACH OF THE SEVENTEEN IS SPELLED OUT WITH ITS LITERAL AT THE CALL SITE, and
-// that verbosity is deliberate. The first draft of this file routed all
-// seventeen through a two-line template, `RtAddr(cache, 0x1800b4540)`, which
-// reads better and is INVISIBLE to tools/addr_door_audit.py -- the audit
-// matches the literal text `ResolveAddr(Module::Runtime, 0x`, so seventeen new
-// by-address doors moved its `by-address call sites` column by ZERO and its
-// `distinct addresses` column by ZERO. Three of those doors are UNREGISTERED
-// (the declined rows in the banner), and the instrument whose entire job is to
-// find unregistered by-address doors could not see them.
-// reference_literal_grep_blind_to_variables.md is the fourth recorded instance
-// of exactly this; the tool even prints its own blind-spot count, and the
-// wrapper form pushed TWO more sites into it. A door the census cannot see is
-// worse than a verbose one.
-
-// ENDGAME B.3.1 step 2: these are file-local typedefs for calls OUT through a
-// resolve door, not entry-point signatures, so the ones that carry a Filename
-// now name the class occupying the same eight bytes (filesystem_setupdirs_
-// win.cpp's exemplar treatment of local Fn typedefs). The callee keeps the
-// retail POD shape; the `reinterpret_cast<...Fn>` at each resolve site is the
-// one that was always there. `FnArrayFilenameFill`'s Filename stays the POD:
-// it is called with `&mods[j].file`, a `Mod` member that stays POD (see the
-// banner).
-using FnStringSet        = void*    (*)(void*, const char*);            // 0x1800c95d0
-using FnStringFormat     = void*    (*)(void*, const char*, ...);       // 0x1800c9730
-using FnGetPackDirectory = System::Filename*(*)(const void*, System::Filename*);  // 0x180007c10
-using FnFindFiles        = void     (*)(const void*, const void*, const void*,
-                                        bool, void*);                   // 0x1800ad7a0
-using FnReadPackfile     = bool     (*)(void*, const Filename*);        // 0x1800b46b0
-using FnPkgGetString     = void*    (*)(const void*, void*);            // 0x1800253xx
-using FnPkgGetFileName   = System::Filename*(*)(const void*, System::Filename*, int);  // 0x180025450
-using FnCloseFile        = void     (*)(void*, void*);                  // 0x1800accc0 (declined)
-using FnMapFind          = void*    (*)(void*, const void*);            // 0x18002ace0
-using FnGetPathFilename  = System::Filename*(*)(const System::Filename*,
-                                                System::Filename*, bool);  // 0x1800c6740
-using FnArrayFilenameFill= void     (*)(void*, int, const Filename*);   // 0x180026880
-using FnModSort          = void     (*)(void*, int, void*);             // 0x180028760 (PORTED, BATCH 8b)
+// B3R RT-IO: the fourteen callees below were function-pointer statics filled
+// through address doors; every one is called by name now (FileSystem /
+// PackageFile / String / Filename members, RtSystem_ConfigMap_Find,
+// RtColl_ArraySetSizeFill_180026880, RtIo_Modification_SortMods).
 
 // The `Mod` int columns, named from the PackageFile fields RefreshList copies
 // them out of (0x1800afaba..0x1800afade and 0x1800afc8e). Modification.h calls
@@ -672,7 +624,7 @@ struct ModShot {
 static char* ShotDup(const char* s) {
     if (s == nullptr) return nullptr;
     const size_t n = std::strlen(s) + 1;
-    char* p = static_cast<char*>(ModMemAlloc(n, 1));
+    char* p = static_cast<char*>(::System::MemoryAllocator::MemAlloc(n, 1));
     if (p != nullptr) std::memcpy(p, s, n);
     return p;
 }
@@ -690,7 +642,7 @@ static int32_t TakeShot(const Modification* self, ModShot** outShots) {
     *outShots = nullptr;
     if (n <= 0) return n;
     ModShot* s = static_cast<ModShot*>(
-        ModMemAlloc(static_cast<uint64_t>(n) * sizeof(ModShot), 8));
+        ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(n) * sizeof(ModShot), 8));
     if (s == nullptr) return 0;
     std::memset(s, 0, static_cast<size_t>(n) * sizeof(ModShot));
     for (int32_t i = 0; i < n; ++i) {
@@ -719,7 +671,7 @@ static int32_t TakeShot(const Modification* self, ModShot** outShots) {
         const int32_t cap = m->set.count > 0 ? m->set.count : 0;
         if (cap > 0) {
             s[i].setKeys = static_cast<char**>(
-                ModMemAlloc(static_cast<uint64_t>(cap) * 8, 8));
+                ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cap) * 8, 8));
             if (s[i].setKeys != nullptr) {
                 std::memset(s[i].setKeys, 0, static_cast<size_t>(cap) * 8);
                 ShotWalkSet(reinterpret_cast<const AvlNode*>(m->set.root),
@@ -729,7 +681,7 @@ static int32_t TakeShot(const Modification* self, ModShot** outShots) {
         const int32_t fc = m->files.size > 0 ? m->files.size : 0;
         if (fc > 0) {
             s[i].fileKeys = static_cast<char**>(
-                ModMemAlloc(static_cast<uint64_t>(fc) * 8, 8));
+                ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(fc) * 8, 8));
             if (s[i].fileKeys != nullptr) {
                 const Filename* fn = static_cast<const Filename*>(m->files.data);
                 for (int32_t k = 0; k < fc; ++k) s[i].fileKeys[k] = ShotDup(fn[k].data);
@@ -744,16 +696,16 @@ static int32_t TakeShot(const Modification* self, ModShot** outShots) {
 static void FreeShot(ModShot* s, int32_t n) {
     if (s == nullptr) return;
     for (int32_t i = 0; i < n; ++i) {
-        ModMemFree(s[i].name);
-        ModMemFree(s[i].author);
-        ModMemFree(s[i].description);
-        ModMemFree(s[i].file);
-        for (int32_t k = 0; k < s[i].setKeyCount;  ++k) ModMemFree(s[i].setKeys[k]);
-        for (int32_t k = 0; k < s[i].fileKeyCount; ++k) ModMemFree(s[i].fileKeys[k]);
-        ModMemFree(s[i].setKeys);
-        ModMemFree(s[i].fileKeys);
+        ::System::MemoryAllocator::MemFree(s[i].name);
+        ::System::MemoryAllocator::MemFree(s[i].author);
+        ::System::MemoryAllocator::MemFree(s[i].description);
+        ::System::MemoryAllocator::MemFree(s[i].file);
+        for (int32_t k = 0; k < s[i].setKeyCount;  ++k) ::System::MemoryAllocator::MemFree(s[i].setKeys[k]);
+        for (int32_t k = 0; k < s[i].fileKeyCount; ++k) ::System::MemoryAllocator::MemFree(s[i].fileKeys[k]);
+        ::System::MemoryAllocator::MemFree(s[i].setKeys);
+        ::System::MemoryAllocator::MemFree(s[i].fileKeys);
     }
-    ModMemFree(s);
+    ::System::MemoryAllocator::MemFree(s);
 }
 
 static bool ShotStrEq(const char* a, const char* b) {
@@ -901,20 +853,6 @@ void Modification::RefreshList() {
         return;
     }
 
-    static FnStringSet         fnStringSet        = nullptr;
-    static FnStringFormat      fnStringFormat     = nullptr;
-    static FnGetPackDirectory  fnGetPackDirectory = nullptr;
-    static FnFindFiles         fnFindFiles        = nullptr;
-    static FnReadPackfile      fnReadPackfile     = nullptr;
-    static FnPkgGetString      fnGetName          = nullptr;
-    static FnPkgGetString      fnGetAuthor        = nullptr;
-    static FnPkgGetString      fnGetDescription   = nullptr;
-    static FnPkgGetFileName    fnGetFileName      = nullptr;
-    static FnCloseFile         fnCloseFile        = nullptr;
-    static FnMapFind           fnMapFind          = nullptr;
-    static FnGetPathFilename   fnGetPathFilename  = nullptr;
-    static FnArrayFilenameFill fnFilesFill        = nullptr;
-    static FnModSort           fnModSort          = nullptr;
 
     // The two singletons retail loads at 0x1800af648 / 0x1800af64f. Read through
     // the exported data slots rather than the raw addresses so a standalone run
@@ -929,51 +867,23 @@ void Modification::RefreshList() {
     ModArray found = { nullptr, 0, 0 };
     {
         // `pattern` is a String::Set call (0x1800c95d0) landed on a Filename-
-        // typed slot -- same eight bytes, and fnFindFiles wants both as
-        // Filenames regardless. Default-constructed (null), so the resolve
-        // door overwrites nothing (the ApplyPathOverride idiom,
-        // filesystem_setupdirs_win.cpp). Scoped in a block so both release at
-        // exactly retail's point (0x1800af6b4 / 0x1800af6ef), not at the end
-        // of this (934-instruction) function.
+        // typed slot -- same eight bytes, and FindFiles wants both as
+        // Filenames regardless. Scoped in a block so both release at exactly
+        // retail's point (0x1800af6b4 / 0x1800af6ef), not at the end of this
+        // (934-instruction) function.
         System::Filename pattern;
+        pattern.AsString().Set("*.pkm");                         // literal 0x1801557f0
 
-        if (fnStringSet == nullptr) fnStringSet = reinterpret_cast<decltype(fnStringSet)>(
-            ResolveAddr(Module::Runtime, 0x1800c95d0));
-        fnStringSet(&pattern, "*.pkm");                          // 0x1801557f0
+        System::Filename packDir(                                // 0x180007c10
+            static_cast<const ::IO::FileSystem*>(fs)->GetPackDirectory());
 
-        System::Filename packDir;
-        if (fnGetPackDirectory == nullptr) fnGetPackDirectory = reinterpret_cast<decltype(fnGetPackDirectory)>(
-            ResolveAddr(Module::Runtime, 0x180007c10));
-        fnGetPackDirectory(fs, &packDir);
-
-        if (fnFindFiles == nullptr) fnFindFiles = reinterpret_cast<decltype(fnFindFiles)>(
-            ResolveAddr(Module::Runtime, 0x1800ad7a0));
-        fnFindFiles(fs, &packDir, &pattern, false, &found);
+        static_cast<const ::IO::FileSystem*>(fs)->FindFiles(       // 0x1800ad7a0  B.3.x bridge
+            *reinterpret_cast<const RtSystem::String*>(&packDir),
+            *reinterpret_cast<const RtSystem::String*>(&pattern),
+            false, reinterpret_cast<RtIO::FilenameArray*>(&found));
     }  // ~packDir then ~pattern (reverse declaration order) release here --
        // retail released packDir then pattern too (0x1800af6b4, 0x1800af6ef).
 
-    if (fnReadPackfile == nullptr) fnReadPackfile = reinterpret_cast<decltype(fnReadPackfile)>(
-        ResolveAddr(Module::Runtime, 0x1800b46b0));
-    if (fnGetName == nullptr) fnGetName = reinterpret_cast<decltype(fnGetName)>(
-        ResolveAddr(Module::Runtime, 0x180025310));
-    if (fnGetAuthor == nullptr) fnGetAuthor = reinterpret_cast<decltype(fnGetAuthor)>(
-        ResolveAddr(Module::Runtime, 0x180025350));
-    if (fnGetDescription == nullptr) fnGetDescription = reinterpret_cast<decltype(fnGetDescription)>(
-        ResolveAddr(Module::Runtime, 0x180025390));
-    if (fnGetFileName == nullptr) fnGetFileName = reinterpret_cast<decltype(fnGetFileName)>(
-        ResolveAddr(Module::Runtime, 0x180025450));
-    if (fnCloseFile == nullptr) fnCloseFile = reinterpret_cast<decltype(fnCloseFile)>(
-        ResolveAddr(Module::Runtime, 0x1800accc0));
-    if (fnMapFind == nullptr) fnMapFind = reinterpret_cast<decltype(fnMapFind)>(
-        ResolveAddr(Module::Runtime, 0x18002ace0));
-    if (fnGetPathFilename == nullptr) fnGetPathFilename = reinterpret_cast<decltype(fnGetPathFilename)>(
-        ResolveAddr(Module::Runtime, 0x1800c6740));
-    if (fnStringFormat == nullptr) fnStringFormat = reinterpret_cast<decltype(fnStringFormat)>(
-        ResolveAddr(Module::Runtime, 0x1800c9730));
-    if (fnFilesFill == nullptr) fnFilesFill = reinterpret_cast<decltype(fnFilesFill)>(
-        ResolveAddr(Module::Runtime, 0x180026880));
-    if (fnModSort == nullptr) fnModSort = reinterpret_cast<decltype(fnModSort)>(
-        ResolveAddr(Module::Runtime, 0x180028760));
 
     // -----------------------------------------------------------------------
     // LOOP 1 — one iteration per .pkm found (0x1800af790 .. 0x1800b019f)
@@ -1015,7 +925,7 @@ void Modification::RefreshList() {
         IO::PackageFile* const pkgObj = ::new (static_cast<void*>(pkgStorage)) IO::PackageFile();
         uint8_t* const pkg = pkgStorage;
 
-        const bool read = fnReadPackfile(pkg, &foundData[i]);    // 0x1800b46b0
+        const bool read = pkgObj->IO::PackageFile::ReadPackfile(foundData[i]);   // 0x1800b46b0
         // 0x1800af923 — `platform` (+0x74) non-zero means the package is not for
         // this build, and retail CLOSES THE FILE before discarding it. The
         // ReadPackfile-failed path does NOT close: there the file never opened.
@@ -1025,7 +935,8 @@ void Modification::RefreshList() {
             continue;
         }
         if (*reinterpret_cast<const int32_t*>(pkg + 0x74) != 0) {
-            fnCloseFile(fs, pkg + 0xC0);                         // 0x1800accc0
+            static_cast<::IO::FileSystem*>(fs)->CloseFile(       // 0x1800accc0  B.3.x bridge
+                *reinterpret_cast<RtIO::FileInfo*>(pkg + 0xC0));
             pkgObj->IO::PackageFile::~PackageFile();
             RtIo_Mod_Dtor_180011460(m);
             continue;
@@ -1035,22 +946,21 @@ void Modification::RefreshList() {
         // caller must release; the member takes a REFERENCE to the same block,
         // which is why the temporary's release comes after the member assign.
         {
-            // FnPkgGetString's slot is `void*`, so `tmp` need not change type
-            // for the call; it is promoted to the class purely for its own
-            // RAII release. GetName's hidden return slot: `tmp` holds null
-            // (default ctor), and it returns the same pointer it was handed.
+            // `tmp` is the class purely for its own RAII release. GetName's
+            // by-value String is constructed into it, over the null the default
+            // ctor left, exactly as the door that stood here did.
             System::Filename tmp;
-            fnGetName(pkg, &tmp);
+            ::new (&tmp.AsString()) System::String(pkgObj->IO::PackageFile::GetName());       // 0x180025310
             AssignShared(&m->name, tmp._data);
         }  // ~tmp releases here, retail's release after the assign
         {
             System::Filename tmp;
-            fnGetAuthor(pkg, &tmp);
+            ::new (&tmp.AsString()) System::String(pkgObj->IO::PackageFile::GetAuthor());     // 0x180025350
             AssignShared(&m->author, tmp._data);
         }  // ~tmp releases here
         {
             System::Filename tmp;
-            fnGetDescription(pkg, &tmp);
+            ::new (&tmp.AsString()) System::String(pkgObj->IO::PackageFile::GetDescription());  // 0x180025390
             AssignShared(&m->description, tmp._data);
         }
 
@@ -1066,14 +976,14 @@ void Modification::RefreshList() {
             ModArray tmp;
             RtIo_PackageFile_GetIconData(pkg, &tmp);             // 0x180025530
             if (&m->ints != &tmp) RtColl_ArrayI32Assign_180011110(&m->ints, &tmp);
-            ModMemFree(tmp.data);
+            ::System::MemoryAllocator::MemFree(tmp.data);
             tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
         }
         {
             ModArray tmp;
             RtIo_PackageFile_GetPreviewData(pkg, &tmp);          // 0x180025580
             if (&m->bytes != &tmp) RtColl_ArrayU8Assign_180011220(&m->bytes, &tmp);
-            ModMemFree(tmp.data);
+            ::System::MemoryAllocator::MemFree(tmp.data);
             tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
         }
 
@@ -1092,11 +1002,9 @@ void Modification::RefreshList() {
         // -------------------------------------------------------------------
         const int32_t entryCount = *reinterpret_cast<const int32_t*>(pkg + 0xb8);
         for (int32_t e = 0; e < entryCount; ++e) {
-            // GetFileName's hidden return slot: `key` holds null (default
-            // ctor), and it returns the same pointer it was handed, so the
-            // rest of this iteration reads `key._data` directly.
-            System::Filename key;
-            fnGetFileName(pkg, &key, e);                          // 0x180025450
+            // GetFileName's by-value return is constructed straight into `key`
+            // (the hidden return slot).
+            System::Filename key(pkgObj->IO::PackageFile::GetFileName(e));   // 0x180025450
 
             // ENDGAME B.3.2 closing pass: the 70 lines retail inlined here are
             // `Collection::Set<System::Filename, FilenameICompare>::Insert`, arm
@@ -1123,7 +1031,8 @@ void Modification::RefreshList() {
             // statement of the loop body, exactly where retail's release sat.
         }
 
-        fnCloseFile(fs, pkg + 0xC0);                             // 0x1800aff2a
+        static_cast<::IO::FileSystem*>(fs)->CloseFile(           // 0x1800aff2a  B.3.x bridge
+            *reinterpret_cast<RtIO::FileInfo*>(pkg + 0xC0));
 
         // 0x1800aff3d — the registry key stem: the mod's path with its directory
         // stripped, kept alive across the temporary's release. `nameRef`
@@ -1132,8 +1041,7 @@ void Modification::RefreshList() {
         // close run retail's release of the temporary.
         char* nameRef;
         {
-            System::Filename pathTmp;
-            fnGetPathFilename(&Sys(m->file), &pathTmp, true);
+            System::Filename pathTmp(Sys(m->file).GetPathFilename(true));   // 0x1800c6740
             nameRef = pathTmp._data;
             if (nameRef != nullptr) ++RefCount(nameRef);         // take the ref FIRST
         }  // ~pathTmp releases here, retail's 0x1800aff.. release ("then drop the temp")
@@ -1145,12 +1053,15 @@ void Modification::RefreshList() {
         // value takes retail's `EDX = -1` arm and a missing entry leaves the
         // flag at the 0 the record was born with.
         {
-            // fnStringFormat's slot is `void*`, landed on a Filename-typed
-            // local as `pattern` above was; `keyStr` is promoted to the class
-            // for its own RAII release only.
+            // String::Format (0x1800c9730) lands on a Filename-typed local, as
+            // `pattern` above does; `keyStr` is the class for its own RAII
+            // release only. Constructed over the default ctor's null, as the
+            // door that stood here did.
             System::Filename keyStr;
-            fnStringFormat(&keyStr, "%s%s", "ModEnabled_", nameRef);
-            void* node = fnMapFind(pers, &keyStr);               // 0x18002ace0
+            ::new (&keyStr.AsString()) System::String(
+                System::String::Format("%s%s", "ModEnabled_", nameRef));
+            void* node = RtSystem_ConfigMap_Find(                // 0x18002ace0  B.3.x bridge
+                pers, reinterpret_cast<const RtSystem::String*>(&keyStr));
             if (node != nullptr) {
                 const char* v = *reinterpret_cast<const char* const*>(
                     static_cast<const uint8_t*>(node) + 8);
@@ -1162,8 +1073,10 @@ void Modification::RefreshList() {
         // leaves `order` at 0.
         {
             System::Filename keyStr;
-            fnStringFormat(&keyStr, "%s%s", "ModIndex_", nameRef);
-            void* node = fnMapFind(pers, &keyStr);
+            ::new (&keyStr.AsString()) System::String(
+                System::String::Format("%s%s", "ModIndex_", nameRef));
+            void* node = RtSystem_ConfigMap_Find(                // B.3.x bridge
+                pers, reinterpret_cast<const RtSystem::String*>(&keyStr));
             if (node != nullptr) {
                 const char* v = *reinterpret_cast<const char* const*>(
                     static_cast<const uint8_t*>(node) + 8);
@@ -1221,7 +1134,7 @@ void Modification::RefreshList() {
                 }
                 if (hit) {
                     // 0x1800b02d2 — append mods[j].file to mods[i].files.
-                    fnFilesFill(&mods[i].files, mods[i].files.size + 1,
+                    RtColl_ArraySetSizeFill_180026880(&mods[i].files, mods[i].files.size + 1,
                                 &mods[j].file);                  // 0x180026880
                     break;                                       // next j
                 }
@@ -1246,17 +1159,16 @@ void Modification::RefreshList() {
     }
 
     // 0x1800b0338 — the sort. PORTED (BATCH 8b,
-    // runtime/src/io/modification_sort.cpp); still reached by address, which is
-    // enough, because ResolveAddr consults the port registry first. The third
+    // runtime/src/io/modification_sort.cpp), called by name. The third
     // argument is a stack slot the callee never reads.
     if (arr->size > 1) {
         void* scratch = nullptr;
-        fnModSort(arr->data, arr->size, &scratch);
+        RtIo_Modification_SortMods(arr->data, arr->size, &scratch);
     }
 
     // 0x1800b0350 — release every found Filename, then the array itself.
     for (int32_t i = 0; i < found.size; ++i) ReleaseInto(&foundData[i].data);
-    ModMemFree(found.data);
+    ::System::MemoryAllocator::MemFree(found.data);
     found.data = nullptr; found.size = 0; found.capacity = 0;
 
     // -----------------------------------------------------------------------

@@ -176,11 +176,10 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
-
-// Declared locally rather than including standalone/resolve.h; byte-identical
-// to the copies in array.cpp and persistence_savelist_job.cpp.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/system/WideString.h"
+#include "../../types/collection/Collection.h"   // rtpathid::Insert / SubtreeFree, RtColl_ArraySetSizeFill_180028cd0
+#include "../../types/io/Modification.h"         // RtColl_ArrayFilenameDtor_1800098d0
 
 namespace RtIO {
 
@@ -246,37 +245,19 @@ struct ReloadArray {
     int32_t      capacity;
 };
 
-// ---- the doors --------------------------------------------------------
-// ENDGAME B.3.1 step 2: these are file-local typedefs for calls OUT through a
-// resolve door, not entry-point signatures, so they name the classes that
-// occupy the same eight bytes (filesystem_setupdirs_win.cpp's exemplar
-// treatment of local Fn typedefs). The callee keeps the retail POD shape; the
-// `reinterpret_cast<...Fn>` at each call site is the one that was always
-// there. `AdjustDelimitersFn` is gone -- every call site below was the tail of
-// a mutating Filename entry point and is now spelled as the class's own ctor
-// / operator= (Filename.h's DELIMITERS note).
-typedef const RtObject::External* (*FindNextFn)(const void*, uint32_t,
-                                                const RtObject::External*);
-typedef System::Filename* (*GetPathFn)(const void*, System::Filename*);
-typedef System::Filename* (*GetCompiledPathFn)(System::Filename*, const System::Filename*);
-typedef uint32_t  (*GetPackfileIdFn)(const void*, const System::Filename*);
-typedef void      (*NoArgFn)(void*);
-typedef bool      (*ExistsInPackfileFn)(const void*, const System::Filename*);
-typedef void*     (*ExternalLoadFn)(const System::Filename*, void*);
-typedef void      (*ForceUnloadFn)(void*, const System::Filename*);
-typedef void*     (*WideStringCtorFn)(void*, const String*);
-typedef void      (*MemFreeFn)(void*);
-
-typedef void*     (*SetInsertFn)(void*, void**, char* const*, const uint32_t*);  // 0x180027380
-typedef void      (*SubtreeFreeFn)(void*, void*);                                // 0x180027970
-typedef void*     (*ArrayFilenameDtorFn)(void*);                                 // 0x1800098d0
-typedef void      (*ArrayFilenameSetSizeFn)(void*, int, const Filename*);        // 0x180026880
-typedef void      (*ReloadArraySetSizeFn)(void*, int, const void*);              // 0x180028cd0
+// ---- the callees ------------------------------------------------------
+// B3R RT-IO: every callee below was a resolve door (RtResolveCached by name,
+// ResolveAddr by address, RT_EXPORT_ONCE); each is called by name now. The two
+// casts are the B.3.x bridge from this body's PODs to the real classes.
+inline const ::Object::External* AsExt(const RtObject::External* e) {
+    return reinterpret_cast<const ::Object::External*>(e);            // B.3.x bridge
+}
+inline const RtObject::External* AsPod(const ::Object::External* e) {
+    return reinterpret_cast<const RtObject::External*>(e);            // B.3.x bridge
+}
 
 void MemFree(void* p) {   // the null test is INSIDE 0x1800c7ad0
-    static void* c = nullptr;
-    reinterpret_cast<MemFreeFn>(RtResolveCached(
-        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z", &c))(p);
+    ::System::MemoryAllocator::MemFree(p);
 }
 
 // Retail's inlined String release, with its asymmetry: the FREEING branch
@@ -348,8 +329,7 @@ bool PlatformFileExists(const System::Filename* path) {
     // Filename read AS a String -- the same same-layout cast retail performs
     // by pointer cast throughout (Filename.h header note); WideString is not
     // a B.3.1 class, so it still wants the POD String pointer.
-    RT_EXPORT_ONCE(WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
-        &ws, reinterpret_cast<const String*>(path));           // 0x1800aefbf
+    ::new (static_cast<void*>(&ws)) System::WideString(path->AsString());   // 0x1800aefbf
     const DWORD attrs = ::GetFileAttributesW(static_cast<LPCWSTR>(ws.data));
     const bool ok = (attrs != 0xFFFFFFFFu);                    // 0x1800aefce
     RtString_ReleaseInline(reinterpret_cast<String*>(&ws));    // 0x1800aefd5
@@ -435,124 +415,90 @@ void Modification::SetupFileSystem() {
     // ENDGAME B.3.9 OBJ: the class record (the minted one is retired).
     const uint32_t kExternalTypeId = ::Object::External::TypeId();
 
-    static void* findNextCache        = nullptr;
-    static void* getPathCache         = nullptr;
-    static void* getCompiledCache     = nullptr;
-    static void* packfileIdCache      = nullptr;
-    static void* closePackagesCache   = nullptr;
-    static void* loadPackagesCache    = nullptr;
-    static void* existsInPackCache    = nullptr;
-    static void* externalLoadCache    = nullptr;
-    static void* forceUnloadCache     = nullptr;
-
-    const FindNextFn FindNext = reinterpret_cast<FindNextFn>(RtResolveCached(
-        "?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z",
-        &findNextCache));
-    const GetPathFn GetPath = reinterpret_cast<GetPathFn>(RtResolveCached(
-        "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ", &getPathCache));
-    const GetCompiledPathFn GetCompiledPath =
-        reinterpret_cast<GetCompiledPathFn>(RtResolveCached(
-            "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z",
-            &getCompiledCache));
-    const GetPackfileIdFn GetPackfileId = reinterpret_cast<GetPackfileIdFn>(
-        RtResolveCached("?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z",
-                        &packfileIdCache));
-    // No AdjustDelimiters resolve any more -- every call site was the tail of
-    // a mutating Filename entry point and is now the class's own ctor /
-    // operator= (see the typedefs block's banner above).
+    const ::Object::ExternalFactory* const extFactoryObj =
+        static_cast<const ::Object::ExternalFactory*>(extFactory);
+    ::IO::FileSystem* const fsObj =
+        reinterpret_cast<::IO::FileSystem*>(fs);                     // B.3.x bridge
 
     // ========================= ACT 1 — SNAPSHOT =============================
     PathIdSet snapshot = { nullptr, 0, 0 };                    // [RBP-0x49]
 
-    static SetInsertFn setInsert = nullptr;
-    if (!setInsert) setInsert = reinterpret_cast<SetInsertFn>(
-        ResolveAddr(Module::Runtime, 0x180027380));
-
-    for (const RtObject::External* ext = FindNext(extFactory, kExternalTypeId, nullptr);
+    for (const RtObject::External* ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, nullptr));
          ext != nullptr; ) {
         System::Filename compiled;                             // [RBP+0x77]
         {
-            // GetPath's hidden return slot: `raw` holds null (default ctor),
-            // so the callee constructing into it overwrites nothing, and
-            // GetPath returns the same pointer it was handed (retail's `got`).
-            System::Filename raw;                              // [RBP+0x7f]
-            GetPath(ext, &raw);                                 // 0x1800aec29
-            GetCompiledPath(&compiled, &raw);                   // 0x1800aec36
+            // GetPath's hidden return slot is `raw` (retail's `got`);
+            // GetCompiledPath's is `compiled`, constructed over the default
+            // ctor's null exactly as the door that stood here did.
+            System::Filename raw(AsExt(ext)->GetPath());        // 0x1800aec29
+            ::new (&compiled) System::Filename(                // 0x1800aec36
+                ::Object::ExternalFactory::GetCompiledPath(raw));
         }  // ~raw releases here, exactly where retail's 0x1800aec3c release sat
 
-        const uint32_t id = GetPackfileId(fs, &compiled);      // 0x1800aec9f
+        const uint32_t id = fsObj->GetPackfileId(              // 0x1800aec9f
+            *reinterpret_cast<const RtSystem::Filename*>(&compiled));
         void* outSlot = nullptr;                               // [RBP-0x4?]
-        setInsert(&snapshot, &outSlot, &compiled._data, &id);  // 0x1800aecb7
+        rtpathid::Insert(reinterpret_cast<rtsetavl::Set*>(&snapshot),       // 0x1800aecb7
+                         reinterpret_cast<rtsetavl::Node**>(&outSlot),
+                         &compiled._data, &id);
 
-        ext = FindNext(extFactory, kExternalTypeId, ext);      // 0x1800aecc8
+        ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, AsExt(ext)));   // 0x1800aecc8
         // ~compiled releases here, exactly where retail's 0x1800aecd3 release sat.
     }
 
     // ========================= ACT 2 — RESTACK ==============================
-    reinterpret_cast<NoArgFn>(RtResolveCached(
-        "?ClosePackages@FileSystem@IO@@QEAAXXZ", &closePackagesCache))(fs);
+    fsObj->ClosePackages();
 
-    {   // ~Array<Filename>(fs->userPackFilenames) — BY ADDRESS, the registered
-        // door modification.cpp owns.
-        static ArrayFilenameDtorFn dtor = nullptr;
-        if (!dtor) dtor = reinterpret_cast<ArrayFilenameDtorFn>(
-            ResolveAddr(Module::Runtime, 0x1800098d0));
-        dtor(&fs->userPackFilenames);                          // 0x1800aed44
+    {   // ~Array<Filename>(fs->userPackFilenames) -- 0x1800098d0, the body
+        // modification.cpp owns.
+        RtIO::RtColl_ArrayFilenameDtor_1800098d0(&fs->userPackFilenames);   // 0x1800aed44
     }
 
     {
-        static ArrayFilenameSetSizeFn append = nullptr;
-        if (!append) append = reinterpret_cast<ArrayFilenameSetSizeFn>(
-            ResolveAddr(Module::Runtime, 0x180026880));
 
         // BACKWARDS, and `order` is stamped on every mod — see the banner.
         for (int32_t i = _count - 1; i >= 0; --i) {       // 0x1800aed49
             Mod* const m = &_mods[i];
             m->order = i;                                      // 0x1800aed64
             if (m->enabled != 0)                               // 0x1800aed68
-                append(&fs->userPackFilenames,
+                RtIO::RtColl_ArraySetSizeFill_180026880(&fs->userPackFilenames,   // 0x180026880
                        fs->userPackFilenameCount + 1, &m->file);
         }
     }
 
-    reinterpret_cast<NoArgFn>(RtResolveCached(
-        "?LoadPackages@FileSystem@IO@@QEAAXXZ", &loadPackagesCache))(fs);
+    fsObj->LoadPackages();
 
     // ========================= ACT 3 — DIFF =================================
     ReloadArray queue = { nullptr, 0, 0 };                     // [RSP+0x30]
 
-    static ReloadArraySetSizeFn queueAppend = nullptr;
-    if (!queueAppend) queueAppend = reinterpret_cast<ReloadArraySetSizeFn>(
-        ResolveAddr(Module::Runtime, 0x180028cd0));
-
-    for (const RtObject::External* ext = FindNext(extFactory, kExternalTypeId, nullptr);
+    for (const RtObject::External* ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, nullptr));
          ext != nullptr; ) {
         System::Filename compiled;                             // [RBP+0x7f]
         {
-            System::Filename raw;                              // [RBP-0x59]
-            GetPath(ext, &raw);                                 // 0x1800aedc7
-            GetCompiledPath(&compiled, &raw);                   // 0x1800aedd4
+            System::Filename raw(AsExt(ext)->GetPath());        // 0x1800aedc7  [RBP-0x59]
+            ::new (&compiled) System::Filename(                // 0x1800aedd4
+                ::Object::ExternalFactory::GetCompiledPath(raw));
         }  // ~raw releases here, exactly where retail's 0x1800aedda release sat
 
         PathIdNode* const hit = SnapshotFind(snapshot.root, compiled._data);
 
         // `TEST RBX,RBX` at 0x1800aeefd is redundant on the found path and is
         // kept; the id compare is what decides.
-        if (hit != nullptr && hit->value != GetPackfileId(fs, &compiled)) {
+        if (hit != nullptr && hit->value != fsObj->GetPackfileId(
+                *reinterpret_cast<const RtSystem::Filename*>(&compiled))) {
             System::Filename compiled2;                         // [RBP+0x77]
             {
-                System::Filename raw2;                          // [RBP-0x51]
-                GetPath(ext, &raw2);                             // 0x1800aef22
-                GetCompiledPath(&compiled2, &raw2);              // 0x1800aef2f
+                System::Filename raw2(AsExt(ext)->GetPath());   // 0x1800aef22  [RBP-0x51]
+                ::new (&compiled2) System::Filename(            // 0x1800aef2f
+                    ::Object::ExternalFactory::GetCompiledPath(raw2));
             }  // ~raw2 releases here, retail's 0x1800aef35 release
 
             // `FileSystem::Exists` OPEN-CODED with its two gate bytes; see the
             // banner for why this is not a call to Exists.
             bool present = false;
             if (fs->existsInPackfileGate != 0) {               // 0x1800aef90
-                present = reinterpret_cast<ExistsInPackfileFn>(RtResolveCached(
-                    "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z",
-                    &existsInPackCache))(fs, &compiled2);
+                present = fsObj->ExistsInPackfile(
+                    *reinterpret_cast<const RtSystem::Filename*>(&compiled2));
             }
             if (!present && fs->platformExistsGate != 0)       // 0x1800aefab
                 present = PlatformFileExists(&compiled2);
@@ -565,8 +511,7 @@ void Modification::SetupFileSystem() {
                 // entry._hole04 is DELIBERATELY left uninitialised: retail's
                 // first store is a DWORD and nothing ever writes +0x04..+0x07.
                 {
-                    System::Filename raw3;                      // [RBP-0x79]
-                    GetPath(ext, &raw3);                         // 0x1800af044
+                    System::Filename raw3(AsExt(ext)->GetPath());   // 0x1800af044  [RBP-0x79]
                     // `entry.file` is raw, uninitialised bytes here (a fresh
                     // ReloadEntry), so placement-construct. Release-then-adopt
                     // on a null destination is a plain adopt, and the ctor's
@@ -577,28 +522,25 @@ void Modification::SetupFileSystem() {
                     new (&Sys(entry.file)) System::Filename(raw3);
                 }  // ~raw3 releases here, retail's release after 0x1800af044
 
-                queueAppend(&queue, queue.size + 1, &entry);   // 0x1800af0c7
+                rtcoll::RtColl_ArraySetSizeFill_180028cd0(&queue, queue.size + 1, &entry);   // 0x1800af0c7
 
-                // queueAppend is a raw byte-copy resolve door (not a converted
-                // class), so it never AddRefs: the array's copy inherits
+                // 0x180028cd0 is a raw byte copy (not a converted class), so it
+                // never AddRefs: the array's copy inherits
                 // entry.file's own reference, and dropping that reference here
                 // is retail's release of the local -- ownership transfer via
                 // copy-then-release, not a double free.
                 Sys(entry.file).~Filename();
             } else {
                 // ---- drop it, 0x1800af195 ----------------------------------
-                System::Filename raw4;                          // [RBP-0x?]
-                GetPath(ext, &raw4);                             // 0x1800af19d
-                reinterpret_cast<ForceUnloadFn>(RtResolveCached(
-                    "?ForceUnload@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z",
-                    &forceUnloadCache))(extFactory, &raw4);     // 0x1800af1a9
+                System::Filename raw4(AsExt(ext)->GetPath());   // 0x1800af19d  [RBP-0x?]
+                static_cast<::Object::ExternalFactory*>(extFactory)->ForceUnload(raw4);   // 0x1800af1a9
                 // ~raw4 releases here, retail's release right after ForceUnload
             }
 
             // ~compiled2 releases here, retail's 0x1800af243 release
         }
 
-        ext = FindNext(extFactory, kExternalTypeId, ext);      // 0x1800af275
+        ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, AsExt(ext)));   // 0x1800af275
         // ~compiled releases here, retail's 0x1800af281 release
     }
 
@@ -631,11 +573,10 @@ void Modification::SetupFileSystem() {
         // the bridge; `e->file` is the `ReloadEntry` POD member (see its banner).
         Sys(ext->_path) = Sys(e->file);                         // 0x1800af341/0x1800af3b3
 
-        System::Filename compiled;                            // [RBP+0x6f]
-        GetCompiledPath(&compiled, &Sys(e->file));              // 0x1800af3c0
-        reinterpret_cast<ExternalLoadFn>(RtResolveCached(
-            "?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z",
-            &externalLoadCache))(&compiled, ext);              // 0x1800af3cc
+        System::Filename compiled(                            // 0x1800af3c0  [RBP+0x6f]
+            ::Object::ExternalFactory::GetCompiledPath(Sys(e->file)));
+        RtObject::RtObject_External_Load(                      // 0x1800af3cc
+            reinterpret_cast<const RtSystem::Filename*>(&compiled), ext);
         // ~compiled releases here, retail's 0x1800af3d2 release
     }
 
@@ -657,12 +598,9 @@ void Modification::SetupFileSystem() {
     // be the same net effect through a different call shape and would stop this
     // matching the listing.
     if (snapshot.root != nullptr) {
-        static SubtreeFreeFn subtreeFree = nullptr;
-        if (!subtreeFree) subtreeFree = reinterpret_cast<SubtreeFreeFn>(
-            ResolveAddr(Module::Runtime, 0x180027970));
         PathIdNode* const root = snapshot.root;
-        subtreeFree(&snapshot, root->left);                    // 0x1800af52d
-        subtreeFree(&snapshot, root->right);                   // 0x1800af53a
+        rtpathid::SubtreeFree(&snapshot, reinterpret_cast<rtsetavl::Node*>(root->left));    // 0x1800af52d
+        rtpathid::SubtreeFree(&snapshot, reinterpret_cast<rtsetavl::Node*>(root->right));   // 0x1800af53a
         ReleaseInline(&root->key);
         MemFree(root);
     }
