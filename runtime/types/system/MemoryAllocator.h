@@ -340,6 +340,27 @@ public:
     uint64_t     pageSize;       // +0x668 GetSystemInfo().dwPageSize
 };
 
+// ---------------------------------------------------------------------------
+// THE INSTRUMENT SEAT — STANDALONE DEVIATION, retail has no such branch.
+//
+// One named hook pair, owned by the allocator's translation unit
+// (runtime/src/system/allocator.cpp defines it), consulted at the ENTRY of
+// MemoryAllocator::MemAlloc and ::MemFree: when a pointer is non-null the call
+// is handed to it whole and the retail body does not run. Both are null unless
+// a diagnostic instrument armed them at boot from Options:
+//   BANISHED_REDZONE (shim mode)  standalone/redzone_alloc.cpp, RedzoneAlloc_Install
+//   BANISHED_ALLOC_STATS          standalone/alloc_cutover_arm.cpp, RtAllocSwapArmCutover
+// An armed hook must perform the allocation itself WITHOUT re-entering
+// MemAlloc/MemFree (it takes the lock at _singleton+0x640 and calls the raw
+// Allocate/Free members), so an allocation is instrumented exactly once.
+// No flag of its own (B3R_RULES R9).
+// ---------------------------------------------------------------------------
+struct MemoryAllocatorInstrument {
+    void* (*memAlloc)(uint64_t size, int align);
+    void  (*memFree)(void* p);
+};
+extern MemoryAllocatorInstrument g_memoryAllocatorInstrument;
+
 } // namespace System
 
 namespace rt {

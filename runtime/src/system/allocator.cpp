@@ -99,6 +99,10 @@ using rt::system::kThisFreeShl2;
 // zero until the ctor below runs (B3R W0-SM M1: was the mint's storage cell).
 System::MemoryAllocator* System::MemoryAllocator::_singleton = nullptr;
 
+// The instrument seat (MemoryAllocator.h): STANDALONE DEVIATION, instrument
+// seat, retail has no such branch. Constant-initialised null; armed at boot only.
+System::MemoryAllocatorInstrument System::g_memoryAllocatorInstrument = { nullptr, nullptr };
+
 // ---------------------------------------------------------------------------
 // Platform seam (see MemoryAllocator.h). Null until the host installs it.
 // ---------------------------------------------------------------------------
@@ -628,7 +632,12 @@ MemoryAllocator* MemoryAllocator::Get() {
 }
 
 // --- MemAlloc (0x1800c7a50) / MemFree (0x1800c7ad0) ------------------------
+// Both open with the instrument seat (MemoryAllocator.h): STANDALONE DEVIATION,
+// instrument seat, retail has no such branch. Null unless BANISHED_REDZONE or
+// BANISHED_ALLOC_STATS armed it at boot; the armed hook does the whole call.
 void* MemoryAllocator::MemAlloc(uint64_t size, int align) {
+    if (System::g_memoryAllocatorInstrument.memAlloc)                // STANDALONE DEVIATION
+        return System::g_memoryAllocatorInstrument.memAlloc(size, align);
     MemoryAllocator* self = Get();
     g_plat.lockEnter(self->lock);
     void* r = self->Allocate(size, align);
@@ -637,6 +646,10 @@ void* MemoryAllocator::MemAlloc(uint64_t size, int align) {
 }
 
 void MemoryAllocator::MemFree(void* p) {
+    if (System::g_memoryAllocatorInstrument.memFree) {               // STANDALONE DEVIATION
+        System::g_memoryAllocatorInstrument.memFree(p);
+        return;
+    }
     if (p == nullptr) return;
     MemoryAllocator* self = Get();
     g_plat.lockEnter(self->lock);

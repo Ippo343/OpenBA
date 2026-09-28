@@ -8,7 +8,10 @@
 // crashes LATER during free-list coalescing — far from the actual bad write.
 //
 // This shim interposes the fn_MemAlloc / fn_MemFreeStatic global pointers
-// (which ALL of code/Game/ routes through) with wrappers that over-allocate by
+// (which ALL of code/Game/ routes through), the MemAlloc/MemFree dispatch
+// slots, and — since B3R W0-A0 — the allocator's own instrument seat
+// (System::g_memoryAllocatorInstrument, consulted at the entry of
+// MemoryAllocator::MemAlloc / MemFree) with wrappers that over-allocate by
 // a tail redzone and stamp a canary right after the requested size. The bad
 // write trips the canary; RedzoneAlloc_ValidateAll(tag) — called at checkpoints
 // in MenuScene::Slot5 / Geometry::Serialize — reports the overflowing buffer by

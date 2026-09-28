@@ -1,7 +1,11 @@
 // standalone/alloc_stats.cpp
 // [ALLOCSTATS] engine-heap accounting (BANISHED_ALLOC_STATS=1, BANISHED_ALLOC_BIG=<bytes>).
 // Fed by the ported allocator's locked Allocate/Free entry points
-// (standalone/alloc_cutover_arm.cpp). Formerly the tail of allocator_lock.cpp,
+// (standalone/alloc_cutover_arm.cpp): the composed ?Allocate@ stub, and since
+// B3R W0-A0 the allocator's instrument seat, which routes every
+// MemoryAllocator::MemAlloc AND MemFree through the composed pair — so frees
+// are counted too (before W0-A0 no free reached AllocStats_RecordFree and the
+// live-bytes figure only grew). Formerly the tail of allocator_lock.cpp,
 // whose DLL byte-patch half died with the DLL (ENDGAME A.3).
 
 #include <windows.h>
