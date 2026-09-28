@@ -196,7 +196,7 @@ int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32
 // ---- keystone_a_zone.cpp
 int RoadTool_helper_6e30(int64_t param_1, unsigned int param_2, uint64_t param_3, void* param_4, int64_t param_5, int param_6);  // 0x1400a6e30
 void ZoneComponent_sub_d360(int* param_1, int64_t* param_2, int param_3, int param_4, unsigned int param_5, int param_6, int64_t* param_7, int param_8);  // 0x14009d360
-void RoadTool_sub_ce00(int64_t param_1, unsigned int param_2, unsigned int param_3, uint64_t param_4, void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8);  // 0x14009ce00
+int RoadTool_sub_ce00(int64_t param_1, unsigned int param_2, unsigned int param_3, uint64_t param_4, void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8);  // 0x14009ce00
 
 // ---- region_graph_build.cpp
 int* Pf_RegionGraphCtor_8670(int* param_1, int64_t param_2, int64_t param_3, int64_t param_4, uint32_t param_5, int param_6);  // 0x1400a8670 (local extern in code/Game/Game/region_seed.cpp (reg_region_graph.cpp prototype registers nothing))
