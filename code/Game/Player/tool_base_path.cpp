@@ -26,7 +26,10 @@
 // wave; a wrong port is silent corruption). See reg_player_path.cpp.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -46,7 +49,7 @@ static const uint32_t* s_pTid_7d98 = &s_pTid_7d98_v;  // StateMachineComponent
 static const uint32_t* s_pTid_7430 = &s_pTid_7430_v;  // CreateDragDescription
 static bool s_tidInit = false;
 
-static void EnsureTypeIds() {
+static void InitTypeIds() {
     if (s_tidInit) return;
     s_pTid_75f0_v = DestroyComponent::TypeId();
     s_pTid_7d98_v = StateMachineComponent::TypeId();
@@ -73,39 +76,33 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (t == *pTypeId) {
                 void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
+                found = Object::IsDerivedFromNullSafe(c, *pTypeId) ? c : nullptr;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
 
 // Reimpl of FUN_140005780 — FindComponent (type-ID DWORD_1401c75f0)
 void* PlayerPath_FindComponent_5780(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
+    InitTypeIds();
     return FindComponentByTypeId(entity, retIBP, s_pTid_75f0);
 }
 
 // Reimpl of FUN_140003ea0 — FindComponent (type-ID DWORD_1401c7d98)
 void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
+    InitTypeIds();
     return FindComponentByTypeId(entity, retIBP, s_pTid_7d98);
 }
 
-// FUN_1400052c0 (FindComponent, type-ID DAT_1401c7b30) is already registered
-// elsewhere. sub_48a0 needs it; call the registered exe function so we stay 1:1
-// (do NOT duplicate the body).
-typedef void* (*fn_find052c0_t)(uintptr_t, void*);
-static fn_find052c0_t s_fn_find052c0 = nullptr;
+// FUN_1400052c0 (FindComponent, type-ID DAT_1401c7b30) is ported elsewhere
+// (WorkBase_FindComponent_52c0, Work/exe_bodies.h). sub_48a0 needs it; call that
+// body so we stay 1:1 (do NOT duplicate the body).
 static void* FindComponent_AreaSelf(uintptr_t entity, void* retIBP) {
-    if (!s_fn_find052c0)
-        s_fn_find052c0 = reinterpret_cast<fn_find052c0_t>(ResolveAddr(Module::Exe, 0x1400052c0));
-    if (s_fn_find052c0) return s_fn_find052c0(entity, retIBP);
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    return retIBP;
+    return WorkBase_FindComponent_52c0(entity, retIBP);
 }
 
 // ============================================================
@@ -148,20 +145,11 @@ uint64_t PlayerPath_Sub_11e710(uintptr_t param_1) {
 // Signature: bool fn(int* p1, int p2, int p3, uint p4, float p5, float p6,
 //                    float p7, char p8, char p9, longlong p10)
 // ============================================================
-typedef float* (*fn_CharComp_f3e0_t)(int* p1, float* p2, float* p3, char p4, void* p5);
-static fn_CharComp_f3e0_t s_fn_CharComp_f3e0 = nullptr;
-static bool s_f3e0Init = false;
+// (CharacterComponent_impl_f3e0 0x14009f3e0 = Reimpl_MapGetTerrainPos, Game/exe_bodies.h.)
 
 bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t param_4,
                               float param_5, float param_6, float param_7,
                               char param_8, char param_9, int64_t param_10) {
-    if (!s_f3e0Init) {
-        s_fn_CharComp_f3e0 = reinterpret_cast<fn_CharComp_f3e0_t>(
-            ResolveAddr(Module::Exe, 0x14009f3e0));
-        s_f3e0Init = true;
-    }
-    if (!s_fn_CharComp_f3e0) return false;
-
     const float kHalf = 0.5f;  // DAT_140172114
     uintptr_t p1 = reinterpret_cast<uintptr_t>(param_1);
 
@@ -208,7 +196,7 @@ bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t p
     queryPos[0] = (float)(iVar2 % *param_1) - base;
     queryPos[1] = (float)(iVar2 / *param_1) - base;
 
-    s_fn_CharComp_f3e0(param_1, outPos, queryPos, '\0', extraOut);
+    Reimpl_MapGetTerrainPos(param_1, outPos, queryPos, '\0', extraOut);
 
     // param_5 ([RSP+0xa0]) <= extraOut.z ([RSP+0x50]); then outPos.z ([RSP+0x60])
     // - param_7, Abs, <= param_6 ([RSP+0xa8]).  (P4 draft used outPos[1] here — wrong lane.)
@@ -306,7 +294,7 @@ uint64_t PlayerPath_Sub_4770(uintptr_t param_1, void* param_2) {
 // Signature: ulonglong fn(longlong p1, InternalBasePtr* p2, int p3, int p4)
 // ============================================================
 uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int param_4) {
-    EnsureTypeIds();
+    InitTypeIds();
     const float kHundred = 100.0f;  // DAT_140172208
 
     // Ghidra's 'g_pGameWorldSingleton' is the GameWorld base pointer; our extern
@@ -327,7 +315,7 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
                 uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (t == *s_pTid_7430) {
                     void* c = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lst + 0x28) + (int64_t)idx * 8);
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_7430)) matched = c;
+                    if (Object::IsDerivedFromNullSafe(c, *s_pTid_7430)) matched = c;
                     break;
                 }
                 idx++;
@@ -389,7 +377,7 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
 
             // Original cleanup branch (string state) runs on zero locals.
             // local_a0 / local_88 / local_90 are all 0 -> null-safe.
-            if (fn_MemFreeStatic) fn_MemFreeStatic(nullptr);
+            System::MemoryAllocator::MemFree(nullptr);
 
             if (ok) return 1;
         }

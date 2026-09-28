@@ -41,7 +41,12 @@
 #include "graphics/Geometry.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Component/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Entity/componententity_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "FencedTool.h"
 #include <cstdint>
@@ -51,50 +56,28 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
-// ---- resolved deps ------------------------------------------------------------
+// ---- exe deps, called by name ------------------------------------------------
+//   0x1400c3720 ComponentEntity_CtorFromDescription, 0x1400c48a0
+//   EntityList_RegisterEntity_Impl (Entity/componententity_funcs.h)
+//   0x140003110 ActHunt_DynArraySetCount_3110 (Action/exe_bodies.h) -- IBP append
+//   0x1401018d0 DragPlacementTool_ClearPathEntities_1018d0, 0x1400dbf90
+//   PlayerEdit_FencedAnchorCalc_dbf90 (Player/exe_bodies.h)
+//   the finder leaves (FindOn below): 0x140004680 FloorComponent_FindResData (map),
+//   0x140003f60 ActCNR_FindComponent_3f60 (model; "ClearPathQueue" misnomer),
+//   0x140026a30 BuildComponent_FindStorage26a30 (picking -- the body's name says
+//   storage; the address and this use say PickingComponent), 0x140004740
+//   InteractComponent_FindWorkplaceComponent (MultiObject)
 namespace {
 
-typedef void* (*fn_ctorFromDesc_t)(void* mem, void* desc);                    // 0x1400c3720
-typedef void* (*fn_findComp_t)(int64_t entity, void* outIBP);                 // 4680/3f60/26a30/4740
-typedef void  (*fn_appendIBP_t)(int64_t* arr, int newCount, void* valIBP);    // 0x140003110
-typedef void  (*fn_registerEnt_t)(void* entityList, void* ibp, int priority); // 0x1400c48a0
-typedef void  (*fn_clearEnts_t)(int64_t entity, int x0, int y0, int x1, int y1,
-                                int64_t templ);                               // 0x1401018d0
-typedef uint64_t (*fn_anchorCalc_t)(void* tool, uint32_t* shMinX, uint32_t* shMinY,
-                                    uint32_t* shMaxX, uint32_t* shMaxY,
-                                    float* pos, float* yaw);                  // 0x1400dbf90
+typedef void (*FinderFn)(int64_t entity, void* outIBP);
 
-fn_ctorFromDesc_t    s_ctorFromDesc = nullptr;
-fn_findComp_t        s_findMap      = nullptr;   // 0x140004680
-fn_findComp_t        s_findModel    = nullptr;   // 0x140003f60 ("ClearPathQueue" misnomer)
-fn_findComp_t        s_findPicking  = nullptr;   // 0x140026a30
-fn_findComp_t        s_findMulti    = nullptr;   // 0x140004740
-fn_appendIBP_t       s_append       = nullptr;   // 0x140003110
-fn_registerEnt_t     s_registerEnt  = nullptr;   // 0x1400c48a0
-fn_clearEnts_t       s_clearEnts    = nullptr;   // 0x1401018d0
-fn_anchorCalc_t      s_anchorCalc   = nullptr;   // 0x1400dbf90
-
-bool s_resolved = false;
-void EnsureFuncs() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_ctorFromDesc = reinterpret_cast<fn_ctorFromDesc_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_findMap      = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_findModel    = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_findPicking  = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140026a30));
-    s_findMulti    = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140004740));
-    s_append       = reinterpret_cast<fn_appendIBP_t>(ResolveAddr(Module::Exe, 0x140003110));
-    s_registerEnt  = reinterpret_cast<fn_registerEnt_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_clearEnts    = reinterpret_cast<fn_clearEnts_t>(ResolveAddr(Module::Exe, 0x1401018d0));
-    s_anchorCalc   = reinterpret_cast<fn_anchorCalc_t>(ResolveAddr(Module::Exe, 0x1400dbf90));
-}
-
-
+void FindMap(int64_t e, void* out)     { FloorComponent_FindResData(reinterpret_cast<void*>(e), out); }   // 0x140004680
+void FindModel(int64_t e, void* out)   { ActCNR_FindComponent_3f60(static_cast<uintptr_t>(e), out); }     // 0x140003f60
+void FindPicking(int64_t e, void* out) { BuildComponent_FindStorage26a30(e, out); }                       // 0x140026a30
 
 // Find a component on an entity through one of the exe finder leaves; returns
 // the raw component pointer (finders write an IBP through the out param).
-void* FindOn(fn_findComp_t finder, void* entity, void* entityIBPSlot) {
-    if (!finder) return nullptr;
+void* FindOn(FinderFn finder, void* entity, void* entityIBPSlot) {
     (void)entity;
     int64_t out = 0;
     finder(*reinterpret_cast<int64_t*>(entityIBPSlot), &out);
@@ -146,10 +129,10 @@ void SeatPickOwner_1290d0(void* pickComp, void** masterIBPSlot) {
 // idiom): map-space = (col - c, row - c), c = (gridDim >> 1) - 0.5.
 void CellWorldPos(int* mapGrid, int col, int row, float out[3]) {
     out[0] = out[1] = out[2] = 0.f;
-    if (!mapGrid || !fn_MapGetTerrainPos) return;
+    if (!mapGrid) return;
     const float c = static_cast<float>(*mapGrid >> 1) - 0.5f;
     float in[3] = { static_cast<float>(col) - c, static_cast<float>(row) - c, 0.f };
-    fn_MapGetTerrainPos(reinterpret_cast<uint32_t*>(mapGrid), out, in, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(reinterpret_cast<uint32_t*>(mapGrid), out, in, '\0', nullptr);
 }
 
 // ============================================================
@@ -162,9 +145,8 @@ void CellWorldPos(int* mapGrid, int col, int row, float out[3]) {
 // ============================================================
 void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
                            int w, int h, int angleDeg, void** multiObjIBPSlot) {
-    EnsureFuncs();
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gw || !s_ctorFromDesc || !fn_MemAlloc) return;
+    if (!gw) return;
     int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
 
     float a[3], b[3], centre[3];
@@ -178,17 +160,17 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     void* sectionTmpl = *reinterpret_cast<void**>(desc + 0x28 + static_cast<int64_t>(sectionIdx) * 8);
     if (!sectionTmpl) return;
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-    void* ent = mem ? s_ctorFromDesc(mem, sectionTmpl) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    void* ent = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), sectionTmpl) : nullptr;
     int64_t entIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&entIBP) ::Object::InternalBasePtr(
+    new (&entIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
     if (!entIBP) return;
 
-    void* mapComp = FindOn(s_findMap, ent, &entIBP);
+    void* mapComp = FindOn(FindMap, ent, &entIBP);
     StampMapRect(mapComp, x, y, w, h, angleDeg);
 
-    void* model = FindOn(s_findModel, ent, &entIBP);
+    void* model = FindOn(FindModel, ent, &entIBP);
     if (model) ApplyModelYaw(model, static_cast<float>(angleDeg), centre);
 
     // Report WHERE every fence piece is put. A "gate model ended up in a lake" report is
@@ -208,16 +190,16 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
 
     // Append to the master's MultiObject list (arr at +0x48, count at +0x50).
     uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiObjIBPSlot);
-    if (multi && s_append) {
+    if (multi) {
         int64_t val = entIBP;
-        s_append(reinterpret_cast<int64_t*>(multi + 0x48),
-                 *reinterpret_cast<int32_t*>(multi + 0x50) + 1, &val);
+        ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(multi + 0x48),
+                                      *reinterpret_cast<int32_t*>(multi + 0x50) + 1, &val);
     }
 
-    if (s_registerEnt) {
+    {
         int64_t val = entIBP;
         int prio = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(sectionTmpl) + 0x20);
-        s_registerEnt(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8), &val, prio);
+        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8), &val, prio);
     }
 }
 
@@ -237,7 +219,6 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
 void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
                    int shMinX, int shMinY, int shMaxX, int shMaxY,
                    int angleDeg, void** multiObjIBPSlot) {
-    EnsureFuncs();
     bool prevFence  = false;   // bVar2: previous cell was a fence cell
     bool afterGap   = false;   // bVar5: a shelter gap has been seen on this run
     bool prevLong   = false;   // bVar3: previous spawn was a long piece
@@ -325,9 +306,8 @@ void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
 // 0x1400dae00 — FencedTool::CalcPath (Slot13). Returns 1 on commit, 0 on abort.
 // ============================================================
 bool FencedTool::CalcPath(int startCell, int endCell) {
-    EnsureFuncs();
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gw || !s_ctorFromDesc || !s_anchorCalc || !fn_MemAlloc || !fencedDesc) {
+    if (!gw || !fencedDesc) {
         return 0;
     }
 
@@ -363,62 +343,63 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     uint32_t shMinX = 0, shMinY = 0, shMaxX = 0, shMaxY = 0;
     float shelterPos[3] = { 0.f, 0.f, 0.f };
     float yawF = 0.f;
-    s_anchorCalc(this, &shMinX, &shMinY, &shMaxX, &shMaxY, shelterPos, &yawF);
+    // The door typed the last argument float*; the body takes uint32_t* (same pointer).
+    PlayerEdit_FencedAnchorCalc_dbf90(reinterpret_cast<uintptr_t>(this), &shMinX, &shMinY, &shMaxX,
+                                      &shMaxY, shelterPos, reinterpret_cast<uint32_t*>(&yawF));
     const int yawI = static_cast<int>(yawF);
 
     // 4. Master entity from the tool's description template (tool+0x20).
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-    void* master = mem ? s_ctorFromDesc(mem, descriptionPtr) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    void* master = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), descriptionPtr) : nullptr;
     int64_t masterIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&masterIBP) ::Object::InternalBasePtr(
+    new (&masterIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
     if (!masterIBP) return 0;
 
-    void* masterMap = FindOn(s_findMap, master, &masterIBP);
+    void* masterMap = FindOn(FindMap, master, &masterIBP);
     StampMapRect(masterMap, minCol, minRow, rectW, rectH, yawI);
 
     int64_t multiIBP = 0;
-    if (s_findMulti) {
-        s_findMulti(masterIBP, &multiIBP);
-    }
+    InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(masterIBP), &multiIBP);
 
-    if (s_clearEnts) {
+    {
         int64_t clearTmpl = *reinterpret_cast<int64_t*>(
             reinterpret_cast<uintptr_t>(fencedDesc) + 0x70);
-        s_clearEnts(masterIBP, minCol, minRow, maxCol, maxRow, clearTmpl);
+        DragPlacementTool_ClearPathEntities_1018d0(reinterpret_cast<void*>(masterIBP), minCol, minRow,
+                                                   maxCol, maxRow, clearTmpl);
     }
 
     // 5. Shelter entity from sections[0].
     void* shelterTmpl = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(fencedDesc) + 0x28);
-    void* smem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-    void* shelter = (smem && shelterTmpl) ? s_ctorFromDesc(smem, shelterTmpl) : nullptr;
+    void* smem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    void* shelter = (smem && shelterTmpl) ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(smem), shelterTmpl) : nullptr;
     int64_t shelterIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&shelterIBP) ::Object::InternalBasePtr(
+    new (&shelterIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(shelter));   // B.3.3 bridge
     if (shelterIBP) {
-        void* shMap = FindOn(s_findMap, shelter, &shelterIBP);
+        void* shMap = FindOn(FindMap, shelter, &shelterIBP);
         StampMapRect(shMap, static_cast<int>(shMinX), static_cast<int>(shMinY),
                      static_cast<int>(shMaxX - shMinX) + 1,
                      static_cast<int>(shMaxY - shMinY) + 1, yawI);
 
-        void* shModel = FindOn(s_findModel, shelter, &shelterIBP);
+        void* shModel = FindOn(FindModel, shelter, &shelterIBP);
         if (shModel) ApplyModelYaw(shModel, yawF, shelterPos);
 
-        void* shPick = FindOn(s_findPicking, shelter, &shelterIBP);
+        void* shPick = FindOn(FindPicking, shelter, &shelterIBP);
         void* masterVal = reinterpret_cast<void*>(masterIBP);
         SeatPickOwner_1290d0(shPick, &masterVal);
 
-        if (multiIBP && s_append) {
+        if (multiIBP) {
             int64_t val = shelterIBP;
-            s_append(reinterpret_cast<int64_t*>(multiIBP + 0x48),
-                     *reinterpret_cast<int32_t*>(multiIBP + 0x50) + 1, &val);
+            ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(multiIBP + 0x48),
+                                          *reinterpret_cast<int32_t*>(multiIBP + 0x50) + 1, &val);
         }
-        if (s_registerEnt) {
+        {
             int64_t val = shelterIBP;
             int prio = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(shelterTmpl) + 0x20);
-            s_registerEnt(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
-                          &val, prio);
+            EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
+                                           &val, prio);
         }
     }
 
@@ -450,12 +431,12 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
                   sMinX, sMinY, sMaxX, sMaxY, 0x5a, &multiVal);
 
     // 8. Register the master entity (priority from the tool's own template).
-    if (s_registerEnt) {
+    {
         int64_t val = masterIBP;
         int prio = *reinterpret_cast<int32_t*>(
             reinterpret_cast<uintptr_t>(descriptionPtr) + 0x20);
-        s_registerEnt(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
-                      &val, prio);
+        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
+                                       &val, prio);
     }
 
     return 1;

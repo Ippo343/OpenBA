@@ -55,6 +55,9 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"
+#include "system/MemoryAllocator.h"
+#include "system/Value.h"      // RtSystem_Time_Ctor
 
 namespace {
 
@@ -66,10 +69,10 @@ namespace {
 // subclass ctor here; the class's ctor is that body).
 void* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
     Engine::UpdateLoop* pDlLoop = nullptr;
-    void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
+    void* dlLoop = System::MemoryAllocator::MemAlloc(0xb60, 4);
     if (dlLoop) {
         uint64_t delayTime = 0;
-        fn_Time_Ctor_Float(&delayTime, 1.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // 0x140099130
@@ -79,10 +82,10 @@ void* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
     }
 
     void* pOuterLoop = nullptr;
-    void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+    void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
     if (outerLoop) {
         uint64_t zeroTime = 0;
-        fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
         pOuterLoop = ::new (outerLoop) GameLoaderLoop(
             pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
     }
@@ -93,11 +96,6 @@ void* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
 const char* MissingDependency(bool needSaveLoad) {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return "KeyMap/scenario-list singleton";
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return "GameWorld singleton";
-    if (!fn_IsDerivedFrom) return "IsDerivedFrom";
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return "MemAlloc";
-    if (!fn_Time_Ctor_Float) return "Time::Time(float)";
-    if (!fn_Random_Default_Ctor) return "Random::Random";
-    if (!fn_InternalBasePtr_Ctor) return "InternalBasePtr::InternalBasePtr";
     if (!needSaveLoad) return nullptr;
     if (!::Save::SaveLoad::_singleton) return "SaveLoad singleton";
     if (!::IO::Persistence::_singleton) return "Persistence singleton";
@@ -146,7 +144,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         reinterpret_cast<uintptr_t>(scenarioList) + 0x20);
     void* resource = *reinterpret_cast<void**>(resArray + static_cast<uintptr_t>(scenIdx) * 8);
 
-    void* scenario = fn_IsDerivedFrom(resource, Scenario::TypeId()) ? resource : nullptr;
+    void* scenario = Object::IsDerivedFromNullSafe(resource, Scenario::TypeId()) ? resource : nullptr;
     uintptr_t sc = reinterpret_cast<uintptr_t>(scenario);
 
     // 0x140013AA0 -- Scenario::GetSaveName, String(scenario + 0x88). Retail runs
@@ -195,7 +193,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         uint64_t terrainGen     = *reinterpret_cast<uint64_t*>(sc + 0x78);
         uint64_t climateGen     = *reinterpret_cast<uint64_t*>(sc + 0x80);
 
-        void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+        void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         if (gameLoop) {
             // ENDGAME B.3.9 EXA: the real class; ctor 0x140098060 copy-constructs
             // the name (retail's by-value String arrives by hidden pointer), and
@@ -244,7 +242,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         int loopCount = 0;
         while (operation != 0) {
             uint8_t zeroTime[8];
-            fn_Time_Ctor_Float(zeroTime, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
             reinterpret_cast<Save::SaveLoad*>(saveLoad)->Update(*reinterpret_cast<const System::Time*>(zeroTime));   // B.3.7 bridge
             operation = static_cast<int>(reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetOperation());   // B.3.7 bridge
             ++loopCount;
@@ -257,7 +255,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
 
         void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();   // B.3.7 bridge
 
-        void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+        void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         if (gameLoop) {
             // Retail passes an EMPTY String here (local_res8 = 0). A null COW
             // pointer IS the empty string -- no allocation, nothing to destruct.

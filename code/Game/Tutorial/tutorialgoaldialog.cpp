@@ -10,6 +10,7 @@
 
 #include "Tutorial/TutorialGoalDialog.h"
 #include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
@@ -94,9 +95,9 @@ bool TutorialGoalDialog::IsComplete(void* /*time*/, void* /*instance*/) {
     void* userData = *reinterpret_cast<void**>(dialogPtr + 0x30);
     void* description = nullptr;
     if (userData != nullptr) {
-        if (fn_IsDerivedFrom(userData, ComponentDescription::TypeId())) {
+        if (Object::IsDerivedFromNullSafe(userData, ComponentDescription::TypeId())) {
             description = userData;
-        } else if (fn_IsDerivedFrom(userData, ComponentEntity::TypeId())) {
+        } else if (Object::IsDerivedFromNullSafe(userData, ComponentEntity::TypeId())) {
             description = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(userData) + 0x28);
         }
     }

@@ -26,7 +26,8 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
-#include "resolve.h"
+#include "object/TypeInfo.h"
+#include "Dialog/exe_bodies.h"   // 0x140102b60 Toolbar_ShowGroup_Impl
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -99,8 +100,7 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
 
     void* result = nullptr;
     if (found) {
-        if (!fn_IsDerivedFrom ||
-            fn_IsDerivedFrom(found, ComponentDescription::TypeId())) {
+        if (Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
             result = found;
         }
     }
@@ -288,10 +288,8 @@ void TutorialSetupRestrictPlayer::End() {
     // call SetEditMode(playerController, 0) to clear tool selection
     TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
     if (*(uint64_t*)(s + 0x48) != 0) {
-        if (fn_SetEditMode) {
-            uintptr_t playerCtrl2 = *(uintptr_t*)(gameWorld + 0x120);
-            fn_SetEditMode((void*)playerCtrl2, 0);
-        }
+        uintptr_t playerCtrl2 = *(uintptr_t*)(gameWorld + 0x120);
+        Toolbar_ShowGroup_Impl((void*)playerCtrl2, 0);   // 0x140102b60 (the door was named SetEditMode)
     }
 }
 

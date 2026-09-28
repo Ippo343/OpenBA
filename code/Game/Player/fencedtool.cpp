@@ -25,7 +25,10 @@
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 #include "Player/RotationSetting.h"   // ENDGAME B.3.9 CB: 0x1401c63c8 cell class
 #include "Component/CreateFencedDescription.h"
 #include "Component/MapDescription.h"
@@ -38,14 +41,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
-// Graphics::Scene::RemoveObject — resolved locally via exe IAT dispatch slot
-
-static bool s_sceneResolved = false;
-
-static void EnsureSceneFuncs() {
-    if (s_sceneResolved) return;
-    s_sceneResolved = true;
-}
 
 // ============================================================
 // FencedTool::Shutdown2 (vtable +0x28, Slot5)
@@ -53,8 +48,6 @@ static void EnsureSceneFuncs() {
 // Removes the fence preview from the scene and destroys the mesh instance.
 // Original: 0x1400dccc0
 void FencedTool::Shutdown() {
-    EnsureSceneFuncs();
-
     // Remove scene object if added
     if ((int)sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
@@ -152,8 +145,6 @@ char FencedTool::OnKey(char key) {
 // and the caller read a garbage EAX for the keep-alive decision.
 // Original: 0x1400dcd10
 char FencedTool::OnCancel() {
-    EnsureSceneFuncs();
-
     // Remove scene object if added
     if ((int)sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
@@ -184,8 +175,6 @@ char FencedTool::OnCancel() {
 // When inactive: remove mesh from scene if present.
 // Original: 0x1400dcad0
 void FencedTool::Update(void* /*param2*/, char param3) {
-    EnsureSceneFuncs();
-
     // Initialize local offset vector to {0, 0, 0}
     float offset[3] = {0.0f, 0.0f, 0.0f};
 
@@ -198,10 +187,10 @@ void FencedTool::Update(void* /*param2*/, char param3) {
         uint32_t outYaw[8];  // Scalar data for yaw/orientation
         memset(outYaw, 0, sizeof(outYaw));
 
-        if (!fn_FencedPlacementParams) goto remove;
-
-        bool valid = fn_FencedPlacementParams(
-            this, outParam2, &outParam3, &outParam4, outParam5, offset, outYaw);
+        // 0x1400dbf90 returns uint64_t; the door read AL as the bool.
+        bool valid = static_cast<uint8_t>(PlayerEdit_FencedAnchorCalc_dbf90(
+            reinterpret_cast<uintptr_t>(this), outParam2, &outParam3, &outParam4, outParam5,
+            offset, outYaw)) != 0;
 
         if (valid) {
             // Add mesh to scene if not already added
@@ -257,7 +246,6 @@ void FencedTool::Update(void* /*param2*/, char param3) {
         }
     }
 
-remove:
     // Remove mesh from scene if present
     if ((int32_t)sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
@@ -270,28 +258,11 @@ remove:
 }
 
 // ============================================================
-// CalcCost helper function pointers
+// CalcCost helpers, called by name:
+//   0x14009f3e0 Reimpl_MapGetTerrainPos (Game/exe_bodies.h) -- terrain height query
+//   0x1400dbf90 PlayerEdit_FencedAnchorCalc_dbf90 (Player/exe_bodies.h) --
+//               anchor/rotation adjustment
 // ============================================================
-
-// CharacterComponent_impl_f3e0: Terrain height query
-typedef void (*fn_TerrainHeightQuery_t)(void* mapGrid, float* outPos, float* inPos,
-                                         char param4, void* outExtra);
-static fn_TerrainHeightQuery_t s_fn_TerrainHeightQuery = nullptr;
-
-// FUN_1400dbf90: Anchor/rotation adjustment
-typedef uint64_t (*fn_FencedTool_AnchorCalc_t)(void* self, uint32_t* p2, uint32_t* p3,
-                                                 uint32_t* p4, uint32_t* p5,
-                                                 float* p6, uint32_t* p7);
-static fn_FencedTool_AnchorCalc_t s_fn_FencedTool_AnchorCalc = nullptr;
-
-static void EnsureCalcCostHelpers() {
-    if (!s_fn_TerrainHeightQuery) {
-        s_fn_TerrainHeightQuery = reinterpret_cast<fn_TerrainHeightQuery_t>(
-            ResolveAddr(Module::Exe, 0x14009f3e0));
-        s_fn_FencedTool_AnchorCalc = reinterpret_cast<fn_FencedTool_AnchorCalc_t>(
-            ResolveAddr(Module::Exe, 0x1400dbf90));
-    }
-}
 
 static constexpr float HALF_CELL = 0.5f;
 static constexpr float HEIGHT_TOLERANCE = 100.0f;
@@ -305,8 +276,6 @@ static constexpr float HEIGHT_TOLERANCE = 100.0f;
 int FencedTool::CalcCost(int startCell, int endCell,
                          uint32_t* outWidth, int* outHeight, int* outDepth,
                          int* outFenceSegments) {
-    EnsureCalcCostHelpers();
-
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
     int* mapGrid = *(int**)(gameWorld + 0xf8);
@@ -389,7 +358,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
             if (*(uint8_t*)(cellPtr + 0x28) != 0) { allValid = false; break; }
 
             // Height validation
-            if (s_fn_TerrainHeightQuery) {
+            {
                 float halfOffset = (float)(mapWidth >> 1) - HALF_CELL;
                 float inPos[4] = {0};
                 *reinterpret_cast<Math::Vector3*>(inPos) = Math::Vector3(
@@ -397,7 +366,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
                     (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
                 float outPos[4] = {0};
                 uint32_t extra[2] = {0};
-                s_fn_TerrainHeightQuery(mapGrid, outPos, inPos, '\0', extra);
+                Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
                 if (!heightInitialized) { baseHeight = outPos[2]; heightInitialized = true; }
                 Math::Scalar heightDiff(outPos[2] - baseHeight);
@@ -409,13 +378,12 @@ int FencedTool::CalcCost(int startCell, int endCell,
     if (!allValid) return 3;  // Blocked
 
     // Anchor/rotation adjustment
-    if (!s_fn_FencedTool_AnchorCalc) return 3;
     uint32_t anchorMinCol = minCol, anchorMinRow = minRow;
     uint32_t anchorMaxCol = effectiveMaxCol, anchorMaxRow = effectiveMaxRow;
     float anchorPos[3] = {0};
 
-    uint64_t anchorResult = s_fn_FencedTool_AnchorCalc(
-        this, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
+    uint64_t anchorResult = PlayerEdit_FencedAnchorCalc_dbf90(
+        reinterpret_cast<uintptr_t>(this), &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
         anchorPos, &anchorMinCol);
     if ((char)anchorResult == '\0') return 3;
 
@@ -464,12 +432,12 @@ struct TileArray {
         int newCount = count + 1;
         if (newCount > capacity) {
             int newCap = (count == 0) ? newCount * 3 : newCount * 3;
-            TileRecord* newData = (TileRecord*)fn_MemAlloc(
-                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRecord), 4);
+            TileRecord* newData = (TileRecord*)System::MemoryAllocator::MemAlloc(
+                (uint64_t)newCap * sizeof(TileRecord), 4);
             if (data && newData) {
                 memcpy(newData, data, (uint64_t)count * sizeof(TileRecord));
             }
-            if (data) fn_MemFreeStatic(data);
+            if (data) System::MemoryAllocator::MemFree(data);
             data = newData;
             capacity = newCap;
         }
@@ -491,7 +459,7 @@ struct TileArray {
     }
 
     void free() {
-        if (data) fn_MemFreeStatic(data);
+        if (data) System::MemoryAllocator::MemFree(data);
         data = nullptr;
         count = 0;
         capacity = 0;
@@ -499,26 +467,10 @@ struct TileArray {
 };
 
 // ============================================================
-// Local function pointers for Draw
+// Draw helpers: 0x140101270 PlayerRay_ScreenToCell_101270 (the cell under the
+// cursor), 0x14009f3e0 Reimpl_MapGetTerrainPos (terrain height query),
+// 0x1401008c0 PlayerTileRender_DrawOverlay_08c0 (the tile overlay submit).
 // ============================================================
-
-// FUN_140101270: GetCursorCell — computes the cell index under the cursor
-typedef int (*fn_GetCursorCell_t)(uint64_t keyMap);
-static fn_GetCursorCell_t s_fn_GetCursorCell = nullptr;
-
-// FUN_14009f3e0: CharacterComponent_impl_f3e0 — terrain height query
-// Already declared as s_fn_TerrainHeightQuery in CalcCost section above.
-
-static bool s_drawFuncsResolved = false;
-
-static void EnsureDrawHelpers() {
-    if (s_drawFuncsResolved) return;
-    s_fn_GetCursorCell = reinterpret_cast<fn_GetCursorCell_t>(
-        ResolveAddr(Module::Exe, 0x140101270));
-    // Ensure CalcCost helpers are resolved too (terrain height, Vector3, ScalarAbs)
-    EnsureCalcCostHelpers();
-    s_drawFuncsResolved = true;
-}
 
 // ============================================================
 // FencedTool::Draw (vtable +0x40, Slot8)
@@ -532,8 +484,6 @@ static void EnsureDrawHelpers() {
 // Both phases build arrays of 0x14-byte TileRecords and call fn_TileRender.
 // Original: 0x1400dc440
 void FencedTool::Draw(void* context, char param3) {
-    EnsureDrawHelpers();
-
     uintptr_t dialog = (uintptr_t)dialogPtr;
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
     int mapWidth = *mapGrid;
@@ -567,9 +517,8 @@ void FencedTool::Draw(void* context, char param3) {
         uint8_t lineArrayBuf[16] = {0};
         editTiles.toEngineFormat(tileArrayBuf);
 
-        if (fn_TileRender) {
-            fn_TileRender(nullptr, context, tileArrayBuf, lineArrayBuf);
-        }
+        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(tileArrayBuf),
+                                          reinterpret_cast<int64_t*>(lineArrayBuf));
 
         editTiles.free();
     }
@@ -583,12 +532,8 @@ void FencedTool::Draw(void* context, char param3) {
         endCell   = this->endCell;
     } else {
         // Get cell under cursor
-        if (s_fn_GetCursorCell) {
-            startCell = s_fn_GetCursorCell((uint64_t)***(void****)g_pInputConfigSingletonExref);
-            endCell = startCell;
-        } else {
-            return;
-        }
+        startCell = PlayerRay_ScreenToCell_101270((uintptr_t)***(void****)g_pInputConfigSingletonExref);
+        endCell = startCell;
     }
 
     const float HEIGHT_TOL = 100.0f;  // DAT_140172208
@@ -670,7 +615,7 @@ void FencedTool::Draw(void* context, char param3) {
                     }
 
                     // Height validation
-                    if (s_fn_TerrainHeightQuery) {
+                    {
                         float halfOffset = (float)(mapWidth >> 1) - HALF_CELL_OFF;
                         float inPos[4] = {0};
                         *reinterpret_cast<Math::Vector3*>(inPos) = Math::Vector3(
@@ -678,14 +623,12 @@ void FencedTool::Draw(void* context, char param3) {
                             (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
                         float outPos[4] = {0};
                         uint32_t extra[2] = {0};
-                        s_fn_TerrainHeightQuery(mapGrid, outPos, inPos, '\0', extra);
+                        Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
                         Math::Scalar heightDiff(outPos[2] - 0.0f);
                         if (heightDiff.Abs().v <= HEIGHT_TOL) {
                             valid = true;
                         }
-                    } else {
-                        valid = true; // Can't validate height, assume ok
                     }
                 }
             }
@@ -707,9 +650,8 @@ after_check:
     uint8_t lineArrayBuf[16] = {0};
     previewTiles.toEngineFormat(tileArrayBuf);
 
-    if (fn_TileRender) {
-        fn_TileRender(nullptr, context, tileArrayBuf, lineArrayBuf);
-    }
+    PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(tileArrayBuf),
+                                      reinterpret_cast<int64_t*>(lineArrayBuf));
 
     previewTiles.free();
 }
@@ -725,7 +667,7 @@ after_check:
 // Returns the first component matching targetTypeId, or nullptr.
 // Same pattern as DragPlacementTool's FindComponentByTypeId but local to this TU.
 static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
-    if (!entity || !fn_IsDerivedFrom) return nullptr;
+    if (!entity) return nullptr;
 
     int count = *(int*)(entity + 0x30);
     void** components = *(void***)(entity + 0x28);
@@ -738,7 +680,7 @@ static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
         uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == targetTypeId) {
-            if (fn_IsDerivedFrom(comp, targetTypeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
                 return comp;
             }
             break;
@@ -796,14 +738,14 @@ void FencedTool::Startup() {
     //    CheckPtr on the IBP first, then IsDerivedFrom, then construct new IBP at +0x50
     void* toolSettingVal = toolSetting;
     void* rotSetting = nullptr;
-    if (fn_IsDerivedFrom && toolSettingVal) {
-        bool isDerived = fn_IsDerivedFrom(toolSettingVal, RotationSetting::TypeId());   // cell 0x1401c63c8
+    if (toolSettingVal) {
+        bool isDerived = Object::IsDerivedFromNullSafe(toolSettingVal, RotationSetting::TypeId());   // cell 0x1401c63c8
         if (isDerived) {
             rotSetting = toolSettingVal;
         }
     }
     // Construct InternalBasePtr at +0x50 with the resolved RotationSetting
-    if (fn_InternalBasePtr_Ctor) {
+    {
         void* localIBP = nullptr;
         new (&localIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(rotSetting));   // B.3.3 bridge
@@ -823,7 +765,7 @@ void FencedTool::Startup() {
     _field60 = *(uint32_t*)((uintptr_t)sizeDesc2 + 0x48);
 
     // 6. Allocate MeshInstance (0x120 bytes, alignment 8)
-    void* meshMem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8) : nullptr;
+    void* meshMem = System::MemoryAllocator::MemAlloc(0x120, 8);
     void* meshInst = nullptr;
     if (meshMem) {
         // Retail: `??0MeshInstance` then the exe's copy 0x14015e240 of the class's
