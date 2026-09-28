@@ -3,5 +3,3 @@
 
 #include "NomadComponent.h"
 #include <cstdint>
-
-void NomadComponent_InitFuncs();
