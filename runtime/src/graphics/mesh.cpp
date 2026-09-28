@@ -136,6 +136,9 @@
 #include "../../types/graphics/AnimationState.h"  // Graphics::AnimationState
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/video/Buffers.h"            // Video::{Index,Vertex}Buffer
+#include "../../types/graphics/Geometry.h"        // Graphics::Geometry::SetTransform
+#include "../../types/collection/Collection.h"    // rtcoll:: the array instantiations
+#include "../../types/math/Math.h"                // Math::Quaternion::Lerp
 
 using RtGraphics::ExternalPtr;
 using RtGraphics::Geometry;
@@ -151,60 +154,25 @@ using RtGraphics::TriangleVertex;
 using RtGraphics::VideoBufferHeader;
 using RtGraphics::kEdgeMeshVertexScale;
 
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
-// resolve.h drags in <windows.h>, and <wingdi.h>'s `Rectangle` function and
-// <windef.h>'s `near` / `far` macros collide with the engine's own type and
-// member names. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two against each other.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 // ============================================================================
-// The DLL internals this lane calls, resolved once each.
-//
-// The Array<T> helpers are NOT exported (they are template instantiations), so
-// they are reached by retail ADDRESS through ResolveAddr, which is a base +
-// ASLR-delta add and not a lookup. The cache is here so a hot body does not
-// even pay that.
+// The DLL internals this lane calls, by body name (B3R). The Array<T> helpers
+// are NOT exported (they are template instantiations):
+//   Array<ExternalPtr<MaterialInstance>>, element 8 bytes:
+//     0x180014c70  operator=   rtcoll::RtColl_ArrayAssign_180014c70
+//     0x180014d00  ~Array      rtcoll::RtColl_ArrayDtor_180014d00
+//   Array<AnimationState layer>, element 0x38, alignment 8:
+//     0x18001b700 / 0x18001c480  rtcoll::Rt_ArrayAssign_18001b700 / Rt_ArrayDtor_18001c480
+//   Array<InterpolatedState<Transform>>, element 0x38, alignment 4 (a DIFFERENT
+//   instantiation from the layer array even though the stride matches — its
+//   SetSize default-constructs new elements to an identity Transform pair):
+//     0x18001b810 / 0x18001c550 / 0x18005ac50
+//       rtcoll::Rt_ArrayAssign_18001b810 / Rt_ArrayDtor_18001c550 / Rt_SetSize_18005ac50
+//   Array<GraphicsMesh::TriangleList>, element 0x18, alignment 4 — EdgeMesh::Set
+//   uses it for both its triangle list and its edge list:
+//     0x1800136f0  rtcoll::RtColl_ArraySetSize_1800136f0
 // ============================================================================
-
-typedef void*  (*ArrayCopyFn)(void* dst, const void* src);   // Array<T>::operator=
-typedef void   (*ArrayFreeFn)(void* self);                   // Array<T>::~Array
-typedef void   (*ArrayResizeFn)(void* self, int n);          // Array<T>::SetSize
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
-
-// Array<ExternalPtr<MaterialInstance>>, element 8 bytes.
-//   0x180014c70  operator=   (frees, grows, then copies element by element)
-//   0x180014d00  ~Array      (Free under the allocator critical section, then
-//                             zeroes _data and the {_size,_capacity} qword)
-ArrayCopyFn RtMatArrayCopy() { static ArrayCopyFn f = RtAddr<ArrayCopyFn>(0x180014c70); return f; }
-ArrayFreeFn RtMatArrayFree() { static ArrayFreeFn f = RtAddr<ArrayFreeFn>(0x180014d00); return f; }
-
-// Array<AnimationState layer>, element 0x38, alignment 8.
-ArrayCopyFn RtLayerArrayCopy() { static ArrayCopyFn f = RtAddr<ArrayCopyFn>(0x18001b700); return f; }
-ArrayFreeFn RtLayerArrayFree() { static ArrayFreeFn f = RtAddr<ArrayFreeFn>(0x18001c480); return f; }
-
-// Array<InterpolatedState<Transform>>, element 0x38, alignment 4. Note that
-// this is a DIFFERENT instantiation from the layer array above even though the
-// stride matches, because the element type differs — MSVC emits one body per
-// instantiation and the SetSize body below default-constructs new elements to
-// an identity Transform pair, which the layer body does not.
-ArrayCopyFn   RtNodeArrayCopy()   { static ArrayCopyFn   f = RtAddr<ArrayCopyFn>(0x18001b810);   return f; }
-ArrayFreeFn   RtNodeArrayFree()   { static ArrayFreeFn   f = RtAddr<ArrayFreeFn>(0x18001c550);   return f; }
-ArrayResizeFn RtNodeArrayResize() { static ArrayResizeFn f = RtAddr<ArrayResizeFn>(0x18005ac50); return f; }
-
-// Array<GraphicsMesh::TriangleList>, element 0x18, alignment 4 — EdgeMesh::Set
-// uses it for both its triangle list and its edge list.
-ArrayResizeFn RtTriListArrayResize() { static ArrayResizeFn f = RtAddr<ArrayResizeFn>(0x1800136f0); return f; }
 
 // The exported neighbours, by mangled name. Each is a direct internal CALL in
 // the retail body it replaces, so going to the DLL is the byte-faithful choice
@@ -807,19 +775,19 @@ Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other
     mi->_materials._data = nullptr;
     mi->_materials._size = 0;
     mi->_materials._capacity = 0;
-    RtMatArrayCopy()(&mi->_materials, &src->_materials);
+    rtcoll::RtColl_ArrayAssign_180014c70(&mi->_materials, &src->_materials);
 
     mi->_animation._instanced = src->_animation._instanced;
 
     mi->_animation._layers._data = nullptr;
     mi->_animation._layers._size = 0;
     mi->_animation._layers._capacity = 0;
-    RtLayerArrayCopy()(&mi->_animation._layers, &src->_animation._layers);
+    rtcoll::Rt_ArrayAssign_18001b700(&mi->_animation._layers, &src->_animation._layers);
 
     mi->_nodes._data = nullptr;
     mi->_nodes._size = 0;
     mi->_nodes._capacity = 0;
-    RtNodeArrayCopy()(&mi->_nodes, &src->_nodes);
+    rtcoll::Rt_ArrayAssign_18001b810(&mi->_nodes, &src->_nodes);
 
     mi->_rootAnimationOffset = src->_rootAnimationOffset;
     mi->_color[0] = src->_color[0];
@@ -896,9 +864,9 @@ Graphics::MeshInstance::MeshInstance() {
 
 Graphics::MeshInstance::~MeshInstance() {
     RtGraphics::MeshInstance* const mi = reinterpret_cast<RtGraphics::MeshInstance*>(this);   // B.3.8 bridge (the POD view)
-    RtNodeArrayFree()(&mi->_nodes);
-    RtLayerArrayFree()(&mi->_animation._layers);
-    RtMatArrayFree()(&mi->_materials);
+    rtcoll::Rt_ArrayDtor_18001c550(&mi->_nodes);
+    rtcoll::Rt_ArrayDtor_18001c480(&mi->_animation._layers);
+    rtcoll::RtColl_ArrayDtor_180014d00(&mi->_materials);
 
 }
 
@@ -1298,18 +1266,9 @@ static void RtGraphics_EdgeMeshInstance_SetMesh(void* self, ExternalPtr mesh, vo
 
 namespace {
 
-// Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191. Reached BY ADDRESS
-// through the port-aware resolver, exactly as scene.cpp's RtQuaternionLerp
-// does, because Wave 9 lane P registered BOTH the name and the address for its
-// port (runtime/src/math/wave9_lane_p.cpp:241) and the address form is the one
-// the other Graphics caller already uses — one spelling, one place to repoint.
-// HIDDEN RETURN SLOT: RCX = the FROM quaternion, RDX = the return buffer,
-// R8 = the TO quaternion, R9 = &t.
-typedef void* (*QuatLerpFn)(const void* from, void* ret, const void* to, const void* t);
-QuatLerpFn RtQuatLerp() {
-    static QuatLerpFn f = RtAddr<QuatLerpFn>(0x18001d500);
-    return f;
-}
+// Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191: the member, by
+// value (B3R). HIDDEN RETURN SLOT in retail: RCX = the FROM quaternion, RDX =
+// the return buffer, R8 = the TO quaternion, R9 = &t.
 
 // Math::Transform::AsMatrix — retail 0x18001e5f0, ordinal 1619. ENDGAME B.3.1
 // step 2: a direct member call; there is no door left to bypass. The
@@ -1354,13 +1313,7 @@ inline void* TransformLerp(const void* from, void* ret, const void* to,
 }
 
 // ?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z — retail
-// 0x1800155a0, ordinal 3992. PORTED and registered BY ADDRESS by
-// runtime/src/graphics/scene.cpp:1906, so this resolves to our own body.
-typedef void (*GeoSetTransformFn)(void* self, const void* xf);
-GeoSetTransformFn RtGeometrySetTransform() {
-    static GeoSetTransformFn f = RtAddr<GeoSetTransformFn>(0x1800155a0);
-    return f;
-}
+// 0x1800155a0, ordinal 3992: Graphics::Geometry::SetTransform, the member (B3R).
 
 // ---------------------------------------------------------------------------
 // THE SHARED ARITHMETIC OF BOTH GetInstanceTransform BODIES.
@@ -1393,7 +1346,10 @@ void RtLerpTransformPair(const uint8_t* pair, float t, Transform* out) {
         reinterpret_cast<const Transform*>(pair + 0x1c);
 
     const Scalar s = { t };
-    RtQuatLerp()(&prev->rotation, &out->rotation, &cur->rotation, &s);
+    *reinterpret_cast<Math::Quaternion*>(&out->rotation) =              // B.3.x bridge
+        reinterpret_cast<const Math::Quaternion*>(&prev->rotation)->Lerp(
+            *reinterpret_cast<const Math::Quaternion*>(&cur->rotation),
+            *reinterpret_cast<const Math::Scalar*>(&s));
 
     out->translation.x = prev->translation.x + (cur->translation.x - prev->translation.x) * t;
     out->translation.y = prev->translation.y + (cur->translation.y - prev->translation.y) * t;
@@ -2484,7 +2440,7 @@ void MeshInstance::SetMaterialInstance(int index, ExternalPtrHandle value) {
 // ---------------------------------------------------------------------------
 void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
     _mesh = mesh;
-    RtMatArrayCopy()(&_materials,
+    rtcoll::RtColl_ArrayAssign_180014c70(&_materials,
                      reinterpret_cast<const RtGraphics::GraphicsMeshView*>(mesh.p)->_materialLists);
 
     if (_materials._size > 0) {
@@ -2500,7 +2456,7 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
 
     reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // B.3.5 bridge
         ->::Graphics::AnimationState::ResetAnimationState();
-    RtNodeArrayResize()(&_nodes, Rd<int32_t>(mesh.p, 0x68));
+    rtcoll::Rt_SetSize_18005ac50(&_nodes, Rd<int32_t>(mesh.p, 0x68));
     this->MeshInstance::UpdateHierarchy();
 
     const uint8_t* m = B(_mesh.p);               // re-read, as retail does
@@ -2737,7 +2693,8 @@ void EdgeMeshInstance::Update(const System::Time& time) {
     if (followed) {
         Transform xf;
         std::memcpy(&xf, &followed->_transform, 0x1c);   // seven dwords
-        RtGeometrySetTransform()(this, &xf);
+        reinterpret_cast<::Graphics::Geometry*>(this)                   // B.3.x bridge
+            ->::Graphics::Geometry::SetTransform(*reinterpret_cast<const Math::Transform*>(&xf));
     }
 }
 
@@ -2993,11 +2950,11 @@ bool EdgeMesh::Set(int triCount, const void* triLists,
     for (int i = 0; i < 6; ++i)
         std::memcpy(B(this) + 0x168 + i * 4, B(&box) + i * 4, 4);
 
-    RtTriListArrayResize()(&_triangleLists, triCount);
+    rtcoll::RtColl_ArraySetSize_1800136f0(&_triangleLists, triCount);
     for (int i = 0; i < _triangleLists._size; ++i)
         std::memcpy(_triangleLists._data + i * 0x18, B(triLists) + i * 0x18, 0x18);
 
-    RtTriListArrayResize()(&_edgeLists, edgeCount);
+    rtcoll::RtColl_ArraySetSize_1800136f0(&_edgeLists, edgeCount);
     for (int i = 0; i < _edgeLists._size; ++i)
         std::memcpy(_edgeLists._data + i * 0x18, B(edgeLists) + i * 0x18, 0x18);
 

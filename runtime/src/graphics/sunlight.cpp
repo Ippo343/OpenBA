@@ -112,6 +112,7 @@
 #include "../../types/graphics/SunLight.h"
 #include "../../types/video/Device.h"      // RtVideo::Device, RtVideo::RenderBuffer
 #include "../../types/video/ImageBuffer.h" // ENDGAME B.3.9 VS: ::new (p) Video::ImageBuffer()
+#include "../../types/system/MemoryAllocator.h"
 #include <new>
 
 #include <cstdio>
@@ -131,16 +132,8 @@ namespace {
 // and must keep working with the DLL absent
 // (reference_converting_a_door_is_not_satisfying_it.md).
 // ---------------------------------------------------------------------------
-using MemAllocFn          = void* (*)(size_t, int);
-using MemFreeFn           = void  (*)(void*);
 using PlatformFn          = void  (*)(void*);
 
-MemAllocFn MemAlloc() {
-    return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-}
-MemFreeFn MemFree() {
-    return RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-}
 // ENDGAME B.3.5 caller batch: `Create`, `PlatformConstruct` and `PlatformDestruct`
 // are DEFINED members of the real `Video::RenderBuffer` (device.cpp / buffers.cpp),
 // so the three by-name doors become member calls. They were spelled as
@@ -197,8 +190,8 @@ bool ImageBufferCreate(void* ib, int imageType, int usage, int format,
 }
 
 // `operator new` / `operator delete`, transcribed — see the header block.
-void* OperatorNew(size_t n) { return MemAlloc()(n, 8); }
-void  OperatorDelete(void* p) { if (p != nullptr) MemFree()(p); }
+void* OperatorNew(size_t n) { return System::MemoryAllocator::MemAlloc(n, 8); }
+void  OperatorDelete(void* p) { if (p != nullptr) System::MemoryAllocator::MemFree(p); }
 
 // ---------------------------------------------------------------------------
 // The two composite steps the ctor and Set share, spelled once.

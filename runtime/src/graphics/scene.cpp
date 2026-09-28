@@ -144,6 +144,9 @@
 #include "../../types/graphics/Scene.h"
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
 #include "wave9_lane_gfxd.h"
+#include "scene_grid.h"                 // rtgfxgrid:: the Scene grid bodies
+#include "../picking/scene_grid.h"      // rtpickgrid::BoxTransform
+#include "../../types/math/Math.h"
 
 using RtGraphics::Geometry;
 using RtGraphics::Scene;
@@ -307,11 +310,9 @@ const float kBigNeg       = -1.0e8f;
 // negative control (scene_grid_probe.cpp, SweepFloatBodies). Tolerance zero.
 // ONE registration, in that file: do not add a second here.
 //   out: 6 floats {minX,minY,minZ,maxX,maxY,maxZ}; localBox: the same 6 floats.
+// B3R: rtpickgrid::BoxTransform, by name.
 float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
-    using Fn = float* (*)(float*, const Transform*, const float*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001f470));
-    return fn(out, xf, localBox);
+    return static_cast<float*>(rtpickgrid::BoxTransform(out, xf, localBox));
 }
 
 // Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191,
@@ -320,12 +321,11 @@ float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
 // quaternion, R9 = &t. Pinned by the disassembly of GetInstanceTransform at
 // 0x1800154e1/0x1800154bd, which loads RCX = this+0xa0 and R8 = this+0x84 and
 // spills XMM3 to the stack slot it passes in R9.
+// B3R: the member, by value; `ret` is the caller's storage.
 Quaternion* RtQuaternionLerp(const Quaternion* from, Quaternion* ret,
                              const Quaternion* to, const Scalar* t) {
-    using Fn = Quaternion* (*)(const Quaternion*, Quaternion*, const Quaternion*, const Scalar*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001d500));
-    return fn(from, ret, to, t);
+    *ret = from->Lerp(*to, *t);
+    return ret;
 }
 
 // Math::Transform::AsMatrix — retail 0x18001e5f0. HIDDEN RETURN SLOT in RDX.
@@ -360,10 +360,7 @@ Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
 // 0x5555 cell counts filled with 0). ~350 KB of allocation, all through the
 // allocator lock.
 void RtSceneGridInit(Scene* self, float cellSize) {
-    using Fn = void* (*)(Scene*, float);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e4a0));
-    fn(self, cellSize);
+    rtgfxgrid::GridInit(self, cellSize);
 }
 
 // The grid insert — retail 0x18005e5e0. Takes a slot off the free-id array (or
@@ -372,10 +369,7 @@ void RtSceneGridInit(Scene* self, float cellSize) {
 // chain. Returns the node id. Everything it touches is the Scene's own arrays
 // or the allocator, so it is layout-compatible with this port.
 uint32_t RtSceneGridAdd(Scene* self, Geometry* const* geo) {
-    using Fn = uint64_t (*)(Scene*, Geometry* const*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005e5e0));
-    return static_cast<uint32_t>(fn(self, geo));
+    return rtgfxgrid::GridAdd(self, geo);
 }
 
 // The grid unthread — retail 0x18005f090. Splices node `id` out of its cell's
@@ -388,10 +382,7 @@ uint32_t RtSceneGridAdd(Scene* self, Geometry* const* geo) {
 // See scene_grid.cpp's banner; a null-terminated reading of it makes retail look
 // like it writes sixteen bytes in front of the node buffer, and it does not.
 void RtSceneGridUnthread(Scene* self, int32_t id) {
-    using Fn = void (*)(Scene*, int32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005f090));
-    fn(self, id);
+    rtgfxgrid::GridUnthread(self, id);
 }
 
 // The grid re-index — retail 0x18005ee30. Recomputes node `id`'s quadtree level
@@ -399,10 +390,7 @@ void RtSceneGridUnthread(Scene* self, int32_t id) {
 // it if the cell changed. Scene::Clean calls it for every object whose Clean
 // reported a change.
 void RtSceneGridReindex(Scene* self, int32_t id) {
-    using Fn = void (*)(Scene*, int32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18005ee30));
-    fn(self, id);
+    rtgfxgrid::GridReindex(self, id);
 }
 
 // ENDGAME B.3.2 step 2 — the global-list teardown forwarder (0x18005f1f0) is

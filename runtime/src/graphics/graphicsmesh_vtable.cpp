@@ -31,15 +31,18 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/graphics/GraphicsMesh.h"   // the real Graphics::GraphicsMesh
 #include "../../types/video/Device.h"            // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/graphics/AnimationState.h" // rtcoll::Rt_SetSize_18005aa30 / RtGraphics_SerializeMeshNodes
+#include "../../types/graphics/Mesh.h"           // RtGraphics_EdgeMesh_SerializeTriangleListArray
+#include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
+#include "../../types/object/External.h"         // the ExternalPtr serializers
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-// See imagebuffer_derived.cpp for why this is re-declared instead of included.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -90,25 +93,9 @@ using PtrThisFn   = void* (*)(void*);
 using SerMemberFn = void  (*)(void*, Serializer*);
 
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
-// PORTED (system/string.cpp). ASKED FOR BY ADDRESS DELIBERATELY: string.cpp
-// registers this symbol with RegisterRuntimeAddr ONLY — there is no
-// RegisterRuntimeExport for it anywhere in the tree (grepped, not assumed), so
-// a name door would resolve straight past our port into the DLL. The same
-// reasoning imagebuffer_vtable.cpp:170 wrote down for the same callee.
+// the member System::String::Serialize. B.3.x bridge: the field is a String.
 void StringSerialize(void* str, Serializer* ser) {
-    using Fn = void (*)(void*, Serializer*);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c9930));
-    f(str, ser);
-}
-
-// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` — retail 0x1800c7ad0. The
-// destructor's String release calls it directly (0x1800ff2c9). PORTED.
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    f(p);
+    static_cast<System::String*>(str)->Serialize(ser);
 }
 
 // `?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z` —
@@ -134,10 +121,9 @@ void PlatformSerializeDoor(void* self, Serializer* ser) {
 }
 
 // ---------------------------------------------------------------------------
-// The unexported Collection helpers this class's Serialize drives. All six are
-// template instantiations with no export name in either shipped build, so all
-// six are ADDRESS doors; `ResolveAddr` is registry-first, so each lands on our
-// port where one exists.
+// The unexported Collection helpers this class's Serialize drives. All are
+// template instantiations with no export name in either shipped build; each is
+// called by its body name (B3R).
 //
 //   0x18005d840  Array<TriangleList>::SetSize(n)          array_graphics_mesh.cpp (THIS batch)
 //   0x18005cda0  Array<Array<T>>::SetSize(n)              array_graphics_mesh.cpp (THIS batch)
@@ -149,24 +135,7 @@ void PlatformSerializeDoor(void* self, Serializer* ser) {
 //   0x18005c120  the Array<Node> Serialize helper         (already ported)
 //   0x180014850  EdgeMesh triangle-list array Serialize   (closure batch 2b)
 // ---------------------------------------------------------------------------
-using SetSizeFn   = void (*)(void*, int);
-using SerNCountFn = void (*)(Serializer*, int, void*);
 
-void ByAddr2(uintptr_t va, void* a, int n) {
-    using Fn = void (*)(void*, int);
-    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, va))(a, n);
-}
-// The one-argument form. Spelled separately rather than reusing ByAddr2 with a
-// dummy: `~Array` reads RCX only (checked at all three addresses), and a
-// two-argument typedef over a one-argument body is the shape lane Q's SetSize
-// correction was about — harmless on this ABI today, wrong as documentation.
-void ByAddr1(uintptr_t va, void* a) {
-    using Fn = void* (*)(void*);
-    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, va))(a);
-}
-void ByAddrSerN(uintptr_t va, Serializer* ser, int n, void* data) {
-    reinterpret_cast<SerNCountFn>(ResolveAddr(Module::Runtime, va))(ser, n, data);
-}
 
 // ---------------------------------------------------------------------------
 // The two GraphicsMesh file-scope statics that carry context into
@@ -349,9 +318,9 @@ Object::External* GraphicsMesh::Reconstruct() {
 GraphicsMesh::~GraphicsMesh() {
     GraphicsMesh* const self = this;
 
-    ByAddr1(0x180014160ull, &self->_skinMaterials);            // ~Array<Array<T>>
-    ByAddr1(0x180014090ull, &self->_nodes);                    // ~Array<Node>
-    ByAddr1(0x180013fb0ull, &self->_detailLevels);             // ~Array<DetailLevel>
+    rtcoll::Rt_ArrayDtor_180014160(&self->_skinMaterials);     // ~Array<Array<T>>
+    rtcoll::Rt_ArrayDtor_180014090(&self->_nodes);             // ~Array<Node>
+    rtcoll::Rt_ArrayDtor_180013fb0(&self->_detailLevels);      // ~Array<DetailLevel>
 
     char* const name = self->_name.data;
     if (name != nullptr) {
@@ -359,7 +328,7 @@ GraphicsMesh::~GraphicsMesh() {
         --*refs;
         if (*refs == 0) {
             self->_name.data = name - 8;                       // ADD qword [RBX+0x20],-8
-            MemFree(self->_name.data);
+            System::MemoryAllocator::MemFree(self->_name.data);   // 0x1800c7ad0
         } else {
             self->_name.data = nullptr;                        // MOV qword [RBX+0x20],0
         }
@@ -458,8 +427,8 @@ void TriangleListPass(GraphicsMesh::DetailLevel* level, Serializer* ser, ReaderW
     int32_t n = level->_triangleLists._size;                   // +0xa0
     EmitInt(rw, &n);
     if (ser->stream->direction == rt::io::kDirectionReading)
-        ByAddr2(0x1800136f0ull, &level->_triangleLists, n);    // +0x98
-    ByAddrSerN(0x180014850ull, ser, n, level->_triangleLists._data);
+        rtcoll::RtColl_ArraySetSize_1800136f0(&level->_triangleLists, n);    // +0x98
+    RtGraphics_EdgeMesh_SerializeTriangleListArray(ser, n, level->_triangleLists._data);   // 0x180014850
 
     void* const kSubObjects[4] = {
         level->_indexBuffer._deviceData,        // +0x38 + 8 = +0x40
@@ -588,14 +557,14 @@ bool GraphicsMesh::Serialize(void* streamv) {
     {
         int32_t n = _detailLevels._size;
         EmitInt(rw, &n);
-        if (reading) ByAddr2(0x18005d840ull, &_detailLevels, n);
+        if (reading) rtcoll::Rt_SetSize_18005d840(&_detailLevels, n);
 
         DetailLevel* e = reinterpret_cast<DetailLevel*>(_detailLevels._data);
         for (int32_t i = 0; i < n; ++i, ++e) {     // ++e strides retail's 0xb0
             EmitFloat(rw, &e->_distance);
             StringSerialize(&e->_name, &ser);
-            reinterpret_cast<SerMemberFn>(
-                ResolveAddr(Module::Runtime, 0x18005d0f0ull))(&e->_image, &ser);
+            RtObject_ExternalPtrSerialize_ImageBuffer(                    // 0x18005d0f0
+                reinterpret_cast<RtObject::External**>(&e->_image), &ser);
             if (CodecVersion(rw) == 0)
                 RtGraphics_GraphicsMeshTriangleList_Serialize(e, &ser);
         }
@@ -605,14 +574,15 @@ bool GraphicsMesh::Serialize(void* streamv) {
     {
         int32_t n = _skinMaterials._size;
         EmitInt(rw, &n);
-        if (reading) ByAddr2(0x18005cda0ull, &_skinMaterials, n);
+        if (reading) rtcoll::Rt_SetSize_18005cda0(&_skinMaterials, n);
 
         ArrayHdrView* e = reinterpret_cast<ArrayHdrView*>(_skinMaterials._data);
         for (int64_t i = 0; i < static_cast<int64_t>(n); ++i, ++e) {
             int32_t m = e->size;
             EmitInt(rw, &m);
-            if (reading) ByAddr2(0x18005cc60ull, e, m);
-            ByAddrSerN(0x18005d4a0ull, &ser, m, e->data);
+            if (reading) rtcoll::RtColl_ArraySetSize_18005cc60(e, m);
+            RtObject_ExternalPtrArraySerialize_MaterialInstance(          // 0x18005d4a0
+                &ser, m, reinterpret_cast<RtObject::External**>(e->data));
         }
     }
 
@@ -620,8 +590,8 @@ bool GraphicsMesh::Serialize(void* streamv) {
     {
         int32_t n = _nodes._size;
         EmitInt(rw, &n);
-        if (reading) ByAddr2(0x18005aa30ull, &_nodes, n);
-        ByAddrSerN(0x18005c120ull, &ser, n, _nodes._data);
+        if (reading) rtcoll::Rt_SetSize_18005aa30(&_nodes, n);
+        RtGraphics_SerializeMeshNodes(&ser, n, _nodes._data);            // 0x18005c120
     }
 
     EmitFloatArray(rw, 3, &_aabb.min.x);
