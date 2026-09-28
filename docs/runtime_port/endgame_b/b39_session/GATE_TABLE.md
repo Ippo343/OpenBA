@@ -78,3 +78,4 @@ readers are `X::TypeId()` now (the gate's lazy-lookup rule: equal). Baseline and
 it so later comparisons are strict. `NOT IMPLEMENTED` hits on the new-game route: 23 → 11 (rows of deleted
 readers; none new).
 | b39-TIR (W3: 29 Runtime type records folded into DEFINE_TYPE — Graphics 11, Video 7, Achievement 4, Collision2D 2, Audio 2, Picking, Pathfinding, IO) | b0835c71 | ok | 0 | 909 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/74/10 | 4 | tools x3 exit 0; typetable == baseline (428 lines, identical ids) | 0 |
+| b39-TIUI (W3: the 68 UI type records folded into DEFINE_TYPE) | 251c9c9a | ok | 0 | 912 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/6/10 | 4 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0; forced device-lost in game COMPLETE, crash log 0; typetable == baseline (identical ids) | 0 |
