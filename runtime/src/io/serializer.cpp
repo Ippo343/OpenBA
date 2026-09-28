@@ -123,7 +123,6 @@ using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
-namespace rw_vtbl = rt::io::rw_vtbl;
 
 // ============================================================================
 // ENDGAME B.3.4 block 3 — THIS FILE IS NOW DOORS ONLY
@@ -169,12 +168,12 @@ static inline IO::Serializer* Ser(Serializer* self) {          // B.3.4 bridge
     return reinterpret_cast<IO::Serializer*>(self);
 }
 
-#define RT_SER_SCALAR(FN, T, SLOT, LABEL, MANGLED)                             \
+#define RT_SER_SCALAR(FN, T, LABEL, MANGLED)                                   \
     void FN(Serializer* self, T* v, const char* name) {                        \
         Ser(self)->Serialize(*v, name);                                        \
     }
 
-#define RT_SER_ARRAY(FN, T, SLOT, LABEL, MANGLED)                              \
+#define RT_SER_ARRAY(FN, T, LABEL, MANGLED)                                    \
     void FN(Serializer* self, int n, T* d, const char* name) {                 \
         Ser(self)->Serialize(n, d, name);                                      \
     }
@@ -182,63 +181,63 @@ static inline IO::Serializer* Ser(Serializer* self) {          // B.3.4 bridge
 extern "C" {
 
 // ---- scalars ---------------------------------------------------------------
-RT_SER_SCALAR(RtSerializer_Serialize_Bool,   bool,     rw_vtbl::kScalarBool,
+RT_SER_SCALAR(RtSerializer_Serialize_Bool,   bool,
               "IO::Serializer::Serialize(bool&)",
               "?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_SChar,  int8_t,   rw_vtbl::kScalarSChar,
+RT_SER_SCALAR(RtSerializer_Serialize_SChar,  int8_t,
               "IO::Serializer::Serialize(schar&)",
               "?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_UChar,  uint8_t,  rw_vtbl::kScalarUChar,
+RT_SER_SCALAR(RtSerializer_Serialize_UChar,  uint8_t,
               "IO::Serializer::Serialize(uchar&)",
               "?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_Short,  int16_t,  rw_vtbl::kScalarShort,
+RT_SER_SCALAR(RtSerializer_Serialize_Short,  int16_t,
               "IO::Serializer::Serialize(short&)",
               "?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_UShort, uint16_t, rw_vtbl::kScalarUShort,
+RT_SER_SCALAR(RtSerializer_Serialize_UShort, uint16_t,
               "IO::Serializer::Serialize(ushort&)",
               "?Serialize@Serializer@IO@@QEAAXAEAGPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_Int,    int32_t,  rw_vtbl::kScalarInt,
+RT_SER_SCALAR(RtSerializer_Serialize_Int,    int32_t,
               "IO::Serializer::Serialize(int&)",
               "?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z")
 // ENDGAME B.3.4b SYSTEM (5) — the 24th door. `_J` is MSVC's `__int64`, which is
 // `int64_t` on this toolchain; `long` is FOUR bytes on Win64 and would bind
 // neither overload, so there is no ambiguity to create here.
-RT_SER_SCALAR(RtSerializer_Serialize_Int64,  int64_t,  rw_vtbl::kScalarInt64,
+RT_SER_SCALAR(RtSerializer_Serialize_Int64,  int64_t,
               "IO::Serializer::Serialize(int64&)",
               "?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_UInt,   uint32_t, rw_vtbl::kScalarUInt,
+RT_SER_SCALAR(RtSerializer_Serialize_UInt,   uint32_t,
               "IO::Serializer::Serialize(uint&)",
               "?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_Float,  float,    rw_vtbl::kScalarFloat,
+RT_SER_SCALAR(RtSerializer_Serialize_Float,  float,
               "IO::Serializer::Serialize(float&)",
               "?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z")
 
 // ---- arrays ----------------------------------------------------------------
-RT_SER_ARRAY(RtSerializer_Serialize_CharArr,   char,     rw_vtbl::kArrayChar,
+RT_SER_ARRAY(RtSerializer_Serialize_CharArr,   char,
              "IO::Serializer::Serialize(n,char*)",
              "?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_SCharArr,  int8_t,   rw_vtbl::kArraySChar,
+RT_SER_ARRAY(RtSerializer_Serialize_SCharArr,  int8_t,
              "IO::Serializer::Serialize(n,schar*)",
              "?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_BoolArr,   bool,     rw_vtbl::kArrayBool,
+RT_SER_ARRAY(RtSerializer_Serialize_BoolArr,   bool,
              "IO::Serializer::Serialize(n,bool*)",
              "?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_UCharArr,  uint8_t,  rw_vtbl::kArrayUChar,
+RT_SER_ARRAY(RtSerializer_Serialize_UCharArr,  uint8_t,
              "IO::Serializer::Serialize(n,uchar*)",
              "?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_ShortArr,  int16_t,  rw_vtbl::kArrayShort,
+RT_SER_ARRAY(RtSerializer_Serialize_ShortArr,  int16_t,
              "IO::Serializer::Serialize(n,short*)",
              "?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_UShortArr, uint16_t, rw_vtbl::kArrayUShort,
+RT_SER_ARRAY(RtSerializer_Serialize_UShortArr, uint16_t,
              "IO::Serializer::Serialize(n,ushort*)",
              "?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_IntArr,    int32_t,  rw_vtbl::kArrayInt,
+RT_SER_ARRAY(RtSerializer_Serialize_IntArr,    int32_t,
              "IO::Serializer::Serialize(n,int*)",
              "?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_UIntArr,   uint32_t, rw_vtbl::kArrayUInt,
+RT_SER_ARRAY(RtSerializer_Serialize_UIntArr,   uint32_t,
              "IO::Serializer::Serialize(n,uint*)",
              "?Serialize@Serializer@IO@@QEAAXHPEAIPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_FloatArr,  float,    rw_vtbl::kArrayFloat,
+RT_SER_ARRAY(RtSerializer_Serialize_FloatArr,  float,
              "IO::Serializer::Serialize(n,float*)",
              "?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z")
 

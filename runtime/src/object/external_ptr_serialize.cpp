@@ -195,7 +195,6 @@ using RtObject::ExternalFactory;
 using RtSystem::Filename;
 using RtSystem::String;
 using rt::io::Encoding;
-using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
@@ -280,16 +279,15 @@ int EncodingType(const Serializer* ser) {
 // live at +0x90 and +0xb0, and copying them from a profile decompile would emit
 // the wrong record type into every save
 // ([[reference_encoding_vtable_offsets_differ_between_builds]]).
+// B3X W0: both by name (+0x78 SerializeBool, +0x98 SerializeUInt).
 void SerializeBool(Serializer* ser, bool* v) {
-    ReaderWriter* rw = ser->readerWriter;
-    using Fn = void (*)(ReaderWriter*, bool*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8])(rw, v, nullptr);
+    reinterpret_cast<::IO::ReaderWriter*>(ser->readerWriter)   // B.3.x bridge
+        ->SerializeBool(*v, nullptr);
 }
 
 void SerializeUInt(Serializer* ser, uint32_t* v) {
-    ReaderWriter* rw = ser->readerWriter;
-    using Fn = void (*)(ReaderWriter*, uint32_t*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, v, nullptr);
+    reinterpret_cast<::IO::ReaderWriter*>(ser->readerWriter)   // B.3.x bridge
+        ->SerializeUInt(*v, nullptr);
 }
 
 constexpr uint32_t kNoReferenceId = 0xFFFFFFFFu;

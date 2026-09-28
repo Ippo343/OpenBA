@@ -206,57 +206,20 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
-
-namespace RtIo {
-
-using rt::io::BinaryCodec;
-using rt::io::ReaderWriter;
-namespace rw = rt::io::rw_vtbl;
-
-namespace {
+#include "../../types/io/Stream.h"   // B3X W0: the stream is called by name
 
 // ---- stream dispatch ------------------------------------------------------
-// Shapes (1) and (2) tail-jump through the STREAM's vtable. Offsets from
-// Serializer.h's stream_vtbl; repeated here as named constants so the two
-// direction-specific slots sit beside the bodies that use them.
-constexpr int kStreamWrite  = 0x10;   // Write(size, buf)  -- BinaryWriter
-constexpr int kStreamRead   = 0x18;   // Read (size, buf)  -- BinaryReader
-constexpr int kStreamSetPos = 0x20;   // SetCurrentPos(pos)
-
-using StreamRwFn   = bool (*)(void* self, int32_t size, void* buf);
-using StreamSeekFn = bool (*)(void* self, int32_t pos);
-
-inline void* VSlot(void* obj, int off) {
-    return (*reinterpret_cast<void***>(obj))[off / 8];
-}
-
-// The scalar bodies' single instruction of work.
-inline void StreamMove(int slot, void* stream, int32_t size, void* buf) {
-    reinterpret_cast<StreamRwFn>(VSlot(stream, slot))(stream, size, buf);
-}
-
-// Shape (3)'s virtual self-dispatch. Signature of every scalar slot.
-using ScalarSlotFn = void (*)(void* self, void* value, const char* name);
-
-// The array loop, once. `slot` is the scalar vtable offset for T.
+// Shapes (1) and (2) tail-jump through the STREAM's vtable: Write (+0x10,
+// BinaryWriter), Read (+0x18, BinaryReader), SetCurrentPos (+0x20, Skip).
+// B3X W0: called by name on `IO::Stream` -- the same slots. `stream` is the
+// ReaderWriter's `void*` field (+0x18), hence the one cast per body.
 //
-// Faithful to 0x1800a8410's shape in the three ways that are observable:
-// the `<= 0` signed guard returns without loading the vtable; the vtable is
-// re-read from `self` on every iteration; and `name` is dropped in favour of
-// nullptr. Retail walks a pointer and counts down a register — index arithmetic
-// on T* is the same sequence of addresses.
-template <typename T>
-inline void SerializeArray(int slot, void* self, int32_t count, T* arr) {
-    if (count <= 0) return;
-    for (int32_t i = 0; i < count; ++i) {
-        ScalarSlotFn f = reinterpret_cast<ScalarSlotFn>(VSlot(self, slot));
-        f(self, &arr[i], nullptr);          // name is DROPPED, not forwarded
-    }
-}
-
-}  // namespace
-
-}  // namespace RtIo
+// Shape (3), the array loop, is spelled inline in the two macros below:
+// faithful to 0x1800a8410's shape in the three ways that are observable --
+// the `<= 0` signed guard returns before any dispatch; each element is a
+// separate virtual call on `this` (the scalar slot for T); and `name` is
+// dropped in favour of nullptr. Retail walks a pointer and counts down a
+// register -- index arithmetic on T* is the same sequence of addresses.
 
 // ===========================================================================
 // ENDGAME B.3.4 block 2 — the 73 bodies, as IO::BinaryReader's and
@@ -271,12 +234,11 @@ inline void SerializeArray(int slot, void* self, int32_t count, T* arr) {
 //     field names; a reader depends entirely on ORDER.
 //   * THE ARRAY BODIES DROP `name` AND PASS nullptr to the elements. They do
 //     not forward the array's own name.
-//   * THE ARRAY DISPATCH IS VIRTUAL AND THE VTABLE IS RELOADED EACH ITERATION,
-//     through `RtIo::SerializeArray`'s raw `VSlot(self, slot)` — NOT through a
-//     C++ virtual call on `this`. That is deliberate: these objects wear the
-//     MINTED table, and keeping the raw slot read means the loop observes a
-//     mid-array re-stamp exactly as retail's does. A subclass overriding only
-//     the scalar slot still gets its override honoured for arrays.
+//   * THE ARRAY BODY CALLS THE SCALAR MEMBER ONCE PER ELEMENT. Retail
+//     re-dispatches through the vtable each iteration; B3X W0 spells that as
+//     `this->Serialize<T>(arr[i], nullptr)`. The minted tables that once made
+//     a raw slot read necessary were retired in B.3.9, and both classes are
+//     `final`, so the member the call reaches is the one the slot held.
 //
 // `Visitor`'s 24 bodies are `= {}` inline in the header: the shipped bodies are
 // three bytes of `RET` each, and giving each its own out-of-line function would
@@ -286,25 +248,27 @@ namespace IO {
 #define RT_RW_READER_BODY(METHOD, T)                                           \
     void BinaryReader::Serialize##METHOD(T& v, const char* name) {             \
         (void)name;                 /* CLOBBERED by retail before use */       \
-        RtIo::StreamMove(RtIo::kStreamRead, stream, (int32_t)sizeof(T), &v);   \
+        static_cast<Stream*>(stream)->Read((int32_t)sizeof(T), &v);   /* +0x18 */ \
     }                                                                          \
     void BinaryReader::Serialize##METHOD##Array(int count, T* arr,             \
                                                 const char* name) {            \
         (void)name;                 /* dropped, not forwarded */               \
-        RtIo::SerializeArray<T>(rt::io::rw_vtbl::kScalar##METHOD, this,        \
-                                count, arr);                                   \
+        if (count <= 0) return;                                                \
+        for (int32_t i = 0; i < count; ++i)                                    \
+            this->Serialize##METHOD(arr[i], nullptr);                          \
     }
 
 #define RT_RW_WRITER_BODY(METHOD, T)                                           \
     void BinaryWriter::Serialize##METHOD(T& v, const char* name) {             \
         (void)name;                                                            \
-        RtIo::StreamMove(RtIo::kStreamWrite, stream, (int32_t)sizeof(T), &v);  \
+        static_cast<Stream*>(stream)->Write((int32_t)sizeof(T), &v);  /* +0x10 */ \
     }                                                                          \
     void BinaryWriter::Serialize##METHOD##Array(int count, T* arr,             \
                                                 const char* name) {            \
         (void)name;                                                            \
-        RtIo::SerializeArray<T>(rt::io::rw_vtbl::kScalar##METHOD, this,        \
-                                count, arr);                                   \
+        if (count <= 0) return;                                                \
+        for (int32_t i = 0; i < count; ++i)                                    \
+            this->Serialize##METHOD(arr[i], nullptr);                          \
     }
 
 RT_RW_READER_BODY(Char,   char)
@@ -338,9 +302,8 @@ RT_RW_WRITER_BODY(SChar,  signed char)
 // word20 + word24 is the ONE-PAST-THE-END position of the current record, so
 // Skip is "abandon the rest of this record and jump to the next".
 void BinaryReader::Skip() {
-    void* s = stream;
     const int32_t end = word24 + word20;
-    reinterpret_cast<RtIo::StreamSeekFn>(RtIo::VSlot(s, RtIo::kStreamSetPos))(s, end);
+    static_cast<Stream*>(stream)->SetCurrentPos(end);   // +0x20
 }
 
 // The count comes straight through: (int, void*) already sit where
@@ -348,11 +311,11 @@ void BinaryReader::Skip() {
 // marshalling for these two.
 void BinaryReader::SerializeBytes(int count, void* buf, const char* name) {
     (void)name;
-    RtIo::StreamMove(RtIo::kStreamRead, stream, count, buf);
+    static_cast<Stream*>(stream)->Read(count, buf);    // +0x18
 }
 void BinaryWriter::SerializeBytes(int count, void* buf, const char* name) {
     (void)name;
-    RtIo::StreamMove(RtIo::kStreamWrite, stream, count, buf);
+    static_cast<Stream*>(stream)->Write(count, buf);   // +0x10
 }
 
 // ENDGAME B.3.9 IO: slot 0 and the constructors/destructors of all three

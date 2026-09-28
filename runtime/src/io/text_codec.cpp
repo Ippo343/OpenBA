@@ -108,12 +108,11 @@ void MemFree(void* p) {   // the null test lives inside 0x1800c7ad0
     if (fn) fn(p);
 }
 
-inline void** RwVTable(rt::io::ReaderWriter* rw) {
-    return *reinterpret_cast<void***>(rw);
+// B3X W0: the three ReaderWriter calls below go by name; `ser->readerWriter`
+// is the rt::io POD view of the object.
+inline ::IO::ReaderWriter* Rw(rt::io::ReaderWriter* rw) {
+    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
 }
-using ArrayCharFn   = void (*)(void* rw, int32_t n, char*     p, const char* name);
-using ArrayUShortFn = void (*)(void* rw, int32_t n, uint16_t* p, const char* name);
-using ScalarUIntFn  = void (*)(void* rw, uint32_t* v, const char* name);
 
 }  // namespace
 
@@ -521,11 +520,7 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
                 *reinterpret_cast<const int32_t*>(*slot - 8) + 1);
         tagged |= 0x80000000u;                                     // BTS EAX,31
 
-        {
-            rt::io::ReaderWriter* rw = ser->readerWriter;
-            reinterpret_cast<ScalarUIntFn>(
-                RwVTable(rw)[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &tagged, nullptr);
-        }
+        Rw(ser->readerWriter)->SerializeUInt(tagged, nullptr);    // +0x98
 
         const bool wasWide = (tagged >> 31) == 0;                  // SHR/NOT/AND 1
         uint32_t len = tagged & 0x7FFFFFFFu;                       // BTR EDX,31
@@ -538,10 +533,8 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
 
         if (!wasWide || !reading || len == 0) {
             // ---- PLAIN: the payload is bytes --------------------- 0x180029e23
-            rt::io::ReaderWriter* rw = ser->readerWriter;
-            reinterpret_cast<ArrayCharFn>(
-                RwVTable(rw)[rt::io::rw_vtbl::kArrayChar / 8])(
-                    rw, static_cast<int32_t>(len), *slot, nullptr);
+            Rw(ser->readerWriter)->SerializeCharArray(
+                static_cast<int32_t>(len), *slot, nullptr);        // +0x18
             continue;
         }
 
@@ -549,13 +542,9 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
         const uint64_t bytes = static_cast<uint64_t>(len) * 2;     // ADD RBX,RBX
         uint8_t* const tmp = static_cast<uint8_t*>(MemAlloc(bytes, 4));
 
-        {
-            rt::io::ReaderWriter* rw = ser->readerWriter;
-            reinterpret_cast<ArrayUShortFn>(
-                RwVTable(rw)[rt::io::rw_vtbl::kArrayUShort / 8])(
-                    rw, static_cast<int32_t>(len),
-                    reinterpret_cast<uint16_t*>(tmp), nullptr);
-        }
+        Rw(ser->readerWriter)->SerializeUShortArray(
+            static_cast<int32_t>(len),
+            reinterpret_cast<uint16_t*>(tmp), nullptr);            // +0x50
 
         // `len*2 - 2`: the trailing NUL code unit is not transcoded.
         const uint8_t* const wideEnd =

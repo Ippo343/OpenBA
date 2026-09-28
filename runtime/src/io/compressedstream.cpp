@@ -152,19 +152,16 @@ namespace {
 // still unported at cutover, which is a work-list row rather than a crash.
 
 using VoidThisFn  = void (*)(void*);
-using StreamVFn   = void (*)(void*);          // vtable slot 7, Close()
 
 // ENDGAME B.3.9 IO (W2): the by-name vtable reads (CompressedMemoryStream,
 // CompressedStream, Stream) went with the ??0 doors that stamped them.
 
 // The embedded MemoryStream's Close(), dispatched through its own vtable at
 // +0x38 exactly as retail does (`MOV RAX,[RDI]; CALL [RAX+0x38]`). Deliberately
-// NOT a direct call to ?Close@MemoryStream: retail dispatches virtually and a
-// subclass could in principle sit there.
+// NOT a qualified call to ?Close@MemoryStream: retail dispatches virtually and a
+// subclass could in principle sit there. B3X W0: the virtual call by name.
 void CallStreamCloseVirtual(MemoryStream* ms) {
-    const void* const* vtbl = *reinterpret_cast<const void* const* const*>(ms);
-    reinterpret_cast<StreamVFn>(
-        const_cast<void*>(vtbl[RtIo::kStreamVtblCloseSlot]))(ms);
+    reinterpret_cast<IO::MemoryStream*>(ms)->Close();   // slot 7 +0x38 (B.3.x bridge)
 }
 
 }  // namespace

@@ -45,6 +45,7 @@
 #include "../../types/math/Math.h"
 #include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
+#include "../../types/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
 #include "transform.h"
 
 #include <cstdint>
@@ -758,16 +759,17 @@ Transform Transform::FromLookAt(const Vector3& from, const Vector3& to) {
 // MUTATES the IO stream; correctness is exercised by save/load parity in
 // sa-run per PLAN.md §6 step 6.
 // ============================================================================
+//
+// B3X W0: the "encoding" at Serializer+0x08 is the IO::ReaderWriter and +0x28
+// is its `SerializeFloatArray(int n, float* arr, const char* name)` slot
+// (runtime/types/io/Serializer.h:488), called BY NAME. The old typedef passed
+// no `name` (R9 was whatever the caller left); every body in the family
+// ignores `name` (Serializer.h's banner), so passing nullptr changes nothing.
 void Transform::Serialize(void* serializer /* io::Serializer* */) {
-    constexpr int kEncSlotSerializeFloatArr = 0x28;
-    typedef void (*SerializeFloatArrFn)(void* encoding, int count, void* data);
-    // io::Serializer { Stream* m_stream; Encoding* m_encoding; }  (engine/types/io_serializer.h)
-    void* encoding = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(serializer) + 8);
-    void** vtbl = *reinterpret_cast<void***>(encoding);
-    auto fn = reinterpret_cast<SerializeFloatArrFn>(
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtbl) + kEncSlotSerializeFloatArr));
-    fn(encoding, 4, &this->rotation);
-    fn(encoding, 3, &this->translation);
+    ::IO::ReaderWriter* const rw = reinterpret_cast<::IO::Serializer*>(serializer)
+                                       ->_readerWriter;   // +0x08 (B.3.x bridge)
+    rw->SerializeFloatArray(4, reinterpret_cast<float*>(&this->rotation), nullptr);     // +0x28
+    rw->SerializeFloatArray(3, reinterpret_cast<float*>(&this->translation), nullptr);  // +0x28
 }
 
 // ============================================================================
