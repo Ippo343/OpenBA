@@ -19,6 +19,10 @@
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "object/TypeInfo.h"
+#include "Component/exe_bodies.h"   // 0x140028860 ToolbarDescription_StringArrayResize
+#include "Dialog/exe_bodies.h"      // 0x140101a80 / 0x140102b60
+#include "Tutorial/exe_bodies.h"    // TutWave_* (0x140028650, 0x1400e2330/24f0/2700/29f0)
 #include <cstdint>
 #include <new>
 
@@ -77,7 +81,7 @@ bool TutorialSetupDialog::Serialize(void* stream) {
     uint32_t count1 = shownPathCount;
     ser->Serialize(*reinterpret_cast<int*>(&count1), nullptr);
     if (static_cast<int>(ser->GetDirection()) == 0) {   // (IO::Serializer::GetDirection, retail 0x180006210)
-        fn_StringArray_Resize(&shownPaths, static_cast<int>(count1));
+        ToolbarDescription_StringArrayResize(&shownPaths, static_cast<unsigned>(static_cast<int>(count1)));   // 0x140028860
     }
     if (static_cast<int32_t>(count1) > 0) {
         uint8_t* p = reinterpret_cast<uint8_t*>(shownPaths);
@@ -90,7 +94,7 @@ bool TutorialSetupDialog::Serialize(void* stream) {
     uint32_t count2 = dialogNameCount;
     ser->Serialize(*reinterpret_cast<int*>(&count2), nullptr);
     if (static_cast<int>(ser->GetDirection()) == 0) {
-        fn_StringArray_Resize(&dialogNames, static_cast<int>(count2));
+        ToolbarDescription_StringArrayResize(&dialogNames, static_cast<unsigned>(static_cast<int>(count2)));   // 0x140028860
     }
     if (static_cast<int32_t>(count2) > 0) {
         uint8_t* p = reinterpret_cast<uint8_t*>(dialogNames);
@@ -100,7 +104,7 @@ bool TutorialSetupDialog::Serialize(void* stream) {
     }
 
     reinterpret_cast<System::String*>(&highlightPath)->Serialize(serializer);   // B.3.1 bridge
-    fn_SerializeExternalPtr(&highlightDialog, serializer);   // ExternalPtr<UI::Dialog> (0x140028650)
+    TutWave_SerializeDialogRef(&highlightDialog, serializer);   // ExternalPtr<UI::Dialog> (0x140028650)
     ser->Serialize(arrowRotation, nullptr);
 
     // Temporary Filename retail's compiler emitted as this scope's guard.
@@ -119,7 +123,7 @@ bool TutorialSetupDialog::Serialize(void* stream) {
             ::Object::ExternalFactory* efactory =
                 reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
             void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filenameBuf)));
-            bool valid = found && fn_IsDerivedFrom(found, ComponentDescription::TypeId());
+            bool valid = found && Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId());
             toolbarCached = valid ? found : nullptr;
             toolbarStamp = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 8);
         }
@@ -139,8 +143,8 @@ bool TutorialSetupDialog::Serialize(void* stream) {
 // building (a building description data source) or close it (clearing edit
 // mode first when the data source is a ComponentEntity).
 void TutorialSetupDialog::Begin() {
-    fn_TSD_Slot9Helper(this);
-    fn_TSD_OpenDialog(this, '\0');
+    TutWave_ShowListedElements(this);        // 0x1400e29f0
+    TutWave_OpenHighlightDialog(this, '\0'); // 0x1400e2700
 
     int count2 = static_cast<int32_t>(dialogNameCount);
     for (int i = 0; i < count2; ++i) {
@@ -152,21 +156,21 @@ void TutorialSetupDialog::Begin() {
         void* basePtr = *reinterpret_cast<void**>(instance + 0x30);   // DialogInstance::_dataSource
 
         // Original uses IsA first (null/type-safe), then IsDerivedFrom
-        bool isBuild = fn_IsA(basePtr, ComponentDescription::TypeId());
+        bool isBuild = reinterpret_cast<const Object::Base*>(basePtr)->IsA(ComponentDescription::TypeId());   // B.3.x bridge
         if (isBuild) {
-            bool derived = fn_IsDerivedFrom(basePtr, ComponentDescription::TypeId());
+            bool derived = Object::IsDerivedFromNullSafe(basePtr, ComponentDescription::TypeId());
             void* entityForFollow = derived ? basePtr : nullptr;
             uint64_t retval[2] = {0, 0};
             uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
             void* playerController = *reinterpret_cast<void**>(gameSingleton + 0x120);
-            fn_SetFollowBuilding(playerController, retval, reinterpret_cast<uint64_t>(entityForFollow));
+            Toolbar_Utility_Reg(playerController, retval, reinterpret_cast<uint64_t>(entityForFollow));   // 0x140101a80
         } else {
             // Original: SetEditMode only if IsA(ComponentEntity), but CloseDialog always
-            bool isEntity = fn_IsA(basePtr, ComponentEntity::TypeId());
+            bool isEntity = reinterpret_cast<const Object::Base*>(basePtr)->IsA(ComponentEntity::TypeId());   // B.3.x bridge
             uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
             if (isEntity) {
                 void* playerController = *reinterpret_cast<void**>(gameSingleton + 0x120);
-                fn_SetEditMode(playerController, 0);
+                Toolbar_ShowGroup_Impl(playerController, 0);   // 0x140102b60 (the door was named SetEditMode)
             }
             void* ui = *reinterpret_cast<void**>(gameSingleton + 0x98);
             uint64_t instCopy = instance;
@@ -182,8 +186,8 @@ void TutorialSetupDialog::Begin() {
 // Every tick: re-show the listed elements, re-open the highlight unless one
 // is already open. `time` is unused.
 void TutorialSetupDialog::Update(void* /*time*/) {
-    fn_TSD_Slot9Helper(this);
-    fn_TSD_OpenDialog(this, '\x01');
+    TutWave_ShowListedElements(this);           // 0x1400e29f0
+    TutWave_OpenHighlightDialog(this, '\x01');  // 0x1400e2700
 }
 
 // ============================================================
@@ -191,10 +195,10 @@ void TutorialSetupDialog::Update(void* /*time*/) {
 // ============================================================
 // The step completes: un-hide every dialog, close the open highlight.
 void TutorialSetupDialog::End() {
-    fn_TSD_SetDialogFlags(this, '\x01');
+    TutWave_SetAllDialogFlags(this, '\x01');   // 0x1400e2330
 
     uint64_t instance = 0;
-    fn_TSD_FindInstance(this, &instance);
+    TutWave_FindHighlightDialog(this, &instance);   // 0x1400e24f0
     if (instance != 0) {
         uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
         void* ui = *reinterpret_cast<void**>(gameSingleton + 0x98);
