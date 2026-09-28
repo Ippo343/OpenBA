@@ -36,7 +36,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "object/Type.h"   // B3R: RtObject::RtObject_Type_Serialize
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 #include <cstdint>
@@ -58,16 +58,12 @@
 // the class inherits.
 
 // [5] 0x14005fb70 — read the command id and the target component type.
-// Object::Type::Serialize is the exe import slot 0x1401516b0 (resolved per
-// call: no first-use cache, B6-5).
+// Object::Type::Serialize is the exe import slot 0x1401516b0:
+// RtObject_Type_Serialize, called by name (B3R).
 bool ControlUIConfig::Serialize(void* stream) {
-    typedef void (*fn_Type_Serialize_t)(void* type, void* serializer);
-    fn_Type_Serialize_t typeSerialize = nullptr;
-    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401516b0))
-        typeSerialize = *reinterpret_cast<fn_Type_Serialize_t*>(slot);
     IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     serializer.Serialize(_command, nullptr);
-    if (typeSerialize) typeSerialize(&_componentType, &serializer);
+    RtObject::RtObject_Type_Serialize(&_componentType, &serializer);   // import slot 0x1401516b0
     return true;
 }
 

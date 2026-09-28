@@ -29,6 +29,8 @@
 #include "Component/BuildDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Player/EditTool.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/exe_bodies.h"
+#include "Player/exe_bodies.h"   // B3R: PlayerTrade_BSTRemove_25740, PlayerTrade_Retrace_25920
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -56,7 +58,7 @@ static void EntityTrackingSet_Remove_Impl(void* bstRoot, void* key)
             node = *(uint8_t**)(node + 0x20);
         } else if (searchKey <= nodeKey) {
             // Found the node — delete it
-            fn_EntityTrackingSet_BST_Delete(bstRoot, (void*)node);
+            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(bstRoot), (void*)node);   // 0x140025740
             return;
         } else {
             // Go right: *(node+0x28) = right child
@@ -88,7 +90,7 @@ static void GetDescPage_Impl(void* entityDesc, void* retval)
         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == (int)UIDescription::TypeId()) {
-            if (fn_IsDerivedFrom(comp, UIDescription::TypeId())) {
+            if (::Object::IsDerivedFromNullSafe(comp, UIDescription::TypeId())) {
                 result = comp;
             }
             break;
@@ -110,7 +112,7 @@ static bool BuildComplete_Impl(void* posComp)
     if (!posComp) return false;
 
     void* desc = *(void**)((uintptr_t)posComp + 0x18);
-    bool isResource = fn_IsDerivedFrom(desc, BuildDescription::TypeId());
+    bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
     void* resourceComp = isResource ? desc : nullptr;
 
     if (!resourceComp) return false;
@@ -228,7 +230,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 
     if (*rootPtr == 0) {
         // Empty tree — create root node
-        uintptr_t* newNode = (uintptr_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+        uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
         if (newNode != nullptr) {
             *(uint64_t*)newNode = 0;
             *(uint64_t*)newNode = entityKey;
@@ -259,8 +261,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                 uintptr_t right = *(uintptr_t*)(cur + 0x28);
                 if (right == 0) {
                     // Insert as right child
-                    uintptr_t* newNode = (uintptr_t*)fn_MemAlloc(
-                        g_pMemAllocSingleton, 0x38, 8);
+                    uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
                     if (newNode != nullptr) {
                         *(uint64_t*)newNode = 0;
                         *(uint64_t*)newNode = entityKey;
@@ -275,7 +276,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                     *(uintptr_t*)(cur + 0x28) = (uintptr_t)newNode;
                     // Rebalance
                     uintptr_t nodeRef = (uintptr_t)newNode;
-                    fn_AVL_Rebalance_0x38(rootPtr, &nodeRef);
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&nodeRef));   // 0x140025920
                     break;
                 }
                 cur = right;
@@ -284,8 +285,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                 uintptr_t left = *(uintptr_t*)(cur + 0x20);
                 if (left == 0) {
                     // Insert as left child
-                    uintptr_t* newNode = (uintptr_t*)fn_MemAlloc(
-                        g_pMemAllocSingleton, 0x38, 8);
+                    uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
                     if (newNode != nullptr) {
                         *(uint64_t*)newNode = 0;
                         *(uint64_t*)newNode = entityKey;
@@ -300,7 +300,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                     *(uintptr_t*)(cur + 0x20) = (uintptr_t)newNode;
                     // Rebalance
                     uintptr_t nodeRef = (uintptr_t)newNode;
-                    fn_AVL_Rebalance_0x38(rootPtr, &nodeRef);
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&nodeRef));   // 0x140025920
                     break;
                 }
                 cur = left;
@@ -335,7 +335,7 @@ void EntityUI::OnCreated() {
 
     // Get entity from data source (+0x28), check if it's a ComponentEntity
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     new ((void*)(s + 0x30)) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -369,7 +369,7 @@ void EntityUI::OnCreated() {
 
         void* toolUI = nullptr;
         if (controller) {
-            bool isTool = fn_IsDerivedFrom(controller, ToolUI::TypeId());
+            bool isTool = ::Object::IsDerivedFromNullSafe(controller, ToolUI::TypeId());
             if (isTool) toolUI = controller;
         }
 
@@ -554,7 +554,7 @@ void EntityUI_Slot8(EntityUI* self) {
 
     void* toolUI = nullptr;
     if (controller) {
-        bool isTool = fn_IsDerivedFrom(controller, ToolUI::TypeId());
+        bool isTool = ::Object::IsDerivedFromNullSafe(controller, ToolUI::TypeId());
         if (isTool) toolUI = controller;
     }
     uint8_t toolBuf[8];
@@ -594,7 +594,7 @@ void EntityUI_Slot8(EntityUI* self) {
     void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
 
     // Check if current tool is EditTool
-    bool isEditTool = fn_IsDerivedFrom(currentTool, EditTool::TypeId());
+    bool isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
     void* editTool = isEditTool ? currentTool : nullptr;
 
     uint8_t editToolBuf[8];
@@ -606,7 +606,7 @@ void EntityUI_Slot8(EntityUI* self) {
 
         // Re-read current tool after deselect (with CheckPtr)
         currentTool = *(void**)((uintptr_t)playerController + 0x28);
-        isEditTool = fn_IsDerivedFrom(currentTool, EditTool::TypeId());
+        isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
         void* newEditTool = isEditTool ? currentTool : nullptr;
 
         new (editToolBuf) ::Object::InternalBasePtr(
@@ -617,7 +617,7 @@ void EntityUI_Slot8(EntityUI* self) {
     void* editToolPtr = *(void**)editToolBuf;
     if (editToolPtr) {
         void* entityPtr = *(void**)(s + 0x30);
-        fn_EditTool_SelectEntity(*(void**)editToolBuf, &entityPtr);
+        EditTool_SelectEntity_Impl(*(void**)editToolBuf, &entityPtr);   // 0x1400fd3b0
     }
 }
 
@@ -711,13 +711,13 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
                 float inXY1[3] = { (float)(idx1 % gridSize) - halfGrid,
                                    (float)(idx1 / gridSize) - halfGrid, 0.0f };
                 float pos1[3] = {0.0f, 0.0f, 0.0f};
-                if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);
+                Reimpl_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);   // 0x14009f3e0
 
                 int idx2 = gridSize * (int)posY + (int)posX;
                 float inXY2[3] = { (float)(idx2 % gridSize) - halfGrid,
                                    (float)(idx2 / gridSize) - halfGrid, 0.0f };
                 float pos2[3] = {0.0f, 0.0f, 0.0f};
-                if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);
+                Reimpl_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);   // 0x14009f3e0
 
                 focus[0] = (pos1[0] + pos2[0]) * 0.5f;
                 focus[1] = (pos1[1] + pos2[1]) * 0.5f;
@@ -745,7 +745,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
 
         void* toolUI = nullptr;
         if (controller) {
-            bool isTool = fn_IsDerivedFrom(controller, ToolUI::TypeId());
+            bool isTool = ::Object::IsDerivedFromNullSafe(controller, ToolUI::TypeId());
             if (isTool) toolUI = controller;
         }
         uint8_t toolBuf[8];

@@ -39,7 +39,7 @@
 //   DAT_1401c7fc8   = UIComponent  (writer: UIComponent_RegisterType, used by db60)
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"   // B3R: HighlightClear_Impl, HighlightSelect_Impl
 #include "Component/UIComponent.h"     // ENDGAME B.3.9 CB: 0x1401c7fc8 cell class
 #include "Component/UIDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7f90 cell class
 #include "Dialog/EntityUI.h"           // ENDGAME B.3.9 CB: 0x1401c4f00 cell class
@@ -52,6 +52,7 @@
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
@@ -60,24 +61,11 @@ namespace {
 //   (Entity_impl_cb40) + close the previously-open selection panel.
 // Entity_impl_c9e0 (0x1400fc9e0) — finalize: mark the entity's UIComponents dirty
 //   (+0x11c) and repaint the selection overlay via Entity_impl_c4a0.
-// Both are ported in code/Game/Player/tool_base_render.cpp and registered by
-// RegisterPlayerRenderBatch — but ONLY when BANISHED_SELECTION_OUTLINE is set
-// (their closure transits the EdgeMesh render-mesh family, which mutates the live
-// Graphics::Scene). Resolved here as direct exe pointers: our ports in
-// standalone-with-outline, NULL in standalone-default -> null-guarded skip.
-// Effect when skipped (outline off, the shipping default): the info dialog still
-// OPENS; only the previous-panel teardown + selection-highlight repaint are skipped.
-typedef void (*fn_void_self_t)(void* self);
-fn_void_self_t s_fn_cb40 = nullptr;   // 0x1400fcb40 (clear highlight on self+0x30)
-fn_void_self_t s_fn_c9e0 = nullptr;   // 0x1400fc9e0
-bool s_resolved = false;
-
-void EnsureFuncs() {
-    if (s_resolved) return;
-    s_fn_cb40 = reinterpret_cast<fn_void_self_t>(ResolveAddr(Module::Exe, 0x1400fcb40));
-    s_fn_c9e0 = reinterpret_cast<fn_void_self_t>(ResolveAddr(Module::Exe, 0x1400fc9e0));
-    s_resolved = true;
-}
+// Both are ported in code/Game/Player/tool_base_render.cpp (0x1400fcb40
+// HighlightClear_Impl clears the highlight on self+0x30, 0x1400fc9e0
+// HighlightSelect_Impl) and are called by name (B3R). RegisterPlayerRenderBatch
+// registers them unconditionally (the BANISHED_SELECTION_OUTLINE gate is gone), so
+// the old null-guarded skip never ran.
 
 typedef uint32_t (*GetTypeId_t)(void* obj);
 
@@ -99,11 +87,11 @@ void EntityFindUIComponent(uint64_t entity, uint64_t* outIBP) {
             uint64_t* slot2 = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
             void* comp2 = *reinterpret_cast<void**>(slot2);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tidUIComp)) found = comp2;
+            if (::Object::IsDerivedFromNullSafe(comp2, tidUIComp)) found = comp2;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
+    new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
@@ -118,7 +106,6 @@ extern "C" void* g_LastSelectStore[4] = {};
 extern "C" int   g_LastSelectStoreIdx = 0;
 
 extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
-    EnsureFuncs();
     uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
     uint64_t* entityIBP = reinterpret_cast<uint64_t*>(entityIBPv);
 
@@ -142,7 +129,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
 
     // Result-dialog IBP holder (local_res18), initialized null.
     uint64_t resultDialog = 0;
-    if (fn_InternalBasePtr_Ctor) new (&resultDialog) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (&resultDialog) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     // 4. Walk the open-dialog list for an existing EntityUI dialog bound to this entity.
     const uint32_t tidEntityUI = EntityUI::TypeId();   // cell 0x1401c4f00
@@ -159,12 +146,12 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             ::new (&ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialog)->GetController(tidEntityUI));  // B.3.6 bridge
         if (ctrlBuf != 0) {
             void* c = reinterpret_cast<void*>(ctrlBuf);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidEntityUI)) matched = c;
+            if (::Object::IsDerivedFromNullSafe(c, tidEntityUI)) matched = c;
         }
 
         // Wrap the (possibly null) controller in an IBP, resolve, compare +0x30 to *entity.
         uint64_t ctrlRef = 0;
-        if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
+        new (&ctrlRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(matched));   // B.3.3 bridge
         if (ctrlRef != 0) {
             uint64_t ctrlEntity = *reinterpret_cast<uint64_t*>(ctrlRef + 0x30);
@@ -191,7 +178,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             // Matched: re-fetch, require derived + non-null, else abort the whole select.
             obj = *reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(descList + 0x28) + static_cast<int64_t>(i) * 8);
-            if (!(fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tidUIDesc))) return;
+            if (!(::Object::IsDerivedFromNullSafe(obj, tidUIDesc))) return;
             if (obj == nullptr) return;
             break;
         }
@@ -201,7 +188,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         uint64_t uiCompIBP = 0;
         EntityFindUIComponent(*entityIBP, &uiCompIBP);
 
-        void* dlg = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+        void* dlg = System::MemoryAllocator::MemAlloc(0xB8, 8);
         void* newDialog = nullptr;
         if (dlg != nullptr) {
             void* ctrlData = nullptr;
@@ -225,7 +212,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
 
         // Wrap in IBP; if null (alloc failed) -> abort before finalize.
         uint64_t dialogRef = 0;
-        if (fn_InternalBasePtr_Ctor) new (&dialogRef) ::Object::InternalBasePtr(
+        new (&dialogRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(newDialog));   // B.3.3 bridge
         resultDialog = dialogRef;
         if (dialogRef == 0) return;
@@ -239,7 +226,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     //    the highlight on self+0x30, which is still the OLD entity until the store
     //    below. (Moved off the per-frame step-2 cc90 path so hover-picks over
     //    no-dialog entities can't wipe the current selection; see step 2.)
-    if (s_fn_cb40) s_fn_cb40(selfV);
+    HighlightClear_Impl(selfV);   // 0x1400fcb40
 
     // 6a. Close the PREVIOUSLY-open info dialog (self+0x28) before replacing it with
     //     the new one. This is retail cc90's third action (see Entity_impl_cc90 @
@@ -260,10 +247,10 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         void* ctrl = nullptr;
         if (ctrlBuf != 0) {
             void* c = reinterpret_cast<void*>(ctrlBuf);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidToolUI)) ctrl = c;
+            if (::Object::IsDerivedFromNullSafe(c, tidToolUI)) ctrl = c;
         }
         uint64_t ctrlRef = 0;
-        if (fn_InternalBasePtr_Ctor) new (&ctrlRef) ::Object::InternalBasePtr(
+        new (&ctrlRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(ctrl));   // B.3.3 bridge
         // Not pinned (ctrl+0x40 == 0) -> close it. (A null controller -> ctrlRef 0,
         // reading +0x40 off 0 would fault, so require a resolved controller first.)
@@ -280,5 +267,5 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     g_LastSelectStore[g_LastSelectStoreIdx & 3] = reinterpret_cast<void*>(*entityIBP);
     g_LastSelectStoreIdx = (g_LastSelectStoreIdx + 1) & 3;
     *reinterpret_cast<uint64_t*>(self + 0x30) = *entityIBP;
-    if (s_fn_c9e0) s_fn_c9e0(selfV);
+    HighlightSelect_Impl(selfV);   // 0x1400fc9e0
 }

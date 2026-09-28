@@ -11,7 +11,6 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -73,11 +72,11 @@ static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
 
     // Check if description is of upgrade type
     void* desc = *(void**)((uintptr_t)destroyComp + 0x18);
-    bool isType = fn_IsDerivedFrom(desc, DestroyDescription::TypeId());
+    bool isType = ::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId());
     void* typedDesc = isType ? desc : nullptr;
 
     // Also check separately (decompile does it twice)
-    fn_IsDerivedFrom(*(void**)((uintptr_t)destroyComp + 0x18), DestroyDescription::TypeId());
+    ::Object::IsDerivedFromNullSafe(*(void**)((uintptr_t)destroyComp + 0x18), DestroyDescription::TypeId());
 
     int64_t upgradeRef = *(int64_t*)((uintptr_t)destroyComp + 0x60);
 
@@ -201,7 +200,7 @@ static void DestroyComponent_Destroy_Impl(void* destroyComp)
 // 0x14011e4d0 — the old port ran the full upgrade pump for both. The
 // authoritative, disasm-verified port is RemovalCalc_StateMachine_dfa0 in
 // code/Game/Player/keystone_a_removalcalcpath.cpp, registered for 0x14011dfa0;
-// UpgradeUI_OnRemove reaches it via ResolveAddr(Module::Exe, 0x14011dfa0).
+// UpgradeUI_OnRemove calls it by name.
 //
 // BuildState state bytes (used by the helpers in this file):
 //   +0x50 previousState, +0x51 currentSubState,
@@ -232,11 +231,8 @@ namespace destroyui_sa {
 
 // ENDGAME B.3.9: ComponentEntity / DestroyDescription (was TypeId_DestroyComponent, a
 // misnamed alias for the cell at 0x1401c7628) both have a ported TypeId() now, so the
-// EnsureGlobals() lazy-cache over the exe .rdata globals is dead.
-
-bool Ready() {
-    return fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
-}
+// EnsureGlobals() lazy-cache over the exe .rdata globals is dead. (B3R: the Ready()
+// test over the IsDerivedFrom / InternalBasePtr doors was always true; gone.)
 
 // SA-guard: the data-source entity ref (+0x28) is nulled by entity destruction
 // (upgrade demolishes the house while its panel is open). IsDerivedFrom(null)
@@ -268,7 +264,7 @@ bool DataSourceAlive(void* self) {
 
 // [4] 0x140066150
 void DestroyUI::OnCreated() {
-    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
+    if (!destroyui_sa::DataSourceAlive(this)) return;
     if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x20))
         return;  // dialog element tree not bound yet
     void* dialogElem = *(void**)((uintptr_t)this + 0x20);
@@ -293,7 +289,7 @@ void DestroyUI::OnCreated() {
 
     // --- Get entity for component checks ---
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -343,10 +339,10 @@ void DestroyUI::OnCreated() {
 
 // [7] 0x140065b00
 void DestroyUI::OnUpdateLayout() {
-    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
+    if (!destroyui_sa::DataSourceAlive(this)) return;
     // Get entity, wrap in InternalBasePtr
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -529,12 +525,12 @@ void DestroyUI::OnUpdateLayout() {
 // [9] 0x140066080
 void DestroyUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
+    if (!destroyui_sa::DataSourceAlive(this)) return;
     if (param3 != 0x12) return;
 
     // Get entity, wrap in InternalBasePtr
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -571,7 +567,7 @@ void DestroyUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void DestroyUI::OnUpdate(const System::Time& /*time*/) {
-    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
+    if (!destroyui_sa::DataSourceAlive(this)) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {
         DestroyUI::OnCreated();

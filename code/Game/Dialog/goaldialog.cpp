@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // GoalDialog::Slot4 (vtable +0x20) — Setup: populate goal table
@@ -296,7 +297,7 @@ GoalDialog::GoalDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 // Retail's dtor (inside [0] 0x140011c10): MemFree the entry array at +0xb8 and
 // zero its header (+0xb8 data, +0xc0 count/capacity), then ~DialogInstance.
 GoalDialog::~GoalDialog() {
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dataB8));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dataB8));
     dataB8 = 0;
     dataC0 = 0;
 }

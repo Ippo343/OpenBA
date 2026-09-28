@@ -74,7 +74,7 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
             // Check TypeId via vtable[2]
             int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (typeId == (int)tombTypeId) {
-                bool isTomb = fn_IsDerivedFrom(comp, tombTypeId);
+                bool isTomb = ::Object::IsDerivedFromNullSafe(comp, tombTypeId);
                 if (isTomb) { found = true; break; }
             }
         }
@@ -110,7 +110,7 @@ void CemeteryUI::OnCreated() {
     void* foundElem = (void*)result;
 
     // Type-check and wrap as InternalBasePtr
-    bool isProgress = fn_IsDerivedFrom(foundElem, UI::ProgressElement::TypeId());
+    bool isProgress = ::Object::IsDerivedFromNullSafe(foundElem, UI::ProgressElement::TypeId());
     void* progressPtr = isProgress ? foundElem : nullptr;
     uint8_t basePtrBuf[8];
     new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progressPtr));   // B.3.3 bridge
@@ -120,7 +120,7 @@ void CemeteryUI::OnCreated() {
     if (!SA_DialogEntityAlive(this)) return;
     // Get entity, find CemeteryComponent
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -151,7 +151,7 @@ void CemeteryUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
     // Get entity, find CemeteryComponent
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge

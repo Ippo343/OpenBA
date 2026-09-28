@@ -45,13 +45,14 @@
 // right functions to extend — the real generic resize (with the live grow/copy path)
 // already exists in the tree as Reimpl_Array_Resize_* in serialize_resize_helpers.cpp.
 // These three are the clear-only specialisations retail emitted separately.
-#include "resolve.h"
+#include "Component/exe_bodies.h"   // B3R: CitizenAI_Reg_helper_e360
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>
 #include "Dialog/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ── B.3.2: the three clears are Collection::Array<T>::Clear() ────────────────
 // `Clear()` is `SetSize(0)`, and rtcoll::SetSizeCore at newSize == 0 does
@@ -218,10 +219,8 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState,
     if (*cap < newCount) {
         *cap = newCount;
         if (oldCount != 0) *cap = newCount * 3;
-        int64_t* grown = fn_MemAllocStatic
-            ? static_cast<int64_t*>(fn_MemAllocStatic(
-                  static_cast<uint64_t>(*cap) * 8, 8))
-            : nullptr;
+        int64_t* grown = static_cast<int64_t*>(System::MemoryAllocator::MemAlloc(
+                  static_cast<uint64_t>(*cap) * 8, 8));
         if (!grown) {                        // standalone-only: retail never checks.
             *count = oldCount;               // leave the array exactly as we found it
             *cap   = oldCap;
@@ -232,7 +231,7 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState,
     for (int32_t i = (oldItems == *items) ? oldCount : 0; i < newCount; ++i) {
         (*items)[i] = (i < oldCount) ? oldItems[i] : resourceEntity;
     }
-    if (oldItems != *items && fn_MemFreeStatic) fn_MemFreeStatic(oldItems);
+    if (oldItems != *items) System::MemoryAllocator::MemFree(oldItems);
 }
 
 // ── 0x14000e2c0 / 0x14000e1c0 — the storage AVL insert ───────────────────────
@@ -256,22 +255,8 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState,
 // agrees, but this was checked against the instructions because a signed compare
 // would put any key with bit 63 set on the wrong side of the tree and produce a
 // silently mis-ordered (but structurally valid) BST.
-namespace {
-// 0x14000e360 — the AVL rebalance walk. Ported in citizenai_housing_idle.cpp and
-// registered by reg_citizenai_housing_idle.cpp; pulled through the address registry
-// so this file does not hard-link another translation unit's internal symbol.
-typedef void (*fn_Rebalance_e360_t)(int64_t* rootSlot, int64_t* nodeSlot);
-fn_Rebalance_e360_t RebalanceE360() {
-    static fn_Rebalance_e360_t s_fn = nullptr;
-    static bool s_tried = false;
-    if (!s_tried) {
-        s_tried = true;
-        s_fn = reinterpret_cast<fn_Rebalance_e360_t>(
-            ResolveAddr(Module::Exe, 0x14000e360));
-    }
-    return s_fn;
-}
-} // namespace
+// 0x14000e360 — the AVL rebalance walk, ported in citizenai_housing_idle.cpp as
+// CitizenAI_Reg_helper_e360 and called by name (B3R; the lazy resolver is gone).
 
 extern "C" void* TradeUI_StorageTreeNodeNew_e2c0(uint64_t /*key*/,
                                                  const uint64_t* entry,
@@ -279,8 +264,7 @@ extern "C" void* TradeUI_StorageTreeNodeNew_e2c0(uint64_t /*key*/,
     // The key argument is genuinely unused: retail passes it but the ctor takes both
     // key and value from `entry`. Kept in the signature because the second caller
     // (TradeUI_impl_55a0, 0x1400255a0) passes it too.
-    if (!fn_MemAllocStatic) return nullptr;
-    uint64_t* n = static_cast<uint64_t*>(fn_MemAllocStatic(0x30, 8));
+    uint64_t* n = static_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!n) return nullptr;                  // retail checks this too
     n[0] = entry[0];                         // key
     n[1] = entry[1];                         // value
@@ -301,8 +285,7 @@ extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree,
     if (*tree == 0) {
         // Empty tree: the root node is built inline rather than through e2c0 (retail
         // duplicates the ctor here), with a null parent and no rebalance.
-        uint64_t* n = fn_MemAllocStatic
-            ? static_cast<uint64_t*>(fn_MemAllocStatic(0x30, 8)) : nullptr;
+        uint64_t* n = static_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
         if (!n) {
             *tree = 0;
             *out  = nullptr;
@@ -347,13 +330,10 @@ extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree,
     // Rebalance from the insertion point upward. `node` is the PARENT of the new
     // node, not the new node — retail passes the address of the local holding it and
     // Helper_e360 walks it up via +0x10 to the root, rotating as it goes. That helper
-    // is 0x14000e360, already ported and registered by
-    // standalone/reg_citizenai_housing_idle.cpp; resolving it through the registry
-    // rather than calling it directly keeps this port honest about which exe function
-    // it is invoking.
-    if (fn_Rebalance_e360_t reb = RebalanceE360()) {
+    // is 0x14000e360, CitizenAI_Reg_helper_e360, called by name (B3R).
+    {
         int64_t walk = reinterpret_cast<int64_t>(node);
-        reb(tree, &walk);
+        CitizenAI_Reg_helper_e360(tree, &walk);   // 0x14000e360
     }
     *out = inserted;
     ++*count;

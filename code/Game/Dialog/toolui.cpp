@@ -25,7 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include "resolve.h"
+#include "Player/exe_bodies.h"   // B3R: HighlightClear_Impl
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
@@ -161,7 +161,8 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         }
 
         // Check if the found element is a TabElement
-        bool isTabElement = fn_IsA(foundElement, UI::TabElement::TypeId());
+        bool isTabElement = reinterpret_cast<const ::Object::Base*>(foundElement)->IsA(
+            UI::TabElement::TypeId());   // B.3.x bridge (?IsA@Base@Object@@)
 
         if (!isTabElement) {
             // Not a tab — use 6-arg AddController (non-tab path)
@@ -180,7 +181,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
         // Element is a TabElement — cast via IsDerivedFrom and use tab path
         ++g_uidescTab;
-        bool derived = fn_IsDerivedFrom(foundElement, UI::TabElement::TypeId());
+        bool derived = ::Object::IsDerivedFromNullSafe(foundElement, UI::TabElement::TypeId());
         void* tabElement = derived ? foundElement : nullptr;
 
         // Wrap in InternalBasePtr
@@ -239,9 +240,7 @@ namespace toolui_sa {
     // ComponentDescription_Register), ComponentEntity::TypeId(),
     // ToolbarDescription::TypeId() (cell 0x1401c7f58), UIDescription::TypeId(),
     // UI::TabElement::TypeId()). All always answer, so EnsureTypeIds's lazy-fill
-    // retires (kept as a no-op call site to avoid touching every caller).
-    void EnsureTypeIds() {
-    }
+    // retired; the empty function and its call went with B3R.
     // Per-frame update (+0x40). Runtime DialogInstance::OnUpdate dispatches
     // (controller, Time&); the reimpl ignores the Time arg. Idle cost is two flag
     // reads (+0x41/+0x4D, both 0 unless Slot9 armed a drag). Guard the KeyMap
@@ -264,7 +263,6 @@ namespace toolui_sa {
 
 // [4] 0x14007bd70
 void ToolUI::OnCreated() {
-    toolui_sa::EnsureTypeIds();
     static bool s_logged=false;
     if(!s_logged && Opt().mapTrace){ s_logged=true;
         printf("[ToolUI::Slot4] dispatched self=%p ds(+0x28)=%p\n",
@@ -273,20 +271,20 @@ void ToolUI::OnCreated() {
 
     // Determine description source from +0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isBuildComp = fn_IsDerivedFrom(dataSource, ComponentDescription::TypeId());
+    bool isBuildComp = ::Object::IsDerivedFromNullSafe(dataSource, ComponentDescription::TypeId());
 
     if (isBuildComp && dataSource != nullptr) {
         // Data source IS the description — check again and store
         void* ds2 = *(void**)(s + 0x28);
-        bool check = fn_IsDerivedFrom(ds2, ComponentDescription::TypeId());
+        bool check = ::Object::IsDerivedFromNullSafe(ds2, ComponentDescription::TypeId());
         *(void**)(s + 0x30) = check ? ds2 : nullptr;
     } else {
         // Check if data source is a ComponentEntity
         void* ds2 = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(ds2, ComponentEntity::TypeId());
+        bool isEntity = ::Object::IsDerivedFromNullSafe(ds2, ComponentEntity::TypeId());
         if (isEntity && ds2 != nullptr) {
             void* ds3 = *(void**)(s + 0x28);
-            bool check = fn_IsDerivedFrom(ds3, ComponentEntity::TypeId());
+            bool check = ::Object::IsDerivedFromNullSafe(ds3, ComponentEntity::TypeId());
             void* entity = check ? ds3 : nullptr;
             // Store entity's description (+0x28) at self+0x30
             *(void**)(s + 0x30) = *(void**)((uintptr_t)entity + 0x28);
@@ -321,7 +319,7 @@ void ToolUI::OnCreated() {
             int typeId = reinterpret_cast<Object::Base*>(entry)->Type();  // B.3.8 bridge
 
             if (typeId == (int)ToolbarDescription::TypeId()) {
-                bool check = fn_IsDerivedFrom(entry, ToolbarDescription::TypeId());
+                bool check = ::Object::IsDerivedFromNullSafe(entry, ToolbarDescription::TypeId());
                 if (check && entry != nullptr) {
                     // Create UI::String from entry's string table (+0x30) and name (+0x38)
                     uint8_t uiStrBuf[16];
@@ -385,7 +383,7 @@ void ToolUI::OnCreated() {
                 printf("[ToolUI_Slot4]   descEntry[%d]=%p tid=%d\n", i, entry, typeId);
 
             if (typeId == (int)UIDescription::TypeId()) {
-                bool check = fn_IsDerivedFrom(entry, UIDescription::TypeId());
+                bool check = ::Object::IsDerivedFromNullSafe(entry, UIDescription::TypeId());
                 if (!check || entry == nullptr) return;
 
                 // Register sub-controllers from UIDescription
@@ -402,7 +400,7 @@ void ToolUI::OnCreated() {
 // EntityUI controller instead of type-checking the datasource entity. During
 // demolition teardown (upgrade path, destroy SM state 4->5) the datasource
 // pointer at controller+0x28 stays non-null while the entity's class-info is
-// already torn down, so fn_IsDerivedFrom(datasource, ...) reads a nulled
+// already torn down, so ::Object::IsDerivedFromNullSafe(datasource, ...) reads a nulled
 // typeinfo (+0x10) inside Runtime — AV'd live 2026-07-20. Retail never probes
 // the datasource in per-frame dialog slots; its drag-arm (EntityUI::Slot8,
 // 0x140066AD0) is scoped by construction: EntityUI exists only on entity
@@ -559,10 +557,10 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
         void* dataSource = *(void**)(s + 0x28);
         bool isEntity = entityDialog && dataSource != nullptr &&
                         SA_DialogEntityAlive((void*)s) &&
-                        fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
+                        ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
         if (isEntity && dataSource != nullptr) {
             void* ds2 = *(void**)(s + 0x28);
-            bool check = fn_IsDerivedFrom(ds2, ComponentEntity::TypeId());
+            bool check = ::Object::IsDerivedFromNullSafe(ds2, ComponentEntity::TypeId());
             void* entity = check ? ds2 : nullptr;
 
             uint8_t entityBuf[8];
@@ -649,7 +647,7 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton &&
             ToolUI_DialogHasEntityUI(s) && SA_DialogEntityAlive((void*)s)) {
             void* ds = *(void**)(s + 0x28);
-            if (ds && fn_IsDerivedFrom(ds, ComponentEntity::TypeId())) {
+            if (ds && ::Object::IsDerivedFromNullSafe(ds, ComponentEntity::TypeId())) {
                 uintptr_t pc = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x120);
                 if (pc) {
                     void* activeTool = *(void**)(pc + 0x28);
@@ -671,17 +669,10 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
                         // close AND blocked re-selecting the same building
                         // (EditTool::OnKey's `lastEntityRef != foundEntity` guard
                         // and d3b0's step-1 early-out both saw it as still
-                        // selected). cb40 resolves to our tool_base_render.cpp
-                        // port only when BANISHED_SELECTION_OUTLINE registered it;
-                        // otherwise NULL -> skip (no outline to clear).
-                        typedef void (*fn_cb40_t)(void*);
-                        static fn_cb40_t s_fn_cb40 = nullptr;
-                        static bool s_cb40Resolved = false;
-                        if (!s_cb40Resolved) {
-                            s_fn_cb40 = (fn_cb40_t)ResolveAddr(Module::Exe, 0x1400fcb40);
-                            s_cb40Resolved = true;
-                        }
-                        if (s_fn_cb40) s_fn_cb40(activeTool);
+                        // selected). cb40 is our tool_base_render.cpp port,
+                        // HighlightClear_Impl, registered unconditionally (the
+                        // BANISHED_SELECTION_OUTLINE gate is gone): called by name (B3R).
+                        HighlightClear_Impl(activeTool);   // 0x1400fcb40
                         *(uint64_t*)((uintptr_t)activeTool + 0x28) = 0;
                         *(uint64_t*)((uintptr_t)activeTool + 0x30) = 0;
                     }

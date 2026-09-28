@@ -6,7 +6,7 @@
 //   0x14005dec0  AutoSaveDialog autosave handler (timer-event 0x13).
 //   0x140099d40  autosave-name builder ("Autosave" UIString) — sub-callee of 0x14005dec0.
 //
-// Depends only on engine_funcs.h + resolve.h.
+// Depends only on engine_funcs.h.
 // Decompiled from Application-x64.exe via Ghidra.
 
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -17,7 +17,6 @@
 #include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "dialog_exe_helpers.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -52,12 +51,12 @@ void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (t == tid) {
                 void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+                found = (::Object::IsDerivedFromNullSafe(c, tid)) ? c : nullptr;
                 break;
             }
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -111,7 +110,7 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
 
     // Min operation-display time = 1.0s.
     uint8_t timeBuf[8];
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeBuf, 1.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 1.0f);   // import slot Time::Time(float)
     reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(timeBuf));  // B.3.7 bridge
 
     // Screenshot sprite (16 bytes) copied from KeyMap+0xb8.
