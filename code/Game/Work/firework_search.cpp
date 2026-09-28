@@ -53,48 +53,22 @@
 //
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // B3R: the Pf_* helpers called by name
+#include "Game/exe_constants.h"  // B3R: kRdata_140172114
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Component/InteractComponent.h"   // ENDGAME B.3.9 D5: InteractComponent::TypeId()
 
 // ---------------------------------------------------------------------------
-// Lazily-resolved sub-helpers (resolve once; in standalone -> our registered ports). Mirrors action_pf_road.cpp's style.
+// Sub-helpers, called by name (B3R): 0x140122e20 Pf_EntityResolvePos_2e20,
+// 0x140123070 Pf_RecursiveChildSum_123070, 0x140087fb0 Pf_EntityAnchorCell_7fb0,
+// 0x140002ed0 WorkBase_FindComponent_2ed0, 0x1400a00f0 WorkBase_ValidateCell_a00f0,
+// 0x14009f810 Pf_IsDstReachable_f810, 0x140132010 WorkImpl_Sqrtf_132010;
+// DAT_140172114 = kRdata_140172114 (0.5f).
 // ---------------------------------------------------------------------------
 
-typedef void* (*fw_EntityResolvePos_t)(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20
-typedef int   (*fw_RecursiveChildSum_t)(int64_t self, int idx);                                  // 0x140123070
-typedef int   (*fw_EntityAnchorCell_t)(void* selfIBP, float* p2);                                // 0x140087fb0
-typedef void* (*fw_FindCompPos_t)(uintptr_t entity, void* retIBP);                               // 0x140002ed0
-typedef uint64_t (*fw_ValidateCell_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell); // 0x1400a00f0
-typedef int   (*fw_IsDstReachable_t)(int* map, uint32_t srcCell, uint32_t dstCell, char useCache);      // 0x14009f810
-typedef float (*fw_Sqrtf_t)(float v);                                                            // 0x140132010
-
-static bool                   s_init = false;
-static fw_EntityResolvePos_t  s_resolvePos   = nullptr;
-static fw_RecursiveChildSum_t s_childSum     = nullptr;
-static fw_EntityAnchorCell_t  s_anchorCell   = nullptr;
-static fw_FindCompPos_t       s_findCompPos  = nullptr;
-static fw_ValidateCell_t      s_validateCell = nullptr;
-static fw_IsDstReachable_t    s_isReachable  = nullptr;
-static fw_Sqrtf_t             s_sqrtf        = nullptr;
-static const float*           s_pHalfCell    = nullptr;  // DAT_140172114 = 0.5f
-
-static void EnsureInit() {
-    if (s_init) return;
-    s_resolvePos   = reinterpret_cast<fw_EntityResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_childSum     = reinterpret_cast<fw_RecursiveChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
-    s_anchorCell   = reinterpret_cast<fw_EntityAnchorCell_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_findCompPos  = reinterpret_cast<fw_FindCompPos_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_validateCell = reinterpret_cast<fw_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_isReachable  = reinterpret_cast<fw_IsDstReachable_t>(ResolveAddr(Module::Exe, 0x14009f810));
-    s_sqrtf        = reinterpret_cast<fw_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_pHalfCell    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_init = true;
-}
-
-static inline float HalfCell() { return s_pHalfCell ? *s_pHalfCell : 0.5f; }
+static inline float HalfCell() { return kRdata_140172114; }   // DAT_140172114 = 0.5f
 
 // ===========================================================================
 // FireWork_SpiralCell_8730  (FUN_140088730)
@@ -107,7 +81,6 @@ static inline float HalfCell() { return s_pHalfCell ? *s_pHalfCell : 0.5f; }
 void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
                               int param_4, int param_5, uint32_t param_6,
                               int* param_7, int* param_8, uint64_t* param_9) {
-    EnsureInit();
 
     // plVar8 = *(param_1 + 0x140) + param_3 * 0x10 ; entry: {ptr ids, int count, ...}
     int64_t* plVar8 = reinterpret_cast<int64_t*>(
@@ -131,10 +104,10 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
                 int64_t entIBP = *reinterpret_cast<int64_t*>(*refSlot + 0x10);
 
                 int64_t posIBP = 0;
-                if (s_findCompPos) s_findCompPos(static_cast<uintptr_t>(entIBP), &posIBP);
+                WorkBase_FindComponent_2ed0(static_cast<uintptr_t>(entIBP), &posIBP);
 
                 float pos[3] = {0.0f, 0.0f, 0.0f};
-                if (s_resolvePos) s_resolvePos(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);
+                Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);
 
                 int iVar6 = *param_2;                  // grid width W
                 int iVar2 = static_cast<int>(pos[0] + static_cast<float>(iVar6 >> 1));
@@ -158,20 +131,17 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
             }
 
             // Reachability: path-type 0xe07 query then explicit length query.
-            if (s_validateCell) {
-                uint64_t ok = s_validateCell(param_2, 0xe07, param_6, static_cast<int>(uVar7));
+            {
+                uint64_t ok = WorkBase_ValidateCell_a00f0(param_2, 0xe07, param_6, static_cast<int>(uVar7));
                 if (static_cast<char>(ok) != '\0') {
                     int iVar2;
-                    if (s_isReachable)
-                        iVar2 = s_isReachable(param_2, param_6, uVar7, '\x01');
-                    else
-                        iVar2 = 0;
+                    iVar2 = Pf_IsDstReachable_f810(param_2, param_6, uVar7, '\x01');
                     if (iVar2 < 0) {
                         // Unreachable by road -> fall back to euclidean (in cells) + bias.
                         int W2  = *param_2;
                         int dr  = static_cast<int>(param_6) / W2 - static_cast<int>(uVar7) / W2;
                         int dc  = static_cast<int>(param_6) % W2 - static_cast<int>(uVar7) % W2;
-                        float d = s_sqrtf ? s_sqrtf(static_cast<float>(dr * dr + dc * dc)) : 0.0f;
+                        float d = WorkImpl_Sqrtf_132010(static_cast<float>(dr * dr + dc * dc));
                         iVar2 = static_cast<int>(d) + W2;
                     }
                     if (iVar2 < *param_7) {
@@ -185,7 +155,7 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
                                 (static_cast<int64_t>(iVar1) * 8 + 8));
                         } else {
                             uint64_t emptyIBP = 0;
-                            if (fn_InternalBasePtr_Ctor) new (&emptyIBP) ::Object::InternalBasePtr(
+                            new (&emptyIBP) ::Object::InternalBasePtr(
                                 nullptr);   // B.3.3 bridge
                             bestRef = emptyIBP;
                         }
@@ -212,7 +182,6 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
 // ===========================================================================
 int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_3,
                                    float* param_4, float* param_5) {
-    EnsureInit();
 
     // WorldGrid pointer at GameWorld(+0xf8). piVar1[0] = grid width W.
     int* piVar1 = *reinterpret_cast<int**>(
@@ -302,7 +271,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
         inXY_a[1] = static_cast<float>(cellA / *piVar1) - half;
         inXY_a[2] = 0.0f;
         float outA[3];
-        if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(piVar1, outA, inXY_a, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(piVar1, outA, inXY_a, '\0', nullptr);
         param_4[0] = outA[0];
         param_4[1] = outA[1];
         param_4[2] = outA[2];
@@ -316,7 +285,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
         inXY_b[1] = static_cast<float>(cellB / *piVar1) - half2;
         inXY_b[2] = 0.0f;
         float outB[3];
-        if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(piVar1, outB, inXY_b, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(piVar1, outB, inXY_b, '\0', nullptr);
         param_5[0] = outB[0];
         param_5[1] = outB[1];
         param_5[2] = outB[2];
@@ -343,7 +312,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
                 uint64_t* sel = reinterpret_cast<uint64_t*>(
                     *reinterpret_cast<int64_t*>(entIBP + 0x30) + static_cast<int64_t>(idx) * 8);
                 void* candidate = reinterpret_cast<void*>(*sel);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(candidate, typeId))
+                if (Object::IsDerivedFromNullSafe(candidate, typeId))
                     chosen = candidate;
                 break;
             }
@@ -354,29 +323,28 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
 
     // Wrap the chosen entity in an IBP, random-index a sub-entity, resolve its position.
     uint64_t chosenIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&chosenIBP) ::Object::InternalBasePtr(
+    new (&chosenIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(chosen));   // B.3.3 bridge
 
-    uint32_t count = s_childSum ? static_cast<uint32_t>(s_childSum(static_cast<int64_t>(chosenIBP), 0)) : 0;
+    uint32_t count = static_cast<uint32_t>(Pf_RecursiveChildSum_123070(static_cast<int64_t>(chosenIBP), 0));
     void* rng = *reinterpret_cast<void**>(
         reinterpret_cast<int64_t>(*g_pGameWorldSingleton) + 0xd8);
     uint32_t randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
 
     float resolved[3] = {0.0f, 0.0f, 0.0f};
-    if (s_resolvePos)
-        s_resolvePos(reinterpret_cast<void*>(chosenIBP), resolved, 0,
+    Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(chosenIBP), resolved, 0,
                      static_cast<int>(randIdx), nullptr);
 
     // Anchor cell of the found entity (entIBP), then its terrain position into param_5.
     uint64_t anchorIBP = entIBP;
-    int anchorCell = s_anchorCell ? s_anchorCell(&anchorIBP, nullptr) : 0;
+    int anchorCell = Pf_EntityAnchorCell_7fb0(&anchorIBP, nullptr);
     float half = static_cast<float>(*piVar1 >> 1) - HalfCell();
     float inXY[3];
     inXY[0] = static_cast<float>(anchorCell % *piVar1) - half;
     inXY[1] = static_cast<float>(anchorCell / *piVar1) - half;
     inXY[2] = 0.0f;
     float outP[3];
-    if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(piVar1, outP, inXY, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(piVar1, outP, inXY, '\0', nullptr);
     param_5[0] = outP[0];
     param_5[1] = outP[1];
     param_5[2] = outP[2];

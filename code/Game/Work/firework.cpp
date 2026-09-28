@@ -24,7 +24,8 @@
 #include "Work/FireWork.h"
 #include "Work/firework_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"   // B3R: the Work bodies called by name
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/CitizenDescription.h"   // ENDGAME B.3.9 D5: CitizenDescription::TypeId()
 #include "Component/InteractDescription.h"  // ENDGAME B.3.9 D5: InteractDescription::TypeId()
@@ -35,107 +36,20 @@
 #include <new>
 
 // ============================================================
-// Local sub-function pointers (resolved at runtime)
+// Sub-functions, called by name (B3R; Work/exe_bodies.h)
 // ============================================================
-
-// FireWork_helper_81d0 (0x1400881d0): Searches for a burning entity
-// in a spiral pattern around the building. Returns true if found,
-// fills outSrcPos and outDestPos with fire/citizen positions.
-typedef bool (*fn_FireHelper_FindFire_t)(
-    uintptr_t mapData, uint32_t centerCell, int searchRadius,
-    float* outSrcPos, float* outDestPos);
-static fn_FireHelper_FindFire_t s_fn_FindFire = nullptr;
-
-// FUN_140122be0: Pathfinding accessibility check for entity positions.
-// Checks if citizen can reach fire location. Writes best position to outPos
-// and distance to outDist.
-typedef bool (*fn_PathCheck_t)(
-    uintptr_t entity, uintptr_t posArray, float* srcPos,
-    float* outPos, int* outDist);
-static fn_PathCheck_t s_fn_PathCheck = nullptr;
-
-// FUN_140122b00: Recursive path check across entity children.
-// Calls s_fn_PathCheck on each child entity.
-typedef bool (*fn_PathCheckRecursive_t)(
-    uintptr_t entity, int index, float* srcPos,
-    float* outPos, int* outDist);
-static fn_PathCheckRecursive_t s_fn_PathCheckRecursive = nullptr;
-
-// BuildStructure_impl_6ef0 (0x1400f6ef0): Validates work assignment
-// against citizen/entity, checks distance and timing.
-typedef bool (*fn_ValidateAssignment_t)(
-    uintptr_t work, void* citizenIBP, uint32_t destCell,
-    uint32_t srcCell, void* time);
-static fn_ValidateAssignment_t s_fn_ValidateAssignment = nullptr;
-
-// PerformWork_Action_CopyCtor (0x1400ba9f0): Sets up the full action
-// queue for fire suppression (MoveTo, ShowTool, PerformWork, CompleteTask).
-typedef void (*fn_SetupFireActions_t)(
-    void* citizenIBP, int priority, float* srcPos,
-    float* destPos, float* firePos, void* workEntityIBP);
-static fn_SetupFireActions_t s_fn_SetupFireActions = nullptr;
-
-// CitizenAI_impl_1a30 (0x140021a30): Registers work assignment
-// with the citizen AI's BST (inserts entity into work tracking).
-typedef void (*fn_RegisterWork_t)(
-    void* bstRoot, void* entityIBP, void* citizenIBP);
-static fn_RegisterWork_t s_fn_RegisterWork = nullptr;
-
-// FUN_1400f7100: Validates a citizen entity still has active fire work.
-// Checks if the entity's task list contains a CompleteTask matching
-// the work's priority ID at +0x20.
-typedef bool (*fn_ValidateFireEntity_t)(
-    uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
-static fn_ValidateFireEntity_t s_fn_ValidateEntity = nullptr;
-
-// CitizenAI_impl_a6e0 (0x14001a6e0): Removes a node from the intrusive
-// BST (AVL/red-black tree). Handles rebalancing.
-typedef void (*fn_BSTRemove_t)(void* bstRoot, void* node);
-static fn_BSTRemove_t s_fn_BSTRemove = nullptr;
-
-
-// ============================================================
-// FireWork_ResolveFuncs
-// ============================================================
-bool FireWork_ResolveFuncs() {
-    s_fn_FindFire = reinterpret_cast<fn_FireHelper_FindFire_t>(
-        ResolveAddr(Module::Exe, 0x1400881d0));
-
-    s_fn_PathCheck = reinterpret_cast<fn_PathCheck_t>(
-        ResolveAddr(Module::Exe, 0x140122be0));
-
-    s_fn_PathCheckRecursive = reinterpret_cast<fn_PathCheckRecursive_t>(
-        ResolveAddr(Module::Exe, 0x140122b00));
-
-    s_fn_ValidateAssignment = reinterpret_cast<fn_ValidateAssignment_t>(
-        ResolveAddr(Module::Exe, 0x1400f6ef0));
-
-    s_fn_SetupFireActions = reinterpret_cast<fn_SetupFireActions_t>(
-        ResolveAddr(Module::Exe, 0x1400ba9f0));
-
-    s_fn_RegisterWork = reinterpret_cast<fn_RegisterWork_t>(
-        ResolveAddr(Module::Exe, 0x140021a30));
-
-    s_fn_ValidateEntity = reinterpret_cast<fn_ValidateFireEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-
-    s_fn_BSTRemove = reinterpret_cast<fn_BSTRemove_t>(
-        ResolveAddr(Module::Exe, 0x14001a6e0));
-
-    bool ok = s_fn_FindFire && s_fn_PathCheck && s_fn_PathCheckRecursive &&
-              s_fn_ValidateAssignment && s_fn_SetupFireActions &&
-              s_fn_RegisterWork && s_fn_ValidateEntity && s_fn_BSTRemove;
-
-#ifdef _DEBUG
-    printf("[FireWork] ResolveFuncs: FindFire=%p PathCheck=%p ValidateAssign=%p "
-           "SetupActions=%p RegisterWork=%p ValidateEntity=%p BSTRemove=%p ok=%d\n",
-           (void*)s_fn_FindFire, (void*)s_fn_PathCheck,
-           (void*)s_fn_ValidateAssignment, (void*)s_fn_SetupFireActions,
-           (void*)s_fn_RegisterWork, (void*)s_fn_ValidateEntity,
-           (void*)s_fn_BSTRemove, ok);
-#endif
-    return ok;
-}
+//   0x1400881d0 FireWork_helper_81d0 spiral fire search  FireWork_SpiralSearch_81d0
+//               (returns 0/1 in the low byte; the caller tests the byte)
+//   0x140122be0 walkable-position check                   WorkImpl_WalkablePos_122be0
+//   0x140122b00 recursive walkable-position check         WorkImpl_WalkablePosRecursive_122b00
+//   0x1400f6ef0 BuildStructure_impl_6ef0 validate         WorkImpl_BuildStructureStep_6ef0
+//               (a uint64 whose LOW BYTE is the bool; the upper bytes are garbage)
+//   0x1400ba9f0 PerformWork_Action_CopyCtor (fire queue)  WorkAct_PerformWorkCopyCtor_ba9f0
+//   0x140021a30 CitizenAI_impl_1a30 BST insert            WorkBST_RegisterWork_1a30
+//   0x1400f7100 validate the fire entitys CompleteTask   WorkBase_ValidateTask_f7100
+//   0x14001a6e0 CitizenAI_impl_a6e0 BST node remove       WorkBST_BSTRemove_a6e0
+//   0x140025520 CitizenAI_impl_5520 BST remove-by-key     WorkBST_BSTFindRemove_25520
+//   0x1400c5400 remove pending actions                    WorkBase_TaskListCleanup_c5400
 
 // ============================================================
 // Helper: Convert world position to clamped grid cell index.
@@ -171,7 +85,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
 
     // Find PositionComponent on building entity
     uintptr_t posCompIBP = 0;
-    fn_Entity_FindComponent_Position(*(uintptr_t*)(s + 0x10), &posCompIBP);
+    WorkBase_FindComponent_2ed0(*(uintptr_t*)(s + 0x10), &posCompIBP);
 
     // Check capacity: _field48 (max capacity) vs _field58 (assigned count)
     // Original: if ((int)param_1[9] <= (int)param_1[0xb]) return 1;
@@ -204,7 +118,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     void* citizenObj = *(void**)(*(uintptr_t*)citizenIBP + 0x18);
     // DWORD_1401c7190 = CitizenDescription (ENDGAME B.3.9 D5: by cell, not by the
     // legacy variable name "CitizenComponent").
-    bool isCitizen = fn_IsDerivedFrom(citizenObj, CitizenDescription::TypeId());
+    bool isCitizen = Object::IsDerivedFromNullSafe(citizenObj, CitizenDescription::TypeId());
     void* citizenComp = isCitizen ? citizenObj : nullptr;
 
     // Initialize position buffers (all zeroed — original zeros local_60 before FindFire)
@@ -213,7 +127,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
 
     // Search for a burning entity (spiral search from citizen position)
     int searchRadius = *(int*)((uintptr_t)citizenComp + 0xf8);
-    bool found = s_fn_FindFire(mapData, centerCell, searchRadius, srcPos, destPos);
+    bool found = static_cast<uint8_t>(FireWork_SpiralSearch_81d0(static_cast<int64_t>(mapData), centerCell, searchRadius, srcPos, destPos)) != 0;
 
     // Outcome of the TownManager water search (0x1400881d0). This is the ONLY place
     // that walks townMgr+0x140, so it is also the only place that proves the coarse
@@ -246,14 +160,14 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     void* posComp = *(void**)(posCompIBP + 0x18);
     // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell, not by the
     // legacy variable name "PositionComponent").
-    bool isPositionComp = fn_IsDerivedFrom(posComp, InteractDescription::TypeId());
+    bool isPositionComp = Object::IsDerivedFromNullSafe(posComp, InteractDescription::TypeId());
     void* posCompTyped = isPositionComp ? posComp : nullptr;
 
     int bestDist = 0x7fffffff;
     float bestPos[3] = {0.0f, 0.0f, 0.0f};
 
     // Check main entity path
-    bool pathFound = s_fn_PathCheck(
+    bool pathFound = WorkImpl_WalkablePos_122be0(
         posCompIBP, (uintptr_t)posCompTyped + 0x28,
         srcPos, bestPos, &bestDist);
 
@@ -263,7 +177,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
         uintptr_t childOffset = 0;
         for (int i = 0; i < *(int32_t*)(posCompVal + 0x30); i++) {
             uintptr_t* childIBP = (uintptr_t*)(*(uintptr_t*)(posCompVal + 0x28) + childOffset);
-            bool childResult = s_fn_PathCheckRecursive(
+            bool childResult = WorkImpl_WalkablePosRecursive_122b00(
                 *childIBP, 0, srcPos, bestPos, &bestDist);
             pathFound = pathFound || childResult;
             citizenIBP = citizenIBP; // preserve param register (Ghidra artifact)
@@ -287,8 +201,8 @@ int FireWork::Execute(void* citizenIBP, void* time) {
 
     // Validate work assignment (checks timing, distance, etc.)
     uintptr_t citizenIBPVal = *(uintptr_t*)citizenIBP;
-    bool valid = s_fn_ValidateAssignment(
-        s, (void*)&citizenIBPVal, destCell, centerCell, time);
+    bool valid = static_cast<uint8_t>(WorkImpl_BuildStructureStep_6ef0(
+        s, (void*)&citizenIBPVal, destCell, centerCell, time)) != 0;
 
     if (!valid) {
         return 0;
@@ -300,10 +214,10 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     uintptr_t workEntityIBP = *(uintptr_t*)(s + 0x10);
     int priority = *(int32_t*)(s + 0x20);
     uintptr_t citizenPtr = *(uintptr_t*)citizenIBP;
-    s_fn_SetupFireActions(
+    WorkAct_PerformWorkCopyCtor_ba9f0(
         (void*)&citizenPtr,
         priority,
-        srcPos, destPos, bestPos, (void*)&workEntityIBP);
+        srcPos, destPos, bestPos, reinterpret_cast<int64_t*>((void*)&workEntityIBP));
 
     // Update citizen entity state
     uintptr_t citizenVal = *(uintptr_t*)citizenIBP;
@@ -323,7 +237,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     }
 
     // Register with citizen AI BST at +0x50
-    s_fn_RegisterWork((void*)(s + 0x50), &targetIBP, citizenIBP);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(s + 0x50)), &targetIBP, citizenIBP);
 
     return 2;
 }
@@ -378,7 +292,7 @@ int FireWork::Validate() {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Check if this entity still needs fire work
-        bool stillValid = s_fn_ValidateEntity(s, nullptr, (void*)&entityIBP, nullptr);
+        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(s), nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Need to add to removal list -- grow array if needed
@@ -390,8 +304,7 @@ int FireWork::Validate() {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    uintptr_t* newArr = (uintptr_t*)fn_MemAlloc(
-                        g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+                    uintptr_t* newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8);
 
                     // Copy existing entries
                     uint32_t copyStart = 0;
@@ -412,7 +325,7 @@ int FireWork::Validate() {
 
                     // Free old array if different
                     if (removeArr != newArr) {
-                        fn_MemFreeStatic(removeArr);
+                        System::MemoryAllocator::MemFree(removeArr);
                     }
                     removeArr = newArr;
                 } else {
@@ -460,7 +373,7 @@ int FireWork::Validate() {
                 } else {
                     if (removeArr[i] <= nodeKey) {
                         // Found -- remove it
-                        s_fn_BSTRemove(bstRoot, bstNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRoot), bstNode);
                         break;
                     }
                     bstNode = *(void**)((uintptr_t)bstNode + 0x18); // right
@@ -470,7 +383,7 @@ int FireWork::Validate() {
     }
 
     // Free the removal array
-    fn_MemFreeStatic(removeArr);
+    System::MemoryAllocator::MemFree(removeArr);
 
     // Return 1 if BST is now empty, 0 otherwise
     return (removeCount == 0) ? 1 : 0;
@@ -484,24 +397,12 @@ int FireWork::Validate() {
 // the citizen entry identified by param2, then returns 0.
 // ============================================================
 
-// CitizenAI_impl_5520 (0x140025520): BST lookup + remove by key.
-// Searches BST for a node matching param2's IBP key, removes it.
-typedef void (*fn_BST_RemoveByKey_t)(void* bstRoot, void* ibpKey);
-static fn_BST_RemoveByKey_t s_fn_BST_RemoveByKey = nullptr;
-
-static bool EnsureSlot6Funcs() {
-    if (!s_fn_BST_RemoveByKey) {
-        s_fn_BST_RemoveByKey = reinterpret_cast<fn_BST_RemoveByKey_t>(
-            ResolveAddr(Module::Exe, 0x140025520));
-    }
-    return s_fn_BST_RemoveByKey != nullptr;
-}
+// CitizenAI_impl_5520 (0x140025520) = WorkBST_BSTFindRemove_25520: BST lookup + remove by key.
 
 int FireWork::OnComplete(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
-    if (!EnsureSlot6Funcs()) return 0;
     uintptr_t s = (uintptr_t)this;
     // Remove citizen entry from BST at +0x50
-    s_fn_BST_RemoveByKey((void*)(s + 0x50), citizenIBP);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(s + 0x50)), citizenIBP);
     return 0;
 }
 
@@ -514,10 +415,9 @@ int FireWork::OnComplete(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
 // identical to Slot6 without the SUB RSP / return false wrapper.
 // ============================================================
 int FireWork::OnCancel(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
-    if (!EnsureSlot6Funcs()) return 0;
     uintptr_t s = (uintptr_t)this;
     // Remove citizen entry from BST at +0x50
-    s_fn_BST_RemoveByKey((void*)(s + 0x50), citizenIBP);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(s + 0x50)), citizenIBP);
     return 0;
 }
 
@@ -532,20 +432,9 @@ int FireWork::OnCancel(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
 // Continues until the BST root is null.
 // ============================================================
 
-// FUN_1400c5400: remove pending action from state machine
-typedef void (*fn_RemovePendingAction_t)(void* smActionList);
-static fn_RemovePendingAction_t s_fn_RemovePendingAction_FW = nullptr;
-
-static bool EnsureSlot8Funcs() {
-    if (!s_fn_RemovePendingAction_FW) {
-        s_fn_RemovePendingAction_FW = reinterpret_cast<fn_RemovePendingAction_t>(
-            ResolveAddr(Module::Exe, 0x1400c5400));
-    }
-    return s_fn_RemovePendingAction_FW != nullptr;
-}
+// FUN_1400c5400 = WorkBase_TaskListCleanup_c5400: remove pending action from state machine.
 
 int FireWork::Cleanup() {
-    if (!EnsureSlot8Funcs()) return 0;
     uintptr_t s = (uintptr_t)this;
     void** bstRoot = (void**)(s + 0x50);
 
@@ -578,7 +467,7 @@ int FireWork::Cleanup() {
         uintptr_t smComp = *(uintptr_t*)(entityPtr + 0x278);
 
         // Remove pending action from SMC+0x48
-        s_fn_RemovePendingAction_FW((void*)(smComp + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
     }
 }
 
@@ -647,11 +536,9 @@ int FireWork::GetPriority() {
 
 // ============================================================
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The stamps are the compiler's. FireWork_ResolveFuncs wires
-// the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The stamps are the compiler's.
 // ============================================================
 FireWork::FireWork() : Work(), _field48(nullptr), _field50(nullptr), _field58(0) {
-    FireWork_ResolveFuncs();
 }
 
 // 0x1400e9bd0: `MOV dword [RDI+0x48],EBX` -- a DWORD store into the qword
@@ -659,7 +546,6 @@ FireWork::FireWork() : Work(), _field48(nullptr), _field50(nullptr), _field58(0)
 FireWork::FireWork(void* pEntityIBP, uint32_t capacity)
     : Work(pEntityIBP), _field50(nullptr), _field58(0) {
     std::memcpy(&_field48, &capacity, sizeof capacity);
-    FireWork_ResolveFuncs();
 }
 
 // ============================================================
