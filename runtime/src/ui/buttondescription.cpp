@@ -94,18 +94,18 @@ bool ButtonDescription::Serialize(void* streamv) {
     ElementDescription::Serialize(stream);                 // 1801113fa
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
     for (int i = 0; i < 5; ++i)                            // 18011142f .. 180111476
         RtAddr<FieldSerFn>(0x180038f90ull)(&_childDesc[i], &ser);
 
-    RwScalar(rw, kRwScalarUInt, &_word90);                 // 18011147b .. 1801114d5
-    RwScalar(rw, kRwScalarUInt, &_word94);
-    RwScalar(rw, kRwScalarUInt, &_word98);
-    RwScalar(rw, kRwScalarUInt, &_word9c);
+    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word90), nullptr); // 18011147b .. 1801114d5
+    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word94), nullptr);
+    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word98), nullptr);
+    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word9c), nullptr);
 
-    DestroyReaderWriter(rw);                               // 1801114ee
+    if (rw != nullptr) rw->DeletingDtor(1);                // 1801114ee
     return true;
 }
 

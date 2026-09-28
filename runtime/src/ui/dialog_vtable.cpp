@@ -416,18 +416,15 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
 
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+    reinterpret_cast<IO::ReaderWriter*>(rw)->DeletingDtor(1);   // B.3.x bridge
 }
 
 void RecUInt(ReaderWriter* rw, uint32_t* v) {
-    using Fn = void (*)(ReaderWriter*, uint32_t*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, v, nullptr);
+    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(v), nullptr);   // B.3.x bridge
 }
 
 void RecInt(ReaderWriter* rw, int32_t* v) {
-    using Fn = void (*)(ReaderWriter*, int32_t*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, v, nullptr);
+    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(*v, nullptr);   // B.3.x bridge
 }
 
 const char* const kSerializeMangled =

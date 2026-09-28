@@ -131,8 +131,8 @@ bool SpinnerDescription::Serialize(void* streamArg) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                              // 1800d88ca
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
@@ -140,13 +140,10 @@ bool SpinnerDescription::Serialize(void* streamArg) {
     RtAddr<FieldSerFn>(0x180038f90ull)(&_upDescription, &ser);          // 1800d88e6
     RtAddr<FieldSerFn>(0x180038f90ull)(&_downDescription, &ser);        // 1800d88f4
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_increment, nullptr);
+    rw->SerializeInt(_increment, nullptr);
 
     if (rw != nullptr) {                                                // 1800d891a
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

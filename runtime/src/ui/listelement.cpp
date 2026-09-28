@@ -54,6 +54,7 @@
 
 #include "widget_common.h"
 #include "../../types/ui/ListElement.h"
+#include "../../types/ui/DialogInstance.h"   // B3X W0: OnElementEvent by name
 
 using namespace rtui;
 
@@ -69,11 +70,10 @@ constexpr int kGridExtents  = 0xC8;   // Array<int32>::_data
 using DrawHighlightFn = void (*)(const void* self, void* ctx, int32_t index, uint32_t color);
 
 // `?OnElementEvent@DialogInstance@UI@@` — the DialogInstance vtable's slot 8
-// (+0x40). Seven arguments after `this`, read straight off 0x1800d3e2a..3e5e:
-// RDX = &InternalPtr<Element>, R8D = event kind (0x14), R9D = the element id,
-// [RSP+0x20] = the row index, and three zeroed dwords/qwords.
-using OnElementEventFn = void (*)(void* dlg, void** elem, int32_t kind, int32_t elemId,
-                                  int32_t a, int32_t b, int32_t c, int64_t d);
+// (+0x40), called by name in Update. Seven arguments after `this`, read
+// straight off 0x1800d3e2a..3e5e: RDX = &InternalPtr<Element>, R8D = event
+// kind (0x14), R9D = the element id, [RSP+0x20] = the row index, and three
+// zeroed dwords/qwords.
 
 }  // namespace
 
@@ -222,9 +222,10 @@ void ListElement::Update(const System::Time& time, UserInterface* ui,
                     _selectedIndex = i;
                     slot = this;                                   // 1800d3e37
                     void* dlg = *reinterpret_cast<void* const*>(dialog);   // 1800d3e2a
-                    // UI::DialogInstance slot 8 (block B): hand-inlined, as before.
-                    reinterpret_cast<OnElementEventFn>(VTable(dlg)[0x40 / 8])(
-                        dlg, &slot, 0x14, _elementId, i, 0, 0, 0);
+                    // UI::DialogInstance slot 8 (block B), by name.
+                    static_cast<DialogInstance*>(dlg)->OnElementEvent(
+                        reinterpret_cast<Object::InternalPtr<Element>*>(&slot),   // B.3.x bridge
+                        0x14, _elementId, i, 0, 0, nullptr);
                 }
             }
         }

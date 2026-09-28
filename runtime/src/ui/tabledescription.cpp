@@ -147,18 +147,16 @@ bool TableDescription::Serialize(void* streamv) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 18011e5da
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_columnCount, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_rowCount, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_spacing, nullptr);
+    rw->SerializeInt(_columnCount, nullptr);
+    rw->SerializeInt(_rowCount, nullptr);
+    rw->SerializeInt(_spacing, nullptr);
 
     int32_t n = _cells._size;                                  // 18011e61e
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
+    rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 18011e643 (re-read)
         using SetSizeFn = void (*)(void* array, int n);
@@ -168,14 +166,13 @@ bool TableDescription::Serialize(void* streamv) {
     using FieldSerFn = void (*)(void* field, Serializer* ser);
     Cell* cell = _cells._data;                                 // 18011e656 (once)
     for (int32_t i = 0; i < n; ++i, ++cell) {                  // 18011e65e / 18011e6ae
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &cell->column, nullptr);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &cell->row,    nullptr);
+        rw->SerializeInt(cell->column, nullptr);
+        rw->SerializeInt(cell->row, nullptr);
         RtAddr<FieldSerFn>(0x180038f90ull)(&cell->desc, &ser); // 18011e6a2
     }
 
     if (rw != nullptr) {                                       // 18011e6b8
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

@@ -172,7 +172,8 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t coun
     Serializer* ser = static_cast<Serializer*>(serv);
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
-    using ScalarFn   = void (*)(void* rw, void* value, const char* name);
+    // The ReaderWriter is re-read from the Serializer for every field, as retail does.
+    auto rw = [ser]() { return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter); };  // B.3.x bridge
 
     for (int32_t i = 0; i < count; ++i, ++e) {
         RtAddr<FieldSerFn>(0x180038f90ull)(&e->desc, ser);         // 180043f77
@@ -180,21 +181,11 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t coun
         RtAddr<FieldSerFn>(0x1800c9930ull)(&e->relativeToX, ser);  // 180043f8e
         RtAddr<FieldSerFn>(0x1800c9930ull)(&e->relativeToY, ser);  // 180043f9a
 
-        void** rvt = VTableOf(ser->readerWriter);              // re-read each field
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(
-            ser->readerWriter, &e->horizontal, nullptr);
-        rvt = VTableOf(ser->readerWriter);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(
-            ser->readerWriter, &e->vertical, nullptr);
-        rvt = VTableOf(ser->readerWriter);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(
-            ser->readerWriter, &e->offsetX, nullptr);
-        rvt = VTableOf(ser->readerWriter);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(
-            ser->readerWriter, &e->offsetY, nullptr);
-        rvt = VTableOf(ser->readerWriter);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(
-            ser->readerWriter, &e->force, nullptr);
+        rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->horizontal), nullptr);          // +0x98
+        rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->vertical), nullptr);            // +0x98
+        rw()->SerializeInt(e->offsetX, nullptr);              // +0xa0
+        rw()->SerializeInt(e->offsetY, nullptr);              // +0xa0
+        rw()->SerializeBool(reinterpret_cast<bool&>(e->force), nullptr);               // +0x78
     }
 }
 
@@ -231,15 +222,12 @@ bool LayoutDescription::Serialize(void* streamv) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 1800d398a
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-
     int32_t n = _entries._size;                                // 1800d398f
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
+    rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 1800d39b1 (re-read)
         using SetSizeFn = void (*)(void* array, int n);
@@ -250,8 +238,7 @@ bool LayoutDescription::Serialize(void* streamv) {
     RtAddr<EntriesSerFn>(0x180043f50ull)(&ser, n, _entries._data);   // 1800d39d1
 
     if (rw != nullptr) {                                       // 1800d39df
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

@@ -118,8 +118,6 @@ static_assert(kTiTypeIdOffset == 0, "BaseTypeInfo::typeId is at +0x00");
 static_assert(kTiNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
 
 using SerFactoryFn = void* (*)(void* encoding, void* ser, int flag);
-using SerU32Fn     = void  (*)(void* impl, uint32_t* v, const char* name);
-using DeleteFn     = void* (*)(void* self, int flag);
 using StrSerFn     = void  (*)(void* str, void* ser);
 using VoidPtrFn    = void  (*)(void*);
 
@@ -182,8 +180,9 @@ bool StringTable::Serialize(void* streamV) {
     ser.impl = reinterpret_cast<SerFactoryFn>(VSlotOf(enc, slot))(enc, &ser, 0);
 
     int32_t count = _size;                                   // 18011d987
-    reinterpret_cast<SerU32Fn>(VSlotOf(ser.impl, 0xa0))(
-        ser.impl, reinterpret_cast<uint32_t*>(&count), nullptr);     // 18011d99e
+    // +0xa0 is SerializeInt (the old typedef here was named for +0x98).
+    reinterpret_cast<IO::ReaderWriter*>(ser.impl)->SerializeInt(     // B.3.x bridge
+        count, nullptr);                                             // 18011d99e
 
     // The direction is RE-READ from the stream here, not cached from above:
     // 18011d9a4 reloads [RSP+0x28] and 18011d9a9 tests [RAX+0x8] again.
@@ -205,7 +204,7 @@ bool StringTable::Serialize(void* streamV) {
     }
 
     if (ser.impl != nullptr) {                               // 18011d9f9
-        reinterpret_cast<DeleteFn>(VSlotOf(ser.impl, 0))(ser.impl, 1);   // 18011da06
+        reinterpret_cast<IO::ReaderWriter*>(ser.impl)->DeletingDtor(1);  // 18011da06  B.3.x bridge
     }
     return true;                                             // 18011da08
 }

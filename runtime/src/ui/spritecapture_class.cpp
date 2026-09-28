@@ -77,10 +77,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-// The int32 slot every scalar goes through. See the QWORD/DWORD note on Draw's
-// sibling in runtime/src/ui/animatedimagedescription.cpp.
-using ScalarFn = void (*)(void* rw, void* value, const char* name);
-
 }  // namespace
 
 // 0x18003c7f0 / 0x18003c810: the class's own BaseTypeInfo node at +0 and +8.
@@ -179,15 +175,12 @@ bool SpriteCapture::Serialize(void* streamv) {
     void*  factory = stream->encodingFactory;                // 1800d9567
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;     // 1800d9571 CMP / JNZ
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int zero);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                   // 1800d9582
 
-    void** rvt = VTableOf(rw);
-    ScalarFn scalar = reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8]);
-
     int32_t n = _sheets.size;       // 1800d9586  _sheets._size
-    scalar(rw, &n, nullptr);                                 // 1800d959b
+    rw->SerializeInt(n, nullptr);                            // 1800d959b
 
     using SetSizeFn = void (*)(void* array, int n);
     using WalkFn    = void (*)(Serializer* ser, int count, void* data);
@@ -197,11 +190,11 @@ bool SpriteCapture::Serialize(void* streamv) {
     }
     RtAddr<WalkFn>(0x18003eb60ull)(&ser, n, _sheets.data);
 
-    scalar(rw, &_width, nullptr);                           // 1800d95d5  _width
-    scalar(rw, &_height, nullptr);                           // 1800d95e9  _height
+    rw->SerializeInt(_width, nullptr);                       // 1800d95d5  _width
+    rw->SerializeInt(_height, nullptr);                      // 1800d95e9  _height
 
     n = _entries.size;               // 1800d95ef  _entries._size
-    scalar(rw, &n, nullptr);                                 // 1800d9604
+    rw->SerializeInt(n, nullptr);                            // 1800d9604
 
     if (ser.stream->mode == 0) {                             // 1800d960e (re-read)
         RtAddr<SetSizeFn>(0x18004ba90ull)(&_entries, n);      // 1800d961b
@@ -248,8 +241,7 @@ bool SpriteCapture::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {                                     // 1800d96da
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);                                 // slot 0, flag 1
     }
     return true;                                             // 1800d96e9 MOV AL,1
 }
@@ -421,25 +413,21 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void*
     using StrSerFn = void (*)(void* str, Serializer* ser);
     StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
 
+    // Re-read before every call (see above), then dispatched by name.
+    auto rw = [ser]() { return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter); };  // B.3.x bridge
+    auto i32 = [](uint8_t* p) -> int32_t& { return *reinterpret_cast<int32_t*>(p); };
+
     for (int i = 0; i < count; ++i, e += 0x28) {
-        void* rw = ser->readerWriter;
-        void** rvt = VTableOf(rw);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x00, nullptr);
+        rw()->SerializeInt(i32(e + 0x00), nullptr);
 
         strSer(e + 0x08, ser);                                // 18004c10b
 
-        rw = ser->readerWriter; rvt = VTableOf(rw);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x10, nullptr);
-        rw = ser->readerWriter; rvt = VTableOf(rw);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x14, nullptr);
-        rw = ser->readerWriter; rvt = VTableOf(rw);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x18, nullptr);
-        rw = ser->readerWriter; rvt = VTableOf(rw);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, e + 0x1c, nullptr);
-        rw = ser->readerWriter; rvt = VTableOf(rw);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarFloat / 8])(rw, e + 0x20, nullptr);
-        rw = ser->readerWriter; rvt = VTableOf(rw);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, e + 0x24, nullptr);
+        rw()->SerializeInt(i32(e + 0x10), nullptr);
+        rw()->SerializeInt(i32(e + 0x14), nullptr);
+        rw()->SerializeInt(i32(e + 0x18), nullptr);
+        rw()->SerializeInt(i32(e + 0x1c), nullptr);
+        rw()->SerializeFloat(*reinterpret_cast<float*>(e + 0x20), nullptr);
+        rw()->SerializeUInt(*reinterpret_cast<uint32_t*>(e + 0x24), nullptr);
     }
 }
 

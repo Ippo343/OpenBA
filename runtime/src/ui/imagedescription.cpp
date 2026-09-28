@@ -108,16 +108,16 @@ bool ImageDescription::Serialize(void* streamv) {
     ElementDescription::Serialize(stream);                     // 1801184ca
 
     rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 1801184fa
+    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1801184fa
 
     using FieldSerFn = void (*)(void* field, rtdesc::Serializer* ser);
     rtdesc::RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);   // 180118508 ExternalPtr<SpriteSheet>
     rtdesc::RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);    // 180118516 String
 
-    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &_width);
-    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &_height);
+    rw->SerializeInt(_width, nullptr);
+    rw->SerializeInt(_height, nullptr);
 
-    rtdesc::DestroyReaderWriter(rw);                           // 18011854b
+    if (rw != nullptr) rw->DeletingDtor(1);                    // 18011854b
     return true;
 }
 

@@ -148,14 +148,9 @@ int32_t DecodeUtf8(const void* src, const void* end, int32_t* cp) {
 const char kEllipsisText[] = "...";
 const char kSpaceText[]    = " ";
 
-// ---- the reader/writer's scalar and array doors ----------------------------
-using ScalarFn = void (*)(void* rw, void* value, const char* name);
-using ArrayFn  = void (*)(void* rw, int32_t n, void* data, const char* name);
-using VersionFn = int32_t (*)(void* rw);
-using RwDtorFn  = void (*)(void* rw, int flag);
-
-void ScalarInt(void* rw, void* value) {
-    reinterpret_cast<ScalarFn>(VTableOf(rw)[rt::io::rw_vtbl::kScalarInt / 8])(rw, value, nullptr);
+// ---- the reader/writer's scalar slot (+0xa0), by name -----------------------
+void ScalarInt(IO::ReaderWriter* rw, void* value) {
+    rw->SerializeInt(*static_cast<int32_t*>(value), nullptr);
 }
 
 // The per-codepoint advance walk, shared by both of Serialize's measuring
@@ -304,8 +299,8 @@ bool Font::Serialize(void* streamv) {
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? rt::io::encoding_vtbl::kCreateReader
                                           : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int two);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 2);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int two);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 2);
     ser.readerWriter = rw;                                           // 180117720
 
     StringSerialize(p + 0x20, &ser);                                 // 18011772c
@@ -321,9 +316,7 @@ bool Font::Serialize(void* streamv) {
     RtAddr<PairFn>(0x180004590ull)(p + 0x60, &ser);                  // 1801177af  ExternalPtr<SpriteSheet>
     RtAddr<PairFn>(0x180014520ull)(p + 0x68, &ser);                  // 1801177bc  ExternalPtr<MaterialInstance>
 
-    void** rvt = VTableOf(rw);
-    const int32_t version =
-        reinterpret_cast<VersionFn>(rvt[rt::io::rw_vtbl::kGetVersion / 8])(rw);   // 1801177c8
+    const int32_t version = rw->GetVersion();                        // 1801177c8
 
     if (version < 2) {                                               // 1801177ce
         // ---- legacy uint16 codepoint table -----------------------
@@ -338,8 +331,7 @@ bool Font::Serialize(void* streamv) {
             RtAddr<U16SetSizeFn>(0x1800774d0ull)(&tmp, n);           // 18011780b
         }
 
-        reinterpret_cast<ArrayFn>(rvt[rt::io::rw_vtbl::kArrayUShort / 8])(
-            rw, n, tmp._data, nullptr);                              // 180117827
+        rw->SerializeUShortArray(n, tmp._data, nullptr);             // 180117827 (+0x50)
 
         using I32SetSizeFn = void (*)(void* array, int32_t n);
         RtAddr<I32SetSizeFn>(0x18002fea0ull)(p + 0x30, tmp._size);   // 180117833
@@ -365,8 +357,8 @@ bool Font::Serialize(void* streamv) {
             RtAddr<I32SetSizeFn>(0x18002fea0ull)(p + 0x30, n);       // 1801178da
         }
 
-        reinterpret_cast<ArrayFn>(rvt[rt::io::rw_vtbl::kArrayInt / 8])(
-            rw, n, *reinterpret_cast<void**>(p + 0x30), nullptr);    // 1801178ef
+        rw->SerializeIntArray(n, *reinterpret_cast<int32_t**>(p + 0x30),
+                              nullptr);                              // 1801178ef (+0x48)
     }
 
     // ---- the glyph table: four separate int32 scalars per row ----
@@ -395,8 +387,7 @@ bool Font::Serialize(void* streamv) {
 
     ScalarInt(rw, p + 0x54);                                         // 1801179a6
 
-    const int32_t version2 =
-        reinterpret_cast<VersionFn>(rvt[rt::io::rw_vtbl::kGetVersion / 8])(rw);   // 1801179b3
+    const int32_t version2 = rw->GetVersion();                       // 1801179b3
 
     if (version2 >= 1) {                                             // 1801179b6
         ScalarInt(rw, p + 0x58);                                     // 1801179c9
@@ -416,7 +407,7 @@ bool Font::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {                                             // 180117b32
-        reinterpret_cast<RwDtorFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);                                         // slot 0, flag 1
     }
     return true;                                                     // 180117b3e MOV AL,1
 }

@@ -74,9 +74,6 @@ using OperatorNewFn    = void* (*)(uint64_t size);
 using SetUpperLeftFn   = void  (*)(void* dlgInstance, int x, int y, bool centre);
 using DynArrayPushFn   = void  (*)(void* array, int newSize, const void* fill);
 using CloseDialogFn    = void  (*)(void* ui, void** dlgInstance);
-// UI::DialogInstance vtable slot 4 (+0x20) is OnOpened (RULE B6-1.2) — block
-// B's class, reached through its table.
-using DialogOnOpenedFn = void  (*)(void* self);
 using ArrayDtorFn      = void* (*)(void* array);
 
 }  // namespace
@@ -200,7 +197,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         U32(_openDialog, kDlgInstFlags) |= 2u;
 
         void* pushed = _openDialog;
-        VSlot<DialogOnOpenedFn>(pushed, 4)(pushed);
+        static_cast<DialogInstance*>(pushed)->OnOpened();              // DialogInstance slot 4
         uint8_t* u = reinterpret_cast<uint8_t*>(ui);
         RtAddr<DynArrayPushFn>(0x18007a0d0ull)(u + kUiDialogs,
                                                I32(u, kUiDialogCount) + 1, &pushed);

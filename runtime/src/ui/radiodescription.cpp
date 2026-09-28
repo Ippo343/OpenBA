@@ -94,11 +94,11 @@ bool RadioDescription::Serialize(void* streamv) {
     GroupDescription::Serialize(stream);                       // 1800d5a9a
 
     rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 1800d5aca
+    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800d5aca
 
-    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &_activeRadio);
+    rw->SerializeInt(_activeRadio, nullptr);
 
-    rtdesc::DestroyReaderWriter(rw);                           // 1800d5aed
+    if (rw != nullptr) rw->DeletingDtor(1);                    // 1800d5aed
     return true;
 }
 

@@ -154,8 +154,8 @@ bool TextDescription::Serialize(void* streamv) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;       // Create{Reader,Writer}
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 1);  // R8D=1
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 1);  // R8D=1
     ser.readerWriter = rw;                                     // 18011ee7d
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
@@ -163,16 +163,12 @@ bool TextDescription::Serialize(void* streamv) {
     RtAddr<FieldSerFn>(0x1800042a0ull)(&_stringTable2, &ser);  // 18011ee99 ExternalPtr<StringTable>
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_name, &ser);          // 18011eea7 String
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(rw, &_b84, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(rw, &_b85, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &_i88, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_u80, nullptr);
+    rw->SerializeBool(reinterpret_cast<bool&>(_b84), nullptr);
+    rw->SerializeBool(reinterpret_cast<bool&>(_b85), nullptr);
+    rw->SerializeInt(_i88, nullptr);
+    rw->SerializeUInt(_u80, nullptr);
 
-    using GetVersionFn = int32_t (*)(void* rw);
-    const int32_t rwVersion =
-        reinterpret_cast<GetVersionFn>(rvt[rt::io::rw_vtbl::kGetVersion / 8])(rw);  // 18011ef0e
+    const int32_t rwVersion = rw->GetVersion();                // 18011ef0e
 
     bool emitTail = (rwVersion >= 1);                          // 18011ef11 CMP EAX,1 / JGE
     if (!emitTail) {
@@ -181,12 +177,11 @@ bool TextDescription::Serialize(void* streamv) {
         emitTail = !reinterpret_cast<EncPredFn>(evt[0])(stream->encodingFactory);
     }
     if (emitTail) {
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_i8c, nullptr);
+        rw->SerializeInt(_i8c, nullptr);
     }
 
     if (rw != nullptr) {                                       // 18011ef41
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

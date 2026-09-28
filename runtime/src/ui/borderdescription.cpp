@@ -123,14 +123,14 @@ bool BorderDescription::Serialize(void* streamv) {
     ElementDescription::Serialize(stream);                  // 18010fe3a
 
     Serializer ser = { stream, nullptr };                   // [RSP+0x28], [RSP+0x30]
-    void* rw = MakeReaderWriter(stream, &ser);              // 18010fe62 / 18010fe67
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);  // 18010fe62 / 18010fe67
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
     RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser); // 18010fe78 ExternalPtr<SpriteSheet>
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
         RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName[i], &ser);
 
-    DestroyReaderWriter(rw);                                // 18010ff23
+    if (rw != nullptr) rw->DeletingDtor(1);                 // 18010ff23
     return true;                                            // MOV AL,1
 }
 

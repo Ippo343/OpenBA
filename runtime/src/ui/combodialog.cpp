@@ -120,6 +120,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/ComboDialog.h"
+#include "../../types/ui/Element.h"     // B3X W0: the root's Contains by name
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
 
 namespace RtUI {
@@ -220,9 +221,8 @@ void ComboDialog::OnUpdate(const System::Time& /*time*/) {
     if ((_flags & 0x4) == 0) {                                           // 180111c3f
         uint8_t* root = static_cast<uint8_t*>(_root);
         if (_flags & 0x8) {                                              // 180111c47
-            using ContainsFn = bool (*)(void*, int32_t, int32_t, void*);
-            void** vt = *reinterpret_cast<void***>(root);
-            if (reinterpret_cast<ContainsFn>(vt[0x48 / 8])(root, mx, my, _ui))
+            if (reinterpret_cast<Element*>(root)->Contains(              // Element slot 9
+                    mx, my, static_cast<UserInterface*>(_ui)))
                 return;                                                  // 180111c55
         } else {
             const int32_t l = *reinterpret_cast<int32_t*>(root + 0x68);
