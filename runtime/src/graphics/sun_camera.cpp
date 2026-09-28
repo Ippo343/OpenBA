@@ -119,8 +119,6 @@ inline float AbsF(float v) {
     float r; std::memcpy(&r, &b, 4); return r;
 }
 
-
-
 // ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now.
 void** SlotVideoDevice() { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
 void** SlotVideoConfig() { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }
@@ -396,8 +394,5 @@ extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* r
 
 int RtGraphicsSunCameraRegister() {
     int n = 0;
-    RegisterRuntimeExport("?GetSunCamera@SunLight@Graphics@@QEBA?AVCamera@2@AEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_SunLight_GetSunCamera); ++n;
-    RegisterRuntimeAddr(0x180107010ull, (void*)&RtGraphics_SunLight_GetSunCamera);
     return n;
 }

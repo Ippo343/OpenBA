@@ -65,7 +65,6 @@ using Graphics::FrameCopyImageBuffer;
 using Graphics::GeneratedImageBuffer;
 using Graphics::ReflectionImageBuffer;
 
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -78,7 +77,6 @@ namespace {
 // `?_typeInfo@` rows are MINTED and PROMOTED (standalone/reg_mint_promoted.cpp
 // :936-992). By address we would read the DLL's copy while the rest of the tree
 // reads the minted one — the split-brain shape mainloop_video.cpp:303 warns of.
-
 
 // ---------------------------------------------------------------------------
 // The named dependencies, called by name (B3R).
@@ -150,7 +148,6 @@ bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
 // `EmitFloatArray` is `ser.Serialize(4, &_planeX, nullptr)`, the non-virtual
 // forwarder that reaches +0x28.
 // ---------------------------------------------------------------------------
-
 
 }  // namespace
 
@@ -719,28 +716,10 @@ int RtGraphicsImageBufferDerivedRegister() {
     // banner above the Reflection section). The factory pairs (B39_RULES D2) are
     // the classes' own statics, by name AND address; the minted `?_typeInfo@`
     // records resolve them.
-    RegisterRuntimeExport("?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::GeneratedImageBuffer::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18001edf0ull, (void*)&Graphics::GeneratedImageBuffer::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::GeneratedImageBuffer::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18001ee00ull, (void*)&Graphics::GeneratedImageBuffer::CreateInPlaceObject);
-    RegisterRuntimeExport("?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::FrameCopyImageBuffer::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18001f0a0ull, (void*)&Graphics::FrameCopyImageBuffer::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::FrameCopyImageBuffer::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18001f120ull, (void*)&Graphics::FrameCopyImageBuffer::CreateInPlaceObject);
 
     // ---- Graphics::ReflectionImageBuffer -----------------------------------
     // The factory pair (B39_RULES D2), the class's own statics, by name AND
     // address; the minted `?_typeInfo@ReflectionImageBuffer` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::ReflectionImageBuffer::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x1800222c0ull, (void*)&Graphics::ReflectionImageBuffer::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::ReflectionImageBuffer::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x180022370ull, (void*)&Graphics::ReflectionImageBuffer::CreateInPlaceObject);
 
     return n;
 }

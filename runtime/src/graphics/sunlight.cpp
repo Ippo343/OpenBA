@@ -395,7 +395,6 @@ void Graphics::SunLight::InitFields() {
     self->_renderBuffer = nullptr;
     self->_base._materialTypeFlags = 0x8000;
 
-
     if (DeviceSupportsColourShadowTarget()) {
         self->_colourTarget = NewImageBuffer();
         ImageBufferCreate(self->_colourTarget, 0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
@@ -435,10 +434,6 @@ int RtGraphicsSunLightRegister() {
     int n = 0;
 
     // (ENDGAME B.3.9 pilot: the ??0 / ??1 SunLight doors are retired -- see above.)
-    RegisterRuntimeExport("?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z",
-                          (void*)&Graphics_SunLight_Set);
-    RegisterRuntimeAddr(0x180107f10, (void*)&Graphics_SunLight_Set);
-    n++;
 
     printf("[RtPort] Graphics::SunLight (lane GFX2): %d exports registered\n", n);
     return n;

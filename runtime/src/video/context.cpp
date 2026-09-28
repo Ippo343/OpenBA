@@ -178,8 +178,6 @@ using Video::Viewport;
 using RtVideo::RenderBufferPrefix;
 using RtVideo::kContextSize;
 
-
-
 namespace {
 
 // ENDGAME B.3.5 block J — `BackendSlot<Fn>(this, byteOffset)` IS GONE. It read
@@ -899,99 +897,36 @@ int RtVideoContextRegister() {
     int count = 0;
 
     // ---- state mutators (replay oracle) ------------------------------------
-    RegisterRuntimeExport("?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z", (void*)&RtVideo_Context_SetColor); ++count;
-    RegisterRuntimeAddr(0x18001a8e0, (void*)&RtVideo_Context_SetColor);
-
-    RegisterRuntimeExport("?SetInverseScale@Context@Video@@QEAAXMMMM@Z", (void*)&RtVideo_Context_SetInverseScale); ++count;
-    RegisterRuntimeAddr(0x18001a880, (void*)&RtVideo_Context_SetInverseScale);
-
-    RegisterRuntimeExport("?SetTime@Context@Video@@QEAAXM@Z", (void*)&RtVideo_Context_SetTime); ++count;
-    RegisterRuntimeAddr(0x18001a330, (void*)&RtVideo_Context_SetTime);
-
-    RegisterRuntimeExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z", (void*)&RtVideo_Context_SetFog); ++count;
-    RegisterRuntimeAddr(0x18001a360, (void*)&RtVideo_Context_SetFog);
-
-    RegisterRuntimeExport("?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z", (void*)&RtVideo_Context_SetViewport); ++count;
-    RegisterRuntimeAddr(0x18001a060, (void*)&RtVideo_Context_SetViewport);
-
-    RegisterRuntimeExport("?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z", (void*)&RtVideo_Context_SetImageBuffer); ++count;
-    RegisterRuntimeAddr(0x180019ed0, (void*)&RtVideo_Context_SetImageBuffer);
-
-    RegisterRuntimeExport("?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z", (void*)&RtVideo_Context_SetVertexBuffer); ++count;
-    RegisterRuntimeAddr(0x180019f20, (void*)&RtVideo_Context_SetVertexBuffer);
-
-    RegisterRuntimeExport("?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z", (void*)&RtVideo_Context_SetRenderBuffer); ++count;
-    RegisterRuntimeAddr(0x1800f2100, (void*)&RtVideo_Context_SetRenderBuffer);
-
-    RegisterRuntimeExport("?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z", (void*)&RtVideo_Context_SetDefaultRenderBuffer); ++count;
-    RegisterRuntimeAddr(0x1800ef3c0, (void*)&RtVideo_Context_SetDefaultRenderBuffer);
-
-    RegisterRuntimeExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z", (void*)&RtVideo_Context_SetTransform); ++count;
-    RegisterRuntimeAddr(0x18001a6b0, (void*)&RtVideo_Context_SetTransform);
 
     // WAVE 28 LANE MISC. Name spelled out as a literal, not kSetTransformScale,
     // for the same reason the banner at the top of this file gives: the census
     // cannot see through a named constant.
-    RegisterRuntimeExport("?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z", (void*)&RtVideo_Context_SetTransformScale); ++count;
-    RegisterRuntimeAddr(0x18001a400, (void*)&RtVideo_Context_SetTransformScale);
-
-    RegisterRuntimeExport("?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z", (void*)&RtVideo_Context_SetCamera); ++count;
-    RegisterRuntimeAddr(0x18001a150, (void*)&RtVideo_Context_SetCamera);
-
-    RegisterRuntimeExport("?Reset@Context@Video@@QEAAXXZ", (void*)&RtVideo_Context_Reset); ++count;
-    RegisterRuntimeAddr(0x1800f1e50, (void*)&RtVideo_Context_Reset);
-
-    RegisterRuntimeExport("?AddVertex@Context@Video@@QEAAXPEBX@Z", (void*)&RtVideo_Context_AddVertex); ++count;
-    RegisterRuntimeAddr(0x18001ad40, (void*)&RtVideo_Context_AddVertex);
-
-    RegisterRuntimeExport("?AddVertices@Context@Video@@QEAAXHPEBX@Z", (void*)&RtVideo_Context_AddVertices); ++count;
-    RegisterRuntimeAddr(0x18001ad70, (void*)&RtVideo_Context_AddVertices);
 
     // ---- backend forwarders (thunk oracle) ---------------------------------
     // Each site is static so it survives past this function and shows up in
     // with the one call VerifyThunk makes.
     {
-        RegisterRuntimeExport("?Clear@Context@Video@@QEAAXIIMH@Z", (void*)&RtVideo_Context_Clear); ++count;
-        RegisterRuntimeAddr(0x1800f23f0, (void*)&RtVideo_Context_Clear);
     }
     {
-        RegisterRuntimeExport("?DrawIndexed@Context@Video@@QEAAXW4PrimitiveType@12@HHHHH@Z", (void*)&RtVideo_Context_DrawIndexed); ++count;
-        RegisterRuntimeAddr(0x1800f2410, (void*)&RtVideo_Context_DrawIndexed);
     }
     {
-        RegisterRuntimeExport("?GetMaxDynamicInstances@Context@Video@@QEBAHHHH@Z", (void*)&RtVideo_Context_GetMaxDynamicInstances); ++count;
-        RegisterRuntimeAddr(0x1800f21d0, (void*)&RtVideo_Context_GetMaxDynamicInstances);
     }
     {
-        RegisterRuntimeExport("?BeginVertices@Context@Video@@QEAA_NHH@Z", (void*)&RtVideo_Context_BeginVertices); ++count;
-        RegisterRuntimeAddr(0x1800f21b0, (void*)&RtVideo_Context_BeginVertices);
     }
     {
-        RegisterRuntimeExport("?EndVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", (void*)&RtVideo_Context_EndVertices); ++count;
-        RegisterRuntimeAddr(0x1800f2190, (void*)&RtVideo_Context_EndVertices);
     }
     {
-        RegisterRuntimeExport("?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z", (void*)&RtVideo_Context_BeginIndexedVertices); ++count;
-        RegisterRuntimeAddr(0x1800f2170, (void*)&RtVideo_Context_BeginIndexedVertices);
     }
     {
-        RegisterRuntimeExport("?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", (void*)&RtVideo_Context_EndIndexedVertices); ++count;
-        RegisterRuntimeAddr(0x1800f2150, (void*)&RtVideo_Context_EndIndexedVertices);
     }
     {
-        RegisterRuntimeExport("?BeginInstancedIndexedVertices@Context@Video@@QEAA_NHHHH@Z", (void*)&RtVideo_Context_BeginInstancedIndexedVertices); ++count;
-        RegisterRuntimeAddr(0x1800f2130, (void*)&RtVideo_Context_BeginInstancedIndexedVertices);
     }
     {
-        RegisterRuntimeExport("?EndInstancedIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", (void*)&RtVideo_Context_EndInstancedIndexedVertices); ++count;
-        RegisterRuntimeAddr(0x1800f2110, (void*)&RtVideo_Context_EndInstancedIndexedVertices);
     }
 
     // BATCH 8: Math::Matrix::operator!=, a non-virtual leaf with no slot to verify.
 
     // BATCH 8: SetBones — a plain public export, no vtable slot to verify.
-    RegisterRuntimeExport("?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z", (void*)&RtVideo_Context_SetBones); ++count;
-    RegisterRuntimeAddr(0x18001a780, (void*)&RtVideo_Context_SetBones);
 
     // ENDGAME B.3.5 block D1 — `Video::Viewport`'s two comparison operators.
     // NEW ROWS. Both names were read out of the shipped export directory and
@@ -1001,10 +936,6 @@ int RtVideoContextRegister() {
     // the rows were written). The other three `Video::Viewport` exports — the two
     // constructors 0x180018210 / 0x180018220 and `??4` 0x1800181f0 — stay
     // unported DOORS for the triviality reason in Context.h's banner.
-    RegisterRuntimeExport("??8Viewport@Video@@QEBA_NAEBV01@@Z", (void*)&RtVideo_Viewport_Equal); ++count;
-    RegisterRuntimeAddr(0x180018240, (void*)&RtVideo_Viewport_Equal);
-    RegisterRuntimeExport("??9Viewport@Video@@QEBA_NAEBV01@@Z", (void*)&RtVideo_Viewport_NotEqual); ++count;
-    RegisterRuntimeAddr(0x180018270, (void*)&RtVideo_Viewport_NotEqual);
 
     return count;
 }

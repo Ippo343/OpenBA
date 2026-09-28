@@ -101,7 +101,6 @@ namespace {
 
 using ArrayHdr = Collection::Array<uint8_t>;
 
-
 // ---------------------------------------------------------------------------
 // Record strides and field offsets, all of them already asserted next door.
 // ---------------------------------------------------------------------------
@@ -411,45 +410,6 @@ extern "C" void* RtGraphics_InterpolatedState_Transform_Lerp(
 // ============================================================================
 int RtGraphicsAnimationTransformsRegister() {
     int n = 0;
-
-    RegisterRuntimeExport(
-        "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@"
-        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@"
-        "AEBVTime@System@@2M_N@Z",
-        (void*)&RtGraphics_AnimationState_PlayAnimation);                       ++n;
-    RegisterRuntimeAddr(0x1800fdf50ull, (void*)&RtGraphics_AnimationState_PlayAnimation);
-
-    RegisterRuntimeExport(
-        "?GetInstanceId@AnimationManager@Graphics@@QEAAHV?$ExternalPtr@VAnimationGroup@"
-        "Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@@Z",
-        (void*)&RtGraphics_AnimationManager_GetInstanceId);                     ++n;
-    RegisterRuntimeAddr(0x1800fb9d0ull, (void*)&RtGraphics_AnimationManager_GetInstanceId);
-
-    RegisterRuntimeExport(
-        "?CopyInstancedToUnique@AnimationState@Graphics@@AEBAXAEBV?$Array@UNode@"
-        "GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@"
-        "VTransform@Math@@@2@H@Z",
-        (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);               ++n;
-    RegisterRuntimeAddr(0x1800fd4c0ull, (void*)&RtGraphics_AnimationState_CopyInstancedToUnique);
-
-    RegisterRuntimeExport(
-        "?UpdateNodes@AnimationState@Graphics@@AEAAXMAEBV?$Array@UNode@GraphicsMesh@"
-        "Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@VTransform@"
-        "Math@@@2@PEAV56@AEAVVector3@6@@Z",
-        (void*)&RtGraphics_AnimationState_UpdateNodes);                         ++n;
-    RegisterRuntimeAddr(0x1800fcc20ull, (void*)&RtGraphics_AnimationState_UpdateNodes);
-
-    RegisterRuntimeExport(
-        "?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z",
-        (void*)&RtGraphics_MeshInstance_GetBones);                              ++n;
-    RegisterRuntimeAddr(0x180100070ull, (void*)&RtGraphics_MeshInstance_GetBones);
-
-    RegisterRuntimeExport(
-        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@"
-        "AEBVScalar@4@@Z",
-        (void*)&RtGraphics_InterpolatedState_Transform_Lerp);                   ++n;
-    RegisterRuntimeAddr(0x18001aff0ull,
-                        (void*)&RtGraphics_InterpolatedState_Transform_Lerp);
 
     return n;
 }

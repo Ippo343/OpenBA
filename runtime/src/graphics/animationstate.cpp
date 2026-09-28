@@ -738,31 +738,5 @@ int RtCollectionGraphicsAnimRegister();
 int RtGraphicsAnimationStateRegister() {
     int n = RtCollectionGraphicsAnimRegister();
 
-    RegisterRuntimeExport("??0Node@GraphicsMesh@Graphics@@QEAA@AEBU012@@Z",
-                          (void*)&RtGraphics_MeshNode_CopyCtor);                        ++n;
-    RegisterRuntimeAddr  (0x1800127f0ull, (void*)&RtGraphics_MeshNode_CopyCtor);
-    RegisterRuntimeAddr  (0x18005b660ull, (void*)&RtGraphics_AnimState_CopyCtor);       ++n;
-    RegisterRuntimeAddr  (0x18005b700ull, (void*)&RtGraphics_AnimInstance_CopyCtor);    ++n;
-
-    RegisterRuntimeAddr  (0x180059820ull, (void*)&RtGraphics_SerializeTransformArray);  ++n;
-    RegisterRuntimeAddr  (0x18005c230ull, (void*)&RtGraphics_SerializeInterpTransforms);++n;
-    RegisterRuntimeAddr  (0x18005c120ull, (void*)&RtGraphics_SerializeMeshNodes);       ++n;
-    RegisterRuntimeAddr  (0x18005cb40ull, (void*)&RtGraphics_SerializeAnimLayers);      ++n;
-    RegisterRuntimeAddr  (0x18005c2c0ull, (void*)&RtGraphics_SerializeAnimStates);      ++n;
-    RegisterRuntimeAddr  (0x18005c660ull, (void*)&RtGraphics_SerializeAnimInstances);   ++n;
-
-    RegisterRuntimeExport("?Serialize@AnimationState@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtGraphics_AnimationState_Serialize);                 ++n;
-    RegisterRuntimeAddr  (0x1800fe250ull, (void*)&RtGraphics_AnimationState_Serialize);
-    RegisterRuntimeExport("?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ",
-                          (void*)&RtGraphics_AnimationState_Reset);                     ++n;
-    RegisterRuntimeAddr  (0x1800fd930ull, (void*)&RtGraphics_AnimationState_Reset);
-    RegisterRuntimeExport("?GetPose@AnimationManager@Graphics@@QEBAXHPEAVTransform@Math@@H@Z",
-                          (void*)&RtGraphics_AnimationManager_GetPose);                 ++n;
-    RegisterRuntimeAddr  (0x1800fb8e0ull, (void*)&RtGraphics_AnimationManager_GetPose);
-    RegisterRuntimeExport(
-        "?GetPoseAtTime@Animation@Graphics@@QEBAXAEBVTime@System@@0PEAVTransform@Math@@H@Z",
-        (void*)&RtGraphics_Animation_GetPoseAtTime);                                    ++n;
-    RegisterRuntimeAddr  (0x1800faca0ull, (void*)&RtGraphics_Animation_GetPoseAtTime);
     return n;
 }

@@ -88,7 +88,6 @@ bool CallIsDerivedFrom(const void* obj, uint32_t typeId) {
 // (the function-local cache over the minted record is gone, B9-10).
 uint32_t GeneratedImageBufferTypeId() { return Graphics::GeneratedImageBuffer::TypeId(); }
 
-
 // ---------------------------------------------------------------------------
 // Collection::Array<RendererDrawItem>::Resize(int newCount, const T& fill)
 // retail 0x180063680 — UNEXPORTED, so it is reproduced here rather than called.
@@ -318,21 +317,6 @@ void RtGraphics_Renderer_AddDrawItem(Renderer* self,
 // ============================================================================
 int RtGraphicsWave9GfxRegister() {
     int n = 0;
-
-    RegisterRuntimeExport(
-        "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z",
-        (void*)&RtGraphics_InterpolatedStateTransform_Lerp); ++n;
-    RegisterRuntimeAddr(0x18001aff0, (void*)&RtGraphics_InterpolatedStateTransform_Lerp);
-
-    RegisterRuntimeExport(
-        "?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2@AEBVScene@2@AEBVCamera@2@H@Z",
-        (void*)&RtGraphics_MaterialInstance_RenderTextures); ++n;
-    RegisterRuntimeAddr(0x180102df0, (void*)&RtGraphics_MaterialInstance_RenderTextures);
-
-    RegisterRuntimeExport(
-        "?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z",
-        (void*)&RtGraphics_Renderer_AddDrawItem); ++n;
-    RegisterRuntimeAddr(0x1801057b0, (void*)&RtGraphics_Renderer_AddDrawItem);
 
     return n;
 }

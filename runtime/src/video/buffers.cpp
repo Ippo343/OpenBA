@@ -43,8 +43,6 @@ void RtVideoDeviceUnlock(void** deviceSingleton);
 
 namespace {
 
-
-
 // ENDGAME B.3.5 block VC — `ObjectExternalDtor()` IS GONE. It was an
 // `RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ")` (binding spelling 3)
 // that `~ImageBuffer` used to reach its own base destructor with, next to a
@@ -560,7 +558,6 @@ struct BufferClass {
     void**    (*head)();           // the exported class-static list head
 };
 
-
 const BufferClass kImageClass  = { 0x50, 0x60, false, kImageLinks,  &ImageBufferFirstSurface };
 const BufferClass kIndexClass  = { 0x60, 0x08, true,  kBufferLinks, &IndexBufferFirstBuffer };
 const BufferClass kVertexClass = { 0x68, 0x08, true,  kBufferLinks, &VertexBufferFirstBuffer };
@@ -580,7 +577,6 @@ static_assert(offsetof(VertexBuffer, platformData) == 0x08, "kVertexClass.compan
 static_assert(offsetof(RtVideo::RenderBuffer, platformData) == 0x28, "kRenderClass.companionOff");
 static_assert(offsetof(RtVideo::RenderBuffer, next) == 0x18, "kRenderLinks.next");
 static_assert(offsetof(RtVideo::RenderBuffer, prev) == 0x20, "kRenderLinks.prev");
-
 
 }  // namespace
 
@@ -1011,131 +1007,18 @@ int RtVideoBuffersRegister() {
     int n = 0;
 
     // ENDGAME B.3.9 VS (B39_RULES D2): the class's own factory pair, by name AND VA.
-    RegisterRuntimeExport("?CreateNewObject@ImageBuffer@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::ImageBuffer::CreateNewObject);
-    RegisterRuntimeAddr(0x18001e9f0ull, (void*)&Video::ImageBuffer::CreateNewObject);
-    n++;
-    RegisterRuntimeExport("?CreateInPlaceObject@ImageBuffer@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::ImageBuffer::CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18001ea70ull, (void*)&Video::ImageBuffer::CreateInPlaceObject);
-    n++;
-
-    RegisterRuntimeExport("?Width@ImageBuffer@Video@@QEBAHXZ", (void*)&Video_ImageBuffer_Width);
-    RegisterRuntimeAddr(0x1800f2530, (void*)&Video_ImageBuffer_Width);
-    n++;
-
-    RegisterRuntimeExport("?Height@ImageBuffer@Video@@QEBAHXZ", (void*)&Video_ImageBuffer_Height);
-    RegisterRuntimeAddr(0x1800f24e0, (void*)&Video_ImageBuffer_Height);
-    n++;
-
-    RegisterRuntimeExport("?GetLevelCount@ImageBuffer@Video@@QEBAHXZ", (void*)&Video_ImageBuffer_GetLevelCount);
-    RegisterRuntimeAddr(0x1800f2420, (void*)&Video_ImageBuffer_GetLevelCount);
-    n++;
-
-    RegisterRuntimeExport("?IsCompressed@ImageBuffer@Video@@QEBA_NXZ", (void*)&Video_ImageBuffer_IsCompressed);
-    RegisterRuntimeAddr(0x1800f2480, (void*)&Video_ImageBuffer_IsCompressed);
-    n++;
-
-    RegisterRuntimeExport("?IsDepthBuffer@ImageBuffer@Video@@QEBA_NXZ", (void*)&Video_ImageBuffer_IsDepthBuffer);
-    RegisterRuntimeAddr(0x1800f24c0, (void*)&Video_ImageBuffer_IsDepthBuffer);
-    n++;
-
-    RegisterRuntimeExport("?IsDynamic@ImageBuffer@Video@@QEBA_NXZ", (void*)&Video_ImageBuffer_IsDynamic);
-    RegisterRuntimeAddr(0x1800f24d0, (void*)&Video_ImageBuffer_IsDynamic);
-    n++;
-
-    RegisterRuntimeExport("?IsGenerated@ImageBuffer@Video@@QEBA_NXZ", (void*)&Video_ImageBuffer_IsGenerated);
-    RegisterRuntimeAddr(0x1800f24a0, (void*)&Video_ImageBuffer_IsGenerated);
-    n++;
-
-    RegisterRuntimeExport("?IsRenderBuffer@ImageBuffer@Video@@QEBA_NXZ", (void*)&Video_ImageBuffer_IsRenderBuffer);
-    RegisterRuntimeAddr(0x1800f2460, (void*)&Video_ImageBuffer_IsRenderBuffer);
-    n++;
-
-    RegisterRuntimeExport("?IsRendered@ImageBuffer@Video@@QEBA_NXZ", (void*)&Video_ImageBuffer_IsRendered);
-    RegisterRuntimeAddr(0x1800f2490, (void*)&Video_ImageBuffer_IsRendered);
-    n++;
-
-    RegisterRuntimeExport("?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z", (void*)&Video_ImageBuffer_CopyToTexture);
-    RegisterRuntimeAddr(0x1800f3380, (void*)&Video_ImageBuffer_CopyToTexture);
-    n++;
-
-    RegisterRuntimeExport("?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z", (void*)&Video_ImageBuffer_CopyFromTexture);
-    RegisterRuntimeAddr(0x1800f33a0, (void*)&Video_ImageBuffer_CopyFromTexture);
-    n++;
-
-    RegisterRuntimeExport(
-        "?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@"
-        "W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z",
-        (void*)&Video_ImageBuffer_Create);
-    RegisterRuntimeAddr(0x1800f2680, (void*)&Video_ImageBuffer_Create);
-    n++;
 
     RegisterRuntimeExport("??0IndexBuffer@Video@@QEAA@XZ", (void*)&Video_IndexBuffer_Ctor);
     RegisterRuntimeAddr(0x1800f3490, (void*)&Video_IndexBuffer_Ctor);
-    n++;
-
-    RegisterRuntimeExport("?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z", (void*)&Video_IndexBuffer_Create);
-    RegisterRuntimeAddr(0x1800f3880, (void*)&Video_IndexBuffer_Create);
-    n++;
-
-    RegisterRuntimeExport("?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z", (void*)&Video_IndexBuffer_Set);
-    RegisterRuntimeAddr(0x1800f38a0, (void*)&Video_IndexBuffer_Set);
     n++;
 
     RegisterRuntimeExport("??0VertexBuffer@Video@@QEAA@XZ", (void*)&Video_VertexBuffer_Ctor);
     RegisterRuntimeAddr(0x1800f55f0, (void*)&Video_VertexBuffer_Ctor);
     n++;
 
-    RegisterRuntimeExport("?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z", (void*)&Video_VertexBuffer_Create);
-    RegisterRuntimeAddr(0x1800f59e0, (void*)&Video_VertexBuffer_Create);
-    n++;
-
-    RegisterRuntimeExport("?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z", (void*)&Video_VertexBuffer_Set);
-    RegisterRuntimeAddr(0x1800f5a00, (void*)&Video_VertexBuffer_Set);
-    n++;
-
     // ---- Wave 9 lane W: the six Platform{Construct,Destruct} bodies ----
-    RegisterRuntimeExport("?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ",
-                          (void*)&Video_ImageBuffer_PlatformConstruct);
-    RegisterRuntimeAddr(0x1800f2f40, (void*)&Video_ImageBuffer_PlatformConstruct);
-    n++;
-
-    RegisterRuntimeExport("?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ",
-                          (void*)&Video_ImageBuffer_PlatformDestruct);
-    RegisterRuntimeAddr(0x1800f3020, (void*)&Video_ImageBuffer_PlatformDestruct);
-    n++;
-
-    RegisterRuntimeExport("?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_IndexBuffer_PlatformConstruct);
-    RegisterRuntimeAddr(0x1800f3680, (void*)&Video_IndexBuffer_PlatformConstruct);
-    n++;
-
-    RegisterRuntimeExport("?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_IndexBuffer_PlatformDestruct);
-    RegisterRuntimeAddr(0x1800f3760, (void*)&Video_IndexBuffer_PlatformDestruct);
-    n++;
-
-    RegisterRuntimeExport("?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_VertexBuffer_PlatformConstruct);
-    RegisterRuntimeAddr(0x1800f57e0, (void*)&Video_VertexBuffer_PlatformConstruct);
-    n++;
-
-    RegisterRuntimeExport("?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_VertexBuffer_PlatformDestruct);
-    RegisterRuntimeAddr(0x1800f58c0, (void*)&Video_VertexBuffer_PlatformDestruct);
-    n++;
 
     // ---- Wave 9 lane GFX2: the fourth pair ----
-    RegisterRuntimeExport("?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ",
-                          (void*)&Video_RenderBuffer_PlatformConstruct);
-    RegisterRuntimeAddr(0x1800f4320, (void*)&Video_RenderBuffer_PlatformConstruct);
-    n++;
-
-    RegisterRuntimeExport("?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ",
-                          (void*)&Video_RenderBuffer_PlatformDestruct);
-    RegisterRuntimeAddr(0x1800f4400, (void*)&Video_RenderBuffer_PlatformDestruct);
-    n++;
 
     // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — HELD BACK, see above.
 

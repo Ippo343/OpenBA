@@ -132,8 +132,6 @@
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 
-
-
 // `kSpec_InnerArrayU8` (0x180053f00) is defined in
 // runtime/src/collection/array.cpp but, like `kSpec_EmitterInstance`
 // (runtime/src/audio/audio_effectslot_serialize.cpp), was never added to
@@ -376,10 +374,6 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(Video::ImageBuffer* self,
 // Registration — BY NAME AND BY ADDRESS
 // ============================================================================
 int RtVideoImageBufferSerializeRegister() {
-    RegisterRuntimeExport(
-        "?PlatformSerialize@ImageBuffer@Video@@AEAAXAEAVSerializer@IO@@@Z",
-        (void*)&Video_ImageBuffer_PlatformSerialize);
-    RegisterRuntimeAddr(0x1800f3130, (void*)&Video_ImageBuffer_PlatformSerialize);
     printf("[RtPort] Video::ImageBuffer::PlatformSerialize (Wave 18 lane VRES): "
            "1 export registered\n");
     return 1;

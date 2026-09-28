@@ -641,46 +641,5 @@ extern "C" void Video_Device_ReleaseDynamic(void* self) {
 int RtVideoDynamicResourcesRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?Lock@Device@Video@@QEAAXXZ",
-                          (void*)&Video_Device_Lock); ++n;
-    RegisterRuntimeExport("?Unlock@Device@Video@@QEAAXXZ",
-                          (void*)&Video_Device_Unlock); ++n;
-    RegisterRuntimeExport("?RecreateDynamic@Device@Video@@QEAAXXZ",
-                          (void*)&Video_Device_RecreateDynamic); ++n;
-    RegisterRuntimeExport("?ReleaseDynamic@Device@Video@@QEAAXXZ",
-                          (void*)&Video_Device_ReleaseDynamic); ++n;
-    RegisterRuntimeExport("?RecreateDynamic@ImageBuffer@Video@@SAXXZ",
-                          (void*)&Video_ImageBuffer_RecreateDynamic); ++n;
-    RegisterRuntimeExport("?ReleaseDynamic@ImageBuffer@Video@@SAXXZ",
-                          (void*)&Video_ImageBuffer_ReleaseDynamic); ++n;
-    RegisterRuntimeExport("?RecreateDynamic@IndexBuffer@Video@@SAXXZ",
-                          (void*)&Video_IndexBuffer_RecreateDynamic); ++n;
-    RegisterRuntimeExport("?ReleaseDynamic@IndexBuffer@Video@@SAXXZ",
-                          (void*)&Video_IndexBuffer_ReleaseDynamic); ++n;
-    RegisterRuntimeExport("?RecreateDynamic@VertexBuffer@Video@@SAXXZ",
-                          (void*)&Video_VertexBuffer_RecreateDynamic); ++n;
-    RegisterRuntimeExport("?ReleaseDynamic@VertexBuffer@Video@@SAXXZ",
-                          (void*)&Video_VertexBuffer_ReleaseDynamic); ++n;
-    RegisterRuntimeExport("?RecreateDynamic@RenderBuffer@Video@@SAXXZ",
-                          (void*)&Video_RenderBuffer_RecreateDynamic); ++n;
-    RegisterRuntimeExport("?ReleaseDynamic@RenderBuffer@Video@@SAXXZ",
-                          (void*)&Video_RenderBuffer_ReleaseDynamic); ++n;
-    RegisterRuntimeExport("?Recreate@RenderBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_RenderBuffer_Recreate); ++n;
-
-    RegisterRuntimeAddr(0x18000ca90, (void*)&Video_Device_Lock);
-    RegisterRuntimeAddr(0x18000cac0, (void*)&Video_Device_Unlock);
-    RegisterRuntimeAddr(0x1800f80b0, (void*)&Video_Device_RecreateDynamic);
-    RegisterRuntimeAddr(0x1800f80e0, (void*)&Video_Device_ReleaseDynamic);
-    RegisterRuntimeAddr(0x1800f2d90, (void*)&Video_ImageBuffer_RecreateDynamic);
-    RegisterRuntimeAddr(0x1800f2e80, (void*)&Video_ImageBuffer_ReleaseDynamic);
-    RegisterRuntimeAddr(0x1800f3500, (void*)&Video_IndexBuffer_RecreateDynamic);
-    RegisterRuntimeAddr(0x1800f35d0, (void*)&Video_IndexBuffer_ReleaseDynamic);
-    RegisterRuntimeAddr(0x1800f5660, (void*)&Video_VertexBuffer_RecreateDynamic);
-    RegisterRuntimeAddr(0x1800f5730, (void*)&Video_VertexBuffer_ReleaseDynamic);
-    RegisterRuntimeAddr(0x1800f4030, (void*)&Video_RenderBuffer_RecreateDynamic);
-    RegisterRuntimeAddr(0x1800f40c0, (void*)&Video_RenderBuffer_ReleaseDynamic);
-    RegisterRuntimeAddr(0x1800f4170, (void*)&Video_RenderBuffer_Recreate);
-
     return n;
 }

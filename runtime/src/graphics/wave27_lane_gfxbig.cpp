@@ -122,8 +122,6 @@
 #include "../collection/introsort_msvc.h"
 #include "../system/string.h"
 
-
-
 namespace rtgfxbig {
 
 using RtGraphics::AnimationClipPrefix;
@@ -712,23 +710,8 @@ extern "C" bool RtGraphics_AnimationState_Update(
 int RtGraphicsWave27GfxbigRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ",
-                          (void*)&RtGraphics_MaterialInstance_BuildParameters); ++count;
-    RegisterRuntimeExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@"
-                          "AEBVCamera@2@@Z",
-                          (void*)&RtGraphics_Renderer_Draw); ++count;
-    RegisterRuntimeExport("?Update@AnimationState@Graphics@@QEAA_NAEBVTime@System@@AEBV?$Array@"
-                          "UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$"
-                          "InterpolatedState@VTransform@Math@@@2@PEAV78@AEAVVector3@8@_N6@Z",
-                          (void*)&RtGraphics_AnimationState_Update); ++count;
-
-    RegisterRuntimeAddr(0x180060d30,
-                        (void*)&RtCollection_Array_MaterialParameterSet_SetSize); ++count;
-
     // BATCH 8b: the draw-item sort and its selection-sort callee — see the
     // banner above RtGraphics_Renderer_DrawItemSort.
-    RegisterRuntimeAddr(0x180062d60, (void*)&RtGraphics_Renderer_DrawItemSort); ++count;
-    RegisterRuntimeAddr(0x180063b90, (void*)&RtGraphics_Renderer_DrawItemSortSmall); ++count;
 
     return count;   // 6
 }

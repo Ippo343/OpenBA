@@ -114,10 +114,7 @@
 #include "../../funcs/rt_port.h"
 #include "scene_grid.h"
 
-
-
 namespace rtgfxgrid {
-
 
 namespace {
 
@@ -591,12 +588,6 @@ void FreeGlobals(GlobalList* list) {
 // ============================================================================
 int Register() {
     int n = 0;
-    RegisterRuntimeAddr(0x18005e4a0, (void*)&GridInit);     ++n;
-    RegisterRuntimeAddr(0x18005e5e0, (void*)&GridAdd);      ++n;
-    RegisterRuntimeAddr(0x18005f090, (void*)&GridUnthread); ++n;
-    RegisterRuntimeAddr(0x18005ee30, (void*)&GridReindex);  ++n;
-    RegisterRuntimeAddr(0x18005f1f0, (void*)&FreeGlobals);  ++n;
-    RegisterRuntimeAddr(0x18005f4b0, (void*)&GridThread);   ++n;
     return n;
 }
 

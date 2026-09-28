@@ -983,13 +983,6 @@ int RtGraphicsLightsVtableRegister() {
     // all retired (tools/rt_mint_retired/gfx.txt). The bodies are the members.
 
     // ---- Graphics::SunLight -------------------------------------------------
-    RegisterRuntimeExport("?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",
-                          (void*)&RtGraphics_SunLight_DrawShadowMap); ++n;
-    RegisterRuntimeAddr(0x180106bc0ull, (void*)&RtGraphics_SunLight_DrawShadowMap);
-
-    RegisterRuntimeExport("?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z",
-                          (void*)&RtGraphics_SunLight_Draw); ++n;
-    RegisterRuntimeAddr(0x1801067b0ull, (void*)&RtGraphics_SunLight_Draw);
 
     return n;
 }

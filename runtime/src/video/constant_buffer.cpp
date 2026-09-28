@@ -825,7 +825,6 @@ extern "C" void RtVideo_Context_AssignConstants(void* self) {
     static_cast<Video::Context*>(self)->Video::Context::AssignConstants();
 }
 
-
 // ============================================================================
 // Registration
 //
@@ -843,37 +842,14 @@ extern "C" void RtVideo_Context_AssignConstants(void* self) {
 int RtVideoConstantBufferRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?BeginConstants@ConstantBuffer@Video@@QEAAXAEBVString@System@@0HH_N1H@Z",
-                          (void*)&RtVideo_ConstantBuffer_BeginConstants); ++n;
-    RegisterRuntimeExport("?AddConstant@ConstantBuffer@Video@@QEAAXAEBVString@System@@0H@Z",
-                          (void*)&RtVideo_ConstantBuffer_AddConstant); ++n;
-    RegisterRuntimeExport("?EndConstants@ConstantBuffer@Video@@QEAAXH@Z",
-                          (void*)&RtVideo_ConstantBuffer_EndConstants); ++n;
-    RegisterRuntimeExport("?PlatformCreate@ConstantBuffer@Video@@AEAA_NXZ",
-                          (void*)&RtVideo_ConstantBuffer_PlatformCreate); ++n;
     // ENDGAME B.3.5 block D1 — NEW ROW. `?GetNextUploadIndex@` (0x1800eef90,
     // ordinal 2831) was the body this file carried as the file-local
     // `NextSlotAfter` with no door at all; `?AssignConstants@` drives it seven
     // times per Context construction. The name was checked against
     // standalone/rt_export_addrs.inc, and 0x1800eef90 appeared nowhere in the
     // tree before this row.
-    RegisterRuntimeExport("?GetNextUploadIndex@ConstantBuffer@Video@@QEBAHXZ",
-                          (void*)&RtVideo_ConstantBuffer_GetNextUploadIndex); ++n;
-    RegisterRuntimeAddr(0x1800eef90, (void*)&RtVideo_ConstantBuffer_GetNextUploadIndex);
 
-    RegisterRuntimeAddr(0x1800eed10, (void*)&RtVideo_ConstantBuffer_BeginConstants);
-    RegisterRuntimeAddr(0x1800eec40, (void*)&RtVideo_ConstantBuffer_AddConstant);
-    RegisterRuntimeAddr(0x1800eebf0, (void*)&RtVideo_ConstantBuffer_EndConstants);
-    RegisterRuntimeAddr(0x1800ef010, (void*)&RtVideo_ConstantBuffer_PlatformCreate);
-
-    RegisterRuntimeExport("?AssignConstants@Context@Video@@AEAAXXZ",
-                          (void*)&RtVideo_Context_AssignConstants); ++n;
-    RegisterRuntimeAddr(0x1800ef3d0, (void*)&RtVideo_Context_AssignConstants);
-
-    RegisterRuntimeAddr(0x180053510, (void*)&RtVideo_ConstEntryArraySetSize);
     // Phase 1's two, now that they have callers outside context_lifecycle.cpp.
-    RegisterRuntimeAddr(0x18001cab0, (void*)&RtVideo_ConstEntryArrayDtor);
-    RegisterRuntimeAddr(0x18001cfc0, (void*)&RtVideo_ConstEntryArrayDestroy);
 
     return n;
 }

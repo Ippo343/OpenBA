@@ -110,7 +110,6 @@
 #include "../../types/graphics/Particle.h"          // RtGraphics_Emitter_OperatorDelete
 #include "../picking/scene_grid.h"                  // rtpickgrid::TransformArrayAssign / ArrayDtorTransform
 
-
 namespace rtcoll { void MemFree(void* p); }   // runtime/src/collection/array.cpp
 
 using rt::io::ReaderWriter;
@@ -124,7 +123,6 @@ using RtGraphics::RendererDrawItem;
 using RtGraphics::EdgeMesh;
 
 namespace {
-
 
 // ---------------------------------------------------------------------------
 // Retail vtable constants. Resolved through the NAME (all five are exported
@@ -145,7 +143,6 @@ namespace {
 
 // (ENDGAME B.3.9 GFX: `ExternalDtor`, the ??1External door the retired ??1EdgeMesh
 // door tail-called, is gone; the real ~EdgeMesh chains ~External.)
-
 
 // Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
 // both PORTED (video/buffers.cpp) and registered by name and address.
@@ -541,7 +538,6 @@ constexpr uint32_t kLvlTail     = 0xa8;
 static_assert(kLvlTail + 4 <= kLvlStride, "detail-level fields must fit the 0xb0 stride");
 static_assert(kLvlTriCount == kLvlTriData + 8,
               "the triangle Array's _size must follow its _data, Collection::Array shape");
-
 
 using BufSerFn   = void (*)(void*, Serializer*);
 
@@ -1045,13 +1041,7 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
 extern "C" int RtGraphicsBatchCLeavesRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z",
-                          (void*)&RtGraphics_MaterialInstance_GenerateTextures); ++n;
-    RegisterRuntimeAddr(0x180102eb0ull, (void*)&RtGraphics_MaterialInstance_GenerateTextures);
-
     // (ENDGAME B.3.9 GFX: the ??1ParticleSystemInstance door is retired.)
-
-
 
     RegisterRuntimeExport("??0Animation@Graphics@@QEAA@AEBV01@@Z",
                           (void*)&RtGraphics_Animation_CopyCtor); ++n;
@@ -1062,18 +1052,6 @@ extern "C" int RtGraphicsBatchCLeavesRegister() {
     RegisterRuntimeAddr(0x1800fb290ull, (void*)&RtGraphics_Animation_Dtor);
 
     // (ENDGAME B.3.9 GFX: the ??1EdgeMesh door is retired.)
-
-    RegisterRuntimeExport("?CreateTargets@SpotLight@Graphics@@AEAAXXZ",
-                          (void*)&RtGraphics_SpotLight_CreateTargets); ++n;
-    RegisterRuntimeAddr(0x180106050ull, (void*)&RtGraphics_SpotLight_CreateTargets);
-
-    RegisterRuntimeExport("?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtGraphics_GraphicsMesh_PlatformSerialize); ++n;
-    RegisterRuntimeAddr(0x1800a48e0ull, (void*)&RtGraphics_GraphicsMesh_PlatformSerialize);
-
-    RegisterRuntimeExport("?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z",
-                          (void*)&RtGraphics_Renderer_DrawItemList); ++n;
-    RegisterRuntimeAddr(0x180105240ull, (void*)&RtGraphics_Renderer_DrawItemList);
 
     return n;
 }

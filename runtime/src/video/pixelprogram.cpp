@@ -328,36 +328,6 @@ bool PixelProgram::Serialize(void* streamv) {
 int RtVideoPixelProgramRegister() {
     int n = 0;
     // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
-    RegisterRuntimeExport("?CreateNewObject@PixelProgram@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::PixelProgram::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004e9d0ull, (void*)&Video::PixelProgram::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@PixelProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::PixelProgram::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004ea50ull, (void*)&Video::PixelProgram::CreateInPlaceObject);
-    RegisterRuntimeExport("?TypeId@PixelProgram@Video@@SAIXZ",        (void*)&RtVideo_PixelProgram_TypeId);   ++n;
-    RegisterRuntimeAddr  (0x18004e8d0ull,                             (void*)&RtVideo_PixelProgram_TypeId);
-    RegisterRuntimeExport("?_TypeName@PixelProgram@Video@@CAPEBDXZ",       (void*)&RtVideo_PixelProgram_StaticTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e8a0ull,                                  (void*)&RtVideo_PixelProgram_StaticTypeName);
-    RegisterRuntimeExport("?_ParentTypeName@PixelProgram@Video@@CAPEBDXZ", (void*)&RtVideo_PixelProgram_ParentTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e8b0ull,                                  (void*)&RtVideo_PixelProgram_ParentTypeName);
-    RegisterRuntimeExport("?_FileExtension@PixelProgram@Video@@CAPEBDXZ",  (void*)&RtVideo_PixelProgram_FileExtension); ++n;
-    RegisterRuntimeAddr  (0x18004e890ull,                                  (void*)&RtVideo_PixelProgram_FileExtension);
 
-
-    RegisterRuntimeExport("?GetData@PixelProgram@Video@@QEBAPEBVPixelProgramData@2@XZ",
-                          (void*)&RtVideo_PixelProgram_GetData); ++n;
-    RegisterRuntimeAddr  (0x18004eaa0ull, (void*)&RtVideo_PixelProgram_GetData);
-    RegisterRuntimeExport("?Bind@PixelProgram@Video@@QEBAXAEAVContext@2@H@Z",
-                          (void*)&RtVideo_PixelProgram_Bind); ++n;
-    RegisterRuntimeAddr  (0x1800f3ed0ull, (void*)&RtVideo_PixelProgram_Bind);
-    RegisterRuntimeExport("?PlatformConstruct@PixelProgram@Video@@AEAAXXZ",
-                          (void*)&RtVideo_PixelProgram_PlatformConstructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f3e40ull, (void*)&RtVideo_PixelProgram_PlatformConstructExport);
-    RegisterRuntimeExport("?PlatformCreate@PixelProgram@Video@@AEAA_NXZ",
-                          (void*)&RtVideo_PixelProgram_PlatformCreateExport); ++n;
-    RegisterRuntimeAddr  (0x1800f3eb0ull, (void*)&RtVideo_PixelProgram_PlatformCreateExport);
-    RegisterRuntimeExport("?PlatformDestruct@PixelProgram@Video@@AEAAXXZ",
-                          (void*)&RtVideo_PixelProgram_PlatformDestructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f3e90ull, (void*)&RtVideo_PixelProgram_PlatformDestructExport);
     return n;
 }

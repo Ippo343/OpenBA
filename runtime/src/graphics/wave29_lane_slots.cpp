@@ -65,8 +65,6 @@
 
 using RtGraphics::MeshInstance;
 
-
-
 namespace {
 
 inline uint8_t*       B(void* p)       { return reinterpret_cast<uint8_t*>(p); }
@@ -521,8 +519,6 @@ extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
 // (reference_literal_grep_blind_to_variables.md, one blind spot over.)
 extern "C" int RtGraphicsWave29SlotsRegister() {
     int count = 0;
-    RegisterRuntimeExport("?Update@MeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z", (void*)&RtGraphics_MeshInstance_Update); ++count;
-    RegisterRuntimeExport("?SetSharedInstanceData@MeshInstance@Graphics@@UEBAHAEAVContext@Video@@HM@Z", (void*)&RtGraphics_MeshInstance_SetSharedInstanceData); ++count;
     return count;
 }
 

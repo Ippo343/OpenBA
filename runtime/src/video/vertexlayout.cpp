@@ -109,7 +109,6 @@ void* ActiveDeviceDataPtr() {
 }
 constexpr size_t kDeviceDataCreateVertexLayoutData = 0x70;   // DeviceData vtable slot 14
 
-
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
 // interchangeable in Serializer.h). `name` is nullptr, as retail passes.
@@ -258,7 +257,6 @@ bool VertexLayout::Serialize(void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-
     int32_t n = _elements._size;
     AsRw(rw)->SerializeInt(n, nullptr);
     if (ser.stream->direction == 0) rtcoll::RtColl_ArraySetSize_180056240(&_elements, n);
@@ -286,12 +284,5 @@ bool VertexLayout::Serialize(void* streamv) {
 // the unexported element loop by address.
 int RtVideoVertexLayoutRegister() {
     int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::VertexLayout::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004ddc0ull, (void*)&Video::VertexLayout::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@VertexLayout@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::VertexLayout::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004de40ull, (void*)&Video::VertexLayout::CreateInPlaceObject);
-    RegisterRuntimeAddr  (0x1800563c0ull,                                (void*)&RtVideo_VertexLayout_SerializeElements); ++n;
     return n;
 }

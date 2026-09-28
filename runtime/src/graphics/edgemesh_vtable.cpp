@@ -71,9 +71,6 @@
 #include "../../types/object/External.h"  // RtObject_ExternalPtrSerialize_*
 #include "../collection/array_internal.h"
 
-
-
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -90,7 +87,6 @@ namespace {
 // (graphics_type_records.cpp) and both slots are DECLARE_TYPE's bodies; the
 // RT_DATA_SLOT node readers that stood here are gone.
 // ---------------------------------------------------------------------------
-
 
 typedef uint32_t    (*U32ThisFn)(const void*);
 typedef const char* (*CStrThisFn)(const void*);
@@ -352,7 +348,6 @@ bool EdgeMesh::Serialize(void* stream) {
         ctx.encoding = make(factory, &ctx, 0);
     }
 
-
     // The +0x20 qword no getter names, then the four materials IN FIELD ORDER
     // (mask, skinMask, edge, skinEdge — see Mesh.h's note; the FIELD order and
     // the SetMaterials ARGUMENT order are two groupings of the same four).
@@ -511,13 +506,6 @@ Object::Base* EdgeMesh::CreateInPlaceObject(void* place) {
 // ============================================================================
 int RtGraphicsEdgeMeshVtableRegister() {
     int n = 0;
-
-    RegisterRuntimeExport("?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::EdgeMesh::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x180012d80ull, (void*)&Graphics::EdgeMesh::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::EdgeMesh::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x180012e00ull, (void*)&Graphics::EdgeMesh::CreateInPlaceObject);
 
     return n;   // 2
 }

@@ -320,11 +320,6 @@ template <typename T> T  Rd(const void* p, size_t off) {
 // ENDGAME B.3.5 block G: BODY MOVED to
 // `Graphics::GraphicsMesh::GetMaterialList(int32_t)`. The door keeps its name and
 // its registration and delegates with a QUALIFIED non-virtual call.
-static const void* RtGraphics_GraphicsMesh_GetMaterialList(const void* self, int index) {
-    return &reinterpret_cast<const Graphics::GraphicsMesh*>(self)      // B.3.5 bridge
-                ->Graphics::GraphicsMesh::GetMaterialList(index);
-}
-
 // ============================================================================
 // Graphics::GraphicsMesh::GetNodeIndexFromName(const char*) const
 //   ?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z
@@ -349,11 +344,6 @@ static const void* RtGraphics_GraphicsMesh_GetMaterialList(const void* self, int
 // ============================================================================
 // ENDGAME B.3.5 block G: BODY MOVED to
 // `Graphics::GraphicsMesh::GetNodeIndexFromName(const char*)`.
-static int RtGraphics_GraphicsMesh_GetNodeIndexFromName(const void* self, const char* name) {
-    return reinterpret_cast<const Graphics::GraphicsMesh*>(self)       // B.3.5 bridge
-               ->Graphics::GraphicsMesh::GetNodeIndexFromName(name);
-}
-
 // ============================================================================
 // Graphics::MeshInstance::IsAnimating() const
 //   ?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ
@@ -377,11 +367,6 @@ static int RtGraphics_GraphicsMesh_GetNodeIndexFromName(const void* self, const 
 // ENDGAME B.3.5 block E: the BODY MOVED to `Graphics::MeshInstance::IsAnimating`
 // at the bottom of this file. This door keeps its name and its registration and
 // delegates with a QUALIFIED non-virtual call.
-static bool RtGraphics_MeshInstance_IsAnimating(const void* self) {
-    return reinterpret_cast<const ::Graphics::MeshInstance*>(self)
-               ->::Graphics::MeshInstance::IsAnimating();
-}
-
 namespace {
 
 // The pool pose the two "instanced" branches share.
@@ -499,13 +484,6 @@ const uint8_t* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
 // spell. The member returns by value, which is safe for a NON-virtual member
 // (both ends of a member call are this same GCC); see Geometry.h's B5-12 block
 // for why the same is NOT true of a vtable slot.
-static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret, int node) {
-    *reinterpret_cast<Math::Transform*>(ret) =
-        reinterpret_cast<const ::Graphics::MeshInstance*>(self)
-            ->::Graphics::MeshInstance::GetNodeToWorld(node);
-    return ret;
-}
-
 // ============================================================================
 // Graphics::MeshInstance::RootAnimationOffset() const -> Math::Vector3
 //   ?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ
@@ -529,12 +507,6 @@ static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret,
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED to
 // `Graphics::MeshInstance::RootAnimationOffset()`.
-static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* ret) {
-    *reinterpret_cast<Math::Vector3*>(ret) =
-        reinterpret_cast<const ::Graphics::MeshInstance*>(self)
-            ->::Graphics::MeshInstance::RootAnimationOffset();
-}
-
 // ============================================================================
 // Graphics::MeshInstance::UpdateHierarchy()
 //   ?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ
@@ -624,11 +596,6 @@ static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED to
 // `Graphics::MeshInstance::SetMaterialInstance`.
-static void RtGraphics_MeshInstance_SetMaterialInstance(void* self, int index, ExternalPtr value) {
-    reinterpret_cast<::Graphics::MeshInstance*>(self)
-        ->::Graphics::MeshInstance::SetMaterialInstance(index, value);
-}
-
 // ============================================================================
 // Graphics::MeshInstance::SetMesh(ExternalPtr<GraphicsMesh>)
 //   ?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@
@@ -664,11 +631,6 @@ static void RtGraphics_MeshInstance_SetMaterialInstance(void* self, int index, E
 // ENDGAME B.3.5 block E: BODY MOVED to `Graphics::MeshInstance::SetMesh`,
 // including the "read the stars, not the offsets" note that cost the first
 // integration run.
-static void RtGraphics_MeshInstance_SetMesh(void* self, ExternalPtr mesh) {
-    reinterpret_cast<::Graphics::MeshInstance*>(self)
-        ->::Graphics::MeshInstance::SetMesh(mesh);
-}
-
 // ============================================================================
 // Graphics::MeshInstance::PlayAnimation(ExternalPtr<AnimationGroup>, int,
 //                                       const Time&, const Time&, float)
@@ -700,13 +662,6 @@ static void RtGraphics_MeshInstance_SetMesh(void* self, ExternalPtr mesh) {
 // predicate that does not actually test them.
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED to `Graphics::MeshInstance::PlayAnimation`.
-static void RtGraphics_MeshInstance_PlayAnimation(void* self, ExternalPtr group, int index,
-                                                  const void* startTime, const void* blendTime,
-                                                  float weight) {
-    reinterpret_cast<::Graphics::MeshInstance*>(self)
-        ->::Graphics::MeshInstance::PlayAnimation(group, index, startTime, blendTime, weight);
-}
-
 // ============================================================================
 // Graphics::MeshInstance::MeshInstance()
 //   ??0MeshInstance@Graphics@@QEAA@XZ
@@ -952,23 +907,6 @@ void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void*
 //
 // ENDGAME B.3.5 block G: BODY MOVED to `Graphics::EdgeMesh::SetMaterials`.
 // ============================================================================
-static void RtGraphics_EdgeMesh_SetMaterials(void* self, ExternalPtr m0, ExternalPtr m1,
-                                             ExternalPtr m2, ExternalPtr m3) {
-    // The four `RtGraphics::ExternalPtr` handles and the four
-    // `Object::ExternalPtr<MaterialInstance>`s are the same eight bytes; the door
-    // keeps the POD spelling its registration was written with.
-    reinterpret_cast<Graphics::EdgeMesh*>(self)                     // B.3.5 bridge
-        ->Graphics::EdgeMesh::SetMaterials(
-            Object::ExternalPtr<Graphics::MaterialInstance>(
-                static_cast<Graphics::MaterialInstance*>(m0.p)),
-            Object::ExternalPtr<Graphics::MaterialInstance>(
-                static_cast<Graphics::MaterialInstance*>(m1.p)),
-            Object::ExternalPtr<Graphics::MaterialInstance>(
-                static_cast<Graphics::MaterialInstance*>(m2.p)),
-            Object::ExternalPtr<Graphics::MaterialInstance>(
-                static_cast<Graphics::MaterialInstance*>(m3.p)));
-}
-
 // ============================================================================
 // Graphics::EdgeMesh::EdgeMesh()
 //   ??0EdgeMesh@Graphics@@QEAA@XZ
@@ -1085,24 +1023,6 @@ Graphics::EdgeMesh::EdgeMesh() {
 // registration and its address and delegates with the QUALIFIED non-virtual call.
 // `Set` is not virtual, so the qualification is belt-and-braces, not a recursion
 // guard -- but it is the shape every other moved body in this file uses.
-static bool RtGraphics_EdgeMesh_Set(void* self,
-                                    int triCount,  const void* triLists,
-                                    int edgeCount, const void* edgeLists,
-                                    int i0, uint16_t* ib0, int v0s, void* vb0, int v0n, int v0x,
-                                    uint16_t* ib1, int v1s, void* vb1, int v1n, int v1x,
-                                    uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
-                                    uint16_t* ib3, int v3s, void* vb3, int v3n,
-                                    const void* box) {
-    return reinterpret_cast<Graphics::EdgeMesh*>(self)   // B.3.5 bridge
-        ->Graphics::EdgeMesh::Set(
-        triCount, triLists, edgeCount, edgeLists,
-        i0, ib0, v0s, vb0, v0n, v0x,
-        ib1, v1s, vb1, v1n, v1x,
-        ib2, v2s, vb2, v2n, v2x,
-        ib3, v3s, vb3, v3n,
-        *reinterpret_cast<const ::Box*>(box));
-}
-
 // ============================================================================
 // Graphics::EdgeMeshInstance::EdgeMeshInstance()
 //   ??0EdgeMeshInstance@Graphics@@QEAA@XZ
@@ -1202,12 +1122,6 @@ Graphics::EdgeMeshInstance::EdgeMeshInstance(const EdgeMeshInstance& other)
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED to
 // `Graphics::EdgeMeshInstance::SetMesh`.
-static void RtGraphics_EdgeMeshInstance_SetMesh(void* self, ExternalPtr mesh, void* followed) {
-    reinterpret_cast<::Graphics::EdgeMeshInstance*>(self)
-        ->::Graphics::EdgeMeshInstance::SetMesh(
-              mesh, reinterpret_cast<::Graphics::MeshInstance*>(followed));
-}
-
 // ============================================================================
 // Registration.
 //
@@ -1932,24 +1846,6 @@ extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const void* self,
 int RtGraphicsMeshVtableRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtGraphics_EdgeMeshInstance_Update); ++n;
-    RegisterRuntimeAddr(0x1800a39b0ull, (void*)&RtGraphics_EdgeMeshInstance_Update);
-
-    RegisterRuntimeExport("?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z",
-                          (void*)&RtGraphics_EdgeMeshInstance_GetInstanceTransform); ++n;
-    RegisterRuntimeAddr(0x1800a3840ull,
-                        (void*)&RtGraphics_EdgeMeshInstance_GetInstanceTransform);
-
-    RegisterRuntimeExport("?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z",
-                          (void*)&RtGraphics_MeshInstance_GetSubTransform); ++n;
-    RegisterRuntimeAddr(0x180101200ull, (void*)&RtGraphics_MeshInstance_GetSubTransform);
-
-    RegisterRuntimeExport("?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z",
-                          (void*)&RtGraphics_MeshInstance_GetInstanceTransform); ++n;
-    RegisterRuntimeAddr(0x180101280ull,
-                        (void*)&RtGraphics_MeshInstance_GetInstanceTransform);
-
     // NOT a vtable slot -- the row this lane's own
     // ?GetInstanceTransform@EdgeMeshInstance@ opened. Registered here so the lane
     // closes it rather than handing it on. Note the trailing `M`: this is the
@@ -1978,10 +1874,6 @@ int RtGraphicsMeshVtableRegister() {
     // (reference_half_registered_port_reads_as_absent.md). Every
     // RegisterRuntimeExport this lane added is single-line for that reason, even
     // where it overruns the column width.
-    RegisterRuntimeExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z",
-                          (void*)&RtGraphics_MeshInstance_GetNodeToWorldInterp); ++n;
-    RegisterRuntimeAddr(0x180016c20ull,
-                        (void*)&RtGraphics_MeshInstance_GetNodeToWorldInterp);
 
     // ---- WAVE 28 LANE SLOTS ------------------------------------------------
     // The two ?AddDrawItems@ overrides. BOTH mangled names were read out of the
@@ -2005,10 +1897,6 @@ int RtGraphicsMeshVtableRegister() {
     RegisterRuntimeExport("?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
                           (void*)&RtGraphics_MeshInstance_AddDrawItems); ++n;
     RegisterRuntimeAddr(0x180100f20ull, (void*)&RtGraphics_MeshInstance_AddDrawItems);
-
-    RegisterRuntimeExport("?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_EdgeMeshInstance_AddDrawItems); ++n;
-    RegisterRuntimeAddr(0x1800a2fd0ull, (void*)&RtGraphics_EdgeMeshInstance_AddDrawItems);
 
     return n;   // 7
 }
@@ -2046,48 +1934,18 @@ int RtGraphicsMeshRegister() {
     // ---- Graphics::MeshInstance ----
     // ENDGAME B.3.9 GFX: the ??0 / copy ??0 / ??1 doors (and ??1's address row
     // 0x180017060) are retired; the members are the only ctors and dtor.
-    RegisterRuntimeExport("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ",
-                          (void*)&RtGraphics_MeshInstance_IsAnimating); ++count;
-    RegisterRuntimeExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z",
-                          (void*)&RtGraphics_MeshInstance_GetNodeToWorld); ++count;
-    RegisterRuntimeExport("?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ",
-                          (void*)&RtGraphics_MeshInstance_RootAnimationOffset); ++count;
     RegisterRuntimeExport("?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ",
                           (void*)&RtGraphics_MeshInstance_UpdateHierarchy); ++count;
-    RegisterRuntimeExport("?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@"
-                          "VMaterialInstance@Graphics@@@Object@@@Z",
-                          (void*)&RtGraphics_MeshInstance_SetMaterialInstance); ++count;
-    RegisterRuntimeExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@"
-                          "VGraphicsMesh@Graphics@@@Object@@@Z",
-                          (void*)&RtGraphics_MeshInstance_SetMesh); ++count;
-    RegisterRuntimeExport("?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@"
-                          "VAnimationGroup@Graphics@@@Object@@HAEBVTime@System@@1M@Z",
-                          (void*)&RtGraphics_MeshInstance_PlayAnimation); ++count;
 
     // ---- Graphics::GraphicsMesh ----
-    RegisterRuntimeExport("?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@"
-                          "V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Collection@@H@Z",
-                          (void*)&RtGraphics_GraphicsMesh_GetMaterialList); ++count;
-    RegisterRuntimeExport("?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z",
-                          (void*)&RtGraphics_GraphicsMesh_GetNodeIndexFromName); ++count;
-    RegisterRuntimeAddr(0x1800fee90, (void*)&RtGraphics_GraphicsMesh_GetNodeIndexFromName);
 
     // ---- Graphics::EdgeMesh ----
     RegisterRuntimeExport("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z",
                           (void*)&RtGraphics_EdgeMesh_TriangleVertex_Ctor); ++count;
     RegisterRuntimeExport("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z",
                           (void*)&RtGraphics_EdgeMesh_EdgeVertex_Ctor); ++count;
-    RegisterRuntimeExport("?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@"
-                          "H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z",
-                          (void*)&RtGraphics_EdgeMesh_Set); ++count;
-    RegisterRuntimeExport("?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@"
-                          "VMaterialInstance@Graphics@@@Object@@000@Z",
-                          (void*)&RtGraphics_EdgeMesh_SetMaterials); ++count;
 
     // ---- Graphics::EdgeMeshInstance ----
-    RegisterRuntimeExport("?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@"
-                          "VEdgeMesh@Graphics@@@Object@@PEAVMeshInstance@2@@Z",
-                          (void*)&RtGraphics_EdgeMeshInstance_SetMesh); ++count;
     // ENDGAME B.3.9 GFX (W2): the EdgeMesh ??0 door and the EdgeMeshInstance
     // ??0 / copy ??0 / ??1 doors are retired with their minted tables.
 

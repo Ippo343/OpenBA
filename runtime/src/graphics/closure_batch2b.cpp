@@ -307,7 +307,5 @@ int RtClosure2bGraphicsRegister() {
     int n = 0;
     // (??0Geometry copy, 0x180015b60: retired with its door, ENDGAME B.3.9 GFX.)
     RegisterRuntimeAddr(0x18001be60, (void*)&RtGraphics_DrawGroup_CopyCtor);  ++n;
-    RegisterRuntimeAddr(0x180014850,
-                        (void*)&RtGraphics_EdgeMesh_SerializeTriangleListArray); ++n;
     return n;
 }

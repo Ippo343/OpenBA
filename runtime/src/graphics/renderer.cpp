@@ -942,22 +942,6 @@ int RtGraphicsRendererRegister() {
                           (void*)&RtGraphics_Camera_Ctor); ++count;
     RegisterRuntimeAddr(0x1800fe960, (void*)&RtGraphics_Camera_Ctor);
 
-    RegisterRuntimeExport("?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z",
-                          (void*)&RtGraphics_Camera_SetFrustum); ++count;
-    RegisterRuntimeAddr(0x1800fe5c0, (void*)&RtGraphics_Camera_SetFrustum);
-
-    RegisterRuntimeExport("?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z",
-                          (void*)&RtGraphics_Camera_SetCameraToWorld); ++count;
-    RegisterRuntimeAddr(0x1800feb00, (void*)&RtGraphics_Camera_SetCameraToWorld);
-
-    RegisterRuntimeExport("?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z",
-                          (void*)&RtGraphics_Camera_SnapCameraToWorld); ++count;
-    RegisterRuntimeAddr(0x1800fe560, (void*)&RtGraphics_Camera_SnapCameraToWorld);
-
-    RegisterRuntimeExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ",
-                          (void*)&RtGraphics_Camera_GetFrustum); ++count;
-    RegisterRuntimeAddr(0x1800fe3e0, (void*)&RtGraphics_Camera_GetFrustum);
-
     // --- Graphics::Camera, the FIVE exports block F added -------------------
     // With these, ALL THIRTEEN of the class's exports are ported: five here from
     // wave 6 lane F, two in wave9_lane_gfxd.cpp (the two constructors), ONE —
@@ -969,25 +953,6 @@ int RtGraphicsRendererRegister() {
     // was not enough: `operator=` came back with comments only, because
     // wave28_lane_gfxbody.cpp registers it by NAME and never by address. It took
     // a link error to find. Sized by the EXPORT LIST, not by the grep.
-    RegisterRuntimeExport("?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@XZ",
-                          (void*)&RtGraphics_Camera_GetCameraToWorld); ++count;
-    RegisterRuntimeAddr(0x180017e70, (void*)&RtGraphics_Camera_GetCameraToWorld);
-
-    RegisterRuntimeExport("?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@M@Z",
-                          (void*)&RtGraphics_Camera_GetCameraToWorldAtT); ++count;
-    RegisterRuntimeAddr(0x180017e10, (void*)&RtGraphics_Camera_GetCameraToWorldAtT);
-
-    RegisterRuntimeExport("?GetProjection@Camera@Graphics@@QEBA?AVMatrix@Math@@XZ",
-                          (void*)&RtGraphics_Camera_GetProjection); ++count;
-    RegisterRuntimeAddr(0x180017ed0, (void*)&RtGraphics_Camera_GetProjection);
-
-    RegisterRuntimeExport("?IsMirrored@Camera@Graphics@@QEBA_NXZ",
-                          (void*)&RtGraphics_Camera_IsMirrored); ++count;
-    RegisterRuntimeAddr(0x1800fe480, (void*)&RtGraphics_Camera_IsMirrored);
-
-    RegisterRuntimeExport("?SetZUp@Camera@Graphics@@QEAAX_N@Z",
-                          (void*)&RtGraphics_Camera_SetZUp); ++count;
-    RegisterRuntimeAddr(0x1800fe550, (void*)&RtGraphics_Camera_SetZUp);
 
     // ??4Camera@ (0x180017c40) is registered in wave28_lane_gfxbody.cpp. NOT
     // duplicated here — see the note above its door.
@@ -1001,71 +966,12 @@ int RtGraphicsRendererRegister() {
                           (void*)&RtGraphics_Renderer_Dtor); ++count;
     RegisterRuntimeAddr(0x1800180a0, (void*)&RtGraphics_Renderer_Dtor);
 
-    RegisterRuntimeExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ",
-                          (void*)&RtGraphics_Renderer_GetCullCamera); ++count;
-    RegisterRuntimeAddr(0x180017f90, (void*)&RtGraphics_Renderer_GetCullCamera);
-
-    RegisterRuntimeExport("?GetShader@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetShader); ++count;
-    RegisterRuntimeAddr(0x180018010, (void*)&RtGraphics_Renderer_GetShader);
-
     // --- Graphics::Renderer, the ELEVEN accessors block F added -------------
     // All eleven are one to six instructions, read as disassembly this pass, and
     // all eleven addresses came back with zero pre-existing registrations.
-    RegisterRuntimeExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z",
-                          (void*)&RtGraphics_Renderer_GetCullCameraAt); ++count;
-    RegisterRuntimeAddr(0x180017fd0, (void*)&RtGraphics_Renderer_GetCullCameraAt);
-
-    RegisterRuntimeExport("?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ",
-                          (void*)&RtGraphics_Renderer_GetCamera); ++count;
-    RegisterRuntimeAddr(0x180017f70, (void*)&RtGraphics_Renderer_GetCamera);
-
-    RegisterRuntimeExport("?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z",
-                          (void*)&RtGraphics_Renderer_GetCameraAt); ++count;
-    RegisterRuntimeAddr(0x180017fb0, (void*)&RtGraphics_Renderer_GetCameraAt);
-
-    RegisterRuntimeExport("?GetSceneGroup@Renderer@Graphics@@QEBAAEBUSceneGroup@12@H@Z",
-                          (void*)&RtGraphics_Renderer_GetSceneGroup); ++count;
-    RegisterRuntimeAddr(0x180018090, (void*)&RtGraphics_Renderer_GetSceneGroup);
-
-    RegisterRuntimeExport("?GetMaterialTypeFlags@Renderer@Graphics@@QEBAIXZ",
-                          (void*)&RtGraphics_Renderer_GetMaterialTypeFlags); ++count;
-    RegisterRuntimeAddr(0x180017ff0, (void*)&RtGraphics_Renderer_GetMaterialTypeFlags);
-
-    RegisterRuntimeExport("?GetCurrentSceneGroup@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetCurrentSceneGroup); ++count;
-    RegisterRuntimeAddr(0x180018030, (void*)&RtGraphics_Renderer_GetCurrentSceneGroup);
-
-    RegisterRuntimeExport("?GetAlphaT@Renderer@Graphics@@QEBAMXZ",
-                          (void*)&RtGraphics_Renderer_GetAlphaT); ++count;
-    RegisterRuntimeAddr(0x180018040, (void*)&RtGraphics_Renderer_GetAlphaT);
-
-    RegisterRuntimeExport("?SetShaderDetail@Renderer@Graphics@@QEAAXH@Z",
-                          (void*)&RtGraphics_Renderer_SetShaderDetail); ++count;
-    RegisterRuntimeAddr(0x180018050, (void*)&RtGraphics_Renderer_SetShaderDetail);
-
-    RegisterRuntimeExport("?GetShaderDetail@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetShaderDetail); ++count;
-    RegisterRuntimeAddr(0x180018060, (void*)&RtGraphics_Renderer_GetShaderDetail);
-
-    RegisterRuntimeExport("?GetDetailId@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetDetailId); ++count;
-    RegisterRuntimeAddr(0x180018070, (void*)&RtGraphics_Renderer_GetDetailId);
-
-    RegisterRuntimeExport("?GetFrameIndex@Renderer@Graphics@@QEBAHXZ",
-                          (void*)&RtGraphics_Renderer_GetFrameIndex); ++count;
-    RegisterRuntimeAddr(0x180018080, (void*)&RtGraphics_Renderer_GetFrameIndex);
 
     // --- Graphics::MaterialInstance (2 rows; ENDGAME B.3.9 GFX: the ??0 door
     // 0x180103980 is retired -- the class is built by its real ctor) --------
-
-    RegisterRuntimeExport("?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_SetMaterial); ++count;
-    RegisterRuntimeAddr(0x180103340, (void*)&RtGraphics_MaterialInstance_SetMaterial);
-
-    RegisterRuntimeExport("?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_AddTexture); ++count;
-    RegisterRuntimeAddr(0x180103350, (void*)&RtGraphics_MaterialInstance_AddTexture);
 
     return count;
 }

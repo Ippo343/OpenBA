@@ -261,7 +261,6 @@ void DestroyInterfaceRange(GraphicsInterface* base, int count) {
 
 }  // namespace
 
-
 // ---------------------------------------------------------------------------
 // 0x180010f00 — the RETAIL-ABI entry point. WAVE 26 LANE INT33.
 //
@@ -578,16 +577,6 @@ int RtVideoResourcesRegister() {
     RegisterRuntimeAddr(0x1800f4020, (void*)&Video_RenderBuffer_Dtor);
     n++;
 
-    RegisterRuntimeExport("?Bind@RenderBuffer@Video@@QEBAXAEAVContext@2@@Z",
-                          (void*)&Video_RenderBuffer_Bind);
-    RegisterRuntimeAddr(0x1800f4300, (void*)&Video_RenderBuffer_Bind);
-    n++;
-
-    RegisterRuntimeExport("?Recreate@ImageBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_ImageBuffer_Recreate);
-    RegisterRuntimeAddr(0x1800f33f0, (void*)&Video_ImageBuffer_Recreate);
-    n++;
-
     RegisterRuntimeExport("??1Configuration@Video@@QEAA@XZ", (void*)&Video_Configuration_Dtor);
     RegisterRuntimeAddr(0x1800f6f80, (void*)&Video_Configuration_Dtor);
     n++;
@@ -600,8 +589,6 @@ int RtVideoResourcesRegister() {
     // destroy. ADDRESS ONLY: it has no exported name in either shipped build
     // (checked against the export directory, not asserted from the `internal`
     // bucket's label). See the comment above RtVideo_ArrayInterfaceElemDestroy.
-    RegisterRuntimeAddr(0x180010f00, (void*)&RtVideo_ArrayInterfaceElemDestroy);
-    n++;
 
     printf("[RtPort] Video resource lifecycle (Wave 18 lane VRES): %d exports registered\n", n);
     return n;

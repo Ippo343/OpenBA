@@ -153,8 +153,6 @@ using RtGraphics::Scene;
 using RtGraphics::SceneNode;
 using RtGraphics::SceneObjectId;
 
-
-
 namespace {
 
 // (The nine mangled-name constants of the retired diff-oracle calls -- kGeoClean
@@ -1571,35 +1569,9 @@ int RtGraphicsSceneRegister() {
     // ENDGAME B.3.9 GFX: the ??0 (0x1800a4270) and ??1 (0x1800a41c0) doors are
     // retired -- `Geometry()` / `~Geometry()` are the members below, and their
     // one address reader (the RT_DELDTOR row 0x180015e90) is retired with them.
-    RegisterRuntimeExport("?Attach@Geometry@Graphics@@QEAAXPEAV12@H@Z", (void*)&RtGraphics_Geometry_Attach); ++count;
-    RegisterRuntimeAddr(0x1800a3fa0, (void*)&RtGraphics_Geometry_Attach);
-
-    RegisterRuntimeExport("?Detach@Geometry@Graphics@@QEAAXPEAV12@@Z", (void*)&RtGraphics_Geometry_Detach); ++count;
-    RegisterRuntimeAddr(0x1800a3f20, (void*)&RtGraphics_Geometry_Detach);
-
-    RegisterRuntimeExport("?Clean@Geometry@Graphics@@UEAA_NXZ", (void*)&RtGraphics_Geometry_Clean); ++count;
-    RegisterRuntimeAddr(0x1800a4420, (void*)&RtGraphics_Geometry_Clean);
-
-    RegisterRuntimeExport("?UpdateAttached@Geometry@Graphics@@UEAAXXZ", (void*)&RtGraphics_Geometry_UpdateAttached); ++count;
-    RegisterRuntimeAddr(0x1800a4020, (void*)&RtGraphics_Geometry_UpdateAttached);
-
-    RegisterRuntimeExport("?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z", (void*)&RtGraphics_Geometry_GetSubTransform); ++count;
-    RegisterRuntimeAddr(0x1800a43c0, (void*)&RtGraphics_Geometry_GetSubTransform);
 
     RegisterRuntimeExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ", (void*)&RtGraphics_Geometry_GetTransform); ++count;
     RegisterRuntimeAddr(0x180015800, (void*)&RtGraphics_Geometry_GetTransform);
-
-    RegisterRuntimeExport("?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z", (void*)&RtGraphics_Geometry_GetInstanceTransform); ++count;
-    RegisterRuntimeAddr(0x1800154a0, (void*)&RtGraphics_Geometry_GetInstanceTransform);
-
-    RegisterRuntimeExport("?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z", (void*)&RtGraphics_Geometry_SetSharedInstanceData); ++count;
-    RegisterRuntimeAddr(0x180015590, (void*)&RtGraphics_Geometry_SetSharedInstanceData);
-
-    RegisterRuntimeExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z", (void*)&RtGraphics_Geometry_SetBounds); ++count;
-    RegisterRuntimeAddr(0x180015700, (void*)&RtGraphics_Geometry_SetBounds);
-
-    RegisterRuntimeExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z", (void*)&RtGraphics_Geometry_SetTransform); ++count;
-    RegisterRuntimeAddr(0x1800155a0, (void*)&RtGraphics_Geometry_SetTransform);
 
     // ---- Graphics::Scene ----
     RegisterRuntimeExport("??0Scene@Graphics@@QEAA@XZ", (void*)&RtGraphics_Scene_Ctor); ++count;
@@ -1614,19 +1586,7 @@ int RtGraphicsSceneRegister() {
     RegisterRuntimeExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z", (void*)&RtGraphics_Scene_RemoveObject); ++count;
     RegisterRuntimeAddr(0x180102600, (void*)&RtGraphics_Scene_RemoveObject);
 
-    RegisterRuntimeExport("?AddGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z", (void*)&RtGraphics_Scene_AddGlobalObject); ++count;
-    RegisterRuntimeAddr(0x180102540, (void*)&RtGraphics_Scene_AddGlobalObject);
-
-    RegisterRuntimeExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z", (void*)&RtGraphics_Scene_RemoveGlobalObject); ++count;
-    RegisterRuntimeAddr(0x1801024c0, (void*)&RtGraphics_Scene_RemoveGlobalObject);
-
-    RegisterRuntimeExport("?Clean@Scene@Graphics@@QEAAXXZ", (void*)&RtGraphics_Scene_Clean); ++count;
-    RegisterRuntimeAddr(0x1801023f0, (void*)&RtGraphics_Scene_Clean);
-
     // ENDGAME B.3.5 block F — the twentieth row, read out of the DLL this pass.
-    RegisterRuntimeExport("?AddDrawItems@Scene@Graphics@@QEBAXAEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_Scene_AddDrawItems); ++count;
-    RegisterRuntimeAddr(0x1801023b0, (void*)&RtGraphics_Scene_AddDrawItems);
 
     return count;
 }

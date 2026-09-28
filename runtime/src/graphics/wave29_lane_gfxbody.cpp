@@ -171,7 +171,6 @@
 #include "../../types/system/Value.h"      // System::Time -- ENDGAME B.3.5 block GC
 #include "../../types/system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
-
 namespace rtgfxbody29 {
 namespace {
 
@@ -558,15 +557,6 @@ Transform* RtGraphics_Animation_GetRootPoseAtTime(const void* self,
 // ============================================================================
 int RtGraphicsWave29GfxbodyRegister() {
     int count = 0;
-    RegisterRuntimeExport("?AddGlobalDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_Scene_AddGlobalDrawItems); ++count;
-    RegisterRuntimeExport("?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z",
-                          (void*)&RtGraphics_Renderer_AddLight); ++count;
-    RegisterRuntimeExport("?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z",
-                          (void*)&RtGraphics_Renderer_EndDrawGroup); ++count;
-    RegisterRuntimeExport("?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
-                          "AEBVTime@System@@0@Z",
-                          (void*)&RtGraphics_Animation_GetRootPoseAtTime); ++count;
     return count;
 }
 

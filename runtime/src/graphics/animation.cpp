@@ -577,12 +577,6 @@ int RtGraphicsAnimationRegister() {
     // ENDGAME B.3.9 block GFX: AnimationEvent's factory pair, the class's own
     // statics (B39_RULES D2), replacing its FACTREST row. The ??0 / ??1 doors
     // are retired (above).
-    RegisterRuntimeExport("?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&::Graphics::AnimationEvent::CreateNewObject); ++count;
-    RegisterRuntimeAddr(0x180011700, (void*)&::Graphics::AnimationEvent::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&::Graphics::AnimationEvent::CreateInPlaceObject); ++count;
-    RegisterRuntimeAddr(0x180011710, (void*)&::Graphics::AnimationEvent::CreateInPlaceObject);
 
     RegisterRuntimeExport("??0AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Ctor); ++count;
     RegisterRuntimeAddr(0x1800fc430, (void*)&RtGraphics_AnimationManager_Ctor);
@@ -590,11 +584,6 @@ int RtGraphicsAnimationRegister() {
     RegisterRuntimeExport("??1AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Dtor); ++count;
     RegisterRuntimeAddr(0x1800fc400, (void*)&RtGraphics_AnimationManager_Dtor);
 
-    RegisterRuntimeExport("?Update@ParticleInstance@Graphics@@QEAA_NXZ", (void*)&RtGraphics_ParticleInstance_Update); ++count;
-    RegisterRuntimeAddr(0x180104180, (void*)&RtGraphics_ParticleInstance_Update);
-
-    RegisterRuntimeExport("?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ", (void*)&RtGraphics_ParticleInstance_IncrementInstanceIndex); ++count;
-    RegisterRuntimeAddr(0x1800201f0, (void*)&RtGraphics_ParticleInstance_IncrementInstanceIndex);
     // (ENDGAME B.3.9 GFX: the ??0ParticleInstance / ??0ParticleSystemInstance
     // doors are retired.)
 

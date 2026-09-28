@@ -481,13 +481,6 @@ extern "C" void RtEngine_MainLoop_CreateVideoContext(void* self) {
 // ============================================================================
 int RtVideoContextCtorRegister() {
     int n = 0;
-    RegisterRuntimeExport("??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z",
-                          (void*)&RtVideo_Context_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800f1820, (void*)&RtVideo_Context_Ctor);
-
-    RegisterRuntimeExport("?CreateVideoContext@MainLoop@Engine@@AEAAXXZ",
-                          (void*)&RtEngine_MainLoop_CreateVideoContext); ++n;
-    RegisterRuntimeAddr(0x1800dd500, (void*)&RtEngine_MainLoop_CreateVideoContext);
 
     RegisterRuntimeExport("??2ImageBuffer@Video@@SAPEAX_K@Z",
                           (void*)&RtVideo_ImageBuffer_OperatorNew); ++n;
@@ -498,9 +491,5 @@ int RtVideoContextCtorRegister() {
     RegisterRuntimeAddr(0x18001f2e0, (void*)&RtVideo_RenderBuffer_OperatorNew);
 
     // Unexported, so address-only.
-    RegisterRuntimeAddr(0x180053730, (void*)&RtVideo_Ctx_ZeroTransformPair);
-    RegisterRuntimeAddr(0x180053840, (void*)&RtVideo_Ctx_ZeroBoneMatrices);
-    RegisterRuntimeAddr(0x1800538b0, (void*)&RtVideo_Ctx_ZeroTransformMatrices);
-    RegisterRuntimeAddr(0x180053920, (void*)&RtVideo_Ctx_ZeroLightBlock);
     return n;
 }

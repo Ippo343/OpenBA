@@ -394,32 +394,6 @@ int RtVideoCompanionRegister() {
     RegisterRuntimeAddr(0x1800f8cd0, (void*)&Video_DeviceData_Ctor);
     n++;
 
-
-    RegisterRuntimeExport("?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z",
-                          (void*)&Video_IndexBuffer_Lock);
-    RegisterRuntimeAddr(0x1800f34e0, (void*)&Video_IndexBuffer_Lock);
-    n++;
-
-    RegisterRuntimeExport("?Unlock@IndexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_IndexBuffer_Unlock);
-    RegisterRuntimeAddr(0x1800f34c0, (void*)&Video_IndexBuffer_Unlock);
-    n++;
-
-    RegisterRuntimeExport("?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z",
-                          (void*)&Video_VertexBuffer_Lock);
-    RegisterRuntimeAddr(0x1800f5640, (void*)&Video_VertexBuffer_Lock);
-    n++;
-
-    RegisterRuntimeExport("?Unlock@VertexBuffer@Video@@QEAAXXZ",
-                          (void*)&Video_VertexBuffer_Unlock);
-    RegisterRuntimeAddr(0x1800f5620, (void*)&Video_VertexBuffer_Unlock);
-    n++;
-
-    RegisterRuntimeExport("?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z",
-                          (void*)&Video_ConstantBuffer_Bind);
-    RegisterRuntimeAddr(0x1800eef70, (void*)&Video_ConstantBuffer_Bind);
-    n++;
-
     RegisterRuntimeExport("??0DisplayMode@Device@Video@@QEAA@HH@Z",
                           (void*)&Video_DisplayMode_Ctor);
     RegisterRuntimeAddr(0x18000d300, (void*)&Video_DisplayMode_Ctor);

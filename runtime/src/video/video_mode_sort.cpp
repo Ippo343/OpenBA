@@ -446,10 +446,5 @@ extern "C" void RtVideo_SwapDisplayMode(DisplayMode* a, DisplayMode* b) {
 // Registration — addresses only; none of the five is exported.
 // ============================================================================
 int RtVideoModeSortRegister() {
-    RegisterRuntimeAddr(0x180057910, (void*)&RtVideo_SortDisplayModes);
-    RegisterRuntimeAddr(0x180058120, (void*)&RtVideo_SmallSortDisplayModes);
-    RegisterRuntimeAddr(0x1800584c0, (void*)&RtVideo_SwapDisplayMode);
-    RegisterRuntimeAddr(0x180057630, (void*)&RtVideo_SortRefreshRates);
-    RegisterRuntimeAddr(0x180057fa0, (void*)&RtVideo_SmallSortRefreshRates);
     return 5;
 }

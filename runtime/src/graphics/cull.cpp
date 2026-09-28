@@ -496,10 +496,5 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
 
 int RtGraphicsCullRegister() {
     int n = 0;
-    RegisterRuntimeExport("?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_Scene_AddCulledDrawItems); ++n;
-    RegisterRuntimeAddr(0x1801017a0ull, (void*)&RtGraphics_Scene_AddCulledDrawItems);
-    RegisterRuntimeAddr(0x18005f2f0ull, (void*)&RtGraphics_Scene_CullStackInit);        ++n;
-    RegisterRuntimeAddr(0x18005ead0ull, (void*)&RtGraphics_Scene_CullStackPushChildren); ++n;
     return n;
 }

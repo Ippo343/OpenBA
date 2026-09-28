@@ -432,40 +432,5 @@ extern "C" bool Video_ImageBuffer_Serialize(Video::ImageBuffer* self, void* stre
 int RtVideoImageBufferVtableRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?TypeName@ImageBuffer@Video@@UEBAPEBDXZ",
-                          (void*)&Video_ImageBuffer_TypeName);
-    RegisterRuntimeAddr(0x18001e900, (void*)&Video_ImageBuffer_TypeName);
-    n++;
-
-    RegisterRuntimeExport("?Type@ImageBuffer@Video@@UEBAIXZ",
-                          (void*)&Video_ImageBuffer_Type);
-    RegisterRuntimeAddr(0x18001e8e0, (void*)&Video_ImageBuffer_Type);
-    n++;
-
-    RegisterRuntimeExport("?GetFileVersion@ImageBuffer@Video@@UEBAHXZ",
-                          (void*)&Video_ImageBuffer_GetFileVersion);
-    RegisterRuntimeAddr(0x1800f26e0, (void*)&Video_ImageBuffer_GetFileVersion);
-    n++;
-
-    RegisterRuntimeExport("?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&Video_ImageBuffer_Serialize);
-    RegisterRuntimeAddr(0x1800f26f0, (void*)&Video_ImageBuffer_Serialize);
-    n++;
-
-    RegisterRuntimeExport("?Reconstruct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&Video_ImageBuffer_Reconstruct);
-    RegisterRuntimeAddr(0x18001ea80, (void*)&Video_ImageBuffer_Reconstruct);
-    n++;
-
-    RegisterRuntimeExport("?Destruct@ImageBuffer@Video@@UEAAXXZ",
-                          (void*)&Video_ImageBuffer_Destruct);
-    RegisterRuntimeAddr(0x18001eab0, (void*)&Video_ImageBuffer_Destruct);
-    n++;
-
-    RegisterRuntimeExport("?Construct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&Video_ImageBuffer_Construct);
-    RegisterRuntimeAddr(0x18001eaa0, (void*)&Video_ImageBuffer_Construct);
-    n++;
-
     return n;
 }

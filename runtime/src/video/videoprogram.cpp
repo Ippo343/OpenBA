@@ -87,7 +87,6 @@ void* ActiveDeviceDataPtr() {
 }
 constexpr size_t kDeviceDataCreateVideoProgramData = 0x90;   // DeviceData vtable slot 18
 
-
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
 // interchangeable in Serializer.h). `name` is nullptr, as retail passes.
@@ -227,11 +226,5 @@ bool VideoProgram::Serialize(void* streamv) {
 // minted ?_typeInfo@VideoProgram record resolves its factory pointers by name.
 int RtVideoProgramRegister() {
     int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::VideoProgram::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004ed40ull, (void*)&Video::VideoProgram::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::VideoProgram::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004edc0ull, (void*)&Video::VideoProgram::CreateInPlaceObject);
     return n;
 }

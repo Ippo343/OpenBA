@@ -597,29 +597,10 @@ bool Video_Configuration_Startup(Configuration* self) {
 int RtVideoDeviceRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?GetInterfaceCount@Device@Video@@QEBAHXZ",
-                          (void*)&Video_Device_GetInterfaceCount); ++n;
-    RegisterRuntimeExport("?GetInterface@Device@Video@@QEBAAEBUGraphicsInterface@12@H@Z",
-                          (void*)&Video_Device_GetInterface); ++n;
-    RegisterRuntimeExport("?GetMultisampleModeCount@Device@Video@@QEBAHXZ",
-                          (void*)&Video_Device_GetMultisampleModeCount); ++n;
-    RegisterRuntimeExport("?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z",
-                          (void*)&Video_Device_IsMultisampleModeSupported); ++n;
-    RegisterRuntimeExport("?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z",
-                          (void*)&Video_Device_ValidateConfiguration); ++n;
-    RegisterRuntimeExport("?ApplyChangedSettings@Device@Video@@QEAA_NXZ",
-                          (void*)&Video_Device_ApplyChangedSettings); ++n;
-    RegisterRuntimeExport("?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z",
-                          (void*)&Video_RenderBuffer_Create); ++n;
-    RegisterRuntimeExport("?Save@Configuration@Video@@QEAAXXZ",
-                          (void*)&Video_Configuration_Save); ++n;
-
     // Own kill switch, narrower than the file's RT_VIDDEVICE: this is
     // the one function here that Engine::Startup calls on the BOOT path
     // (engine_lifecycle.cpp:653), so it must be switchable without taking the
     // other nine registrations down with it.
-    RegisterRuntimeExport("?Startup@Configuration@Video@@QEAA_NXZ",
-                          (void*)&Video_Configuration_Startup); ++n;
 
     return n;
 }

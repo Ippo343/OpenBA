@@ -103,7 +103,6 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-
 namespace rtcoll {
 // Lane Q's `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) door:
 // `EnterCriticalSection(_singleton+0x640); Allocate(_singleton, n, align);
@@ -150,7 +149,6 @@ inline float DegToRad() {
     std::memcpy(&f, &bits, sizeof f);
     return f;
 }
-
 
 inline uint8_t*       B(void* p)        { return static_cast<uint8_t*>(p); }
 inline const uint8_t* B(const void* p)  { return static_cast<const uint8_t*>(p); }
@@ -1198,19 +1196,9 @@ int RtGraphicsWave27GfxpartRegister() {
 
     // Cutover closure batch D1. No exported name in either build; the address
     // is the only door. Registered unconditionally (DIRECTION.md §2).
-    RegisterRuntimeAddr(0x1800205a0ull, (void*)&RtGraphics_Emitter_OperatorNew);    ++count;
-    RegisterRuntimeAddr(0x180020600ull, (void*)&RtGraphics_Emitter_OperatorDelete); ++count;
-    RegisterRuntimeAddr(0x180020d60ull, (void*)&RtGraphics_Emitter_DeleteDtor);     ++count;
-
 
     // ENDGAME B.3.9 block GFX: Particle's factory pair (D2), the class's own
     // statics, replacing its FACTREST row; the Serialize slot door is retired.
-    RegisterRuntimeExport("?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&::Graphics::Particle::CreateNewObject); ++count;
-    RegisterRuntimeAddr(0x18001ff40ull, (void*)&::Graphics::Particle::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&::Graphics::Particle::CreateInPlaceObject); ++count;
-    RegisterRuntimeAddr(0x18001ff50ull, (void*)&::Graphics::Particle::CreateInPlaceObject);
     // (ENDGAME B.3.9 GFX: the four ParticleInstance slot doors and the
     // ParticleSystemInstance SetParticle door are retired with the two minted
     // tables, their only reader.)
@@ -1219,8 +1207,6 @@ int RtGraphicsWave27GfxpartRegister() {
     // Unexported in both builds, so RegisterRuntimeAddr only (these do not
     // move `count`, which is the EXPORT count this lane's attendance line
     // prints).
-    RegisterRuntimeAddr(0x180061a80, (void*)&RtGraphics_ParticlePool_OperatorNew);
-    RegisterRuntimeAddr(0x180103bf0, (void*)&RtGraphics_ParticlePoolRecord_Ctor);
 
     return count;   // 2 exports + 3 batch-D1 addresses (batch-D2 not counted)
 }

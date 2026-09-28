@@ -162,8 +162,6 @@ using RtGraphics::Particle;
 using RtGraphics::ParticleInstance;
 using RtGraphics::ParticleSystemInstance;
 
-
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -225,7 +223,6 @@ inline int64_t I64(const void* p, size_t o) { int64_t v; std::memcpy(&v, B(p) + 
 inline void    SetI64(void* p, size_t o, int64_t v)   { std::memcpy(B(p) + o, &v, sizeof v); }
 inline uint32_t U32(const void* p, size_t o) { uint32_t v; std::memcpy(&v, B(p) + o, sizeof v); return v; }
 inline void    SetU32(void* p, size_t o, uint32_t v)  { std::memcpy(B(p) + o, &v, sizeof v); }
-
 
 // ---------------------------------------------------------------------------
 // Graphics::Particle's static MT19937, and the draw retail inlines.
@@ -1162,15 +1159,6 @@ void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const 
 // ============================================================================
 extern "C" int RtGraphicsWave28PartsysRegister() {
     int count = 0;
-    RegisterRuntimeExport("?RemoveState@ParticleInstance@Graphics@@IEAAXXZ",
-                          (void*)&RtGraphics_ParticleInstance_RemoveState); ++count;
-    RegisterRuntimeExport("?Update@SunLight@Graphics@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtGraphics_SunLight_Update); ++count;
-    RegisterRuntimeExport("?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@"
-                          "V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-                          (void*)&RtGraphics_SunLight_Draw_MHHH); ++count;
-    RegisterRuntimeExport("?AddDrawItems@SunLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_SunLight_AddDrawItems); ++count;
     return count;
 }
 

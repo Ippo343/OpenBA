@@ -43,7 +43,6 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -135,7 +134,6 @@ void PlatformSerializeDoor(void* self, Serializer* ser) {
 //   0x18005c120  the Array<Node> Serialize helper         (already ported)
 //   0x180014850  EdgeMesh triangle-list array Serialize   (closure batch 2b)
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // The two GraphicsMesh file-scope statics that carry context into
@@ -617,15 +615,6 @@ int RtGraphicsMeshVtableBatch6Register() {
 
     // The factory pair (B39_RULES D2), the class's own statics, by name AND
     // address. The ctor / dtor / slot doors are retired (above).
-    RegisterRuntimeExport("?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&::Graphics::GraphicsMesh::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x180012480ull, (void*)&::Graphics::GraphicsMesh::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&::Graphics::GraphicsMesh::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x180012500ull, (void*)&::Graphics::GraphicsMesh::CreateInPlaceObject);
-
-    RegisterRuntimeAddr(0x1800a4670ull,
-                        (void*)&RtGraphics_GraphicsMeshTriangleList_Serialize); ++n;
 
     return n;
 }

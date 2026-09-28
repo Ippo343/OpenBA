@@ -245,7 +245,6 @@ namespace {
 using AnimationClip  = ::Graphics::Animation;
 using AnimationGroup = ::Graphics::AnimationGroup;
 
-
 // ENDGAME B.3.9 block GFX: batch 7's `ConstructBody` (the Base / External /
 // AnimationGroup stamps out of the MINT plus the field stores) is gone. The
 // stores are the real `AnimationGroup()` (AnimationGroup.h) and the stamps the
@@ -509,7 +508,6 @@ namespace {
 // fields that keep a position name are the ones no reader has identified. See
 // that header's banner for the two-witness argument.
 using ParticleSystem = ::Graphics::ParticleSystem;
-
 
 }  // namespace
 
@@ -838,21 +836,8 @@ int RtGraphicsBatch7AnimGroupParticleSystemRegister() {
     // AnimationGroup: the factory pair (B39_RULES D2), the class's own statics,
     // by name AND address; the minted `?_typeInfo@AnimationGroup` record
     // resolves them. The slot doors are retired (above).
-    RegisterRuntimeExport("?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&::Graphics::AnimationGroup::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x180016400ull, (void*)&::Graphics::AnimationGroup::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&::Graphics::AnimationGroup::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x1800164d0ull, (void*)&::Graphics::AnimationGroup::CreateInPlaceObject);
-    RegisterRuntimeAddr  (0x18005a040ull, (void*)&RtGraphics_AnimationGroup_SerializeClips); ++n;
 
     // ParticleSystem: the factory pair (B39_RULES D2), the class's own statics,
     // by name AND address. Its ctor / slot doors are retired (above).
-    RegisterRuntimeExport("?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&::Graphics::ParticleSystem::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x1800204d0ull, (void*)&::Graphics::ParticleSystem::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&::Graphics::ParticleSystem::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180020550ull, (void*)&::Graphics::ParticleSystem::CreateInPlaceObject);
     return n;
 }

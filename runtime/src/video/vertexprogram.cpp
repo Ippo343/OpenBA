@@ -127,7 +127,6 @@ void* ActiveDeviceDataPtr() {
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
 }
 
-
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
 // interchangeable in Serializer.h). `name` is nullptr, as retail passes.
@@ -428,40 +427,8 @@ extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, vo
 int RtVideoVertexProgramRegister() {
     int n = 0;
     // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
-    RegisterRuntimeExport("?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::VertexProgram::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004e650ull, (void*)&Video::VertexProgram::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::VertexProgram::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004e6d0ull, (void*)&Video::VertexProgram::CreateInPlaceObject);
 
     // Batch D1: unexported in both builds, address door only.
-    RegisterRuntimeAddr  (0x180056db0ull, (void*)&RtVideo_VertexProgram_SerializeStreams); ++n;
 
-    RegisterRuntimeExport("?TypeId@VertexProgram@Video@@SAIXZ",        (void*)&RtVideo_VertexProgram_TypeId);   ++n;
-    RegisterRuntimeAddr  (0x18004e550ull,                              (void*)&RtVideo_VertexProgram_TypeId);
-    RegisterRuntimeExport("?_TypeName@VertexProgram@Video@@CAPEBDXZ",       (void*)&RtVideo_VertexProgram_StaticTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e520ull,                                   (void*)&RtVideo_VertexProgram_StaticTypeName);
-    RegisterRuntimeExport("?_ParentTypeName@VertexProgram@Video@@CAPEBDXZ", (void*)&RtVideo_VertexProgram_ParentTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e530ull,                                   (void*)&RtVideo_VertexProgram_ParentTypeName);
-    RegisterRuntimeExport("?_FileExtension@VertexProgram@Video@@CAPEBDXZ",  (void*)&RtVideo_VertexProgram_FileExtension); ++n;
-    RegisterRuntimeAddr  (0x18004e510ull,                                   (void*)&RtVideo_VertexProgram_FileExtension);
-
-
-    RegisterRuntimeExport("?GetData@VertexProgram@Video@@QEBAPEBVVertexProgramData@2@XZ",
-                          (void*)&RtVideo_VertexProgram_GetData); ++n;
-    RegisterRuntimeAddr  (0x18004e720ull, (void*)&RtVideo_VertexProgram_GetData);
-    RegisterRuntimeExport("?Bind@VertexProgram@Video@@QEBAXAEAVContext@2@H@Z",
-                          (void*)&RtVideo_VertexProgram_Bind); ++n;
-    RegisterRuntimeAddr  (0x1800f6660ull, (void*)&RtVideo_VertexProgram_Bind);
-    RegisterRuntimeExport("?PlatformConstruct@VertexProgram@Video@@AEAAXXZ",
-                          (void*)&RtVideo_VertexProgram_PlatformConstructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f65e0ull, (void*)&RtVideo_VertexProgram_PlatformConstructExport);
-    RegisterRuntimeExport("?PlatformCreate@VertexProgram@Video@@AEAA_NXZ",
-                          (void*)&RtVideo_VertexProgram_PlatformCreateExport); ++n;
-    RegisterRuntimeAddr  (0x1800f6640ull, (void*)&RtVideo_VertexProgram_PlatformCreateExport);
-    RegisterRuntimeExport("?PlatformDestruct@VertexProgram@Video@@AEAAXXZ",
-                          (void*)&RtVideo_VertexProgram_PlatformDestructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f6620ull, (void*)&RtVideo_VertexProgram_PlatformDestructExport);
     return n;
 }

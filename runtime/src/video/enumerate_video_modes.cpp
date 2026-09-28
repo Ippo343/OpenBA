@@ -190,8 +190,5 @@ extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
 }
 
 int RtVideoEnumerateModesRegister() {
-    RegisterRuntimeExport("?EnumerateVideoModes@Device@Video@@QEAA_NXZ",   // 2319
-                          (void*)&RtVideo_Device_EnumerateVideoModes);
-    RegisterRuntimeAddr(0x1800f8610, (void*)&RtVideo_Device_EnumerateVideoModes);
     return 1;
 }

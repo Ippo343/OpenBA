@@ -70,8 +70,6 @@
 
 using RtGraphics::FrameCopyImageBuffer;
 
-
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -521,8 +519,6 @@ int RtGraphicsWave23GfxbodyRegister() {
     // Create, Generate) are retired -- every builder is `::new (p) X()`, the
     // destructor is reached through slot 0, and Create / Generate only through
     // the object's own (compiler) table.
-    RegisterRuntimeExport("?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z",
-                          (void*)&RtGraphics_AnimationManager_Update); ++count;
 
     return count;   // 1
 }

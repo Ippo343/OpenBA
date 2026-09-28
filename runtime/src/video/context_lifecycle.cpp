@@ -599,7 +599,6 @@ void BuildCase(Context* c, unsigned seed) {
 
 }  // namespace
 
-
 // ============================================================================
 // Registration
 //
@@ -636,21 +635,15 @@ void BuildCase(Context* c, unsigned seed) {
 int RtVideoContextLifecycleRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?ClearResources@Context@Video@@QEAAXXZ",
-                          (void*)&RtVideo_Context_ClearResources); ++n;
     RegisterRuntimeExport("??1Context@Video@@QEAA@XZ",
                           (void*)&RtVideo_Context_Dtor); ++n;
-    RegisterRuntimeExport("??1ConstantBuffer@Video@@QEAA@XZ",
-                          (void*)&Video_ConstantBuffer_Dtor); ++n;
     // ?PlatformDestruct@RenderBuffer@Video@@ is registered by buffers.cpp, which
     // owns the body. Registering it here too made this file's (now deleted)
     // duplicate body win both doors.
     RegisterRuntimeExport("??3RenderBuffer@Video@@SAXPEAX@Z",
                           (void*)&Video_RenderBuffer_OperatorDelete); ++n;
 
-    RegisterRuntimeAddr(0x1800f2090, (void*)&RtVideo_Context_ClearResources);
     RegisterRuntimeAddr(0x1800f16e0, (void*)&RtVideo_Context_Dtor);
-    RegisterRuntimeAddr(0x1800eeee0, (void*)&Video_ConstantBuffer_Dtor);
     // 0x1800f4400: likewise buffers.cpp's, see above.
     RegisterRuntimeAddr(0x18001f360, (void*)&Video_RenderBuffer_OperatorDelete);
     // Bound by NAME as well as by address since Wave 9 phase 4. It was

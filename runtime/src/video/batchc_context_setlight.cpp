@@ -209,8 +209,5 @@ extern "C" void RtVideo_Context_SetLight(void* self,
 // token, so registering it is safe.
 // ============================================================================
 extern "C" int RtVideoBatchCSetLightRegister() {
-    RegisterRuntimeExport("?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z",
-                          (void*)&RtVideo_Context_SetLight);
-    RegisterRuntimeAddr(0x18001a950ull, (void*)&RtVideo_Context_SetLight);
     return 1;
 }

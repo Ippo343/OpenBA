@@ -182,8 +182,6 @@
 #include "../../types/object/External.h"           // the ExternalPtr serializers
 #include "../../types/system/String.h"
 
-
-
 // ---------------------------------------------------------------------------
 // NEGATIVE-CONTROL SEAM — COMPILED ONLY INTO tools/gfxmat24_probe.
 //
@@ -581,7 +579,6 @@ bool MaterialInstance::Serialize(void* streamv) {
 
 }  // namespace Graphics
 
-
 // ---------------------------------------------------------------------------
 // ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z
 // retail 0x1800ff680, ordinal 3707. 114 bytes.
@@ -740,16 +737,6 @@ int RtGraphicsWave24GfxmatRegister() {
 
     // ENDGAME B.3.9 GFX: the four MaterialInstance slot doors are retired; the
     // factory pair (B39_RULES D2) is the class's own, by name AND address.
-    RegisterRuntimeExport("?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::MaterialInstance::CreateNewObject); ++count;
-    RegisterRuntimeAddr(0x180002900ull, (void*)&Graphics::MaterialInstance::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::MaterialInstance::CreateInPlaceObject); ++count;
-    RegisterRuntimeAddr(0x1800029d0ull, (void*)&Graphics::MaterialInstance::CreateInPlaceObject);
-    RegisterRuntimeExport("?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtGraphics_MeshInstance_Serialize); ++count;
-    RegisterRuntimeExport("?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtGraphics_AnimationManager_Serialize); ++count;
 
     return count;   // 4
 }

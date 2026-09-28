@@ -401,10 +401,6 @@ extern "C" bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
 // Registration — BY NAME AND BY ADDRESS
 // ============================================================================
 int RtVideoSaveImageRegister() {
-    RegisterRuntimeExport(
-        "?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z",
-        (void*)&Video_ImageBuffer_SaveImageToFile);
-    RegisterRuntimeAddr(0x1800f2840, (void*)&Video_ImageBuffer_SaveImageToFile);
     printf("[RtPort] Video::ImageBuffer::SaveImageToFile (Wave 18 lane VRES): "
            "1 export registered\n");
     return 1;

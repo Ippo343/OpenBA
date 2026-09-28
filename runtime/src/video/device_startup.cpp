@@ -109,7 +109,6 @@ using RtVideo::GraphicsInterface;
 using RtVideo::InterfaceSlot;
 using RtVideo::RefreshRate;
 
-
 // The Win32 half (device_startup_win.cpp): the two message callbacks whose
 // ADDRESSES PlatformStartup stores, and the EnumDisplaySettingsW probe.
 extern "C" int  RtVideo_Device_SizeWindow(void* hwnd, unsigned msg, uint64_t w, int64_t l);
@@ -831,43 +830,6 @@ int RtVideoDeviceStartupRegister() {
     // after is necessary but not sufficient, because it cannot see a swap that
     // happened and was undone.
     printf("[LaneVID2] identity: device_startup.cpp built " __DATE__ " " __TIME__ "\n");
-
-    RegisterRuntimeExport("?PlatformStartup@Device@Video@@AEAA_NXZ",
-                          (void*)&RtVideo_Device_PlatformStartup); ++n;
-    RegisterRuntimeExport("?Startup@Device@Video@@QEAA_NXZ",
-                          (void*)&RtVideo_Device_Startup); ++n;
-    RegisterRuntimeExport("?PlatformShutdown@Device@Video@@AEAAXXZ",
-                          (void*)&RtVideo_Device_PlatformShutdown); ++n;
-    RegisterRuntimeExport("?Shutdown@Device@Video@@QEAAXXZ",
-                          (void*)&RtVideo_Device_Shutdown); ++n;
-    RegisterRuntimeExport("?ValidateConfiguration@Device@Video@@QEAA_NXZ",
-                          (void*)&RtVideo_Device_ValidateConfiguration); ++n;
-    RegisterRuntimeExport("?CreateVideoInterface@Device@Video@@QEAA_NH@Z",
-                          (void*)&RtVideo_Device_CreateVideoInterface); ++n;
-    RegisterRuntimeExport("?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z",
-                          (void*)&RtVideo_Device_SizeWindow); ++n;
-    RegisterRuntimeExport("?MoveWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z",
-                          (void*)&RtVideo_Device_MoveWindow); ++n;
-    RegisterRuntimeExport("?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z",
-                          (void*)&RtVideo_Device_GetDefaultResolution); ++n;
-
-    RegisterRuntimeAddr(0x1800f8260, (void*)&RtVideo_Device_PlatformStartup);
-    RegisterRuntimeAddr(0x1800f7270, (void*)&RtVideo_Device_Startup);
-    RegisterRuntimeAddr(0x1800f83f0, (void*)&RtVideo_Device_PlatformShutdown);
-    RegisterRuntimeAddr(0x1800f7280, (void*)&RtVideo_Device_Shutdown);
-    RegisterRuntimeAddr(0x1800f8830, (void*)&RtVideo_Device_ValidateConfiguration);
-    RegisterRuntimeAddr(0x1800f7930, (void*)&RtVideo_Device_CreateVideoInterface);
-    RegisterRuntimeAddr(0x1800f7d20, (void*)&RtVideo_Device_SizeWindow);
-    RegisterRuntimeAddr(0x1800f7d90, (void*)&RtVideo_Device_MoveWindow);
-    RegisterRuntimeAddr(0x1800f7540, (void*)&RtVideo_Device_GetDefaultResolution);
-
-    RegisterRuntimeAddr(0x180010760, (void*)&RtVideo_ArrayRefreshDtor);
-    RegisterRuntimeAddr(0x180009560, (void*)&RtVideo_ArrayBoolDtor);
-    RegisterRuntimeAddr(0x180010cf0, (void*)&RtVideo_ArrayModeElemDestroy);
-    RegisterRuntimeAddr(0x180010830, (void*)&RtVideo_ArrayModeDtor);
-    RegisterRuntimeAddr(0x18000fbf0, (void*)&RtVideo_ArrayRefreshAssign);
-    RegisterRuntimeAddr(0x180008b00, (void*)&RtVideo_ArrayBoolAssign);
-    RegisterRuntimeAddr(0x18000fcd0, (void*)&RtVideo_ArrayModeAssign);
 
     return n;
 }

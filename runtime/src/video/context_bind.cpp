@@ -594,7 +594,6 @@ extern "C" void RtVideo_Context_BindResources(void* self) {
     static_cast<Video::Context*>(self)->Video::Context::BindResources();
 }
 
-
 // ============================================================================
 // THE PROBE
 // ============================================================================
@@ -960,7 +959,6 @@ constexpr int kNCases = static_cast<int>(sizeof(kCases) / sizeof(kCases[0]));
 
 }  // namespace
 
-
 // ============================================================================
 // Registration — BOTH DOORS for both symbols.
 // ============================================================================
@@ -985,11 +983,5 @@ constexpr int kNCases = static_cast<int>(sizeof(kCases) / sizeof(kCases[0]));
 // spells them `AEAA`, for the same reason and with the same note.
 int RtVideoContextBindRegister() {
     int n = 0;
-    RegisterRuntimeExport("?BindResources@Context@Video@@AEAAXXZ",
-                          (void*)&RtVideo_Context_BindResources); ++n;
-    RegisterRuntimeExport("?BindTextures@Context@Video@@AEAAXXZ",
-                          (void*)&RtVideo_Context_BindTextures);  ++n;
-    RegisterRuntimeAddr(0x1800ef060, (void*)&RtVideo_Context_BindResources);
-    RegisterRuntimeAddr(0x1800ef330, (void*)&RtVideo_Context_BindTextures);
     return n;
 }

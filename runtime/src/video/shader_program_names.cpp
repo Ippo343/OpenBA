@@ -246,10 +246,6 @@ extern "C" String* RtVideo_ShaderProgram_GetTextureName(const void* self,
 // ports were invisible to the board for that reason.
 int Register() {
     int count = 0;
-    RegisterRuntimeExport("?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z",
-                          (void*)&RtVideo_ShaderProgram_GetConstantName); ++count;
-    RegisterRuntimeExport("?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z",
-                          (void*)&RtVideo_ShaderProgram_GetTextureName); ++count;
     return count;
 }
 

@@ -45,7 +45,6 @@ using RtGraphics::MaterialParameterSet;
 using RtGraphics::MaterialTexture;
 using RtVideo::Context;
 
-
 namespace {
 
 // ============================================================================
@@ -294,9 +293,6 @@ int RtGraphicsWave21GfxbodyRegister() {
                           (void*)&RtGraphics_FrameCopyImageBuffer_OperatorNew); ++count;
     RegisterRuntimeExport("??2MaterialInstance@Graphics@@SAPEAX_K@Z",
                           (void*)&RtGraphics_MaterialInstance_OperatorNew); ++count;
-    RegisterRuntimeExport("?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z",
-                          (void*)&RtGraphics_MaterialInstance_Setup); ++count;
-
 
     return count;   // 3
 }

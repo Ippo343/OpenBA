@@ -62,7 +62,6 @@ using rt::io::Serializer;
 using rt::io::Stream;
 using rt::io::ReaderWriter;
 
-
 // ENDGAME B.3.9 block GFX: `ConstructBody` (retail 0x1801029a0 open-coded as
 // three MINTED vptr stamps plus the zero stores) and `CallSlot0` are gone: the
 // stores are the real `Material()` (Material.h), the stamps the compiler's, and
@@ -185,11 +184,5 @@ int RtGraphicsMaterialRegister() {
     int n = 0;
     // The factory pair (B39_RULES D2), the class's own statics, by name AND
     // address; the minted `?_typeInfo@Material` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::Material::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x1800119c0ull, (void*)&Graphics::Material::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::Material::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180011a70ull, (void*)&Graphics::Material::CreateInPlaceObject);
     return n;
 }

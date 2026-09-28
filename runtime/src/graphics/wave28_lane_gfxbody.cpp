@@ -62,8 +62,6 @@
 #include "../collection/array_internal.h"
 #include "../system/string.h"
 
-
-
 // System::Timer::_secondsPerTick (0x1801fe728). NOT a literal that can be
 // lifted: RVA 0x1fe728 lies BEYOND `.data`'s SizeOfRawData, i.e. in the
 // uninitialised tail, so there are no bytes in the file to read and a port that
@@ -504,7 +502,6 @@ extern "C" void RtGraphics_Animation_ApplyEvents(const void* self, const void* t
 // ----------------------------------------------------------------------------
 namespace {
 
-
 // The eh-vector ctor at 0x1800801e8 runs 0x180062950 over three 0x10-byte
 // elements, and 0x180062950 is five instructions:
 //     XOR EAX,EAX / MOV [RCX],RAX / MOV [RCX+8],RAX / MOV RAX,RCX / RET
@@ -771,26 +768,8 @@ extern "C" void* RtGraphics_Camera_Assign(void* self, const void* src) {
 int RtGraphicsWave28GfxbodyRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("?GetConstantName@Material@Graphics@@QEBA?AVString@System@@HH@Z",
-                          (void*)&RtGraphics_Material_GetConstantName); ++count;
-    RegisterRuntimeExport("?GetTextureName@Material@Graphics@@QEBA?AVString@System@@HH@Z",
-                          (void*)&RtGraphics_Material_GetTextureName); ++count;
-    RegisterRuntimeExport("?FindConstant@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_FindConstant); ++count;
-    RegisterRuntimeExport("?FindTexture@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_FindTexture); ++count;
-    RegisterRuntimeExport("?ApplyEvents@Animation@Graphics@@QEBAXAEBVTransform@Math@@"
-                          "AEBVTime@System@@1@Z",
-                          (void*)&RtGraphics_Animation_ApplyEvents); ++count;
-    RegisterRuntimeExport("?BeginDrawGroup@Renderer@Graphics@@QEAAHPEBVRenderBuffer@Video@@"
-                          "AEBVCamera@2@1HI@Z",
-                          (void*)&RtGraphics_Renderer_BeginDrawGroup); ++count;
-    RegisterRuntimeExport("?UpdateRootOnly@AnimationState@Graphics@@AEAAXMAEAVVector3@Math@@@Z",
-                          (void*)&RtGraphics_AnimationState_UpdateRootOnly); ++count;
     // Not one of the ten; see §6 -- porting BeginDrawGroup is what put this row
     // into the `called` column, so this lane closes it rather than moving it.
-    RegisterRuntimeExport("??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z",
-                          (void*)&RtGraphics_Camera_Assign); ++count;
 
     return count;
 }

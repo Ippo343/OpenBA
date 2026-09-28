@@ -613,12 +613,6 @@ int RtVideoDeviceEnumTypesRegister() {
                           (void*)&RtVideo_Adapter_CopyCtor); ++n;
     RegisterRuntimeExport("??1Adapter@Device@Video@@QEAA@XZ",
                           (void*)&RtVideo_Adapter_Dtor); ++n;
-    RegisterRuntimeExport("?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z",
-                          (void*)&RtVideo_Adapter_FindOrAddMode); ++n;
-    RegisterRuntimeExport("?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z",
-                          (void*)&RtVideo_Device_GetDisplayMode); ++n;
-    RegisterRuntimeExport("?AdjustDisplay@Device@Video@@QEAAXXZ",
-                          (void*)&RtVideo_Device_AdjustDisplay); ++n;
 
     RegisterRuntimeAddr(0x18000cd90, (void*)&RtVideo_GraphicsInterface_Ctor);
     RegisterRuntimeAddr(0x18000ce10, (void*)&RtVideo_GraphicsInterface_CopyCtor);
@@ -626,15 +620,6 @@ int RtVideoDeviceEnumTypesRegister() {
     RegisterRuntimeAddr(0x1800f7100, (void*)&RtVideo_Adapter_Ctor);
     RegisterRuntimeAddr(0x18000cc70, (void*)&RtVideo_Adapter_CopyCtor);
     RegisterRuntimeAddr(0x18000cc10, (void*)&RtVideo_Adapter_Dtor);
-    RegisterRuntimeAddr(0x1800f7020, (void*)&RtVideo_Adapter_FindOrAddMode);
-    RegisterRuntimeAddr(0x18000d3e0, (void*)&RtVideo_Device_GetDisplayMode);
-    RegisterRuntimeAddr(0x1800f7e20, (void*)&RtVideo_Device_AdjustDisplay);
-
-    RegisterRuntimeAddr(0x180010da0, (void*)&RtVideo_ArrayAdapterElemDestroy);
-    RegisterRuntimeAddr(0x180010900, (void*)&RtVideo_ArrayAdapterDtor);
-    RegisterRuntimeAddr(0x18000fe10, (void*)&RtVideo_ArrayAdapterAssign);
-    RegisterRuntimeAddr(0x180057340, (void*)&RtVideo_ArrayRefreshSetSize);
-    RegisterRuntimeAddr(0x180057440, (void*)&RtVideo_ArrayModeSetSize);
 
     return n;
 }

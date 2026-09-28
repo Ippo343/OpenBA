@@ -71,7 +71,6 @@
 #include "../../types/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 #include "../../types/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -585,14 +584,6 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
 // ============================================================================
 int RtGraphicsMeshInstanceDrawRegister() {
     int n = 0;
-
-    RegisterRuntimeExport("?Draw@MeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-                          (void*)&RtGraphics_MeshInstance_Draw); ++n;
-    RegisterRuntimeAddr(0x180100960ull, (void*)&RtGraphics_MeshInstance_Draw);
-
-    RegisterRuntimeExport("?Draw@EdgeMeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-                          (void*)&RtGraphics_EdgeMeshInstance_Draw); ++n;
-    RegisterRuntimeAddr(0x1800a3150ull, (void*)&RtGraphics_EdgeMeshInstance_Draw);
 
     return n;
 }
