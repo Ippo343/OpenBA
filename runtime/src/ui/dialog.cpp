@@ -207,6 +207,7 @@
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/Element.h"       // B3X W0: the root's slots by name
+#include "../../types/object/VSlot.h"     // B3X W0 audit: the left Contains call's slot
 #include "../../types/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
 #include "../../types/system/Timer.h"     // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/video/Device.h"     // ENDGAME B.3.9 SS1: Video::Device::_singleton
@@ -1641,9 +1642,12 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
             // (+0x18); retail passes `_ui` (+0x10): 0x180113bb3 MOV R9,[RBX+0x10]
             // before CALL [RAX+0x48]. A by-name Contains(x, y, UserInterface*)
             // would either change behaviour or enshrine the divergence.
-            void** vt = *reinterpret_cast<void***>(root);
+            // B3X W0 audit: the SLOT is taken from the member (object/VSlot.h),
+            // not the literal 9, so it follows UI::Element through the flip; the
+            // call and its arguments are unchanged.
             using Fn = bool (*)(uint8_t*, int32_t, int32_t, const void*);
-            hit = reinterpret_cast<Fn>(vt[9])(root, mx2, my2, _dialog);
+            hit = reinterpret_cast<Fn>(
+                ::Object::SlotAddressOf(root, &UI::Element::Contains))(root, mx2, my2, _dialog);
         } else {
             const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
             const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);

@@ -52,6 +52,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"        // Graphics::Animation -- block GC
+#include "../../types/object/VSlot.h"             // B3X W0 audit: ApplyEvents' slot-8 call
 #include "../../types/system/Value.h"             // System::Time, ditto
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
@@ -1129,9 +1130,10 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
 //
 // SLOT 8 OF THE EVENT OBJECT STAYS A HAND-INLINED VIRTUAL CALL. Its receiver is a
 // `Graphics::AnimationEvent` subclass defined in the EXE, reached through whatever
-// vtable that object wears, and slot 8 is `_purecall` in the abstract base -- there
-// is no member to call. Left as is, and named here rather than left to be
-// rediscovered.
+// vtable that object wears, and slot 8 is `_purecall` in the abstract base (the
+// header's pure `Construct()`, whose empty argument list disagrees with the call).
+// The slot is read through `Object::SlotAddressOf(&AnimationEvent::Construct)`
+// (B3X W0 audit), not a literal index.
 // ---------------------------------------------------------------------------
 void Animation::ApplyEvents(const Math::Transform& base, const System::Time& from,
                             const System::Time& to) const {
@@ -1171,7 +1173,15 @@ void Animation::ApplyEvents(const Math::Transform& base, const System::Time& fro
         if (!fire) continue;
 
         void* const e = ev->event;
-        (*reinterpret_cast<rtgfxbody28::EventFireFn* const*>(e))[8](e, transform);
+        // Slot 8 is `AnimationEvent::Construct()` in the header, but retail passes
+        // RDX = the transform (`CALL [RAX+0x40]`, banner above) and the header's
+        // empty argument list is pinned by the tests' overrides, so it cannot be
+        // corrected here. The SLOT is taken from the member (object/VSlot.h), so it
+        // follows the class through the normal-virtual flip; the call keeps
+        // retail's two arguments. B3X W0 audit: a by-name call waits for the
+        // header's slot-8 signature fix (W1, with the tests).
+        reinterpret_cast<rtgfxbody28::EventFireFn>(
+            ::Object::SlotAddressOf(e, &Graphics::AnimationEvent::Construct))(e, transform);
         ++rtgfxbody28::g_applyEventsFired;
     }
 }
