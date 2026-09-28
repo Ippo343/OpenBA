@@ -56,21 +56,17 @@ SpawnDescription::~SpawnDescription() {
 
 // [5] 0x1400560b0: stream order as retail.
 bool SpawnDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    // exe-internal 16-byte-stride array resize (0x14000c520, resolved by address)
-    typedef void (*SpawnArrayResize_t)(void* arrayHeader, int newCount);
-    SpawnArrayResize_t resize =
-        reinterpret_cast<SpawnArrayResize_t>(ResolveAddr(Module::Exe, 0x14000c520));
     int count = _entryCount;
     ser.Serialize(count, nullptr);
-    if (SerStreamErr(ser) == 0 && resize) {
-        resize(&_entries, count);   // header at +0x20 {ptr, count, cap}
+    if (SerStreamErr(ser) == 0) {
+        // exe-internal 16-byte-stride array resize (0x14000c520)
+        Reimpl_Array_Resize_Stride10_Spawn(&_entries, count);   // header at +0x20 {ptr, count, cap}
     }
     if (count > 0) {
         uint8_t* elem = static_cast<uint8_t*>(_entries);
         for (int i = 0; i < count && elem; ++i, elem += 0x10) {
-            fn_ExternalPtr_BuildSerialize(elem + 0x00, &ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x00, &ser);
             ser.Serialize(*reinterpret_cast<float*>(elem + 0x08), nullptr);
             ser.Serialize(*reinterpret_cast<float*>(elem + 0x0c), nullptr);
         }

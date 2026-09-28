@@ -26,31 +26,29 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"          // ActCNR_FindComponent_c460, ActCNR_SetupModelAtCell_126540,
+                                        // ActCNR_SetGrowthProgress_120db0
+#include "Work/exe_bodies.h"            // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
+#include "Player/exe_bodies.h"          // PlayerPath_CharComp_f5d0
+#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Game/exe_constants.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
 
 static constexpr float SECS_PER_SEASON = 300.0f;
 
-// FUN_1400052c0 — gets linked object from entity owner
-typedef void* (*fn_GetLinkedObject_t)(void* entity, void* outPtr);
-static fn_GetLinkedObject_t s_fn_GetLinkedObject = nullptr;
-
-// FUN_140055780 — performs actual spawn operation
-typedef void (*fn_DoSpawn_t)(void* self, void* resourceData, int entryIndex, char flag);
-static fn_DoSpawn_t s_fn_DoSpawn = nullptr;
+// 0x1400052c0 WorkBase_FindComponent_52c0 — gets linked object from entity owner
+// 0x140055780 SpawnComponent_DoSpawn (below) — performs actual spawn operation
 
 // FUN_140001bb0 — dynamic Time-array resize (stride 8). Sizes the per-entry timer
 // array at self+0x28 in the OnCreate/Startup body-init. ENDGAME B.3.2 step 2:
 // converted to GameColl::AsArray<GameColl::Ptr8>(h).SetSize(n) (same stride/align/
 // zero-tail as Collection::Array<void*>::SetSize).
 
-// ---- stream-serialize helpers (vtable slot [3], see SpawnComponent_Serialize) ----
-typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
-static fn_IsDerived_t          s_fn_IsDerived           = nullptr;  // slot 0x140152a98
-
-static bool s_initialized = false;
+// The stream serializer (vtable slot [3]) validates with ?IsDerivedFrom@Base@Object@@
+// (import slot 0x140152a98), called on the object.
 
 // ============================================================
 // SpawnComponent::Update (0x140055ad0)
@@ -91,19 +89,15 @@ bool g_worldgenDone = false;
 //     meaningless (retail's data never has one).
 // The dead component-search over the OWNER's list at the top of 5cc0 (its result
 // is computed and discarded) is not reproduced.
-static void EnsureSpawnHelpers();   // defined with the DoSpawn closure below
-
 void SpawnComponent_InitialSpawn(SpawnComponent* self) {
-    SpawnComponent_InitFuncs();
-    EnsureSpawnHelpers();
-    if (!self || !s_fn_DoSpawn) return;
+    if (!self) return;
 
     uintptr_t comp = reinterpret_cast<uintptr_t>(self);
 
     // Sibling NaturalResourceComponent — carries the growth value at +0x28.
     uintptr_t ownerIBP = comp + 0x10;
     uintptr_t natRes = 0;
-    if (s_fn_GetLinkedObject) s_fn_GetLinkedObject(*(void**)ownerIBP, &natRes);
+    WorkBase_FindComponent_52c0(*(uintptr_t*)ownerIBP, &natRes);
     if (natRes == 0) return;
     const float growth = *(float*)(natRes + 0x28);
 
@@ -111,7 +105,7 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
     void* baseObj = self->_description;
     if (!baseObj) return;
     void* spawnDesc = baseObj;
-    if (fn_IsDerivedFrom && fn_IsDerivedFrom(baseObj, SpawnDescription::TypeId()))
+    if (Object::IsDerivedFromNullSafe(baseObj, SpawnDescription::TypeId()))
         spawnDesc = baseObj;
 
     const int entryCount = *(int*)((uintptr_t)spawnDesc + 0x28);
@@ -145,31 +139,10 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
         if (!(perSpawn > 0.0f)) continue;
         const int repeats = (int)(growth / perSpawn) + 1;
         for (int r = 0; r < repeats; ++r) {
-            s_fn_DoSpawn(self, spawnDesc, i, 1);   // flag=1 => random orientation
+            SpawnComponent_DoSpawn(self, spawnDesc, i, 1);   // flag=1 => random orientation
         }
     }
 }
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void SpawnComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_GetLinkedObject = reinterpret_cast<fn_GetLinkedObject_t>(
-        ResolveAddr(Module::Exe, 0x1400052c0));
-    s_fn_DoSpawn = reinterpret_cast<fn_DoSpawn_t>(
-        ResolveAddr(Module::Exe, 0x140055780));
-
-    {
-        uintptr_t slot;
-        slot = ResolveAddr(Module::Exe, 0x140152a98);
-        if (slot) s_fn_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
-    }
-
-    s_initialized = true;
-}
-
 
 // 0x140055ee0 door: registered by address (standalone/reg_growth_spawn_serialize.cpp).
 extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
@@ -187,46 +160,16 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
 // template's density (g_fUVScale / templ+0x48) decides whether to spawn; the tile is
 // chosen by RandTol jitter around the owner tile and validated, then a copy of the
 // template entity is instantiated, placed, oriented, and registered.
-typedef void* (*fn_SC_FindMap_t)(uintptr_t entity, void* retbuf); // 0x140004680
-typedef char  (*fn_SC_CanPlace_t)(int* grid, int x, int y, int kind,
-                                  float a, float b, float c,
-                                  char d, char e, int f);          // 0x14009f5d0
-typedef char  (*fn_SC_TileFree_t)(void* templ, int x, int y);     // 0x140120c30
-typedef void* (*fn_SC_CopyCtor_t)(void* dst, int64_t srcEntity);  // 0x1400c3720
-typedef void* (*fn_SC_FindLinkA_t)(int64_t ibp, void* retbuf);    // 0x1400052c0
-typedef void* (*fn_SC_FindLinkB_t)(int64_t ibp, void* retbuf);    // 0x14000c460
-typedef void  (*fn_SC_SetTile_t)(int64_t entity, int tileIndex);  // 0x140126540
-typedef void  (*fn_SC_SetOrient_t)(int64_t entity, float v);      // 0x140120db0
-typedef void  (*fn_SC_Register_t)(void* list, void* ibp, int idx); // 0x1400c48a0
-static fn_SC_FindMap_t   s_sc_FindMap = nullptr;
-static fn_SC_CanPlace_t  s_sc_CanPlace = nullptr;
-static fn_SC_TileFree_t  s_sc_TileFree = nullptr;
-static fn_SC_CopyCtor_t  s_sc_CopyCtor = nullptr;
-static fn_SC_FindLinkA_t s_sc_FindLinkA = nullptr;
-static fn_SC_FindLinkB_t s_sc_FindLinkB = nullptr;
-static fn_SC_SetTile_t   s_sc_SetTile = nullptr;
-static fn_SC_SetOrient_t s_sc_SetOrient = nullptr;
-static fn_SC_Register_t  s_sc_Register = nullptr;
-static float* s_sc_pUVScale = nullptr;   // 0x14017214c
-static float* s_sc_pConstA = nullptr;    // 0x140172140
-static float* s_sc_pConstB = nullptr;    // 0x140172248
-static bool s_scSpawnResolved = false;
-static void EnsureSpawnHelpers() {
-    if (s_scSpawnResolved) return;
-    s_sc_FindMap   = reinterpret_cast<fn_SC_FindMap_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_sc_CanPlace  = reinterpret_cast<fn_SC_CanPlace_t>(ResolveAddr(Module::Exe, 0x14009f5d0));
-    s_sc_TileFree  = reinterpret_cast<fn_SC_TileFree_t>(ResolveAddr(Module::Exe, 0x140120c30));
-    s_sc_CopyCtor  = reinterpret_cast<fn_SC_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_sc_FindLinkA = reinterpret_cast<fn_SC_FindLinkA_t>(ResolveAddr(Module::Exe, 0x1400052c0));
-    s_sc_FindLinkB = reinterpret_cast<fn_SC_FindLinkB_t>(ResolveAddr(Module::Exe, 0x14000c460));
-    s_sc_SetTile   = reinterpret_cast<fn_SC_SetTile_t>(ResolveAddr(Module::Exe, 0x140126540));
-    s_sc_SetOrient = reinterpret_cast<fn_SC_SetOrient_t>(ResolveAddr(Module::Exe, 0x140120db0));
-    s_sc_Register  = reinterpret_cast<fn_SC_Register_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_sc_pUVScale  = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_sc_pConstA   = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172140));
-    s_sc_pConstB   = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172248));
-    s_scSpawnResolved = true;
-}
+// The DoSpawn closure, by retail address:
+//   0x140004680 FloorComponent_FindResData        (the owner's map component)
+//   0x14009f5d0 PlayerPath_CharComp_f5d0          (can-place test)
+//   0x140120c30 WorkLeaf_FootprintOwnerCheck_120c30 (tile-free test; the door read AL)
+//   0x1400c3720 ComponentEntity_CtorFromDescription
+//   0x1400052c0 WorkBase_FindComponent_52c0       0x14000c460 ActCNR_FindComponent_c460
+//   0x140126540 ActCNR_SetupModelAtCell_126540    0x140120db0 ActCNR_SetGrowthProgress_120db0
+//   0x1400c48a0 EntityList_RegisterEntity_Impl
+//   .rdata 0x14017214c = 1.0 (g_fUVScale), 0x140172140 = 0.98, 0x140172248 = 1000.0
+static float SC_RdataF32(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 // DoSpawn outcome census — `dispatched` above only counts CALLS, and DoSpawn
 // bails on six separate conditions before an entity exists. Counting the call is
@@ -272,7 +215,6 @@ extern "C" void SpawnComponent_ReportDoSpawnCensus(const char* tag) {
 // BANISHED_LIVE_GROWTH is default-on, so the links ARE populated, the guard never
 // fired, and the crash reproduced byte-identically. Ruled out — don't re-spend it.
 void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag) {
-    EnsureSpawnHelpers();
     uintptr_t self = (uintptr_t)selfP;
     ++g_doSpawn.calls;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) { ++g_doSpawn.noWorld; return; }
@@ -294,7 +236,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
             void* comp = *(void**)(arr + (int64_t)i * 8);
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
             if (tid == GrowthDescription::TypeId()) {
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, GrowthDescription::TypeId())) templ = comp;
+                if (Object::IsDerivedFromNullSafe(comp, GrowthDescription::TypeId())) templ = comp;
                 break;
             }
         }
@@ -303,12 +245,12 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 
     // Density roll
     float roll = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
-    float density = s_sc_pUVScale ? (*s_sc_pUVScale / (float)*(int*)((uintptr_t)templ + 0x48)) : 0.0f;
+    float density = kRdata_14017214c / (float)*(int*)((uintptr_t)templ + 0x48);
     if (roll > density) { ++g_doSpawn.densityRoll; return; }
 
     // Owner tile
     uint8_t mapBuf[8] = {0};
-    if (s_sc_FindMap) s_sc_FindMap(*(uintptr_t*)(self + 0x10), mapBuf);
+    FloorComponent_FindResData(*(void**)(self + 0x10), mapBuf);
     int64_t mapComp = *(int64_t*)mapBuf;
     int16_t baseX = *(int16_t*)(mapComp + 0x28);
     int16_t baseY = *(int16_t*)(mapComp + 0x2a);
@@ -320,43 +262,45 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     int mapSize = *grid;
     if (x >= mapSize || y >= mapSize) { ++g_doSpawn.offMap; return; }
 
-    float ca = s_sc_pConstA ? *s_sc_pConstA : 0.0f;
-    float cb = s_sc_pConstB ? *s_sc_pConstB : 0.0f;
-    bool canPlace = s_sc_CanPlace &&
-        s_sc_CanPlace(grid, x, y, 4, ca, cb, 0.0f, '\0', '\0', 0) != '\0';
+    float ca = SC_RdataF32(kRdata_140172140);
+    float cb = SC_RdataF32(kRdata_140172248);
+    bool canPlace =
+        PlayerPath_CharComp_f5d0(grid, x, y, 4, ca, cb, 0.0f, '\0', '\0', 0);
     if (!canPlace) { ++g_doSpawn.cannotPlace; return; }
-    if (!(s_sc_TileFree && s_sc_TileFree(templ, x, y) != '\0')) { ++g_doSpawn.tileTaken; return; }
+    if (!(static_cast<char>(WorkLeaf_FootprintOwnerCheck_120c30(
+              reinterpret_cast<intptr_t>(templ), x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
 
     int placeMapSize = *grid;
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* newEntity = nullptr;
-    if (mem && s_sc_CopyCtor) newEntity = s_sc_CopyCtor(mem, *entry);
+    if (mem) newEntity = ComponentEntity_CtorFromDescription(
+                             reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(*entry));
     // Retail carries a null entity through the remaining steps (every one of them
     // is individually null-guarded, and the final Register would file a null IBP).
     // Bailing here reaches the same end state without adding a junk entry.
     if (!newEntity) { ++g_doSpawn.allocFailed; return; }
 
     int64_t entityIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&entityIbp) ::Object::InternalBasePtr(
+    new (&entityIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
     // Place at tile index
     int64_t linkBufA = 0;
-    void* pa = s_sc_FindLinkA ? s_sc_FindLinkA(entityIbp, &linkBufA) : nullptr;
+    void* pa = WorkBase_FindComponent_52c0(static_cast<uintptr_t>(entityIbp), &linkBufA);
     if (pa) {
-        if (s_sc_SetTile) s_sc_SetTile(*(int64_t*)pa, placeMapSize * y + x);
+        ActCNR_SetupModelAtCell_126540(*(int64_t*)pa, placeMapSize * y + x);
     }
 
     // Reset orientation
     int64_t linkBufB = 0;
-    void* pb = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &linkBufB) : nullptr;
+    void* pb = ActCNR_FindComponent_c460(static_cast<uintptr_t>(entityIbp), &linkBufB);
     if (pb) {
-        if (s_sc_SetOrient) s_sc_SetOrient(*(int64_t*)pb, 0.0f);
+        ActCNR_SetGrowthProgress_120db0(*(int64_t*)pb, 0.0f);
     }
 
     // Register with world entity list
     int64_t regIbp = entityIbp;
-    if (s_sc_Register) {
+    {
         // EntityList::RegisterEntity (0x1400c48a0) opens with
         //   if (*(char*)((char*)list + 0xE0)) { InternalBasePtr::DeletePtr(ibp); return; }
         // i.e. a closed list DESTROYS the entity we just constructed instead of
@@ -366,8 +310,8 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
         // precisely the dangling scene node Scene::Clean faults on.
         void* list = *(void**)(gw + 0xe8);
         const bool closed = list && *((char*)list + 0xE0) != '\0';
-        s_sc_Register(list, &regIbp,
-                      *(int*)(*(int64_t*)(*(int64_t*)(self + 0x10) + 0x28) + 0x20));
+        EntityList_RegisterEntity_Impl(list, &regIbp,
+                                       *(int*)(*(int64_t*)(*(int64_t*)(self + 0x10) + 0x28) + 0x20));
         // Measurement only — the tail below stays byte-faithful to retail, which
         // also carries on through the deleted IBP (its finders return null there).
         if (closed) ++g_doSpawn.listClosed; else ++g_doSpawn.created;
@@ -376,12 +320,12 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     // Optional random orientation
     if (flag != '\0') {
         int64_t b2 = 0;
-        void* p2 = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &b2) : nullptr;
+        void* p2 = ActCNR_FindComponent_c460(static_cast<uintptr_t>(entityIbp), &b2);
         if (p2 && *(int64_t*)p2 != 0) {
             int64_t b3 = 0;
-            void* p3 = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &b3) : nullptr;
+            void* p3 = ActCNR_FindComponent_c460(static_cast<uintptr_t>(entityIbp), &b3);
             float rf = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
-            if (p3 && s_sc_SetOrient) s_sc_SetOrient(*(int64_t*)p3, rf);
+            if (p3) ActCNR_SetGrowthProgress_120db0(*(int64_t*)p3, rf);
         }
     }
 }
@@ -418,7 +362,6 @@ SpawnComponent::SpawnComponent() : field28(nullptr), field30(nullptr) {
 //   resolved as s_pSpawnResourceTypeId): if they differ, resize again to
 //   match the description currently in effect.
 void SpawnComponent::Persist(void* stream) {
-    SpawnComponent_InitFuncs();
     if (!stream) return;
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
@@ -445,8 +388,8 @@ void SpawnComponent::Persist(void* stream) {
     if (Loading(stream)) {
         void* desc = *reinterpret_cast<void**>(comp + 0x18);
         void* validated = nullptr;
-        if (desc && s_fn_IsDerived &&
-            s_fn_IsDerived(desc, SpawnDescription::TypeId()))
+        if (desc &&
+            reinterpret_cast<const Object::Base*>(desc)->IsDerivedFrom(SpawnDescription::TypeId()))   // B.3.x bridge
             validated = desc;
         int descCount = validated
             ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(validated) + 0x28)
@@ -471,7 +414,6 @@ void SpawnComponent::Persist(void* stream) {
 // standalone that can be unreliable, so we trust comp+0x18 (the description the
 // copy-ctor stored), matching growthcomponent.cpp's documented precedent.
 void SpawnComponent::Startup() {
-    SpawnComponent_InitFuncs();
     uint8_t* comp = reinterpret_cast<uint8_t*>(this);
 
     void* desc = *reinterpret_cast<void**>(comp + 0x18);   // _unk18 = SpawnDescription
@@ -488,7 +430,6 @@ void SpawnComponent::Startup() {
 // bucket tick 0x1400c42af).
 void SpawnComponent::Update(void* timeV) {
     int64_t* pDeltaTime = static_cast<int64_t*>(timeV);
-    SpawnComponent_InitFuncs();
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(this);
 
@@ -510,15 +451,11 @@ void SpawnComponent::Update(void* timeV) {
     // CheckPtr on owner IBP, then get linked object
     uintptr_t ownerIBP = (uintptr_t)this + 0x10;
     uintptr_t linkedObjPtr = 0;
-    if (s_fn_GetLinkedObject)
-        s_fn_GetLinkedObject(*(void**)ownerIBP, &linkedObjPtr);
+    WorkBase_FindComponent_52c0(*(uintptr_t*)ownerIBP, &linkedObjPtr);
 
     // Get resource data via IsDerivedFrom check on _unk18
     void* baseObj = _description;
-    if (!fn_IsDerivedFrom) {
-        return;
-    }
-    bool isDerived = fn_IsDerivedFrom(baseObj, SpawnDescription::TypeId());
+    bool isDerived = Object::IsDerivedFromNullSafe(baseObj, SpawnDescription::TypeId());
     void* resourceData = isDerived ? baseObj : nullptr;
     // [STANDALONE TRUST] The factory tree can be incomplete in standalone, making
     // IsDerivedFrom on a description unreliable (see growthcomponent.cpp Startup).
@@ -574,7 +511,7 @@ void SpawnComponent::Update(void* timeV) {
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
 
             if (typeId == GrowthDescription::TypeId()) {
-                if (fn_IsDerivedFrom(comp, GrowthDescription::TypeId())) {
+                if (Object::IsDerivedFromNullSafe(comp, GrowthDescription::TypeId())) {
                     spawnIntervalComp = comp;
                 }
                 break;
@@ -592,7 +529,7 @@ void SpawnComponent::Update(void* timeV) {
         pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
         while (intervalTicks > 0 && *pTimer >= intervalTicks) {
             *pTimer -= intervalTicks;
-            if (s_fn_DoSpawn) {
+            {
                 // Positive assertion: only the per-tick arm can print this,
                 // one-shot.
                 if (g_worldgenDone) {
@@ -603,7 +540,7 @@ void SpawnComponent::Update(void* timeV) {
                         fflush(stderr);
                     }
                 }
-                s_fn_DoSpawn(this, resourceData, i, 0);
+                SpawnComponent_DoSpawn(this, resourceData, i, 0);
             }
             pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
         }
