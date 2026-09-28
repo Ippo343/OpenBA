@@ -1184,9 +1184,8 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
 
         // 0x1400f10ce: recompute the region ids at cell+0x26. ⚠ ONE argument --
         // RCX only. Ghidra prints a 4-arg prototype; the extra three are stale
-        // registers, and the ported body reads only param_1. Passing zeros is
-        // therefore equivalent to retail's garbage.
-        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(terrain), nullptr, nullptr, 0);
+        // registers, and the body takes only param_1.
+        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(terrain));
 
         // --- 0x1400f10d3..0x1400f1156: the passability / region test ---------
         // Cell records live at terrain+0x80, stride 0x30 (LEA r,[r+r*2]; SHL 4).

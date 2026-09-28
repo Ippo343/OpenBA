@@ -366,7 +366,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
         int candidateCell = WorldToCell(gridSize, candidatePos[0], candidatePos[1]);
 
         if (candidateCell != 0) {
-            Pf_ZoneRefresh_9c480(mapGrid, nullptr, nullptr, 0);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
+            Pf_ZoneRefresh_9c480(mapGrid);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
 
             uintptr_t gridData = *(uintptr_t*)(mapGrid + 0x20);
             if (CheckCellConnectivity(gridData, buildingCell, candidateCell)) {
@@ -398,13 +398,13 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
                     int testCell = WorldToCell(gridSize, testPos[0], testPos[1]);
 
                     // Check connectivity (first pass)
-                    Pf_ZoneRefresh_9c480(mapGrid, nullptr, nullptr, 0);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
+                    Pf_ZoneRefresh_9c480(mapGrid);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
                     gridData = *(uintptr_t*)(mapGrid + 0x20);
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;
 
                     // Check connectivity (second pass after re-invalidation)
-                    Pf_ZoneRefresh_9c480(mapGrid, nullptr, nullptr, 0);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
+                    Pf_ZoneRefresh_9c480(mapGrid);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
                     gridData = *(uintptr_t*)(mapGrid + 0x20);
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;

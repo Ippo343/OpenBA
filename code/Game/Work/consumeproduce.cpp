@@ -805,7 +805,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
             if (prodCellX >= mapSize) prodCellX = mapSize - 1;
 
             // Recalculate map zones
-            Pf_ZoneRefresh_9c480(mapGrid, producePos, 0, slot);
+            Pf_ZoneRefresh_9c480(mapGrid);
 
             // Get cell structs for passability check
             uintptr_t structBase3 = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);

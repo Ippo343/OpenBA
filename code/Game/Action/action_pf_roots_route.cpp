@@ -222,7 +222,6 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
         uint32_t local_res8 = 0xffffffff;
         if (iVar5 <= iVar6) {
             do {
-                uint64_t uVar18 = (uint64_t)uVar16;
                 if ((-1 < iVar5) && (iVar5 < *piVar3)) {
                     for (int iVar13 = iVar4; iVar13 < (int)(iVar4 + uVar16); iVar13 = iVar13 + 1) {
                         if ((-1 < iVar13) && (iVar13 < *piVar3)) {
@@ -230,10 +229,11 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
                             int64_t lVar10b = (int64_t)(int)uVar14;
                             if ((1 << (*(uint8_t*)(*(int64_t*)(piVar3 + 0x20) + 0x29 + lVar10b * 0x30) & 0x1f) &
                                  0xe07U) != 0) {
-                                Pf_ZoneRefresh_9c480(piVar3, (void*)uVar9, (void*)uVar18, (int)param_4);   // 0x14009c480
+                                // 0x14009c480, RCX only (Ghidra's uVar18 carried its phantom
+                                // 3rd argument and is gone with it)
+                                Pf_ZoneRefresh_9c480(piVar3);
                                 param_4 = *(int64_t*)(piVar3 + 0x20);
                                 uint32_t uVar17 = 1 << (*(uint8_t*)(param_4 + 0x29 + (int64_t)(int)param_2 * 0x30) & 0x1f);
-                                uVar18 = (uint64_t)uVar17;
                                 uint32_t uVar7 = 1 << (*(uint8_t*)(param_4 + 0x29 + lVar10b * 0x30) & 0x1f);
                                 uint32_t uVar11 = uVar7 | uVar17;
                                 uint32_t uVar12 = uVar11 | 0xe1f;
@@ -243,7 +243,6 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
                                          (*(short*)(param_4 + 0x26 + (int64_t)(int)param_2 * 0x30) != 0)) &&
                                         (*(short*)(param_4 + 0x26 + lVar10b * 0x30) ==
                                          *(short*)(param_4 + 0x26 + (int64_t)(int)param_2 * 0x30))))))) {
-                                    uVar18 = (uint64_t)param_2;
                                     int iVar8 = WorkBase_CalcDistance_8830(piVar3, uVar14, param_2);   // 0x140008830
                                     if (iVar8 < iVar15) {
                                         uVar9 = (uint64_t)uVar14;

@@ -53,9 +53,15 @@ void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int p
 //   for each walkable (terrain-class bit in 0xe1f) cell whose marker is still 0, launch
 //   a flood-fill (9c170) labelling that connected component with an incrementing region
 //   id (sVar6 starting at 1).
-// param_4 = the seed/scratch passed through to 9c170.
+// ONE parameter (B3R Leftovers, read in retail): Ghidra's prototype had four, built from
+// register use. The callers (0x14009f29e, 0x1400eb303, 0x1400e532a / 54ea / 556c, ...)
+// load only RCX. The body WRITES EDX (0x14009c4bd; per cell 0x14009c524 = EDI, the cell
+// index: uVar2 below) and R8D (0x14009c520 = R14W, the region id: sVar6 below) before
+// reading them -- they are its locals, initialised exactly there -- and never touches R9.
+// What reaches 9c170's R9 is therefore not a value of this function (9c170 does not read
+// it either: see Pf_FloodFillRegion_9c170).
 // ============================================================
-void Pf_ZoneRefresh_9c480(int* param_1, void* param_2, void* param_3, int param_4) {
+void Pf_ZoneRefresh_9c480(int* param_1) {
     uint uVar1;
     uint64_t uVar2;
     uint64_t uVar3;
@@ -83,7 +89,7 @@ void Pf_ZoneRefresh_9c480(int* param_1, void* param_2, void* param_3, int param_
             do {
                 if (((1 << (*reinterpret_cast<uint8_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x20) + 0x29 + uVar5) & 0x1f) & 0xe1fU) != 0) &&
                     (*reinterpret_cast<short*>(*reinterpret_cast<int64_t*>(param_1 + 0x20) + 0x26 + uVar5) == 0)) {
-                    Pf_FloodFillRegion_9c170(param_1, static_cast<uint32_t>(static_cast<int>(uVar2)), static_cast<uint16_t>(sVar6), param_4);   // 0x14009c170
+                    Pf_FloodFillRegion_9c170(param_1, static_cast<uint32_t>(static_cast<int>(uVar2)), static_cast<uint16_t>(sVar6));   // 0x14009c170
                     sVar6 = sVar6 + 1;
                 }
                 uVar5 = uVar5 + 0x30;
@@ -92,7 +98,6 @@ void Pf_ZoneRefresh_9c480(int* param_1, void* param_2, void* param_3, int param_
             } while (lVar4 != 0);
         }
     }
-    (void)param_2; (void)param_3;
 }
 
 // ============================================================

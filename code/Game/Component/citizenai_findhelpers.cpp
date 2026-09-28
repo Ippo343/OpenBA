@@ -455,23 +455,19 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                 Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP), vec, 0, 0, nullptr);
                 uint32_t cell = WorldToCell(mapGrid, vec);
 
-                // path cost + ZoneRefresh args (uVar30/uVar22 carry cell/goal or %w/dist² per fallback)
-                uint64_t zr_a = cell;
-                uint64_t zr_b = param_3;
+                // path cost (Ghidra's uVar30/uVar22, cell/goal or %w/dist², were the extra
+                // ZoneRefresh "arguments"; 0x14009c480 takes RCX only and they are gone)
                 int cost = Pf_IsDstReachable_f810(mapGrid, cell, param_3, '\x01');
                 if (cost < 0) {
                     int w = *mapGrid;
-                    zr_a = static_cast<uint32_t>(static_cast<int>(param_3) % w);
                     int dRow = static_cast<int>(cell) / w - static_cast<int>(param_3) / w;
                     int dCol = static_cast<int>(cell) % w - static_cast<int>(param_3) % w;
                     uint32_t d2 = static_cast<uint32_t>(dRow * dRow + dCol * dCol);
-                    zr_b = d2;
                     float r = WorkImpl_Sqrtf_132010(static_cast<float>(static_cast<int>(d2)));
                     cost = static_cast<int>(r) + w;
                 }
                 if (cost < best) {
-                    Pf_ZoneRefresh_9c480(mapGrid, reinterpret_cast<void*>(zr_a),
-                                         reinterpret_cast<void*>(zr_b), 1);   // 0x14009c480
+                    Pf_ZoneRefresh_9c480(mapGrid);   // 0x14009c480 (RCX only)
                     int64_t cellArr = *reinterpret_cast<int64_t*>(mapGrid + 0x20);  // int* +0x20 = +0x80 bytes
                     int64_t cGoal = static_cast<int64_t>(static_cast<int>(param_3)) * 0x30 + cellArr;
                     int64_t cCand = static_cast<int64_t>(static_cast<int>(cell)) * 0x30 + cellArr;

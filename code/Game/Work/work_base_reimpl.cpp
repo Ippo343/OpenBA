@@ -349,8 +349,7 @@ uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t d
         static_cast<int64_t>(destCell) >= cellCount)
         return 0;
 
-    Pf_ZoneRefresh_9c480(mapGrid, reinterpret_cast<void*>(static_cast<uintptr_t>(pathType)),
-                         reinterpret_cast<void*>(static_cast<uintptr_t>(destCell)), srcCell);
+    Pf_ZoneRefresh_9c480(mapGrid);   // 0x14009c480 (RCX only)
 
     uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
     uintptr_t recSrc  = cellArr + static_cast<uintptr_t>(static_cast<uint32_t>(srcCell)) * 0x30;

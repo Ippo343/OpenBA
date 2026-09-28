@@ -10,8 +10,8 @@
 // until its own pass registers it.
 #include "resolve.h"
 #include <cstdint>
+#include "Action/exe_bodies.h"   // Pf_ZoneRefresh_9c480 (0x14009c480), declared from its definition
 
-extern void Pf_ZoneRefresh_9c480(int*, void*, void*, int);                 // 0x14009c480
 extern void Pf_SetTileRoadFlag_9f2f0(int*, int, uint32_t);                 // 0x14009f2f0
 extern void Pf_RefreshRegionHeight_9e0e0(uint32_t*, int, int, int, int);   // 0x14009e0e0
 extern void Pf_FinalizeRoadTile_9c640(uint32_t*, int, uint8_t, uint32_t);  // 0x14009c640

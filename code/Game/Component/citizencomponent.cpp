@@ -2010,7 +2010,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
                     if (mw <= wpX) wpX = mw - 1;
                     if (wpY < 0) wpY = 0;
                     if (mw <= wpY) wpY = mw - 1;
-                    Pf_ZoneRefresh_9c480(mapInfo, mapInfo, 0, 0);
+                    Pf_ZoneRefresh_9c480(mapInfo);   // 0x14009c480 (RCX only)
                     int64_t cellBase = *reinterpret_cast<int64_t*>(
                         reinterpret_cast<uint8_t*>(mapInfo) + 0x80);
                     int64_t homeCellPtr = homeCellIdx * 0x30 + cellBase;

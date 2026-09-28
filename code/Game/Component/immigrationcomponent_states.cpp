@@ -240,7 +240,7 @@ extern "C" int Immigration_FindSpawnCell(void* compV, int x, int y, int hallCell
         uintptr_t tiles = Tiles(grid);
         uint32_t fc = 1u << (*reinterpret_cast<uint8_t*>(tiles + static_cast<uintptr_t>(c) * 0x30 + 0x29) & 0x1f);
         if ((fc & 0xe07u) == 0) continue;
-        Pf_ZoneRefresh_9c480(grid, nullptr, nullptr, hallCell);   // 0x14009c480
+        Pf_ZoneRefresh_9c480(grid);   // 0x14009c480 (RCX only)
         tiles = Tiles(grid);
         uintptr_t tc = tiles + static_cast<uintptr_t>(c) * 0x30;
         uintptr_t th = tiles + static_cast<uintptr_t>(hallCell) * 0x30;
