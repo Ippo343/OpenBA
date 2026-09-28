@@ -33,6 +33,7 @@
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Component/exe_bodies.h"   // B3R: FrustumOutline_ProjectCorners
+#include "Game/exe_constants.h"   // B3R: kRdata_*
 
 
 // ============================================================
@@ -143,7 +144,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // Set sprite info with UV scale
     imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
     imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
     reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);  // B.3.6 bridge
 
     // --- Find named image element and set sprite ---

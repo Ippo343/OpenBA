@@ -73,6 +73,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 #include "Dialog/exe_bodies.h"
+#include "Game/exe_constants.h"   // B3R: kRdata_*
 
 
 // ============================================================
@@ -180,7 +181,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
     void* tableElem = *(void**)(s + 0x108);
     reinterpret_cast<UI::TableElement*>(tableElem)->SetSize(totalSlots / 3 + 1, 3);  // B.3.6 bridge
 
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
     void* saveLoad = ::Save::SaveLoad::_singleton;
 
     // --- Phase 3: Populate save file entries ---

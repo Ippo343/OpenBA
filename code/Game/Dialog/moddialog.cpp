@@ -65,15 +65,19 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
+#include "Dialog/MainMenuDialog.h"     // B3R: MainMenuDialog_ReturnToMenu
+#include "save/SaveLoad.h"             // B3R: Save::SavedState
+#include "system/Configuration.h"      // B3R: System::Configuration::GetVersionString
+#include "Game/exe_constants.h"   // B3R: kRdata_*
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
 // ============================================================
 // Helper types
 // ============================================================
 
-// Vtable call helpers for Element (via raw vtable pointer reads)
-typedef void* (*fn_ElementVt_Child_t)(void* self, void* retbuf, int index);
-typedef void  (*fn_ElementVt_Hide_t)(void* self, int hide);
+// (B3R: the two unused raw-vtable-read typedefs fn_ElementVt_Child_t / _Hide_t that
+// stood here had no reader and are gone.)
 
 // ENDGAME B.3.5 batch K1: the hand-built `fn_ImageBuffer_Create_t` slot typedef for
 // vtable+0x48 went with the slot read below, which is now a virtual call on
@@ -176,8 +180,9 @@ conflict_done:
             uint32_t versionMinor = *(uint32_t*)(m + 0x1C);
 
             // GetVersionString returns a String for the version major (as game build version)
-            System::String buildStr;
-            fn_Configuration_GetVersionString(&buildStr, versionMajor, false);
+            // ?GetVersionString@Configuration@System@@ is a by-value static; its door
+            // placement-constructed the result over this (empty) local.
+            System::String buildStr = System::Configuration::GetVersionString(versionMajor, false);
 
             System::String formatted = System::String::Format("%i (%s)", (uint64_t)versionMinor, buildStr._data);
 
@@ -274,7 +279,7 @@ void ModDialog::OnOpened() {
 
     void* modSingleton = ::IO::Modification::_singleton;
     int modCount = reinterpret_cast<const IO::Modification*>(modSingleton)->GetCount();   // B.3.4 bridge
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
 
     for (int i = 0; i < modCount; i++) {
         // Clone template element from Dialog, add to tableMods
@@ -393,7 +398,7 @@ void ModDialog::OnOpened() {
         entry.imageIcon     = *(uint64_t*)imageIconBuf;
 
         // --- Create 48x48 ImageBuffer ---
-        void* imgBuf = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+        void* imgBuf = System::MemoryAllocator::MemAlloc(0x68, 8);
         entry.imageBuffer = nullptr;
         if (imgBuf) {
             // Retail: `CALL [??0ImageBuffer]` then LEA 0x14015c8c0 — the class's
@@ -405,7 +410,7 @@ void ModDialog::OnOpened() {
         }
 
         // --- Create MaterialInstance (0x60 bytes) ---
-        void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+        void* matInst = System::MemoryAllocator::MemAlloc(0x60, 8);
         entry.matInstance = nullptr;
         if (matInst) {
             ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
@@ -421,7 +426,7 @@ void ModDialog::OnOpened() {
                     ->FindOrLoad(filenameBuf));
             void* material = nullptr;
             if (ext) {
-                bool derived = fn_IsDerivedFrom(ext, Graphics::Material::TypeId());
+                bool derived = ::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId());
                 if (derived) material = ext;
             }
             reinterpret_cast<Graphics::MaterialInstance*>(matInst)->SetMaterial(
@@ -442,7 +447,7 @@ void ModDialog::OnOpened() {
             ->BuildParameters();   // B.3.5 bridge
 
         // --- Create SpriteSheet (0x58 bytes) ---
-        void* sprSheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+        void* sprSheet = System::MemoryAllocator::MemAlloc(0x58, 8);
         entry.spriteSheet = nullptr;
         if (sprSheet) {
             ::new (sprSheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
@@ -599,7 +604,7 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
     void* dialog = ext;
 
     // Allocate ModDetailsDialog (0xC8 = 200 bytes)
-    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
+    void* newDialog = System::MemoryAllocator::MemAlloc(0xC8, 8);
     void* dialogInst = nullptr;
     if (newDialog) {
         // Get sprite handle from entry+0x50 (SpriteSheet ptr)
@@ -659,7 +664,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         void* dialog = ext;  // IsDerivedFrom check always passes for valid .rsc
 
         // Create ReloadDialog (0xC0 bytes)
-        void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+        void* newDialog = System::MemoryAllocator::MemAlloc(0xC0, 8);
         void* dialogInst = nullptr;
         if (newDialog) {
             // ENDGAME B.3.8 DLG: a real MessageDialog (retail stamps its
@@ -690,17 +695,17 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         if ((unsigned)(result - 1) < 2) {
             // User confirmed: save and reload
             reinterpret_cast<IO::Modification*>(modSingleton)->SaveList();   // B.3.4 bridge
-            fn_ModDialog_CloseAndReload((void*)self);
+            ModDialog_CloseAndReload((void*)self);   // 0x14006e9b0
 
             if (gameWorld == nullptr) {
                 // Menu context: simple reload via +0xD0 controller
-                fn_MainMenu_Reload(*(void**)(s + 0xD0));
+                MainMenuDialog_ReturnToMenu(*(MainMenuDialog**)(s + 0xD0));   // 0x1400b4790
             } else {
                 // Game context: allocate SavedState (0x10 bytes), construct it
-                void* savedState = fn_MemAlloc(g_pMemAllocSingleton, 0x10, 4);
+                void* savedState = System::MemoryAllocator::MemAlloc(0x10, 4);
                 void* statePtr = nullptr;
-                if (savedState && fn_SavedState_Ctor) {
-                    statePtr = fn_SavedState_Ctor(savedState);
+                if (savedState) {
+                    statePtr = ::new (savedState) Save::SavedState();   // ??0SavedState 0x1800c0ee0 (its door placement-news the class)
                 }
 
                 // Call vtable[7] on Engine singleton sub-object at +0x20
@@ -719,7 +724,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
                 new (&nullRef2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                 // Trigger game reload with saved state
-                fn_Game_ReloadWithSave(*(void**)(s + 0xD0), statePtr, (void*)(uintptr_t)-1, &nullRef2);
+                WorldSetup_LoadFromSave(*(void**)(s + 0xD0), statePtr, (void*)(uintptr_t)-1, &nullRef2);   // 0x1400b49f0
             }
         } else {
             // User cancelled: refresh list to undo changes
