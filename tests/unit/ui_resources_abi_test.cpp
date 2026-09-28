@@ -62,11 +62,13 @@ void B39NoteDtor(const void* self) {
     ++g_b39DtorCount;
 }
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -129,7 +131,7 @@ void CheckNineSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
 // Slot 4 is Object::External's own body (inherited) on four of the six.
 void CheckCompileInherited(void* raw) {
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] == VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, kCompile / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), kCompile / 8));
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +173,7 @@ UNIT_TEST(ui_characterset_qualified_call_does_not_reenter_the_door) {
     const void* minted[9] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 9; ++i) minted[i] = real[i];
-    minted[kGetFileVersion / 8] = reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
+    minted[RetailSlot<Object::Base>(kGetFileVersion / 8)] = reinterpret_cast<const void*>(&MintedGetFileVersionDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;
@@ -261,7 +263,7 @@ UNIT_TEST(ui_stringtable_slot_order_is_retails) {
 // with no hidden slot, so the raw call is safe.
 void CheckCompileOverridden(void* raw) {
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] != VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, kCompile / 8) != RetailEntry<Object::Base>(static_cast<void*>(&bare), kCompile / 8));
     using CompileFn = uint32_t (*)(void*, const void*);
     Reset();
     const uint32_t r = SlotAt<CompileFn>(raw, kCompile)(raw, nullptr);
@@ -410,7 +412,7 @@ UNIT_TEST(ui_block_d_resources_construct_at_slot8) {
         CHECK_EQ(g_lastMark, kConstruct / 8);
         CHECK(g_lastSelf == all[c]);
         for (int i = 0; i < 8; ++i)
-            CHECK(VTableOf(all[c])[i] != VTableOf(all[c])[kConstruct / 8]);
+            CHECK(VTableOf(all[c])[i] != RetailEntry<Object::Base>(all[c], kConstruct / 8));
     }
 }
 

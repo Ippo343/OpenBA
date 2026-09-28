@@ -231,7 +231,7 @@ UNIT_TEST(achievement_goal_slot9_takes_this_then_retslot) {
     ProbeGoalLeaf g; g.typeId = 0x1234abcdu;
     // GoalList::Initialize (0x18009f13f): RCX = the goal, RDX = &slot, CALL [RAX+0x48].
     using RetailOrder = Object::Type* (*)(const void* self, Object::Type* ret);
-    void* slot9 = (*reinterpret_cast<void***>(&g))[0x48 / 8];
+    void* slot9 = (*reinterpret_cast<void***>(&g))[RetailSlot<ProbeGoalLeaf>(0x48 / 8)];
     Object::Type slot; slot._type = 0xdeadbeefu;
     Object::Type* got = reinterpret_cast<RetailOrder>(slot9)(&g, &slot);
     CHECK_EQ(got, &slot);                   // RAX == the caller's storage

@@ -41,6 +41,7 @@
 // which are verified by the real run.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -74,11 +75,13 @@ void Note(const void* self, int mark, long long arg = 0) {
 }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -346,8 +349,8 @@ UNIT_TEST(ui_elementdescription_slot_order_is_retails) {
 
     // Slot 4 is `Object::External::Compile`, INHERITED (RULE B6-1.5).
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kD4_Compile / 8] ==
-          VTableOf(static_cast<void*>(&bare))[kD4_Compile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, kD4_Compile / 8) ==
+          RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8));
 
     // Nine distinct entries: CreateInstance at slot 8, no Construct (B6-1.1).
     const void* const* vt = VTableOf(raw);
@@ -435,7 +438,7 @@ UNIT_TEST(ui_element_qualified_call_does_not_reenter_the_door) {
     const void* minted[12] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 12; ++i) minted[i] = real[i];
-    minted[kE10_SetColor / 8] = reinterpret_cast<const void*>(&MintedSetColorDoor);
+    minted[RetailSlot<Object::Base>(kE10_SetColor / 8)] = reinterpret_cast<const void*>(&MintedSetColorDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;

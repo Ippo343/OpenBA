@@ -68,11 +68,12 @@ void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
 
 // The one instruction every raw slot caller in runtime/src compiles to.
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,7 @@ struct AnimationGroupProbe final : Graphics::AnimationGroup {
 // takes a `const System::Filename&` (one pointer) and returns a four-byte enum
 // in EAX with NO hidden return slot (B35_RULES section 2.5 excludes `?AW4`), so
 // it raw-calls safely too.
+template <class T>
 void CheckExternalFamilySlots(void* raw, bool checkConstruct,
                               const ::Object::BaseTypeInfo* record = nullptr) {
     using DtorFn  = void* (*)(void*, unsigned);
@@ -134,38 +136,38 @@ void CheckExternalFamilySlots(void* raw, bool checkConstruct,
     using PtrFn   = void* (*)(void*);
     using VoidFn  = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
+    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8);
     CHECK(g_lastSelf == raw);
 
     if (record) {   // DECLARE_TYPE's real slots 1/2 over the class's record (B.3.9 TI-REST)
-        CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record->name);
-        CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record->typeId);
+        CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record->name);
+        CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record->typeId);
     } else {
-        Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);
+        Reset(); SlotAt<NameFn, T>(raw, kTypeName)(raw);
         CHECK_EQ(g_lastMark, kTypeName / 8);
 
-        Reset(); SlotAt<TypeFn>(raw, kType)(raw);
+        Reset(); SlotAt<TypeFn, T>(raw, kType)(raw);
         CHECK_EQ(g_lastMark, kType / 8);
     }
 
-    Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);
+    Reset(); SlotAt<VerFn, T>(raw, kGetFileVersion)(raw);
     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
 
-    Reset(); SlotAt<CompFn>(raw, kCompile)(raw, nullptr);
+    Reset(); SlotAt<CompFn, T>(raw, kCompile)(raw, nullptr);
     CHECK_EQ(g_lastMark, kCompile / 8);
 
-    Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr);
+    Reset(); SlotAt<SerFn, T>(raw, kSerialize)(raw, nullptr);
     CHECK_EQ(g_lastMark, kSerialize / 8);
 
-    Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);
+    Reset(); SlotAt<PtrFn, T>(raw, kReconstruct)(raw);
     CHECK_EQ(g_lastMark, kReconstruct / 8);
 
-    Reset(); SlotAt<VoidFn>(raw, kDestruct)(raw);
+    Reset(); SlotAt<VoidFn, T>(raw, kDestruct)(raw);
     CHECK_EQ(g_lastMark, kDestruct / 8);
 
     if (checkConstruct) {
-        Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);
+        Reset(); SlotAt<PtrFn, T>(raw, kConstruct)(raw);
         CHECK_EQ(g_lastMark, kConstruct / 8);
     }
 }
@@ -175,7 +177,7 @@ UNIT_TEST(graphics_animationevent_slot_order_is_retails) {
     void* raw = static_cast<void*>(&probe);
 
     // The probe overrides all nine, so all nine raw-call onto their own marker.
-    CheckExternalFamilySlots(raw, /*checkConstruct=*/true);
+    CheckExternalFamilySlots<AnimationEventProbe>(raw, /*checkConstruct=*/true);
 
     // The table has NINE distinct entries and no tenth that aliases one of them.
     const void* const* vt = *reinterpret_cast<const void* const* const*>(raw);
@@ -219,7 +221,8 @@ UNIT_TEST(graphics_animationgroup_slot_order_is_retails) {
     // Slots 3-8 are AnimationGroup's OWN overrides, whose bodies are the marker
     // stubs at the bottom of this file; 1/2 are DECLARE_TYPE's over the class
     // record (ENDGAME B.3.9 TI-REST). Slot 0 is the probe's.
-    CheckExternalFamilySlots(raw, /*checkConstruct=*/true, &Graphics::AnimationGroup::GetTypeInfo());
+    CheckExternalFamilySlots<AnimationGroupProbe>(raw, /*checkConstruct=*/true,
+                                                  &Graphics::AnimationGroup::GetTypeInfo());
 
     const void* const* vt = *reinterpret_cast<const void* const* const*>(raw);
     for (int i = 0; i < 9; ++i)

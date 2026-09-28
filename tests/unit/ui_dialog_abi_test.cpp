@@ -75,11 +75,13 @@ const void* g_lastArg  = nullptr;
 void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = nullptr; }
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -197,7 +199,7 @@ UNIT_TEST(ui_dialoginstance_slot_order_is_retails) {
     // Persist is DialogInstance's OWN body (0x180114fa0), not Internal's
     // 0x1800bfda0 — so the +0x18 entries must differ.
     BareInternalProbe bare;
-    CHECK(VTableOf(raw)[DI::kPersist / 8] != VTableOf(static_cast<void*>(&bare))[DI::kPersist / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, DI::kPersist / 8) != RetailEntry<Object::Base>(static_cast<void*>(&bare), DI::kPersist / 8));
     CHECK(static_cast<void*>(static_cast<Object::Internal*>(&probe)) == raw);
 }
 
@@ -223,7 +225,7 @@ UNIT_TEST(ui_dialogcontroller_slot_order_is_one_apart) {
 
     // Slot 3 is INHERITED from Object::Internal (0x1800bfda0).
     BareInternalProbe bare;
-    CHECK(VTableOf(raw)[DC::kPersist / 8] == VTableOf(static_cast<void*>(&bare))[DC::kPersist / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, DC::kPersist / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), DC::kPersist / 8));
 
     // RULE B6-1.2, side by side: the same NAME, one slot apart.
     DialogInstanceProbe inst;
@@ -244,9 +246,9 @@ UNIT_TEST(ui_combodialog_slot_order_is_retails) {
     Reset(); SlotAt<VoidFn>(raw, DI::kOnOpened)(raw);       CHECK_EQ(g_lastMark, 104);
     DialogInstanceProbe base;
     for (int s : {DI::kPersist, DI::kOnOpened, DI::kOnClosed, DI::kOnSerializeSettings})
-        CHECK(VTableOf(raw)[s / 8] == VTableOf(static_cast<void*>(&base))[s / 8]);
+        CHECK(RetailEntry<Object::Base>(raw, s / 8) == RetailEntry<Object::Base>(static_cast<void*>(&base), s / 8));
     for (int s : {DI::kOnUpdateLayout, DI::kOnUpdate, DI::kOnElementEvent})
-        CHECK(VTableOf(raw)[s / 8] != VTableOf(static_cast<void*>(&base))[s / 8]);
+        CHECK(RetailEntry<Object::Base>(raw, s / 8) != RetailEntry<Object::Base>(static_cast<void*>(&base), s / 8));
 }
 
 UNIT_TEST(ui_tooltipdialog_overrides_only_slots_0_1_2) {
@@ -258,7 +260,7 @@ UNIT_TEST(ui_tooltipdialog_overrides_only_slots_0_1_2) {
     CHECK_EQ(SlotAt<TypeFn>(raw, DI::kType)(raw), UI::ToolTipDialog::GetTypeInfo().typeId);
     DialogInstanceProbe base;
     for (int s = DI::kPersist; s <= DI::kOnSerializeSettings; s += 8)
-        CHECK(VTableOf(raw)[s / 8] == VTableOf(static_cast<void*>(&base))[s / 8]);
+        CHECK(RetailEntry<Object::Base>(raw, s / 8) == RetailEntry<Object::Base>(static_cast<void*>(&base), s / 8));
 }
 
 UNIT_TEST(ui_dialog_slot_order_is_retails_construct_at_8) {
@@ -279,7 +281,7 @@ UNIT_TEST(ui_dialog_slot_order_is_retails_construct_at_8) {
     CheckDistinct(raw, 9);
     // Slot 4 is External's Compile, inherited.
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[EX::kCompile / 8] == VTableOf(static_cast<void*>(&bare))[EX::kCompile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, EX::kCompile / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), EX::kCompile / 8));
 }
 
 UNIT_TEST(ui_dialogcontrollerconfig_slot_order_is_retails) {
@@ -293,7 +295,7 @@ UNIT_TEST(ui_dialogcontrollerconfig_slot_order_is_retails) {
     Reset(); SlotAt<VoidFn>(raw, EX::kDestruct)(raw);      CHECK_EQ(g_lastMark, 7);
     CHECK(std::is_abstract<UI::DialogControllerConfig>::value);
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[EX::kCompile / 8] == VTableOf(static_cast<void*>(&bare))[EX::kCompile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, EX::kCompile / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), EX::kCompile / 8));
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +317,7 @@ UNIT_TEST(ui_dialoginstance_qualified_call_does_not_reenter_the_door) {
     const void* minted[10] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 10; ++i) minted[i] = real[i];
-    minted[DI::kOnUpdateLayout / 8] = reinterpret_cast<const void*>(&MintedOnUpdateLayoutDoor);
+    minted[RetailSlot<Object::Base>(DI::kOnUpdateLayout / 8)] = reinterpret_cast<const void*>(&MintedOnUpdateLayoutDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;

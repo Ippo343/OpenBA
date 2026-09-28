@@ -83,6 +83,7 @@
 // is in `tests/unit/sources.mk`), so PART C's retslot values are real ones.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 // The shipped headers. The tests measure THESE, not local copies, so a failure
 // means the header and the ABI disagree.
@@ -116,12 +117,13 @@ void Note(const void* self, int mark, long long arg = 0) {
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 
 // The one instruction every hand-inlined `(*(void***)p)[N]` caller compiles to,
-// spelled by BYTE OFFSET because that is how the tree spells it.
-template <typename Fn>
+// spelled by BYTE OFFSET because that is how the tree spells it. The offset is
+// RETAIL's; T (the object's class, here the mirror) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 // Byte offset of a member measured from two live addresses, for the cases where
@@ -415,36 +417,36 @@ UNIT_TEST(graphics_geometry_slot_order_is_retail_order) {
     // Direction A: a raw `(*(void***)p)[N]` caller, exactly as 118 call sites
     // in the tree spell it, must land on the override with `this` UNADJUSTED.
     Reset();
-    SlotAt<void (*)(void*, unsigned)>(g, kSlot0_DeletingDtor)(g, 3u);
+    SlotAt<void (*)(void*, unsigned), ProbeGeometry>(g, kSlot0_DeletingDtor)(g, 3u);
     CHECK_EQ(g_lastMark, 0);            // MeshInstance does not override slot 0
     CHECK_EQ(g_lastSelf, (const void*)&mi);
     CHECK_EQ(g_lastArg, 3LL);
 
     Reset();
-    SlotAt<void (*)(void*, long long)>(g, kSlot1_Update)(g, 42LL);
+    SlotAt<void (*)(void*, long long), ProbeGeometry>(g, kSlot1_Update)(g, 42LL);
     CHECK_EQ(g_lastMark, 101);
     CHECK_EQ(g_lastSelf, (const void*)&mi);
 
     Reset();
-    SlotAt<void (*)(const void*, int)>(g, kSlot2_Draw)(g, 5);
+    SlotAt<void (*)(const void*, int), ProbeGeometry>(g, kSlot2_Draw)(g, 5);
     CHECK_EQ(g_lastMark, 102);
 
     Reset();
-    SlotAt<void (*)(const void*, int)>(g, kSlot3_AddDrawItems)(g, 6);
+    SlotAt<void (*)(const void*, int), ProbeGeometry>(g, kSlot3_AddDrawItems)(g, 6);
     CHECK_EQ(g_lastMark, 103);
 
     // Slots 4 and 8 are INHERITED: MeshInstance's table carries Geometry's own
     // body at both indices (0x1800a4020 and 0x1800a4420 in retail).
     Reset();
-    SlotAt<void (*)(void*)>(g, kSlot4_UpdateAttached)(g);
+    SlotAt<void (*)(void*), ProbeGeometry>(g, kSlot4_UpdateAttached)(g);
     CHECK_EQ(g_lastMark, 4);
 
     Reset();
-    SlotAt<bool (*)(void*)>(g, kSlot8_Clean)(g);
+    SlotAt<bool (*)(void*), ProbeGeometry>(g, kSlot8_Clean)(g);
     CHECK_EQ(g_lastMark, 8);
 
     Reset();
-    SlotAt<int (*)(const void*, void*, int, float)>(g, kSlot7_SetSharedInstanceData)(
+    SlotAt<int (*)(const void*, void*, int, float), ProbeGeometry>(g, kSlot7_SetSharedInstanceData)(
         g, nullptr, 9, 0.5f);
     CHECK_EQ(g_lastMark, 107);
 }
@@ -458,7 +460,7 @@ UNIT_TEST(graphics_edgemeshinstance_overrides_only_slot6_of_the_two_retslots) {
     {
         Math::Transform out;
         using Fn = Math::Transform* (*)(const void*, Math::Transform*, int);
-        Math::Transform* got = SlotAt<Fn>(g, kSlot5_GetSubTransform)(g, &out, 11);
+        Math::Transform* got = SlotAt<Fn, ProbeGeometry>(g, kSlot5_GetSubTransform)(g, &out, 11);
         CHECK_EQ(got, &out);
         CHECK_EQ(g_lastMark, 5);            // Geometry's, NOT an override
     }
@@ -467,7 +469,7 @@ UNIT_TEST(graphics_edgemeshinstance_overrides_only_slot6_of_the_two_retslots) {
     {
         Math::Matrix out;
         using Fn = Math::Matrix* (*)(const void*, Math::Matrix*, int, float);
-        Math::Matrix* got = SlotAt<Fn>(g, kSlot6_GetInstanceTransform)(g, &out, 12, 0.25f);
+        Math::Matrix* got = SlotAt<Fn, ProbeGeometry>(g, kSlot6_GetInstanceTransform)(g, &out, 12, 0.25f);
         CHECK_EQ(got, &out);
         CHECK_EQ(g_lastMark, 206);
     }
@@ -479,17 +481,17 @@ UNIT_TEST(graphics_light_branch_adds_slots_9_and_10) {
 
     // The first nine indices still mean what Geometry says they mean …
     Reset();
-    SlotAt<void (*)(const void*, int)>(g, kSlot3_AddDrawItems)(g, 1);
+    SlotAt<void (*)(const void*, int), ProbeGeometry>(g, kSlot3_AddDrawItems)(g, 1);
     CHECK_EQ(g_lastMark, 303);
 
     // … and the two new ones sit at 0x48 and 0x50, in that order.
     Reset();
-    SlotAt<void (*)(const void*, int, int)>(g, kSlot9_DrawShadowMap)(g, 4, 5);
+    SlotAt<void (*)(const void*, int, int), ProbeGeometry>(g, kSlot9_DrawShadowMap)(g, 4, 5);
     CHECK_EQ(g_lastMark, 309);
     CHECK_EQ(g_lastArg, 4005LL);
 
     Reset();
-    SlotAt<void (*)(const void*, int, int, int, int)>(g, kSlot10_DrawLight)(g, 7, 0, 0, 8);
+    SlotAt<void (*)(const void*, int, int, int, int), ProbeGeometry>(g, kSlot10_DrawLight)(g, 7, 0, 0, 8);
     CHECK_EQ(g_lastMark, 310);
     CHECK_EQ(g_lastArg, 7008LL);
 }
@@ -503,12 +505,12 @@ UNIT_TEST(graphics_the_two_draw_overloads_stay_eight_slots_apart) {
     ProbeGeometry* g = &sun;
 
     Reset();
-    SlotAt<void (*)(const void*, int)>(g, kSlot2_Draw)(g, 77);
+    SlotAt<void (*)(const void*, int), ProbeGeometry>(g, kSlot2_Draw)(g, 77);
     CHECK_EQ(g_lastMark, 302);          // the slot-2 overload
     CHECK_EQ(g_lastArg, 77LL);
 
     Reset();
-    SlotAt<void (*)(const void*, int, int, int, int)>(g, kSlot10_DrawLight)(g, 1, 0, 0, 2);
+    SlotAt<void (*)(const void*, int, int, int, int), ProbeGeometry>(g, kSlot10_DrawLight)(g, 1, 0, 0, 2);
     CHECK_EQ(g_lastMark, 310);          // the slot-10 overload
     CHECK_EQ(g_lastArg, 1002LL);
 
@@ -594,7 +596,7 @@ UNIT_TEST(graphics_slot5_and_slot6_carry_the_hidden_return_slot) {
         Math::Transform out;
         out.translation = Math::Vector3(-1.0f, -1.0f, -1.0f);
         using Fn = Math::Transform* (*)(const void*, Math::Transform*, int);
-        Math::Transform* got = SlotAt<Fn>(g, kSlot5_GetSubTransform)(g, &out, 4);
+        Math::Transform* got = SlotAt<Fn, ProbeGeometry>(g, kSlot5_GetSubTransform)(g, &out, 4);
         CHECK_EQ(g_lastMark, 105);
         CHECK_EQ(got, &out);                       // RAX == the caller's buffer
         CHECK_EQ(out.translation.x, 10.0f);        // and it holds the value
@@ -609,7 +611,7 @@ UNIT_TEST(graphics_slot5_and_slot6_carry_the_hidden_return_slot) {
     {
         Math::Matrix out;
         using Fn = Math::Matrix* (*)(const void*, Math::Matrix*, int, float);
-        Math::Matrix* got = SlotAt<Fn>(g, kSlot6_GetInstanceTransform)(g, &out, 5, 0.5f);
+        Math::Matrix* got = SlotAt<Fn, ProbeGeometry>(g, kSlot6_GetInstanceTransform)(g, &out, 5, 0.5f);
         CHECK_EQ(g_lastMark, 106);
         CHECK_EQ(got, &out);
         CHECK_EQ(out.m[0], 100.5f);
@@ -678,8 +680,8 @@ UNIT_TEST(graphics_qualified_call_suppresses_minted_dispatch) {
     static void* table[11] = { nullptr };
     void** const gccTable = *reinterpret_cast<void***>(&mi);
     for (int i = 0; i < 9; ++i) table[i] = gccTable[i];
-    table[kSlot1_Update / 8] = reinterpret_cast<void*>(&MintedUpdate);
-    table[kSlot2_Draw   / 8] = reinterpret_cast<void*>(&MintedDraw);
+    table[RetailSlot<ProbeMeshInstance>(kSlot1_Update / 8)] = reinterpret_cast<void*>(&MintedUpdate);
+    table[RetailSlot<ProbeMeshInstance>(kSlot2_Draw   / 8)] = reinterpret_cast<void*>(&MintedDraw);
     *reinterpret_cast<void***>(&mi) = table;
 
     // An ordinary virtual call goes through the minted array …

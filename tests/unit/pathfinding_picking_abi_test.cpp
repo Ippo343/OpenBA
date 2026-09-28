@@ -49,11 +49,12 @@ int         g_lastMark = -1;
 void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
 
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -85,6 +86,7 @@ struct BareExternalProbe final : Object::External {
 // here) and check the marker each one leaves. Slots 1 and 2 are DECLARE_TYPE's
 // real inline bodies (ENDGAME B.3.9 TI-REST) over the class's own record, so
 // they are checked against that record, not a marker.
+template <class T>
 void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
     using DtorFn    = void* (*)(void*, unsigned);
     using NameFn    = const char* (*)(const void*);
@@ -95,19 +97,19 @@ void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
     using PtrFn     = void* (*)(void*);
     using VoidFn    = void (*)(void*);
 
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
+    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
-    CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record.name);
-    CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record.typeId);
-    Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);  CHECK_EQ(g_lastMark, kGetFileVersion / 8);
+    CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record.name);
+    CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record.typeId);
+    Reset(); (SlotAt<VerFn, T>(raw, kGetFileVersion)(raw));  CHECK_EQ(g_lastMark, kGetFileVersion / 8);
     Reset();
-    const uint32_t r = SlotAt<CompileFn>(raw, kCompile)(raw, nullptr);
+    const uint32_t r = SlotAt<CompileFn, T>(raw, kCompile)(raw, nullptr);
     CHECK_EQ(g_lastMark, kCompile / 8);
     CHECK_EQ(r, 1u);                                    // retail's `MOV EAX,1`
-    Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr); CHECK_EQ(g_lastMark, kSerialize / 8);
-    Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);     CHECK_EQ(g_lastMark, kReconstruct / 8);
-    Reset(); SlotAt<VoidFn>(raw, kDestruct)(raw);       CHECK_EQ(g_lastMark, kDestruct / 8);
-    Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);       CHECK_EQ(g_lastMark, kConstruct / 8);
+    Reset(); (SlotAt<SerFn, T>(raw, kSerialize)(raw, nullptr)); CHECK_EQ(g_lastMark, kSerialize / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kReconstruct)(raw));     CHECK_EQ(g_lastMark, kReconstruct / 8);
+    Reset(); (SlotAt<VoidFn, T>(raw, kDestruct)(raw));       CHECK_EQ(g_lastMark, kDestruct / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kConstruct)(raw));       CHECK_EQ(g_lastMark, kConstruct / 8);
     CHECK(g_lastSelf == raw);
 
     const void* const* vt = VTableOf(raw);
@@ -116,7 +118,7 @@ void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
             CHECK(vt[i] != vt[j]);
 
     BareExternalProbe bare;
-    CHECK(vt[kCompile / 8] != VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<T>(raw, kCompile / 8) != RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
 }
 
 }  // namespace
@@ -206,7 +208,7 @@ UNIT_TEST(pathfinding_pointlist_getters_read_retails_offsets) {
 UNIT_TEST(pathfinding_pointlist_slot_order_is_retails) {
     PointListProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineOwnSlots(raw, Pathfinding::PointList::GetTypeInfo());
+    CheckNineOwnSlots<PointListProbe>(raw, Pathfinding::PointList::GetTypeInfo());
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 
@@ -219,13 +221,14 @@ UNIT_TEST(pathfinding_pointlist_qualified_call_does_not_reenter_the_door) {
     const void* minted[9] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 9; ++i) minted[i] = real[i];
-    minted[kGetFileVersion / 8] = reinterpret_cast<const void*>(&MintedPointListGetFileVersionDoor);
+    minted[RetailSlot<PointListProbe>(kGetFileVersion / 8)] =
+        reinterpret_cast<const void*>(&MintedPointListGetFileVersionDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;
     Reset();
     using VerFn = int32_t (*)(const void*);
-    const int32_t v = SlotAt<VerFn>(raw, kGetFileVersion)(raw);
+    const int32_t v = SlotAt<VerFn, PointListProbe>(raw, kGetFileVersion)(raw);
     CHECK_EQ(g_doorEntries, 1);
     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
     CHECK_EQ(v, 5);                      // retail's literal (0x18010f880)
@@ -321,8 +324,8 @@ UNIT_TEST(pathfinding_ipathinfo_is_two_pure_slots_and_no_dtor_slot) {
     PathInfoProbe probe;
     void* raw = static_cast<void*>(&probe);
     using VoidFn = void (*)(void*);
-    Reset(); SlotAt<VoidFn>(raw, 0x00)(raw); CHECK_EQ(g_lastMark, 100);
-    Reset(); SlotAt<VoidFn>(raw, 0x08)(raw); CHECK_EQ(g_lastMark, 101);
+    Reset(); (SlotAt<VoidFn, PathInfoProbe>(raw, 0x00)(raw)); CHECK_EQ(g_lastMark, 100);
+    Reset(); (SlotAt<VoidFn, PathInfoProbe>(raw, 0x08)(raw)); CHECK_EQ(g_lastMark, 101);
 }
 
 UNIT_TEST(pathfinding_scene_layout) {
@@ -512,7 +515,7 @@ UNIT_TEST(picking_pickingmesh_accessors_read_retails_offsets) {
 UNIT_TEST(picking_pickingmesh_slot_order_is_retails) {
     PickingMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineOwnSlots(raw, Picking::PickingMesh::GetTypeInfo());
+    CheckNineOwnSlots<PickingMeshProbe>(raw, Picking::PickingMesh::GetTypeInfo());
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 

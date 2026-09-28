@@ -84,14 +84,18 @@ void Note(const void* self, int who, int slot, long long arg = 0) {
 }
 void Reset() { g_self = nullptr; g_who = kNone; g_slot = -1; g_arg = 0; g_trailN = 0; }
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
+// Retail slot n of a table in this file, as the compiler numbers it.
+constexpr long Retail(int n) { return RetailSlot<Object::Base>(n); }
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
@@ -532,11 +536,11 @@ UNIT_TEST(ui_c1_buttonelement_slot_order_is_retails) {
 
     // INHERITED from UI::Element: 3 Persist, 9 Contains, 10 SetColor, 11 GetBorder.
     for (int off : { kE3_Persist, kE9_Contains, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == pv[off / 8]);
+        CHECK(vt[Retail(off / 8)] == pv[Retail(off / 8)]);
     // ... and the six own ones are NOT the parent's.
     for (int off : { kE1_TypeName, kE2_Type, kE4_ComputeSize, kE5_ComputeLayout,
                      kE6_Draw, kE7_Update, kE8_Enable })
-        CHECK(vt[off / 8] != pv[off / 8]);
+        CHECK(vt[Retail(off / 8)] != pv[Retail(off / 8)]);
 
     CHECK(static_cast<void*>(static_cast<UI::Element*>(&probe)) == raw);
 }
@@ -554,11 +558,11 @@ UNIT_TEST(ui_c1_checkelement_slot_order_is_retails) {
     for (int off : { kE1_TypeName, kE2_Type, kE4_ComputeSize, kE5_ComputeLayout, kE6_Draw })
         ExpectElementSlot(raw, off, kCheckE);
     // Slot 8 is ButtonElement::Enable, INHERITED (0x180110cc0 in both tables).
-    CHECK(vt[kE8_Enable / 8] == bv[kE8_Enable / 8]);
+    CHECK(vt[Retail(kE8_Enable / 8)] == bv[Retail(kE8_Enable / 8)]);
     ExpectElementSlot(raw, kE8_Enable, kButtonE);
     for (int off : { kE3_Persist, kE9_Contains, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
-    CHECK(vt[kE7_Update / 8] != bv[kE7_Update / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
+    CHECK(vt[Retail(kE7_Update / 8)] != bv[Retail(kE7_Update / 8)]);
     CHECK(static_cast<void*>(static_cast<UI::ButtonElement*>(&probe)) == raw);
 }
 
@@ -570,7 +574,7 @@ UNIT_TEST(ui_c1_buttondescription_slot_order_is_retails) {
                      kD6_Reconstruct, kD7_Destruct, kD9_Construct })
         ExpectDescriptionSlot(raw, off, kButtonD);
     // Slot 4 is Object::External::Compile, inherited (RULE B6-1.5).
-    CHECK(VTableOf(raw)[kD4_Compile / 8] == VTableOf(static_cast<void*>(&bare))[kD4_Compile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, kD4_Compile / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8));
     // Ten distinct entries; Construct (9) is BEHIND CreateInstance (8) — B6-1.1.
     const void* const* vt = VTableOf(raw);
     for (int i = 0; i < 10; ++i)
@@ -589,9 +593,9 @@ UNIT_TEST(ui_c1_checkdescription_slot_order_is_retails) {
     // parent's: B36_SLOTS.md marks only slot 4 inherited.
     const void* const* vt = VTableOf(raw);
     const void* const* bv = VTableOf(static_cast<void*>(&button));
-    CHECK(vt[kD4_Compile / 8] == bv[kD4_Compile / 8]);
+    CHECK(vt[Retail(kD4_Compile / 8)] == bv[Retail(kD4_Compile / 8)]);
     for (int i = 1; i < 10; ++i)
-        if (i != kD4_Compile / 8) CHECK(vt[i] != bv[i]);
+        if (i != kD4_Compile / 8) CHECK(vt[Retail(i)] != bv[Retail(i)]);
 }
 
 // ===========================================================================
@@ -649,7 +653,7 @@ UNIT_TEST(ui_c1_qualified_calls_do_not_reenter_the_door) {
     const void* minted[12] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 12; ++i) minted[i] = real[i];
-    minted[kE7_Update / 8] = reinterpret_cast<const void*>(&MintedCheckUpdateDoor);
+    minted[RetailSlot<Object::Base>(kE7_Update / 8)] = reinterpret_cast<const void*>(&MintedCheckUpdateDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x9000));
@@ -717,12 +721,12 @@ UNIT_TEST(ui_c1_comboelement_slot_order_is_retails) {
     ExpectElementSlot(raw, kE2_Type, kComboE);
     // 4/5/6/8 are ButtonElement's (B36_SLOTS.md: inherited-from UI::ButtonElement).
     for (int off : { kE4_ComputeSize, kE5_ComputeLayout, kE6_Draw, kE8_Enable }) {
-        CHECK(vt[off / 8] == bv[off / 8]);
+        CHECK(vt[Retail(off / 8)] == bv[Retail(off / 8)]);
         ExpectElementSlot(raw, off, kButtonE);
     }
     for (int off : { kE3_Persist, kE9_Contains, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
-    CHECK(vt[kE7_Update / 8] != bv[kE7_Update / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
+    CHECK(vt[Retail(kE7_Update / 8)] != bv[Retail(kE7_Update / 8)]);
 
     // Slot 7 is Combo's own and chains to ButtonElement's, qualified.
     void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x5000));
@@ -746,9 +750,9 @@ UNIT_TEST(ui_c1_combodescription_slot_order_is_retails) {
         ExpectDescriptionSlot(raw, off, kComboD);
     const void* const* vt = VTableOf(raw);
     const void* const* bv = VTableOf(static_cast<void*>(&button));
-    CHECK(vt[kD4_Compile / 8] == bv[kD4_Compile / 8]);
+    CHECK(vt[Retail(kD4_Compile / 8)] == bv[Retail(kD4_Compile / 8)]);
     for (int i = 1; i < 10; ++i)
-        if (i != kD4_Compile / 8) CHECK(vt[i] != bv[i]);
+        if (i != kD4_Compile / 8) CHECK(vt[Retail(i)] != bv[Retail(i)]);
     ExpectCreateInstanceRetslot(raw, kComboD, 0xC0C0C0C0u);
 }
 
@@ -813,7 +817,7 @@ UNIT_TEST(ui_c1_borderelement_slot_order_is_retails) {
         ExpectElementSlot(raw, off, kBorderE);
     for (int off : { kE3_Persist, kE7_Update, kE8_Enable, kE9_Contains, kE10_SetColor,
                      kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
 }
 
 UNIT_TEST(ui_c1_clipregionelement_slot_order_is_retails) {
@@ -832,23 +836,23 @@ UNIT_TEST(ui_c1_clipregionelement_slot_order_is_retails) {
         raw, nullptr, nullptr, &handle, &state);
     CHECK_EQ(g_who, (int)kClipE); CHECK_EQ(g_slot, 7);
     // Slot 9 Contains is ClipRegion's own (the only one in this block).
-    CHECK(vt[kE9_Contains / 8] != ev[kE9_Contains / 8]);
+    CHECK(vt[Retail(kE9_Contains / 8)] != ev[Retail(kE9_Contains / 8)]);
     for (int off : { kE3_Persist, kE8_Enable, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
 }
 
 UNIT_TEST(ui_c1_border_clipregion_description_slots) {
     BorderDescriptionProbe border;
     ClipRegionDescriptionProbe clip;
     BareExternalProbe bare;
-    const void* compile = VTableOf(static_cast<void*>(&bare))[kD4_Compile / 8];
+    const void* compile = RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8);
     for (int off : { kD1_TypeName, kD2_Type, kD3_GetFileVersion, kD5_Serialize,
                      kD6_Reconstruct, kD7_Destruct, kD9_Construct }) {
         ExpectDescriptionSlot(static_cast<void*>(&border), off, kBorderD);
         ExpectDescriptionSlot(static_cast<void*>(&clip), off, kClipD);
     }
-    CHECK(VTableOf(static_cast<void*>(&border))[kD4_Compile / 8] == compile);
-    CHECK(VTableOf(static_cast<void*>(&clip))[kD4_Compile / 8] == compile);
+    CHECK(RetailEntry<Object::Base>(static_cast<void*>(&border), kD4_Compile / 8) == compile);
+    CHECK(RetailEntry<Object::Base>(static_cast<void*>(&clip), kD4_Compile / 8) == compile);
     ExpectCreateInstanceRetslot(static_cast<void*>(&border), kBorderD, 0xBDBDBDBDu);
     ExpectCreateInstanceRetslot(static_cast<void*>(&clip), kClipD, 0xC1C2C1C2u);
 }
@@ -870,7 +874,7 @@ UNIT_TEST(ui_c1_clipregion_contains_reaches_the_base_without_reentry) {
     const void* minted[12] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 12; ++i) minted[i] = real[i];
-    minted[kE9_Contains / 8] = reinterpret_cast<const void*>(&MintedClipContainsDoor);
+    minted[RetailSlot<Object::Base>(kE9_Contains / 8)] = reinterpret_cast<const void*>(&MintedClipContainsDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_containsDoorEntries = 0;

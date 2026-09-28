@@ -21,12 +21,18 @@
 // own numbering inside a class whose primary table flips.
 //
 // Constants are never bumped by hand. A raw read through a vtable takes the
-// retail number and translates it with RetailSlot<T> (or RetailByteOffset<T>).
+// retail number and translates it with RetailSlot<T> / RetailByteOffset<T>
+// (RetailEntry / RetailSlotFn read the entry).
+//
+// Left for the flip (W1): raw slot-0 reads and calls (slot 0 becomes D1, and
+// D0 is at 1), loops over a whole table's length, and minted-copy lengths —
+// see docs/runtime_port/endgame_b/b3x_session/T0_LEFT_FOR_W1.md.
 // ============================================================================
 #include "unit.h"
 
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <type_traits>
 
 #include "runtime/types/object/VSlot.h"
@@ -49,6 +55,24 @@ template <class T>
 constexpr uintptr_t RetailByteOffset(uintptr_t retailOff) {
     return static_cast<uintptr_t>(RetailSlot<T>(static_cast<int>(retailOff / sizeof(void*)))) *
            sizeof(void*);
+}
+
+// The entry at RETAIL slot n of obj's table (a raw read). T is obj's class, or
+// any class of its hierarchy: a virtual destructor is inherited, so every class
+// under one root shifts alike.
+template <class T>
+inline const void* RetailEntry(const void* obj, int n) {
+    return (*reinterpret_cast<const void* const* const*>(obj))[RetailSlot<T>(n)];
+}
+
+// The same entry as a function pointer of type Fn.
+template <class Fn, class T>
+inline Fn RetailSlotFn(const void* obj, int n) {
+    static_assert(sizeof(Fn) == sizeof(void*), "a plain function pointer");
+    const void* raw = RetailEntry<T>(obj, n);
+    Fn f;
+    std::memcpy(&f, &raw, sizeof f);
+    return f;
 }
 
 namespace slot_check {

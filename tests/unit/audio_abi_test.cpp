@@ -60,11 +60,12 @@ void NoteDtor(const void* self) {
     ++g_dtorCount;
 }
 
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
@@ -144,16 +145,17 @@ using VoidFn    = void (*)(void*);
 // Raw-call the eight slots every Audio resource owns (4 checked separately).
 // Slots 1 and 2 are DECLARE_TYPE's inline bodies over the class's own record
 // (ENDGAME B.3.9 TI-REST), checked against that record.
+template <class T>
 void CheckOwnSlotsExceptCompile(void* raw, const ::Object::BaseTypeInfo& record) {
-    Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
+    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
-    CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record.name);
-    CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record.typeId);
-    Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
-    Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr); CHECK_EQ(g_lastMark, kSerialize / 8);
-    Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);        CHECK_EQ(g_lastMark, kReconstruct / 8);
-    Reset(); SlotAt<VoidFn>(raw, kDestruct)(raw);          CHECK_EQ(g_lastMark, kDestruct / 8);
-    Reset(); SlotAt<PtrFn>(raw, kConstruct)(raw);          CHECK_EQ(g_lastMark, kConstruct / 8);
+    CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record.name);
+    CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record.typeId);
+    Reset(); (SlotAt<VerFn, T>(raw, kGetFileVersion)(raw));     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
+    Reset(); (SlotAt<SerFn, T>(raw, kSerialize)(raw, nullptr)); CHECK_EQ(g_lastMark, kSerialize / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kReconstruct)(raw));        CHECK_EQ(g_lastMark, kReconstruct / 8);
+    Reset(); (SlotAt<VoidFn, T>(raw, kDestruct)(raw));          CHECK_EQ(g_lastMark, kDestruct / 8);
+    Reset(); (SlotAt<PtrFn, T>(raw, kConstruct)(raw));          CHECK_EQ(g_lastMark, kConstruct / 8);
     CHECK(g_lastSelf == raw);
 }
 
@@ -285,23 +287,25 @@ UNIT_TEST(audio_scene_and_configuration_layout) {
 UNIT_TEST(audio_soundbuffer_slot_order_and_inherited_compile) {
     SoundBufferProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckOwnSlotsExceptCompile(raw, Audio::SoundBuffer::GetTypeInfo());
+    CheckOwnSlotsExceptCompile<SoundBufferProbe>(raw, Audio::SoundBuffer::GetTypeInfo());
     // Slot 4 is NOT SoundBuffer's: it is Object::External's Compile, the same
     // pointer a bare External leaf carries, and it answers retail's 1.
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] == VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
-    CHECK_EQ(SlotAt<CompileFn>(raw, kCompile)(raw, nullptr), 1u);
+    CHECK(RetailEntry<SoundBufferProbe>(raw, kCompile / 8) ==
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
+    CHECK_EQ((SlotAt<CompileFn, SoundBufferProbe>(raw, kCompile)(raw, nullptr)), 1u);
 }
 
 UNIT_TEST(audio_soundeffect_slot_order_and_own_compile) {
     SoundEffectProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckOwnSlotsExceptCompile(raw, Audio::SoundEffect::GetTypeInfo());
+    CheckOwnSlotsExceptCompile<SoundEffectProbe>(raw, Audio::SoundEffect::GetTypeInfo());
     Reset();
-    CHECK_EQ(SlotAt<CompileFn>(raw, kCompile)(raw, nullptr), 1u);
+    CHECK_EQ((SlotAt<CompileFn, SoundEffectProbe>(raw, kCompile)(raw, nullptr)), 1u);
     CHECK_EQ(g_lastMark, kCompile / 8);
     BareExternalProbe bare;
-    CHECK(VTableOf(raw)[kCompile / 8] != VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(RetailEntry<SoundEffectProbe>(raw, kCompile / 8) !=
+          RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
     const void* const* vt = VTableOf(raw);
     for (int i = 0; i < 9; ++i)
         for (int j = i + 1; j < 9; ++j)
@@ -312,7 +316,7 @@ UNIT_TEST(audio_stream_slot0_is_run_and_slot1_is_threads_oncompleted) {
     StreamProbe probe;
     void* raw = static_cast<void*>(&probe);
     Reset();
-    SlotAt<VoidFn>(raw, 0x00)(raw);
+    SlotAt<VoidFn, StreamProbe>(raw, 0x00)(raw);
     CHECK_EQ(g_lastMark, 50);
     CHECK(g_lastSelf == raw);
     // Slot 1 is System::Thread's own OnCompleted: the same pointer the
@@ -335,12 +339,12 @@ UNIT_TEST(audio_soundeffect_qualified_call_does_not_reenter_the_door) {
     const void* minted[9] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 9; ++i) minted[i] = real[i];
-    minted[kCompile / 8] = reinterpret_cast<const void*>(&MintedSoundEffectCompileDoor);
+    minted[RetailSlot<SoundEffectProbe>(kCompile / 8)] =reinterpret_cast<const void*>(&MintedSoundEffectCompileDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_doorEntries = 0;
     Reset();
-    const uint32_t r = SlotAt<CompileFn>(raw, kCompile)(raw, nullptr);
+    const uint32_t r = SlotAt<CompileFn, SoundEffectProbe>(raw, kCompile)(raw, nullptr);
     CHECK_EQ(g_doorEntries, 1);
     CHECK_EQ(g_lastMark, kCompile / 8);
     CHECK_EQ(r, 1u);
@@ -562,7 +566,7 @@ UNIT_TEST(b39_eng_platformchannel_ctor_makes_loop2_stores) {
     CHECK(VTableOf(a) == VTableOf(b));
     // A raw COM-shaped call through slot 2 lands in the member with `this`.
     using VoidFn = void (*)(void*);
-    Reset(); SlotAt<VoidFn>(a, 0x10)(a); CHECK_EQ(g_lastMark, 62); CHECK(g_lastSelf == a);
+    Reset(); (SlotAt<VoidFn, Audio::Device::PlatformChannel>(a, 0x10)(a)); CHECK_EQ(g_lastMark, 62); CHECK(g_lastSelf == a);
 }
 
 // ENDGAME B.3.9 ENG W2: Audio::Stream is built by its REAL ctor on
