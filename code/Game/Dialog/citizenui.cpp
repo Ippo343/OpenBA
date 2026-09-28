@@ -52,6 +52,7 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Player/EditTool.h"   // X::TypeId() (B.3.8 callers)
 #include "Work/Work.h"         // B.3.x W0: Work::GetTarget by name
+#include "Dialog/exe_bodies.h"
 
 // FUN_140011050 — Entity::FindComponent<CitizenAIComponent>, the component whose +0x28
 // holds the citizen's current action-state index (the Action text on this panel and on

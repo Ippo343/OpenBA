@@ -43,6 +43,7 @@
 #include <cstring>
 #include <atomic>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ============================================================
 // Helper #1 — Geometry init (FUN_1400b00e0)

@@ -18,6 +18,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
+#include "Player/exe_bodies.h"
 
 // ============================================================
 // FindDescription (FUN_140005160) — closure-safe

@@ -24,6 +24,7 @@
 #include <cmath>
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "Player/exe_bodies.h"
 
 // ============================================================
 // Locally-resolved dispatch-slot helpers (Runtime exports behind exe .rdata slots)

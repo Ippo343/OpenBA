@@ -1,0 +1,665 @@
+key	name	defining_file	linkage	declared_in	note
+0x140001bb0	Reimpl_Array_Resize_Stride08	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400021d0	Reimpl_Array_Resize_Stride04	code/Game/Game/serialize_resize_helpers.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140002340	Reimpl_ExternalPtr_Serialize_StringTable	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	one body for 5 addresses
+0x140003870	ToolTile_SetTransformFromYaw_3870	code/Game/Player/tool_base_tile.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140003ea0	PlayerPath_FindComponent_3ea0	code/Game/Player/tool_base_path.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400049c0	Reimpl_ExternalPtrArray_Serialize	code/Game/Game/serialize_externals_array.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140005160	DragTool_FindDescription_5160	code/Game/Player/tool_base_drag.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140005780	PlayerPath_FindComponent_5780	code/Game/Player/tool_base_path.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140007140	Reimpl_ExternalPtr_Serialize_Typed_7140	code/Game/Game/serialize_externals_typed.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14000a590	Reimpl_Array_Resize_Byte	code/Game/Game/serialize_resize_helpers.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14000a8a0	Game_EventNotifierCleanup	code/Game/Game/game_leaf_helpers.cpp	C++	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14000b7b0	Reimpl_ExternalPtr_Serialize_StringTable	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	one body for 5 addresses
+0x14000bd30	Reimpl_ExternalPtr_Serialize_StringTable	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	one body for 5 addresses
+0x14000bf40	Reimpl_ExternalPtr_Serialize_StringTable	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	one body for 5 addresses
+0x14000c520	Reimpl_Array_Resize_Stride10_Spawn	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14000d6c0	Dialog_FindComponent_d6c0	code/Game/Dialog/dialog_exe_helpers.cpp	C++	code/Game/Dialog/dialog_exe_helpers.h	already declared; not redeclared
+0x14000e1c0	TradeUI_StorageTree_Insert_e1c0	code/Game/Dialog/tradeui_leaves.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140013920	TutBase_CastToSliderElement	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140014890	ToolbarUtility_BstInsert_4890	code/Game/Dialog/toolbar_utility_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400149a0	TownHall_AvlRebalance28	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140014b00	TradeWork_helper_14b00	code/Game/Player/tool_base_highlight.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140014b40	TradeWork_impl_4b40	code/Game/Player/tool_base_highlight.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140015200	TownHall_InventorySortAsc	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140015500	TownHall_InventorySortDesc	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140015800	TownHall_ProfArrayPush	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400159b0	TownHall_ProdArrayPush	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140015fd0	TradeUI_GetOrderName_15fd0	code/Game/Dialog/tradeui_leaves.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140016050	TradeUI_DynArrayClear_16050	code/Game/Dialog/tradeui_leaves.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140016130	TradeUI_DynArrayClear_16130	code/Game/Dialog/tradeui_leaves.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140016200	TradeUI_DynArrayClear_16200	code/Game/Dialog/tradeui_leaves.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400162d0	TradeUI_IntroSort_ByName_162d0	code/Game/Dialog/tradeui_sort.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400165d0	TradeUI_IntroSort_ByComponent_165d0	code/Game/Dialog/tradeui_sort.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140017640	ResizeStride0x10	code/Game/Game/citizenlist_serialize.cpp	anonymous namespace	-	internal linkage: not declared (linkage unchanged)
+0x1400177c0	ResizeStride0x20	code/Game/Game/citizenlist_serialize.cpp	anonymous namespace	-	internal linkage: not declared (linkage unchanged)
+0x140018020	Reimpl_ExternalPtr_Serialize_StringTable	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	one body for 5 addresses
+0x140018220	Game_MusicPlayerDtor	code/Game/Game/game_leaf_helpers.cpp	C++	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400192a0	Reimpl_ExternalPtr_Serialize_EnvironmentDesc	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400194a0	Reimpl_ExternalPtr_Serialize_ClimateGenerator	code/Game/Game/serialize_externals_typed.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400196a0	Reimpl_ExternalPtr_Serialize_Weather	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400198a0	Reimpl_WeatherArray_Resize	code/Game/Game/weather_particles.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140019ec0	Reimpl_ExternalPtr_Serialize_MapGenerator	code/Game/Game/serialize_externals_typed.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001a0c0	Reimpl_ExternalPtr_Serialize_TerrainGenerator	code/Game/Game/serialize_externals_typed.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001b030	Game_DestroyStringArray18	code/Game/Game/game_leaf_helpers.cpp	C++	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001b8e0	Reimpl_ExternalPtr_Serialize_GraphicsMesh	code/Game/Game/serialize_externals.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001baf0	Reimpl_Array_Resize_Stride20	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001bbf0	Reimpl_Array_Serialize_Stride20	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001bcc0	Reimpl_Array_Serialize_External_GraphicsMesh	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001bf10	Reimpl_Array_Resize_Stride14	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001bff0	Reimpl_Array_Serialize_External_Particle	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001c890	Reimpl_Array_Resize_Stride02	code/Game/Game/serialize_resize_helpers.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001ef10	Reimpl_Array_Resize_Stride16B	code/Game/Game/serialize_resize_helpers.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001f250	Reimpl_Struct60B_Resize	code/Game/Game/serialize_struct60b.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001f5e0	Reimpl_Struct60B_CopyCtor	code/Game/Game/serialize_struct60b.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001fb80	Reimpl_Struct60B_DtorRange	code/Game/Game/serialize_struct60b.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001fdb0	Reimpl_Struct60B_SubArrayCopyStride14	code/Game/Game/serialize_struct60b.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14001fe60	Reimpl_Struct60B_SubArrayCopyStride02	code/Game/Game/serialize_struct60b.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140021ba0	BucketTree_Serialize_21ba0	code/Game/Game/gameupdateloop_serialize.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140025740	PlayerTrade_BSTRemove_25740	code/Game/Player/tool_base_trade.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140025920	PlayerTrade_Retrace_25920	code/Game/Player/tool_base_trade.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400262b0	TutWave_SerializeTutorialRef	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x1400265b0	StatGoal_ResolveExternalPtr	code/Game/Goal/goal_exe_helpers.cpp	C++	code/Game/Goal/goal_exe_helpers.h	already declared; not redeclared
+0x140026fb0	TutBase_SerializeStepArray	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140027ad0	TutBase_SerializeImageRef	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140027de0	TutBase_ResolveToolbarRef	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140028650	TutWave_SerializeDialogRef	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140028cf0	TutBase_SerializeImageArray	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	CALLBACK (table/switch row)
+0x140028f40	TutBase_SerializeSetupArray	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	CALLBACK (table/switch row)
+0x140029190	TutBase_SerializeGoalArray	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	CALLBACK (table/switch row)
+0x14002c690	PlayerTrade_BSTFindRemove_2c690	code/Game/Player/tool_base_trade.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x14004c4a0	HighlightRepaint_Impl	code/Game/Player/tool_base_render.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140055430	Player_HighlightAdd_55430	code/Game/Player/tool_base_highlight.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140059490	TradeUI_AddPurchaseOrder_59490	code/Game/Dialog/tradeui_leaves.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140059670	TradeUI_GetBuyEntries_59670	code/Game/Dialog/tradeui_buyentries.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14005a490	TradeDescription_ExtendMerchantStay	code/Game/Dialog/tradeui_checkout.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14005a520	TradeUI_GetResourcePrice_a520	code/Game/Dialog/tradeui_price.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14005e120	AutoSaveDialog_Slot4	code/Game/Dialog/autosavedialog.cpp	C++	code/Game/Dialog/AutoSaveDialog.h	already declared; not redeclared
+0x14005e230	AutoSaveDialog_Ctor_Standalone	code/Game/Dialog/autosavedialog.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400666b0	PlayerTrade_EntityUI_66b0	code/Game/Player/tool_base_trade.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140066800	PlayerTrade_EditTool_66800	code/Game/Player/tool_base_trade.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140068ab0	EventNotifyDialog_Ctor_Standalone	code/Game/Dialog/eventnotifydialog.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14006abf0	TownHall_GroupRatingInit	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14006aed0	TownHall_GroupRatingUpdate	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14006bd80	MapParamsDialog_Ctor_Standalone	code/Game/Dialog/unreg_lane2_mapparamsdialog_ctor.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14006d300	MessageDialog_Ctor_Standalone	code/Game/Dialog/messagedialog.cpp	C++	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x14006e9b0	ModDialog_CloseAndReload	code/Game/Dialog/mod_dialog_vtables.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140070030	ModDialog_Ctor_Standalone	code/Game/Dialog/mod_dialog_vtables.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140071040	NewGameDialog_Ctor_Standalone	code/Game/Dialog/newgamedialog.cpp	C++	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140071d30	OptionInputBindDialog_Ctor_Standalone	code/Game/Dialog/optioninputbinddialog.cpp	C++	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140075150	OptionsDialog_Ctor_Standalone	code/Game/Dialog/optionsdialog.cpp	C++	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140081420	TradeUI_OnTradeButton	code/Game/Dialog/tradeui_checkout.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140089470	TownRegistry_ShuffleProfessionList	code/Game/Game/town_workplace_registry.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400895a0	ResidenceComponent_impl_95a0	code/Game/Game/town_workplace_registry.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14008c2b0	CitizenBehavior_Update	code/Game/Entity/citizenbehavior.cpp	C++	code/Game/Entity/citizenbehavior_funcs.h	already declared; not redeclared
+0x14008d100	FindAvailableBuilding	code/Game/Game/town_workplace_registry.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14008f580	CitizenList_PostLoad_8f580	code/Game/Game/citizenlist_serialize.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14008f760	CitizenList_Serialize_8f760	code/Game/Game/citizenlist_serialize.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400907b0	CitizenList_Dtor_907b0	code/Game/Game/gameupdateloop_teardown.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140090f20	TownHall_QueryProductionStat	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400910a0	TutBase_CountProfessionsByType	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140091180	TownHall_RemoveWorker	code/Game/Dialog/townhall_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140092010	TutBase_CountBuildingsByType	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140093eb0	Game_WeatherDtor	code/Game/Game/game_leaf_helpers.cpp	C++	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400944e0	Weather_ResetTime_Reimpl	code/Game/Game/weather_sim.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140094e00	EventLog_AddCitizenEvent	code/Game/Game/eventlog.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140095580	EventLog_AddEvent	code/Game/Game/eventlog.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140095750	EventLog_AddEventWithName	code/Game/Game/eventlog.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140095da0	GameUpdateLoop_TakeScreenshot	code/Game/Game/w2_takescreenshot.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140098210	PlayerScreenRect_WorldToScreen_098210	code/Game/Player/tool_base_screenrect.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400983f0	Reimpl_FUN_1400983f0	code/Game/Game/gameupdateloop_load.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140098660	Reimpl_FUN_140098660	code/Game/Game/gameupdateloop_load.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400988c0	Reimpl_Transform_SerializeWrapper	code/Game/Game/serialize_arrays.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140098970	GameSettings_Save	code/Game/Game/game_settings_persist.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140098b60	GameSettings_Load	code/Game/Game/game_settings_persist.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140099260	ApplyKeyMapToUI_Impl	code/Game/Dialog/optionsdialog.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400992f0	Game::RegisterDefaultInputBindings	code/Game/Game/inputbindings.cpp	C++	code/Game/Game/inputbindings.h	already declared; not redeclared
+0x14009c700	RemovalCalc_helper_c700	code/Game/Player/keystone_a_removalcalcpath.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x14009d580	ToolTile_FootprintValidity_d580	code/Game/Player/tool_base_tile.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x14009ed60	Game_Dtor_9ed60	code/Game/Game/keystone_a_gamedtor.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14009f100	GameGrid_Serialize_9f100	code/Game/Game/gamegrid_serialize.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14009f3e0	Reimpl_MapGetTerrainPos	code/Game/Game/mapquery.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x14009f5d0	PlayerPath_CharComp_f5d0	code/Game/Player/tool_base_path.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400a0280	PlayerEdit_EntityAtCell_a0280	code/Game/Player/tool_base_edit.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400a40e0	MusicPlayer_Update	code/Game/Game/unreg_lane5_musicplayer.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400a4b30	NameDB_GenerateName	code/Game/Game/citizen_names.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400a4c60	NameDB_PickAndGenerate	code/Game/Game/citizen_names.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400a4fc0	Game_ImageCaptureDtor	code/Game/Game/game_leaf_helpers.cpp	C++	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400a5140	Minimap_PaintTerrain	code/Game/Game/minimap_paint.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400a90a0	ProfessionList_Startup_Impl	code/Game/Game/professionlist.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400aa530	PlayerRay_TerrainMarch_aa530	code/Game/Player/tool_base_ray.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400ace40	TradeWork_impl_ace40	code/Game/Player/tool_base_highlight_tess.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400ae270	Reimpl_TradeWork_helper_e270	code/Game/Game/serialize_heightmap_mesh.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400b04d0	Reimpl_TradeWork_impl_04d0	code/Game/Game/geometry_serialize.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400b4540	StartNewGame_Reg	code/Game/Dialog/newgamedialog.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400b4790	MainMenuDialog_ReturnToMenu	code/Game/Dialog/mainmenudialog.cpp	C++	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400b49f0	WorldSetup_LoadFromSave	code/Game/Game/worldsetup_reload.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400b8270	SaveLoadDialog_Ctor_8270	code/Game/Dialog/saveloaddialog.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400b9910	ToolbarDialog_Ctor_Impl	code/Game/Dialog/toolbardialog.cpp	C++	code/Game/Dialog/ToolbarDialog.h	already declared; not redeclared
+0x1400c2c70	EntityList_PostUpdateNodeHandler	code/Game/Entity/entitylist.cpp	C++	code/Game/Entity/entitylist_funcs.h	already declared; not redeclared
+0x1400c3720	ComponentEntity_CtorFromDescription	code/Game/Entity/componententity.cpp	C++	code/Game/Entity/componententity_funcs.h	already declared; not redeclared
+0x1400c38e0	EntityList_RemoveEntity	code/Game/Entity/entitylist.cpp	C++	code/Game/Entity/entitylist_funcs.h	already declared; not redeclared
+0x1400c3ab0	EntityList_PostUpdateStaging	code/Game/Entity/entitylist.cpp	C++	code/Game/Entity/entitylist_funcs.h	already declared; not redeclared
+0x1400c3bd0	EntityList_PreUpdate	code/Game/Entity/entitylist.cpp	C++	code/Game/Entity/entitylist_funcs.h	already declared; not redeclared
+0x1400c3d30	EntityList_Shutdown_c3d30	code/Game/Game/gameupdateloop_teardown.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400c3e60	EntityList_Dtor_c3e60	code/Game/Game/gameupdateloop_teardown.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400c4090	EntityList_Update	code/Game/Entity/entitylist.cpp	C++	code/Game/Entity/entitylist_funcs.h	already declared; not redeclared
+0x1400c43d0	EntityList_PostUpdate	code/Game/Entity/entitylist.cpp	C++	code/Game/Entity/entitylist_funcs.h	already declared; not redeclared
+0x1400c44a0	EntityList_Serialize	code/Game/Entity/entitylist.cpp	C++	code/Game/Entity/entitylist_funcs.h	already declared; not redeclared
+0x1400c48a0	EntityList_RegisterEntity_Impl	code/Game/Entity/componententity.cpp	C++	code/Game/Entity/componententity_funcs.h	already declared; not redeclared
+0x1400d3f10	WeatherParticle_GeoCtor	code/Game/Game/weather_particles.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400d3f80	WeatherParticle_Config	code/Game/Game/weather_particles.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400dbf90	PlayerEdit_FencedAnchorCalc_dbf90	code/Game/Player/tool_base_edit.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400dd710	PathTool_helper_d710	code/Game/Player/pathtool_setselected.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400e1870	FindUIElementByPath_Impl	code/Game/Tutorial/find_ui_element_by_path.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x1400e1db0	TutWave_StepExecute	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x1400e2330	TutWave_SetAllDialogFlags	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x1400e24f0	TutWave_FindHighlightDialog	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x1400e2700	TutWave_OpenHighlightDialog	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x1400e29f0	TutWave_ShowListedElements	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x1400f8d50	RemovalCalc_helper_8d50	code/Game/Player/keystone_a_removalcalcpath.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400f8ff0	Tutorial_Dtor_f8ff0	code/Game/Game/gameupdateloop_teardown.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400f9240	Goals_Serialize_f9240	code/Game/Game/goals_serialize.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1400f9ad0	RemovalCalc_CitizenAI_9ad0	code/Game/Player/keystone_a_removalcalcpath.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fb2d0	BridgeTool_ValidatePath_Impl	code/Game/Player/bridgetool_validate.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fb710	BridgeTool_SnapEndCell_Impl	code/Game/Player/bridgetool_validate.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fc9e0	HighlightSelect_Impl	code/Game/Player/tool_base_render.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fcb40	HighlightClear_Impl	code/Game/Player/tool_base_render.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fd3b0	EditTool_SelectEntity_Impl	code/Game/Dialog/edittool_select.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1400fd650	ToolTile_ValidateCreate_fd650	code/Game/Player/tool_base_tile.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fd960	PlacementToolPlace_FlipVariant_d960	code/Game/Player/tool_base_place.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fda00	PlayerRay_PlacementPosCalc_fda00	code/Game/Player/tool_base_ray.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fe960	PlayerScreenRect_AccumulateRect_fe960	code/Game/Player/tool_base_screenrect.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400fec70	PlayerScreenRect_BuildCorners_ec70	code/Game/Player/tool_base_screenrect.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400ff980	DragTool_CloseToolDialog_ff980	code/Game/Player/tool_base_drag.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400ff9e0	ToolUI_OpenToolDialog_ff9e0	code/Game/Player/tool_base_toolui.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400ffbf0	DragTool_PlayTickSound_ffbf0	code/Game/Player/tool_base_drag.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1400ffc60	UpdateToolUI_fc60	code/Game/Player/tool_base_createbar.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1401000f0	DragTool_PlayPlaceSound_1000f0	code/Game/Player/tool_base_drag.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140100140	DragTool_PlayErrorSound_100140	code/Game/Player/tool_base_drag.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1401001f0	TutWave_TutorialTreeInsert	code/Game/Tutorial/tutorial_wave.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x140100270	ToolbarUtility_FindDialogByControllerType_0270	code/Game/Dialog/toolbar_utility_helpers.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140100380	PlayerScreenRect_Entity_0380	code/Game/Player/tool_base_screenrect.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1401005a0	PlayerRay_GetMouseRay_1005a0	code/Game/Player/tool_base_ray.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1401008c0	PlayerTileRender_DrawOverlay_08c0	code/Game/Player/tool_base_tilerender.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140101270	PlayerRay_ScreenToCell_101270	code/Game/Player/tool_base_ray.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140101380	PlayerTileRender_BuildRecords_1380	code/Game/Player/tool_base_tilerender.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140101730	PlayerEdit_AvgTerrainHeight_101730	code/Game/Player/tool_base_edit.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1401018d0	DragPlacementTool_ClearPathEntities_1018d0	code/Game/Player/tool_base_drag.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140101a80	Toolbar_Utility_Reg	code/Game/Dialog/toolbardialog.cpp	extern "C"	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x1401024d0	EntityUI_Dtor_1024d0	code/Game/Game/gameupdateloop_teardown.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x1401027c0	CalcWindFactor_Reg	code/Game/Game/gameupdateloop.cpp	extern "C"	code/Game/Game/exe_bodies.h	exe DIRECT
+0x140102b60	Toolbar_ShowGroup_Impl	code/Game/Dialog/toolbardialog.cpp	C++	code/Game/Dialog/exe_bodies.h	exe DIRECT
+0x140104670	PlayerPath_Sub_4670	code/Game/Player/tool_base_path.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140104770	PlayerPath_Sub_4770	code/Game/Player/tool_base_path.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x1401048a0	PlayerPath_Sub_48a0	code/Game/Player/tool_base_path.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x140107400	Herd_Helper7400_Thunk	standalone/reg_herd_live.cpp	static	-	internal linkage: not declared (linkage unchanged)
+0x14011dfa0	RemovalCalc_StateMachine_dfa0	code/Game/Player/keystone_a_removalcalcpath.cpp	extern "C"	code/Game/Player/exe_bodies.h	exe DIRECT
+0x14011e710	PlayerPath_Sub_11e710	code/Game/Player/tool_base_path.cpp	C++	code/Game/Player/exe_bodies.h	exe DIRECT
+0x14012e5c0	WorkComponent_CalcMaxWorkers	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+0x14012fbb0	WorkPlaceComponent_GetMaxWorkers	code/Game/Tutorial/tutorial_base.cpp	extern "C"	code/Game/Tutorial/exe_bodies.h	exe DIRECT
+_Z22fn_FindComponent_BuildPvS_	fn_FindComponent_Build	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z27fn_FindComponent_BuildStatePvS_	fn_FindComponent_BuildState	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z31fn_FindComponent_ConsumeProducePvS_	fn_FindComponent_ConsumeProduce	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z25fn_FindComponent_PositionPvS_	fn_FindComponent_Position	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z24fn_FindComponent_DestroyPvS_	fn_FindComponent_Destroy	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z25fn_FindComponent_BuildingPvS_	fn_FindComponent_Building	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z21fn_FindComponent_WorkPvS_	fn_FindComponent_Work	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z27fn_FindComponent_AttendancePvS_	fn_FindComponent_Attendance	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z24fn_FindComponent_PasturePvS_	fn_FindComponent_Pasture	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z24fn_FindComponent_OrchardPvS_	fn_FindComponent_Orchard	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z26fn_FindComponent_WorkPlacePvS_	fn_FindComponent_WorkPlace	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z19fn_FindComponent_SMPvS_	fn_FindComponent_SM	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z24fn_FindComponent_CitizenPvS_	fn_FindComponent_Citizen	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z24fn_FindComponent_StoragePvS_	fn_FindComponent_Storage	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z26fn_FindComponent_ResidencePvS_	fn_FindComponent_Residence	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h; DEAD (defined, never called)
+_Z25fn_FindComponent_CemeteryPvS_	fn_FindComponent_Cemetery	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z28fn_FindComponent_ImmigrationPvS_	fn_FindComponent_Immigration	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z24fn_FindComponent_TrackerPvS_	fn_FindComponent_Tracker	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z29fn_FindComponent_MeshInstancePvS_	fn_FindComponent_MeshInstance	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z26fn_FindComponent_CharacterPvS_	fn_FindComponent_Character	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z26fn_FindComponent_CitizenAIPvS_	fn_FindComponent_CitizenAI	code/Game/Dialog/citizenui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z30fn_StorageComponent_QueryCountPv	fn_StorageComponent_QueryCount	code/Game/Component/storagecomponent.cpp	C++	engine/funcs/engine_funcs.h (TO MOVE: Component)	moved from engine_funcs.h
+_Z21FindComponentByTypeIdPvi	FindComponentByTypeId	inline (no .cpp)	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z31SaveLoadDialog_PopulateFileListP14SaveLoadDialog	SaveLoadDialog_PopulateFileList	code/Game/Dialog/saveloaddialog.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+class SaveLoadDialog	SaveLoadDialog	-	C++ (forward declaration)	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z20SA_DialogEntityAlivePv	SA_DialogEntityAlive	inline (no .cpp)	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z25EntityUI_SetEditMode_ImplPvy	EntityUI_SetEditMode_Impl	code/Game/Dialog/entityui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z26EntityUI_SelectEntity_ImplPvS_jj	EntityUI_SelectEntity_Impl	code/Game/Dialog/entityui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z28fn_FindComponent_MultiObjectPvS_	fn_FindComponent_MultiObject	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z26ResolveExternalByName_ImplPv	ResolveExternalByName_Impl	code/Game/Component/componentdescription.cpp	C++	engine/funcs/engine_funcs.h (TO MOVE: Component)	moved from engine_funcs.h
+_Z27fn_TrackerComponent_RebuildPvS_	fn_TrackerComponent_Rebuild	inline (no .cpp)	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+fn_Random_RandFloatTol	fn_Random_RandFloatTol	code/Game/Game/worldgen_f390_shims.cpp	extern "C"	code/Game/Game/exe_bodies.h	moved from engine_funcs.h
+_Z25fn_GetCurrentProductIndexPv	fn_GetCurrentProductIndex	inline (no .cpp)	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z20fn_StorageCountQueryPv	fn_StorageCountQuery	code/Game/Component/workcomponent.cpp	C++	engine/funcs/engine_funcs.h (TO MOVE: Component)	moved from engine_funcs.h
+_Z18fn_CalcWorkerSlotsPv	fn_CalcWorkerSlots	inline (no .cpp)	C++	engine/funcs/engine_funcs.h (TO MOVE: Component)	moved from engine_funcs.h
+_Z19StorageUI_SortItemsPviS_S_	StorageUI_SortItems	code/Game/Dialog/storageui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z26UIDesc_AddControllers_ImplPvS_S_	UIDesc_AddControllers_Impl	code/Game/Dialog/toolui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z22TownHallUI_InitGeneralP10TownHallUI	TownHallUI_InitGeneral	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z20TownHallUI_InitGraphP10TownHallUI	TownHallUI_InitGraph	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z26TownHallUI_InitProfessionsP10TownHallUI	TownHallUI_InitProfessions	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z25TownHallUI_InitProductionP10TownHallUI	TownHallUI_InitProduction	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z24TownHallUI_InitInventoryP10TownHallUI	TownHallUI_InitInventory	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z26TownHallUI_InitAgricultureP10TownHallUI	TownHallUI_InitAgriculture	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z22TownHallUI_UpdateGraphP10TownHallUI	TownHallUI_UpdateGraph	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z24TownHallUI_UpdateGeneralP10TownHallUI	TownHallUI_UpdateGeneral	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z28TownHallUI_UpdateProfessionsP10TownHallUI	TownHallUI_UpdateProfessions	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z27TownHallUI_UpdateProductionP10TownHallUI	TownHallUI_UpdateProduction	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z28TownHallUI_UpdateAgricultureP10TownHallUI	TownHallUI_UpdateAgriculture	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z26TownHallUI_UpdateInventoryP10TownHallUI	TownHallUI_UpdateInventory	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z20TownHallUI_UpdateAllP10TownHallUI	TownHallUI_UpdateAll	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z29TownHallUI_OnProfessionButtonP10TownHallUIi	TownHallUI_OnProfessionButton	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z30TownHallUI_OnProfessionSpinnerP10TownHallUIi	TownHallUI_OnProfessionSpinner	code/Game/Dialog/townhallui.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+class TownHallUI	TownHallUI	-	C++ (forward declaration)	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z21fn_FindComponent_FirePvS_	fn_FindComponent_Fire	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z17SetEngineNextLoopyPv	SetEngineNextLoop	inline (no .cpp)	C++	code/Game/Game/exe_bodies.h	moved from engine_funcs.h
+_Z23SetDialogLoaderNextLoopyPv	SetDialogLoaderNextLoop	inline (no .cpp)	C++	code/Game/Game/exe_bodies.h	moved from engine_funcs.h
+_Z21GetLoadingSoundStringPv	GetLoadingSoundString	inline (no .cpp)	C++	code/Game/Game/exe_bodies.h	moved from engine_funcs.h
+_Z22Game_RemoveEntity_ImplPvS_	Game_RemoveEntity_Impl	inline (no .cpp)	C++	code/Game/Game/exe_bodies.h	moved from engine_funcs.h
+_Z15Storage_AddItemPvS_i	Storage_AddItem	inline (no .cpp)	C++	engine/funcs/engine_funcs.h (TO MOVE: Component)	moved from engine_funcs.h; DEAD (no caller)
+_Z21FindDialogByName_ImplPvS_	FindDialogByName_Impl	inline (no .cpp)	C++	code/Game/Tutorial/exe_bodies.h	moved from engine_funcs.h
+_Z31Game_TriggerDisasterByType_Impli	Game_TriggerDisasterByType_Impl	code/Game/Game/game.cpp	C++	code/Game/Game/exe_bodies.h	moved from engine_funcs.h
+_Z24Game_SpawnResources_ImplPvji	Game_SpawnResources_Impl	code/Game/Game/game.cpp	C++	code/Game/Game/exe_bodies.h	moved from engine_funcs.h
+_Z27Toolbar_CenterOnEntity_ImplPvS_S_	Toolbar_CenterOnEntity_Impl	code/Game/Dialog/toolbardialog.cpp	C++	code/Game/Dialog/exe_bodies.h	moved from engine_funcs.h
+_Z28fn_FindComponent_Unknown7ee8PvS_	fn_FindComponent_Unknown7ee8	code/Game/Entity/entity_findcomponent.cpp	C++	code/Game/Entity/exe_bodies.h	moved from engine_funcs.h
+_Z30fn_CitizenComponent_HasVacancyy	fn_CitizenComponent_HasVacancy	inline (no .cpp)	C++	engine/funcs/engine_funcs.h (TO MOVE: Component)	moved from engine_funcs.h
+Entity_FindComponentByExeTypeId	Entity_FindComponentByExeTypeId	engine/funcs/engine_funcs.cpp	C++	engine/funcs/engine_funcs.h	defined in engine_funcs.cpp: stays
+EngineFuncsInit	EngineFuncsInit	engine/funcs/engine_funcs.cpp	C++	engine/funcs/engine_funcs.h	defined in engine_funcs.cpp: stays
+?IsDerivedFrom@Base@Object@@QEBA_NI@Z	Object::IsDerivedFromNullSafe	runtime/types/object/TypeInfo.h (inline)	C++ inline	runtime/types/object/TypeInfo.h	STANDALONE DEVIATION helper wrapping 0x1800c0390 (the fn_IsDerivedFrom trampoline); no caller yet
+0x18001c100	ArrayDtorTransform	runtime/src/picking/scene_grid.cpp	C++	runtime/src/picking/scene_grid.h	already declared (runtime/src header)
+0x18001f470	BoxTransform	runtime/src/picking/scene_grid.cpp	C++	runtime/src/picking/scene_grid.h	already declared (runtime/src header)
+??0InternalFactory@Object@@QEAA@XZ	Ctor_InternalFactory	runtime/src/engine/singleton_ctors.cpp	anonymous namespace	-	NOT declared: internal linkage; addr 0x1800c0030
+??0MemoryAllocator@System@@QEAA@XZ	Ctor_MemoryAllocator	runtime/src/engine/singleton_ctors.cpp	anonymous namespace	-	NOT declared: internal linkage; addr 0x1800c79a0
+??0Modification@IO@@QEAA@XZ	Ctor_Modification	runtime/src/engine/singleton_ctors.cpp	anonymous namespace	-	NOT declared: internal linkage; addr 0x1800b04b0
+??1MemoryAllocator@System@@QEAA@XZ	Dtor_MemoryAllocator	runtime/src/engine/singleton_ctors.cpp	anonymous namespace	-	NOT declared: internal linkage; addr 0x1800c7960
+0x180009c30	FreeLockedIgnoringSelf	runtime/src/system/allocator.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005e5e0	GridAdd	runtime/src/graphics/scene_grid.cpp	C++	runtime/src/graphics/scene_grid.h	already declared (runtime/src header)
+0x18005e4a0	GridInit	runtime/src/graphics/scene_grid.cpp	C++	runtime/src/graphics/scene_grid.h	already declared (runtime/src header)
+0x18005ee30	GridReindex	runtime/src/graphics/scene_grid.cpp	C++	runtime/src/graphics/scene_grid.h	already declared (runtime/src header)
+0x18005f090	GridUnthread	runtime/src/graphics/scene_grid.cpp	C++	runtime/src/graphics/scene_grid.h	already declared (runtime/src header)
+0x18000a4f0	RtApp_SetDestroyTree	runtime/src/application/application_lifecycle.cpp	extern "C"	runtime/types/application/Application.h	Runtime DIRECT
+0x180013640	rtcoll::RtColl_ArrayAssign_180013640	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180014c70	rtcoll::RtColl_ArrayAssign_180014c70	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001b1a0	rtcoll::RtColl_ArrayAssign_18001b1a0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001b270	rtcoll::RtColl_ArrayAssign_18001b270	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003ce30	rtcoll::RtColl_ArrayAssign_18003ce30	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003cf20	rtcoll::RtColl_ArrayAssign_18003cf20	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180052700	rtcoll::RtColl_ArrayAssign_180052700	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800571b0	rtcoll::RtColl_ArrayAssign_1800571b0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001c620	rtcoll::RtColl_ArrayCopyCtor_18001c620	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001c1e0	rtcoll::RtColl_ArrayDtorAnim_18001c1e0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180004a90	rtcoll::RtColl_ArrayDtorElem_180004a90	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180004b70	rtcoll::RtColl_ArrayDtorElem_180004b70	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180004c80	rtcoll::RtColl_ArrayDtorElem_180004c80	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180004d60	rtcoll::RtColl_ArrayDtorElem_180004d60	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180004f50	rtcoll::RtColl_ArrayDtorElem_180004f50	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180010ab0	rtcoll::RtColl_ArrayDtorElem_180010ab0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001c2d0	rtcoll::RtColl_ArrayDtorElem_18001c2d0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180033880	rtcoll::RtColl_ArrayDtorElem_180033880	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180039280	rtcoll::RtColl_ArrayDtorElem_180039280	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180039360	rtcoll::RtColl_ArrayDtorElem_180039360	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003e310	rtcoll::RtColl_ArrayDtorElem_18003e310	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003e4a0	rtcoll::RtColl_ArrayDtorElem_18003e4a0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800416d0	rtcoll::RtColl_ArrayDtorElem_1800416d0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180043a00	rtcoll::RtColl_ArrayDtorElem_180043a00	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004fa30	rtcoll::RtColl_ArrayDtorElem_18004fa30	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004fb00	rtcoll::RtColl_ArrayDtorElem_18004fb00	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004fbd0	rtcoll::RtColl_ArrayDtorElem_18004fbd0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800516c0	rtcoll::RtColl_ArrayDtorElem_1800516c0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18005bf60	rtcoll::RtColl_ArrayDtorElem_18005bf60	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180065d40	rtcoll::RtColl_ArrayDtorElem_180065d40	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180073720	rtcoll::RtColl_ArrayDtorElem_180073720	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180013da0	rtcoll::RtColl_ArrayDtor_180013da0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180013e70	rtcoll::RtColl_ArrayDtor_180013e70	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180014d00	rtcoll::RtColl_ArrayDtor_180014d00	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001c020	rtcoll::RtColl_ArrayDtor_18001c020	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001c3b0	rtcoll::RtColl_ArrayDtor_18001c3b0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001c750	rtcoll::RtColl_ArrayDtor_18001c750	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180021490	rtcoll::RtColl_ArrayDtor_180021490	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800248e0	rtcoll::RtColl_ArrayDtor_1800248e0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800249c0	rtcoll::RtColl_ArrayDtor_1800249c0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180024aa0	rtcoll::RtColl_ArrayDtor_180024aa0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180037310	rtcoll::RtColl_ArrayDtor_180037310	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180039440	rtcoll::RtColl_ArrayDtor_180039440	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003d8c0	rtcoll::RtColl_ArrayDtor_18003d8c0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003da00	rtcoll::RtColl_ArrayDtor_18003da00	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003db40	rtcoll::RtColl_ArrayDtor_18003db40	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003e0c0	rtcoll::RtColl_ArrayDtor_18003e0c0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180043cb0	rtcoll::RtColl_ArrayDtor_180043cb0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004cc90	rtcoll::RtColl_ArrayDtor_18004cc90	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180051d80	rtcoll::RtColl_ArrayDtor_180051d80	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180062320	rtcoll::RtColl_ArrayDtor_180062320	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180065bf0	rtcoll::RtColl_ArrayDtor_180065bf0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180065e80	rtcoll::RtColl_ArrayDtor_180065e80	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180079870	rtcoll::RtColl_ArrayDtor_180079870	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800098d0	RtIO::RtColl_ArrayFilenameDtor_1800098d0	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x1800111a0	RtIO::RtColl_ArrayI32Dtor_1800111a0	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x180010110	RtIO::RtColl_ArrayModAssign_180010110	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x180010b80	RtIO::RtColl_ArrayModDtor_180010b80	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x180023830	rtcoll::RtColl_ArraySetSizeFill_180023830	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180024fe0	rtcoll::RtColl_ArraySetSizeFill_180024fe0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180026880	RtIO::RtColl_ArraySetSizeFill_180026880	runtime/src/io/filesystem_find_win.cpp	C++	runtime/types/io/FileSystem.h	Runtime DIRECT
+0x180028cd0	rtcoll::RtColl_ArraySetSizeFill_180028cd0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800298f0	rtcoll::RtColl_ArraySetSizeFill_1800298f0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180033690	rtcoll::RtColl_ArraySetSizeFill_180033690	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180034860	rtcoll::RtColl_ArraySetSizeFill_180034860	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003df80	rtcoll::RtColl_ArraySetSizeFill_18003df80	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003e1a0	rtcoll::RtColl_ArraySetSizeFill_18003e1a0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180043b40	rtcoll::RtColl_ArraySetSizeFill_180043b40	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004bfc0	rtcoll::RtColl_ArraySetSizeFill_18004bfc0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180063a80	rtcoll::RtColl_ArraySetSizeFill_180063a80	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180076900	rtcoll::RtColl_ArraySetSizeFill_180076900	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180076d10	rtcoll::RtColl_ArraySetSizeFill_180076d10	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18007a0d0	rtcoll::RtColl_ArraySetSizeFill_18007a0d0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800136f0	rtcoll::RtColl_ArraySetSize_1800136f0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180020e90	rtcoll::RtColl_ArraySetSize_180020e90	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180021220	rtcoll::RtColl_ArraySetSize_180021220	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180024c10	rtcoll::RtColl_ArraySetSize_180024c10	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180024d70	rtcoll::RtColl_ArraySetSize_180024d70	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180029510	rtcoll::RtColl_ArraySetSize_180029510	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180029630	rtcoll::RtColl_ArraySetSize_180029630	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180029a80	rtcoll::RtColl_ArraySetSize_180029a80	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18002f070	rtcoll::RtColl_ArraySetSize_18002f070	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18002fea0	rtcoll::RtColl_ArraySetSize_18002fea0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800370c0	rtcoll::RtColl_ArraySetSize_1800370c0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003d1c0	rtcoll::RtColl_ArraySetSize_18003d1c0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003d430	rtcoll::RtColl_ArraySetSize_18003d430	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003e600	rtcoll::RtColl_ArraySetSize_18003e600	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003ea50	rtcoll::RtColl_ArraySetSize_18003ea50	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003eea0	rtcoll::RtColl_ArraySetSize_18003eea0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180043d80	rtcoll::RtColl_ArraySetSize_180043d80	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800492d0	rtcoll::RtColl_ArraySetSize_1800492d0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004ba90	rtcoll::RtColl_ArraySetSize_18004ba90	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004cdf0	rtcoll::RtColl_ArraySetSize_18004cdf0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180052e60	rtcoll::RtColl_ArraySetSize_180052e60	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180053190	rtcoll::RtColl_ArraySetSize_180053190	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180053f00	rtcoll::RtColl_ArraySetSize_180053f00	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800547e0	rtcoll::RtColl_ArraySetSize_1800547e0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180054a20	rtcoll::RtColl_ArraySetSize_180054a20	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180055db0	rtcoll::RtColl_ArraySetSize_180055db0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180056240	rtcoll::RtColl_ArraySetSize_180056240	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800567d0	rtcoll::RtColl_ArraySetSize_1800567d0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180056af0	rtcoll::RtColl_ArraySetSize_180056af0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180059140	rtcoll::RtColl_ArraySetSize_180059140	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180059930	rtcoll::RtColl_ArraySetSize_180059930	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180059e70	rtcoll::RtColl_ArraySetSize_180059e70	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18005a220	rtcoll::RtColl_ArraySetSize_18005a220	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18005a410	rtcoll::RtColl_ArraySetSize_18005a410	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18005cc60	rtcoll::RtColl_ArraySetSize_18005cc60	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800604e0	rtcoll::RtColl_ArraySetSize_1800604e0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800616c0	rtcoll::RtColl_ArraySetSize_1800616c0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180061880	rtcoll::RtColl_ArraySetSize_180061880	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180061bb0	rtcoll::RtColl_ArraySetSize_180061bb0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180062110	rtcoll::RtColl_ArraySetSize_180062110	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800660f0	rtcoll::RtColl_ArraySetSize_1800660f0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180066350	rtcoll::RtColl_ArraySetSize_180066350	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800666e0	rtcoll::RtColl_ArraySetSize_1800666e0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180066bc0	rtcoll::RtColl_ArraySetSize_180066bc0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180066e80	rtcoll::RtColl_ArraySetSize_180066e80	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800764c0	rtcoll::RtColl_ArraySetSize_1800764c0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180076a40	rtcoll::RtColl_ArraySetSize_180076a40	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180077330	rtcoll::RtColl_ArraySetSize_180077330	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800774d0	rtcoll::RtColl_ArraySetSize_1800774d0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800783d0	rtcoll::RtColl_ArraySetSize_1800783d0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800799a0	rtcoll::RtColl_ArraySetSize_1800799a0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18007a4d0	rtcoll::RtColl_ArraySetSize_18007a4d0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18007a790	rtcoll::RtColl_ArraySetSize_18007a790	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18007a900	rtcoll::RtColl_ArraySetSize_18007a900	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18007aa40	rtcoll::RtColl_ArraySetSize_18007aa40	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180011220	RtIO::RtColl_ArrayU8Assign_180011220	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x1800112a0	RtIO::RtColl_ArrayU8Dtor_1800112a0	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x180044050	rtcoll::RtColl_DestroyElem_180044050	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800419b0	rtcoll::RtColl_DestroyInner_1800419b0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004ff80	rtcoll::RtColl_DestroyInner_18004ff80	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180052110	rtcoll::RtColl_DestroyInner_180052110	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180052220	rtcoll::RtColl_DestroyInner_180052220	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180005570	rtcoll::RtColl_DestroyStrings_180005570	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180005880	rtcoll::RtColl_DestroyStrings_180005880	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180005930	rtcoll::RtColl_DestroyStrings_180005930	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800059e0	rtcoll::RtColl_DestroyStrings_1800059e0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180006ac0	rtcoll::RtColl_DestroyStrings_180006ac0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180011010	rtcoll::RtColl_DestroyStrings_180011010	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001cbf0	rtcoll::RtColl_DestroyStrings_18001cbf0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180026b50	rtcoll::RtColl_DestroyStrings_180026b50	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180029190	rtcoll::RtColl_DestroyStrings_180029190	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18002afc0	rtcoll::RtColl_DestroyStrings_18002afc0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800341e0	rtcoll::RtColl_DestroyStrings_1800341e0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180039580	rtcoll::RtColl_DestroyStrings_180039580	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180039640	rtcoll::RtColl_DestroyStrings_180039640	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003e3e0	rtcoll::RtColl_DestroyStrings_18003e3e0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18003f070	rtcoll::RtColl_DestroyStrings_18003f070	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004fe20	rtcoll::RtColl_DestroyStrings_18004fe20	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18004fed0	rtcoll::RtColl_DestroyStrings_18004fed0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180054920	rtcoll::RtColl_DestroyStrings_180054920	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180054ba0	rtcoll::RtColl_DestroyStrings_180054ba0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180056960	rtcoll::RtColl_DestroyStrings_180056960	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180056cb0	rtcoll::RtColl_DestroyVtxStream_180056cb0	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18001cdf0	rtcoll::RtColl_I32ArrayAssign_18001cdf0	runtime/src/collection/array.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180043980	rtcoll::RtColl_LayoutEntryAssign_180043980	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180004220	rtcoll::RtColl_SpriteEntryAssign_180004220	runtime/src/collection/array_destroy.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180127560	RtCrt_Powf	runtime/src/crt/msvc_libm.cpp	static	-	NOT declared: internal linkage
+0x18007f050	RtCrt_Qsort_18007f050	runtime/src/crt/msvc_qsort.cpp	extern "C"	runtime/funcs/rt_libm.h	Runtime DIRECT
+0x18001be60	RtGraphics_DrawGroup_CopyCtor	runtime/src/graphics/closure_batch2b.cpp	extern "C"	runtime/types/graphics/Scene.h	Runtime DIRECT
+??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z	RtGraphics_EdgeMesh_EdgeVertex_Ctor	runtime/src/graphics/mesh.cpp	static	-	NOT declared: internal linkage; addr 0x1800a2df0
+0x180014850	RtGraphics_EdgeMesh_SerializeTriangleListArray	runtime/src/graphics/closure_batch2b.cpp	extern "C"	runtime/types/graphics/Mesh.h	Runtime DIRECT
+??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z	RtGraphics_EdgeMesh_TriangleVertex_Ctor	runtime/src/graphics/mesh.cpp	static	-	NOT declared: internal linkage; addr 0x1800a2f50
+0x180020d60	RtGraphics_Emitter_DeleteDtor	runtime/src/graphics/wave27_lane_gfxpart.cpp	extern "C"	runtime/types/graphics/Particle.h	Runtime DIRECT
+0x180020600	RtGraphics_Emitter_OperatorDelete	runtime/src/graphics/wave27_lane_gfxpart.cpp	extern "C"	runtime/types/graphics/Particle.h	Runtime DIRECT
+0x1800205a0	RtGraphics_Emitter_OperatorNew	runtime/src/graphics/wave27_lane_gfxpart.cpp	extern "C"	runtime/types/graphics/Particle.h	Runtime DIRECT
+0x180061ae0	RtGraphics_Material_OperatorDelete	runtime/src/system/closure_batch2b.cpp	extern "C"	runtime/types/graphics/Material.h	Runtime DIRECT
+0x180103bf0	RtGraphics_ParticlePoolRecord_Ctor	runtime/src/graphics/wave27_lane_gfxpart.cpp	extern "C"	runtime/types/graphics/Particle.h	Runtime DIRECT
+0x180062d60	rtgfxbig::RtGraphics_Renderer_DrawItemSort	runtime/src/graphics/wave27_lane_gfxbig.cpp	extern "C"	runtime/types/graphics/Scene.h	Runtime DIRECT
+0x18005c660	RtGraphics_SerializeAnimInstances	runtime/src/graphics/animationstate.cpp	extern "C"	runtime/types/graphics/AnimationState.h	Runtime DIRECT
+0x18005c120	RtGraphics_SerializeMeshNodes	runtime/src/graphics/animationstate.cpp	extern "C"	runtime/types/graphics/AnimationState.h	Runtime DIRECT
+?Commit@CompressedStream@IO@@QEAAXXZ	RtIo::RtIo_CompressedStream_Commit	runtime/src/io/compressed_stream_write.cpp	extern "C"	runtime/types/io/Stream.h	Runtime DIRECT; addr 0x1800a9ee0
+?CompressWindow@CompressedStream@IO@@AEAAXH@Z	RtIo::RtIo_CompressedStream_CompressWindow	runtime/src/io/compressed_stream_write.cpp	extern "C"	runtime/types/io/Stream.h	Runtime DIRECT; addr 0x1800a9810
+?SetWindowCount@CompressedStream@IO@@QEAAXH@Z	RtIo::RtIo_CompressedStream_SetWindowCount	runtime/src/io/compressed_stream_open.cpp	extern "C"	runtime/types/io/Stream.h	Runtime DIRECT; addr 0x1800aa020
+0x18000c180	RtIO::RtIo_FileInfo_Dtor	runtime/src/io/file_stream.cpp	extern "C"	runtime/types/io/FileSystem.h	Runtime DIRECT
+0x180026ef0	RtIO::RtIo_Mod_Assign_180026ef0	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x1800101e0	RtIO::RtIo_Mod_CopyCtor_1800101e0	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+0x180011460	RtIO::RtIo_Mod_Dtor_180011460	runtime/src/io/modification.cpp	C++	runtime/types/io/Modification.h	Runtime DIRECT
+??1Modification@IO@@QEAA@XZ	RtIo::RtIo_Modification_Dtor	runtime/src/io/iobase_vtables.cpp	extern "C"	runtime/types/io/Modification.h	Runtime DIRECT; addr 0x1800b0470
+0x180028760	RtIO::RtIo_Modification_SortMods	runtime/src/io/modification_sort.cpp	extern "C"	runtime/types/io/Modification.h	Runtime DIRECT
+0x1800b69c0	RtIo_PersistenceWorker_Delete	runtime/src/io/closure_batch2b_win.cpp	extern "C"	runtime/types/io/PersistenceWorker.h	Runtime DIRECT
+0x1800b7390	RtIo_PersistenceWorker_EnqueueDelete	runtime/src/io/persistence_worker_win.cpp	extern "C"	runtime/types/io/PersistenceWorker.h	Runtime DIRECT
+0x1800b7460	RtIo_PersistenceWorker_EnqueueLoad	runtime/src/io/persistence_worker_win.cpp	extern "C"	runtime/types/io/PersistenceWorker.h	Runtime DIRECT
+0x1800b75c0	RtIo_PersistenceWorker_EnqueueSave	runtime/src/io/persistence_worker_win.cpp	extern "C"	runtime/types/io/PersistenceWorker.h	Runtime DIRECT
+0x1800b65b0	RtIo_PersistenceWorker_GetSaveInfo	runtime/src/io/persistence_saveinfo_job.cpp	extern "C"	runtime/types/io/PersistenceWorker.h	Runtime DIRECT
+0x1800b6290	RtIo_PersistenceWorker_GetSaveList	runtime/src/io/persistence_savelist_job.cpp	extern "C"	runtime/types/io/PersistenceWorker.h	Runtime DIRECT
+0x1800b6aa0	RtIo_PersistenceWorker_Load	runtime/src/io/closure_batch2b_win.cpp	extern "C"	runtime/types/io/PersistenceWorker.h	Runtime DIRECT
+0x180029bb0	RtIo_SerializeStringArray	runtime/src/io/text_codec.cpp	extern "C"	runtime/types/io/Serializer.h	Runtime DIRECT
+0x1800ca260	RtIo_TextCodec_ConvertText	runtime/src/io/text_codec.cpp	extern "C"	runtime/types/io/Stream.h	Runtime DIRECT
+0x1800c9fc0	RtIo_TextCodec_DecodeOne	runtime/src/io/text_codec.cpp	extern "C"	runtime/types/io/Stream.h	Runtime DIRECT
+0x1800c9d60	RtIo_TextCodec_DetectFormat	runtime/src/io/text_codec.cpp	extern "C"	runtime/types/io/Stream.h	Runtime DIRECT
+0x1800c9b60	RtIo_TextCodec_EncodeOne	runtime/src/io/text_codec.cpp	extern "C"	runtime/types/io/Stream.h	Runtime DIRECT
+?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z	RtObject::RtObject_External_Load	runtime/src/object/external_load.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT; addr 0x1800bc620
+??1ExternalFactory@Object@@QEAA@XZ	RtObjFactoryDtor::RtObject_ExternalFactory_Dtor	runtime/src/object/factory_dtors.cpp	C++	runtime/types/object/TypeInfo.h	Runtime DIRECT; addr 0x1800be760
+0x1800493d0	RtObject_ExternalPtrArraySerialize_ElementDescription	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18002f170	RtObject_ExternalPtrArraySerialize_External	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18003e710	RtObject_ExternalPtrArraySerialize_Font	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180005220	RtObject_ExternalPtrArraySerialize_Goal	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18005d4a0	RtObject_ExternalPtrArraySerialize_MaterialInstance	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18003eb60	RtObject_ExternalPtrArraySerialize_SpriteSheet	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x1800605e0	RtObject_ExternalPtrArraySerialize_VideoProgram	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180006d10	RtObject_ExternalPtrSerialize_Achievement	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18005b840	RtObject_ExternalPtrSerialize_AnimationGroup	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180076e90	RtObject_ExternalPtrSerialize_CharacterSet	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180076610	RtObject_ExternalPtrSerialize_Dialog	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x1800756d0	RtObject_ExternalPtrSerialize_DialogControllerConfig	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180038f90	RtObject_ExternalPtrSerialize_ElementDescription	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18003dc90	RtObject_ExternalPtrSerialize_ExternalList	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18003f1e0	RtObject_ExternalPtrSerialize_Font	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180005dc0	RtObject_ExternalPtrSerialize_Goal	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180014230	RtObject_ExternalPtrSerialize_GraphicsMesh	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x18005d0f0	RtObject_ExternalPtrSerialize_ImageBuffer	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180061100	RtObject_ExternalPtrSerialize_Material	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180014520	RtObject_ExternalPtrSerialize_MaterialInstance	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180055380	RtObject_ExternalPtrSerialize_PixelProgram	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180055670	RtObject_ExternalPtrSerialize_RenderState	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180052a50	RtObject_ExternalPtrSerialize_SoundBuffer	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180004590	RtObject_ExternalPtrSerialize_SpriteSheet	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x1800042a0	RtObject_ExternalPtrSerialize_StringTable	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x180055090	RtObject_ExternalPtrSerialize_VertexLayout	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+0x1800542a0	RtObject_ExternalPtrSerialize_VertexProgram	runtime/src/object/external_ptr_serialize.cpp	extern "C"	runtime/types/object/External.h	Runtime DIRECT
+??1Factory@Object@@QEAA@XZ	RtObjFactoryDtor::RtObject_Factory_Dtor	runtime/src/object/factory_dtors.cpp	C++	runtime/types/object/TypeInfo.h	Runtime DIRECT; addr 0x1800071a0
+??1InternalFactory@Object@@QEAA@XZ	RtObjFactoryDtor::RtObject_InternalFactory_Dtor	runtime/src/object/factory_dtors.cpp	C++	runtime/types/object/TypeInfo.h	Runtime DIRECT; addr 0x18002f860
+0x180009a20	RtObject_InternalPtrArraySerialize_AchievementInstance	runtime/src/object/internal_ptr_array_serialize.cpp	extern "C"	runtime/types/object/Internal.h	Runtime DIRECT
+0x180009fa0	RtObject_InternalPtrArraySerialize_GoalInstance	runtime/src/object/internal_ptr_array_serialize.cpp	extern "C"	runtime/types/object/Internal.h	Runtime DIRECT
+?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z	RtObject::RtObject_Type_Serialize	runtime/src/object/type_system.cpp	C++	runtime/types/object/Type.h	Runtime DIRECT; addr 0x1800c0c40
+0x180032f70	RtSave_MetaData_CopyCtor	runtime/src/save/closure_batch2b.cpp	extern "C"	runtime/types/save/SaveLoad.h	Runtime DIRECT
+??1SaveLoad@Save@@QEAA@XZ	RtSave_SaveLoad_Dtor	runtime/src/save/saveload.cpp	C++	runtime/types/save/SaveLoad.h	Runtime DIRECT; addr 0x1800c3c90
+0x18002ace0	RtSystem_ConfigMap_Find	runtime/src/system/configuration.cpp	extern "C"	runtime/types/system/Configuration.h	Runtime DIRECT
+?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ	RtSystem_Configuration_CurrentBuildId	runtime/src/system/value_types.cpp	C++	runtime/types/system/Configuration.h	Runtime DIRECT; addr 0x1800c4c60
+??0CriticalSection@System@@QEAA@XZ	RtSystem_CriticalSection_Ctor	runtime/src/system/thread_win.cpp	C++	runtime/types/system/Thread.h	Runtime DIRECT; addr 0x18000c5c0
+??1CriticalSection@System@@QEAA@XZ	RtSystem_CriticalSection_Dtor	runtime/src/system/thread_win.cpp	C++	runtime/types/system/Thread.h	Runtime DIRECT; addr 0x18000c5b0
+??MFilename@System@@QEBA_NAEBV01@@Z	RtSystem::RtSystem_Filename_Less	runtime/src/system/filename.cpp	C++	runtime/types/system/Filename.h	Runtime DIRECT; addr 0x180026cb0
+??0Random@System@@QEAA@XZ	RtSystem_Random_Ctor	runtime/src/system/value_types.cpp	C++	runtime/types/system/Value.h	Runtime DIRECT; addr 0x1800c7f20
+??0Random@System@@QEAA@I@Z	RtSystem_Random_CtorSeed	runtime/src/system/value_types.cpp	C++	runtime/types/system/Value.h	Runtime DIRECT; addr 0x1800c7ed0
+??HSystem@@YA?AVString@0@AEBV10@0@Z	RtSystem_String_Concat	runtime/src/system/string.cpp	C++	runtime/src/system/string.h	already declared (runtime/src header); addr 0x1800c9440
+??HSystem@@YA?AVString@0@AEBV10@PEBD@Z	RtSystem_String_ConcatCStr	runtime/src/system/string.cpp	C++	runtime/src/system/string.h	already declared (runtime/src header); addr 0x1800c92d0
+??0Time@System@@QEAA@M@Z	RtSystem_Time_Ctor	runtime/src/system/value_types.cpp	C++	runtime/types/system/Value.h	Runtime DIRECT; addr 0x1800078c0
+0x180043f50	RtUi_LayoutDescription_SerializeEntries	runtime/src/ui/layoutdescription.cpp	extern "C"	runtime/types/ui/LayoutDescription.h	Runtime DIRECT
+0x18004c0d0	RtUi_SpriteCapture_SerializeEntries	runtime/src/ui/spritecapture_class.cpp	extern "C"	runtime/types/ui/SpriteCapture.h	Runtime DIRECT
+0x180078ad0	RtUi_SpriteSheet_SerializeEntries	runtime/src/ui/spritesheet_vtable.cpp	extern "C"	runtime/types/ui/SpriteSheet.h	Runtime DIRECT
+??BString@UI@@QEBA?AV0System@@XZ	RtUi_UIString_ToSystemString	runtime/src/ui/sprite.cpp	C++	runtime/types/ui/String.h	Runtime DIRECT; addr 0x180035020
+??1UserInterface@UI@@QEAA@XZ	RtUi_UserInterface_Dtor	runtime/src/ui/userinterface.cpp	extern "C"	runtime/types/ui/UserInterface.h	Runtime DIRECT; addr 0x180120b90
+??0PerlinNoise@Utility@@QEAA@MMHH@Z	RtUtility_PerlinNoise_Ctor	runtime/src/utility/perlin.cpp	C++	runtime/types/utility/PerlinNoise.h	Runtime DIRECT; addr 0x180108c70
+?Generate@PerlinNoise@Utility@@QEBAMMM@Z	RtUtility_PerlinNoise_Generate	runtime/src/utility/perlin.cpp	C++	runtime/types/utility/PerlinNoise.h	Runtime DIRECT; addr 0x1801089b0
+??0Adapter@Device@Video@@QEAA@AEBU012@@Z	RtVideo_Adapter_CopyCtor	runtime/src/video/device_enum_types.cpp	extern "C"	runtime/types/video/Device.h	Runtime DIRECT; addr 0x18000cc70
+??0Adapter@Device@Video@@QEAA@XZ	RtVideo_Adapter_Ctor	runtime/src/video/device_enum_types.cpp	extern "C"	runtime/types/video/Device.h	Runtime DIRECT; addr 0x1800f7100
+??1Adapter@Device@Video@@QEAA@XZ	RtVideo_Adapter_Dtor	runtime/src/video/device_enum_types.cpp	extern "C"	runtime/types/video/Device.h	Runtime DIRECT; addr 0x18000cc10
+0x180010760	RtVideo_ArrayRefreshDtor	runtime/src/video/device_startup.cpp	extern "C"	runtime/types/video/Device.h	Runtime DIRECT
+??1Context@Video@@QEAA@XZ	RtVideo_Context_Dtor	runtime/src/video/context_lifecycle.cpp	extern "C"	runtime/types/video/Context.h	Runtime DIRECT; addr 0x1800f16e0
+??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z	RtVideo_GraphicsInterface_CopyCtor	runtime/src/video/device_enum_types.cpp	extern "C"	runtime/types/video/Device.h	Runtime DIRECT; addr 0x18000ce10
+??0GraphicsInterface@Device@Video@@QEAA@XZ	RtVideo_GraphicsInterface_Ctor	runtime/src/video/device_enum_types.cpp	extern "C"	runtime/types/video/Device.h	Runtime DIRECT; addr 0x18000cd90
+??1GraphicsInterface@Device@Video@@QEAA@XZ	RtVideo_GraphicsInterface_Dtor	runtime/src/video/device_enum_types.cpp	extern "C"	runtime/types/video/Device.h	Runtime DIRECT; addr 0x18000cdc0
+0x180056db0	RtVideo_VertexProgram_SerializeStreams	runtime/src/video/vertexprogram.cpp	extern "C"	runtime/types/video/VideoProgram.h	Runtime DIRECT
+??4Box@Volume@@QEAAAEAV01@AEBV01@@Z	RtVolume_Box_Assign	runtime/src/volume/box.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x180011e70
+??0Box@Volume@@QEAA@XZ	RtVolume_Box_Ctor	runtime/src/volume/box.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x180011ea0
+?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z	RtVolume_Box_Extend	runtime/src/volume/box.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x180011ff0
+?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z	RtVolume_Box_GetCorners	runtime/src/volume/box.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800121b0
+?Intersect@Box@Volume@@QEBA_NAEBV12@@Z	RtVolume_Box_Intersect	runtime/src/volume/box.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x180012160
+?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z	RtVolume_Frustum_Contains	runtime/src/volume/frustum.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800f8e80
+??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z	RtVolume_Frustum_Ctor_General	runtime/src/volume/frustum.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800fa3d0
+??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z	RtVolume_Frustum_Ctor_Perspective	runtime/src/volume/frustum.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800fa1e0
+?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z	RtVolume_Frustum_GetCorners	runtime/src/volume/frustum.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800f9850
+?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z	RtVolume_Frustum_GetScreenDirection	runtime/src/volume/frustum.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800f9c80
+??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z	RtVolume_Frustum_MulTransform3	runtime/src/volume/frustum.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800f9310
+?Projection@Frustum@Volume@@QEBA?AVMatrix@Math@@_N@Z	RtVolume_Frustum_Projection	runtime/src/volume/frustum.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x1800f9dc0
+??0Rectangle@Volume@@QEAA@XZ	RtVolume_Rectangle_Ctor	runtime/src/volume/rectangle.cpp	C++	runtime/types/volume/Volume.h	Runtime DIRECT; addr 0x18005ddd0
+0x180013960	Rt_ArrayAssign_180013960	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18001b700	Rt_ArrayAssign_18001b700	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18001b810	Rt_ArrayAssign_18001b810	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005b130	Rt_ArrayAssign_18005b130	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x180013fb0	Rt_ArrayDtor_180013fb0	runtime/src/collection/array_graphics_mesh.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x180014090	Rt_ArrayDtor_180014090	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x180014160	Rt_ArrayDtor_180014160	runtime/src/collection/array_graphics_mesh.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18001c480	Rt_ArrayDtor_18001c480	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18001c550	Rt_ArrayDtor_18001c550	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005bbb0	Rt_ArrayDtor_18005bbb0	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x180006a10	Rt_GuardedObjectFree	runtime/src/video/context_lifecycle.cpp	extern "C"	runtime/types/video/Context.h	Runtime DIRECT
+0x18005aa30	Rt_SetSize_18005aa30	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005ac50	Rt_SetSize_18005ac50	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005b1e0	Rt_SetSize_18005b1e0	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005be30	Rt_SetSize_18005be30	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005c3d0	Rt_SetSize_18005c3d0	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005c8a0	Rt_SetSize_18005c8a0	runtime/src/collection/array_graphics_anim.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005cda0	Rt_SetSize_18005cda0	runtime/src/collection/array_graphics_mesh.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x18005d840	Rt_SetSize_18005d840	runtime/src/collection/array_graphics_mesh.cpp	anonymous namespace	-	NOT declared: internal linkage
+0x1800c3f40	SaveInfo_Dtor	runtime/src/save/saveload.cpp	static	-	NOT declared: internal linkage
+0x18001b360	TransformArrayAssign	runtime/src/picking/scene_grid.cpp	C++	runtime/src/picking/scene_grid.h	already declared (runtime/src header)
+??0DisplayMode@Device@Video@@QEAA@HH@Z	Video_DisplayMode_Ctor	runtime/src/video/companion_data.cpp	C++	runtime/types/video/Device.h	Runtime DIRECT; addr 0x18000d300
+??1DisplayMode@Device@Video@@QEAA@XZ	Video_DisplayMode_Dtor	runtime/src/video/companion_data.cpp	C++	runtime/types/video/Device.h	Runtime DIRECT; addr 0x18000cb80
+??0IndexBuffer@Video@@QEAA@XZ	Video_IndexBuffer_Ctor	runtime/src/video/buffers.cpp	C++	runtime/types/video/Buffers.h	Runtime DIRECT; addr 0x1800f3490
+??0RenderBuffer@Video@@QEAA@XZ	Video_RenderBuffer_Ctor	runtime/src/video/video_resources.cpp	C++	runtime/types/video/Device.h	Runtime DIRECT; addr 0x1800f3ee0
+??1RenderBuffer@Video@@QEAA@XZ	Video_RenderBuffer_Dtor	runtime/src/video/video_resources.cpp	C++	runtime/types/video/Device.h	Runtime DIRECT; addr 0x1800f4020
+??0VertexBuffer@Video@@QEAA@XZ	Video_VertexBuffer_Ctor	runtime/src/video/buffers.cpp	C++	runtime/types/video/Buffers.h	Runtime DIRECT; addr 0x1800f55f0
+?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z	allocateEntry	runtime/src/system/allocator.cpp	parameter	-	NOT declared: the registered value is a parameter, not a body; addr 0x1800c6e60
+?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z	rtalloc::MemAlloc	runtime/src/system/allocator.cpp	C++	-	NOT declared: runtime/types/system/MemoryAllocator.h is W0-SM's; addr 0x1800c7a50
+?MemFree@MemoryAllocator@System@@SAXPEAX@Z	rtalloc::MemFree	runtime/src/system/allocator.cpp	C++	-	NOT declared: runtime/types/system/MemoryAllocator.h is W0-SM's; addr 0x1800c7ad0
+?Shutdown@MemoryAllocator@System@@QEAAXXZ	rtalloc::Shutdown	runtime/src/system/allocator.cpp	C++	-	NOT declared: runtime/types/system/MemoryAllocator.h is W0-SM's; addr 0x1800c75b0
+?Startup@MemoryAllocator@System@@QEAA_N_K0@Z	rtalloc::Startup	runtime/src/system/allocator.cpp	C++	-	NOT declared: runtime/types/system/MemoryAllocator.h is W0-SM's; addr 0x1800c7620
+0x180025a80	rtavl::FilenameSetInsert	runtime/src/collection/avl_trees.cpp	C++	runtime/src/collection/avl_trees.h	already declared (runtime/src header)
+0x180009350	rtavl::PtrArrayAssign	runtime/src/collection/avl_trees.cpp	C++	runtime/src/collection/avl_trees.h	already declared (runtime/src header)
+0x1800093e0	rtavl::PtrArrayDtor	runtime/src/collection/avl_trees.cpp	C++	runtime/src/collection/avl_trees.h	already declared (runtime/src header)
+0x18002a090	rtavl::StringMapInsert	runtime/src/collection/avl_trees.cpp	C++	runtime/src/collection/avl_trees.h	already declared (runtime/src header)
+0x180008340	rtpathid::SubtreeFree	runtime/src/collection/avl_trees.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x18007eefc	rtcrt::StrICmp	runtime/src/crt/msvc_stricmp.cpp	C++	runtime/funcs/rt_libm.h	Runtime DIRECT
+0x1800637b0	rtgfxd::RtGfxd_SceneArraySetSizeFill	runtime/src/graphics/wave9_lane_gfxd.cpp	extern "C"	runtime/types/graphics/Scene.h	Runtime DIRECT
+0x180027380	rtpathid::Insert	runtime/src/collection/set_avl_pathid.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180027970	rtpathid::SubtreeFree	runtime/src/collection/set_avl_pathid.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180023060	rtsetavl24::AllocNode	runtime/src/collection/set_avl_e24.cpp	C++	runtime/src/collection/set_avl_e24.h	already declared (runtime/src header)
+0x180023130	rtsetavl24::DestroySubtree	runtime/src/collection/set_avl_e24.cpp	C++	runtime/src/collection/set_avl_e24.h	already declared (runtime/src header)
+0x180023170	rtsetavl24::Retrace	runtime/src/collection/set_avl_e24.cpp	C++	runtime/src/collection/set_avl_e24.h	already declared (runtime/src header)
+0x180025e10,0x1800279f0,0x18002a310	rtsetavl::Retrace	runtime/src/collection/set_avl.cpp	C++	runtime/src/collection/set_avl.h	already declared (runtime/src header)
+0x18000f7d0	rtsetclear::Clear	runtime/src/collection/set_clear.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180050d30	rtsort::Array16Assign	runtime/src/collection/introsort.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x180051650	rtsort::EffectSlotAssign	runtime/src/collection/introsort.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1800264a0	rtsort::SortByKey70	runtime/src/collection/introsort.cpp	C++	runtime/types/collection/Collection.h	Runtime DIRECT
+0x1401720b0	kRdata_1401720b0	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401720b8	kRdata_1401720b8	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401720bc	kRdata_1401720bc	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401720c0	kRdata_1401720c0	standalone/reg_unreg_lane4.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_bits_1720c0
+0x1401720cc	kRdata_1401720cc	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401720d4	kRdata_1401720d4	standalone/reg_action_move.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1720d4_MinDist
+0x1401720e4	kRdata_1401720e4	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401720ec	kRdata_1401720ec	standalone/reg_component_gap_A.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1720ec
+0x1401720f4	kRdata_1401720f4	standalone/reg_unreg_lane4.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_bits_1720f4
+0x1401720fc	kRdata_1401720fc	standalone/reg_boat_ctrl.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1720fc
+0x140172100	kRdata_140172100	standalone/reg_component_gap_A.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172100
+0x14017210c	kRdata_14017210c	standalone/reg_boat_ctrl.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_17210c; two cells, one constant
+0x14017210c	kRdata_14017210c	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table); two cells, one constant
+0x140172110	kRdata_140172110	standalone/reg_herd_live.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_f_HerdPopulateJitter
+0x140172114	kRdata_140172114	standalone/reg_citizen_needsupdate.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172114
+0x140172120	kRdata_140172120	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172124	kRdata_140172124	standalone/reg_citizenai_actionctors.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172124
+0x14017213c	kRdata_14017213c	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172140	kRdata_140172140	standalone/reg_component_nature.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_172140
+0x140172144	kRdata_140172144	standalone/reg_food_typeid.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172144
+0x140172148	kRdata_140172148	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x14017214c	kRdata_14017214c	code/Game/Game/gameupdateloop_load.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage s_fConst_1_0
+0x140172168	kRdata_140172168	standalone/reg_component_gap_A.cpp	inline constexpr	code/Game/Game/exe_constants.h	double; storage k_rdata_172168
+0x140172174	kRdata_140172174	code/Game/Game/gameupdateloop_load.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage s_fCamParam2
+0x140172178	kRdata_140172178	standalone/reg_work_actionctor.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_f_PlantWorkTime
+0x140172180	kRdata_140172180	standalone/reg_citizenai_handlers.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172180
+0x140172184	kRdata_140172184	standalone/reg_citizenai_handlers.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172184
+0x140172188	kRdata_140172188	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172194	kRdata_140172194	standalone/reg_citizenai_actionctors.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172194
+0x140172198	kRdata_140172198	standalone/reg_citizenai_actionctors.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172198
+0x14017219c	kRdata_14017219c	code/Game/Game/gameupdateloop_load.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage s_fAudioTimeScale; two cells, one constant
+0x14017219c	kRdata_14017219c	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_storage[] (table); two cells, one constant
+0x1401721a0	kRdata_1401721a0	standalone/reg_citizenai_handlers.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1721a0
+0x1401721a8	kRdata_1401721a8	standalone/reg_component_gap_A.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1721a8
+0x1401721b0	kRdata_1401721b0	standalone/reg_work_actionctor.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_f_GrazingWorkTime
+0x1401721b8	kRdata_1401721b8	standalone/reg_component_fruit.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_1721b8
+0x1401721cc	kRdata_1401721cc	standalone/reg_unreg_lane4.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_bits_1721cc
+0x1401721d0	kRdata_1401721d0	standalone/reg_component_nature.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_1721d0
+0x1401721d4	kRdata_1401721d4	standalone/reg_citizenai_handlers.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1721d4
+0x1401721dc	kRdata_1401721dc	code/Game/Game/gameupdateloop_load.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage s_fCamParam1; two cells, one constant
+0x1401721dc	kRdata_1401721dc	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_storage[] (table); two cells, one constant
+0x1401721e4	kRdata_1401721e4	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401721f4	kRdata_1401721f4	standalone/reg_boat_ctrl.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1721f4
+0x1401721fc	kRdata_1401721fc	standalone/reg_citizenbehavior_tick.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_1721fc
+0x140172204	kRdata_140172204	standalone/reg_pasture_live.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_f_QuarterTurn
+0x140172208	kRdata_140172208	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172214	kRdata_140172214	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172220	kRdata_140172220	standalone/reg_component_animal.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_f_HerdSpawnSpread
+0x140172228	kRdata_140172228	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x14017222c	kRdata_14017222c	standalone/reg_component_nature.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_17222c
+0x140172230	kRdata_140172230	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172234	kRdata_140172234	standalone/reg_citizen_needsupdate.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172234
+0x140172238	kRdata_140172238	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172240	kRdata_140172240	code/Game/Game/gameupdateloop_load.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage s_fCamParam3; two cells, one constant
+0x140172240	kRdata_140172240	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage g_storage[] (table); two cells, one constant
+0x140172248	kRdata_140172248	standalone/reg_component_nature.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_172248
+0x140172254	kRdata_140172254	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x14017225c	kRdata_14017225c	standalone/reg_component_fruit.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_17225c
+0x140172264	kRdata_140172264	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x14017226c	kRdata_14017226c	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x140172280	kRdata_140172280	standalone/reg_citizenai_handlers.cpp	inline constexpr	code/Game/Game/exe_constants.h	float; storage k_rdata_172280
+0x140172288	kRdata_140172288	standalone/reg_component_nature.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage k_rdata_172288
+0x1401722a0	kRdata_1401722a0	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401722a8	kRdata_1401722a8	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table)
+0x1401722b0	kRdata_1401722b0	standalone/reg_component_nature.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint64_t; storage k_rdata_1722b0
+0x1401722c0	kRdata_1401722c0	standalone/reg_fire.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_DAT_1401722c0; two cells, one constant
+0x1401722c0	kRdata_1401722c0	standalone/reg_rdata_float_consts.cpp	inline constexpr	code/Game/Game/exe_constants.h	uint32_t; storage g_storage[] (table); two cells, one constant

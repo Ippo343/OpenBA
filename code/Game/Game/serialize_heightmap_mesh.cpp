@@ -51,6 +51,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include "Game/exe_bodies.h"
 
 namespace {
 

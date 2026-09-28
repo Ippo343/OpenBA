@@ -81,6 +81,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Game/exe_bodies.h"
 
 namespace {
 

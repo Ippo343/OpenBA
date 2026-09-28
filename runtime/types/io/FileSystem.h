@@ -637,3 +637,17 @@ static_assert(std::is_standard_layout<FileSystem>::value,
               "the doors reach these fields through a reinterpret_cast");
 
 }  // namespace IO
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+namespace RtIO {
+// ---- io/file_stream.cpp
+extern "C" void RtIo_FileInfo_Dtor(FileInfo* self);  // 0x18000c180
+// ---- io/filesystem_find_win.cpp
+void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill);  // 0x180026880
+}  // namespace RtIO
+// ==== end B3R W0-P0c ====

@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Player/exe_bodies.h"
 
 // ---- engine .rdata constants (retail values; see header) -------------------------
 namespace {

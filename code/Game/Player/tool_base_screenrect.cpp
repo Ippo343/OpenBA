@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "Player/exe_bodies.h"
 // One-shot screen-rect projection diagnostics (BANISHED_TOOL_DIAG). A/B-safe: only
 // emits when the placement pick chain is active + the env is set. Bounded line count.
 

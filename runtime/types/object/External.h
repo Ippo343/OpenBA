@@ -1006,3 +1006,44 @@ static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simple
 // ############################################################################
 
 }  // namespace Object
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+namespace RtObject {
+// ---- object/external_load.cpp
+extern "C" External* RtObject_External_Load(const RtSystem::Filename* path, External* existing);  // 0x1800bc620
+}  // namespace RtObject
+
+// ---- object/external_ptr_serialize.cpp
+extern "C" void RtObject_ExternalPtrArraySerialize_External(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18002f170
+extern "C" void RtObject_ExternalPtrArraySerialize_Goal(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x180005220
+extern "C" void RtObject_ExternalPtrArraySerialize_ElementDescription(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x1800493d0
+extern "C" void RtObject_ExternalPtrArraySerialize_MaterialInstance(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18005d4a0
+extern "C" void RtObject_ExternalPtrArraySerialize_VideoProgram(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x1800605e0
+extern "C" void RtObject_ExternalPtrArraySerialize_Font(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18003e710
+extern "C" void RtObject_ExternalPtrArraySerialize_SpriteSheet(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18003eb60
+extern "C" void RtObject_ExternalPtrSerialize_ElementDescription(RtObject::External** self, rt::io::Serializer* ser);  // 0x180038f90
+extern "C" void RtObject_ExternalPtrSerialize_Dialog(RtObject::External** self, rt::io::Serializer* ser);  // 0x180076610
+extern "C" void RtObject_ExternalPtrSerialize_StringTable(RtObject::External** self, rt::io::Serializer* ser);  // 0x1800042a0
+extern "C" void RtObject_ExternalPtrSerialize_Goal(RtObject::External** self, rt::io::Serializer* ser);  // 0x180005dc0
+extern "C" void RtObject_ExternalPtrSerialize_SpriteSheet(RtObject::External** self, rt::io::Serializer* ser);  // 0x180004590
+extern "C" void RtObject_ExternalPtrSerialize_MaterialInstance(RtObject::External** self, rt::io::Serializer* ser);  // 0x180014520
+extern "C" void RtObject_ExternalPtrSerialize_ImageBuffer(RtObject::External** self, rt::io::Serializer* ser);  // 0x18005d0f0
+extern "C" void RtObject_ExternalPtrSerialize_Material(RtObject::External** self, rt::io::Serializer* ser);  // 0x180061100
+extern "C" void RtObject_ExternalPtrSerialize_GraphicsMesh(RtObject::External** self, rt::io::Serializer* ser);  // 0x180014230
+extern "C" void RtObject_ExternalPtrSerialize_DialogControllerConfig(RtObject::External** self, rt::io::Serializer* ser);  // 0x1800756d0
+extern "C" void RtObject_ExternalPtrSerialize_AnimationGroup(RtObject::External** self, rt::io::Serializer* ser);  // 0x18005b840
+extern "C" void RtObject_ExternalPtrSerialize_Achievement(RtObject::External** self, rt::io::Serializer* ser);  // 0x180006d10
+extern "C" void RtObject_ExternalPtrSerialize_VertexLayout(RtObject::External** self, rt::io::Serializer* ser);  // 0x180055090
+extern "C" void RtObject_ExternalPtrSerialize_VertexProgram(RtObject::External** self, rt::io::Serializer* ser);  // 0x1800542a0
+extern "C" void RtObject_ExternalPtrSerialize_PixelProgram(RtObject::External** self, rt::io::Serializer* ser);  // 0x180055380
+extern "C" void RtObject_ExternalPtrSerialize_RenderState(RtObject::External** self, rt::io::Serializer* ser);  // 0x180055670
+extern "C" void RtObject_ExternalPtrSerialize_Font(RtObject::External** self, rt::io::Serializer* ser);  // 0x18003f1e0
+extern "C" void RtObject_ExternalPtrSerialize_CharacterSet(RtObject::External** self, rt::io::Serializer* ser);  // 0x180076e90
+extern "C" void RtObject_ExternalPtrSerialize_SoundBuffer(RtObject::External** self, rt::io::Serializer* ser);  // 0x180052a50
+extern "C" void RtObject_ExternalPtrSerialize_ExternalList(RtObject::External** self, rt::io::Serializer* ser);  // 0x18003dc90
+// ==== end B3R W0-P0c ====

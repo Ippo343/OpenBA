@@ -69,6 +69,7 @@
 #include "save/SaveLoad.h"                    // ENDGAME B.3.7 callers (K2)
 #include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 #include "object/External.h"   // ENDGAME B.3.9 SS2: Object::ExternalFactory::_singleton
+#include "Game/exe_bodies.h"
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);

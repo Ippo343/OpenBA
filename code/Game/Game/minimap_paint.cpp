@@ -56,6 +56,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Configuration::_singleton
+#include "Game/exe_bodies.h"
 
 // Shared with minimap_upload.cpp — creates the display GPU buffers at minimap
 // +0x08/+0x10 (ports FUN_1400a4e80) and uploads +0x18/+0x28 into them.

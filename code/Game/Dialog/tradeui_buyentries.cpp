@@ -63,6 +63,7 @@
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include <cstdint>
+#include "Dialog/exe_bodies.h"
 
 namespace {
 

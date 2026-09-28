@@ -63,6 +63,7 @@
 #include "Tutorial/TutorialSetup.h"
 #include "Tutorial/TutorialGoal.h"
 #include "Tutorial/TutorialImage.h"
+#include "Tutorial/exe_bodies.h"
 
 // Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
 // Defined in tutorial_next_scenario.cpp.

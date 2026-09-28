@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include "Game/exe_bodies.h"
 
 // WorldGeometry offsets (mirror worldgen.cpp WG_*).
 static constexpr int WG_DIMX2      = 0xc0;   // int dim*2 (== heightfield gridSize, e.g. 512)

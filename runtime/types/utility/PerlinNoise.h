@@ -49,3 +49,14 @@ static_assert(offsetof(PerlinNoise, _offsetY)  == 0x0c, "PerlinNoise._offsetY @ 
 static_assert(sizeof(PerlinNoise) == 0x10, "sizeof(Utility::PerlinNoise) == 0x10");
 
 }  // namespace RtUtility
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- utility/perlin.cpp
+RtUtility::PerlinNoise* RtUtility_PerlinNoise_Ctor(RtUtility::PerlinNoise* self, float persistence, float octaves, int32_t offsetX, int32_t offsetY);  // 0x180108c70
+float RtUtility_PerlinNoise_Generate(const RtUtility::PerlinNoise* self, float x, float y);  // 0x1801089b0
+// ==== end B3R W0-P0c ====

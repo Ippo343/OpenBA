@@ -744,3 +744,14 @@ enum : unsigned {
 };
 
 }  // namespace RtVideo
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- video/context_lifecycle.cpp
+extern "C" void RtVideo_Context_Dtor(Video::Context* self);  // 0x1800f16e0
+extern "C" void Rt_GuardedObjectFree(void* p);  // 0x180006a10
+// ==== end B3R W0-P0c ====

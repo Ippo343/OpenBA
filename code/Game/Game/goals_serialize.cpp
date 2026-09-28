@@ -78,6 +78,7 @@
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include "Component/WorkComponent.h"
 #include <new>
+#include "Game/exe_bodies.h"
 
 
 namespace {

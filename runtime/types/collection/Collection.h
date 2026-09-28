@@ -1751,3 +1751,189 @@ static_assert(offsetof(S24::Node, right)  == 0x28, "Set::Node::right @ +0x28 for
 
 }  // namespace LayoutProbe
 }  // namespace Collection
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+namespace rtsetavl { struct Set; struct Node; }   // runtime/src/collection/set_avl.h
+
+namespace rtcoll {
+// ---- collection/array_destroy.cpp
+void* RtColl_ArrayAssign_180013640(void* self, const void* src);  // 0x180013640
+void* RtColl_ArrayAssign_180014c70(void* self, const void* src);  // 0x180014c70
+void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src);  // 0x18001b1a0
+void* RtColl_ArrayAssign_18001b270(void* self, const void* src);  // 0x18001b270
+void* RtColl_ArrayAssign_18003ce30(void* self, const void* src);  // 0x18003ce30
+void* RtColl_ArrayAssign_18003cf20(void* self, const void* src);  // 0x18003cf20
+void* RtColl_ArrayAssign_180052700(void* self, const void* src);  // 0x180052700
+void* RtColl_ArrayAssign_1800571b0(void* self, const void* src);  // 0x1800571b0
+void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src);  // 0x18001c620
+void* RtColl_ArrayDtorAnim_18001c1e0(void* self);  // 0x18001c1e0
+void* RtColl_ArrayDtorElem_180004a90(void* self);  // 0x180004a90
+void* RtColl_ArrayDtorElem_180004b70(void* self);  // 0x180004b70
+void* RtColl_ArrayDtorElem_180004c80(void* self);  // 0x180004c80
+void* RtColl_ArrayDtorElem_180004d60(void* self);  // 0x180004d60
+void* RtColl_ArrayDtorElem_180004f50(void* self);  // 0x180004f50
+void* RtColl_ArrayDtorElem_180010ab0(void* self);  // 0x180010ab0
+void* RtColl_ArrayDtorElem_18001c2d0(void* self);  // 0x18001c2d0
+void* RtColl_ArrayDtorElem_180033880(void* self);  // 0x180033880
+void* RtColl_ArrayDtorElem_180039280(void* self);  // 0x180039280
+void* RtColl_ArrayDtorElem_180039360(void* self);  // 0x180039360
+void* RtColl_ArrayDtorElem_18003e310(void* self);  // 0x18003e310
+void* RtColl_ArrayDtorElem_18003e4a0(void* self);  // 0x18003e4a0
+void* RtColl_ArrayDtorElem_1800416d0(void* self);  // 0x1800416d0
+void* RtColl_ArrayDtorElem_180043a00(void* self);  // 0x180043a00
+void* RtColl_ArrayDtorElem_18004fa30(void* self);  // 0x18004fa30
+void* RtColl_ArrayDtorElem_18004fb00(void* self);  // 0x18004fb00
+void* RtColl_ArrayDtorElem_18004fbd0(void* self);  // 0x18004fbd0
+void* RtColl_ArrayDtorElem_1800516c0(void* self);  // 0x1800516c0
+void* RtColl_ArrayDtorElem_18005bf60(void* self);  // 0x18005bf60
+void* RtColl_ArrayDtorElem_180065d40(void* self);  // 0x180065d40
+void* RtColl_ArrayDtorElem_180073720(void* self);  // 0x180073720
+// ---- collection/array.cpp
+void* RtColl_ArrayDtor_180013da0(void* a);  // 0x180013da0
+void* RtColl_ArrayDtor_180013e70(void* a);  // 0x180013e70
+void* RtColl_ArrayDtor_180014d00(void* a);  // 0x180014d00
+void* RtColl_ArrayDtor_18001c020(void* a);  // 0x18001c020
+void* RtColl_ArrayDtor_18001c3b0(void* a);  // 0x18001c3b0
+void* RtColl_ArrayDtor_18001c750(void* a);  // 0x18001c750
+void* RtColl_ArrayDtor_180021490(void* a);  // 0x180021490
+void* RtColl_ArrayDtor_1800248e0(void* a);  // 0x1800248e0
+void* RtColl_ArrayDtor_1800249c0(void* a);  // 0x1800249c0
+void* RtColl_ArrayDtor_180024aa0(void* a);  // 0x180024aa0
+void* RtColl_ArrayDtor_180037310(void* a);  // 0x180037310
+void* RtColl_ArrayDtor_180039440(void* a);  // 0x180039440
+void* RtColl_ArrayDtor_18003d8c0(void* a);  // 0x18003d8c0
+void* RtColl_ArrayDtor_18003da00(void* a);  // 0x18003da00
+void* RtColl_ArrayDtor_18003db40(void* a);  // 0x18003db40
+void* RtColl_ArrayDtor_18003e0c0(void* a);  // 0x18003e0c0
+void* RtColl_ArrayDtor_180043cb0(void* a);  // 0x180043cb0
+void* RtColl_ArrayDtor_18004cc90(void* a);  // 0x18004cc90
+void* RtColl_ArrayDtor_180051d80(void* a);  // 0x180051d80
+void* RtColl_ArrayDtor_180062320(void* a);  // 0x180062320
+void* RtColl_ArrayDtor_180065bf0(void* a);  // 0x180065bf0
+void* RtColl_ArrayDtor_180065e80(void* a);  // 0x180065e80
+void* RtColl_ArrayDtor_180079870(void* a);  // 0x180079870
+void RtColl_ArraySetSizeFill_180023830(void* a, int n, const void* fill);  // 0x180023830
+void RtColl_ArraySetSizeFill_180024fe0(void* a, int n, const void* fill);  // 0x180024fe0
+void RtColl_ArraySetSizeFill_180028cd0(void* a, int n, const void* fill);  // 0x180028cd0
+void RtColl_ArraySetSizeFill_1800298f0(void* a, int n, const void* fill);  // 0x1800298f0
+void RtColl_ArraySetSizeFill_180033690(void* a, int n, const void* fill);  // 0x180033690
+void RtColl_ArraySetSizeFill_180034860(void* a, int n, const void* fill);  // 0x180034860
+void RtColl_ArraySetSizeFill_18003df80(void* a, int n, const void* fill);  // 0x18003df80
+void RtColl_ArraySetSizeFill_18003e1a0(void* a, int n, const void* fill);  // 0x18003e1a0
+void RtColl_ArraySetSizeFill_180043b40(void* a, int n, const void* fill);  // 0x180043b40
+void RtColl_ArraySetSizeFill_18004bfc0(void* a, int n, const void* fill);  // 0x18004bfc0
+void RtColl_ArraySetSizeFill_180063a80(void* a, int n, const void* fill);  // 0x180063a80
+void RtColl_ArraySetSizeFill_180076900(void* a, int n, const void* fill);  // 0x180076900
+void RtColl_ArraySetSizeFill_180076d10(void* a, int n, const void* fill);  // 0x180076d10
+void RtColl_ArraySetSizeFill_18007a0d0(void* a, int n, const void* fill);  // 0x18007a0d0
+void RtColl_ArraySetSize_1800136f0(void* a, int n);  // 0x1800136f0
+void RtColl_ArraySetSize_180020e90(void* a, int n);  // 0x180020e90
+void RtColl_ArraySetSize_180021220(void* a, int n);  // 0x180021220
+void RtColl_ArraySetSize_180024c10(void* a, int n);  // 0x180024c10
+void RtColl_ArraySetSize_180024d70(void* a, int n);  // 0x180024d70
+void RtColl_ArraySetSize_180029510(void* a, int n);  // 0x180029510
+void RtColl_ArraySetSize_180029630(void* a, int n);  // 0x180029630
+void RtColl_ArraySetSize_180029a80(void* a, int n);  // 0x180029a80
+void RtColl_ArraySetSize_18002f070(void* a, int n);  // 0x18002f070
+void RtColl_ArraySetSize_18002fea0(void* a, int n);  // 0x18002fea0
+void RtColl_ArraySetSize_1800370c0(void* a, int n);  // 0x1800370c0
+void RtColl_ArraySetSize_18003d1c0(void* a);  // 0x18003d1c0
+void RtColl_ArraySetSize_18003d430(void* a);  // 0x18003d430
+void RtColl_ArraySetSize_18003e600(void* a, int n);  // 0x18003e600
+void RtColl_ArraySetSize_18003ea50(void* a, int n);  // 0x18003ea50
+void RtColl_ArraySetSize_18003eea0(void* a, int n);  // 0x18003eea0
+void RtColl_ArraySetSize_180043d80(void* a, int n);  // 0x180043d80
+void RtColl_ArraySetSize_1800492d0(void* a, int n);  // 0x1800492d0
+void RtColl_ArraySetSize_18004ba90(void* a, int n);  // 0x18004ba90
+void RtColl_ArraySetSize_18004cdf0(void* a, int n);  // 0x18004cdf0
+void RtColl_ArraySetSize_180052e60(void* a, int n);  // 0x180052e60
+void RtColl_ArraySetSize_180053190(void* a, int n);  // 0x180053190
+void RtColl_ArraySetSize_180053f00(void* a, int n);  // 0x180053f00
+void RtColl_ArraySetSize_1800547e0(void* a, int n);  // 0x1800547e0
+void RtColl_ArraySetSize_180054a20(void* a, int n);  // 0x180054a20
+void RtColl_ArraySetSize_180055db0(void* a, int n);  // 0x180055db0
+void RtColl_ArraySetSize_180056240(void* a, int n);  // 0x180056240
+void RtColl_ArraySetSize_1800567d0(void* a, int n);  // 0x1800567d0
+void RtColl_ArraySetSize_180056af0(void* a, int n);  // 0x180056af0
+void RtColl_ArraySetSize_180059140(void* a, int n);  // 0x180059140
+void RtColl_ArraySetSize_180059930(void* a, int n);  // 0x180059930
+void RtColl_ArraySetSize_180059e70(void* a, int n);  // 0x180059e70
+void RtColl_ArraySetSize_18005a220(void* a, int n);  // 0x18005a220
+void RtColl_ArraySetSize_18005a410(void* a, int n);  // 0x18005a410
+void RtColl_ArraySetSize_18005cc60(void* a, int n);  // 0x18005cc60
+void RtColl_ArraySetSize_1800604e0(void* a, int n);  // 0x1800604e0
+void RtColl_ArraySetSize_1800616c0(void* a, int n);  // 0x1800616c0
+void RtColl_ArraySetSize_180061880(void* a, int n);  // 0x180061880
+void RtColl_ArraySetSize_180061bb0(void* a, int n);  // 0x180061bb0
+void RtColl_ArraySetSize_180062110(void* a, int n);  // 0x180062110
+void RtColl_ArraySetSize_1800660f0(void* a, int n);  // 0x1800660f0
+void RtColl_ArraySetSize_180066350(void* a, int n);  // 0x180066350
+void RtColl_ArraySetSize_1800666e0(void* a, int n);  // 0x1800666e0
+void RtColl_ArraySetSize_180066bc0(void* a, int n);  // 0x180066bc0
+void RtColl_ArraySetSize_180066e80(void* a, int n);  // 0x180066e80
+void RtColl_ArraySetSize_1800764c0(void* a, int n);  // 0x1800764c0
+void RtColl_ArraySetSize_180076a40(void* a);  // 0x180076a40
+void RtColl_ArraySetSize_180077330(void* a, int n);  // 0x180077330
+void RtColl_ArraySetSize_1800774d0(void* a, int n);  // 0x1800774d0
+void RtColl_ArraySetSize_1800783d0(void* a);  // 0x1800783d0
+void RtColl_ArraySetSize_1800799a0(void* a, int n);  // 0x1800799a0
+void RtColl_ArraySetSize_18007a4d0(void* a, int n);  // 0x18007a4d0
+void RtColl_ArraySetSize_18007a790(void* a, int n);  // 0x18007a790
+void RtColl_ArraySetSize_18007a900(void* a, int n);  // 0x18007a900
+void RtColl_ArraySetSize_18007aa40(void* a, int n);  // 0x18007aa40
+// ---- collection/array_destroy.cpp
+void RtColl_DestroyElem_180044050(void* elem);  // 0x180044050
+void RtColl_DestroyInner_1800419b0(void* ignoredThis, void* base, int count);  // 0x1800419b0
+void RtColl_DestroyInner_18004ff80(void* ignoredThis, void* base, int count);  // 0x18004ff80
+void RtColl_DestroyInner_180052110(void* ignoredThis, void* base, int count);  // 0x180052110
+void RtColl_DestroyInner_180052220(void* ignoredThis, void* base, int count);  // 0x180052220
+void RtColl_DestroyStrings_180005570(void* ignoredThis, void* base, int count);  // 0x180005570
+void RtColl_DestroyStrings_180005880(void* ignoredThis, void* base, int count);  // 0x180005880
+void RtColl_DestroyStrings_180005930(void* ignoredThis, void* base, int count);  // 0x180005930
+void RtColl_DestroyStrings_1800059e0(void* ignoredThis, void* base, int count);  // 0x1800059e0
+void RtColl_DestroyStrings_180006ac0(void* ignoredThis, void* base, int count);  // 0x180006ac0
+void RtColl_DestroyStrings_180011010(void* ignoredThis, void* base, int count);  // 0x180011010
+void RtColl_DestroyStrings_18001cbf0(void* ignoredThis, void* base, int count);  // 0x18001cbf0
+void RtColl_DestroyStrings_180026b50(void* ignoredThis, void* base, int count);  // 0x180026b50
+void RtColl_DestroyStrings_180029190(void* ignoredThis, void* base, int count);  // 0x180029190
+void RtColl_DestroyStrings_18002afc0(void* ignoredThis, void* base, int count);  // 0x18002afc0
+void RtColl_DestroyStrings_1800341e0(void* ignoredThis, void* base, int count);  // 0x1800341e0
+void RtColl_DestroyStrings_180039580(void* ignoredThis, void* base, int count);  // 0x180039580
+void RtColl_DestroyStrings_180039640(void* ignoredThis, void* base, int count);  // 0x180039640
+void RtColl_DestroyStrings_18003e3e0(void* ignoredThis, void* base, int count);  // 0x18003e3e0
+void RtColl_DestroyStrings_18003f070(void* ignoredThis, void* base, int count);  // 0x18003f070
+void RtColl_DestroyStrings_18004fe20(void* ignoredThis, void* base, int count);  // 0x18004fe20
+void RtColl_DestroyStrings_18004fed0(void* ignoredThis, void* base, int count);  // 0x18004fed0
+void RtColl_DestroyStrings_180054920(void* ignoredThis, void* base, int count);  // 0x180054920
+void RtColl_DestroyStrings_180054ba0(void* ignoredThis, void* base, int count);  // 0x180054ba0
+void RtColl_DestroyStrings_180056960(void* ignoredThis, void* base, int count);  // 0x180056960
+void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count);  // 0x180056cb0
+// ---- collection/array.cpp
+void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src);  // 0x18001cdf0
+// ---- collection/array_destroy.cpp
+void* RtColl_LayoutEntryAssign_180043980(void* dst, const void* src);  // 0x180043980
+void* RtColl_SpriteEntryAssign_180004220(void* dst, const void* src);  // 0x180004220
+}  // namespace rtcoll
+
+namespace rtsort {
+// ---- collection/introsort.cpp
+void SortByKey70(void** first, int32_t count);  // 0x1800264a0
+void* Array16Assign(void* dstRaw, const void* srcRaw);  // 0x180050d30
+void* EffectSlotAssign(void* dstRaw, const void* srcRaw);  // 0x180051650
+}  // namespace rtsort
+
+namespace rtpathid {
+// ---- collection/set_avl_pathid.cpp
+rtsetavl::Node** Insert(rtsetavl::Set* set, rtsetavl::Node** outSlot, char* const* key, const uint32_t* value);  // 0x180027380
+void SubtreeFree(void* ignoredThis, rtsetavl::Node* node);  // 0x180027970
+}  // namespace rtpathid
+
+namespace rtsetclear {
+// ---- collection/set_clear.cpp
+void Clear(rtsetavl::Set* set);  // 0x18000f7d0
+}  // namespace rtsetclear
+// ==== end B3R W0-P0c ====

@@ -86,6 +86,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/VSlot.h"      // B.3.x W0: ReportBadSelectionRef's slot probe
 #include "system/Value.h"      // System::Time (Geometry::Update by name)
+#include "Player/exe_bodies.h"
 
 // [diag] last entities committed into EditTool+0x30 (edittool_select.cpp step 6).
 extern "C" void* g_LastSelectStore[4];

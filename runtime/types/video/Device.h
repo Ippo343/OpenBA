@@ -986,3 +986,26 @@ enum ImageBufferSizeFlag : uint32_t {
 };
 
 }  // namespace RtVideo
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- video/companion_data.cpp
+void* Video_DisplayMode_Ctor(Video::Device::DisplayMode* self, int width, int height);  // 0x18000d300
+void Video_DisplayMode_Dtor(Video::Device::DisplayMode* self);  // 0x18000cb80
+// ---- video/device_enum_types.cpp
+extern "C" void* RtVideo_GraphicsInterface_Ctor(void* selfv);  // 0x18000cd90
+extern "C" void* RtVideo_GraphicsInterface_CopyCtor(void* dstv, const void* srcv);  // 0x18000ce10
+extern "C" void RtVideo_GraphicsInterface_Dtor(void* selfv);  // 0x18000cdc0
+extern "C" void* RtVideo_Adapter_Ctor(void* selfv);  // 0x1800f7100
+extern "C" void* RtVideo_Adapter_CopyCtor(void* dstv, const void* srcv);  // 0x18000cc70
+extern "C" void RtVideo_Adapter_Dtor(void* selfv);  // 0x18000cc10
+// ---- video/device_startup.cpp
+extern "C" void RtVideo_ArrayRefreshDtor(void* arr);  // 0x180010760
+// ---- video/video_resources.cpp
+Video::RenderBuffer* Video_RenderBuffer_Ctor(Video::RenderBuffer* self);  // 0x1800f3ee0
+void Video_RenderBuffer_Dtor(Video::RenderBuffer* self);  // 0x1800f4020
+// ==== end B3R W0-P0c ====

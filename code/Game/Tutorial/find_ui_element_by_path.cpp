@@ -47,6 +47,7 @@
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "Entity/ComponentEntity.h"
 #include <new>
+#include "Tutorial/exe_bodies.h"
 
 namespace {
 

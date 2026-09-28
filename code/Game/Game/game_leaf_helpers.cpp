@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ------------------------------------------------------------------
 // String-array destructors. Each is `{ void* data; int count; int cap; }`

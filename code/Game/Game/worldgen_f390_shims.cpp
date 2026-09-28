@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/exe_bodies.h"
 
 extern "C" {
 

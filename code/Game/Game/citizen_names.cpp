@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "Game/exe_bodies.h"
 
 // System::Random::Rand(int min, int max)  (Runtime 0x1800c7d70) returns
 //   min + Rand() % ((max - min) + 1)   -- inclusive [min, max].

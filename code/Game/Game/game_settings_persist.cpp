@@ -31,6 +31,7 @@
 #include "io/Persistence.h"   // ENDGAME B.3.4a closing: Persistence::Get/Set members
 #include <cstdint>
 #include <cstdio>
+#include "Game/exe_bodies.h"
 
 namespace {
 

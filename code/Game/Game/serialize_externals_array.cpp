@@ -38,6 +38,7 @@
 #include "Game/serialize_externals.h"
 #include "Component/ComponentDescription.h"
 #include <cstdint>
+#include "Game/exe_bodies.h"
 
 // FUN_1400049c0(Serializer* s, int count, longlong arrayBase, void* deadInit)
 extern "C" void Reimpl_ExternalPtrArray_Serialize(

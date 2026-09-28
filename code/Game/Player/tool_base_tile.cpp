@@ -27,6 +27,7 @@
 #include <cstring>                           // std::strcmp (BANISHED_CLEAR_PLACE_OVER)
 #include <climits>                           // INT_MIN (reject-trace dedupe)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Player/exe_bodies.h"
 
 // ============================================================
 // 0x140003870 — SetTransformFromYaw

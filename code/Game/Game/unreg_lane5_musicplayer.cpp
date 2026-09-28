@@ -100,6 +100,7 @@
 #include <vector>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
+#include "Game/exe_bodies.h"
 
 namespace {
 

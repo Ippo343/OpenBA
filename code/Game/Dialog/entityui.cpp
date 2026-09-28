@@ -28,6 +28,7 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/BuildDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Player/EditTool.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Dialog/exe_bodies.h"
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)

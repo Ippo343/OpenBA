@@ -668,3 +668,15 @@ static_assert(offsetof(InternalFactory, _random) ==
                   offsetof(RtObject::InternalFactory, random),     "alias _random");
 
 }  // namespace Object
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+namespace IO { class Serializer; }   // io/Serializer.h
+
+// ---- object/internal_ptr_array_serialize.cpp
+extern "C" void RtObject_InternalPtrArraySerialize_AchievementInstance(::IO::Serializer* ser, int count, RtObject::InternalBasePtr* elems);  // 0x180009a20
+extern "C" void RtObject_InternalPtrArraySerialize_GoalInstance(::IO::Serializer* ser, int count, RtObject::InternalBasePtr* elems);  // 0x180009fa0
+// ==== end B3R W0-P0c ====

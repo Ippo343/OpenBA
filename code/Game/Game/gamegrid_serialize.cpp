@@ -59,6 +59,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Entity/ComponentEntity.h"
+#include "Game/exe_bodies.h"
 
 // ============================================================
 // External declarations -- functions already ported elsewhere.

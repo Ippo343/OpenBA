@@ -261,79 +261,6 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
 // Typedef kept for any existing code that uses fn_FindComponent_t as a type.
 typedef void (*fn_FindComponent_t)(void* entity, void* retval);
 
-// FindComponent inline wrappers — call Entity_FindComponentByExeTypeId with correct type ID.
-// Original exe functions (FUN_140XXXXXX) are no longer needed.
-
-// fn_FindComponent_Build — DAT_1401c79e0, original FUN_140004680. MISNOMER: the type id at
-// DAT_1401c79e0 is MapComponent, not BuildComponent (registrar MapComponent_RegisterType
-// 0x14014f375). Bodies: code/Game/Entity/entity_findcomponent.cpp.
-void fn_FindComponent_Build(void* entity, void* retval);
-// fn_FindComponent_BuildState — DAT_1401c7d98, original FUN_140003ea0
-void fn_FindComponent_BuildState(void* entity, void* retval);
-// fn_FindComponent_ConsumeProduce — DAT_1401c7350, original FUN_14000b6f0
-void fn_FindComponent_ConsumeProduce(void* entity, void* retval);
-// fn_FindComponent_Position — DAT_1401c7008, original FUN_14000d6c0
-void fn_FindComponent_Position(void* entity, void* retval);
-// fn_FindComponent_Destroy — DAT_1401c75f0, original FUN_140005780
-void fn_FindComponent_Destroy(void* entity, void* retval);
-// fn_FindComponent_Building — DAT_1401c4b80, original FUN_140015140.
-// ⚠ MISNAMED, kept only because the name is load-bearing across the tree: 0x140015140
-// matches DWORD_1401c4b80 = TradeComponent (verified at instruction level 2026-08-21),
-// so this is a TRADING-POST finder, not a "building" finder. Anything reading its result
-// as "is there a building here?" is wrong — see the animal habitat test in
-// animalcomponent.cpp, whose comment said exactly that until it was corrected.
-// Consequence for gating: this finder returns null for EVERY entity while
-// BANISHED_LIVE_TRADE_TIDS is off, and non-null only for a trading post when it is on.
-void fn_FindComponent_Building(void* entity, void* retval);
-// fn_FindComponent_Work — DAT_1401c8070 = "WorkComponent" (factory_registrations.csv:306),
-// original FUN_140003050. Was named fn_FindComponent_Workplace, which is a DIFFERENT type:
-// WorkPlaceComponent is DAT_1401c80e0 / fn_FindComponent_WorkPlace below. Retail uses both,
-// side by side, in WorkPlaceUI::OnCreate (0x140087080) and in the builder-profession pair
-// (0x14012f520 / 0x14012f670). Confusing them costs crashes — a WorkComponent read as a
-// WorkPlaceComponent puts the small work id (+0x28) where a roster heap pointer (+0x58) is
-// expected. Fields used off a WorkComponent: +0x18 WorkDescription, +0x28 scheduler work id
-// (-1 = none), +0x30 cached max workers (WorkComponent_CalcMaxWorkers).
-void fn_FindComponent_Work(void* entity, void* retval);
-// fn_FindComponent_Attendance — DAT_1401c3f40, original FUN_1400105e0
-void fn_FindComponent_Attendance(void* entity, void* retval);
-// fn_FindComponent_Pasture — DAT_1401c7ba0, original FUN_140004fe0
-void fn_FindComponent_Pasture(void* entity, void* retval);
-// fn_FindComponent_Orchard — DAT_1401c46b0, original FUN_140005440
-void fn_FindComponent_Orchard(void* entity, void* retval);
-// fn_FindComponent_WorkPlace — DAT_1401c80e0 = "WorkPlaceComponent"
-// (factory_registrations.csv:308), original FUN_140002e10. Was named
-// fn_FindComponent_BuildState2. Fields: +0x48 active profession key, +0x58 roster base,
-// +0x60 roster count, +0x18 WorkPlaceDescription (whose +0x20 is the natural profession).
-void fn_FindComponent_WorkPlace(void* entity, void* retval);
-// fn_FindComponent_SM — DAT_1401c71c8, original FUN_14000a170
-void fn_FindComponent_SM(void* entity, void* retval);
-// fn_FindComponent_Citizen — DAT_1401c7158, original FUN_140009790
-void fn_FindComponent_Citizen(void* entity, void* retval);
-// fn_FindComponent_Storage — DAT_1401c7e78, original FUN_140006270
-// NOTE: same function as fn_FindComponent_Residence (same type ID search)
-void fn_FindComponent_Storage(void* entity, void* retval);
-// fn_FindComponent_Residence — same as fn_FindComponent_Storage (same type ID)
-void fn_FindComponent_Residence(void* entity, void* retval);
-// fn_FindComponent_Cemetery — DAT_1401c4090, original FUN_140010a00
-void fn_FindComponent_Cemetery(void* entity, void* retval);
-// fn_FindComponent_Immigration — DAT_1401c4480, original FUN_140012020
-void fn_FindComponent_Immigration(void* entity, void* retval);
-// fn_FindComponent_Tracker — DAT_1401c4b10, original FUN_140013320
-void fn_FindComponent_Tracker(void* entity, void* retval);
-// fn_FindComponent_MeshInstance — DAT_1401c7e08,
-// StatusIconComponent's BaseTypeInfo (writer StatusIconComponent_RegisterType
-// 0x14014fab5; real HappinessComponent id is 0x1401c42c0). Original FUN_140002f90.
-void fn_FindComponent_MeshInstance(void* entity, void* retval);
-// fn_FindComponent_Character — DAT_1401c7a50 = ModelComponent (writer ModelComponent_RegisterType);
-// finds ModelComponent. Function name kept for callers; the "Character" label is historical.
-// Original FUN_140003f60.
-void fn_FindComponent_Character(void* entity, void* retval);
-// fn_FindComponent_CitizenAI — FUN_140011050, Entity::FindComponent<CitizenAIComponent>
-// (compares against [0x1401c70e8] at 0x140011093, IsDerivedFrom at 0x1400110ec).
-// ENDGAME B.3.9 CB: defined in code/Game/Dialog/citizenui.cpp over
-// CitizenAIComponent::TypeId(); the cell is unregistered, so the old inline over
-// the cell pointer only worked when a dialog re-pointed that global.
-void fn_FindComponent_CitizenAI(void* entity, void* retval);
 
 // ============================================================
 // Dynamic array helpers — Reimplemented in clean C++
@@ -348,13 +275,6 @@ void fn_FindComponent_CitizenAI(void* entity, void* retval);
 // every caller is now Collection::Array<...>::SetSize. Read rtcoll::SetSizeCore
 // for the algorithm.
 
-// StorageComponent::QueryCount(storageComp) -> int
-// FUN_14012cf10: iterates +0x28 item array (count at +0x30). Each slot is 0x10 bytes:
-//   [0..7] = ptr to "item" struct (has +0x28=component ptr array, +0x30=comp count)
-//   [8..11] = item quantity count
-// For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
-// then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-int fn_StorageComponent_QueryCount(void* storageComp);
 
 // Radius calculation helper (returns radius display index)
 typedef int (*fn_RadiusCalc_t)(void* component, int tileIndex);
@@ -391,28 +311,6 @@ extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 // Additional Exe Functions (Phase D additions)
 // ============================================================
 
-// FindComponentByTypeId(entity, typeId) — searches entity component array
-// Reimplemented from FUN_1400c3680: iterates entity+0x30 array (count at +0x38),
-// calls Object::Base::Type() (retail slot 2, +0x10) on each component, returns first match.
-// Original used hidden return pointer (InternalBasePtr); this inline returns void* directly.
-inline void* FindComponentByTypeId(void* entity, int typeId) {
-    if (!entity) return nullptr;
-    uintptr_t e = (uintptr_t)entity;
-    int count = *(int*)(e + 0x38);
-    uintptr_t arr = *(uintptr_t*)(e + 0x30);  // array of InternalBasePtr (8 bytes each)
-    for (int i = 0; i < count; i++) {
-        void* compPtr = *(void**)(arr + (uintptr_t)i * 8);  // InternalBasePtr value = Internal*
-        if (!compPtr) continue;
-        // CheckPtr validates the pointer; for our purposes we just null-check above.
-        // Object::Base::Type() (retail slot 2, +0x10), by name on the real class.
-        int id = static_cast<int>(
-            static_cast<const ::Object::Base*>(compPtr)->Type());   // B.3.x bridge
-        if (id == typeId) {
-            return compPtr;
-        }
-    }
-    return nullptr;
-}
 
 // EntityTrackingSet_BST_Delete(root, node) — AVL/BST node deletion helper
 // FUN_140025740: called by EntityTrackingSet_Remove to delete found node
@@ -449,13 +347,6 @@ extern fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor;
 typedef void* (*fn_DateTime_AsString_t)(void* dateTime, void* retval);
 extern fn_DateTime_AsString_t fn_DateTime_AsString;
 
-// SaveLoadDialog helper: FUN_1400b6ce0 — populates the file list table
-// NOW REIMPLEMENTED in code/Game/Dialog/saveloaddialog.cpp as SaveLoadDialog_PopulateFileList()
-// Old typedef kept for reference:
-// typedef void (*fn_SaveLoadDialog_PopulateFileList_t)(void* self);
-// extern fn_SaveLoadDialog_PopulateFileList_t fn_SaveLoadDialog_PopulateFileList;
-class SaveLoadDialog;
-void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
 // ScenarioDialog helper: loads the selected scenario — NOW REIMPLEMENTED
 // fn_ScenarioDialog_LoadSelected replaced by inline code in scenariodialog.cpp
@@ -502,23 +393,6 @@ typedef int (*fn_SelectResourceUI_GetResourceCount_t)(void* self);
 
 // fn_FollowDialog_Close — now inline in followdialog.cpp Slot7 (Escape key handler)
 
-// ============================================================
-// Shared SA dialog guard
-// ============================================================
-// Is a DialogController's data-source entity (+0x28) still safe to read? The
-// weak ref is nulled when the entity is destroyed, and while the
-// marked-for-removal flag (entity+0x40 bit 0x400) is set the entity survives
-// until the EntityList drain with its components already torn down. Reading a
-// roster/storage in either state crashed live 2026-07-20 (upgrade path
-// demolishing a house with its panel open). Wrappers bail — the panel freezes
-// until the dialog closes.
-inline bool SA_DialogEntityAlive(void* self) {
-    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
-    if (!e) return false;
-    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
-        return false;
-    return true;
-}
 
 // ============================================================
 // UpgradeUI helpers
@@ -564,14 +438,6 @@ extern fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker;
 // EntityUI helpers
 // ============================================================
 
-// fn_EntityUI_SetEditMode — reimplemented in entityui.cpp as EntityUI_SetEditMode_Impl
-// FUN_140102b60: sets player controller edit state (BST lookup + Factory::CreateObject)
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
-
-// fn_EntityUI_SelectEntity — reimplemented in entityui.cpp as EntityUI_SelectEntity_Impl
-// FUN_140102e30: BST insert/update for entity tracking
-void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
-                                 uint32_t x, uint32_t y);
 
 // Factory::CreateObject(factory_singleton, typeId) -> Base*
 // Used by SetEditMode to create tool controller objects.
@@ -653,9 +519,6 @@ extern fn_FindDialogByControllerType_t fn_FindDialogByControllerType;
 // --- Sub-dependencies for Toolbar_CenterOnEntity_Impl ---
 
 
-// FindComponent_MultiObject — inline wrapper for MultiObjectComponent lookup
-void fn_FindComponent_MultiObject(void* entity, void* retval);
-
 // EntityPanel_SyncTracking (FUN_1400666b0) — syncs tracking/follow flag to dialog controller
 typedef void (*fn_EntityPanel_SyncTracking_t)(void* panelController);
 extern fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking;
@@ -684,18 +547,7 @@ extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
 // fn_GetCurrentProductIndex — inline defined later (after fn_Random_RandFloat)
 // FUN_140119470: if +0x50 != 0xffffffff return it; else weighted random pick from +0x58 array.
 
-// ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
-// Resolves and caches an External object by filename.
-// Input: nameString points to an ExternalRef struct:
-//   +0x00: String (8 bytes) — resource name
-//   +0x08: int32  — cached generation counter (compared against ExternalFactory+0x08)
-//   +0x10: void*  — cached External* result
-// If the generation counter matches the factory's, the cached result is still valid.
-// Otherwise, looks up the External by converting the String to a Filename and calling
-// ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
-// caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
 typedef void (*fn_ResolveExternalByName_t)(void* nameString); // kept for ABI reference
-void ResolveExternalByName_Impl(void* nameString);
 
 // (fn_External_External / fn_External_Dtor — the ??0/??1External doors read
 // through exe slots 0x140151e98 / 0x140151ea0 — went at ENDGAME B.3.9 EXA:
@@ -771,41 +623,6 @@ typedef void (*fn_StatusBarUI_StatusIconHandler_t)(void* self, int iconIndex);  
 // ProductionUI support
 // ============================================================
 
-// TrackerComponent rebuild: FUN_14000d9d0 — moves/rebuilds tracker item arrays
-// Called when game world item count changes.
-// param_1 = dst array descriptor (uint64_t[2]: ptr, count+capacity)
-// param_2 = src array descriptor (uint64_t[2]: ptr, count+capacity)
-// Frees old dst buffer, allocates count*16 bytes, copies 16-byte entries from src.
-inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
-    if (dstArray == srcArray) return;
-    uint64_t* dst = (uint64_t*)dstArray;
-    uint64_t* src = (uint64_t*)srcArray;
-    fn_MemFreeStatic((void*)*dst);
-    dst[1] = 0;
-    dst[0] = 0;
-    int count = (int)(uint32_t)src[1];  // low 32 bits of src[1]
-    dst[1] = (uint64_t)(uint32_t)count;
-    if (count > 0) {
-        // High word of dst[1]+4 = capacity (same as count on fresh alloc)
-        *(int*)((uintptr_t)dst + 0xc) = count;
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 16, 8);
-        *dst = (uint64_t)newBuf;
-    }
-    // Copy entries
-    if ((int)(uint32_t)dst[1] > 0) {
-        uint8_t* dstBuf = (uint8_t*)*dst;
-        uint8_t* srcBuf = (uint8_t*)*src;
-        int n = (int)(uint32_t)dst[1];
-        for (int i = 0; i < n; i++) {
-            if (dstBuf) {
-                uint64_t* d = (uint64_t*)(dstBuf + (uintptr_t)i * 16);
-                uint64_t* s = (uint64_t*)(srcBuf + (uintptr_t)i * 16);
-                d[0] = s[0];
-                d[1] = s[1];
-            }
-        }
-    }
-}
 
 // ============================================================
 // ProfessionUI support
@@ -908,53 +725,6 @@ extern void** g_pNewGameSettings;  // DAT_1401c3de0
 // the Runtime exports ?Rand@Random@System@@QEAAII@Z (ordinal 3442, 0x1800c8040)
 // and ?RandFloat@Random@System@@QEAAMXZ (ordinal 3444, 0x1800c7d40) stay bound.
 
-// System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
-// extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
-// the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
-// reused by callers that need the tolerance-range primitive.
-extern "C" float fn_Random_RandFloatTol(void* self);
-
-// GetCurrentProductIndex (FUN_140119470 in exe)
-// Reads +0x50 product index; if not -1 (0xffffffff), returns it directly.
-// If -1, performs weighted random selection from +0x58 float array (count at +0x60)
-// using System::Random::RandFloat on the game singleton's Random at +0xd8.
-inline uint32_t fn_GetCurrentProductIndex(void* component) {
-    uintptr_t c = (uintptr_t)component;
-    uint32_t idx = *(uint32_t*)(c + 0x50);
-    if ((int)idx < 0) {
-        if (idx != 0xffffffff) return 0;
-        int count = *(int*)(c + 0x60);
-        float* weights = *(float**)(c + 0x58);
-        float totalWeight = 0.0f;
-        for (int i = 0; i < count; i++) totalWeight += weights[i];
-        void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
-        // B.3.4b bridge: ?RandFloat@Random@System@@QEAAMXZ (0x1800c7d40).
-        float randVal = reinterpret_cast<System::Random*>(randomPtr)->RandFloat();
-        float accum = 0.0f;
-        for (int i = 0; i < count; i++) {
-            accum += weights[i];
-            if (randVal * totalWeight < accum) return (uint32_t)i;
-        }
-        return 0;
-    }
-    return idx;
-}
-
-// FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —
-// i.e. the initial value of WorkComponent+0x30, the number of worker SLOTS the site opens
-// with. It is NOT the maximum the player can reach: the jobCount spinner raises +0x30 up
-// to WorkDescription+0x2c (_maxWorkerCount) via SetMaxWorkers (0x14012fb00).
-// param_1+0x18 = the WorkDescription (checks IsDerivedFrom at DAT_1401c80a8).
-// WorkDescription layout: +0x20 _allowCountChange, +0x24 _defaultWorkers,
-//   +0x28 _minWorkerCount, +0x2c _maxWorkerCount, +0x30 _maxArea, +0x34 _scaleWorkersWithSize.
-// If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
-// Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
-// Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
-int fn_StorageCountQuery(void* component);
-// Alias used by professionui.cpp
-inline int fn_CalcWorkerSlots(void* storageLocComp) {
-    return fn_StorageCountQuery(storageLocComp);
-}
 
 // Name generator: FUN_140099ac0 — NOW REIMPLEMENTED in newgamedialog.cpp
 // Loads "Game/Names/Cities.ndb", generates name, trims "vill" suffix.
@@ -1012,13 +782,6 @@ extern int32_t** g_pGameSettingsPtr;  // DAT_1401c3de0 — pointer TO pointer to
 // Iterates all loaded externals matching typeId. Pass nullptr to start.
 // ?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z
 
-// StorageUI sort function (FUN_1400213f0) — sorts 0x18-byte entries by resource name.
-// Quicksort/introsort with inline comparator using UI::String → System::String.
-// StorageUI_SortItems — reimplemented as clean C++ introsort in storageui.cpp
-// Sorts array of 0x18-byte resource display structs alphabetically by resource name.
-// Each struct: [0]=entityPtr, [8]=resourceTypePtr, [0x10]=count
-// Original: FUN_1400213f0 (introsort) + FUN_1400b8370 (comparator) + FUN_140015ad0 (insertion sort)
-void StorageUI_SortItems(void* items, int count, void* scratch, void* scratch2);
 
 // MapUI helpers — REIMPLEMENTED in code/Game/Dialog/mapui.cpp
 // fn_MapUI_SetupImage (FUN_14006cb00) — now MapUI_SetupImage()
@@ -1032,12 +795,6 @@ extern fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround;
 // ============================================================
 // ToolUI support functions
 // ============================================================
-
-// FUN_14012e100: UIDescription_AddControllers — REIMPLEMENTED in code/Game/Dialog/toolui.cpp
-// Iterates UIDescription controller entries, checks for TabElement targets,
-// and calls the appropriate AddController overload for each entry.
-// Old fn_* pointer removed; replaced by UIDesc_AddControllers_Impl().
-void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource);
 
 
 // ============================================================
@@ -1157,25 +914,6 @@ extern fn_SavedState_Ctor_t fn_SavedState_Ctor;
 // TownHallUI support functions
 // ============================================================
 
-
-// --- Reimplemented TownHallUI functions (clean C++ in townhallui.cpp) ---
-// Forward-declared here; defined in code/Game/Dialog/townhallui.cpp.
-class TownHallUI;  // forward decl
-void TownHallUI_InitGeneral(TownHallUI* self);           // was FUN_1400807f0
-void TownHallUI_InitGraph(TownHallUI* self);             // was FUN_14007f0a0
-void TownHallUI_InitProfessions(TownHallUI* self);       // was FUN_140080160
-void TownHallUI_InitProduction(TownHallUI* self);        // was FUN_14007fc30
-void TownHallUI_InitInventory(TownHallUI* self);         // was FUN_14007f660
-void TownHallUI_InitAgriculture(TownHallUI* self);       // was FUN_14007ebf0
-void TownHallUI_UpdateGraph(TownHallUI* self);           // was FUN_14007e5b0
-void TownHallUI_UpdateGeneral(TownHallUI* self);         // was FUN_14007d030
-void TownHallUI_UpdateProfessions(TownHallUI* self);     // was FUN_14007ccb0
-void TownHallUI_UpdateProduction(TownHallUI* self);      // was FUN_14007c7f0
-void TownHallUI_UpdateAgriculture(TownHallUI* self);     // was FUN_14007c220
-void TownHallUI_UpdateInventory(TownHallUI* self);       // was FUN_14007def0
-void TownHallUI_UpdateAll(TownHallUI* self);             // was FUN_14007d590
-void TownHallUI_OnProfessionButton(TownHallUI* self, int index); // was FUN_14007dca0
-void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index); // was FUN_14007dd10
 
 // --- GroupRating helpers (hearts/stars display) ---
 // FUN_14006abf0: Init group rating element — iterates children of a group element,
@@ -1310,8 +1048,6 @@ extern fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries;
 // TradeUI::OnTradeButton — executes trade (needs opus — ~160 lines)
 typedef void (*fn_TradeUI_OnTradeButton_t)(void* self, void* p2, void* p3, int64_t p4);
 extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;   // 0x140081420
-
-
 
 
 // FUN_14005a520: (tradeState, resourceEntityTemplate) -> int
@@ -1508,9 +1244,6 @@ extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
 // ============================================================
 
 
-// fn_FindComponent_Fire — searches entity for FireComponent (DAT_1401c41e0)
-void fn_FindComponent_Fire(void* entity, void* retval);
-
 // fn_FindComponent_RawMaterial — searches entity for RawMaterialDescription (DAT_1401c7cb8)
 
 // Game_DestroyEntity (FUN_1400c3ec0 in exe) — destroys an entity from the entity list
@@ -1595,59 +1328,7 @@ extern fn_Random_Default_Ctor_t fn_Random_Default_Ctor;
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);
 extern fn_AudioScene_Ctor_t fn_AudioScene_Ctor;
 
-// SetEngineNextLoop — sets next loop on the MainLoop engine singleton
-// FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr
-// Called when self->m_loaderLoop1 (+0xE0) is null (use engine at +0xE8).
-// REPLACED: was fn_SetEngineNextLoop (ResolveAddr(Module::Exe, 0x140097fb0))
-// Now inline C++ — calls runtime UI functions (SetCursor, SetFullscreenFade).
 typedef void (*fn_SetEngineNextLoop_t)(uintptr_t enginePtr, void* loaderLoop);  // kept for compat
-inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
-    void* ui = *(void**)(enginePtr + 0x98);
-    // Set cursor to default (cursor ptr from KeyMap singleton+0x38)
-    uint64_t cursorVal = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
-    reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
-        ::Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
-    // Fade to black (fadeIn=true, color=0xFF000000=opaque black, reverse=false)
-    reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
-    // Store next loop pointer at engine+0xC8
-    *(void**)(enginePtr + 0xC8) = loaderLoop;
-}
-
-// SetDialogLoaderNextLoop — FUN_14009a8f0 — NOW REIMPLEMENTED INLINE
-// Sets fullscreen fade on DialogLoaderLoopT's UI (+0x40), stores next loop at +0xb68.
-// Old typedef kept for reference:
-// typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
-// extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
-inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop) {
-    reinterpret_cast<UI::UserInterface*>(dialogLoaderLoop + 0x40)->SetFullscreenFade(  // B.3.6 bridge
-        true, 0xFF000000, false);
-    *(void**)(dialogLoaderLoop + 0xb68) = loaderLoop;
-}
-
-// GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
-// Creates a Random, generates rand 0-11, formats "Dialog/Loading.rsc:gameLoad%i".
-// Old typedef kept for reference:
-// typedef void* (*fn_GetLoadingSoundString_t)(uint64_t unused, void* retStr,
-//                                              uint64_t unused2, uint64_t unused3);
-// extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
-inline void* GetLoadingSoundString(void* retStr) {
-    uint8_t rng[2520];  // System::Random is large (~2512 bytes)
-    fn_Random_Default_Ctor(rng);
-    // B.3.4b bridge: the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
-    // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and
-    // Rand(int,int). The ctor door above STAYS (B.3.4b keeps ctor/dtor doors).
-    uint32_t variant = reinterpret_cast<System::Random*>(rng)->Rand(12u);
-    // BANISHED_MENU_SCENE pins every random front-end pick, this one included:
-    // the loading image it selects stays resident and is numbered into the
-    // save's reference table, so an unpinned pick shifts every reference id
-    // after "Dialog\Loading.rsc:gameLoadN" (tools/resave_gate/).
-    if (Opt().menuScene >= 0)
-        variant = static_cast<unsigned>(Opt().menuScene) % 12u;
-    // ?Format@String@System@@SA?AV12@PEBDZZ  retail 0x1800c9730
-    *reinterpret_cast<System::String*>(retStr) =
-        System::String::Format("Dialog/Loading.rsc:gameLoad%i", variant);
-    return retStr;
-}
 
 // ============================================================
 // ModDialog::Slot4 support (Application-x64.exe + Runtime-x64.dll)
@@ -1906,271 +1587,6 @@ extern fn_MapGetTerrainPos_t fn_MapGetTerrainPos;
 typedef bool (*fn_IsA_t)(void* self, uint32_t typeId);
 extern fn_IsA_t fn_IsA;
 
-// --- Game_RemoveEntity (0x140091a20) — adds entity to pending-removal list ---
-// Adds an entity pointer to the game's removal queue at gameWorld+0x120/0x128/0x12c.
-// Uses standard dynamic array grow pattern (triple capacity on first realloc).
-// param_1 = gameWorld ptr (from g_pGameWorldSingleton + offset), param_2 = entity ptr
-// REIMPLEMENTED inline from Ghidra decompilation.
-inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
-    uintptr_t gw = (uintptr_t)gameWorldPtr;
-    uintptr_t entity = (uintptr_t)entityPtr;
-
-    // Check if entity is already in the removal queue
-    int count = *(int*)(gw + 0x128);
-    uintptr_t* arr = *(uintptr_t**)(gw + 0x120);
-    for (int i = 0; i < count; i++) {
-        if (arr[i] == entity) return;  // already queued
-    }
-
-    // Dynamic array push
-    int newCount = count + 1;
-    if (newCount != count) {
-        uintptr_t* oldArr = arr;
-        *(int*)(gw + 0x128) = newCount;
-        int capacity = *(int*)(gw + 0x12c);
-        if (capacity < newCount) {
-            // Grow: triple capacity if non-empty, else use newCount
-            capacity = (count != 0) ? newCount * 3 : newCount;
-            *(int*)(gw + 0x12c) = capacity;
-            void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)capacity * 8, 8);
-            *(void**)(gw + 0x120) = newBuf;
-        }
-        uintptr_t* newArr = *(uintptr_t**)(gw + 0x120);
-        int copyStart = (oldArr == newArr) ? count : 0;
-        for (int i = copyStart; i < newCount; i++) {
-            if (i < count) {
-                newArr[i] = oldArr[i];  // copy existing
-            } else {
-                newArr[i] = entity;     // append new
-            }
-        }
-        if (oldArr != newArr) {
-            fn_MemFreeStatic(oldArr);
-        }
-    }
-}
-
-// --- Storage capacity check: FUN_14012cd80(storageComp, entityPtr, quantity) -> bool ---
-// Checks if storageComp can hold 'quantity' more of the resource on entityPtr.
-// Returns true if total count + (resourceType.size * quantity) <= storageComp.capacity (+0x38).
-// REIMPLEMENTED inline from Ghidra decompilation.
-
-// --- Storage add item: FUN_14012d000(storageComp, entityPtr, quantity) ---
-// Adds quantity of entity's resource to storage. If entity already exists in storage
-// array, increments count. Otherwise appends a new 16-byte entry {entityPtr, quantity, 0}.
-// REIMPLEMENTED inline from Ghidra decompilation.
-inline void Storage_AddItem(void* storageComp, void* entityPtr, int quantity) {
-    uintptr_t sc = (uintptr_t)storageComp;
-    uintptr_t entity = (uintptr_t)entityPtr;
-
-    // Check if entity already in storage array — +0x28 = array ptr, +0x30 = count, +0x34 = capacity
-    int count = *(int*)(sc + 0x30);
-    uintptr_t* arr = *(uintptr_t**)(sc + 0x28);
-
-    // Each entry is 16 bytes: [0..7]=entityPtr, [8..11]=quantity, [12..15]=pad
-    for (int i = 0; i < count; i++) {
-        uintptr_t* entry = (uintptr_t*)((uintptr_t)arr + (uintptr_t)i * 16);
-        if (*entry == entity) {
-            // Already exists — increment count
-            if (i >= 0) {
-                int* qtyPtr = (int*)((uintptr_t)arr + (uintptr_t)i * 16 + 8);
-                *qtyPtr += quantity;
-            }
-            return;
-        }
-    }
-
-    // Not found — append new entry
-    int newCount = count + 1;
-    if (newCount == count) return;
-
-    uintptr_t* oldArr = arr;
-    *(int*)(sc + 0x30) = newCount;
-    int capacity = *(int*)(sc + 0x34);
-    if (capacity < newCount) {
-        capacity = (count != 0) ? newCount * 3 : newCount;
-        *(int*)(sc + 0x34) = capacity;
-        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)capacity * 16, 8);
-        *(void**)(sc + 0x28) = newBuf;
-    }
-    uintptr_t* newArr = *(uintptr_t**)(sc + 0x28);
-    int copyStart = (oldArr == newArr) ? count : 0;
-    for (int i = copyStart; i < newCount; i++) {
-        uintptr_t* dst = (uintptr_t*)((uintptr_t)newArr + (uintptr_t)i * 16);
-        if (i < count) {
-            // Copy from old
-            uintptr_t* src = (uintptr_t*)((uintptr_t)oldArr + (uintptr_t)i * 16);
-            dst[0] = src[0];
-            dst[1] = src[1];
-        } else {
-            // New entry
-            dst[0] = entity;
-            int32_t* newQty = (int32_t*)&dst[1];
-            newQty[0] = quantity;
-            newQty[1] = 0;
-        }
-    }
-    if (oldArr != newArr) {
-        fn_MemFreeStatic(oldArr);
-    }
-}
-
-// --- FindDialogByName (FUN_1400e1600) — REIMPLEMENTED inline ---
-// Parses dialog name string (splits on ':'), gets type IDs via Factory::GetTypeIdFromName,
-// walks UI::UserInterface dialog linked list with IsA checks, optionally matches controller type.
-// Non-trivial return: RCX=retval(InternalBasePtr*), RDX=name(String*)
-// NOTE: the body of exe 0x1400e1600 (the two door pointers once bound to it are gone).
-inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
-    uintptr_t ret = (uintptr_t)retval;
-    uintptr_t namePtr = *(uintptr_t*)nameStr;
-
-    // Empty string or null -> return null
-    if (namePtr == 0 || *(int*)(namePtr - 8) == 0) {
-        *(uintptr_t*)ret = 0;
-        return retval;
-    }
-
-    // Split string on ':'
-    // Build a temporary array of substrings
-    const char* str = (const char*)namePtr;
-    int strLen = *(int*)(namePtr - 8);
-
-    // Count parts (max 2 — "DialogType" or "DialogType:ControllerType")
-    int colonPos = -1;
-    for (int i = 0; i < strLen; i++) {
-        if (str[i] == ':') { colonPos = i; break; }
-    }
-
-    // Extract part1 (and optionally part2)
-    char part1[256] = {};
-    char part2[256] = {};
-    int partCount = 1;
-
-    if (colonPos >= 0) {
-        if (colonPos < 255) {
-            memcpy(part1, str, colonPos);
-            part1[colonPos] = 0;
-        }
-        int part2Len = strLen - colonPos - 1;
-        if (part2Len > 0 && part2Len < 255) {
-            memcpy(part2, str + colonPos + 1, part2Len);
-            part2[part2Len] = 0;
-        }
-        partCount = 2;
-    } else {
-        int copyLen = (strLen < 255) ? strLen : 255;
-        memcpy(part1, str, copyLen);
-        part1[copyLen] = 0;
-    }
-
-    // Get type IDs from Factory (retail: **import slot 0x140152760)
-    void* factoryObj = ::Object::Factory::_singleton;
-    if (!factoryObj) {
-        *(uintptr_t*)ret = 0;
-        return retval;
-    }
-
-    uint32_t dialogTypeId =
-        reinterpret_cast<const ::Object::Factory*>(factoryObj)   // B.3.3 bridge
-            ->GetTypeIdFromName(part1, true);
-    if (dialogTypeId == 0) {
-        *(uintptr_t*)ret = 0;
-        return retval;
-    }
-
-    uint32_t controllerTypeId = 0;
-    if (partCount == 2 && part2[0] != 0) {
-        controllerTypeId =
-            reinterpret_cast<const ::Object::Factory*>(factoryObj)   // B.3.3 bridge
-                ->GetTypeIdFromName(part2, true);
-    }
-
-    // Get UI singleton
-    void* gameWorld = *g_pGameWorldSingleton;
-    if (!gameWorld) {
-        *(uintptr_t*)ret = 0;
-        return retval;
-    }
-    UI::UserInterface* ui =
-        *reinterpret_cast<UI::UserInterface**>((uintptr_t)gameWorld + 0x98);
-    if (!ui || !fn_IsA) {
-        *(uintptr_t*)ret = 0;
-        return retval;
-    }
-
-    // Walk the dialog list.
-    // `_dialogs.GetFirst()` IS retail's UI::UserInterface::GetFirstDialog
-    // (0x180031150, literally `*retval = this->_dialogs._head`), reached here
-    // through dispatch slot 0x140151ca0; the Iterator is the bare node pointer,
-    // so `it.node` is exactly what retail hands to CheckPtr, and `++it` is
-    // retail's `node = *(node + 0x10)`.
-    // Original: LEA RDX,[RBP+0x48]; MOV RCX,RSI; CALL [0x140151ca0]
-    for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        void* node = it.node;
-        // CheckPtr on the iterator node (InternalBasePtr) before dereferencing.
-        // Original: MOV RCX,RSI; CALL [0x140152ab0] (fn_InternalBasePtr_CheckPtr)
-
-        // Deref node to get DialogInstance*
-        void* dialog = *(void**)node;
-        if (dialog) {
-            // Check IsA against dialogTypeId
-            if (fn_IsA(dialog, dialogTypeId)) {
-                if (controllerTypeId == 0 || partCount != 2) {
-                    // Match found, no controller check needed
-                    *(uintptr_t*)ret = (uintptr_t)dialog;
-                    return retval;
-                }
-                // Need to check controller type too.
-                // Original reloads node and calls CheckPtr again before GetController:
-                //   MOV RSI,[RBP+0x48]; MOV RCX,RSI; CALL CheckPtr
-                //   MOV R8D,EBX(=controllerTypeId); LEA RDX,[retbuf]; MOV RCX,[RSI]; CALL GetController
-                // GetController takes controllerTypeId as R8 — it does the type matching
-                // internally and returns a matching controller or null.
-                {
-                    uintptr_t controllerBuf[2] = {};
-                    ::new (static_cast<void*>(controllerBuf)) ::Object::InternalPtr<UI::DialogController>(
-                        reinterpret_cast<UI::DialogInstance*>(*(void**)node)->GetController(controllerTypeId));  // B.3.6 bridge
-                    if (controllerBuf[0] != 0) {
-                        // Controller matched — return this dialog
-                        *(uintptr_t*)ret = (uintptr_t)*(void**)node;
-                        return retval;
-                    }
-                    // Controller didn't match — continue searching
-                }
-            }
-        }
-        // `++it` is retail's next-node step:
-        // MOV RAX,[RBP+0x48]; MOV RSI,[RAX+0x10]; MOV [RBP+0x48],RSI
-    }
-
-    // Not found
-    *(uintptr_t*)ret = 0;
-    return retval;
-}
-
-// --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
-// Iterates ExternalFactory for entities with ComponentDescription (DAT_1401c7318),
-// finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
-// removes matching entity via Game_RemoveEntity.
-void Game_TriggerDisasterByType_Impl(int disasterType);
-
-// --- Game_SpawnResources (0x140091660) — REIMPLEMENTED inline ---
-// Spawns 'count' resources into citizen storage buildings.
-// Phase 1: builds array of entity pointers whose NaturalResourceComponent flags match resourceFlag.
-// Phase 2: round-robin distributes items across citizens' StorageComponents.
-// param_1 = Game object (longlong*), param_2 = resourceFlag bitmask, param_3 = total count to spawn.
-//
-// Structure offsets on param_1 (Game object):
-//   +0x110 (param_1[0x22]) = entity array ptr (raw pointers)
-//   +0x118 (param_1[0x23]) = entity count
-//   +0x000 (param_1[0])    = citizen InternalBasePtr array
-//   +0x008 (param_1[1])    = citizen count
-//
-// Entities (phase 1) are raw pointers with components at +0x28 (array) / +0x30 (count).
-// Citizens (phase 2) are InternalBasePtr entries with components at +0x30 (IBP array) / +0x38 (count).
-//
-// Calls original exe functions StorageComponent_impl_cd80 (0x14012cd80) for CanAdd
-// and FUN_14012d000 (0x14012d000) for AddItem, via resolved function pointers.
 
 // Resolved exe function pointers for Storage CanAdd/AddItem
 typedef uint32_t (*fn_StorageCanAdd_t)(void* storageComp, void* entityPtr, int quantity);
@@ -2179,30 +1595,6 @@ extern fn_StorageCanAdd_t fn_StorageCanAdd;  // 0x14012cd80
 typedef void (*fn_StorageAddItem_t)(void* storageComp, void* entityPtr, int quantity);
 extern fn_StorageAddItem_t fn_StorageAddItem;  // 0x14012d000
 
-void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count);
-
-// ============================================================
-// Toolbar_CenterOnEntity_Impl — centers camera on entity and selects it in EditTool
-// ============================================================
-// Reimplemented from FUN_140103040 (fn_Toolbar_CenterOnEntity / fn_GoToEntity).
-//
-// toolController = PlayerController (gameWorld+0x120)
-// parentDialogPtr = InternalBasePtr* to parent dialog (may be null-ptr)
-// entityPtr = InternalBasePtr* to target entity
-//
-// Logic:
-// 1. If parent dialog has a PageToggleUI controller, enable entity tracking
-// 2. Get entity world position:
-//    - Entities with ModelComponent but no MultiObjectComponent: use model's
-//      Math::Transform position (offset +0x158 = +0x148 transform + 0x10 position)
-//    - Multi-object buildings: calculate center from BuildComponent grid footprint
-// 3. Set camera target and snap camera to new position
-// 4. Get/create EditTool and select entity in it
-//
-// NOTE: fn_FindComponent_Character keeps its historical name but finds ModelComponent
-// (DAT_1401c7a50). Body: code/Game/Dialog/toolbardialog.cpp.
-
-void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);
 
 // ============================================================
 // Work class helpers (shared by BuildStructure, ClearArea, ClearStorage)
@@ -2318,8 +1710,6 @@ extern fn_BuildRoad_QueryStorage_t fn_BuildRoad_QueryStorage;
 // ClearStorage helpers (code/Game/Work/clearstorage.cpp)
 // ============================================================
 
-
-void fn_FindComponent_Unknown7ee8(void* entity, void* retval);
 
 // FUN_1400f7100: Work::CanStartWork(self, citizenAI, taskIBP, outCompleteTask)
 typedef bool (*fn_Work_CanStartWork_t)(void* self, void* citizenAI, void* taskIBP, void* outCompleteTask);
@@ -2453,27 +1843,6 @@ extern fn_BST_Insert_t fn_BST_Insert;
 typedef char (*fn_CitizenComponent_CheckWorkplaceValid_t)(void* citizen, void* workplaceIBP);
 extern fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceValid;
 
-// CitizenComponent_HasVacancy (0x140017050) — WorkPlaceComponent roster (+0x60) < seat
-// capacity (its StorageLocationComponent/WorkComponent +0x30, lazily CalcMaxWorkers'd).
-// Reimplemented INLINE: it was ResolveAddr(Module::Exe,0x140017050), which is NULL in
-// standalone (that exe address isn't registered), and citizencomponent.cpp:1176/1193 call
-// it UNGUARDED — so once a placed building reaches construction and a citizen evaluates
-// switching workplaces, the null call crashed (VCALL-of-0). Byte-faithful to 0x140017050
-// (FUN_140003050 = fn_FindComponent_Work, FUN_14012e5c0 = fn_StorageCountQuery), plus
-// one SA safety guard the original lacks: a null storage-loc component → "no vacancy"
-// rather than dereferencing null+0x30. Works in both DLL and standalone builds.
-inline bool fn_CitizenComponent_HasVacancy(uintptr_t workplaceComp) {
-    int roster = *reinterpret_cast<int*>(workplaceComp + 0x60);
-    uint64_t slComp = 0;
-    fn_FindComponent_Work(*reinterpret_cast<void**>(workplaceComp + 0x10), &slComp);
-    if (slComp == 0) return false;
-    uintptr_t sl = static_cast<uintptr_t>(slComp);
-    if (*reinterpret_cast<int*>(sl + 0x30) == 0) {
-        int cap = fn_StorageCountQuery(reinterpret_cast<void*>(sl));
-        *reinterpret_cast<int*>(sl + 0x30) = cap;
-    }
-    return roster < *reinterpret_cast<int*>(sl + 0x30);
-}
 
 // FUN_140003050 — FindStorageLocationComponent on entity (member fn, retval in RDX)
 // RCX=entity, RDX=retval IBP. Returns retval ptr.
@@ -3033,3 +2402,153 @@ extern fn_Frustum_MulTransform3_t fn_Frustum_MulTransform3;
 // Resolve all function pointers. Call after ResolveInit().
 // Returns true if all critical pointers were resolved.
 bool EngineFuncsInit();
+
+// ============================================================
+// Moved declarations (ENDGAME B.3R, block W0-P0c, B3R_RULES R5)
+// ============================================================
+// This header's plain function declarations, inline bodies, the extern "C"
+// declaration and the forward declarations moved to the header of the module
+// that defines them. It includes those headers here, AFTER every global above
+// (the moved inline bodies still read some of them), so no includer changes.
+// W2-EZ deletes this header; the includers then include the module headers.
+#include "Entity/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
+#include "Tutorial/exe_bodies.h"
+
+// ============================================================
+// TO MOVE: Component
+// ============================================================
+// Declarations and inline bodies that belong in code/Game/Component/exe_bodies.h,
+// which block W0-P0b writes. They stay here, verbatim, until that header exists;
+// then they move there under their defining file's banner.
+
+// ---- storagecomponent.cpp
+// StorageComponent::QueryCount(storageComp) -> int
+// FUN_14012cf10: iterates +0x28 item array (count at +0x30). Each slot is 0x10 bytes:
+//   [0..7] = ptr to "item" struct (has +0x28=component ptr array, +0x30=comp count)
+//   [8..11] = item quantity count
+// For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
+// then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
+int fn_StorageComponent_QueryCount(void* storageComp);
+
+// ---- componentdescription.cpp
+// ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
+// Resolves and caches an External object by filename.
+// Input: nameString points to an ExternalRef struct:
+//   +0x00: String (8 bytes) — resource name
+//   +0x08: int32  — cached generation counter (compared against ExternalFactory+0x08)
+//   +0x10: void*  — cached External* result
+// If the generation counter matches the factory's, the cached result is still valid.
+// Otherwise, looks up the External by converting the String to a Filename and calling
+// ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
+// caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
+void ResolveExternalByName_Impl(void* nameString);
+
+// ---- workcomponent.cpp
+// FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —
+// i.e. the initial value of WorkComponent+0x30, the number of worker SLOTS the site opens
+// with. It is NOT the maximum the player can reach: the jobCount spinner raises +0x30 up
+// to WorkDescription+0x2c (_maxWorkerCount) via SetMaxWorkers (0x14012fb00).
+// param_1+0x18 = the WorkDescription (checks IsDerivedFrom at DAT_1401c80a8).
+// WorkDescription layout: +0x20 _allowCountChange, +0x24 _defaultWorkers,
+//   +0x28 _minWorkerCount, +0x2c _maxWorkerCount, +0x30 _maxArea, +0x34 _scaleWorkersWithSize.
+// If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
+// Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
+// Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
+int fn_StorageCountQuery(void* component);
+
+// ---- inline body (no .cpp)
+// Alias used by professionui.cpp
+inline int fn_CalcWorkerSlots(void* storageLocComp) {
+    return fn_StorageCountQuery(storageLocComp);
+}
+
+// ---- inline body (no .cpp)
+// --- Storage capacity check: FUN_14012cd80(storageComp, entityPtr, quantity) -> bool ---
+// Checks if storageComp can hold 'quantity' more of the resource on entityPtr.
+// Returns true if total count + (resourceType.size * quantity) <= storageComp.capacity (+0x38).
+// REIMPLEMENTED inline from Ghidra decompilation.
+
+// --- Storage add item: FUN_14012d000(storageComp, entityPtr, quantity) ---
+// Adds quantity of entity's resource to storage. If entity already exists in storage
+// array, increments count. Otherwise appends a new 16-byte entry {entityPtr, quantity, 0}.
+// REIMPLEMENTED inline from Ghidra decompilation.
+inline void Storage_AddItem(void* storageComp, void* entityPtr, int quantity) {
+    uintptr_t sc = (uintptr_t)storageComp;
+    uintptr_t entity = (uintptr_t)entityPtr;
+
+    // Check if entity already in storage array — +0x28 = array ptr, +0x30 = count, +0x34 = capacity
+    int count = *(int*)(sc + 0x30);
+    uintptr_t* arr = *(uintptr_t**)(sc + 0x28);
+
+    // Each entry is 16 bytes: [0..7]=entityPtr, [8..11]=quantity, [12..15]=pad
+    for (int i = 0; i < count; i++) {
+        uintptr_t* entry = (uintptr_t*)((uintptr_t)arr + (uintptr_t)i * 16);
+        if (*entry == entity) {
+            // Already exists — increment count
+            if (i >= 0) {
+                int* qtyPtr = (int*)((uintptr_t)arr + (uintptr_t)i * 16 + 8);
+                *qtyPtr += quantity;
+            }
+            return;
+        }
+    }
+
+    // Not found — append new entry
+    int newCount = count + 1;
+    if (newCount == count) return;
+
+    uintptr_t* oldArr = arr;
+    *(int*)(sc + 0x30) = newCount;
+    int capacity = *(int*)(sc + 0x34);
+    if (capacity < newCount) {
+        capacity = (count != 0) ? newCount * 3 : newCount;
+        *(int*)(sc + 0x34) = capacity;
+        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)capacity * 16, 8);
+        *(void**)(sc + 0x28) = newBuf;
+    }
+    uintptr_t* newArr = *(uintptr_t**)(sc + 0x28);
+    int copyStart = (oldArr == newArr) ? count : 0;
+    for (int i = copyStart; i < newCount; i++) {
+        uintptr_t* dst = (uintptr_t*)((uintptr_t)newArr + (uintptr_t)i * 16);
+        if (i < count) {
+            // Copy from old
+            uintptr_t* src = (uintptr_t*)((uintptr_t)oldArr + (uintptr_t)i * 16);
+            dst[0] = src[0];
+            dst[1] = src[1];
+        } else {
+            // New entry
+            dst[0] = entity;
+            int32_t* newQty = (int32_t*)&dst[1];
+            newQty[0] = quantity;
+            newQty[1] = 0;
+        }
+    }
+    if (oldArr != newArr) {
+        fn_MemFreeStatic(oldArr);
+    }
+}
+
+// ---- inline body (no .cpp)
+// CitizenComponent_HasVacancy (0x140017050) — WorkPlaceComponent roster (+0x60) < seat
+// capacity (its StorageLocationComponent/WorkComponent +0x30, lazily CalcMaxWorkers'd).
+// Reimplemented INLINE: it was ResolveAddr(Module::Exe,0x140017050), which is NULL in
+// standalone (that exe address isn't registered), and citizencomponent.cpp:1176/1193 call
+// it UNGUARDED — so once a placed building reaches construction and a citizen evaluates
+// switching workplaces, the null call crashed (VCALL-of-0). Byte-faithful to 0x140017050
+// (FUN_140003050 = fn_FindComponent_Work, FUN_14012e5c0 = fn_StorageCountQuery), plus
+// one SA safety guard the original lacks: a null storage-loc component → "no vacancy"
+// rather than dereferencing null+0x30. Works in both DLL and standalone builds.
+inline bool fn_CitizenComponent_HasVacancy(uintptr_t workplaceComp) {
+    int roster = *reinterpret_cast<int*>(workplaceComp + 0x60);
+    uint64_t slComp = 0;
+    fn_FindComponent_Work(*reinterpret_cast<void**>(workplaceComp + 0x10), &slComp);
+    if (slComp == 0) return false;
+    uintptr_t sl = static_cast<uintptr_t>(slComp);
+    if (*reinterpret_cast<int*>(sl + 0x30) == 0) {
+        int cap = fn_StorageCountQuery(reinterpret_cast<void*>(sl));
+        *reinterpret_cast<int*>(sl + 0x30) = cap;
+    }
+    return roster < *reinterpret_cast<int*>(sl + 0x30);
+}
