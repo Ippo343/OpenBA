@@ -71,8 +71,6 @@
 #include "../../types/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 #include "../../types/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 

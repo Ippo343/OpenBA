@@ -132,11 +132,7 @@
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 
-// Locally declared for the reason device.cpp gives: resolve.h drags in
-// <windows.h>, and PLAN §4.1 decision 1 keeps runtime/src/ platform-neutral.
-// This declaration must stay byte-identical to resolve.h's.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 // `kSpec_InnerArrayU8` (0x180053f00) is defined in
 // runtime/src/collection/array.cpp but, like `kSpec_EmitterInstance`

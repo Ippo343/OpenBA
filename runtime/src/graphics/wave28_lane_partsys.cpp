@@ -162,11 +162,7 @@ using RtGraphics::Particle;
 using RtGraphics::ParticleInstance;
 using RtGraphics::ParticleSystemInstance;
 
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
-// must stay platform-neutral.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 namespace {
 

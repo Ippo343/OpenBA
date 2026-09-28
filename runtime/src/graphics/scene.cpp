@@ -153,16 +153,7 @@ using RtGraphics::Scene;
 using RtGraphics::SceneNode;
 using RtGraphics::SceneObjectId;
 
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
-// resolve.h drags in <windows.h>, and <wingdi.h>'s `Rectangle` function and
-// <windef.h>'s `near`/`far` macros collide with the engine's own type and
-// member names. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two against each other.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 namespace {
 

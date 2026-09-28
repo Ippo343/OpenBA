@@ -39,8 +39,6 @@
 // replace this file's two hand-inlined ReaderWriter slot offsets.
 #include "../../types/io/Serializer.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // ============================================================================
 // 0x180054080 — the SHARED blob half of an `Array<Array<uint8>>` serialize.

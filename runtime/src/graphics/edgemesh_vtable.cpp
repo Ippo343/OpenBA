@@ -71,12 +71,7 @@
 #include "../../types/object/External.h"  // RtObject_ExternalPtrSerialize_*
 #include "../collection/array_internal.h"
 
-// Same local declaration mesh.cpp, array.cpp and deleting_dtor.cpp carry, and
-// for the same reason: standalone/resolve.h drags in <windows.h>, which
-// PLAN.md §4.1 keeps out of runtime/src/. The linker checks the two spellings
-// match.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 
 namespace {

@@ -114,11 +114,7 @@
 #include "../../funcs/rt_port.h"
 #include "scene_grid.h"
 
-// Byte-identical to standalone/resolve.h's declaration; the linker checks the
-// two against each other. Not included, for the <wingdi.h> `Rectangle` reason
-// rt_port.h's banner gives.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 namespace rtgfxgrid {
 

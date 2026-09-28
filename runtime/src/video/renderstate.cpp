@@ -84,13 +84,7 @@
 #include "../../types/io/Stream.h"
 #include "../../types/video/RenderState.h"
 
-// standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
-// and <wingdi.h> declares a function called `AlphaBlend`, which would make
-// Video::RenderState::AlphaBlend ambiguous at every use. Same local declaration
-// runtime/src/collection/array.cpp and runtime/src/object/deleting_dtor.cpp
-// carry, for the same PLAN.md §4.1 reason; the linker checks the two spellings.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 // The four registered doors over `Video::RenderState`'s protected surface:
 // `?PlatformConstruct@` / `?PlatformCreate@` / `?PlatformDestruct@` (private in

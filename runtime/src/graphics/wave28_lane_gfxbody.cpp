@@ -62,11 +62,7 @@
 #include "../collection/array_internal.h"
 #include "../system/string.h"
 
-// Byte-identical to standalone/resolve.h's declaration; the linker checks the
-// two against each other. Not included, for the <wingdi.h> `Rectangle` reason
-// wave21_lane_gfxbody.cpp:47 gives at length.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 // System::Timer::_secondsPerTick (0x1801fe728). NOT a literal that can be
 // lifted: RVA 0x1fe728 lies BEYOND `.data`'s SizeOfRawData, i.e. in the

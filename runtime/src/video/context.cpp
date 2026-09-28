@@ -178,17 +178,7 @@ using Video::Viewport;
 using RtVideo::RenderBufferPrefix;
 using RtVideo::kContextSize;
 
-// ----------------------------------------------------------------------------
-// ResolveExport, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
-// resolve.h drags in <windows.h>, and <wingdi.h>'s `Rectangle` function and
-// <windef.h>'s `near`/`far` macros collide with the engine's own type and
-// member names — and this file has parameters literally called `nearZ`/`farZ`.
-// This declaration must stay byte-identical to resolve.h's; the linker checks
-// the two against each other. (Precedent: runtime/src/achievement/
-// achievement_manager.cpp:71 declares the same prototype for the same reason.)
-void* ResolveExport(const char* mangled_name);
+
 
 namespace {
 

@@ -65,14 +65,7 @@
 
 using RtGraphics::MeshInstance;
 
-// `ResolveAddr` is NOT declared by rt_port.h — that header deliberately omits
-// it (and everything else in standalone/resolve.h) to keep <windows.h> out of
-// runtime/, where <wingdi.h>'s `Rectangle` and <windef.h>'s `near`/`far` would
-// collide with the engine's own type and field names. Every runtime/ file that
-// needs it re-declares the pair locally; this is the identical spelling
-// animation.cpp:123 uses, and the linker is what checks the two agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 
 namespace {
 
