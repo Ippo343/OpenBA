@@ -2,7 +2,6 @@
 
 
 #include "redzone_alloc.h"
-#include "engine_funcs.h"
 #include "resolve.h"
 #include "options.h"
 #include "system/MemoryAllocator.h"   // -Iruntime/types: the instrument seat
@@ -28,7 +27,7 @@
 #endif
 #define printf(...) std::fprintf(stderr, __VA_ARGS__)
 
-extern "C" void RtAllocInstrument_MemFree(void* p);   // alloc_cutover_arm.cpp
+#include "alloc_cutover_arm.h"   // RtAllocInstrument_MemAlloc / _MemFree: the shim's real pair
 
 namespace {
 
@@ -52,13 +51,13 @@ struct Entry {
 };
 
 // The shim's own bookkeeping lives on the CRT heap (std::unordered_map / mutex
-// call malloc, NOT fn_MemAlloc), so there is no re-entrancy with the engine
+// call malloc, NOT the engine allocator), so there is no re-entrancy with the engine
 // allocator we are wrapping.
 std::unordered_map<void*, Entry>* g_live = nullptr;
 std::mutex                         g_mutex;
 
-fn_MemAlloc_t      g_realAlloc = nullptr;
-fn_MemFreeStatic_t g_realFree  = nullptr;
+void* (*g_realAlloc)(uint64_t size, int alignment) = nullptr;
+void  (*g_realFree)(void* ptr)                    = nullptr;
 bool               g_enabled   = false;
 uint32_t           g_seq       = 0;
 
@@ -201,8 +200,8 @@ int ValidateAllLocked(const char* tag) {
     return bad;
 }
 
-void* ShimAlloc(void* singleton, uint64_t size, int alignment) {
-    void* p = g_realAlloc(singleton, size + g_pad, alignment);
+void* ShimAlloc(uint64_t size, int alignment) {
+    void* p = g_realAlloc(size + g_pad, alignment);
     if (!p) return p;  // alloc failed — nothing to stamp
     // Diagnostic (BANISHED_REDZONE_ZERO=1): zero-fill every allocation we hand
     // out. The engine allocator is a boundary-tag free-list over VirtualAlloc
@@ -244,10 +243,12 @@ void ShimFree(void* ptr);
 // B3R W0-A0: these two are also what the allocator's instrument seat
 // (System::g_memoryAllocatorInstrument, MemoryAllocator.h) holds in shim mode,
 // so every System::MemoryAllocator::MemAlloc / MemFree caller is shimmed too.
-// `_singleton` is read LIVE (retail MemAlloc's own read). (B3R STORAGE: the
-// engine_funcs g_pMemAllocSingleton snapshot is gone; every reader reads live.)
+// `_singleton` is read LIVE (retail MemAlloc's own read), inside the real pair
+// RtAllocInstrument_MemAlloc / _MemFree. (B3R STORAGE: the engine_funcs
+// g_pMemAllocSingleton snapshot is gone; every reader reads live. B3R W2-EZ: so
+// is fn_MemAlloc, the old seat; ShimAlloc no longer carries a singleton.)
 void* ShimAllocStatic(uint64_t size, int alignment) {
-    return ShimAlloc(System::MemoryAllocator::_singleton, size, alignment);
+    return ShimAlloc(size, alignment);
 }
 void ShimFreeStatic(void* ptr) {
     ShimFree(ptr);
@@ -329,22 +330,23 @@ void RedzoneAlloc_Install() {
         RedzoneStartWatchdog();
         return;
     }
-    if (!fn_MemAlloc || !fn_MemFreeStatic) {
-        printf("[REDZONE] cannot install — fn_MemAlloc=%p fn_MemFreeStatic=%p\n",
-               (void*)fn_MemAlloc, (void*)fn_MemFreeStatic);
-        fflush(stdout);
-        return;
-    }
     g_live = new std::unordered_map<void*, Entry>();
     g_live->reserve(8192);
-    // g_realAlloc is the composed ?Allocate@ stub (SwapAllocate: lock + raw
-    // Allocate + ALLOCSTATS). g_realFree is its free twin, the composed pair's
-    // RtAllocInstrument_MemFree (lock + ALLOCSTATS + raw Free) — NOT the
-    // original fn_MemFreeStatic, which is System::MemoryAllocator::MemFree and
-    // consults the instrument seat armed below: ShimFree -> MemFree -> seat ->
-    // ShimFree would instrument every free twice. Neither of the two reaches
+    // g_realAlloc / g_realFree are the instrument seat's composed pair,
+    // RtAllocInstrument_MemAlloc / _MemFree (lock + raw Allocate / Free +
+    // ALLOCSTATS) — NOT System::MemoryAllocator::MemAlloc / MemFree, which
+    // consult the instrument seat armed below: ShimFree -> MemFree -> seat ->
+    // ShimFree would instrument every call twice. Neither of the two reaches
     // the seat, so a shimmed call is instrumented exactly once.
-    g_realAlloc = fn_MemAlloc;
+    //
+    // B3R W2-EZ: g_realAlloc used to be read from the engine_funcs global
+    // fn_MemAlloc (bound to the ?Allocate@ address row 0x1800c6e60, whose value
+    // was SwapAllocate: the same ComposedAllocate body RtAllocInstrument_MemAlloc
+    // runs, with `_singleton` passed in instead of read live — the one value
+    // ShimAllocStatic ever passed). The "cannot install" refusal on a null
+    // global and the writes of ShimAlloc / ShimFree back into fn_MemAlloc /
+    // fn_MemFreeStatic (read by nothing since B3R W1) went with the globals.
+    g_realAlloc = &RtAllocInstrument_MemAlloc;
     g_realFree  = &RtAllocInstrument_MemFree;
     g_exeBase   = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     if (Opt().redzoneScan > 0) g_scanEvery = (uint32_t)Opt().redzoneScan;
@@ -353,8 +355,6 @@ void RedzoneAlloc_Install() {
         g_watchIntervalMs = Opt().redzoneWatchMs;  // 0 = tight spin
     }
     g_zeroOnAlloc = Opt().redzoneZero;
-    fn_MemAlloc      = &ShimAlloc;
-    fn_MemFreeStatic = &ShimFree;
     // Rewire the static MemAlloc/MemFree dispatch slots too (see ShimAllocStatic
     // comment). Consumers snapshot *(fn**)slot lazily at first use, which happens
     // after this install, so overwriting the slot storage here covers them all.

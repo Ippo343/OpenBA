@@ -34,6 +34,7 @@
 
 #include "system/MemoryAllocator.h"   // -Iruntime/types
 #include "options.h"
+#include "alloc_cutover_arm.h"        // RtAllocInstrument_MemAlloc / _MemFree (B3R W2-EZ)
 
 using rt::system::MemoryAllocator;
 
