@@ -163,8 +163,3 @@ recurse:
     hi = hiStk[sp];
     goto recurse;
 }
-
-// ============================================================================
-// Registration -- address doors only; the CRT has no export names.
-// ============================================================================
-void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);

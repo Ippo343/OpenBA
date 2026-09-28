@@ -272,38 +272,3 @@ System::String Persistence::GetSavePath() const {
 
 }  // namespace IO
 
-// ============================================================================
-// Registration. ReadSettings/WriteSettings are DELIBERATELY absent — see
-// docs/runtime_port/WAVE4_LANE_C.md.
-// ============================================================================
-int RtIoPersistenceRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z",
-                          (void*)&RtIo_Persistence_GetInt); ++n;
-    RegisterRuntimeExport("?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z",
-                          (void*)&RtIo_Persistence_GetBool); ++n;
-    RegisterRuntimeExport("?Set@Persistence@IO@@QEAAXPEBD0H@Z",
-                          (void*)&RtIo_Persistence_SetInt); ++n;
-    RegisterRuntimeExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z",
-                          (void*)&RtIo_Persistence_SetBool); ++n;
-
-    // Address fallbacks too (WAVE3_LANE_A.md §6's lesson: engine_funcs.cpp
-    // falls back to ResolveAddr(Module::Runtime, ...) on a failed name
-    // resolve for Set(bool)/Set(int)/GetSavePath already — registering only
-    // the names would leave that fallback path silently on the DLL).
-    RegisterRuntimeAddr(0x1800b81e0, (void*)&RtIo_Persistence_GetInt);
-    RegisterRuntimeAddr(0x1800b8290, (void*)&RtIo_Persistence_GetBool);
-    RegisterRuntimeAddr(0x1800b80c0, (void*)&RtIo_Persistence_SetInt);
-    RegisterRuntimeAddr(0x1800b8380, (void*)&RtIo_Persistence_SetBool);
-
-    // CORRECTED 2026-09-08 (Wave 9 lanes BOOT2 and SAVE2). This line used to
-    // read "(ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)".
-    // BOTH are ported now, in persistence_registry_win.cpp, and neither was
-    // ever counted by this `n` -- so the message named a holdback that had
-    // stopped being one AND attributed it to the wrong denominator.
-    printf("[RtPort] IO::Persistence: %d/7 exports registered here; "
-           "ReadSettings + WriteSettings + Registry::Registry are registered by "
-           "persistence_registry_win.cpp\n", n);
-    return n;
-}

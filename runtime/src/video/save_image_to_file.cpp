@@ -397,11 +397,3 @@ extern "C" bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
     return Video::ImageBuffer::SaveImageToFile(*path, width, height, pixels);
 }
 
-// ============================================================================
-// Registration — BY NAME AND BY ADDRESS
-// ============================================================================
-int RtVideoSaveImageRegister() {
-    printf("[RtPort] Video::ImageBuffer::SaveImageToFile (Wave 18 lane VRES): "
-           "1 export registered\n");
-    return 1;
-}

@@ -1526,26 +1526,3 @@ extern "C" void RtUi_UserInterface_SaveAllSettings(UserInterface* self) {
     self->UI::UserInterface::SaveAllSettings();
 }
 
-int RtUiManagerRegister() {
-    int count = 0;
-
-    RegisterRuntimeExport("??0UserInterface@UI@@QEAA@XZ",
-                          (void*)&RtUi_UserInterface_Ctor); ++count;
-    RegisterRuntimeAddr(0x180120de0, (void*)&RtUi_UserInterface_Ctor);
-
-    // ---- Wave 10 lane UIF --------------------------------------------------
-    // `QEAA` is the NON-VIRTUAL spelling and it is the right one here: this
-    // class has NO vtable (see runtime/types/ui/UserInterface.h) and the export
-    // directory carries `??1UserInterface@UI@@QEAA@XZ` at 0x120b90 / ord 705,
-    // checked with pefile before this line was written. `UEAA` would resolve
-    // NULL in silence (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-    RegisterRuntimeExport("??1UserInterface@UI@@QEAA@XZ",
-                          (void*)&RtUi_UserInterface_Dtor); ++count;
-    RegisterRuntimeAddr(0x180120b90, (void*)&RtUi_UserInterface_Dtor);
-
-    // The twin-synthetic oracle is NOT called here — it needs the allocator,
-    // which does not exist yet at registration time. It is triggered from the
-    // first `RtUi_UserInterface_Ctor`; see the note at its forward declaration.
-
-    return count;
-}

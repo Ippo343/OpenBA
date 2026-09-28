@@ -298,14 +298,3 @@ extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int co
     } while (--n);
 }
 
-// ============================================================================
-// Registration — addresses for the two unexported bodies, address AND mangled
-// name for the copy constructor (ordinal 204, present in the shipped export
-// directory).
-// ============================================================================
-int RtClosure2bGraphicsRegister() {
-    int n = 0;
-    // (??0Geometry copy, 0x180015b60: retired with its door, ENDGAME B.3.9 GFX.)
-    RegisterRuntimeAddr(0x18001be60, (void*)&RtGraphics_DrawGroup_CopyCtor);  ++n;
-    return n;
-}

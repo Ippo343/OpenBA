@@ -557,34 +557,3 @@ void Video_Device_Dtor(Device* self) {
 
 }
 
-// ============================================================================
-// Registration — BY NAME AND BY ADDRESS
-// ============================================================================
-//
-// Both doors, for every row. 13 live sites in this tree reach Runtime symbols
-// through `ResolveAddr(Module::Runtime, …)`, which is registry-FIRST — that
-// call is not "the DLL" (reference_resolveaddr_consults_port_registry_first.md)
-// — and `ResolveExport` falls through to the raw impl in silence for a symbol
-// nobody registered.
-int RtVideoResourcesRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??0RenderBuffer@Video@@QEAA@XZ", (void*)&Video_RenderBuffer_Ctor);
-    RegisterRuntimeAddr(0x1800f3ee0, (void*)&Video_RenderBuffer_Ctor);
-    n++;
-
-    RegisterRuntimeExport("??1RenderBuffer@Video@@QEAA@XZ", (void*)&Video_RenderBuffer_Dtor);
-    RegisterRuntimeAddr(0x1800f4020, (void*)&Video_RenderBuffer_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1Configuration@Video@@QEAA@XZ", (void*)&Video_Configuration_Dtor);
-    RegisterRuntimeAddr(0x1800f6f80, (void*)&Video_Configuration_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1Device@Video@@QEAA@XZ", (void*)&Video_Device_Dtor);
-    RegisterRuntimeAddr(0x1800f7290, (void*)&Video_Device_Dtor);
-    n++;
-
-    printf("[RtPort] Video resource lifecycle (Wave 18 lane VRES): %d exports registered\n", n);
-    return n;
-}

@@ -561,32 +561,6 @@ void ParticleInstance::IncrementInstanceIndex() {
 }  // namespace Graphics
 
 // ============================================================================
-// Registration.
-//
-// Only the nine PORTED functions above are registered here. The six HELD
-// BACK functions (FrameCopyImageBuffer's four, AnimationManager::Update and
-// ::Serialize) are intentionally absent -- every call site for them keeps
-// resolving to the DLL exactly as before this lane ran. Both mangled name
-// and retail address are registered for every port, matching every prior
-// wave's convention (this lane's call-site table in wave6_lanes.txt shows a
-// mix of `export` and `addr` callers for several of these rows).
-// ============================================================================
-int RtGraphicsAnimationRegister() {
-    int count = 0;
-
-    RegisterRuntimeExport("??0AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Ctor); ++count;
-    RegisterRuntimeAddr(0x1800fc430, (void*)&RtGraphics_AnimationManager_Ctor);
-
-    RegisterRuntimeExport("??1AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Dtor); ++count;
-    RegisterRuntimeAddr(0x1800fc400, (void*)&RtGraphics_AnimationManager_Dtor);
-
-    // (ENDGAME B.3.9 GFX: the ??0ParticleInstance / ??0ParticleSystemInstance
-    // doors are retired.)
-
-    return count;
-}
-
-// ============================================================================
 // Graphics::Particle::ReleaseFields — ??1Particle@Graphics@@UEAA@XZ 0x180103c70
 // up to its External half (ENDGAME B.3.8 block RB). Read off the disassembly:
 //

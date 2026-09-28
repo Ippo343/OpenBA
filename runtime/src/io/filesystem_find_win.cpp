@@ -736,30 +736,3 @@ void FileSystem::FindFiles(const RtSystem::String& dirRef,
 
 }  // namespace IO
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoFileSystemFindRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    // Mangled names spelled as LITERALS, not through the kName* constants
-    // above: tools/runtime_census.py matches `RegisterRuntimeExport("<literal>"`
-    // and cannot see through a named constant. Registering through constants
-    // made all six of Wave 4 lane D's ports invisible to the census.
-    RegisterRuntimeExport(
-        "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_ExistsInPackfile); ++n;
-    RegisterRuntimeAddr(0x1800ab180, (void*)&RtIo_FileSystem_ExistsInPackfile);
-
-
-
-    // The two internals. RegisterRuntimeAddr ONLY — neither has a name in
-    // either shipped build, so there is nothing to register under. Both were
-    // grepped for an existing `RegisterRuntimeAddr(0x…` across runtime/,
-    // standalone/, engine/ and code/ before being claimed here; neither was
-    // registered by any lane. §6b bounds what the second one claims.
-
-    printf("[RtPort]   IO::FileSystem find/exists: %d exports registered\n", n);
-    return n;
-}

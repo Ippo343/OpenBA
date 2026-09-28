@@ -547,8 +547,7 @@ int RtObjectExternalRegister() {
     // FACTREST rows.
     RegisterRuntimeExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ",
                           (void*)&RtObject_ExternalList_GetResourceCount); ++n;
-
-    RegisterRuntimeAddr(0x180007650, (void*)&RtObject_ExternalList_GetResourceCount);
+    // B3R W2-RT: the address row (0x180007650) had no reader and went.
 
     // The Wave 3 banner named four deliberate omissions. All four have since
     // been ported by other files and this line was still claiming otherwise:

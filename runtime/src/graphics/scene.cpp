@@ -1568,21 +1568,18 @@ int RtGraphicsSceneRegister() {
     // retired -- `Geometry()` / `~Geometry()` are the members below, and their
     // one address reader (the RT_DELDTOR row 0x180015e90) is retired with them.
 
+    // B3R W2-RT: the five address rows (0x180015800, 0x180102730, 0x1801026c0,
+    // 0x180102670, 0x180102600) and the ??1Scene name row had no reader and
+    // went. The four names below stay while engine_funcs.cpp /
+    // address_registry.cpp read them.
     RegisterRuntimeExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ", (void*)&RtGraphics_Geometry_GetTransform); ++count;
-    RegisterRuntimeAddr(0x180015800, (void*)&RtGraphics_Geometry_GetTransform);
 
     // ---- Graphics::Scene ----
     RegisterRuntimeExport("??0Scene@Graphics@@QEAA@XZ", (void*)&RtGraphics_Scene_Ctor); ++count;
-    RegisterRuntimeAddr(0x180102730, (void*)&RtGraphics_Scene_Ctor);
-
-    RegisterRuntimeExport("??1Scene@Graphics@@QEAA@XZ", (void*)&RtGraphics_Scene_Dtor); ++count;
-    RegisterRuntimeAddr(0x1801026c0, (void*)&RtGraphics_Scene_Dtor);
 
     RegisterRuntimeExport("?AddObject@Scene@Graphics@@QEAAIPEAVGeometry@2@@Z", (void*)&RtGraphics_Scene_AddObject); ++count;
-    RegisterRuntimeAddr(0x180102670, (void*)&RtGraphics_Scene_AddObject);
 
     RegisterRuntimeExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z", (void*)&RtGraphics_Scene_RemoveObject); ++count;
-    RegisterRuntimeAddr(0x180102600, (void*)&RtGraphics_Scene_RemoveObject);
 
     return count;
 }

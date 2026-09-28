@@ -914,33 +914,3 @@ System::Filename PackageFile::GetFileName(int index) const {
 
 }  // namespace IO
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoFileSystemPackagesRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    RegisterRuntimeExport("?ClosePackages@FileSystem@IO@@QEAAXXZ",
-                          (void*)&RtIo_FileSystem_ClosePackages); ++n;
-    RegisterRuntimeAddr(0x1800abab0, (void*)&RtIo_FileSystem_ClosePackages);
-
-
-
-    // DELIBERATELY ABSENT — the callees this row exposes. Sizes and reasons in
-    // §4; each is called through its proper door above, so reaching one is a
-    // NAMED death, not a silent no-op.
-    //   ?FindFiles@FileSystem@IO@@QEBAX…       0x1800ad7a0  ord 2350   289 instrs
-    //   ??0PackageFile@IO@@QEAA@XZ             0x1800b4440  ord  289    48 instrs
-    //   ?ReadPackfile@PackageFile@IO@@QEAA_N…  0x1800b46b0  ord 3461  6,597 bytes
-    //   ?CloseFile@FileSystem@IO@@QEAAX…       0x1800accc0  ord 1726
-    // ALL FOUR OF THE FOLLOWING ARE NOW PORTED (Wave 9 lane COLL, 2026-09-08)
-    // and reach OUR bodies through the same doors — the registry is consulted
-    // first, so no edit was needed here. Kept listed because this block's job is
-    // to name what this row exposes, not only what is missing:
-    //   FUN_1800264a0 (packfile sort)          0x1800264a0             110 instrs
-    //   FUN_180025a80 (BST insert)             0x180025a80
-    //   FUN_180008340 (index-node free)        0x180008340
-    //   FUN_18007eefc (_stricmp)               0x18007eefc
-    return n;
-}

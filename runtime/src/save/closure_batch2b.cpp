@@ -150,8 +150,3 @@ extern "C" void* RtSave_SavedState_Delete(void* self) {
     return self;   // MOV RAX,<this> — retail returns the (now freed) pointer
 }
 
-int RtClosure2bSaveRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x180032f70, (void*)&RtSave_MetaData_CopyCtor); ++n;
-    return n;
-}

@@ -760,50 +760,6 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     reinterpret_cast<IO::Modification*>(selfv)->RefreshList();
 }
 
-// ===========================================================================
-// Registration
-// ===========================================================================
-// BOTH DOORS for the three rows that have a name in the export table, address
-// door alone for the five that do not. RefreshList needs both: it is reached by
-// NAME from runtime/src/engine/engine_lifecycle.cpp:605 (the Engine::Startup
-// call attempt 19 died on) and by ADDRESS through engine/funcs/
-// engine_funcs.cpp's `fn_Modification_RefreshList`, which
-// code/Game/Dialog/moddialog.cpp calls on both the mods dialog's Cancel and its
-// Ok. Registering one and not the other would leave the second resolving null
-// with the name never mentioned in the log.
-//
-// EVERY MANGLED NAME AND ORDINAL BELOW WAS PRINTED OUT OF Runtime-x64.dll's OWN
-// EXPORT DIRECTORY with pefile, not transcribed from a decompile. The first
-// draft of this file guessed `?$Array@H` for GetIconData; the real export is
-// `?$Array@I` (unsigned int) and `?BV` (const), which no compiler would have
-// caught — the same class of error lane PKG2 records for its ordinals.
-//
-//   ?RefreshList@Modification@IO@@QEAAXXZ                            ord 3528
-//   ?GetIconData@PackageFile@IO@@QEBA?BV?$Array@I@Collection@@XZ     ord 2697
-//   ?GetPreviewData@PackageFile@IO@@QEBA?BV?$Array@E@Collection@@XZ  ord 2855
-//
-// Every address was grepped for an existing `RegisterRuntimeAddr(0x…` across
-// runtime/, standalone/ and code/ before being claimed — the check
-// `reference_grep_for_the_port_before_writing_it.md` exists for. All eight were
-// unregistered.
-//
-// The mangled names are LITERALS: tools/runtime_census.py matches
-// `RegisterRuntimeExport("<literal>"` and cannot see through a constant.
-int RtIoModificationRefreshRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?RefreshList@Modification@IO@@QEAAXXZ",
-                          (void*)&RtIo_Modification_RefreshList); ++n;
-
-    RegisterRuntimeAddr(0x1800af5f0, (void*)&RtIo_Modification_RefreshList);
-
-    // Unexported in both shipped builds — address door only.
-
-    printf("[RtPort]   IO::Modification::RefreshList (lane MOD2): "
-           "%d exports + 8 addresses\n", n);
-    return n;
-}
-
 }  // namespace RtIO
 
 // ============================================================================

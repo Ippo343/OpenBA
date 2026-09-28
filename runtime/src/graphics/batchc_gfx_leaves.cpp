@@ -1024,34 +1024,3 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
             groupIndex, listIndex, shaderIndex);
 }
 
-// ============================================================================
-// Registration — BOTH DOORS for every one of the ten, unconditionally
-// (DIRECTION.md §2.3).
-//
-// THE ADDRESS DOORS WERE CHECKED BEFORE THEY WERE WRITTEN. Every one of the ten
-// addresses was grepped across code/, engine/, runtime/, standalone/ and dx11/.
-// None is used as an IDENTITY TOKEN the way standalone/scene_watch.cpp compares
-// `?AddDrawItems@MeshInstance@`'s address against a live vtable slot
-// (wave21_lane_gfxbody.cpp:311), so registering all ten is safe. Three of them
-// (0x180103c70, 0x1800a51c0, 0x1800a5520, 0x1800a2780) appear as RT_DELDTOR
-// rows in runtime/src/object/deleting_dtor.cpp, which reaches them through
-// ResolveAddr — registry-first — so those rows now land on the bodies above,
-// which is the intent.
-// ============================================================================
-extern "C" int RtGraphicsBatchCLeavesRegister() {
-    int n = 0;
-
-    // (ENDGAME B.3.9 GFX: the ??1ParticleSystemInstance door is retired.)
-
-    RegisterRuntimeExport("??0Animation@Graphics@@QEAA@AEBV01@@Z",
-                          (void*)&RtGraphics_Animation_CopyCtor); ++n;
-    RegisterRuntimeAddr(0x1800160a0ull, (void*)&RtGraphics_Animation_CopyCtor);
-
-    RegisterRuntimeExport("??1Animation@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_Animation_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800fb290ull, (void*)&RtGraphics_Animation_Dtor);
-
-    // (ENDGAME B.3.9 GFX: the ??1EdgeMesh door is retired.)
-
-    return n;
-}

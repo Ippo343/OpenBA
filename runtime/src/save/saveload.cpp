@@ -391,11 +391,8 @@ Save::SaveLoad::SaveInfo::~SaveInfo() {
     ReleaseStringSlot(&name);
     ReleaseStringSlot(&description);
 }
-// The registered address door (0x1800c3f40) — kSpec_MetaData58's destroy and
-// every by-address caller land here.
-static void SaveInfo_Dtor(RtSave::SaveInfo* info) {
-    info->Save::SaveLoad::SaveInfo::~SaveInfo();
-}
+// (B3R W2-RT: the file-static SaveInfo_Dtor, the address door 0x1800c3f40's
+// body, went with its row: nothing called it. ~SaveInfo above is the body.)
 
 // FUN_1800329c0 — Collection::Array<SaveInfo>::~Array, stride 0x58.
 // `_size` is read ONCE into EAX before the loop and used as the trip count, so
@@ -1049,7 +1046,9 @@ Save::SaveLoad* Save::SaveLoad::Get() {
 
 int RtSaveLoadRegister() {
     int n = 0;
-    RegisterRuntimeExport("??0SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Ctor); ++n;
+    // B3R W2-RT: ??0SaveLoad (name), 0x1800c3c90 (~SaveLoad's address) and
+    // 0x1800c3f40 (SaveInfo_Dtor) had no reader and went; the two names below
+    // stay while engine_funcs.cpp reads them.
     RegisterRuntimeExport("??0SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Ctor); ++n;
     // WAVE 9 LANE SYS2. `QEAA`, the NON-VIRTUAL spelling -- SaveLoad has no
     // vtable (the header proves it: the ctor writes an int at +0x00 and the
@@ -1060,15 +1059,6 @@ int RtSaveLoadRegister() {
     // shipped export table with pefile before this line was written:
     // 0x1800c3c90, ordinal 666.
     RegisterRuntimeExport("??1SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800c3c90, (void*)&RtSave_SaveLoad_Dtor);
-    // The three un-exported bodies the chain calls. Nothing in this tree
-    // reaches them by address TODAY, so these are not closing a live bypass --
-    // they are there so that the day something does (a ported UpdateList or
-    // LoadMetaData, which are the only other writers of these arrays), it
-    // reaches our transcription and not a null. A faithful port that calls DLL
-    // internals by address grows the cutover surface; owning the internals
-    // instead is the version of that which shrinks it.
-    RegisterRuntimeAddr(0x1800c3f40, (void*)&SaveInfo_Dtor);
     return n;
 }
 

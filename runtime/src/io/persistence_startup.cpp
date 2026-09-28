@@ -161,16 +161,3 @@ bool Persistence::Startup() {
 
 }  // namespace IO
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoPersistenceStartupRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Startup@Persistence@IO@@QEAA_NXZ", (void*)&RtIo_Persistence_Startup); ++n;
-    RegisterRuntimeAddr(0x1800b7ee0, (void*)&RtIo_Persistence_Startup);
-
-    // DELIBERATELY ABSENT -- both callees, both exported, both unported:
-    //   ?ReadSettings@Persistence@IO@@QEAAXXZ   0x1800b84b0  ord 3462  256 instrs
-    //   ?GetSaveDirectory@FileSystem@IO@@…      0x1800acfd0  ord 2886  (lane FS)
-    return n;
-}

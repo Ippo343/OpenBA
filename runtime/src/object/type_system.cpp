@@ -366,9 +366,9 @@ int RtObjectTypeSystemRegister() {
     // 2026-09-08 before a line of it was written.
     //
 
-    RegisterRuntimeAddr(0x1800491c0, (void*)&RtObject_Base_IsA);
-    RegisterRuntimeAddr(0x1800c0390, (void*)&RtObject_Base_IsDerivedFrom);
-    RegisterRuntimeAddr(0x1800c0c40, (void*)&RtObject_Type_Serialize);
+    // B3R W2-RT: the three address rows (0x1800491c0, 0x1800c0390,
+    // 0x1800c0c40) had no reader and went; the names stay while
+    // engine_funcs.cpp / address_registry.cpp read them.
 
     // (Ordinals 3089 for IsA and 2991 for GetTypeIdFromName used to be
     // registered here as well. ENDGAME A.3 deleted the ordinal door; both

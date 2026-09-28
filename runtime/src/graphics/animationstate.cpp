@@ -730,13 +730,3 @@ GraphicsMesh::Node::Node(const Node& src) {
 
 }  // namespace Graphics
 
-// ============================================================================
-// Registration. Unconditional (DIRECTION.md §2: a port registers, no flag).
-// ============================================================================
-int RtCollectionGraphicsAnimRegister();
-
-int RtGraphicsAnimationStateRegister() {
-    int n = RtCollectionGraphicsAnimRegister();
-
-    return n;
-}
