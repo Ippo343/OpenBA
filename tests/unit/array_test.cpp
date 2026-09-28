@@ -351,6 +351,9 @@ UNIT_TEST(array_pkgentry_shrink_arm_destroys_the_tail_in_place) {
         CHECK_EQ(RefCount(names[1]), 2);
         CHECK(*reinterpret_cast<char**>(nbuf + 0x00) == names[0]._data);   // shared
         CHECK(*reinterpret_cast<char**>(nbuf + 0x10) == names[1]._data);
+        // The grown tail (elements 2..4) is NOT initialised -- the row has no
+        // init arm -- so null it before the final shrink releases all five.
+        std::memset(nbuf + 2 * 0x10, 0, 3 * 0x10);
 
         a.SetSize(0);                       // releases the two survivors
         CHECK_EQ(RefCount(names[0]), 1);

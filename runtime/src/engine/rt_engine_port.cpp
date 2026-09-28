@@ -45,105 +45,13 @@
 //     loading screen forever. See WAVE8_LANE_A.md.
 // ============================================================================
 
-#include <cstdio>
 #include "../../funcs/rt_port.h"
-#include "../../types/engine/MainLoop.h"   // ENDGAME B.3.9 ENG: the storage redirect
-#include "../../types/engine/Engine.h"   // ENDGAME B.3.9 ENG: the storage redirect
 
-extern int RtEngineLoopsRegister();     // loops.cpp            (lane A)  — 12
-extern int RtEngineCoreRegister();      // engine.cpp           (lane B)  — 3
-extern int RtEngineLifecycleRegister(); // engine_lifecycle.cpp (lane ENG) — 8
-extern int RtEngineMainLoopRunRegister();// mainloop_run.cpp    (lane ADDR)— 2
-extern int RtEngineMainLoopFrameRegister();//mainloop_frame.cpp  (W25 BODY)— 1
-extern int RtEngineMainLoopVideoRegister();// mainloop_video.cpp (lane VIDL)— 2
-extern int RtEnginePlatformRegister();  // engine_platform.cpp  (W23 ENGINE)— 1
-extern int RtEngineLoadResourcesRegister();// updateloop_loadresources.cpp  — 1
-
+// B3R RT-Core: every row the eight Engine register functions carried lost its
+// last reader (the readers were converted to direct calls, here and in
+// code/Game), so the functions went with their rows. This entry point
+// registers nothing; it stays defined only because
+// standalone/resolve_standalone.cpp's RuntimePortInit() still calls it (the
+// coordinator removes that call, then this file).
 void RtEnginePortInit() {
-    // ENDGAME B.3.9: `?_singleton@Engine@1@` (ENG W2, eng.txt) and
-    // `?_singleton@MainLoop@Engine@@` (CLOSE, close.txt) are RETIRED: every site
-    // reads the class statics Engine::Engine::_singleton / Engine::MainLoop::_singleton.
-    int loops = 0, core = 0, life = 0, mlrun = 0, mlvid = 0, mlframe = 0;
-    loops = RtEngineLoopsRegister();
-    core  = RtEngineCoreRegister();
-    // Wave 9 lane ENG. Kept as its OWN switch rather than folded into
-    // ENGINECORE: these four are the first ports in this project that sit on
-    // the process's one boot path, and the integrator needs to be able to A/B
-    // them without also giving up MainLoop's ctor/dtor. It must also be turned
-    // OFF for any allocator-shadow run -- RtAllocShadowInstall arms by
-    // detouring the DLL's Engine::Startup, and our port never executes those
-    // bytes, so the shadow would report skipped_pre_startup and call the run
-    // INVALID. See docs/runtime_port/WAVE9_LANE_ENG.md §5.
-    life = RtEngineLifecycleRegister();
-    // Wave 9 lane ADDR. MainLoop::Run + MainLoop::Update, on their OWN switch
-    // because Run is the process's single main loop: it is called once from
-    // game_main.cpp:176, never returns until quit, and CANNOT have a diff
-    // oracle. If it is wrong the symptom is "the game does not run", with no
-    // divergence row to read, so the integrator needs to be able to A/B this
-    // one function without also giving up the Engine lifecycle ports.
-    mlrun = RtEngineMainLoopRunRegister();
-    // Wave 25 lane BODY. MainLoop::Frame, on its OWN switch for the same reason
-    // lane ADDR gave Run one, only more so: Frame runs EVERY frame, drives the
-    // message pump, the audio channel sweep and the fixed-timestep update, and
-    // has NO ORACLE. If it is wrong the symptom is "the game misbehaves", with
-    // no divergence row to read, so the integrator must be able to A/B exactly
-    // this one function while keeping Run and Update.
-    mlframe = RtEngineMainLoopFrameRegister();
-    // Wave 9 lane VIDL. MainLoop::OnVideoError + OnVideoRestart, the
-    // device-lost pair, on their OWN switch for the same reason lane ADDR has
-    // one: they run only after a real (or forced) device reset, so a defect
-    // here is invisible until the day a driver resets — and being able to A/B
-    // exactly these two against the DLL's own bodies, with the rest of the
-    // Engine port left alone, is the only way to attribute a device-lost
-    // regression. They also register the two Collection instantiations they
-    // need (0x18004f620 SetSize and 0x180034440 elem-destroy), so turning this
-    // switch off returns BOTH of those to the DLL as well.
-    mlvid = RtEngineMainLoopVideoRegister();
-    // Wave 23 lane ENGINE. Two OWN switches, and neither is folded into
-    // ENGINELIFE, because they fail in opposite ways and an integrator needs to
-    // A/B them separately:
-    //   * PlatformConfigure is the CUTOVER BOOT WALL. Its Half A is the branch
-    //     every unattended boot takes and is fully ported; its Half B (the
-    //     launcher dialog) needs DLL resources and refuses BY NAME at cutover.
-    //     A defect here shows up as "the launcher appears when it should not"
-    //     or "settings stop persisting", neither of which is a crash.
-    //   * LoadResources runs on EVERY game load, once per loop, from the LOADER
-    //     THREAD (Loader::Run -> UpdateLoop::LoadResources). A defect here is a
-    //     missing mod resource or a leaked String refcount, both silent. It is
-    //     also the body that removes one of the two unported readers of
-    //     ?_singleton@Configuration@System@@ — see the file banner for what
-    //     that does and does NOT discharge.
-    int plat = 0, ldres = 0;
-    plat = RtEnginePlatformRegister();
-    ldres = RtEngineLoadResourcesRegister();
-    printf("[RtPort]   Engine loop family (lane A): %d exports registered "
-           "(LoadResources held back -- no oracle, see WAVE8_LANE_A.md)\n", loops);
-    printf("[RtPort]   Engine::Engine + MainLoop (lane B): %d exports registered "
-           "(2 held back: both detour-required, plus _singleton which is DATA -- "
-           "see WAVE8_LANE_B.md; Run is NO LONGER among them, see lane ADDR below)\n", core);
-    printf("[RtPort]   MainLoop::Run + Update (lane ADDR): %d exports registered "
-           "(Run closes the ADDRESS door at game_main.cpp:176 and opens two NAME "
-           "doors -- Input::Device::Update and MainLoop::Frame; Run has NO ORACLE "
-           "by construction -- see WAVE9_LANE_ADDR.md)\n", mlrun);
-    printf("[RtPort]   MainLoop::Frame (lane BODY, W25): %d exports registered "
-           "(closes the NAME door lane ADDR opened; opens TWO name doors -- "
-           "MainLoop::Draw ord 2251 and Audio::Device::FreeChannelPlatform ord "
-           "2380. NO ORACLE: the site is named [ATTENDANCE] and its divergences "
-           "column carries no verdict -- see WAVE25_LANE_BODY.md)\n", mlframe);
-    printf("[RtPort]   Engine lifecycle (lane ENG): %d exports registered "
-           "(ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, "
-           "calls=0 by construction -- see WAVE9_LANE_ENG.md)\n", life);
-    printf("[RtPort]   MainLoop device-lost pair (lane VIDL): %d exports registered "
-           "(OnVideoError + OnVideoRestart, plus Array<VideoResource>::SetSize "
-           "0x18004f620 and elem-destroy 0x180034440 by ADDRESS; OnVideoRestart "
-           "OPENS THREE NAME DOORS -- Load@External, GetCompiledPath@ExternalFactory, "
-           "OnVideoRestart@SaveLoad -- see WAVE9_LANE_VIDL.md §2)\n", mlvid);
-    printf("[RtPort]   Engine::PlatformConfigure (W23 lane ENGINE): %d registered "
-           "(THE CUTOVER BOOT WALL -- Half A ported, Half B is the launcher "
-           "dialog and needs DLL resources; see WAVE23_LANE_ENGINE.md §1)\n", plat);
-    printf("[RtPort]   UpdateLoop::LoadResources (W23 lane ENGINE): %d registered "
-           "(Wave 8 lane A's oldest holdback, discharged; removes ONE of the two "
-           "unported readers of ?_singleton@Configuration@System@@)\n", ldres);
-    printf("[RtPort] Engine: %d exports registered\n",
-           loops + core + life + mlrun + mlvid + plat + ldres);
 }

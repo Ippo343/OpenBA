@@ -16,16 +16,13 @@
 #include "../../funcs/rt_port.h"
 #include "scene_grid.h"
 
-extern int RtPickingSceneRegister();  // scene.cpp (Wave 5 lane D)
 extern int RtPickingGridRegister();   // scene_grid.cpp (Wave 9 lane PICK)
 
 void RtPickingPortInit() {
-    int n = 0;
-    n += RtPickingSceneRegister();
-
+    // B3R RT-Core: RtPickingSceneRegister went with its rows (no reader).
     // [[maybe_unused]]: the perf build strips printf's arguments (B5-11), which
     // leaves `grid` read by nothing there. The registration call stays OUTSIDE
     // the printf for exactly that reason.
     [[maybe_unused]] int grid = RtPickingGridRegister();
-    printf("[RtPort] Picking: %d exports + %d grid addresses registered\n", n, grid);
+    printf("[RtPort] Picking: %d grid addresses registered\n", grid);
 }

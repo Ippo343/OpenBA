@@ -40,22 +40,17 @@ void RtVolumePortInit() {
     RegisterRuntimeExport("??0Box@Volume@@QEAA@XZ", (void*)&RtVolume_Box_Ctor);
     RegisterRuntimeExport("??4Box@Volume@@QEAAAEAV01@AEBV01@@Z", (void*)&RtVolume_Box_Assign);
     RegisterRuntimeExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z", (void*)&RtVolume_Box_Extend);
-    RegisterRuntimeExport("?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z", (void*)&RtVolume_Box_GetCorners);
     RegisterRuntimeExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z", (void*)&RtVolume_Box_Intersect);
 
     RegisterRuntimeExport("??0Rectangle@Volume@@QEAA@XZ", (void*)&RtVolume_Rectangle_Ctor);
 
     RegisterRuntimeExport("??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z",
                            (void*)&RtVolume_Frustum_Ctor_Perspective);
-    RegisterRuntimeExport("??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z",
-                           (void*)&RtVolume_Frustum_Ctor_General);
     RegisterRuntimeExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z",
                            (void*)&RtVolume_Frustum_MulTransform3);
     RegisterRuntimeExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z", (void*)&RtVolume_Frustum_Contains);
     RegisterRuntimeExport("?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z",
                            (void*)&RtVolume_Frustum_GetCorners);
-    RegisterRuntimeExport("?GetScreenDirection@Frustum@Volume@@QEBA?AVVector3@Math@@MM@Z",
-                           (void*)&RtVolume_Frustum_GetScreenDirection);
     // Wave 9 lane P. Registered by NAME only: the one in-tree caller,
     // runtime/src/graphics/renderer.cpp's RtFrustumProjection, already goes
     // through ResolveExport, and no site reaches it by address.

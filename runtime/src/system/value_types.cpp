@@ -176,9 +176,6 @@ System::Random* RtSystem_Random_CtorSeed(System::Random* self, uint32_t seed) {
 //
 extern "C" void RtSystem_Random_NextGroup(System::Random* self) { self->NextGroup(); }
 
-// ?Rand@Random@System@@QEAAIXZ  retail 0x1800c7f90
-uint32_t RtSystem_Random_Rand(System::Random* self) { return self->Rand(); }
-
 // ?RandFloat@Random@System@@QEAAMXZ  retail 0x1800c7d40
 // DAT_18016165c = 1/2^32 exactly (read as bytes: 0x2f800000): maps a full
 // 32-bit draw to [0,1).
@@ -646,10 +643,8 @@ int RtSystemValueRegister() {
     int n = 0;
 
     RegisterRuntimeExport("??0Random@System@@QEAA@XZ", (void*)&RtSystem_Random_Ctor); ++n;
-    RegisterRuntimeExport("??0Random@System@@QEAA@I@Z", (void*)&RtSystem_Random_CtorSeed); ++n;
     // WAVE 28 LANE MISC: the body has existed since Wave 2; this line is the port.
     RegisterRuntimeExport("?NextGroup@Random@System@@AEAAXXZ", (void*)&RtSystem_Random_NextGroup); ++n;
-    RegisterRuntimeExport("?Rand@Random@System@@QEAAIXZ", (void*)&RtSystem_Random_Rand); ++n;
 
     RegisterRuntimeExport("??0Time@System@@QEAA@M@Z", (void*)&RtSystem_Time_Ctor); ++n;
     RegisterRuntimeExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Time_Serialize); ++n;

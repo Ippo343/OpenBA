@@ -814,25 +814,3 @@ void Engine::MainLoop::OnVideoRestart() {
 extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
     self->Engine::MainLoop::OnVideoRestart();
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Both the exported NAME and the retail ADDRESS, for the reason engine.cpp
-// gives: a name-only registration leaves every `ResolveAddr` caller on the DLL,
-// and the two static thunks reach these members BY ADDRESS.
-//
-// Every mangled name is ONE string literal on ONE line — a name split across
-// lines or hidden behind a named constant is invisible to
-// tools/runtime_census.py, and a port the census cannot see is a port nobody
-// will ever check (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// The two Collection addresses get RegisterRuntimeAddr and no export name
-// because neither is exported (checked with pefile: both absent from the export
-// directory), so they are not counted in the returned total — which counts
-// NAMES closed.
-int RtEngineMainLoopVideoRegister() {
-    int n = 0;
-
-    return n;
-}

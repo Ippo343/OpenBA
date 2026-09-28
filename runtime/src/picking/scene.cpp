@@ -596,12 +596,6 @@ extern "C" Picking::Scene* RtPicking_Scene_Ctor(void* selfv) {
     return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(kCellSize);   // B.3.7 bridge
 }
 
-// ??1Scene@Picking@@QEAA@XZ  0x180125890 — four `~Array` calls, +0x48, +0x30,
-// +0x18, +0x08, the fourth a tail JMP: the implicit destructor (Scene.h).
-extern "C" void RtPicking_Scene_Dtor(void* selfv) {
-    reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::~Scene();   // B.3.7 bridge
-}
-
 // ?GetUserData@Scene@Picking@@QEBAPEAXI@Z  0x1800722d0
 extern "C" void* RtPicking_Scene_GetUserData(const void* selfv, uint32_t id) {
     return reinterpret_cast<const Picking::Scene*>(selfv)->Picking::Scene::GetUserData(id);   // B.3.7 bridge
@@ -652,36 +646,4 @@ extern "C" int RtPicking_Scene_Intersect(const void* selfv, const Vector3* start
                                          Vector3* outPos, Vector3* outNormal) {
     return reinterpret_cast<const Picking::Scene*>(selfv)->Picking::Scene::Intersect(   // B.3.7 bridge
         *start, *dir, *maxDist, *outPos, *outNormal);
-}
-
-// ============================================================================
-// Registration.
-//
-// Both the mangled NAME and the retail ADDRESS are registered for every
-// function. The two registries are separate (standalone/resolve_standalone.cpp
-// keeps RtExportReg and RtAddrReg apart), and this lane's call sites use both:
-// edittool.cpp / mapquery.cpp / gameupdateloop_load.cpp go by name, while
-// citizenai_executor.cpp:406 resolves AddMesh by ADDRESS
-// (`ResolveAddr(Module::Runtime, 0x1801252e0)`). Registering only the name
-// would leave that call on the DLL and the diff oracle would under-count.
-//
-// Every name below is a string LITERAL, not one of the `k*` constants above,
-// because tools/runtime_census.py cannot see through a named constant. It CAN
-// see through a multi-line literal (see the correction above the constants),
-// so the two very long names are kept on one line for readability only, not
-// because the tool requires it.
-//
-// The AddMesh name is present in the shipped DLL at 0x1801252e0, ordinal 1571
-// — verified against the export directory with pefile, not inferred.
-// ============================================================================
-int RtPickingSceneRegister() {
-    int count = 0;
-
-    RegisterRuntimeExport("??0Scene@Picking@@QEAA@XZ", (void*)&RtPicking_Scene_Ctor); ++count;
-    RegisterRuntimeAddr(0x1801258e0, (void*)&RtPicking_Scene_Ctor);
-
-    RegisterRuntimeExport("??1Scene@Picking@@QEAA@XZ", (void*)&RtPicking_Scene_Dtor); ++count;
-    RegisterRuntimeAddr(0x180125890, (void*)&RtPicking_Scene_Dtor);
-
-    return count;
 }

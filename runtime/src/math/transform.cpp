@@ -888,9 +888,6 @@ Transform* RtMath_Transform_CtorCopy(Transform* self, const Transform* other) {
 Transform* RtMath_Transform_Assign(Transform* self, const Transform* other) {
     std::memcpy(self, other, sizeof(Transform)); return self;
 }
-Transform3* RtMath_Transform3_CtorCopy(Transform3* self, const Transform3* other) {
-    std::memcpy(self, other, sizeof(Transform3)); return self;
-}
 Transform2* RtMath_Transform2_Ctor(Transform2* self, const Scalar* angleDeg, const Vector2* offset) {
     *self = Transform2(*angleDeg, *offset); return self;
 }
@@ -906,10 +903,6 @@ Quaternion* RtMath_Quaternion_MulQuaternion(const Quaternion* self, Quaternion* 
 }
 Vector3* RtMath_Quaternion_Rotate(const Quaternion* self, Vector3* ret, const Vector3* v) {
     *ret = self->Rotate(*v); return ret;
-}
-Matrix* RtMath_Matrix_CtorColumns(Matrix* self, const Vector4* c0, const Vector4* c1,
-                                  const Vector4* c2, const Vector4* c3) {
-    *self = Matrix(*c0, *c1, *c2, *c3); return self;   // retail leaves `this` in RAX
 }
 Transform2* RtMath_Transform2_FromYawOffset(Transform2* ret, const Scalar* yawDeg, const Vector2* offset) {
     *ret = Transform2::FromYawOffset(*yawDeg, *offset); return ret;
@@ -939,18 +932,15 @@ void RtMathTransformRegister() {
 
     RegisterRuntimeExport("??0Transform@Math@@QEAA@AEBV01@@Z", (void*)&RtMath_Transform_CtorCopy); ++count;
     RegisterRuntimeExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z", (void*)&RtMath_Transform_Assign); ++count;
-    RegisterRuntimeExport("??0Transform3@Math@@QEAA@AEBV01@@Z", (void*)&RtMath_Transform3_CtorCopy); ++count;
     RegisterRuntimeExport("??0Transform2@Math@@QEAA@AEBVScalar@1@AEBVVector2@1@@Z", (void*)&RtMath_Transform2_Ctor); ++count;
     RegisterRuntimeExport("??DTransform2@Math@@QEBA?AV01@AEBV01@@Z", (void*)&RtMath_Transform2_MulTransform2); ++count;
     RegisterRuntimeExport("??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z", (void*)&RtMath_Transform2_MulVector2); ++count;
     RegisterRuntimeExport("?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z", (void*)&RtMath_Transform2_FromYawOffset); ++count;
     RegisterRuntimeExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z", (void*)&RtMath_Transform_FromYawPitchOffset); ++count;
-    RegisterRuntimeExport("??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z", (void*)&RtMath_Matrix_CtorColumns); ++count;
     // Second door onto the SAME body. weather_particle_draw.cpp now asks by
     // name, but the address stays registered so that any future by-address
     // caller reaches the port instead of walking past it into the DLL --
     // the defect tools/port_bypass_audit.py exists to catch.
-    RegisterRuntimeAddr(0x18001e540, (void*)&RtMath_Matrix_CtorColumns);
 
     // Bonus: dependencies of the above that are genuine Math:: exports in
     // their own right (not on the assigned list, but required internally by

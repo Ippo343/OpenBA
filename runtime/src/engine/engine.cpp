@@ -613,54 +613,6 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
 
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-// Both the exported NAME and the retail ADDRESS are registered for every port.
-// Registering only the name would leave `ResolveAddr(Module::Runtime, …)`
-// callers on the DLL — the gap WAVE3_LANE_A.md found the hard way, and the one
-// game_main.cpp would fall into: it resolves the MainLoop ctor/dtor by name but
-// several sites in this tree reach Runtime functions by address after a failed
-// name resolve.
-//
-// Every mangled name below is ONE string literal on ONE line. A name split
-// across lines or hidden behind a named constant is invisible to
-// tools/runtime_census.py and tools/export_name_audit.py, and a port the census
-// cannot see is a port nobody will ever check
-// (reference_census_cannot_see_nonliteral_registrations.md — it has already
-// produced two false progress reports in this project).
-//
-// The integrator wires `RtEngineCoreRegister()` into
-// runtime/src/engine/rt_engine_port.cpp alongside lane A's register function;
-// this lane does NOT create or edit that file.
-int RtEngineCoreRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??0MainLoop@Engine@@QEAA@PEAV11@@Z", (void*)&RtEngine_MainLoop_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800dd6b0, (void*)&RtEngine_MainLoop_Ctor);
-
-    RegisterRuntimeExport("??1MainLoop@Engine@@QEAA@XZ", (void*)&RtEngine_MainLoop_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800dd640, (void*)&RtEngine_MainLoop_Dtor);
-
-    // MOVED to runtime/src/engine/engine_lifecycle.cpp (Wave 9 lane ENG), which
-    // registers all four. The "allocator, NO-GO" reason that used to stand here
-    // was discharged by Wave 9 lanes E/E2/E3/E4:
-    //   ??0Engine@0@QEAA@PEAX@Z              0x1800dbf00
-    //   ??1Engine@0@QEAA@XZ                  0x1800dbec0
-    //   ?Startup@Engine@1@QEAAIPEBDII_N@Z    0x1800db8a0
-    //   ?Shutdown@Engine@1@QEAAXXZ           0x1800db4f0
-    //
-    // DELIBERATELY ABSENT -- see the holdback sections in the banner:
-    //   ?Run@MainLoop@Engine@@…              0x1800dd3c0  no oracle, kills the run
-    //   (?OnVideoError@ and ?OnVideoRestart@ are NO LONGER absent — Wave 9 lane
-    //    VIDL registers both from runtime/src/engine/mainloop_video.cpp. They
-    //    are not registered HERE because a duplicate registration is
-    //    last-binding-wins and would silently make one of the two bodies dead
-    //    code; see reference_grep_for_the_port_before_writing_it.md.)
-    //   ?_singleton@MainLoop@Engine@@1PE…    0x1801fe750  DATA symbol, nothing to port
-    return n;
-}
-
 // ?_singleton@MainLoop@Engine@@1PEAV12@EA (0x1801fe750) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
 // RtEnginePortInit redirects the minted storage row onto it.
 ::Engine::MainLoop* ::Engine::MainLoop::_singleton = nullptr;

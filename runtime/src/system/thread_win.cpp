@@ -347,19 +347,3 @@ unsigned int __stdcall Thread::ThreadFunc(void* param) {
 }  // namespace System
 
 // ---- Registration ------------------------------------------------------------
-
-int RtSystemThreadRegister() {
-    int n = 0;
-    // Wave 9 lane B3: fills slot 1 of BOTH ??_7Thread@System@@ and
-    // ??_7Loader@Engine@@ -- see the note above the body.
-    RegisterRuntimeExport("??0CriticalSection@System@@QEAA@XZ", (void*)&RtSystem_CriticalSection_Ctor); ++n;
-    RegisterRuntimeExport("??1CriticalSection@System@@QEAA@XZ", (void*)&RtSystem_CriticalSection_Dtor); ++n;
-
-    // Wave 9 lane P. Registered by ADDRESS as well as by name (since B.3.9 the
-    // ctor body names Thread::ThreadFunc directly, as retail's LEA does), and the DLL's own ??0Thread ctor (still live for any Thread
-    // the DLL builds itself) hands 0x1800ca440 to _beginthreadex, and Wave 3's
-    // seam only redirects a call that goes through a resolver. Registering the
-    // address costs nothing and means a future by-address caller lands on us.
-
-    return n;
-}

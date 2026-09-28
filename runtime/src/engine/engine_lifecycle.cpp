@@ -959,48 +959,6 @@ extern "C" void RtEngineLifecycleSummary() {
     std::fflush(stdout);
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-// Both the exported NAME and the retail ADDRESS, for the same reason lane B
-// gives: registering only the name leaves ResolveAddr(Module::Runtime, ...)
-// callers on the DLL.
-//
-// Every mangled name below is ONE string literal on ONE line, so
-// tools/runtime_census.py and tools/export_name_audit.py can see it
-// (reference_census_cannot_see_nonliteral_registrations.md).
-int RtEngineLifecycleRegister() {
-    // The allocator platform seam must exist BEFORE Engine::Engine runs:
-    // `??0MemoryAllocator@System@@` routes to rtalloc::Construct, whose first
-    // call is g_plat.lockInit. On a run with RT_ALLOC unset nobody
-    // else fills that table, and a null there is an EXEC of 0 on the very first
-    // line of the boot. Refuse loudly rather than register a landmine — the
-    // named-refusal shape lane E4 and lane H both settled on.
-    if (!RtLaneXEnsureAllocatorPlatform()) {
-        printf("[RtPort] Engine lifecycle: REFUSING to register -- "
-                    "RtSystemAllocatorInstallPlatform() left g_plat.lockInit null, so "
-                    "the MemoryAllocator constructor Engine::Engine calls cannot run. "
-                    "See runtime/src/system/allocator_win.cpp\n");
-        return 0;
-    }
-
-    int n = 0;
-
-    RegisterRuntimeExport("??0Engine@0@QEAA@PEAX@Z", (void*)&RtEngine_Engine_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800dbf00, (void*)&RtEngine_Engine_Ctor);
-
-    RegisterRuntimeExport("??1Engine@0@QEAA@XZ", (void*)&RtEngine_Engine_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800dbec0, (void*)&RtEngine_Engine_Dtor);
-
-    // NOT registered, deliberately: the two unexported per-class operator
-    // new/delete bodies at 0x180011640 and 0x180006a10. They are MemAlloc(n,4)
-    // and MemFree verbatim, and this lane calls those directly instead. They
-    // have dozens of DLL-internal callers and no name, so registering the
-    // addresses would change what ~20 other call sites in this tree resolve --
-    // that is lane Q's kind of decision, not this lane's.
-    return n;
-}
-
 // ?_singleton@Engine@1@0PEAV11@EA (0x1801fe748) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
 // RtEnginePortInit redirects the minted storage row onto it.
 ::Engine::Engine* ::Engine::Engine::_singleton = nullptr;

@@ -43,14 +43,12 @@ int RtString_GetLength(const String* self);
 
 // ---- ported entry points reused by Filename --------------------------------
 void    RtSystem_String_Set(String* self, const char* src);                       // 0x1800c95d0
-String* RtSystem_String_SubString(const String* self, String* ret, int s, int e); // 0x1800c9230
 String* RtSystem_String_Assign(String* self, const String* rhs);                  // 0x1800c9810
 
 // The two free operator+ overloads. Namespace-scope, so the hidden return slot
 // is the FIRST argument (RCX=ret, RDX=lhs, R8=rhs).
 // ??HSystem@@YA?AVString@0@AEBV10@0@Z     retail 0x1800c9440
 // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z  retail 0x1800c92d0
-String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs);
 String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs);
 
 // ??YString@System@@QEAA?AV01@PEBD@Z  retail 0x1800c9120 -- MEMBER operator+=,

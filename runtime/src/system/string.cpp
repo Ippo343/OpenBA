@@ -1193,11 +1193,6 @@ String* RtSystem_String_Assign(String* self, const String* rhs) {
 }
 void RtSystem_String_Set(String* self, const char* src) { AsSys(self)->Set(src); }
 
-// ---- concatenation and append ---------------------------------------------
-String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs) {
-    new (AsSys(ret)) System::String(*AsSys(lhs) + *AsSys(rhs));
-    return ret;
-}
 String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs) {
     new (AsSys(ret)) System::String(*AsSys(lhs) + rhs);
     return ret;
@@ -1208,24 +1203,6 @@ String* RtSystem_String_AppendAssign(String* self, String* ret, const String* rh
 }
 String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* rhs) {
     new (AsSys(ret)) System::String(*AsSys(self) += rhs);
-    return ret;
-}
-String* RtSystem_String_AppendAssignChar(String* self, String* ret, char c) {
-    new (AsSys(ret)) System::String(*AsSys(self) += c);
-    return ret;
-}
-
-// ---- content ---------------------------------------------------------------
-String* RtSystem_String_SubString(const String* self, String* ret, int start, int end) {
-    new (AsSys(ret)) System::String(AsSys(self)->SubString(start, end));
-    return ret;
-}
-String* RtSystem_String_InsertAt(String* self, String* ret, int index, const String* s) {
-    new (AsSys(ret)) System::String(AsSys(self)->InsertAt(index, *AsSys(s)));
-    return ret;
-}
-String* RtSystem_String_RemoveAt(const String* self, String* ret, int index) {
-    new (AsSys(ret)) System::String(AsSys(self)->RemoveAt(index));
     return ret;
 }
 
@@ -1244,9 +1221,6 @@ void RtSystem_String_Serialize(String* self, void* serializerRaw) {
 
 }  // namespace RtSystem
 
-using RtSystem::RtSystem_String_InsertAt;
-using RtSystem::RtSystem_String_RemoveAt;
-using RtSystem::RtSystem_String_AppendAssignChar;
 
 #ifndef BANISHED_UNIT_TEST
 int RtSystemStringRegister() {
@@ -1263,8 +1237,6 @@ int RtSystemStringRegister() {
     // plain C++ call within this TU, not through the registry. Registering it
     // closes that gap for any caller that reaches it BY NAME or BY ADDRESS
     // instead (`?SetLength@String@System@@AEAAXH@Z`, retail 0x1800c8220).
-    RegisterRuntimeExport("?SetLength@String@System@@AEAAXH@Z",     (void*)&RtString_SetLength); ++n;
-    RegisterRuntimeExport("?SubString@String@System@@QEBA?AV12@HH@Z", (void*)&RtSystem_String_SubString); ++n;
     // WAVE 22 LANE SYSBODY. The body has existed since Wave 2 (above) and was
     // never registered, which is why runtime_census.py has been printing it as
     // an unported System BODY for twenty waves -- a port that is never
@@ -1285,8 +1257,6 @@ int RtSystemStringRegister() {
     // The two free operator+ overloads. They live in namespace System, not in
     // the class, so the mangling has no class component and the hidden return
     // slot is the FIRST argument.
-    RegisterRuntimeExport("??HSystem@@YA?AVString@0@AEBV10@0@Z",
-                          (void*)&RtSystem_String_Concat); ++n;
     RegisterRuntimeExport("??HSystem@@YA?AVString@0@AEBV10@PEBD@Z",
                           (void*)&RtSystem_String_ConcatCStr); ++n;
 
@@ -1301,26 +1271,15 @@ int RtSystemStringRegister() {
     RegisterRuntimeAddr(0x1800c9810, (void*)&RtSystem_String_Assign);
     RegisterRuntimeAddr(0x1800c8a90, (void*)&RtSystem_String_AppendAssign);
     RegisterRuntimeAddr(0x1800c95d0, (void*)&RtSystem_String_Set);
-    RegisterRuntimeAddr(0x1800c9230, (void*)&RtSystem_String_SubString);
     RegisterRuntimeAddr(0x1800c9730, (void*)&RtSystem_String_Format);
     RegisterRuntimeAddr(0x1800c9930, (void*)&RtSystem_String_Serialize);
-    RegisterRuntimeAddr(0x1800c9440, (void*)&RtSystem_String_Concat);
     RegisterRuntimeAddr(0x1800c92d0, (void*)&RtSystem_String_ConcatCStr);
-    RegisterRuntimeAddr(0x1800c8220, (void*)&RtString_SetLength);   // BATCH 8
+       // BATCH 8
 
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -------------
     // Four more members, by NAME and by ADDRESS for the reason the block above
     // gives. Their live consumers are runtime/src/ui/editelement.cpp, which
     // reaches all four by address today.
-    RegisterRuntimeExport("?InsertAt@String@System@@QEAA?AV12@HAEBV12@@Z",
-                          (void*)&RtSystem_String_InsertAt); ++n;
-    RegisterRuntimeExport("?RemoveAt@String@System@@QEBA?AV12@H@Z",
-                          (void*)&RtSystem_String_RemoveAt); ++n;
-    RegisterRuntimeExport("??YString@System@@QEAA?AV01@D@Z",
-                          (void*)&RtSystem_String_AppendAssignChar); ++n;
-    RegisterRuntimeAddr(0x1800c8510, (void*)&RtSystem_String_InsertAt);
-    RegisterRuntimeAddr(0x1800c86b0, (void*)&RtSystem_String_RemoveAt);
-    RegisterRuntimeAddr(0x1800c89e0, (void*)&RtSystem_String_AppendAssignChar);
 
     printf("[RtPort]   System::String: %d exports registered\n", n);
     return n;

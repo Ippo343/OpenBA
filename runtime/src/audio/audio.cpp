@@ -1140,7 +1140,6 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 int RtAudioSceneRegister() {
     int n = 0;
     RegisterRuntimeExport("??0Scene@Audio@@QEAA@XZ", (void*)&RtAudio_Scene_Ctor); ++n;
-    RegisterRuntimeExport("??1Scene@Audio@@QEAA@XZ", (void*)&RtAudio_Scene_Dtor); ++n;
     return n;
 }
 

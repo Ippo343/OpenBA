@@ -15,7 +15,6 @@
 extern int RtSystemStringRegister();      // string.cpp
 extern int RtSystemFilenameRegister();    // filename.cpp
 extern int RtSystemValueRegister();       // value_types.cpp  (Random/Time/DateTime/Color)
-extern int RtSystemThreadRegister();      // thread_win.cpp   (CriticalSection/Thread)
 extern int RtSystemTimerRegister();       // timer.cpp        (also owns the five Timer data exports)
 extern int RtSystemAllocatorRegister();   // allocator.cpp    (System::MemoryAllocator)
 // System::Configuration::SetCommandLine plus the unexported string-keyed BST
@@ -29,7 +28,6 @@ extern int RtSystemErrorRegister();          // error.cpp
 // System::WideString (4 rows) plus the three System leaves of
 // IO::FileSystem::SetupDirectories; the IO half lives in rt_io_port.cpp.
 extern int RtSystemWideStringRegister();       // widestring.cpp
-extern int RtSystemSetupDirHelpersRegister();  // setupdir_helpers.cpp
 // System::Compression::Decompress -- the BOTTOM of the ?ReadPackfile@ stack
 // (docs/runtime_port/WAVE9_READPACKFILE_PLAN.md). It lives in System rather
 // than IO because that is its namespace, but it is PackageFile work: it is the
@@ -39,16 +37,10 @@ extern int RtSystemCompressionRegister();      // compression.cpp
 // jobs reach by address.
 extern int RtSystemCrcRegister();              // crc.cpp
 
-// allocator.cpp -- the single owner of the 0x180009c30 registration; see the
-// comment at the call site in RtSystemPortInit below.
-extern "C" void RtSystemAllocatorRegisterSharedAddresses();
-
 void RtSystemPortInit() {
-    // 0x180009c30 -- the allocator-lock Free wrapper -- was registered THREE
-    // times by three different lanes, each with its own body; the registry's
-    // last binding wins, so two were dead code and which one survived depended
-    // on init order. Consolidated to one owner in allocator.cpp.
-    RtSystemAllocatorRegisterSharedAddresses();
+    // B3R RT-Core: 0x180009c30 (the allocator-lock Free wrapper) is no longer
+    // registered -- every reader calls rtalloc::FreeLockedIgnoringSelf by name --
+    // and the Thread and SetupDir registrars went with their rows.
 
     // ENDGAME B.3.9: Timer's five (close.txt, together, B34B 4.1), Error's three
     // and Configuration's singleton are RETIRED mint rows; every reader uses the
@@ -58,12 +50,10 @@ void RtSystemPortInit() {
     n += RtSystemStringRegister();
     n += RtSystemFilenameRegister();
     n += RtSystemValueRegister();
-    n += RtSystemThreadRegister();
     n += RtSystemTimerRegister();
     n += RtSystemConfigurationRegister();
     n += RtSystemErrorRegister();
     n += RtSystemWideStringRegister();
-    n += RtSystemSetupDirHelpersRegister();
     n += RtSystemCompressionRegister();
     n += RtSystemCrcRegister();
     n += RtSystemAllocatorRegister();

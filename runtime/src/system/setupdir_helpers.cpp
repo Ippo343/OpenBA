@@ -120,14 +120,3 @@ String* RtSystem_Configuration_GetBuildName(void* self, String* ret, int build) 
 }
 
 }  // namespace RtSystem
-
-// ============================================================================
-// Registration — gated by the lane switch in rt_system_port.cpp
-// ============================================================================
-int RtSystemSetupDirHelpersRegister() {
-    using namespace RtSystem;
-    int n = 0;
-
-    printf("[RtPort]   Wave9 lane FS helpers: %d exports registered\n", n);
-    return n;
-}

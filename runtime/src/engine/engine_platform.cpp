@@ -376,14 +376,3 @@ extern "C" void RtEnginePlatformSummary() {
            "dialog-skipped=%u dialog-shown=%u\n",
            g_calls, g_deconfigure, g_skippedDlg, g_shownDlg);
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Name AND address, per the lane ENG rule: registering only the name leaves
-// ResolveAddr(Module::Runtime, 0x1800a1670) callers on the DLL. The mangled
-// name is ONE string literal on ONE line so tools/runtime_census.py and
-// tools/export_name_audit.py can both see it.
-int RtEnginePlatformRegister() {
-    return 1;
-}

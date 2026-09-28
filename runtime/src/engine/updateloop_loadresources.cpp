@@ -298,8 +298,3 @@ extern "C" void RtEngineLoadResourcesSummary() {
 // ============================================================================
 // Registration — name AND address, one literal per line for the census.
 // ============================================================================
-
-int RtEngineLoadResourcesRegister() {
-
-    return 1;
-}
