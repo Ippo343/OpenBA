@@ -144,8 +144,7 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
         if (child != nullptr)
             child->_parent = elem;                             // 1800d59c0
 
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                                elem->_children._size + 1,
                                                made);          // 1800d59d9
 
@@ -153,12 +152,12 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
             n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
-    // The PRIVATE `FindCheckBoxes(InternalPtr<Element>)` (0x1800d5750) — a
-    // widgets_input.cpp door (fragment pass); retail passes the address of a
-    // SECOND stack slot holding the element (RULE B6-11).
+    // The PRIVATE `FindCheckBoxes(InternalPtr<Element>)` (0x1800d5750);
+    // retail passes the address of a SECOND stack slot holding the element
+    // (RULE B6-11).
     void* self2 = elem;                                        // 1800d59fe
-    using FindCheckBoxesFn = void (*)(void* elem, void** root);
-    rtdesc::RtAddr<FindCheckBoxesFn>(0x1800d5750ull)(elem, &self2);   // 1800d5a0b
+    elem->FindCheckBoxes(                                      // 1800d5a0b
+        reinterpret_cast<Object::InternalPtr<Element>*>(&self2));   // B.3.x bridge
 
     const int32_t want = _activeRadio;
     if (want != elem->_activeIndex) {                          // 1800d5a13

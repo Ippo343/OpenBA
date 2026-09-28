@@ -110,9 +110,8 @@ bool ImageDescription::Serialize(void* streamv) {
     rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1801184fa
 
-    using FieldSerFn = void (*)(void* field, rtdesc::Serializer* ser);
-    rtdesc::RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);   // 180118508 ExternalPtr<SpriteSheet>
-    rtdesc::RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);    // 180118516 String
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));   // 180118508 ExternalPtr<SpriteSheet>
+    StringSerialize(&_spriteName, &ser);    // 180118516 String
 
     rw->SerializeInt(_width, nullptr);
     rw->SerializeInt(_height, nullptr);

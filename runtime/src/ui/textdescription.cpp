@@ -51,14 +51,9 @@
 #include "../../types/ui/TextElement.h"
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/system/MemoryAllocator.h"
 
 namespace {
-
-// RULE B6-5: the members below resolve through namespace-scope atomics, never
-// a function-local first-call cache (UI is built on the loader thread).
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // The same two-field views the sibling *Description files carry: these bodies
 // read exactly `Stream::mode` (+0x08) and `Stream::encodingFactory` (+0x10),
@@ -158,10 +153,9 @@ bool TextDescription::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 1);  // R8D=1
     ser.readerWriter = rw;                                     // 18011ee7d
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x18003f1e0ull)(&_font, &ser);          // 18011ee8b ExternalPtr<Font>
-    RtAddr<FieldSerFn>(0x1800042a0ull)(&_stringTable2, &ser);  // 18011ee99 ExternalPtr<StringTable>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_name, &ser);          // 18011eea7 String
+    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 18011ee8b ExternalPtr<Font>
+    RtObject_ExternalPtrSerialize_StringTable(reinterpret_cast<RtObject::External**>(&_stringTable2), reinterpret_cast<rt::io::Serializer*>(&ser));  // 18011ee99 ExternalPtr<StringTable>
+    reinterpret_cast<System::String*>(&_name)->Serialize(&ser);   // 18011eea7 String 0x1800c9930
 
     rw->SerializeBool(reinterpret_cast<bool&>(_b84), nullptr);
     rw->SerializeBool(reinterpret_cast<bool&>(_b85), nullptr);
@@ -202,16 +196,15 @@ bool TextDescription::Serialize(void* streamv) {
 // reached by address (registry-first) with the handle by ADDRESS (B6-11).
 Object::InternalPtr<Element>* TextDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x100, 8);  // 18011f412 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0x100, 8);   // 18011f412 (inlined)
 
     TextElement* elem = nullptr;
     if (raw != nullptr)                                        // 18011f43d
         elem = ::new (raw) TextElement();                      // ??0TextElement 0x18011eb80
 
     void* slot = elem;                                         // 18011f44e
-    using ApplyFn = void (*)(const void* self, void** elemPtr, const void* dlg);
-    RtAddr<ApplyFn>(0x18011ef70ull)(this, &slot, dialog);      // 18011f45e
+    TextDescription::CreateInstance(                           // 18011f45e  0x18011ef70
+        reinterpret_cast<Object::InternalPtr<TextElement>*>(&slot), dialog);   // B.3.x bridge
 
     *reinterpret_cast<void**>(ret) = elem;                     // 18011f463
     return ret;

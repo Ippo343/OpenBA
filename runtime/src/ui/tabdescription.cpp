@@ -47,17 +47,16 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/TabDescription.h"
 #include "../../types/ui/TabElement.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
+#include "../../types/ui/SpriteSheet.h"
 
 #include <atomic>
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -76,14 +75,13 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 
-using MemFreeFn = void (*)(void*);
 
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*field);
+        System::MemoryAllocator::MemFree(*field);
     } else {
         *field = nullptr;
     }
@@ -95,16 +93,19 @@ void ReleaseStringField(char** field) {
 // the caller's InternalPtr local, and WHICH local matters — see the note in
 // CreateInstance.
 void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
-    // UI::Dialog::CreateElement (block B's class) — a door, by address.
-    using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-    void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, slot, childDesc);
+    // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+    // placed in the caller's slot.
+    void** made = slot;
+    new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
+        static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                static_cast<UI::ElementDescription*>(childDesc))));
 
     UI::Element* child = *reinterpret_cast<UI::Element**>(made);
     if (child != nullptr)
         child->_parent = elem;
 
-    using PushFn = void (*)(void* array, int n, const void* fill);
-    RtAddr<PushFn>(0x180076900ull)(&elem->_children, elem->_children.GetSize() + 1, made);
+    rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children, elem->_children.GetSize() + 1, made);
 
     for (UI::Element* n = elem; n != nullptr; n = n->_parent)
         n->_flags |= UI::kElementFlagNeedsSizeCalc;
@@ -119,23 +120,10 @@ void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDes
 // The MEMBERS
 // ============================================================================
 namespace {
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_getSpriteIndex{nullptr};
-// ?GetSpriteIndexFromName@SpriteSheet@UI@@ — block D's class, a door.
+// ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
 int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
-    return reinterpret_cast<GetIdxFn>(AtomicExport(
-        g_getSpriteIndex,
-        "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"))(sheet, nameStr);
+    return static_cast<const UI::SpriteSheet*>(sheet)                       // B.3.x bridge
+        ->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
 }
 }  // namespace
 
@@ -178,14 +166,13 @@ bool TabDescription::Serialize(void* streamArg) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                              // 1800da7aa
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_stripBackdropDescription, &ser);   // 1800da7b8
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_pageBackdropDescription, &ser);    // 1800da7c6
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_pageFrameDescription, &ser);       // 1800da7d4
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 1800da7e5 ExternalPtr<SpriteSheet>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_edgeLeftName, &ser);           // 1800da7f6
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_edgeMiddleName, &ser);         // 1800da807
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_edgeRightName, &ser);          // 1800da818
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_stripBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));   // 1800da7b8
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));    // 1800da7c6
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageFrameDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800da7d4
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da7e5 ExternalPtr<SpriteSheet>
+    reinterpret_cast<System::String*>(&_edgeLeftName)->Serialize(&ser);           // 1800da7f6
+    reinterpret_cast<System::String*>(&_edgeMiddleName)->Serialize(&ser);         // 1800da807
+    reinterpret_cast<System::String*>(&_edgeRightName)->Serialize(&ser);          // 1800da818
 
     rw->SerializeInt(_gap, nullptr);
 
@@ -193,8 +180,7 @@ bool TabDescription::Serialize(void* streamArg) {
     rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                                        // 1800da85a (re-read)
-        using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x18004cdf0ull)(&_tabsData, n);               // 1800da86b
+        rtcoll::RtColl_ArraySetSize_18004cdf0(&_tabsData, n);               // 1800da86b
     }
 
     // The pair loop: BOTH halves of every element, through ONE array-data
@@ -202,8 +188,8 @@ bool TabDescription::Serialize(void* streamArg) {
     // which is safe here only because SetSize has already finished.
     uint8_t* tab = reinterpret_cast<uint8_t*>(_tabsData);
     for (int32_t i = 0; i < n; ++i, tab += 0x10) {                      // 1800da87d / 1800da8a3
-        RtAddr<FieldSerFn>(0x180038f90ull)(tab,       &ser);            // 1800da889
-        RtAddr<FieldSerFn>(0x180038f90ull)(tab + 8,   &ser);            // 1800da897
+        RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da889
+        RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab + 8), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da897
     }
 
     if (rw != nullptr) {                                                // 1800da8ad
@@ -234,8 +220,7 @@ bool TabDescription::Serialize(void* streamArg) {
 // +0xa0 goes to _gap.
 Object::InternalPtr<Element>* TabDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x108, 8);          // 1800da454 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0x108, 8);          // 1800da454 (inlined)
 
     TabElement* elem = nullptr;
     if (raw != nullptr)                                                 // 1800da481
@@ -298,8 +283,7 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
 // ExternalPtrs at +0x68..+0x80 are not released.
 TabDescription::~TabDescription() {
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x18004cc90ull)(p + 0xa8);             // 1800da90c
+    rtcoll::RtColl_ArrayDtor_18004cc90(p + 0xa8);             // 1800da90c
     ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 1800da912
     ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 1800da945
     ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 1800da977

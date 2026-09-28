@@ -134,12 +134,10 @@ bool GroupDescription::Serialize(void* streamv) {
     rw->SerializeInt(n, nullptr);                              // 180117d66
 
     if (ser.stream->mode == 0) {                               // 180117d6c (re-read)
-        using SetSizeFn = void (*)(void* array, int n);
-        rtdesc::RtAddr<SetSizeFn>(0x1800492d0ull)(&_children, n);   // 180117d7f
+        rtcoll::RtColl_ArraySetSize_1800492d0(&_children, n);   // 180117d7f
     }
 
-    using ElemSerFn = void (*)(rtdesc::Serializer* ser, int count, void* data);
-    rtdesc::RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _children._data);
+    RtObject_ExternalPtrArraySerialize_ElementDescription(IoSer(&ser), n, ExtArray(_children._data));
 
     if (rw != nullptr) delete rw;                    // 180117d9c
     return true;                                               // MOV AL,1
@@ -194,8 +192,7 @@ Object::InternalPtr<Element>* GroupDescription::CreateInstance(
 
         // Array<Element*>::SetSize(&elem->_children, size + 1, made) — the
         // three-argument (fill) form, ported as array.cpp's kSpec_Fill8Z.
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                                elem->_children._size + 1,
                                                made);          // 180117ea9
 

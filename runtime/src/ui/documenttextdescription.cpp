@@ -50,6 +50,7 @@
 #include "description_common.h"
 #include "../../types/ui/DocumentTextDescription.h"
 #include "../../types/ui/DocumentTextElement.h"
+#include "../../types/ui/StringTable.h"
 
 namespace {
 
@@ -106,23 +107,20 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
     Serializer ser = { stream, nullptr };                   // [RBP-0x18], [RBP-0x10]
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    using FieldSerFn   = void (*)(void*, Serializer*);
-    using SetSizeFn    = void (*)(void*, int32_t);
-    using ArraySerFn   = void (*)(Serializer*, int32_t, void*);
 
-    RtAddr<FieldSerFn>(0x1800042a0ull)(&_documentStringTable, &ser);   // 1800cf8ff ExternalPtr<StringTable>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_documentTextName, &ser);      // 1800cf90c System::String
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);           // 1800cf919 ExternalPtr<SpriteSheet>
+    RtObject_ExternalPtrSerialize_StringTable(ExtField(&_documentStringTable), IoSer(&ser));   // 1800cf8ff ExternalPtr<StringTable>
+    StringSerialize(&_documentTextName, &ser);      // 1800cf90c System::String
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));           // 1800cf919 ExternalPtr<SpriteSheet>
 
     int32_t n;                                              // [RBP+0x10], the scratch
 
     n = _frameNamesCount;                                   // 1800cf91e
     rw->SerializeInt(n, nullptr);                           // 1800cf935
     if (ser.stream->mode == 0)                              // 1800cf93b re-read
-        RtAddr<SetSizeFn>(0x180029a80ull)(&_frameNamesData, n);        // 1800cf94f
-    RtAddr<ArraySerFn>(0x180029bb0ull)(&ser, n, _frameNamesData);
+        rtcoll::RtColl_ArraySetSize_180029a80(&_frameNamesData, n);        // 1800cf94f
+    RtIo_SerializeStringArray(&ser, n, _frameNamesData, nullptr);   // 0x180029bb0 (4th: unused)
 
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_underlineSpriteName, &ser);   // 1800cf972 System::String
+    StringSerialize(&_underlineSpriteName, &ser);   // 1800cf972 System::String
 
     rw->SerializeUInt(_linkColor, nullptr);                 // 1800cf988
     rw->SerializeUInt(_linkHoverColor, nullptr);            // 1800cf99f
@@ -133,19 +131,19 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
     n = _fontsCount;                                        // 1800cf9ea
     rw->SerializeInt(n, nullptr);                           // 1800cfa01
     if (ser.stream->mode == 0)                              // 1800cfa07
-        RtAddr<SetSizeFn>(0x18003e600ull)(&_fontsData, n);  // 1800cfa1b
-    RtAddr<ArraySerFn>(0x18003e710ull)(&ser, n, _fontsData);
+        rtcoll::RtColl_ArraySetSize_18003e600(&_fontsData, n);  // 1800cfa1b
+    RtObject_ExternalPtrArraySerialize_Font(IoSer(&ser), n, ExtArray(_fontsData));
 
     n = _sheetsCount;                                       // 1800cfa33
     rw->SerializeInt(n, nullptr);                           // 1800cfa4a
     if (ser.stream->mode == 0)                              // 1800cfa50
-        RtAddr<SetSizeFn>(0x18003ea50ull)(&_sheetsData, n); // 1800cfa64
-    RtAddr<ArraySerFn>(0x18003eb60ull)(&ser, n, _sheetsData);
+        rtcoll::RtColl_ArraySetSize_18003ea50(&_sheetsData, n); // 1800cfa64
+    RtObject_ExternalPtrArraySerialize_SpriteSheet(IoSer(&ser), n, ExtArray(_sheetsData));
 
     n = _colorsCount;                                       // 1800cfa7c
     rw->SerializeInt(n, nullptr);                           // 1800cfa93
     if (ser.stream->mode == 0)                              // 1800cfa99
-        RtAddr<SetSizeFn>(0x18003eea0ull)(&_colorsData, n); // 1800cfaad
+        rtcoll::RtColl_ArraySetSize_18003eea0(&_colorsData, n); // 1800cfaad
     {
         // The hand-rolled int loop, walking the array's data pointer read
         // AFTER the SetSize call (`MOV RBX,[RSI+0xd0]` at 0x1800cfab2).
@@ -156,7 +154,7 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
         }
     }
 
-    RtAddr<FieldSerFn>(0x18003dc90ull)(&_resourceList, &ser);   // 1800cfae9
+    RtObject_ExternalPtrSerialize_ExternalList(ExtField(&_resourceList), IoSer(&ser));   // 1800cfae9
 
     if (rw != nullptr) delete rw;                 // 1800cfb00
     return true;
@@ -214,8 +212,8 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
         void* table = _documentStringTable;                 // 1800cf555
         uint64_t idxSlot;                                   // [RSP+0x30], see below
         if (table != nullptr) {                             // 1800cf559
-            using FontIdxFn = int32_t (*)(const void*, const void*);
-            const int32_t idx = RtAddr<FontIdxFn>(0x180002470ull)(table, &_documentTextName);
+            const int32_t idx = static_cast<const StringTable*>(table)       // B.3.x bridge
+                ->GetIndexFromName(*reinterpret_cast<const System::String*>(&_documentTextName));
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);   // 1800cf56a DWORD store
         } else {
             const int32_t minusOne = -1;
@@ -229,8 +227,7 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
 
     element->Get()->_spriteSheet = _spriteSheet;            // 1800cf58e / 1800cf595
     {
-        using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x1800370c0ull)(
+        rtcoll::RtColl_ArraySetSize_1800370c0(
             &element->Get()->_frameTableData, _frameNamesCount);        // 1800cf59c / 1800cf5ac
     }
 
@@ -260,9 +257,8 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
     element->Get()->_wrapWidth        = _wrapWidth;
 
     {
-        using AssignFn = void (*)(void*, const void*);
-        RtAddr<AssignFn>(0x18003ce30ull)(&element->Get()->_fontsData, &_fontsData);    // 1800cf69a / 1800cf6ab
-        RtAddr<AssignFn>(0x18003cf20ull)(&element->Get()->_sheetsData, &_sheetsData);  // 1800cf6b0 / 1800cf6c1
+        rtcoll::RtColl_ArrayAssign_18003ce30(&element->Get()->_fontsData, &_fontsData);    // 1800cf69a / 1800cf6ab
+        rtcoll::RtColl_ArrayAssign_18003cf20(&element->Get()->_sheetsData, &_sheetsData);  // 1800cf6b0 / 1800cf6c1
     }
 
     // ---- the open-coded Array<int> copy -------------------------------------
@@ -328,11 +324,10 @@ namespace UI {
 // ~ImageDescription has.
 DocumentTextDescription::~DocumentTextDescription() {
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x18003db40ull)(p + 0xd0);          // 1800cfb57
-    RtAddr<ArrayDtorFn>(0x18003da00ull)(p + 0xc0);          // 1800cfb64
-    RtAddr<ArrayDtorFn>(0x18003d8c0ull)(p + 0xb0);          // 1800cfb71
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(p + 0x88);          // 1800cfb7e  element-destroying
+    rtcoll::RtColl_ArrayDtor_18003db40(p + 0xd0);          // 1800cfb57
+    rtcoll::RtColl_ArrayDtor_18003da00(p + 0xc0);          // 1800cfb64
+    rtcoll::RtColl_ArrayDtor_18003d8c0(p + 0xb0);          // 1800cfb71
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(p + 0x88);          // 1800cfb7e  element-destroying
     ReleaseStringField(p, 0x80);                            // 1800cfb84
     ReleaseStringField(p, 0x70);                            // 1800cfbba
 }

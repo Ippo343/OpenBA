@@ -125,10 +125,9 @@ bool BorderDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };                   // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);  // 18010fe62 / 18010fe67
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser); // 18010fe78 ExternalPtr<SpriteSheet>
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 18010fe78
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
-        RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName[i], &ser);
+        StringSerialize(&_spriteName[i], &ser);             // 0x1800c9930
 
     if (rw != nullptr) delete rw;                 // 18010ff23
     return true;                                            // MOV AL,1

@@ -70,32 +70,12 @@
 #include "../../types/ui/LayoutDescription.h"
 #include "../../types/ui/LayoutElement.h"
 #include "../../types/io/Serializer.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/ui/Dialog.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 namespace {
-
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_memFree{nullptr};
-
-using MemFreeFn = void (*)(void*);
-MemFreeFn MemFree() {
-    return reinterpret_cast<MemFreeFn>(AtomicExport(
-        g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-}
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -171,15 +151,16 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t coun
     if (count <= 0) return;                                    // 180043f50
     Serializer* ser = static_cast<Serializer*>(serv);
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
     // The ReaderWriter is re-read from the Serializer for every field, as retail does.
     auto rw = [ser]() { return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter); };  // B.3.x bridge
 
     for (int32_t i = 0; i < count; ++i, ++e) {
-        RtAddr<FieldSerFn>(0x180038f90ull)(&e->desc, ser);         // 180043f77
-        RtAddr<FieldSerFn>(0x1800c9930ull)(&e->name, ser);         // 180043f83
-        RtAddr<FieldSerFn>(0x1800c9930ull)(&e->relativeToX, ser);  // 180043f8e
-        RtAddr<FieldSerFn>(0x1800c9930ull)(&e->relativeToY, ser);  // 180043f9a
+        RtObject_ExternalPtrSerialize_ElementDescription(                       // 180043f77
+            reinterpret_cast<RtObject::External**>(&e->desc),                   // B.3.x bridge
+            reinterpret_cast<rt::io::Serializer*>(ser));                        // B.3.x bridge
+        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);         // 180043f83
+        reinterpret_cast<System::String*>(&e->relativeToX)->Serialize(ser);  // 180043f8e
+        reinterpret_cast<System::String*>(&e->relativeToY)->Serialize(ser);  // 180043f9a
 
         rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->horizontal), nullptr);          // +0x98
         rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->vertical), nullptr);            // +0x98
@@ -230,12 +211,10 @@ bool LayoutDescription::Serialize(void* streamv) {
     rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 1800d39b1 (re-read)
-        using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x180043d80ull)(&_entries, n);       // 1800d39bf
+        rtcoll::RtColl_ArraySetSize_180043d80(&_entries, n);       // 1800d39bf
     }
 
-    using EntriesSerFn = void (*)(Serializer* ser, int32_t count, void* data);
-    RtAddr<EntriesSerFn>(0x180043f50ull)(&ser, n, _entries._data);   // 1800d39d1
+    RtUi_LayoutDescription_SerializeEntries(&ser, n, _entries._data);   // 1800d39d1 0x180043f50
 
     if (rw != nullptr) {                                       // 1800d39df
         delete rw;
@@ -287,8 +266,7 @@ bool LayoutDescription::Serialize(void* streamv) {
 //          both sentinels exist and why they are not interchangeable.
 Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd0, 8);   // 1800d33ee (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0xd0, 8);    // 1800d33ee (inlined)
 
     // Retail inlines ??0LayoutElement (0x1800d3421 .. 0x1800d343b): the real ctor.
     LayoutElement* elem = nullptr;
@@ -303,8 +281,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
     struct { int32_t* data; int32_t size; int32_t capacity; } order = { nullptr, 0, 0 };
     {
         const int32_t minusOne = -1;                           // 1800d346a
-        using FillSetSizeFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<FillSetSizeFn>(0x180023830ull)(&order, _entries._size, &minusOne);  // 1800d347d
+        rtcoll::RtColl_ArraySetSizeFill_180023830(&order, _entries._size, &minusOne);  // 1800d347d
     }
 
     const Entry* const entriesBase = _entries._data;
@@ -318,14 +295,17 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
         ++placed;                                              // 1800d34f4
 
         void* childDesc = entriesBase[index].desc;             // 1800d3500
-        using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-        void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, &slot, childDesc);
+        // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+        // placed in the caller's slot.
+        void** made = &slot;
+        new (static_cast<void*>(made)) Object::InternalPtr<Element>(
+            dialog->CreateElement(Object::ExternalPtr<ElementDescription>(
+                static_cast<ElementDescription*>(childDesc))));
 
         Element* child = static_cast<Element*>(*made);         // 1800d3514
         if (child != nullptr) child->_parent = elem;           // 1800d351c
 
-        using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+        rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                        elem->_children.GetSize() + 1, made);   // 1800d3533
 
         for (Element* n = elem; n != nullptr; n = n->_parent)  // 1800d3540..1800d3554
@@ -347,8 +327,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
         const uint64_t zero = 0;
         __builtin_memcpy(&info.sizeX, &zero, sizeof zero);     // 1800d3581  UNALIGNED QWORD
 
-        using InfoPushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<InfoPushFn>(0x180043b40ull)(&elem->_childRecords,
+        rtcoll::RtColl_ArraySetSizeFill_180043b40(&elem->_childRecords,
                                            elem->_childRecords._size + 1,
                                            &info);             // 1800d359a
     };
@@ -429,7 +408,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
     // The order table's buffer is freed through MemoryAllocator::Free under the
     // allocator's own critical section (0x1800d38d7..0x1800d3906), the same
     // sequence ?MemFree@MemoryAllocator@System@@ is.
-    if (order.data != nullptr) MemFree()(order.data);          // 1800d38d2
+    if (order.data != nullptr) System::MemoryAllocator::MemFree(order.data);   // 1800d38d2
     order.data = nullptr;                                      // 1800d390c
     order.size = 0;                                            // 1800d3910
     order.capacity = 0;
@@ -444,8 +423,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
 // afterwards is a no-op. The restamps, the base's _textName (+0x60) and the
 // tail JMP into ~External are the compiler's chain.
 LayoutDescription::~LayoutDescription() {
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180043a00ull)(&_entries);           // 1800d3a34
+    rtcoll::RtColl_ArrayDtorElem_180043a00(&_entries);           // 1800d3a34
 }
 
 // ?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ 0x180042e30 --

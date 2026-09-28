@@ -96,9 +96,8 @@ bool ButtonDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
     for (int i = 0; i < 5; ++i)                            // 18011142f .. 180111476
-        RtAddr<FieldSerFn>(0x180038f90ull)(&_childDesc[i], &ser);
+        RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc[i]), IoSer(&ser));
 
     rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word90), nullptr); // 18011147b .. 1801114d5
     rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word94), nullptr);

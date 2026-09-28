@@ -45,17 +45,15 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/SpinnerDescription.h"
 #include "../../types/ui/SpinnerElement.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 #include <atomic>
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -77,16 +75,19 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // 0x1800d87a6, 0x1800d87f6 — the same instructions with a different source
 // field each time).
 void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
-    // UI::Dialog::CreateElement (block B's class) — a door, by address.
-    using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-    void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, slot, childDesc);
+    // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
+    // placed in the caller's slot.
+    void** made = slot;
+    new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
+        static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                static_cast<UI::ElementDescription*>(childDesc))));
 
     UI::Element* child = *reinterpret_cast<UI::Element**>(made);
     if (child != nullptr)
         child->_parent = elem;
 
-    using PushFn = void (*)(void* array, int n, const void* fill);
-    RtAddr<PushFn>(0x180076900ull)(&elem->_children, elem->_children.GetSize() + 1, made);
+    rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children, elem->_children.GetSize() + 1, made);
 
     for (UI::Element* n = elem; n != nullptr; n = n->_parent)
         n->_flags |= UI::kElementFlagNeedsSizeCalc;
@@ -99,9 +100,6 @@ void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDes
 // ============================================================================
 // The MEMBERS
 // ============================================================================
-namespace {
-}  // namespace
-
 namespace UI {
 
 // [3] 0x1800d8940
@@ -135,10 +133,9 @@ bool SpinnerDescription::Serialize(void* streamArg) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                              // 1800d88ca
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_editDescription, &ser);        // 1800d88d8
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_upDescription, &ser);          // 1800d88e6
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_downDescription, &ser);        // 1800d88f4
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_editDescription), reinterpret_cast<rt::io::Serializer*>(&ser));        // 1800d88d8
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_upDescription), reinterpret_cast<rt::io::Serializer*>(&ser));          // 1800d88e6
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_downDescription), reinterpret_cast<rt::io::Serializer*>(&ser));        // 1800d88f4
 
     rw->SerializeInt(_increment, nullptr);
 
@@ -157,8 +154,7 @@ bool SpinnerDescription::Serialize(void* streamArg) {
 // stores are retail's and both are here.
 Object::InternalPtr<Element>* SpinnerDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xc8, 8);           // 1800d86f2 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0xc8, 8);           // 1800d86f2 (inlined)
 
     SpinnerElement* elem = static_cast<SpinnerElement*>(raw);
     if (raw != nullptr)                                                 // 1800d871d

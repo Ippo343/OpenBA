@@ -74,9 +74,8 @@ bool GraphDescription::Serialize(void* streamArg) {
     rw->SerializeInt(_tickSize, nullptr);                               // 1800d1ab8
     rw->SerializeUInt(_unknown74, nullptr);                             // 1800d1acd
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 1800d1adc ExternalPtr<SpriteSheet>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);             // 1800d1aed System::String
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));            // 1800d1adc ExternalPtr<SpriteSheet>
+    StringSerialize(&_spriteName, &ser);             // 1800d1aed System::String
 
     if (rw != nullptr) delete rw;                             // 1800d1b05
     return true;

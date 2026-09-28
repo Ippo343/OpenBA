@@ -43,6 +43,10 @@
 #include "../../types/ui/ElementDescription.h"   // UI::ElementDescription (B.3.6)
 #include "../../types/ui/Dialog.h"               // UI::Dialog::CreateElement (fragment pass F2)
 #include "../../types/ui/SpriteSheet.h"          // UI::SpriteSheet::GetSpriteIndexFromName (F2)
+#include "../../types/system/MemoryAllocator.h"  // B3R RT-UI: MemAlloc / MemFree, direct
+#include "../../types/system/String.h"           // B3R RT-UI: String::Serialize, direct
+#include "../../types/collection/Collection.h"   // B3R RT-UI: the rtcoll bodies, direct
+#include "../../types/io/Serializer.h"           // B3R RT-UI: RtIo_SerializeStringArray
 #include <new>
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -105,17 +109,36 @@ inline void** VTableOf(const void* o) {
 // taking the name as a runtime argument would cache the first class's vtable
 // and hand it to all ten.
 
+// B3R RT-UI: `?MemFree@MemoryAllocator@System@@` (0x1800c7ad0), called
+// directly (B3R_RULES R9, correction 1).
 inline void MemFree(void* p) {
-    using MemFreeFn = void (*)(void*);
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    System::MemoryAllocator::MemFree(p);
 }
 // The locked Enter/Allocate/Leave triple every CreateInstance inlines
 // (`?_singleton@MemoryAllocator@System@@` + 0x640, EnterCriticalSection,
 // 0x1800c6e60, LeaveCriticalSection) has one out-of-line twin, 0x1800c7a50,
 // checked instruction by instruction by runtime/src/ui/factory_ui1.cpp.
 inline void* MemAlloc(uint64_t bytes, int align) {
-    using MemAllocFn = void* (*)(uint64_t, int);
-    return RtAddr<MemAllocFn>(0x1800c7a50ull)(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
+}
+
+// ---- B3R RT-UI: the argument bridges of the direct field-serializer calls ---
+// The `Object::ExternalPtr<T>::Serialize` bodies (runtime/types/object/External.h)
+// take the field as `RtObject::External**` and the PAIR as `rt::io::Serializer*`;
+// every caller here holds them as the raw field and this file's `Serializer`.
+inline RtObject::External** ExtField(void* field) {
+    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
+}
+inline RtObject::External** ExtArray(void* data) {
+    return reinterpret_cast<RtObject::External**>(data);                   // B.3.x bridge
+}
+inline rt::io::Serializer* IoSer(Serializer* ser) {
+    return reinterpret_cast<rt::io::Serializer*>(ser);                     // B.3.x bridge
+}
+// `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930) on a
+// raw System::String field.
+inline void StringSerialize(void* field, Serializer* ser) {
+    static_cast<System::String*>(field)->Serialize(ser);                   // B.3.x bridge
 }
 
 // ---- fragment 1/2: the reader-writer the encoding factory hands back --------
@@ -161,8 +184,7 @@ inline void AttachAndPushChild(uint8_t* parent, void** made) {
     uint8_t* child = *reinterpret_cast<uint8_t**>(made);
     if (child != nullptr)
         *reinterpret_cast<void**>(child + kElemParent) = parent;
-    using PushFn = void (*)(void* array, int n, const void* fill);
-    RtAddr<PushFn>(0x180076900ull)(
+    rtcoll::RtColl_ArraySetSizeFill_180076900(
         parent + kElemChildren,
         *reinterpret_cast<int32_t*>(parent + kElemChildren + 8) + 1,
         made);

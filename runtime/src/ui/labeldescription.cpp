@@ -75,9 +75,8 @@ bool LabelDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser); // 1800d287b ExternalPtr<SpriteSheet>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);  // 1800d288c System::String
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 1800d287b ExternalPtr<SpriteSheet>
+    StringSerialize(&_spriteName, &ser);  // 1800d288c System::String
 
     rw->SerializeUInt(_word90, nullptr);                     // 1800d28a3
     rw->SerializeUInt(_word94, nullptr);                     // 1800d28bb
@@ -116,8 +115,8 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
         elem = ::new (raw) LabelElement();                   // 1800d2722 ??0LabelElement
 
     void* slot = elem;                                       // 1800d272a
-    using TextApplyFn = void (*)(const void*, void**, const void*);
-    RtAddr<TextApplyFn>(0x18011ef70ull)(this, &slot, dialog);  // 1800d273a
+    TextDescription::CreateInstance(                         // 1800d273a  0x18011ef70
+        reinterpret_cast<Object::InternalPtr<TextElement>*>(&slot), dialog);   // B.3.x bridge
 
     {
         SpriteSheet* sheet = _spriteSheet;                   // 1800d273f

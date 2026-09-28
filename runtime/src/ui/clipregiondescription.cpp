@@ -81,8 +81,7 @@ bool ClipRegionDescription::Serialize(void* streamv) {
     rw->SerializeInt(_width, nullptr);                      // 1800cc06e
     rw->SerializeInt(_height, nullptr);                     // 1800cc083
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_childDesc, &ser);  // 1800cc092
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), IoSer(&ser));  // 1800cc092
 
     if (rw != nullptr) delete rw;                 // 1800cc0aa
     return true;

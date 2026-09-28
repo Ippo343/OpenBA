@@ -98,10 +98,9 @@ bool ContainerDescription::Serialize(void* streamv) {
     rw->SerializeInt(_requestedHeight, nullptr);            // 1800ccf43
     rw->SerializeInt(_barSize, nullptr);                    // 1800ccf58
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[0], &ser);   // 1800ccf5e
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[1], &ser);   // 1800ccf6c
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[2], &ser);   // 1800ccf7d
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[0]), IoSer(&ser));   // 1800ccf5e
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[1]), IoSer(&ser));   // 1800ccf6c
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[2]), IoSer(&ser));   // 1800ccf7d
 
     rw->SerializeBool(reinterpret_cast<bool&>(_clampWidth), nullptr); // 1800ccf9d
     rw->SerializeBool(reinterpret_cast<bool&>(_clampHeight), nullptr); // 1800ccfaf
@@ -201,8 +200,7 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
     slot = clip;                                            // 1800ccdca
     clipElem->_parent = container;                          // 1800ccdcf
     {
-        using PushFn = void (*)(void*, int, const void*);
-        RtAddr<PushFn>(0x180076900ull)(
+        rtcoll::RtColl_ArraySetSizeFill_180076900(
             &container->_children, container->_children.GetSize() + 1, &slot);  // 1800ccdea
         container->SetNeedsSizeCalc();                      // 1800ccdf2
     }

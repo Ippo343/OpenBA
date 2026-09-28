@@ -53,11 +53,9 @@
 #include "../../types/ui/NumberDescription.h"
 #include "../../types/ui/NumberElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/system/MemoryAllocator.h"
 
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -119,8 +117,7 @@ bool NumberDescription::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 180118e7a
 
-    using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x18003f1e0ull)(&_font, &ser);          // 180118e88
+    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 180118e88
 
     rw->SerializeUInt(_u70, nullptr);
     rw->SerializeInt(_i74, nullptr);
@@ -146,8 +143,7 @@ bool NumberDescription::Serialize(void* streamv) {
 // (+0xd8), _f78 -> _floatValue (+0xdc), _b7c -> _showSign (+0xe0).
 Object::InternalPtr<Element>* NumberDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* /*dialog*/) const {
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xe8, 8);   // 180118f51 (inlined)
+    void* raw = System::MemoryAllocator::MemAlloc(0xe8, 8);    // 180118f51 (inlined)
 
     NumberElement* elem = nullptr;
     if (raw != nullptr)                                        // 180118f7c

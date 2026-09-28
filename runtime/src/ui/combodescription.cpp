@@ -52,32 +52,13 @@
 #include "description_common.h"
 #include "../../types/ui/ComboDescription.h"
 #include "../../types/ui/ComboElement.h"
+#include "../../types/ui/String.h"
+#include "../../types/ui/UserInterface.h"
+#include "../../types/ui/DialogInstance.h"
 
 namespace {
 
 using namespace rtdesc;
-
-// RULE B6-5: namespace-scope atomic door caches, never a function-local static
-// inside a member (see buttondescription.cpp).
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_memFree{nullptr};
-
-// rtdesc::MemFree's twin without its function-local cache (it runs inside a
-// member body on the loader thread).
-void MemFreeAtomic(void* p) {
-    using MemFreeFn = void (*)(void*);
-    reinterpret_cast<MemFreeFn>(AtomicResolve(
-        g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
-}
 
 }  // namespace
 
@@ -112,10 +93,9 @@ bool ComboDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_listDesc, &ser);    // 180112a1b
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_itemDesc, &ser);    // 180112a2c
-    RtAddr<FieldSerFn>(0x1800042a0ull)(&_stringTable, &ser); // 180112a3d
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_listDesc), IoSer(&ser));    // 180112a1b
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_itemDesc), IoSer(&ser));    // 180112a2c
+    RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), IoSer(&ser)); // 180112a3d
 
     if (rw != nullptr) delete rw;                 // 180112a55
     return true;
@@ -178,18 +158,17 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
                 // applier used, which is why it has to be one variable.
                 struct UiString { const void* table; int32_t index; int32_t _pad; };
                 UiString key = { table, i, 0 };             // [RSP+0x28]/[RSP+0x30]
-                using ToSysStringFn = void** (*)(const void*, void**);
-                RtAddr<ToSysStringFn>(0x180035020ull)(&key, &slot);  // 180112b68
+                new (static_cast<void*>(&slot)) System::String(       // 180112b68 retslot
+                    reinterpret_cast<const UI::String*>(&key)->operator System::String());  // B.3.x bridge
 
                 struct SpriteFill { void* sheet; int32_t index; int32_t _pad; };
                 SpriteFill spriteFill = { nullptr, -1, 0 }; // 180112b6e / 180112b73
 
-                using FillSetSizeFn = void (*)(void*, int, const void*);
-                RtAddr<FillSetSizeFn>(0x180034860ull)(
+                rtcoll::RtColl_ArraySetSizeFill_180034860(
                     &elem->_strings, elem->_strings._size + 1, &slot);          // 180112b92
-                RtAddr<FillSetSizeFn>(0x18004bfc0ull)(
+                rtcoll::RtColl_ArraySetSizeFill_18004bfc0(
                     &elem->_sprites, elem->_sprites._size + 1, &spriteFill);    // 180112bab
-                RtAddr<FillSetSizeFn>(0x180024fe0ull)(
+                rtcoll::RtColl_ArraySetSizeFill_180024fe0(
                     &elem->_userData, elem->_userData._size + 1, &userDataFill); // 180112bc7
 
                 // The temporary System::String, released in place in the slot.
@@ -199,7 +178,7 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
                         --*reinterpret_cast<int32_t*>(s - 4);
                         if (*reinterpret_cast<int32_t*>(s - 4) == 0) {
                             s = s - 8;                      // 180112beb
-                            MemFreeAtomic(s);
+                            MemFree(s);
                         } else {
                             s = nullptr;                    // 180112bfe
                         }
@@ -215,19 +194,16 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
         void* open = elem->_openDialog;
         if (open != nullptr) {                              // 180112c1f
             slot = open;                                    // 180112c24
-            using CloseDialogFn = void (*)(void*, void**);
-            RtAddr<CloseDialogFn>(0x180120f20ull)(
-                *reinterpret_cast<void**>(static_cast<uint8_t*>(open) + 0x10),
-                &slot);                                     // 180112c38
+            reinterpret_cast<UserInterface*>(                   // B.3.x bridge
+                *reinterpret_cast<void**>(static_cast<uint8_t*>(open) + 0x10))
+                ->CloseDialog(reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&slot));  // 180112c38
             elem->_openDialog = nullptr;                    // 180112c3d
         }
 
         if (elem->_currentItem != 0) {                      // 180112c44
             elem->_currentItem = 0;                         // 180112c4d
-            // ComboElement::UpdateText (0x180112180) — widgets_input.cpp's
-            // door, reached by address (see the banner).
-            using ComboElemFn = void (*)(void*);
-            RtAddr<ComboElemFn>(0x180112180ull)(elem);      // 180112c57
+            // ComboElement::UpdateText (0x180112180).
+            elem->UpdateText();                             // 180112c57
         }
     }
 

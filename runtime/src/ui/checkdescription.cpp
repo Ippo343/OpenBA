@@ -86,8 +86,7 @@ bool CheckDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(&_checkDesc, &ser); // 18011198b
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_checkDesc), IoSer(&ser)); // 18011198b
 
     if (rw != nullptr) delete rw;                // 1801119a3
     return true;

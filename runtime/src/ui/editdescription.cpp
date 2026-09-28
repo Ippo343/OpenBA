@@ -38,27 +38,9 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: member bodies resolve through namespace-scope atomics (same
-// contract as element_common.h's rtuielem::AtomicExport, which cannot be
-// included beside description_common.h — both declare Module).
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_memFreeSlot{nullptr};
-
-// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z through an atomic slot:
-// description_common.h's rtdesc::MemFree keeps a first-call static, which a
-// MEMBER body may not reach (RULE B6-5).
+// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0), called directly.
 void FreeStringBlock(void* p) {
-    using MemFreeFn = void (*)(void*);
-    reinterpret_cast<MemFreeFn>(AtomicExport(
-        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // The refcounted System::String RELEASE (retail's asymmetry: the freeing
@@ -128,14 +110,13 @@ bool EditDescription::Serialize(void* streamv) {
     Serializer ser = { stream, nullptr };
     IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x18003f1e0ull)(&_ptr68, &ser);       // 1800d1168
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_string70, &ser);    // 1800d1176
+    RtObject_ExternalPtrSerialize_Font(ExtField(&_ptr68), IoSer(&ser));       // 1800d1168
+    StringSerialize(&_string70, &ser);    // 1800d1176
 
     rw->SerializeInt(_word78, nullptr);                      // 1800d118a
     rw->SerializeBool(reinterpret_cast<bool&>(_flag7c), nullptr); // 1800d119f
 
-    RtAddr<FieldSerFn>(0x1800c9930ull)(&_string80, &ser);    // 1800d11ae
+    StringSerialize(&_string80, &ser);    // 1800d11ae
 
     if (rw != nullptr) delete rw;                  // 1800d11c6
     return true;
