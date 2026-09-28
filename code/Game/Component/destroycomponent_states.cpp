@@ -70,6 +70,7 @@
 
 #include "engine_funcs.h"
 #include "Work/ClearStorage.h"   // B.3.8 CB1a (Vtable)
+#include "Work/Work.h"           // B.3.x W0: Work::GetPriority by name
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/DestroyDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7628 cell class
 #include "Component/ModelDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7a88 cell class
@@ -238,10 +239,9 @@ static char Destroy_ReclaimPending_ea20(int64_t yard) {
     if (!node) return 0;
     void** vt = *reinterpret_cast<void***>(node);
     if (!vt) return 0;
-    typedef char (*fn_slot58_t)(void*);
-    fn_slot58_t fn = reinterpret_cast<fn_slot58_t>(
-        *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(vt) + 0x58));
-    return fn ? fn(node) : 0;
+    // `node` is the gw+0x118 scheduler's work (id map filled by CitizenAI_impl_88a0
+    // 0x1400f88a0 with the posted Work leaves); retail reads AL.
+    return static_cast<char>(reinterpret_cast<Work*>(node)->GetPriority());   // B.3.x bridge (slot 11)
 }
 
 // ============================================================

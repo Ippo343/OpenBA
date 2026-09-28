@@ -278,10 +278,10 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
         }
         uint64_t t = 0;
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, 0.0f);
-        // (**(code**)(*mesh + 0x40))(mesh, &time) — MeshInstance::Update vtable slot +0x40.
-        typedef void (*VFnUpdate_t)(int64_t* self, void* time);
-        VFnUpdate_t vfn = (VFnUpdate_t)(*(uintptr_t*)(*(uintptr_t*)mesh + 0x40));
-        if (vfn) vfn(mesh, &t);
+        // (**(code**)(*mesh + 0x40))(mesh, &time): `mesh` is the COMPONENT (its
+        // Geometry is mesh+0x28; +0x10 entity / +0x20 flags below), so +0x40 is
+        // Component::Tick, not MeshInstance::Update.
+        reinterpret_cast<Component*>(mesh)->Tick(&t);   // B.3.x bridge (slot 8)
         uint32_t old4 = *(uint32_t*)(mesh + 4);   // FRESH after Update
         uint32_t new4 = old4 | 4;
         *(uint32_t*)(mesh + 4) = new4;

@@ -102,7 +102,7 @@ void Pf_ActStackWalkClear_4f10(void* param_1, void* param_2) {
         if (*reinterpret_cast<char*>(obj + 0x18) != '\0') {
             int64_t* plVar2 = *reinterpret_cast<int64_t**>(param_2);
             *reinterpret_cast<uint8_t*>(plVar2 + 3) = 0;  // byte at obj+0x18
-            (*reinterpret_cast<void(**)(int64_t*, void*)>(*plVar2 + 0x38))(plVar2, param_1);
+            reinterpret_cast<Action*>(plVar2)->Exit(param_1);   // B.3.x bridge (slot 7)
         }
         lVar1 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x10);
         *reinterpret_cast<int64_t*>(param_2) = lVar1;
@@ -364,7 +364,7 @@ void Pf_SetFlagRefreshUpdate_107260(int64_t* param_1) {
         if (s_fn_taskCleanup) s_fn_taskCleanup(reinterpret_cast<void*>(local_res8 + 0x48));
         uint64_t timeStore = 0;
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStore, 0.0f);
-        (*reinterpret_cast<void(**)(int64_t*, void*)>(*param_1 + 0x48))(param_1, &timeStore);
+        reinterpret_cast<Component*>(param_1)->Update(&timeStore);   // B.3.x bridge (slot 9)
     }
 }
 
@@ -418,8 +418,7 @@ int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2) {
             int64_t arr = *reinterpret_cast<int64_t*>(param_2 + 0x28);
             uint32_t wantTid = RawMaterialDescription::TypeId();
             void* child = *reinterpret_cast<void**>(arr + byteOff);
-            uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(
-                *reinterpret_cast<int64_t*>(child) + 0x10))(child);
+            uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
             if (tid == wantTid) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(param_2 + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + static_cast<int64_t>(iVar) * 8);

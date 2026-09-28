@@ -234,7 +234,7 @@ int  HuntAnimal::Execute(void* actionStack, void* time) {
 //    d. Find HerdComponent from the found entity
 //    e. Start herd migration
 
-void HuntAnimal::Enter() {
+void HuntAnimal::Enter(void*, void*) {
 
     // If hunt already started, return early
     if (_field38 != 0) {

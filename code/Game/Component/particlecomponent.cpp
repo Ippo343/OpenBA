@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include <new>
 #include "graphics/ParticleInstance.h"   // ENDGAME B.3.9 SS2: ParticleInstance::_frameIndex
+#include "graphics/Particle.h"           // B.3.x W0: Particle::CreateSystem by name
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
@@ -299,13 +300,13 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
     reinterpret_cast<Graphics::Geometry*>(ge->geo)
         ->SetTransform(*reinterpret_cast<const Math::Transform*>(finalTf));   // B.3.5 bridge
 
-    // Configure the instance from its ParticleSystem resource (vtable+0x48)
+    // Configure the instance from its ParticleSystem resource (slot 9, +0x48).
+    // ge->geo is the concrete ParticleSystemInstance CreateSystem built (Setup);
+    // ParticleInstance itself is abstract, so no live object has a pure slot here.
+    Graphics::ParticleInstance* inst = reinterpret_cast<Graphics::ParticleInstance*>(ge->geo);   // B.3.x bridge
     void* res = *(void**)(elem + 0);
-    void** vt = *(void***)ge->geo;
-    if (res && vt && vt[9]) {
-        typedef void (*fn_setSystem_t)(void*, void*);
-        ((fn_setSystem_t)vt[9])(ge->geo, res);
-    }
+    if (res)
+        inst->SetParticle(Graphics::ExternalPtrHandle{res});   // slot 9
 
     ge->sceneId = -1;
     ge->nodeIdx = (elem[0x10] != 0) ? followIdx : -1;
@@ -313,12 +314,12 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
 
     // Prewarm: tick the emitter forward by t0 (elem+0x18) in engine fixed steps
     int64_t t0 = *(int64_t*)(elem + 0x18);
-    if (t0 > 0 && ::Engine::MainLoop::_singleton && vt && vt[1]) {
+    if (t0 > 0 && ::Engine::MainLoop::_singleton) {
         int64_t step = *(int64_t*)((uintptr_t)::Engine::MainLoop::_singleton + 0x48);
         if (step > 0) {
-            typedef void (*fn_geoUpdate_t)(void*, void*);
             for (int64_t acc = step; ; acc += step) {
-                ((fn_geoUpdate_t)vt[1])(ge->geo, &step);
+                static_cast<Graphics::Geometry*>(inst)->Update(
+                    *reinterpret_cast<const System::Time*>(&step));   // slot 1
                 if (acc >= t0) break;
             }
         }
@@ -379,11 +380,8 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
 
     // Initial Update(Time(0)) then add to the scene
     int64_t zeroTime = 0;
-    void** vt = *(void***)ge->geo;
-    if (vt && vt[1]) {
-        typedef void (*fn_geoUpdate_t)(void*, void*);
-        ((fn_geoUpdate_t)vt[1])(ge->geo, &zeroTime);
-    }
+    reinterpret_cast<Graphics::Geometry*>(ge->geo)->Update(
+        *reinterpret_cast<const System::Time*>(&zeroTime));   // B.3.x bridge (slot 1)
     {
         ge->sceneId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
             ->AddObject(reinterpret_cast<Graphics::Geometry*>(ge->geo));   // B.3.5 bridge
@@ -451,12 +449,9 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
         void* res = *(void**)(emArr + (size_t)i * 0x28);
         void* inst = nullptr;
         if (res) {
-            // ParticleSystem resource vtable+0x40 = CreateInstance (Runtime-side)
-            void** rvt = *(void***)res;
-            if (rvt && rvt[8]) {
-                typedef void* (*fn_createInst_t)(void*);
-                inst = ((fn_createInst_t)rvt[8])(res);
-            }
+            // Graphics::Particle slot 8 (+0x40) CreateSystem: pure in Particle,
+            // filled by the concrete ParticleSystem every resource is.
+            inst = reinterpret_cast<const Graphics::Particle*>(res)->CreateSystem();   // B.3.x bridge (slot 8)
         }
         // A null here is FATAL LATER, not here: ParticleComponent_Draw (slot 6 OnAdded)
         // reads geoArr[i].geo->+0x7C with no test, exactly as retail 0x140053029 does,
@@ -901,11 +896,8 @@ void ParticleComponent::Tick(void* time) {
                 *(float*)(g + 0x7c) = op;
                 *(float*)(g + 0x80) = op;
             }
-            void** vt = *(void***)ge->geo;
-            if (vt && vt[1]) {
-                typedef void (*fn_geoUpdate_t)(void*, void*);
-                ((fn_geoUpdate_t)vt[1])(ge->geo, time);
-            }
+            reinterpret_cast<Graphics::Geometry*>(ge->geo)->Update(
+                *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
         }
     }
 }

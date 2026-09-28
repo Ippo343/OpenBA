@@ -38,6 +38,7 @@
 // Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
+#include "Component/Component.h"   // B.3.x W0: Component::OnEvent by name
 #include "Work/Work.h"   // B.3.8 CB1a (Vtable)
 #include "Work/ClearArea.h"   // B.3.8 CB1a (Vtable)
 #include "resolve.h"
@@ -468,9 +469,7 @@ static void ClearArea_BroadcastEvent(void* ownerEntity, uint32_t ev) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        void** vt = *reinterpret_cast<void***>(comp);
-        void* fn = vt ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(vt) + 0x60) : nullptr;
-        if (fn) reinterpret_cast<void(*)(void*, uint32_t)>(fn)(comp, ev);
+        reinterpret_cast<Component*>(comp)->OnEvent(static_cast<int>(ev));   // B.3.x bridge (slot 12)
     }
 }
 

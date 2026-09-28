@@ -26,10 +26,10 @@
 //        `[vt+0x38](node, stack)`)   [8] 0x1400c4a30 `RET 0`
 //   [9] 0x1400c4a40 `XOR AL,AL; RET`
 //
-// SLOT NAMES 4-9 are the tree's (the exe has no symbols; B38 B8-6). Argument
-// lists of 6 and 8 are the tree's C bodies' (B38_RULES §6 NOT VERIFIED); 4, 5
-// and 7 are the executor's (citizenai_executor.cpp:82-100, asm 0x1400c4ced /
-// 0x1400c4d57 / 0x1400c4ddc).
+// SLOT NAMES 4-9 are the tree's (the exe has no symbols; B38 B8-6). The argument
+// list of 8 is the tree's C body's (B38_RULES §6 NOT VERIFIED); 4, 5 and 7 are
+// the executor's (citizenai_executor.cpp:82-100, asm 0x1400c4ced / 0x1400c4d57 /
+// 0x1400c4ddc); 6 is 0x1400c4f80's (B3X W0, below).
 //
 // LAYOUT: Object::Internal (0x10) + InternalBasePtr +0x10 + bool +0x18 = 0x20.
 // ============================================================================
@@ -51,7 +51,11 @@ public:
     void        Persist(void* stream) override;                   // [3] 0x1400c4b40
     virtual int  AbstractImpl(void* actionStack) = 0;             // [4] _purecall
     virtual int  Execute(void* actionStack, void* time);          // [5] 0x1400c4a90 ret 0
-    virtual void Enter();                                         // [6] 0x1400c4b90 RET
+    // [6] args from retail's only caller, Character_UpdateAnimation 0x1400c4f80:
+    // RDX = the action stack (CharacterComponent+0x48, `MOV RDX,RSI` 0x1400c4fc4),
+    // R8 = the Time* CharacterComponent::Update got in RDX (`MOV R8,RDI` 0x1400c4fbe)
+    // before `CALL [RAX+0x30]` 0x1400c4fc7. The bodies read neither.
+    virtual void Enter(void* actionStack, void* time);            // [6] 0x1400c4b90 RET
     virtual void Exit(void* actionStack);                         // [7] 0x1400c4ba0 RET
     virtual void CheckEntity();                                   // [8] 0x1400c4a30 RET
     virtual bool GetTarget(void* param);                          // [9] 0x1400c4a40 ret false

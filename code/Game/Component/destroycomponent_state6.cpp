@@ -79,6 +79,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Action/Action.h"  // B.3.x W0: Action slots 8/9 by name
 
 // ============================================================
 // Tracing
@@ -197,22 +198,9 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
     int count = *reinterpret_cast<int*>(st + 8);
     if (count <= 0) return;
 
-    // STANDALONE: our action vtables are partially-filled arrays. Calling an unported
-    // slot 8/9 would jump through null; retail's are always real functions.
-    auto slotOf = [](void* act, int idx) -> void* {
-        void** vt = *reinterpret_cast<void***>(act);
-        return vt ? vt[idx] : nullptr;
-    };
-    static bool s_warnedSlot = false;
-    auto warnSlot = [&](int idx) {
-        if (s_warnedSlot) return;
-        s_warnedSlot = true;
-        std::fprintf(stderr, "[Collapse] action-abort SKIPPED an action whose vtable "
-                             "slot %d (+0x%x) is null — unported in standalone\n",
-                     idx, idx * 8);
-        std::fflush(stderr);
-    };
-
+    // Action slots 9 (GetTarget, +0x48) and 8 (CheckEntity, +0x40) by name: every
+    // Action has a compiler table (Action.h bodies 0x1400c4a40 / 0x1400c4a30), so the
+    // old null-slot skip of the partially-filled standalone arrays is gone.
     void** items = *reinterpret_cast<void***>(st);
     if (!items) return;
 
@@ -222,10 +210,8 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
         if (!act) continue;
         act = items[i];
         if (!act) continue;
-        void* fn = slotOf(act, 9);                 // +0x48 ReferencesEntity
-        if (!fn) { warnSlot(9); continue; }
         void* entityCopy = *pEntityIbp;            // retail copies the raw ptr to a local
-        hit = reinterpret_cast<char (*)(void*, void*)>(fn)(act, &entityCopy) != 0;
+        hit = reinterpret_cast<Action*>(act)->GetTarget(&entityCopy);   // B.3.x bridge (slot 9)
     }
     if (!hit) return;
 
@@ -233,9 +219,7 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
         void* cur = items[i];
         if (!cur) continue;
         for (void* p = cur; p != nullptr; ) {
-            void* fn = slotOf(p, 8);               // +0x40 Abort
-            if (!fn) { warnSlot(8); break; }
-            reinterpret_cast<void (*)(void*)>(fn)(p);
+            reinterpret_cast<Action*>(p)->CheckEntity();   // B.3.x bridge (slot 8, the file's "Abort")
             p = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(p) + 0x10);
         }
         if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(&items[i])->DeletePtr(
