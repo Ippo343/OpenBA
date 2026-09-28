@@ -28,8 +28,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_constants.h"
 
 // ============================================================
 // 1. SortByPriority (0x14002fe10)
@@ -83,50 +86,24 @@ void CitizenAI_SortByPriority(void* base, int count) {
 // from StorageComponent, which is why both feed StorageComponent::QueryCount and
 // the confusion is easy to miss.)
 //
-// FindComponent_Residence(entity, outIBP) -> InternalBasePtr* (0x140008090)
-typedef void* (*fn_FindComponentStorage_t)(int64_t entity, void* outIBP);
-// FindComponent_Storage(entity, outIBP) -> InternalBasePtr* (0x140006270)
-typedef void* (*fn_FindComponentCarry_t)(int64_t entity, void* outIBP);
-// Storage_GetResourceCount(storageComp) -> int (0x14012a9d0)
-typedef int (*fn_GetResourceCount_t)(int64_t storageComp);
-// Storage_GetResourceCount2(storageComp) -> int (0x14012ab00)
-typedef int (*fn_GetResourceCount2_t)(int64_t storageComp);
-// StorageComponent_QueryCount(storageComp) -> int (0x14012cf10)
-typedef int (*fn_StorageQueryCount_t)(int64_t storageComp);
-// CitizenComponent_CanFindHousing(citizenComp) -> char (0x140115be0)
-typedef char (*fn_CanFindHousing_t)(int64_t citizenComp);
-
-static fn_FindComponentStorage_t s_fn_FindComponentStorage = nullptr;  // 8090 residence
-static fn_FindComponentCarry_t    s_fn_FindComponentCarry   = nullptr;  // 6270 storage
-static fn_GetResourceCount_t      s_fn_GetResourceCount     = nullptr;
-static fn_GetResourceCount2_t     s_fn_GetResourceCount2    = nullptr;
-static fn_StorageQueryCount_t     s_fn_StorageQueryCount    = nullptr;
-static fn_CanFindHousing_t        s_fn_CanFindHousing       = nullptr;
-
-// Wander-time .rdata float constants (read by BuildCandidateStateList case 0xc).
-static float* s_pf_1721fc = nullptr;   // DAT_1401721fc  (75.0)
-static float* s_pf_172234 = nullptr;   // DAT_140172234  (300.0)
-static float* s_pf_172254 = nullptr;   // _DAT_140172254 (1800.0)
-
-static bool s_resolved = false;
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_fn_FindComponentStorage = reinterpret_cast<fn_FindComponentStorage_t>(
-        ResolveAddr(Module::Exe, 0x140008090));
-    s_fn_FindComponentCarry = reinterpret_cast<fn_FindComponentCarry_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_GetResourceCount = reinterpret_cast<fn_GetResourceCount_t>(
-        ResolveAddr(Module::Exe, 0x14012a9d0));
-    s_fn_GetResourceCount2 = reinterpret_cast<fn_GetResourceCount2_t>(
-        ResolveAddr(Module::Exe, 0x14012ab00));
-    s_fn_StorageQueryCount = reinterpret_cast<fn_StorageQueryCount_t>(
-        ResolveAddr(Module::Exe, 0x14012cf10));
-    s_fn_CanFindHousing = reinterpret_cast<fn_CanFindHousing_t>(
-        ResolveAddr(Module::Exe, 0x140115be0));
-    s_pf_1721fc = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721fc));
-    s_pf_172234 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172234));
-    s_pf_172254 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172254));
-    s_resolved = true;
+// Called by name:
+//   FindComponent_Residence(entity, outIBP) -> InternalBasePtr* (0x140008090)
+//     CitizenComp_Entity_FindComponent_Storage
+//   FindComponent_Storage(entity, outIBP) -> InternalBasePtr* (0x140006270)
+//     WorkBase_FindComponent_6270
+//   Storage_GetResourceCount(storageComp) -> int (0x14012a9d0)
+//     CitizenComp_Storage_GetResourceCount
+//   Storage_GetResourceCount2(storageComp) -> int (0x14012ab00)
+//   StorageComponent_QueryCount(storageComp) -> int (0x14012cf10)
+//     CitizenComp_StorageComponent_QueryCount
+//   CitizenComponent_CanFindHousing(citizenComp) -> char (0x140115be0)
+//     CitizenComp_CanFindHousing
+// Wander-time .rdata float constants (read by BuildCandidateStateList case 0xc):
+// kRdata_1401721fc (75.0), kRdata_140172234 (300.0), kRdata_140172254 (1800.0, bits).
+static inline float RdataF(uint32_t bits) {
+    float f;
+    std::memcpy(&f, &bits, sizeof f);
+    return f;
 }
 
 // ============================================================
@@ -147,22 +124,18 @@ static void EnsureResolved() {
 //  Both resolve to the same storage component — ported faithfully.)
 // ============================================================
 int CitizenComp_HasSufficientResources(int64_t self) {
-    EnsureResolved();
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     if (*reinterpret_cast<int64_t*>(p + 0x238) == 0) return 0;
 
     // local_res8 = first find (feeds GetResourceCount + row scan)
     int64_t local_res8 = 0;
-    if (s_fn_FindComponentStorage)
-        s_fn_FindComponentStorage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
+    CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
 
     int64_t lVar3desc = *reinterpret_cast<int64_t*>(p + 0x288);  // CitizenDescription
 
     // local_res10 = second find (feeds the per-slot requirement read)
     int64_t local_res10 = 0;
-    void* self2 = nullptr;
-    if (s_fn_FindComponentStorage)
-        self2 = s_fn_FindComponentStorage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res10);
+    void* self2 = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res10);
 
     // iVar2 = *(int*)( *(int64*)(*self2 + 0x50) + 8 + citizen[+0x240]*0x10 )
     // [STANDALONE GUARD] FindComponentStorage returns a non-null IBP wrapper but a
@@ -196,7 +169,7 @@ int CitizenComp_HasSufficientResources(int64_t self) {
         } while (lVar6 != 0);
     }
 
-    int iVar4 = s_fn_GetResourceCount ? s_fn_GetResourceCount(lVar3) : 0;
+    int iVar4 = CitizenComp_Storage_GetResourceCount(lVar3);
     return (iVar7 * iVar2 * factor <= iVar4) ? 1 : 0;
 }
 
@@ -210,13 +183,11 @@ int CitizenComp_HasSufficientResources(int64_t self) {
 //   return (float)iVar6 * desc[+0xd4] <= (float)iVar3       (COMISS / SETNC)
 // ============================================================
 int CitizenComp_HasSufficientResources2(int64_t self) {
-    EnsureResolved();
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     if (*reinterpret_cast<int64_t*>(p + 0x238) == 0) return 0;
 
     int64_t local_res8 = 0;
-    if (s_fn_FindComponentStorage)
-        s_fn_FindComponentStorage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
+    CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
 
     int64_t lVar2 = local_res8;                                   // storage obj
     int64_t lVar1desc = *reinterpret_cast<int64_t*>(p + 0x288);   // CitizenDescription
@@ -234,7 +205,7 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
         } while (lVar5 != 0);
     }
 
-    int iVar3 = s_fn_GetResourceCount2 ? s_fn_GetResourceCount2(lVar2) : 0;
+    int iVar3 = Storage_GetResourceCount2(lVar2);
     float threshold = *reinterpret_cast<float*>(lVar1desc + 0xd4);
     // Distribution diagnostic (firewood-evenness): per-house fuel sufficiency
     // inputs — occupied roster rows x CitizenDesc+0xd4 vs fuel units on hand.
@@ -269,14 +240,11 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
 //   140115dfb: CALL 0x140006270
 // ============================================================
 int CitizenComp_GetHappiness(int64_t self) {
-    EnsureResolved();
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     void* local_res8[4] = {nullptr, nullptr, nullptr, nullptr};
 
-    if (s_fn_FindComponentCarry)
-        s_fn_FindComponentCarry(*reinterpret_cast<int64_t*>(p + 0x10),
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(p + 0x10),
                                 reinterpret_cast<void*>(local_res8));
-    if (!s_fn_StorageQueryCount) return 0;
     // Standalone: the citizen's own-entity StorageComponent find returns null when
     // its type-id global is unfilled (the recurring keystone-B pattern). The real
     // game always has a carry-inventory storage here; guard so QueryCount(null) -
@@ -301,7 +269,7 @@ int CitizenComp_GetHappiness(int64_t self) {
         }
         return 0;
     }
-    return s_fn_StorageQueryCount(reinterpret_cast<int64_t>(local_res8[0]));
+    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(local_res8[0]));
 }
 
 // ============================================================
@@ -393,7 +361,6 @@ static void AppendCandidate(int64_t* L, int id, int prio) {
 }
 
 void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param3) {
-    EnsureResolved();
     uint8_t* base = reinterpret_cast<uint8_t*>(selfV);   // CitizenAIComponent
     void* self = base + 0x38;                             // sibling CitizenComponent IBP
 
@@ -446,8 +413,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     cz = *reinterpret_cast<int64_t*>(self);
     if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {
         // FindHousing (id 2, prio 7) if CanFindHousing
-        char canHouse = s_fn_CanFindHousing
-            ? s_fn_CanFindHousing(*reinterpret_cast<int64_t*>(self)) : 0;
+        char canHouse = CitizenComp_CanFindHousing(*reinterpret_cast<int64_t*>(self));
         if (canHouse != '\0') AppendCandidate(outList, 2, 7);
 
         // Education (id 3, prio 3) if cz[+0x1e4] == 0
@@ -481,7 +447,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         // (cz.desc[+0xb8] in (cz[+0x80],..] and AsSeconds(self.acc@+0xc0) > DAT_1721fc)
         float fv1 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xb8);
         float* pf1 = reinterpret_cast<float*>(cz + 0x80);
-        float c1721fc = s_pf_1721fc ? *s_pf_1721fc : 0.0f;
+        float c1721fc = kRdata_1401721fc;
         if ((*pf1 <= fv1 && fv1 != *pf1) &&
             (reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c1721fc)) {   // B.3.4b bridge
             leisure = true;
@@ -491,7 +457,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             cz = *reinterpret_cast<int64_t*>(self);
             float fv2 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xb4);
             float* pf2 = reinterpret_cast<float*>(cz + 0x80);
-            float c172234 = s_pf_172234 ? *s_pf_172234 : 0.0f;
+            float c172234 = kRdata_140172234;
             if ((*pf2 <= fv2 && fv2 != *pf2) &&
                 (reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c172234)) {   // B.3.4b bridge
                 leisure = true;
@@ -499,7 +465,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         }
         if (!leisure) {
             // OR AsSeconds(self.acc) > DAT_172254
-            float c172254 = s_pf_172254 ? *s_pf_172254 : 0.0f;
+            float c172254 = RdataF(kRdata_140172254);
             if (reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c172254) leisure = true;   // B.3.4b bridge
         }
         // id 0xc both ways; only the priority differs (2 when tripped, 0 otherwise).
@@ -595,8 +561,8 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             if (happy >= 1) {
                 // Time t(DAT_172234); prio = (t < self.acc@+0xc8) ? 3 : 1
                 int64_t timeBuf = 0;
-                float c172234 = s_pf_172234 ? *s_pf_172234 : 0.0f;
-                if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeBuf, c172234);
+                float c172234 = kRdata_140172234;
+                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeBuf), c172234);
                 int64_t acc = *reinterpret_cast<int64_t*>(base + 0xc8);
                 ltpPrio = (timeBuf < acc) ? 3 : 1;
                 AppendCandidate(outList, 0xd, ltpPrio);
@@ -645,57 +611,44 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
 // ------------------------------------------------------------
 // if (*(int64*)(self + state*8 + 0x40) < 1) { switch(state){ dispatch handler } }
 // return (low byte). Cooldown gate at self+0x40 indexed by state (8-byte stride).
-// Each handler resolved via ResolveAddr; if the resolved ptr is NULL (not yet
-// ported/registered in standalone), SKIP and return 0 (required — handlers land
-// in a later wave). Case 0xd passes *(self+0x38), not self.
+// Each case calls its handler directly (all fourteen are ported). Case 0xd passes
+// *(self+0x38), not self.
 // ============================================================
-
-// Per-case handler typedefs (from the decompile).
-typedef uint64_t (*fn_StateHandler_t)(int64_t self);        // most cases: (self) -> ulonglong/bool
-typedef uint64_t (*fn_StateHandlerPtr_t)(void* internal);   // case 0xd: (*(self+0x38)) -> *
 
 int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
     uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
 
     // Cooldown gate: *(int64*)(self + state*8 + 0x40) < 1
     if (*reinterpret_cast<int64_t*>(base + (int64_t)state * 8 + 0x40) < 1) {
-        uintptr_t addr = 0;
+        const int64_t self = reinterpret_cast<int64_t>(base);
+        uint64_t r = 0;
         switch (state) {
-            case 0:  case 0xe: addr = 0x14010cd80; break;  // EAT/GetFood (Ghidra "AdultTransition"=MISNOMER; +0x44=hunger, drains via msg2->EatFromStorage 0x1401152e0)
-            case 1:  case 0xf: addr = 0x14010d2c0; break;  // DRINK/GetWater (Ghidra "ElderTransition"=MISNOMER; +0x48=thirst)
-            case 2:            addr = 0x14010b340; break;  // FindHousing
-            case 3:            addr = 0x14010c360; break;  // Education
-            case 4:            addr = 0x14010c890; break;  // GrowUp
-            case 5:            addr = 0x14010d790; break;  // Work
-            case 6:            addr = 0x14010bc90; break;  // GatherResources
-            case 7:            addr = 0x14010b3e0; break;  // GatherResources2
-            case 8:            addr = 0x14010c580; break;  // SeekHappiness
-            case 9:            addr = 0x14010b2d0; break;  // Idle
-            case 10:           addr = 0x14010d560; break;  // FindWork
-            case 0xb:          addr = 0x14010a2b0; break;  // Wander
-            case 0xc:          addr = 0x14010a560; break;  // Leisure
-            case 0xd:          addr = 0x140115e60; break;  // LongTermPlan (special: arg = *(self+0x38))
+            case 0:  case 0xe: r = CitizenAI_State_AdultTransition(self); break;  // 0x14010cd80 EAT/GetFood (Ghidra "AdultTransition"=MISNOMER; +0x44=hunger, drains via msg2->EatFromStorage 0x1401152e0)
+            case 1:  case 0xf: r = CitizenAI_State_ElderTransition(self); break;  // 0x14010d2c0 DRINK/GetWater (Ghidra "ElderTransition"=MISNOMER; +0x48=thirst)
+            case 2:            r = CitizenAI_State_FindHousing(self); break;      // 0x14010b340
+            case 3:            r = CitizenAI_State_Education(self); break;        // 0x14010c360
+            case 4:            r = CitizenAI_State_GrowUp(self); break;           // 0x14010c890
+            case 5:            r = CitizenAI_State_Work(self); break;             // 0x14010d790
+            case 6:            r = CitizenAI_State_GatherResources(self); break;  // 0x14010bc90
+            case 7:            r = CitizenAI_State_GatherResources2(self); break; // 0x14010b3e0
+            case 8:            r = CitizenAI_State_SeekHappiness(self); break;    // 0x14010c580
+            case 9:            r = CitizenAI_State_Idle(self); break;             // 0x14010b2d0
+            case 10:           r = CitizenAI_State_FindWork(self); break;         // 0x14010d560
+            case 0xb:
+                // 0x14010a2b0 Wander: returns a bool in the low byte.
+                return CitizenAI_State_Wander(self) ? 1 : 0;
+            case 0xc:          r = CitizenAI_State_Leisure(self); break;          // 0x14010a560
+            case 0xd: {
+                // 0x140115e60 LongTermPlan: CheckPtr(self+0x38); handler(*(self+0x38));
+                // the original returns CONCAT71(.., 1) -> low byte always 1.
+                void* internal = *reinterpret_cast<void**>(base + 0x38);
+                CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(internal));
+                return 1;
+            }
             default: return 0;
         }
 
-        void* fp = reinterpret_cast<void*>(ResolveAddr(Module::Exe, addr));
-        if (!fp) return 0;   // handler not yet ported/registered -> skip
-
-        if (state == 0xd) {
-            // case 0xd: CheckPtr(self+0x38); ret = handler(*(self+0x38)); return low byte 1.
-            void* internal = *reinterpret_cast<void**>(base + 0x38);
-            (reinterpret_cast<fn_StateHandlerPtr_t>(fp))(internal);
-            return 1;   // original returns CONCAT71(.., 1) -> low byte always 1
-        }
-
-        if (state == 0xb) {
-            // case 0xb returns a bool in low byte.
-            bool r = (bool)(reinterpret_cast<fn_StateHandler_t>(fp))((int64_t)base);
-            return r ? 1 : 0;
-        }
-
         // all other cases: return the handler's low byte directly.
-        uint64_t r = (reinterpret_cast<fn_StateHandler_t>(fp))((int64_t)base);
         return (int)(r & 0xff);
     }
 
