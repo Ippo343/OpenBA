@@ -143,7 +143,7 @@ public:
     virtual bool  EnumerateInterfaces() = 0;
     virtual bool  CreateDevice() = 0;
     virtual void  Shutdown() = 0;
-    virtual void  Slot4() = 0;
+    virtual void  Slot4(bool loading) = 0;   // retail DL (Engine::Loader::Run 0x1800dbfc0)
     virtual float Slot5() = 0;
     virtual bool  Slot6() = 0;
     virtual bool  Slot7() = 0;
@@ -171,7 +171,7 @@ public:
     bool  EnumerateInterfaces() override { Note(this, 1);  return true; }
     bool  CreateDevice() override        { Note(this, 2);  return true; }
     void  Shutdown() override            { Note(this, 3); }
-    void  Slot4() override               { Note(this, 4); }
+    void  Slot4(bool loading) override   { Note(this, 4, loading); }
     float Slot5() override               { Note(this, 5);  return 0.0f; }
     bool  Slot6() override               { Note(this, 6);  return false; }
     bool  Slot7() override               { Note(this, 7);  return true; }
@@ -261,7 +261,8 @@ UNIT_TEST(video_companion_data_slot_order) {
     Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x08)(d);  CHECK_EQ(g_lastMark, 1);
     Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x10)(d);  CHECK_EQ(g_lastMark, 2);
     Reset(); SlotAt<void (*)(void*), MirrorDeviceData>(d, 0x18)(d);  CHECK_EQ(g_lastMark, 3);
-    Reset(); SlotAt<void (*)(void*), MirrorDeviceData>(d, 0x20)(d);  CHECK_EQ(g_lastMark, 4);
+    Reset(); SlotAt<void (*)(void*, bool), MirrorDeviceData>(d, 0x20)(d, true);
+    CHECK_EQ(g_lastMark, 4); CHECK_EQ(g_lastArg, 1);
     Reset(); SlotAt<float (*)(void*), MirrorDeviceData>(d, 0x28)(d); CHECK_EQ(g_lastMark, 5);
     Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x30)(d);  CHECK_EQ(g_lastMark, 6);
     Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x38)(d);  CHECK_EQ(g_lastMark, 7);
