@@ -16,98 +16,14 @@
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
 
-// application.cpp (no Win32)
-bool RtApp_IsPaused(const App* self);
-void RtApp_Quit(App* self);
-
-// application_win.cpp (Win32 platform seam)
-bool RtApp_PlatformUpdate(App* self);
-void RtApp_SleepThread(App* self, int ms);
-void RtApp_YieldToThreads(App* self);
-void RtApp_EnableCursor(App* self, bool enabled);
-bool RtApp_LaunchProcess(App* self, const char* cmd, bool wait);
-
-// application_accessors.cpp (no Win32) -- Wave 12 lane A
-App* RtApp_Get();
-void* RtApp_GetInstance(const App* self);
-void* RtApp_GetWindow(const App* self);
-uint8_t RtApp_IsCursorEnabled(App* self);   // RAW BYTE, not a normalised bool -- see its banner
-bool RtApp_PlatformIsPaused(const App* self);
-void RtApp_PlatformDestruct(App* self);
-
-// application_thunks.cpp -- Wave 12 lane A
-bool RtApp_Update(App* self);
-void RtApp_Shutdown(App* self);
-bool RtApp_Startup(App* self);
-
-extern "C" void RtApp_PlatformConstruct(App* self, void* platformHandle);
-
-// platform_startup_win.cpp (Win32 platform seam; lives beside PlatformStartup
-// because the two share the `kClassName` literal — see its banner)
-extern "C" void RtApp_PlatformShutdown(App* self);
-
 // application_lifecycle.cpp (no Win32) — Wave 12 lane B
 extern "C" void          RtApp_Dtor(App* self);
-extern "C" App*  RtApp_CopyCtor(App* self, const App* other);
-extern "C" App*  RtApp_Assign(App* self, const App* other);
 extern "C" void          RtApp_SetDestroyTree(void* self, rtsetavl::Node* n);
-extern "C" rtsetavl::Node* RtApp_SetCloneTree(void* self, const rtsetavl::Node* src);
-extern "C" void          RtApp_SetClear(rtsetavl::Set* set);
 
 void RtApplicationPortInit() {
     int n = 0;
-    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
-    // static from here on (name door, address door, manifest publish).
-
-    RegisterRuntimeExport("?IsPaused@Application@1@QEAA_NXZ", (void*)&RtApp_IsPaused); ++n;
-    RegisterRuntimeAddr(0x18009f4e0, (void*)&RtApp_IsPaused);
-
-    RegisterRuntimeExport("?Quit@Application@1@QEAAXXZ", (void*)&RtApp_Quit); ++n;
-    RegisterRuntimeAddr(0x18009f4d0, (void*)&RtApp_Quit);
-
-    RegisterRuntimeExport("?PlatformUpdate@Application@1@AEAA_NXZ", (void*)&RtApp_PlatformUpdate); ++n;
-    RegisterRuntimeAddr(0x18009fdf0, (void*)&RtApp_PlatformUpdate);
-
-    RegisterRuntimeExport("?SleepThread@Application@1@QEAAXH@Z", (void*)&RtApp_SleepThread); ++n;
-    RegisterRuntimeAddr(0x18009f850, (void*)&RtApp_SleepThread);
-
-    RegisterRuntimeExport("?YieldToThreads@Application@1@QEAAXXZ", (void*)&RtApp_YieldToThreads); ++n;
-    RegisterRuntimeAddr(0x18009f920, (void*)&RtApp_YieldToThreads);
-
-    // Wave 12 lane A -- the nine trivial-body exports.
-    RegisterRuntimeExport("?Get@Application@1@SAPEAV11@XZ", (void*)&RtApp_Get); ++n;
-    RegisterRuntimeAddr(0x18000a2f0, (void*)&RtApp_Get);
-
-    RegisterRuntimeExport("?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ", (void*)&RtApp_GetInstance); ++n;
-    RegisterRuntimeAddr(0x18009fb90, (void*)&RtApp_GetInstance);
-
-    RegisterRuntimeExport("?GetWindow@Application@1@QEBAPEAUHWND__@@XZ", (void*)&RtApp_GetWindow); ++n;
-    RegisterRuntimeAddr(0x18009fba0, (void*)&RtApp_GetWindow);
-
-    RegisterRuntimeExport("?IsCursorEnabled@Application@1@QEAA_NXZ", (void*)&RtApp_IsCursorEnabled); ++n;
-    RegisterRuntimeAddr(0x18000a0c0, (void*)&RtApp_IsCursorEnabled);
-
-    RegisterRuntimeExport("?PlatformIsPaused@Application@1@AEAA_NXZ", (void*)&RtApp_PlatformIsPaused); ++n;
-    RegisterRuntimeAddr(0x18009fe80, (void*)&RtApp_PlatformIsPaused);
-
-    RegisterRuntimeExport("?PlatformDestruct@Application@1@AEAAXXZ", (void*)&RtApp_PlatformDestruct); ++n;
-    RegisterRuntimeAddr(0x18009fc00, (void*)&RtApp_PlatformDestruct);
-
-    RegisterRuntimeExport("?Update@Application@1@QEAA_NXZ", (void*)&RtApp_Update); ++n;
-    RegisterRuntimeAddr(0x18009f4f0, (void*)&RtApp_Update);
-
-    RegisterRuntimeExport("?Shutdown@Application@1@QEAAXXZ", (void*)&RtApp_Shutdown); ++n;
-    RegisterRuntimeAddr(0x18009f500, (void*)&RtApp_Shutdown);
-
-    RegisterRuntimeExport("?Startup@Application@1@QEAA_NXZ", (void*)&RtApp_Startup); ++n;
-    RegisterRuntimeAddr(0x18009f510, (void*)&RtApp_Startup);
-
-    // Wave 12 lane C.
-    RegisterRuntimeExport("?EnableCursor@Application@1@QEAAX_N@Z", (void*)&RtApp_EnableCursor); ++n;
-    RegisterRuntimeAddr(0x18009f800, (void*)&RtApp_EnableCursor);
-
-    RegisterRuntimeExport("?LaunchProcess@Application@1@QEAA_NPEBD_N@Z", (void*)&RtApp_LaunchProcess); ++n;
-    RegisterRuntimeAddr(0x18009f5e0, (void*)&RtApp_LaunchProcess);
+    // B3R (registry teardown, W1 RT-Core): the rows no code read by name or
+    // by address are gone; what is left has a reader elsewhere.
 
     // ---- Wave 12 lane B: the lifecycle family -----------------------------
     //
@@ -129,22 +45,6 @@ void RtApplicationPortInit() {
                           (void*)&RtApp_Dtor); ++n;
     RegisterRuntimeAddr(0x18009f520, (void*)&RtApp_Dtor);
 
-    RegisterRuntimeExport("?PlatformShutdown@Application@1@AEAAXXZ",   // ord 3393
-                          (void*)&RtApp_PlatformShutdown); ++n;
-    RegisterRuntimeAddr(0x18009fd70, (void*)&RtApp_PlatformShutdown);
-
-    RegisterRuntimeExport("?PlatformConstruct@Application@1@AEAAXPEAX@Z",  // ord 3331
-                          (void*)&RtApp_PlatformConstruct); ++n;
-    RegisterRuntimeAddr(0x18009fbe0, (void*)&RtApp_PlatformConstruct);
-
-    RegisterRuntimeExport("??0Application@0@QEAA@AEBV00@@Z",           // ord 48
-                          (void*)&RtApp_CopyCtor); ++n;
-    RegisterRuntimeAddr(0x18000a0d0, (void*)&RtApp_CopyCtor);
-
-    RegisterRuntimeExport("??4Application@0@QEAAAEAV00@AEBV00@@Z",     // ord 1050
-                          (void*)&RtApp_Assign); ++n;
-    RegisterRuntimeAddr(0x18000a160, (void*)&RtApp_Assign);
-
     // The three `Collection::Set` helpers the five bodies above are built out
     // of. ADDRESS DOORS ONLY, and that is a MEASUREMENT, not an assumption: the
     // pefile sweep over the shipped export directory returns nothing at any of
@@ -162,8 +62,6 @@ void RtApplicationPortInit() {
     // three times, with last-binding-wins deciding which body survived; adding
     // a fourth would reopen exactly that hazard.
     RegisterRuntimeAddr(0x18000a4f0, (void*)&RtApp_SetDestroyTree);
-    RegisterRuntimeAddr(0x18000a530, (void*)&RtApp_SetCloneTree);
-    RegisterRuntimeAddr(0x18000a440, (void*)&RtApp_SetClear);
 
     // ?_singleton@Application@1@0PEAV11@EA @ 0x1801fc678 — a DATA export, not
     // a function. THE REASON RECORDED HERE UNTIL WAVE 12 WAS WRONG. It used to
@@ -199,13 +97,6 @@ void RtApplicationPortInit() {
     // slot 0x140152368 to ResolveAddr(Module::Runtime, 0x1801fc678), which is
     // this exact address, read directly and confirmed against the ctor's own
     // `MOV qword ptr [0x1801fc678],RCX` store — no change needed here.
-
-    // Wave 9 lane VID2: the message-callback Set. These two are the recorded
-    // blocker for ?PlatformStartup@Device@Video@@ (the next cutover boot wall
-    // after the IO chain) AND two of the seventeen unsatisfied rows in
-    // dx11/src/devicedata.cpp's all-or-nothing import table.
-    extern int RtApplicationMessageCallbacksRegister();
-    n += RtApplicationMessageCallbacksRegister();
 
     // Wave 9 lane PLAT: the PlatformStartup family and the WindowProc that one
     // of them installs. CROSS-NAMESPACE ON PURPOSE — Achievement, Object and
