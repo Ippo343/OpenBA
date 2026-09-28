@@ -27,7 +27,12 @@
 #include "Component/CreateDragDescription.h"
 #include "Component/MapDescription.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include "Entity/componententity_funcs.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
+#include <cstring>
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -38,7 +43,7 @@
 // ============================================================
 // Returns the first component matching targetTypeId, or nullptr.
 static void* FindComponentByTypeId(uintptr_t entity, uint32_t targetTypeId) {
-    if (!entity || !fn_IsDerivedFrom) return nullptr;
+    if (!entity) return nullptr;
 
     int count = *(int*)(entity + 0x30);
     void** components = *(void***)(entity + 0x28);
@@ -51,7 +56,7 @@ static void* FindComponentByTypeId(uintptr_t entity, uint32_t targetTypeId) {
         uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == targetTypeId) {
-            if (fn_IsDerivedFrom(comp, targetTypeId)) {
+            if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
                 return comp;
             }
             break;
@@ -85,33 +90,27 @@ void DragPlacementTool::Startup() {
 }
 
 // ============================================================
-// Resolved helper function pointers (set once)
+// Helpers, called by name (Player/exe_bodies.h)
 // ============================================================
 
-// CharacterComponent_impl_f5d0: terrain validation for a single cell.
-// Checks terrain mask, height constraints, overlap flags.
-// Params: (mapPtr, col, row, terrainMask, 0.0f, heightTol, 0.0f,
-//          allowOverlap, hasExisting, entityTemplate)
-// Original: 0x14009f5d0 (CharacterComponent_impl_f5d0; was a dropped-page typo
-// 0x1400ff5d0 which is mid-function inside MainMenuDialog_helper_eec0 — Level-1
-// caller-bug fix, confirmed by the CALL at 0x1400fbcac in DragPlacementTool_Slot14)
-typedef bool (*fn_TerrainValidate_t)(void* mapPtr, uint32_t col, uint32_t row,
-    uint32_t terrainMask, float param5, float heightTol, float param7,
-    char allowOverlap, bool hasExisting, int64_t entityTemplate);
-static fn_TerrainValidate_t s_fn_TerrainValidate = nullptr;
+// PlayerPath_CharComp_f5d0 (0x14009f5d0, CharacterComponent_impl_f5d0): terrain
+// validation for a single cell. Checks terrain mask, height constraints, overlap
+// flags. Params: (mapPtr, col, row, terrainMask, 0.0f, heightTol, 0.0f,
+// allowOverlap, hasExisting, entityTemplate). (Was a dropped-page typo 0x1400ff5d0,
+// mid-function inside MainMenuDialog_helper_eec0 — confirmed by the CALL at
+// 0x1400fbcac in DragPlacementTool_Slot14.)
+static inline bool TerrainValidate(int* mapPtr, uint32_t col, uint32_t row, uint32_t terrainMask,
+                                   float p5, float heightTol, float p7, char allowOverlap,
+                                   bool hasExisting, int64_t entityTemplate) {
+    return PlayerPath_CharComp_f5d0(mapPtr, (int)col, (int)row, terrainMask, p5, heightTol, p7,
+                                    allowOverlap, (char)hasExisting, entityTemplate);
+}
 
-// DAT_140172208: float constant for height tolerance
-static float* s_pHeightTolerance = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-    s_fn_TerrainValidate = reinterpret_cast<fn_TerrainValidate_t>(
-        ResolveAddr(Module::Exe, 0x14009f5d0));
-    s_pHeightTolerance = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x140172208));
-    s_helpersResolved = true;
+// DAT_140172208 (.rdata): the height tolerance, 0x42C80000 = 100.0f.
+static inline float HeightTolerance() {
+    float f;
+    std::memcpy(&f, &kRdata_140172208, sizeof f);
+    return f;
 }
 
 // ============================================================
@@ -127,8 +126,6 @@ static void EnsureHelpers() {
 // Original: 0x1400fbae0
 int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
                                 int* outCostA, int* outCostB, int* outLength) {
-    EnsureHelpers();
-
     // Get map grid size pointer
     int* mapPtr = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
     int gridSize = *mapPtr;
@@ -163,7 +160,7 @@ int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     *outValid = 0;
     *outLength = 1;
 
-    float heightTol = s_pHeightTolerance ? *s_pHeightTolerance : 0.5f;
+    float heightTol = HeightTolerance();
 
     // Read placement description fields
     uintptr_t desc = (uintptr_t)placementDesc;
@@ -187,8 +184,8 @@ int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     for (int row = minRow; row <= maxRow && allValid; row++) {
         for (int col = minCol; col <= maxCol && allValid; col++) {
             // hasExisting = false (no occupancy grid in CalcCost, only in Draw)
-            if (s_fn_TerrainValidate) {
-                bool cellValid = s_fn_TerrainValidate(
+            {
+                bool cellValid = TerrainValidate(
                     mapPtr, (uint32_t)col, (uint32_t)row, terrainMask,
                     0.0f, heightTol, 0.0f,
                     allowOverlap, false, entityTemplate);
@@ -223,28 +220,9 @@ int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     return 3;
 }
 
-// ============================================================
-// Additional function pointers for Draw
-// ============================================================
-
-// FUN_140101270: ScreenToCell — ray-picks map cell under cursor.
-// Returns cell index (row*gridSize + col), or -1 if no hit.
-typedef int (*fn_ScreenToCell_t)(uint64_t unused);
-static fn_ScreenToCell_t s_fn_ScreenToCell = nullptr;
-
-static bool s_drawFuncsResolved = false;
-
-static void EnsureDrawFuncs() {
-    if (s_drawFuncsResolved) return;
-    s_fn_ScreenToCell = (fn_ScreenToCell_t)ResolveAddr(Module::Exe, 0x140101270);
-    if (!s_pHeightTolerance) {
-        s_pHeightTolerance = (float*)ResolveAddr(Module::Exe, 0x140172208);
-    }
-    if (!s_fn_TerrainValidate) {
-        s_fn_TerrainValidate = (fn_TerrainValidate_t)ResolveAddr(Module::Exe, 0x14009f5d0);
-    }
-    s_drawFuncsResolved = true;
-}
+// Draw also calls 0x140101270 PlayerRay_ScreenToCell_101270 (ray-picks the map cell
+// under the cursor: row*gridSize + col, or -1 if no hit) and 0x1401008c0
+// PlayerTileRender_DrawOverlay_08c0 (the tile renderer).
 
 // ============================================================
 // Tile record: 0x14 bytes, used by CharacterComponent_impl_08c0
@@ -301,11 +279,6 @@ using TileArray = Collection::Array<TileRecord>;
 //
 // Original: 0x1400fbe40
 void DragPlacementTool::Draw(void* context, char param3) {
-    EnsureHelpers();
-    EnsureDrawFuncs();
-
-    if (!fn_TileRender) return;
-
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
     // --- Section 1: Existing placement overlay (yellow tiles) ---
@@ -341,7 +314,8 @@ void DragPlacementTool::Draw(void* context, char param3) {
         // CharacterComponent_impl_08c0 signature: (unused, context, &arr1, &arr2)
         // arr1 = 0x14-byte tile records, arr2 = 0x20-byte road-style records
         // For placement tools, arr2 is always empty.
-        fn_TileRender(nullptr, context, (void*)&existArr, (void*)&empty);
+        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&existArr),
+                                          reinterpret_cast<int64_t*>(&empty));
         // existArr / empty are released by ~Array at scope exit (no early return in scope).
     }
 
@@ -352,10 +326,7 @@ void DragPlacementTool::Draw(void* context, char param3) {
         // Get start/end cells based on drag state
         if (dragState == 0) {
             // Not dragging: use ScreenToCell for both
-            int cell = -1;
-            if (s_fn_ScreenToCell) {
-                cell = s_fn_ScreenToCell(0);
-            }
+            int cell = PlayerRay_ScreenToCell_101270(0);
             startCell = cell;
             endCell = cell;
         } else {
@@ -364,7 +335,7 @@ void DragPlacementTool::Draw(void* context, char param3) {
             endCell = this->endCell;
         }
 
-        float heightTol = s_pHeightTolerance ? *s_pHeightTolerance : 0.5f;
+        float heightTol = HeightTolerance();
         int gridSize = **(int**)(gameWorld + 0xf8);
 
         // Convert cell indices to (col, row)
@@ -427,13 +398,10 @@ void DragPlacementTool::Draw(void* context, char param3) {
                         bool hasExisting = false;
 
                         // Validate terrain
-                        bool cellValid = false;
-                        if (s_fn_TerrainValidate) {
-                            cellValid = s_fn_TerrainValidate(
+                        bool cellValid = TerrainValidate(
                                 mapPtr, colIdx, rowIdx, terrainMask,
                                 0.0f, heightTol, 0.0f,
                                 allowOverlap, hasExisting, entityTemplate);
-                        }
 
                         // Determine color
                         uint32_t color;
@@ -460,35 +428,18 @@ void DragPlacementTool::Draw(void* context, char param3) {
 
         // Render drag area tiles
         TileArray empty;
-        fn_TileRender(nullptr, context, (void*)&dragArr, (void*)&empty);
+        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&dragArr),
+                                          reinterpret_cast<int64_t*>(&empty));
         // dragArr / empty are released by ~Array at scope exit (no early return in scope).
     }
 }
 
 // ============================================================
-// Resolved helper function pointers for CalcPath
+// CalcPath helpers, called by name: 0x1401018d0
+// DragPlacementTool_ClearPathEntities_1018d0 (clears existing path entities and
+// sets up the grid range), 0x1400c3720 ComponentEntity_CtorFromDescription (clone
+// an entity from its description), 0x1400c48a0 EntityList_RegisterEntity_Impl.
 // ============================================================
-
-// FUN_1401018d0: clears existing path entities and sets up grid range.
-// Params: (self, minCol, minRow, maxCol, maxRow, entityTemplate)
-typedef void (*fn_ClearPathEntities_t)(void* self, int minCol, int minRow,
-    int maxCol, int maxRow, int64_t entityTemplate);
-static fn_ClearPathEntities_t s_fn_ClearPathEntities = nullptr;
-
-// ComponentEntity_CopyCtor (0x1400c3720): clone entity from description
-typedef void* (*fn_ComponentEntity_CopyCtor_t)(void* self, void* desc);
-static fn_ComponentEntity_CopyCtor_t s_fn_ComponentEntity_CopyCtor = nullptr;
-
-static bool s_calcPathFuncsResolved = false;
-
-static void EnsureCalcPathFuncs() {
-    if (s_calcPathFuncsResolved) return;
-    s_fn_ClearPathEntities = reinterpret_cast<fn_ClearPathEntities_t>(
-        ResolveAddr(Module::Exe, 0x1401018d0));
-    s_fn_ComponentEntity_CopyCtor = reinterpret_cast<fn_ComponentEntity_CopyCtor_t>(
-        ResolveAddr(Module::Exe, 0x1400c3720));
-    s_calcPathFuncsResolved = true;
-}
 
 // ============================================================
 // DragPlacementTool::CalcPath (vtable +0x68, Slot13)
@@ -508,8 +459,6 @@ static void EnsureCalcPathFuncs() {
 //
 // Original: 0x1400fb900
 bool DragPlacementTool::CalcPath(int startCell, int endCell) {
-    EnsureCalcPathFuncs();
-
     // Virtual CalcCost (slot 14, +0x70) to validate, into local out-values
 
     uint32_t outValid = 0;
@@ -566,20 +515,19 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     uintptr_t placementDesc = (uintptr_t)this->placementDesc;
     int64_t entityTemplate = *(int64_t*)(placementDesc + 0x38);
 
-    if (s_fn_ClearPathEntities) {
-        s_fn_ClearPathEntities(this, minCol, minRow, maxCol, maxRow, entityTemplate);
-    }
+    DragPlacementTool_ClearPathEntities_1018d0(this, minCol, minRow, maxCol, maxRow, entityTemplate);
 
     // Allocate and clone a ComponentEntity from description
-    void* newEntityMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* newEntityMem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* newEntity = nullptr;
-    if (newEntityMem && s_fn_ComponentEntity_CopyCtor) {
-        newEntity = s_fn_ComponentEntity_CopyCtor(newEntityMem, (void*)descriptionPtr);
+    if (newEntityMem) {
+        newEntity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(newEntityMem),
+                                                        (void*)descriptionPtr);
     }
 
     // Wrap in InternalBasePtr
     void* entityIBP = nullptr;
-    if (fn_InternalBasePtr_Ctor) {
+    {
         new (&entityIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
     }
@@ -609,9 +557,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     void* entityList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xe8);
     int categoryId = *(int*)((uintptr_t)descriptionPtr + 0x20);
 
-    if (fn_EntityList_RegisterEntity) {
-        fn_EntityList_RegisterEntity(entityList, &entityIBP, categoryId);
-    }
+    EntityList_RegisterEntity_Impl(entityList, &entityIBP, categoryId);
 
     return true;
 }
