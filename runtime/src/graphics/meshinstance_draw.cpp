@@ -71,9 +71,6 @@
 #include "../../types/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 #include "../../types/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -571,30 +568,3 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// Registration — name AND address for both.
-//
-// *** THE ADDRESS DOOR NEEDED A CHECK BEFORE IT WAS WRITTEN. *** This namespace
-// contains one row where a RegisterRuntimeAddr is ACTIVE HARM:
-// `standalone/scene_watch.cpp` compares `?AddDrawItems@MeshInstance@`'s retail
-// address against a live vtable slot as an IDENTITY TOKEN, so registering that
-// address makes the comparison lie (wave21_lane_gfxbody.cpp:311). Both
-// addresses below were grepped across code/, engine/, runtime/, standalone/ and
-// dx11/ before this block was written: 0x180100960 and 0x1800a3150 appear only
-// in the generated mint table and in this batch's own comments, so neither is
-// an identity token and both doors are safe.
-// ============================================================================
-int RtGraphicsMeshInstanceDrawRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?Draw@MeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-                          (void*)&RtGraphics_MeshInstance_Draw); ++n;
-    RegisterRuntimeAddr(0x180100960ull, (void*)&RtGraphics_MeshInstance_Draw);
-
-    RegisterRuntimeExport("?Draw@EdgeMeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-                          (void*)&RtGraphics_EdgeMeshInstance_Draw); ++n;
-    RegisterRuntimeAddr(0x1800a3150ull, (void*)&RtGraphics_EdgeMeshInstance_Draw);
-
-    return n;
-}

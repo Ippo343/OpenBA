@@ -166,28 +166,6 @@ typedef int32_t     (*I32ThisFn)(const void*);
 // reader; the members below are the bodies.
 
 
-// ============================================================================
-// REGISTRATION — by NAME and by ADDRESS, both, for every body.
-//
-// A body PORTED but never REGISTERED is indistinguishable from an ABSENT one to
-// the census (reference_half_registered_port_reads_as_absent.md), and the mint
-// fills a slot by NAME for RT_MINT_NAMED and by ADDRESS otherwise, so a row
-// that wants to become COMPLETE needs whichever door its slot uses. All eight
-// of these are RT_MINT_NAMED; the address door is registered anyway so that a
-// by-address call site (ResolveAddr consults the port registry FIRST —
-// reference_resolveaddr_consults_port_registry_first.md) reaches the same body.
-// ============================================================================
-int RtGraphicsTypeInfoAccessorsRegister() {
-    int n = 0;
-
-
-
-    // (ENDGAME B.3.9 block GFX: AnimationEvent's two, Particle's three and
-    // MaterialInstance's three slot doors are retired with their minted tables.)
-
-    return n;
-}
-
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC -- THE EIGHT SLOT BODIES, AS MEMBERS.
 //

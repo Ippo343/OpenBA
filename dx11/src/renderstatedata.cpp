@@ -85,7 +85,7 @@
 
 #include "dx11_seam.h"
 #include "VideoDX11Data.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // B.3R DX: MemFree, direct
 
 // ENDGAME B.3.5 block C, RULE B5-3 — the real `Video::RenderStateData` abstract
 // base (block A), so this file's destructor can call its base destructor as a
@@ -293,56 +293,28 @@ static_assert(offsetof(D3D11_RASTERIZER_DESC, SlopeScaledDepthBias) == 0x14, "RS
 static_assert(offsetof(D3D11_RASTERIZER_DESC, MultisampleEnable)    == 0x20, "RS_DESC::MultisampleEnable");
 
 // ============================================================================
-// Runtime-side dependencies.
+// Runtime-side dependencies — DIRECT REFERENCES (ENDGAME B.3R, block DX)
 //
-// Resolved here, in this lane's own translation unit, rather than in the shared
-// engine/funcs/engine_funcs.h — six lanes are editing that file concurrently.
-//
-// The remaining one is a *by-name* import of the shipped DLL, read straight out
-// of its import name table, so the mangled string is exact rather than
-// reconstructed:
-//   [0x1800134d0] -> ?MemFree@MemoryAllocator@System@@SAXPEAX@Z   (hint 0xc9b)
+// This was `RuntimeDeps`: a function-local static holding the address of
+// Video::Device::_singleton and a `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`
+// pointer (VideoDX11 import slot 0x1800134d0) resolved by `ResolveExport`, with
+// a readiness flag that sent slot 0 to `Dx11OriginalSlot` when it failed. The
+// name bound to a body in this build and the address of a class static is never
+// null, so the flag was always true; the struct, the flag and slot 0's
+// forwarding arm are GONE (B3R_RULES R2, R8). Slot 0 calls
+// `System::MemoryAllocator::MemFree`, and the chain below reads the class
+// static LIVE, as before (it was never cached, only its address was).
 //
 // ENDGAME B.3.5 block C, RULE B5-3: the second import,
-// `[0x180013348] -> ??1RenderStateData@Video@@UEAA@XZ` (hint 0x295), is GONE. It
-// was spelling 9 of the nine caller bindings (RULE B5-14) — a mangled name
-// resolved into this struct and called indirectly, one of dx11's 76 literals. The
-// Runtime base is now a real class, so the call is a qualified non-virtual member
-// call; see the destructor below.
+// `[0x180013348] -> ??1RenderStateData@Video@@UEAA@XZ` (hint 0x295), went
+// earlier; the base dtor is a qualified non-virtual member call (slot 0).
 // ============================================================================
-typedef void (*fn_MemFree_t)(void* p);
-
-struct RuntimeDeps {
-    void**                       deviceSingleton = nullptr;  // Video::Device**
-    fn_MemFree_t                 memFree         = nullptr;
-    bool                         tried           = false;
-    bool                         ok              = false;
-};
-
-RuntimeDeps& Deps() {
-    static RuntimeDeps d;
-    if (!d.tried) {
-        d.tried = true;
-
-        // Video::Device::_singleton, the target of VideoDX11's import slot
-        // 0x1800134b8 -- the class static since ENDGAME B.3.9 VID.
-        d.deviceSingleton = reinterpret_cast<void**>(&::Video::Device::_singleton);
-
-        d.memFree = reinterpret_cast<fn_MemFree_t>(
-            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-
-        d.ok = (d.deviceSingleton != nullptr) && (d.memFree != nullptr);
-    }
-    return d;
-}
 
 // The chain every slot walks. Returns null if the device has not been created
 // yet — the original would fault here, we forward to the original slot instead
 // (which faults identically, but keeps the failure attributable to it).
 DeviceData* ActiveDeviceData() {
-    RuntimeDeps& d = Deps();
-    if (!d.deviceSingleton) return nullptr;
-    void* device = *d.deviceSingleton;               // Video::Device*
+    void* device = ::Video::Device::_singleton;      // Video::Device*
     if (!device) return nullptr;
     return *reinterpret_cast<DeviceData**>(
         reinterpret_cast<uint8_t*>(device) + 0x100); // Video::Device+0x100
@@ -378,16 +350,6 @@ inline VideoRenderState* OwnerState(RenderStateData* self) {
 // store has to happen before the base dtor runs, exactly as it does.
 // ============================================================================
 RenderStateData* RenderStateData_ScalarDeletingDtor(RenderStateData* self, unsigned int flags) {
-    RuntimeDeps& d = Deps();
-    if (!d.ok) {
-        // Cannot safely half-destroy. Hand the whole thing back to the
-        // original before touching anything.
-        typedef RenderStateData* (*orig_t)(RenderStateData*, unsigned int);
-        orig_t orig = reinterpret_cast<orig_t>(
-            Dx11OriginalSlot(Vt::RenderStateData, 0));
-        return orig ? orig(self, flags) : self;
-    }
-
     self->vptr = Dx11LiveVtable(Vt::RenderStateData);
 
     if (self->blendState) {
@@ -415,7 +377,7 @@ RenderStateData* RenderStateData_ScalarDeletingDtor(RenderStateData* self, unsig
         -> ::Video::RenderStateData::~RenderStateData();   // B.3.5 bridge
 
     if (flags & 1u) {
-        d.memFree(self);
+        System::MemoryAllocator::MemFree(self);
     }
     return self;
 }

@@ -92,7 +92,7 @@ static void* VideoProgramData_Dtor(VideoProgramData* self, unsigned flags) {
     reinterpret_cast< ::Video::VideoProgramData*>(self)
         -> ::Video::VideoProgramData::~VideoProgramData();   // B.3.5 bridge
 
-    if (flags & 1) Dx11MemFree(self);
+    if (flags & 1) System::MemoryAllocator::MemFree(self);
     return self;
 }
 
@@ -141,7 +141,7 @@ static void* RenderBufferData_Dtor(RenderBufferData* self, unsigned flags) {
     reinterpret_cast<Video::RenderBufferData*>(self)
         ->Video::RenderBufferData::~RenderBufferData();   // B.3.5 bridge
 
-    if (flags & 1) Dx11MemFree(self);
+    if (flags & 1) System::MemoryAllocator::MemFree(self);
     return self;
 }
 

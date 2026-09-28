@@ -171,13 +171,6 @@
 #include "../../types/system/Value.h"      // System::Time -- ENDGAME B.3.5 block GC
 #include "../../types/system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
-// Byte-identical to standalone/resolve.h's declaration; the linker checks the
-// two against each other. Not included, for the <wingdi.h> `Rectangle` reason
-// wave21_lane_gfxbody.cpp:47 gives at length -- the same local re-declaration
-// wave28_lane_gfxbody.cpp:63 makes.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace rtgfxbody29 {
 namespace {
 
@@ -270,16 +263,12 @@ inline double SecondsPerTick() {
 // `RendererDrawable`) make kSpec_Fill4/kSpec_Fill16 trait-equivalent. Both
 // rows stay registered in array.cpp: `code/` still reaches them by address.
 
-// The per-pass draw-item sort — 0x180062d60. UNEXPORTED and UNPORTED.
-// std::sort(first, last) over stride-0x38 elements, ~0x2306 bytes with a
-// 0x400-byte recursion stack. `last` is INCLUSIVE: the callee computes
-// `first - 0x38 + count*0x38`. Reached by address — RESIDUAL.
-using DrawItemSortFn = void (*)(void* first, int count, void* scratch);
-
+// The per-pass draw-item sort — 0x180062d60, UNEXPORTED; ported as
+// rtgfxbig::RtGraphics_Renderer_DrawItemSort (wave27_lane_gfxbig.cpp, declared
+// in Scene.h), called by name (B3R). std::sort(first, last) over stride-0x38
+// elements; `last` is INCLUSIVE: the callee computes `first - 0x38 + count*0x38`.
 inline void DrawItemSort(void* data, int count, void* scratch) {
-    static void* fn = nullptr;
-    if (!fn) fn = (void*)ResolveAddr(Module::Runtime, 0x180062d60);
-    reinterpret_cast<DrawItemSortFn>(fn)(data, count, scratch);
+    rtgfxbig::RtGraphics_Renderer_DrawItemSort(data, count, scratch);
 }
 
 }  // namespace
@@ -563,23 +552,6 @@ Transform* RtGraphics_Animation_GetRootPoseAtTime(const void* self,
     return ret;                                   // RAX carries the slot back
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtGraphicsWave29GfxbodyRegister() {
-    int count = 0;
-    RegisterRuntimeExport("?AddGlobalDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_Scene_AddGlobalDrawItems); ++count;
-    RegisterRuntimeExport("?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z",
-                          (void*)&RtGraphics_Renderer_AddLight); ++count;
-    RegisterRuntimeExport("?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z",
-                          (void*)&RtGraphics_Renderer_EndDrawGroup); ++count;
-    RegisterRuntimeExport("?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@"
-                          "AEBVTime@System@@0@Z",
-                          (void*)&RtGraphics_Animation_GetRootPoseAtTime); ++count;
-    return count;
-}
-
 }  // namespace rtgfxbody29
 
 // ############################################################################
@@ -854,10 +826,6 @@ Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
 }
 
 }  // namespace Graphics
-
-int RtGraphicsWave29GfxbodyRegister() {
-    return rtgfxbody29::RtGraphicsWave29GfxbodyRegister();
-}
 
 // Wave 28 defect #7: every lane's summary is written and NOTHING CALLS IT, so a
 // zero means "never printed" rather than "never called". This one is WIRED —

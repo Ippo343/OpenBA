@@ -40,6 +40,7 @@
 #include "Component/StorageComponent.h"
 #include "Component/TradeComponent.h"
 #include "Dialog/TradeUI.h"
+#include "Action/exe_bodies.h"   // ActRm_StorageAdd_d000 (0x14012d000)
 
 class TradeUI;
 void TradeUI_UpdateBuyTotals(TradeUI* self);
@@ -230,15 +231,12 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
             // achievements and both are needed. AddItem is retail 0x14012d000, the same
             // faithful storage-add the founding-house food seed uses.
             {
-                typedef void (*AddItem_t)(int64_t storage, int64_t material, int n);
-                static AddItem_t addItem = reinterpret_cast<AddItem_t>(
-                    ResolveAddr(Module::Exe, 0x14012d000));
                 void* storage = FindCompOnEntity(postEnt, StorageComponent::TypeId());
-                if (addItem && storage && tmpls) {
+                if (storage && tmpls) {
                     for (int i = 0; i < tmplN; ++i)
                         if (tmpls[i])
-                            addItem(reinterpret_cast<int64_t>(storage),
-                                    reinterpret_cast<int64_t>(tmpls[i]), seedQty);
+                            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),
+                                                  reinterpret_cast<int64_t>(tmpls[i]), seedQty);
                 }
             }
             const uintptr_t hdr = reinterpret_cast<uintptr_t>(tradeComp) + 0x60;

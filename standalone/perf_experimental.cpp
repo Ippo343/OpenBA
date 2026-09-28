@@ -16,6 +16,7 @@
 #include <new>       // placement new — the retslot door body at the call site
 #include <vector>
 #include "math/Math.h"       // -Iruntime/types
+#include "volume/Volume.h"   // B3R: RtVolume_Frustum_MulTransform3
 
 namespace PerfX {
 
@@ -111,7 +112,7 @@ void ResolveRootOnly() {
 
 void RefreshFrustum(void* renderer) {
     s_haveFrustum = false;
-    if (!renderer || !fn_Frustum_MulTransform3) return;
+    if (!renderer) return;
     // Renderer::GetCullCamera returns a reference into the camera object; before the first
     // Draw the pointer it adjusts is null, so the "reference" is a small negative address
     // (-0x110 seen live). Anything outside user space is "no camera yet". Taking the
@@ -131,7 +132,9 @@ void RefreshFrustum(void* renderer) {
     static_assert(offsetof(::Graphics::Camera, _cameraToWorld) == 0x64,
                   "Camera::_cameraToWorld @ +0x64 — the offset this read used to spell out");
     Math::Transform3 camXf3 = camera->_cameraToWorld;
-    fn_Frustum_MulTransform3(camFrustum, worldFrustum, &camXf3);
+    // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z (0x1800f9310), explicit slot.
+    RtVolume_Frustum_MulTransform3(reinterpret_cast<const ::Frustum*>(camFrustum),
+                                   reinterpret_cast<::Frustum*>(worldFrustum), &camXf3);
     std::memcpy(s_planes, worldFrustum, sizeof(s_planes));
     // Sanity: a zero frustum (renderer not yet drawn) must not cull everything.
     float mag = 0.0f;

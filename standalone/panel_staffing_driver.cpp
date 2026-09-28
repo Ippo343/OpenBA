@@ -51,10 +51,11 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Dialog/WorkPlaceUI.h"
+#include "Dialog/exe_bodies.h"   // EntityUI_SetEditMode_Impl
 
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+// EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
 
 namespace {
 

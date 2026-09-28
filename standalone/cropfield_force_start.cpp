@@ -25,6 +25,7 @@
 #include "Component/NaturalResourceDescription.h"
 #include "Component/StateMachineComponent.h"
 #include "options.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -156,8 +157,8 @@ void Fire(int frame) {
                     void** subs = *reinterpret_cast<void***>(e + 0x28);
                     const int subN = *reinterpret_cast<int32_t*>(e + 0x30);
                     for (int k = 0; k < subN && subs; ++k)
-                        if (subs[k] && tidNatRes && fn_IsDerivedFrom &&
-                            fn_IsDerivedFrom(subs[k], tidNatRes)) {
+                        if (subs[k] && tidNatRes &&
+                            Object::IsDerivedFromNullSafe(subs[k], tidNatRes)) {
                             planable[planableN++] = entry; break;
                         }
                 }

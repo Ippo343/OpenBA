@@ -535,6 +535,11 @@ extern "C" void RtUi_UserInterface_Dtor(UI::UserInterface* self);  // 0x180120b9
 extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
 // ==== end B3R W0-P0c ====
 
+// ==== B3R S-Harness (R5: a declaration P0 did not write) ====
+// ---- ui/userinterface_standalone.cpp
+extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui);  // 0x180120310
+// ==== end B3R S-Harness ====
+
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
 extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
 // ==== end B3R G-Game ====

@@ -84,14 +84,6 @@
 #include "../../types/io/Stream.h"
 #include "../../types/video/RenderState.h"
 
-// standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
-// and <wingdi.h> declares a function called `AlphaBlend`, which would make
-// Video::RenderState::AlphaBlend ambiguous at every use. Same local declaration
-// runtime/src/collection/array.cpp and runtime/src/object/deleting_dtor.cpp
-// carry, for the same PLAN.md §4.1 reason; the linker checks the two spellings.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // The four registered doors over `Video::RenderState`'s protected surface:
 // `?PlatformConstruct@` / `?PlatformCreate@` / `?PlatformDestruct@` (private in
 // retail, `AEAA`) and `??1RenderState@Video@@` (non-virtual, protected). An
@@ -114,7 +106,6 @@ struct RenderStateDoorAccess {
 };
 
 namespace {
-
 
 // `?_singleton@Device@Video@@0PEAV12@EA` -> `Device+0x100` -> the live
 // `Video::DeviceData*`. B35_RULES section 9: the static row stays an
@@ -391,58 +382,4 @@ extern "C" void RtVideo_RenderState_PlatformCreateExport(void* selfv) {
 extern "C" void RtVideo_RenderState_PlatformDestructExport(void* selfv) {
     RenderStateDoorAccess::PlatformDestruct(
         reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
-}
-
-int RtVideoRenderStateRegister() {
-    int n = 0;
-    // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
-    RegisterRuntimeExport("?CreateNewObject@RenderState@Video@@SAPEAVBase@Object@@XZ",
-                          (void*)&Video::RenderState::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18004b660ull, (void*)&Video::RenderState::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RenderState@Video@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Video::RenderState::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18004b6e0ull, (void*)&Video::RenderState::CreateInPlaceObject);
-    RegisterRuntimeExport("?TypeId@RenderState@Video@@SAIXZ",        (void*)&RtVideo_RenderState_TypeId);   ++n;
-    RegisterRuntimeAddr  (0x18004b560ull,                            (void*)&RtVideo_RenderState_TypeId);
-    RegisterRuntimeExport("?_TypeName@RenderState@Video@@CAPEBDXZ",       (void*)&RtVideo_RenderState_StaticTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004b530ull,                                 (void*)&RtVideo_RenderState_StaticTypeName);
-    RegisterRuntimeExport("?_ParentTypeName@RenderState@Video@@CAPEBDXZ", (void*)&RtVideo_RenderState_ParentTypeName); ++n;
-    RegisterRuntimeAddr  (0x18004b540ull,                                 (void*)&RtVideo_RenderState_ParentTypeName);
-
-
-    RegisterRuntimeExport("??0Stencil@RenderState@Video@@QEAA@XZ",    (void*)&RtVideo_RenderState_Stencil_Ctor);    ++n;
-    RegisterRuntimeAddr  (0x1800f49d0ull,                             (void*)&RtVideo_RenderState_Stencil_Ctor);
-    RegisterRuntimeExport("??0Depth@RenderState@Video@@QEAA@XZ",      (void*)&RtVideo_RenderState_Depth_Ctor);      ++n;
-    RegisterRuntimeAddr  (0x1800f4a80ull,                             (void*)&RtVideo_RenderState_Depth_Ctor);
-    RegisterRuntimeExport("??0AlphaBlend@RenderState@Video@@QEAA@XZ", (void*)&RtVideo_RenderState_AlphaBlend_Ctor); ++n;
-    RegisterRuntimeAddr  (0x1800f4b30ull,                             (void*)&RtVideo_RenderState_AlphaBlend_Ctor);
-    RegisterRuntimeExport("?Serialize@Stencil@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtVideo_RenderState_Stencil_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800f48e0ull, (void*)&RtVideo_RenderState_Stencil_Serialize);
-    RegisterRuntimeExport("?Serialize@Depth@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtVideo_RenderState_Depth_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800f4a00ull, (void*)&RtVideo_RenderState_Depth_Serialize);
-    RegisterRuntimeExport("?Serialize@AlphaBlend@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtVideo_RenderState_AlphaBlend_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800f4aa0ull, (void*)&RtVideo_RenderState_AlphaBlend_Serialize);
-
-    RegisterRuntimeExport("?IsWireframe@RenderState@Video@@QEBA_NXZ", (void*)&RtVideo_RenderState_IsWireframe); ++n;
-    RegisterRuntimeAddr  (0x18004b730ull,                             (void*)&RtVideo_RenderState_IsWireframe);
-    RegisterRuntimeExport("?Bind@RenderState@Video@@QEBAXAEAVContext@2@@Z",
-                          (void*)&RtVideo_RenderState_Bind); ++n;
-    RegisterRuntimeAddr  (0x1800f4ec0ull, (void*)&RtVideo_RenderState_Bind);
-    RegisterRuntimeExport("?Initialize@RenderState@Video@@QEAAXAEBUAlphaBlend@12@AEBUDepth@12@"
-                          "AEBUStencil@12@W4CullMode@12@W4FillMode@12@_N@Z",
-                          (void*)&RtVideo_RenderState_Initialize); ++n;
-    RegisterRuntimeAddr  (0x1800f4840ull, (void*)&RtVideo_RenderState_Initialize);
-    RegisterRuntimeExport("?PlatformConstruct@RenderState@Video@@AEAAXXZ",
-                          (void*)&RtVideo_RenderState_PlatformConstructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f4e30ull, (void*)&RtVideo_RenderState_PlatformConstructExport);
-    RegisterRuntimeExport("?PlatformCreate@RenderState@Video@@AEAAXXZ",
-                          (void*)&RtVideo_RenderState_PlatformCreateExport); ++n;
-    RegisterRuntimeAddr  (0x1800f4ea0ull, (void*)&RtVideo_RenderState_PlatformCreateExport);
-    RegisterRuntimeExport("?PlatformDestruct@RenderState@Video@@AEAAXXZ",
-                          (void*)&RtVideo_RenderState_PlatformDestructExport); ++n;
-    RegisterRuntimeAddr  (0x1800f4e80ull, (void*)&RtVideo_RenderState_PlatformDestructExport);
-    return n;
 }

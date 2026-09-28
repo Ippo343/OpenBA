@@ -61,6 +61,8 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
 #include "save/SaveLoad.h"      // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "audio/Audio.h"        // ENDGAME B.3.8 LOOP: ~MenuDialogLoopT runs ~Audio::Scene
+#include "graphics/Camera.h"    // B3R: RtGraphics_Renderer_Dtor
+#include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree
 #include <new>
 #include <cstring>
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
@@ -247,8 +249,8 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 // deleted at B.3.9 EXA) duplicated, with the vtable store the compiler's.
 MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
     : Engine::DialogLoopT(filename) {
-    fn_Random_Default_Ctor(&_random);     // System::Random at +0x168
-    fn_AudioScene_Ctor(_audioScene);      // Audio::Scene at +0xb30
+    RtSystem_Random_Ctor(&_random);       // System::Random at +0x168  ??0Random@System@@ 0x1800c7f20
+    RtAudio_Scene_Ctor(_audioScene);      // Audio::Scene at +0xb30   ??0Scene@Audio@@ 0x1800e0160
     // Zero-init the MenuDialogLoopT-specific fields (+0xb68..+0xbf8): every
     // field from _pendingLoop to the end of the class, pad included (retail's
     // qword stores).
@@ -267,7 +269,7 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // operator delete); the log line the old slot-0 body carried.
     printf("[MenuDLT::Destroy] self=%p\n", (void*)this);
     for (uint8_t* arr : {_sceneIdArray, _instanceArray, _particleArray}) {
-        fn_MemFreeStatic(*reinterpret_cast<void**>(arr));   // MemFree(null) returns
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(arr));   // MemFree(null) returns
         *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data
         *reinterpret_cast<uint64_t*>(arr + 8) = 0;          // _size, _capacity
     }
@@ -303,12 +305,9 @@ void MenuDialogLoopT::Startup() {
     // autosave path read. (Save/load wave 2026-08-27.)
     {
         if (_saveLoad == nullptr) {
-            typedef void* (*fn_slctor_t)(void* self);
-            static fn_slctor_t s_slCtor = reinterpret_cast<fn_slctor_t>(
-                ResolveExport("??0SaveLoad@Save@@QEAA@XZ"));
-            void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x90, 4) : nullptr;
-            if (mem && s_slCtor) {
-                s_slCtor(mem);
+            void* mem = System::MemoryAllocator::MemAlloc(0x90, 4);
+            if (mem) {
+                RtSave_SaveLoad_Ctor(static_cast<Save::SaveLoad*>(mem));   // ??0SaveLoad@Save@@ 0x1800c3d30
                 _saveLoad = mem;
                 printf("[MenuDLT::Startup] menu SaveLoad created at +0xb70 = %p\n", mem);
             }
@@ -443,14 +442,6 @@ void MenuDialogLoopT::Shutdown() {
     auto deleteObject = [](void* o) {                // MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]
         delete static_cast<Graphics::Geometry*>(o);
     };
-    typedef void (*DtorFn)(void*);
-    static DtorFn s_sceneDtor = reinterpret_cast<DtorFn>(
-        ResolveExport("??1Scene@Graphics@@QEAA@XZ"));
-    static DtorFn s_rendererDtor = reinterpret_cast<DtorFn>(
-        ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
-    static DtorFn s_saveLoadDtor = reinterpret_cast<DtorFn>(
-        ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
-
     // 1. +0xbc0: the menu scene's first Geometry -- REMOVED, not owned (no delete).
     if (_sceneGeometry)
         scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(_sceneGeometry));
@@ -473,13 +464,22 @@ void MenuDialogLoopT::Shutdown() {
         if (void* o = (*reinterpret_cast<void* const* const*>(_instanceArray))[i]) deleteObject(o);
     }
     // 6. +0xbb8 (the Transform block): freed.
-    if (void* t = _transform) fn_MemFreeStatic(t);
-    // 7. +0xba0 Graphics::Scene: ~Scene then freed.
-    if (void* g = _scene) { s_sceneDtor(g); fn_MemFreeStatic(g); }
-    // 8. +0xb98 Graphics::Renderer: ~Renderer then freed.
-    if (void* r = _renderer) { s_rendererDtor(r); fn_MemFreeStatic(r); }
-    // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad then freed.
-    if (void* sl = _saveLoad) { s_saveLoadDtor(sl); fn_MemFreeStatic(sl); }
+    if (void* t = _transform) System::MemoryAllocator::MemFree(t);
+    // 7. +0xba0 Graphics::Scene: ~Scene (??1Scene@Graphics@@ 0x1801026c0) then freed.
+    if (void* g = _scene) {
+        RtGraphics_Scene_Dtor(static_cast<RtGraphics::Scene*>(g));   // B.3.x bridge
+        System::MemoryAllocator::MemFree(g);
+    }
+    // 8. +0xb98 Graphics::Renderer: ~Renderer (??1Renderer@Graphics@@ 0x1800180a0) then freed.
+    if (void* r = _renderer) {
+        RtGraphics_Renderer_Dtor(static_cast<RtGraphics::Renderer*>(r));   // B.3.x bridge
+        System::MemoryAllocator::MemFree(r);
+    }
+    // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad (??1SaveLoad@Save@@ 0x1800c3c90) then freed.
+    if (void* sl = _saveLoad) {
+        RtSave_SaveLoad_Dtor(static_cast<Save::SaveLoad*>(sl));   // B.3.x bridge
+        System::MemoryAllocator::MemFree(sl);
+    }
     // 10. `CALL [0x1401523a0]` -- Engine::DialogLoopT::Shutdown, QUALIFIED.
     Engine::DialogLoopT::Shutdown();
     // 11. Audio::Scene::StopAll(this+0xb30). NOT skippable: it parks the

@@ -239,20 +239,6 @@ extern "C" String* RtVideo_ShaderProgram_GetTextureName(const void* self,
 // THE SWEEP
 // ============================================================================
 
-// ---- registration ----------------------------------------------------------
-// Each mangled name is its own STRING LITERAL. tools/runtime_census.py matches
-// `RegisterRuntimeExport("<literal>"` and cannot see through a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md) -- twelve live
-// ports were invisible to the board for that reason.
-int Register() {
-    int count = 0;
-    RegisterRuntimeExport("?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z",
-                          (void*)&RtVideo_ShaderProgram_GetConstantName); ++count;
-    RegisterRuntimeExport("?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z",
-                          (void*)&RtVideo_ShaderProgram_GetTextureName); ++count;
-    return count;
-}
-
 // ---- attendance, printed UNCONDITIONALLY -----------------------------------
 // Wave 28 defect #7 is that every lane's *Summary() is written and nothing
 // calls it -- and it REPRODUCED on this lane's own subject:
@@ -335,7 +321,3 @@ System::String ShaderProgram::GetTextureName(int32_t index) const {
 }
 
 }  // namespace Video
-
-// The two seams rt_video_port.cpp calls, at global scope with C++ linkage, the
-// same shape as every other Video lane's (`extern int RtVideoBuffersRegister();`).
-int  RtVideoShaderProgramNamesRegister() { return rtvidshadername::Register(); }

@@ -42,7 +42,7 @@
 //   0x1800605e0(&ser, n, _passes._data)                 ExternalPtr<VideoProgram>[] serialize
 //   if (rw) rw->slot0(rw, 1)                            delete the reader/writer
 // Both helpers are ported (collection/array.cpp, object/external_ptr_serialize.cpp)
-// and are reached through the same address doors retail's CALLs name.
+// and are called by their body names (B3R).
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -50,7 +50,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
-#include "../../../standalone/resolve.h"
+
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
@@ -62,16 +62,10 @@ using rt::io::Serializer;
 using rt::io::Stream;
 using rt::io::ReaderWriter;
 
-
 // ENDGAME B.3.9 block GFX: `ConstructBody` (retail 0x1801029a0 open-coded as
 // three MINTED vptr stamps plus the zero stores) and `CallSlot0` are gone: the
 // stores are the real `Material()` (Material.h), the stamps the compiler's, and
 // slot 0 is a virtual call on the class.
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) {
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
 
 }  // namespace
 
@@ -138,11 +132,10 @@ bool Material::Serialize(void* streamv) {
     irw->SerializeInt(n, nullptr);
 
     if (ser.stream->direction == 0) {
-        using SetSizeFn = void (*)(void*, int);
-        RtAddr<SetSizeFn>(0x1800604e0ull)(&_passes, n);
+        rtcoll::RtColl_ArraySetSize_1800604e0(&_passes, n);             // 0x1800604e0
     }
-    using ElemSerFn = void (*)(Serializer*, int, void*);
-    RtAddr<ElemSerFn>(0x1800605e0ull)(&ser, n, _passes._data);
+    RtObject_ExternalPtrArraySerialize_VideoProgram(                     // 0x1800605e0
+        &ser, n, reinterpret_cast<RtObject::External**>(_passes._data));
 
     if (rw != nullptr) {
         delete irw;
@@ -153,13 +146,12 @@ bool Material::Serialize(void* streamv) {
 // ??1Material@Graphics@@UEAA@XZ  0x180102a00 — retail's body, moved here from
 // the retired `RtGraphics_Material_Dtor` door (ENDGAME B.3.9 block GFX): the
 // restamp (the compiler's), `_passes` through retail's own out-of-line ~Array at
-// 0x180013da0 (by address, registry-first), then ~External (the compiler's
+// 0x180013da0 (by body name), then ~External (the compiler's
 // chain). 0x180013da0 frees AND zeroes the header, so the member's implicit
 // ~Array that runs after this body sees an empty header: no element release,
 // MemFree(null) -- `~Array` does not run a second time on live data.
 Material::~Material() {
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180013da0ull)(&_passes);
+    rtcoll::RtColl_ArrayDtor_180013da0(&_passes);
 }
 
 // ?TypeId@Material@Graphics@@SAIXZ 0x1800118c0 -- the static twin of slot 2:
@@ -187,16 +179,3 @@ Object::Base* Material::CreateInPlaceObject(void* place) {
 // their only readers were the minted `??_7Material@Graphics@@6B@` and its
 // RT_DELDTOR row. Every live Material wears the compiler's table.
 // ============================================================================
-
-int RtGraphicsMaterialRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@Material` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ",
-                          (void*)&Graphics::Material::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x1800119c0ull, (void*)&Graphics::Material::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Graphics::Material::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x180011a70ull, (void*)&Graphics::Material::CreateInPlaceObject);
-    return n;
-}

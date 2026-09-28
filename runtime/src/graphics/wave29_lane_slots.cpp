@@ -65,15 +65,6 @@
 
 using RtGraphics::MeshInstance;
 
-// `ResolveAddr` is NOT declared by rt_port.h — that header deliberately omits
-// it (and everything else in standalone/resolve.h) to keep <windows.h> out of
-// runtime/, where <wingdi.h>'s `Rectangle` and <windef.h>'s `near`/`far` would
-// collide with the engine's own type and field names. Every runtime/ file that
-// needs it re-declares the pair locally; this is the identical spelling
-// animation.cpp:123 uses, and the linker is what checks the two agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 inline uint8_t*       B(void* p)       { return reinterpret_cast<uint8_t*>(p); }
@@ -498,39 +489,6 @@ extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
     return reinterpret_cast<const ::Graphics::MeshInstance*>(self)
                ->::Graphics::MeshInstance::SetSharedInstanceData(
                      *reinterpret_cast<Video::Context*>(ctx), packed, t);
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-//
-// BY NAME ONLY, AND THAT IS A DECISION.
-//
-// Both slots are RT_MINT_NAMED in standalone/rt_data_mint_tables.inc, so the
-// NAME door is the one the minted table needs in order to stop being a trap.
-// The ADDRESS door is NOT opened for either, because
-// `standalone/scene_watch.cpp` uses MeshInstance vtable-slot addresses as
-// IDENTITY TOKENS — that is precisely what kept `?AddDrawItems@MeshInstance@`
-// (0x180100f20) unregisterable until Wave 27 rebuilt the token. Before writing
-// this, `grep -rn 0x180100800` and `grep -rn 0x180101660` were run across
-// runtime/ code/ standalone/ engine/ dx11/ to check that neither of THESE two
-// addresses is such a token; neither is. The address doors are still left shut,
-// because nothing in the tree calls either body by address and an address door
-// nobody needs is a registration nobody can audit.
-//
-// *** THE MANGLED NAMES BELOW ARE EACH ON ONE SOURCE LINE, ON PURPOSE. ***
-// This lane's headline finding is that tools/mint_slot_sweep.py parses
-// registrations LINE BY LINE and is therefore blind to a C adjacent-string
-// concatenation split across two lines — 67 of this tree's registrations are
-// invisible to it, and nine of the sixteen slots this lane was briefed to port
-// were ALREADY PORTED behind exactly that blind spot. Splitting a name here
-// would hide these two from the next lane the same way.
-// (reference_literal_grep_blind_to_variables.md, one blind spot over.)
-extern "C" int RtGraphicsWave29SlotsRegister() {
-    int count = 0;
-    RegisterRuntimeExport("?Update@MeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z", (void*)&RtGraphics_MeshInstance_Update); ++count;
-    RegisterRuntimeExport("?SetSharedInstanceData@MeshInstance@Graphics@@UEBAHAEAVContext@Video@@HM@Z", (void*)&RtGraphics_MeshInstance_SetSharedInstanceData); ++count;
-    return count;
 }
 
 // Kickoff warning 10: a `*Summary()` nothing calls reports a zero that means

@@ -64,6 +64,7 @@
 #include "../../types/collection/Collection.h"
 #include "array_internal.h"
 #include "array_destroy_internal.h"
+#include "../../types/graphics/AnimationState.h"   // B3R RT-VG: the Rt_* declarations
 
 // The three element copy constructors live with the class they belong to, in
 // runtime/src/graphics/animationstate.cpp. They are reached by name and not by
@@ -358,9 +359,8 @@ void Clear_18005bbb0(ArrayHdr* a) {                                // Array<Anim
 // The registered entry points. One free function per ADDRESS; the address is in
 // the name so a crash log or a census line names it directly.
 // ============================================================================
-// B3R RT-Core: external linkage (namespace rtcoll, declared in
-// runtime/types/collection/Collection.h) so the graphics readers can call
-// each body by name instead of by its retail address.
+// B3R RT-VG: namespace rtcoll (external linkage), was an anonymous namespace --
+// the graphics readers call these by name (types/graphics/AnimationState.h).
 namespace rtcoll {
 
 using namespace rtcoll::gfxanim;
@@ -429,6 +429,7 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<Interpolated
 // DestroyAnimStateRange / DestroyInstanceRange) are still called from this
 // file's own dtor bodies, so only the retail-arity forwarders went.
 int RtCollectionGraphicsAnimRegister() {
+    using namespace rtcoll;
     int n = 0;
     RegisterRuntimeAddr(0x18001c480ull, (void*)&rtcoll::Rt_ArrayDtor_18001c480);          ++n;
     RegisterRuntimeAddr(0x18001c550ull, (void*)&rtcoll::Rt_ArrayDtor_18001c550);          ++n;

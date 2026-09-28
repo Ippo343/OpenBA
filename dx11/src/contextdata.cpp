@@ -456,7 +456,7 @@ void* ContextData_Dtor(ContextData* self, unsigned flags) {
     reinterpret_cast< ::Video::ContextData*>(self)
         -> ::Video::ContextData::~ContextData();                 // B.3.5 bridge
 
-    if (flags & 1) Dx11MemFree(self);
+    if (flags & 1) System::MemoryAllocator::MemFree(self);
     return self;
 }
 

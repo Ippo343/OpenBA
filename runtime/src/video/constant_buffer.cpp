@@ -64,6 +64,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../../types/video/Context.h"        // Video::Context::AssignConstants
 #include "../../types/video/ConstantBuffer.h"  // Video::ConstantBuffer
 // ENDGAME B.3.5 block J: the real Video::ConstantBufferData, block A's abstract
@@ -97,34 +98,11 @@
 // that was to print them does not exist in this file — so they measured nothing;
 // a counter nothing reads is not an instrument.
 
-// Declared locally rather than by including standalone/resolve.h (PLAN §4.1
-// decision 1). Byte-identical to array.cpp:133.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-// At FILE scope, deliberately: declared inside the `extern "C"` verifier below
-// it would acquire C linkage and fail to find resolve.h's C++-linkage symbol.
-
 // The two element helpers, ported in phase 1 (context_lifecycle.cpp).
 extern "C" void RtVideo_ConstEntryArrayDestroy(void* unused, void* data, int32_t count);
 extern "C" void RtVideo_ConstEntryArrayDtor(void* arr);
 
 namespace {
-
-// ---------------------------------------------------------------------------
-// The allocator boundary. Cache a hit, RETRY a miss.
-// ---------------------------------------------------------------------------
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
 
 using ConstantInfo = Video::ConstantBuffer::ConstantInfo;
 
@@ -182,7 +160,7 @@ void StringAssign(void** dst, void* src) {
         *rc -= 1;
         if (*rc == 0) {
             *dst = static_cast<uint8_t*>(cur) - 8; // 0x1800eed47
-            MemFree(*dst);
+            System::MemoryAllocator::MemFree(*dst);
         } else {
             *dst = nullptr;                        // 0x1800eed57
         }
@@ -212,7 +190,7 @@ void StringRelease(void** field) {
     *rc -= 1;
     if (*rc == 0) {
         *field = static_cast<uint8_t*>(p) - 8;
-        MemFree(*field);
+        System::MemoryAllocator::MemFree(*field);
     } else {
         *field = nullptr;
     }
@@ -264,7 +242,7 @@ extern "C" void RtVideo_ConstEntryArraySetSize(void* arrv, int32_t newSize,
     if (newSize > a->capacity) {
         a->capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0) a->capacity = newSize * 3;
-        a->data = static_cast<ConstantInfo*>(MemAlloc(static_cast<uint64_t>(
+        a->data = static_cast<ConstantInfo*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
                       static_cast<int64_t>(a->capacity) * 0x18), 8));
     }
 
@@ -283,7 +261,7 @@ extern "C" void RtVideo_ConstEntryArraySetSize(void* arrv, int32_t newSize,
 
     if (oldData != newData) {
         RtVideo_ConstEntryArrayDestroy(a, oldData, oldSize);   // 0x180053613
-        if (oldData) MemFree(oldData);
+        if (oldData) System::MemoryAllocator::MemFree(oldData);
     } else if (oldSize > newSize) {
         RtVideo_ConstEntryArrayDestroy(a, oldData + newSize, oldSize - newSize);
     }
@@ -845,57 +823,4 @@ void Video::Context::AssignConstants() {
 
 extern "C" void RtVideo_Context_AssignConstants(void* self) {
     static_cast<Video::Context*>(self)->Video::Context::AssignConstants();
-}
-
-
-// ============================================================================
-// Registration
-//
-// All four mangled names checked against the shipped export directory with
-// pefile BEFORE any body was written:
-//   ?BeginConstants@ConstantBuffer@Video@@QEAAXAEBVString@System@@0HH_N1H@Z  1636
-//   ?AddConstant@ConstantBuffer@Video@@QEAAXAEBVString@System@@0H@Z          1540
-//   ?EndConstants@ConstantBuffer@Video@@QEAAXH@Z                             2306
-//   ?PlatformCreate@ConstantBuffer@Video@@AEAA_NXZ                           3349
-//
-// Three ADDRESS-ONLY rows: 0x180053510, 0x18001cab0 and 0x18001cfc0 are
-// unexported (checked against the retail directory AND Runtime-x64-profile's
-// 5,182 names), so RegisterRuntimeExport has nothing to register under.
-// ============================================================================
-int RtVideoConstantBufferRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?BeginConstants@ConstantBuffer@Video@@QEAAXAEBVString@System@@0HH_N1H@Z",
-                          (void*)&RtVideo_ConstantBuffer_BeginConstants); ++n;
-    RegisterRuntimeExport("?AddConstant@ConstantBuffer@Video@@QEAAXAEBVString@System@@0H@Z",
-                          (void*)&RtVideo_ConstantBuffer_AddConstant); ++n;
-    RegisterRuntimeExport("?EndConstants@ConstantBuffer@Video@@QEAAXH@Z",
-                          (void*)&RtVideo_ConstantBuffer_EndConstants); ++n;
-    RegisterRuntimeExport("?PlatformCreate@ConstantBuffer@Video@@AEAA_NXZ",
-                          (void*)&RtVideo_ConstantBuffer_PlatformCreate); ++n;
-    // ENDGAME B.3.5 block D1 — NEW ROW. `?GetNextUploadIndex@` (0x1800eef90,
-    // ordinal 2831) was the body this file carried as the file-local
-    // `NextSlotAfter` with no door at all; `?AssignConstants@` drives it seven
-    // times per Context construction. The name was checked against
-    // standalone/rt_export_addrs.inc, and 0x1800eef90 appeared nowhere in the
-    // tree before this row.
-    RegisterRuntimeExport("?GetNextUploadIndex@ConstantBuffer@Video@@QEBAHXZ",
-                          (void*)&RtVideo_ConstantBuffer_GetNextUploadIndex); ++n;
-    RegisterRuntimeAddr(0x1800eef90, (void*)&RtVideo_ConstantBuffer_GetNextUploadIndex);
-
-    RegisterRuntimeAddr(0x1800eed10, (void*)&RtVideo_ConstantBuffer_BeginConstants);
-    RegisterRuntimeAddr(0x1800eec40, (void*)&RtVideo_ConstantBuffer_AddConstant);
-    RegisterRuntimeAddr(0x1800eebf0, (void*)&RtVideo_ConstantBuffer_EndConstants);
-    RegisterRuntimeAddr(0x1800ef010, (void*)&RtVideo_ConstantBuffer_PlatformCreate);
-
-    RegisterRuntimeExport("?AssignConstants@Context@Video@@AEAAXXZ",
-                          (void*)&RtVideo_Context_AssignConstants); ++n;
-    RegisterRuntimeAddr(0x1800ef3d0, (void*)&RtVideo_Context_AssignConstants);
-
-    RegisterRuntimeAddr(0x180053510, (void*)&RtVideo_ConstEntryArraySetSize);
-    // Phase 1's two, now that they have callers outside context_lifecycle.cpp.
-    RegisterRuntimeAddr(0x18001cab0, (void*)&RtVideo_ConstEntryArrayDtor);
-    RegisterRuntimeAddr(0x18001cfc0, (void*)&RtVideo_ConstEntryArrayDestroy);
-
-    return n;
 }

@@ -43,6 +43,12 @@
 #include "Dialog/UpgradeUI.h"
 #include "Player/RemovalTool.h"
 #include "Player/Tool.h"
+#include "Player/exe_bodies.h"            // UpdateToolUI_fc60 (0x1400ffc60)
+#include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, ActHunt_DynArraySetCount_3110
+#include "Dialog/exe_bodies.h"            // EntityUI_SetEditMode_Impl
+#include "Dialog/dialog_exe_helpers.h"    // Dialog_FindComponent_d6c0 (0x14000d6c0)
+#include "graphics/Geometry.h"            // Graphics::Geometry::GetTransform
+#include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc / _singleton
 
 // Standalone factory from code/Game/Player/removaltool.cpp (extern "C").
 // Returns a freshly MemAlloc'd RemovalTool (0x40 bytes) with its standalone
@@ -81,8 +87,7 @@ extern "C" void MapParamsDialog_HarnessOpen();
 // Phase 3: the SetEditMode reimpl the toolbar case-1 click drives (entityui.cpp).
 // Walks the tool-mode tree at entityUI+0x10 (built by EntityUI_BuildToolModeTree_SA),
 // resolves PlacementTool from the descriptor's CreatePlacedDescription, CreateObject's
-// it + Startup, installs it at entityUI+0x28. C++ linkage (not extern "C").
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+// it + Startup, installs it at entityUI+0x28. Declared in Dialog/exe_bodies.h.
 
 // GUI: entity-selection (EditTool) harness. Scans the region map near centre and drives
 // the EditTool select path on the first dialog-capable entity (edittool.cpp).
@@ -770,27 +775,23 @@ void FirePreviewPlacement(void* entityUI) {
         uint8_t* t2 = static_cast<uint8_t*>(tool);
         void* controller = *reinterpret_cast<void**>(t2 + 0x10);   // EntityUI / dialog controller
         void* mesh = *reinterpret_cast<void**>(t2 + 0x68);          // meshInstance
-        typedef void (*fc60_t)(void*, int, int, void*, char, char, char, int, int, int, void*, void*);
-        fc60_t fc60 = reinterpret_cast<fc60_t>(ResolveAddr(Module::Exe, 0x1400ffc60));
-        if (fc60 && controller && mesh &&
+        if (controller && mesh &&
             *reinterpret_cast<void**>(controller) != nullptr /*dialog open*/) {
             void* box = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mesh) + 0x34);
-            // Geometry::GetTransform(mesh) -> Transform by value (member, hidden retbuf).
+            // Geometry::GetTransform(mesh) -> Transform by value (member; import slot
+            // 0x140151460 ?GetTransform@Geometry@Graphics@@, 0x180015800).
             uint8_t xf[96] = {};
-            uintptr_t slot = ResolveAddr(Module::Exe, 0x140151460);
-            if (slot && *reinterpret_cast<void**>(slot)) {
-                typedef void* (*getxf_t)(void*, void*);
-                (*reinterpret_cast<getxf_t*>(slot))(mesh, xf);
-            }
+            ::new (static_cast<void*>(xf)) Math::Transform(
+                reinterpret_cast<const Graphics::Geometry*>(mesh)->GetTransform());   // B.3.x bridge
             System::String costStr("");   // empty System::String
             fprintf(stderr, "[ToolHarness] driving operator_fc60 (CreateBar populate+position) "
                    "controller=%p mesh=%p...\n", controller, mesh);
-            fc60(controller, 0, 0, &costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
-                 /*startCell*/-1, /*endCell*/-1, box, xf);
+            UpdateToolUI_fc60(controller, 0, 0, &costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
+                              /*startCell*/-1, /*endCell*/-1, box, xf);   // 0x1400ffc60
             fprintf(stderr, "[ToolHarness] operator_fc60 returned — CreateBar populate ran crash-free\n");
         } else {
             fprintf(stderr, "[ToolHarness] operator_fc60 probe skipped (fc60=%p controller=%p mesh=%p "
-                   "dialogOpen=%d)\n", (void*)fc60, controller, mesh,
+                   "dialogOpen=%d)\n", reinterpret_cast<void*>(&UpdateToolUI_fc60), controller, mesh,
                    controller ? (*reinterpret_cast<void**>(controller) != nullptr) : 0);
         }
     }
@@ -1021,16 +1022,11 @@ void FireMarkRemoval() {
            gw, map, width, (void*)tileArray, entityList,
            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(entityList) + 0xD8));
 
-    // Resolve the two registered backend primitives.
-    typedef void (*MarkRemoval_t)(void*);
-    typedef void (*ArrayPush_t)(void*, int, void*);
-    auto c2ea0 = reinterpret_cast<MarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    auto push3110 = reinterpret_cast<ArrayPush_t>(ResolveAddr(Module::Exe, 0x140003110));
-    fprintf(stderr, "[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n", (void*)c2ea0, (void*)push3110);
-    if (!c2ea0 || !push3110) {
-        fprintf(stderr, "[MarkRemoval] ERROR: backend primitives unregistered (null) — aborting\n");
-        return;
-    }
+    // The two backend primitives: ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0) and
+    // ActHunt_DynArraySetCount_3110 (0x140003110).
+    fprintf(stderr, "[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n",
+            reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
+            reinterpret_cast<void*>(&ActHunt_DynArraySetCount_3110));
 
     // Scan a rectangle near map centre for the first markable entity (either cell slot).
     const int lo = 110, hi = 146;
@@ -1058,14 +1054,14 @@ void FireMarkRemoval() {
                        row, col, cell, slot, local, flags, compCnt, tid);
 
                 // --- Step 1: MarkForRemoval (sets flag 0x400, notifies components) ---
-                c2ea0(local);
+                ActHunt_MarkEntityRemoval_c2ea0(local);
                 uint32_t flagsAfter = *reinterpret_cast<uint32_t*>(
                     reinterpret_cast<uintptr_t>(local) + 0x40);
 
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
                 uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
                 int cntBefore = *reinterpret_cast<int*>(rl + 0x8);
-                push3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);
+                ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);
                 int cntAfter = *reinterpret_cast<int*>(rl + 0x8);
 
                 fprintf(stderr, "[MarkRemoval] MARKED: flags 0x%08x -> 0x%08x (bit0x400 %s), "
@@ -1153,18 +1149,17 @@ void FirePinPanel(void* entityUI) {
     // 5. Mark the house for removal (freed on the next EntityList drain).
     void* gw = GetGW();
     void* entityList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8) : nullptr;
-    auto c2ea0   = reinterpret_cast<void(*)(void*)>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    auto push3110 = reinterpret_cast<void(*)(void*, int, void*)>(ResolveAddr(Module::Exe, 0x140003110));
     void* local = house;
-    if (!local || !c2ea0 || !push3110 || !entityList) {
+    if (!local || !entityList) {
         fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
-               local, (void*)c2ea0, (void*)push3110, entityList);
+               local, reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
+               reinterpret_cast<void*>(&ActHunt_DynArraySetCount_3110), entityList);
         return;
     }
-    c2ea0(local);
+    ActHunt_MarkEntityRemoval_c2ea0(local);                                   // 0x1400c2ea0
     uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
     int cntBefore = *reinterpret_cast<int*>(rl + 8);
-    push3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);
+    ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);   // 0x140003110
     fprintf(stderr, "[PinPanel] MARKED house flags(+0x40)=0x%08x removalList %d->%d — watching the guard "
            "across the free (rawDS vs CheckPtr-hardened)...\n",
            *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(local) + 0x40),
@@ -1242,7 +1237,7 @@ void FirePinPanel(void* entityUI) {
 // not coverage: it is exactly the reading that was already green while the half
 // this route exists for had never executed once.
 static void DlgSettings_InstallBuffer(void* entity, int idx) {
-    if (!entity || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    if (!entity || !System::MemoryAllocator::_singleton) return;   // B3R: read live (was the g_pMemAllocSingleton snapshot)
     const char* e = Opt().dlgSettingsRoute;
     if (!e || !*e || std::strcmp(e, "0") == 0) return;
     int bytes = std::atoi(e);
@@ -1296,7 +1291,7 @@ static void DlgSettings_InstallBuffer(void* entity, int idx) {
                 idx, existing, *reinterpret_cast<uint32_t*>(c + 0x30));
         return;
     }
-    void* buf = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(bytes), 8);
+    void* buf = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(bytes), 8);
     if (!buf) { fprintf(stderr, "[DlgSettings:route] house[%d] MemAlloc failed\n", idx); return; }
     std::memset(buf, 0, static_cast<size_t>(bytes));
     *reinterpret_cast<void**>(c + 0x28)    = buf;
@@ -2280,11 +2275,8 @@ int UpgradeClickDelay() {
 // BuildComponent (0x14000d6c0 / type 0x1401c7008) on `entity`, CheckPtr'd.
 void* UpgradeFindBuildComp(void* entity) {
     if (!entity) return nullptr;
-    auto find = reinterpret_cast<void*(*)(uintptr_t, void*)>(
-        ResolveAddr(Module::Exe, 0x14000d6c0));
-    if (!find) return nullptr;
     uint64_t ibp = 0;
-    find(reinterpret_cast<uintptr_t>(entity), &ibp);
+    Dialog_FindComponent_d6c0(entity, &ibp);   // 0x14000d6c0
     return reinterpret_cast<void*>(ibp);
 }
 // Retail's own two reads: +0x48 = delivered build effort, required = desc(+0x18)+0x30
