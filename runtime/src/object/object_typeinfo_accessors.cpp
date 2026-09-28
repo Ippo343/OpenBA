@@ -96,15 +96,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/object/External.h"   // the Object record accessors (D6 step 1)
-#include "../../types/object/Internal.h"   // Object::Internal's class record (DEFINE_TYPE)
 
 // Forward declarations: the positive control at the bottom of the anonymous
 // namespace calls these, and they are defined below it.
 extern "C" uint32_t    RtObject_Base_Type(const void*);
 extern "C" uint32_t    RtObject_External_Type(const void*);
 extern "C" const char* RtObject_External_TypeName(const void*);
-extern "C" uint32_t    RtObject_Internal_Type(const void*);
-extern "C" const char* RtObject_Internal_TypeName(const void*);
 
 // ENDGAME B.3.9 OBJ (B39_RULES D6 step 1): External's record is read through
 // the Object accessor slot in external_class.cpp (`Object::External::TypeId()`
@@ -134,17 +131,6 @@ extern "C" const char* RtObject_External_TypeName(const void* /*self*/) {
     return ::Object::ExternalTypeInfoRecord()->name;
 }
 
-// ---- ??_7Internal@Object@@6B@  slots 2 and 1 -------------------------------
-// ?Type@Internal@Object@@UEBAIXZ  0x1800064d0  MOV EAX,[node+0x00].
-extern "C" uint32_t RtObject_Internal_Type(const void* /*self*/) {
-    return ::Object::Internal::TypeId();
-}
-
-// ?TypeName@Internal@Object@@UEBAPEBDXZ  0x1800064c0  MOV RAX,[node+0x08].
-extern "C" const char* RtObject_Internal_TypeName(const void* /*self*/) {
-    return ::Object::Internal::GetTypeInfo().name;
-}
-
 // ============================================================================
 // Registration — BOTH doors on every row, for the reason the mint itself
 // gives: a minted vtable slot is filled BY NAME, but many sites in this tree
@@ -166,14 +152,6 @@ int RtObjectTypeInfoAccessorsRegister() {
     RegisterRuntimeExport("?TypeName@External@Object@@UEBAPEBDXZ",
                           (void*)&RtObject_External_TypeName); ++n;
     RegisterRuntimeAddr(0x1800066c0, (void*)&RtObject_External_TypeName);
-
-    RegisterRuntimeExport("?Type@Internal@Object@@UEBAIXZ",
-                          (void*)&RtObject_Internal_Type); ++n;
-    RegisterRuntimeAddr(0x1800064d0, (void*)&RtObject_Internal_Type);
-
-    RegisterRuntimeExport("?TypeName@Internal@Object@@UEBAPEBDXZ",
-                          (void*)&RtObject_Internal_TypeName); ++n;
-    RegisterRuntimeAddr(0x1800064c0, (void*)&RtObject_Internal_TypeName);
 
     return n;
 }

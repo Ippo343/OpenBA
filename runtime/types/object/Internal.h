@@ -450,13 +450,9 @@ static_assert(std::is_trivially_destructible<RtObject::Internal>::value,
 // files still stamping a MINTED table would dispatch one slot out. `~Internal()`
 // is protected and non-virtual; deletion is `Object::Destroy(p)`.
 //
-// THE MINTED TABLE STAYS. `RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010,
-// "Object::Internal")` (deleting_dtor.cpp:294) both dispatches slot 0 AND FILLS
-// slot 0 of the minted `??_7Internal@Object@@6B@` (rt_data_mint_tables.inc
-// kVSlots76, 4 slots). Retiring it publishes a trap table into live objects
-// (B33_RULES §6.1), so nothing here removes a row or a registration; the real
-// class coexists with minted-vtable objects exactly as
-// tests/unit/object_vtable_abi_test.cpp proves it can.
+// THE MINTED TABLE IS GONE (ENDGAME B.3.9 OBJ): the `??_7Internal@Object@@6B@`
+// row, its RT_DELDTOR row 0x180006440 and the ??0 / ??1 doors that stamped it
+// are retired; every Internal-derived object wears a compiler table.
 // ############################################################################
 
 class Internal;
@@ -557,11 +553,6 @@ public:
 
     int32_t  GetFactoryIndex() const { return _factoryIndex; }
     uint32_t GetGeneration()   const { return _generation; }
-
-    // The one-line forwarder the registered `RtObject_Internal_Dtor` shim needs:
-    // `~Internal()` is protected so that `delete p` cannot compile on a class
-    // whose deletion must go through slot 0. Nothing else may call this.
-    static void Shim_Dtor(Internal* self) { self->~Internal(); }
 
     // ---- the 16 bytes, in retail order ----
     // PUBLIC for the same reason `Object::BaseTypeInfo`'s are: every

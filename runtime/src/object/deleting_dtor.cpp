@@ -285,7 +285,6 @@ namespace rtdtor {
 #define RT_DELDTOR(ADDR, DTOR, SIZE, NAME) { (ADDR), (DTOR), (SIZE), NAME }
 
 static constexpr DelDtorSpec kSpecs[] = {
-    RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010, "Object::Internal"),
     RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base"),   // probe subject
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
     // ---- WAVE 10C lane DLG8 -------------------------------------------------
@@ -1037,10 +1036,6 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
     return DeletingDtorCoreWith(self, flags, i, Dtor(i));
 }
 
-// Object::Internal         ~Internal = 0x1800bfdb0  (PORTED)
-void* RtDelDtor_Internal(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180006440>());
-}
 // Object::Base             ~Base = 0x1800c0360  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_Base(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800065b0>());
@@ -1133,7 +1128,6 @@ const DelDtorSpec* Specs() { return kSpecs; }
 void RtObjectDeletingDtorPortInit() {
     using namespace rtdtor;
 
-    RegisterRuntimeAddr(0x180006440, (void*)&RtDelDtor_Internal);
     RegisterRuntimeAddr(0x1800065b0, (void*)&RtDelDtor_Base);
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
 

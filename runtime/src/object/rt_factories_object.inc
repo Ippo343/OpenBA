@@ -67,20 +67,6 @@ static const RtFactoryClass kClsObject_ExternalCompiler = {
 extern "C" void* RtFactNew_Object_ExternalCompiler()          { return RtFactoryNew(kClsObject_ExternalCompiler); }
 extern "C" void* RtFactIP_Object_ExternalCompiler(void* p)    { return RtFactoryInPlace(kClsObject_ExternalCompiler, p); }
 
-// --------------------------------------------------------------------------
-// Object::Internal
-//   ?CreateNewObject@Internal@Object@@SAPEAVBase@2@XZ  0x18002fc80
-//   ?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z  0x1800070c0
-// --------------------------------------------------------------------------
-static uint64_t kCountObject_Internal[3];
-static const RtFactoryClass kClsObject_Internal = {
-    "Object::Internal", 0x0, 0,
-    nullptr, nullptr,
-    0x18002fc80ull, 0x1800070c0ull, kCountObject_Internal,
-};
-extern "C" void* RtFactNew_Object_Internal()          { return RtFactoryNew(kClsObject_Internal); }
-extern "C" void* RtFactIP_Object_Internal(void* p)    { return RtFactoryInPlace(kClsObject_Internal, p); }
-
 
 static const RtFactoryReg kRegs[] = {
     { "?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ", 0x18000b6c0ull, (void*)&RtFactNew_Object_CompiledExternal,
@@ -91,6 +77,4 @@ static const RtFactoryReg kRegs[] = {
       "?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c990ull, (void*)&RtFactIP_Object_External, &kClsObject_External },
     { "?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c0e0ull, (void*)&RtFactNew_Object_ExternalCompiler,
       "?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c0f0ull, (void*)&RtFactIP_Object_ExternalCompiler, &kClsObject_ExternalCompiler },
-    { "?CreateNewObject@Internal@Object@@SAPEAVBase@2@XZ", 0x18002fc80ull, (void*)&RtFactNew_Object_Internal,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, (void*)&RtFactIP_Object_Internal, &kClsObject_Internal },
 };
