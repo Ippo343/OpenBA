@@ -110,14 +110,14 @@ bool ComboDescription::Serialize(void* streamv) {
     ButtonDescription::Serialize(stream);                   // 1801129da
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180038f90ull)(&_listDesc, &ser);    // 180112a1b
     RtAddr<FieldSerFn>(0x180038f90ull)(&_itemDesc, &ser);    // 180112a2c
     RtAddr<FieldSerFn>(0x1800042a0ull)(&_stringTable, &ser); // 180112a3d
 
-    DestroyReaderWriter(rw);                                // 180112a55
+    if (rw != nullptr) rw->DeletingDtor(1);                 // 180112a55
     return true;
 }
 

@@ -126,18 +126,18 @@ bool EditDescription::Serialize(void* streamv) {
     UI::ElementDescription::Serialize(stream);               // 1800d112a
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x18003f1e0ull)(&_ptr68, &ser);       // 1800d1168
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_string70, &ser);    // 1800d1176
 
-    RwScalar(rw, kRwScalarInt,  &_word78);                   // 1800d118a
-    RwScalar(rw, kRwScalarBool, &_flag7c);                   // 1800d119f
+    rw->SerializeInt(_word78, nullptr);                      // 1800d118a
+    rw->SerializeBool(reinterpret_cast<bool&>(_flag7c), nullptr); // 1800d119f
 
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_string80, &ser);    // 1800d11ae
 
-    DestroyReaderWriter(rw);                                 // 1800d11c6
+    if (rw != nullptr) rw->DeletingDtor(1);                  // 1800d11c6
     return true;
 }
 

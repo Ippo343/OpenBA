@@ -126,16 +126,15 @@ bool CharacterSet::Serialize(void* streamv) {
     void*  factory = stream->encodingFactory;                // 1800cb7d0
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;     // 1800cb7da CMP / JNZ
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int zero);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                   // 1800cb7ed
 
     using StrSerFn = void (*)(void* str, Serializer* ser);
     RtAddr<StrSerFn>(0x1800c9930ull)(&_string20, &ser);      // 1800cb7fb
 
     if (rw != nullptr) {                                     // 1800cb806
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(VTableOf(rw)[0])(rw, 1);  // 1800cb813
+        rw->DeletingDtor(1);                                 // 1800cb813
     }
     return true;                                             // 1800cb815 MOV AL,1
 }

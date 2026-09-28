@@ -155,8 +155,8 @@ bool SliderDescription::Serialize(void* streamArg) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                              // 1800d78da
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
@@ -168,17 +168,14 @@ bool SliderDescription::Serialize(void* streamArg) {
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_thumbName, &ser);              // 1800d7937
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_thumbHotName, &ser);           // 1800d7948
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt   / 8])(rw, &_trackOffsetY, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt   / 8])(rw, &_thumbMargin, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarFloat / 8])(rw, &_minimum, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarFloat / 8])(rw, &_maximum, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt   / 8])(rw, &_steps, nullptr);
+    rw->SerializeInt(_trackOffsetY, nullptr);
+    rw->SerializeInt(_thumbMargin, nullptr);
+    rw->SerializeFloat(_minimum, nullptr);
+    rw->SerializeFloat(_maximum, nullptr);
+    rw->SerializeInt(_steps, nullptr);
 
     if (rw != nullptr) {                                                // 1800d79ce
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

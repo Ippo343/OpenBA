@@ -92,21 +92,21 @@ bool ContainerDescription::Serialize(void* streamv) {
     UI::ElementDescription::Serialize(stream);              // 1800cceea (qualified)
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    RwScalar(rw, kRwScalarInt, &_requestedWidth);           // 1800ccf2e
-    RwScalar(rw, kRwScalarInt, &_requestedHeight);          // 1800ccf43
-    RwScalar(rw, kRwScalarInt, &_barSize);                  // 1800ccf58
+    rw->SerializeInt(_requestedWidth, nullptr);             // 1800ccf2e
+    rw->SerializeInt(_requestedHeight, nullptr);            // 1800ccf43
+    rw->SerializeInt(_barSize, nullptr);                    // 1800ccf58
 
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[0], &ser);   // 1800ccf5e
     RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[1], &ser);   // 1800ccf6c
     RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[2], &ser);   // 1800ccf7d
 
-    RwScalar(rw, kRwScalarBool, &_clampWidth);              // 1800ccf9d
-    RwScalar(rw, kRwScalarBool, &_clampHeight);             // 1800ccfaf
+    rw->SerializeBool(reinterpret_cast<bool&>(_clampWidth), nullptr); // 1800ccf9d
+    rw->SerializeBool(reinterpret_cast<bool&>(_clampHeight), nullptr); // 1800ccfaf
 
-    DestroyReaderWriter(rw);                                // 1800ccfc5
+    if (rw != nullptr) rw->DeletingDtor(1);                 // 1800ccfc5
     return true;
 }
 

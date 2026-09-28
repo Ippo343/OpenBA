@@ -206,6 +206,7 @@
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
+#include "../../types/ui/Element.h"       // B3X W0: the root's slots by name
 #include "../../types/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
 #include "../../types/system/Timer.h"     // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/video/Device.h"     // ENDGAME B.3.9 SS1: Video::Device::_singleton
@@ -378,15 +379,7 @@ inline void** VideoDeviceSingleton() {
 // a null for the life of the process, and `~DialogInstance` runs during
 // teardown, which is exactly when an ordering assumption is least safe.
 
-using DeletingDtorFn = void* (*)(void* self, unsigned flags);
 using VoidPtrFn      = void  (*)(void* p);
-
-// Slot 0 of any Object::Base-derived vtable is the SCALAR DELETING DESTRUCTOR
-// (runtime/src/object/deleting_dtor.cpp). Retail calls it with EDX = 1, which
-// means "destruct AND free"; see the note in the block below.
-inline DeletingDtorFn DeletingDtorOf(void* obj) {
-    return reinterpret_cast<DeletingDtorFn>((*reinterpret_cast<void***>(obj))[0]);
-}
 
 // 0x1800c7ad0, which is the out-of-line spelling of the lock+Free retail
 // inlines at both of this dtor's array frees. Same argument
@@ -1302,8 +1295,9 @@ Object::Base* DialogInstance::CreateNewObject() {
 // ============================================================================
 void DialogInstance::ReleaseFields() {
     // --- the root Element, through its scalar deleting destructor ------------
+    // Retail calls slot 0 with EDX = 1: destruct AND free.
     if (_root) {
-        DeletingDtorOf(_root)(_root, 1);
+        static_cast<Element*>(_root)->DeletingDtor(1);
         _root = nullptr;
     }
 
@@ -1312,7 +1306,7 @@ void DialogInstance::ReleaseFields() {
         DialogController** data = _controllers._data;   // re-read: see above
         DialogController*  c    = data[i];
         if (c) {
-            DeletingDtorOf(c)(c, 1);
+            c->DeletingDtor(1);
             data[i] = nullptr;
         }
     }
@@ -1435,11 +1429,9 @@ void DialogInstance::OnElementEvent(Object::InternalPtr<Element>* element,
 bool DialogInstance::Contains(int32_t x, int32_t y) const {    // 0x180114820
     const uint8_t* root = Bytes(_root);
     if ((_flags >> 2) & 1) return false;
-    if ((_flags >> 3) & 1) {
-        void* const* const vtable = *reinterpret_cast<void* const* const*>(root);
-        using Fn = bool (*)(const void*, int32_t, int32_t, void*);
-        return vtable && reinterpret_cast<Fn>(vtable[9])(root, x, y, _ui);
-    }
+    if ((_flags >> 3) & 1)
+        return static_cast<const Element*>(_root)->Contains(       // Element slot 9
+            x, y, static_cast<UserInterface*>(_ui));
     const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
     const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
     const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
@@ -1474,8 +1466,7 @@ void DialogInstance::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 
     uint8_t* root = Bytes(_root);
     auto ComputeSize = [&]() {
-        void** vt = *reinterpret_cast<void***>(root);
-        reinterpret_cast<void (*)(uint8_t*)>(vt[4])(root);
+        reinterpret_cast<Element*>(root)->ComputeSize();       // Element slot 4
     };
     ComputeSize();
 
@@ -1541,9 +1532,8 @@ void DialogInstance::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
         }
     }
 
-    void** vt = *reinterpret_cast<void***>(root);
-    reinterpret_cast<void (*)(uint8_t*, int32_t, int32_t, int32_t, int32_t)>(vt[5])(
-        root, posX, posY, posX + totalW, posY + totalH);
+    reinterpret_cast<Element*>(root)->ComputeLayout(           // Element slot 5
+        posX, posY, posX + totalW, posY + totalH);
 }
 
 void DialogInstance::Update(const System::Time& time, UserInterface* ui,
@@ -1632,11 +1622,13 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
         // ---- root Element::Update (block A's slot 7, five arguments) -------
         uint8_t* root = Bytes(_root);
         DialogInstance* topDialog = this;
-        {
-            void** vt = *reinterpret_cast<void***>(root);
-            reinterpret_cast<void (*)(uint8_t*, const void*, void*, DialogInstance**, uint8_t*)>(
-                vt[7])(root, &time, ui, &topDialog, updateState);
-        }
+        // Slot 7 takes the InternalPtr<DialogInstance> by the ADDRESS of the
+        // caller's 8-byte handle and the UpdateState by reference (Element.h's
+        // banner): the same two pointers the raw call passed.
+        reinterpret_cast<Element*>(root)->Update(
+            time, ui,
+            reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&topDialog),
+            *reinterpret_cast<const Element::UpdateState*>(updateState));
 
         const int32_t mx2 = *reinterpret_cast<const int32_t*>(updateState + 0x18);
         const int32_t my2 = *reinterpret_cast<const int32_t*>(updateState + 0x1c);
@@ -1645,6 +1637,10 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
         if ((_flags >> 2) & 1) {
             hit = false;
         } else if ((_flags >> 3) & 1) {
+            // B3X W0: LEFT as a slot read. The 4th argument here is `_dialog`
+            // (+0x18); retail passes `_ui` (+0x10): 0x180113bb3 MOV R9,[RBX+0x10]
+            // before CALL [RAX+0x48]. A by-name Contains(x, y, UserInterface*)
+            // would either change behaviour or enshrine the divergence.
             void** vt = *reinterpret_cast<void***>(root);
             using Fn = bool (*)(uint8_t*, int32_t, int32_t, const void*);
             hit = reinterpret_cast<Fn>(vt[9])(root, mx2, my2, _dialog);
@@ -1691,10 +1687,7 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
     uint8_t* root = Bytes(_root);
 
     // Element vtable slot 4 — ComputeSize. Pure virtual on the base.
-    {
-        void** vtbl = *reinterpret_cast<void***>(root);
-        reinterpret_cast<void (*)(void*)>(vtbl[4])(root);
-    }
+    reinterpret_cast<Element*>(root)->ComputeSize();
 
     int32_t w = *reinterpret_cast<const int32_t*>(root + 0x60) +
                 *reinterpret_cast<const int32_t*>(root + 0x1c) +

@@ -133,8 +133,8 @@ bool ScrollDescription::Serialize(void* streamv) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 18011a98a
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
@@ -142,17 +142,14 @@ bool ScrollDescription::Serialize(void* streamv) {
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
         RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteNames[i], &ser);
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(rw, &_vertical, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &_inset, nullptr);
+    rw->SerializeBool(reinterpret_cast<bool&>(_vertical), nullptr);
+    rw->SerializeInt(_inset, nullptr);
     // BOTH of the last two are kScalarUInt (vt+0x98), not kScalarInt.
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_barColor, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_unknownC4, nullptr);
+    rw->SerializeUInt(_barColor, nullptr);
+    rw->SerializeUInt(_unknownC4, nullptr);
 
     if (rw != nullptr) {                                       // 18011aa96
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

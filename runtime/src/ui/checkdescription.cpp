@@ -84,12 +84,12 @@ bool CheckDescription::Serialize(void* streamv) {
     ButtonDescription::Serialize(stream);                  // 18011194a
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180038f90ull)(&_checkDesc, &ser); // 18011198b
 
-    DestroyReaderWriter(rw);                               // 1801119a3
+    if (rw != nullptr) rw->DeletingDtor(1);                // 1801119a3
     return true;
 }
 

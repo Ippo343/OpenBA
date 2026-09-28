@@ -190,14 +190,6 @@ enum : size_t {
     kChildrenData = 0xa0,   // ?Child@         0x180035540
     kChildrenSize = 0xa8,   // ?ChildCount@    0x180035530
 };
-// Vtable slots. Slot 2 (+0x10) is Object::Internal's Type slot — the same
-// offset runtime/types/object/Internal.h calls kInternalVtblType. Slot 4
-// (+0x20) is ComputeSize(), which is _purecall in the Element base and
-// overridden by every class this file calls it on.
-enum : int {
-    kVtblType        = 0x10,
-    kVtblComputeSize = 0x20,
-};
 }  // namespace EL
 
 // UI::Element::_flags bits, named by runtime/types/ui/Element.h.
@@ -311,17 +303,12 @@ void* DeviceSingleton() {
 }
 
 // ---- virtual dispatch ------------------------------------------------------
+// By name (B3X W0): Object::Base slot 2 `Type()`, Element slot 4 `ComputeSize()`.
 inline uint32_t VCallType(void* el) {
-    void* const* const vt = *reinterpret_cast<void* const* const*>(el);
-    return reinterpret_cast<uint32_t (*)(void*)>(
-        *reinterpret_cast<void* const*>(
-            reinterpret_cast<const uint8_t*>(vt) + EL::kVtblType))(el);
+    return static_cast<const UI::Element*>(el)->Type();
 }
 inline void VCallComputeSize(void* el) {
-    void* const* const vt = *reinterpret_cast<void* const* const*>(el);
-    reinterpret_cast<void (*)(void*)>(
-        *reinterpret_cast<void* const*>(
-            reinterpret_cast<const uint8_t*>(vt) + EL::kVtblComputeSize))(el);
+    static_cast<UI::Element*>(el)->ComputeSize();
 }
 
 // ===========================================================================

@@ -108,10 +108,10 @@ bool AnimatedImageDescription::Serialize(void* streamv) {
     ImageDescription::Serialize(stream);                       // 1800cb5da
 
     rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 1800cb60a
+    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800cb60a
 
     int32_t n = _frameNames._size;                             // 1800cb60f
-    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &n);
+    rw->SerializeInt(n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 1800cb62f (re-read)
         using SetSizeFn = void (*)(void* array, int n);
@@ -121,9 +121,9 @@ bool AnimatedImageDescription::Serialize(void* streamv) {
     using StrArrayFn = void (*)(rtdesc::Serializer* ser, int count, void* data);
     rtdesc::RtAddr<StrArrayFn>(0x180029bb0ull)(&ser, n, _frameNames._data);
 
-    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &_framesPerSecond);
+    rw->SerializeInt(_framesPerSecond, nullptr);
 
-    rtdesc::DestroyReaderWriter(rw);                           // 1800cb67d
+    if (rw != nullptr) rw->DeletingDtor(1);                    // 1800cb67d
     return true;
 }
 
