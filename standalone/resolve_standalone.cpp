@@ -11,7 +11,6 @@
 #include "resolve.h"
 #include "options.h"
 #include "../runtime/funcs/rt_port.h"
-#include "rt_data_mint.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -293,11 +292,9 @@ void RuntimePortInit() {
     // vtable at ENDGAME B.3.9 OBJ: every class declares its own DeletingDtor.)
 
     // Wave 9 lane X: the fourteen constructors that publish a `?_singleton@...`
-    // DATA export. Here, between lane K and the mint, for two reasons. It must
-    // be BEFORE RtDataMintInit() because the mint's verdict for a storage row
-    // depends on whether its writer is registered. And it is AFTER every other
-    // wave because its probe calls our OWN ??0Random@System@@QEAA@XZ through
-    // the port-aware door, which only reaches the port once Wave 2 has run.
+    // DATA export. AFTER every other wave because its probe calls our OWN
+    // ??0Random@System@@QEAA@XZ through the port-aware door, which only reaches
+    // the port once Wave 2 has run.
     RtSingletonCtorsPortInit();  // Wave 9: singleton constructors (lane X)
 
     // B3R W0-SM: the seven addresses the deleted name->address mirror used to
@@ -309,15 +306,10 @@ void RuntimePortInit() {
     extern void RtMirror16Register();
     RtMirror16Register();
 
-    // Wave 9 lane C2: mint the exported DATA symbols (??_7 vtables,
-    // BaseTypeInfo, singletons and the other .data statics -- the count is a
-    // moving target, see WAVE9_LANE_C2.md). AFTER every *_PortInit() above,
-    // because a
-    // vtable slot is filled with our port only if that port is registered by
-    // now — anything registered later stays a trap until the next run.
-    // See standalone/rt_data_mint.h.
-    // Nothing to resolve at this point — the tables hold our own function
-    // pointers, not DLL addresses — so the rest of this only reports.
+    // Registration is complete; this only reports. (The mint -- Wave 9 lane
+    // C2's minted exported DATA, RtDataMintInit() -- was deleted at B3R W0-SM
+    // M3: its last two storage rows are the class statics
+    // System::MemoryAllocator::_singleton and System::Debug::_disableHandler.)
     RuntimeRegistryStats st = GetRuntimeRegistryStats();
     printf("[RtPort] runtime registry: %zu exports, %zu addrs\n",
            st.exports, st.addrs);
@@ -325,29 +317,6 @@ void RuntimePortInit() {
     // Wave 9 lane H: everything resolved from here on sees the full registry.
     // Anything recorded BEFORE this line resolved against a partly-built one,
     // and if its call site caches, it is frozen on the pre-registration answer.
-    // WAVE 9: BUILD AND REGISTER THE MINTED DATA.
-    //
-    // Restored 2026-09-08.  Lane X's probe-reordering commit (4a60ccf) DELETED
-    // this call while adding comments that refer to it, so the mint stopped
-    // initialising entirely: no vtable, no BaseTypeInfo and no storage row was
-    // ever built or registered.
-    //
-    // Nothing on an ordinary run could see that, because the mint registered
-    // and reported only when it was explicitly armed, which no routine run did.
-    // The FIRST controlled DLL-absent boot found it immediately:
-    // ResolveAddr(Module::Runtime, 0x1801fc718) returned null and
-    // engine_funcs.cpp:1623 dereferenced it, because
-    // ?_singleton@MemoryAllocator@System@@ is a minted row that was never
-    // registered.
-    //
-    // Placement, per lane X's own reasoning which the comments below preserve:
-    // AFTER every *PortInit() above, because the mint reads the port registry
-    // to decide a storage row's verdict; BEFORE RtResolveMarkPortInitDone() and
-    // before lane X's probe, because the probe resolves the fourteen
-    // ?_singleton@ names through a CACHING door and those are the very caches
-    // the ported constructors publish through.
-    RtDataMintInit();
-
     RtResolveMarkPortInitDone();
 
     // NOTE (Wave 17 lane CEIL): the door-attendance phase marker is DELIBERATELY
@@ -415,7 +384,7 @@ bool ResolveInit() {
     g_modules[0].delta = 0;
 
     // Runtime-x64.dll is NEVER loaded (docs/runtime_port/ENDGAME.md A.1). Our
-    // ports, the mint and our allocator are the runtime; a null handle is the
+    // ports and our allocator are the runtime; a null handle is the
     // only correct state, and since A.3 no door exists that could use one.
     g_modules[1].handle      = nullptr;
     g_modules[1].runtimeBase = 0;
@@ -433,8 +402,8 @@ bool ResolveInit() {
     fprintf(stderr, "[Standalone] Runtime-x64.dll: never loaded (ENDGAME A.1)\n");
     fflush(stderr);
 
-    // The mint owns every exported data symbol and our allocator owns the heap,
-    // because nothing else exists; a cutover boot has no other meaning. That
+    // Our class statics own every exported data symbol and our allocator owns
+    // the heap, because nothing else exists; a cutover boot has no other meaning. That
     // used to be published as three BANISHED_RT_* variables set from here;
     // ENDGAME C.1 deleted the readers, so there is nothing left to announce.
 

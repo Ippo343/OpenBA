@@ -3,10 +3,15 @@ r"""mirror_proof.py -- B3R W0-SM MIRROR: prove statically that deleting the
 name<->address mirror (standalone/resolve_standalone.cpp + rt_export_addrs.inc)
 changes nothing a reader can see.
 
-Run from the repo root, no arguments (optional: --base REV, default eb6f8600,
-the tree the mirror was deleted from):
+Run from the repo root (optional: --base REV, default eb6f8600, the tree the
+mirror was deleted from; --after REV, default the working tree):
 
-    python docs/runtime_port/endgame_b/b3r_session/scripts/mirror_proof.py
+    python docs/runtime_port/endgame_b/b3r_session/scripts/mirror_proof.py --after ec144a63
+
+ec144a63 is the MIRROR commit. Against a LATER tree the proof reports the rows
+later commits removed on purpose together with their converted readers (M1 / M3
+retire the mint's `_singleton@MemoryAllocator` / `_disableHandler` rows, whose
+readers became class statics): those are not mirror rows.
 
 What it does
   BEFORE = the base revision, read out of git (`git cat-file`), WITH the mirror.
@@ -279,7 +284,9 @@ def main():
     base = 'eb6f8600'
     if '--base' in sys.argv:
         base = sys.argv[sys.argv.index('--base') + 1]
-    fb, fa = load_rev(base), load_worktree()
+    after = sys.argv[sys.argv.index('--after') + 1] if '--after' in sys.argv else None
+    fb = load_rev(base)
+    fa = load_rev(after) if after else load_worktree()
     mirror = export_table(fb)
     by_name, by_addr = mirror
     rb, pb = lookups_to_bodies(*registrations(fb))

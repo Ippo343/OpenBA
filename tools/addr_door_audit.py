@@ -158,49 +158,14 @@ def scan():
     return calls, regs, nonlit, reg_nonlit
 
 
-MINT_TABLES = "standalone/rt_data_mint_tables.inc"
-MINT_ADDR = re.compile(r"0x1[0-9a-fA-F]{8}")
-
-
-def mint_addresses():
-    """The addresses the DATA MINT registers, which no literal scan can see.
-
-    rt_data_mint.cpp walks three generated tables and registers every row
-    through a VARIABLE:
-
-        RegisterRuntimeAddr((uintptr_t)v.dllVa, (void*)v.table);   // :578
-        RegisterRuntimeAddr((uintptr_t)t.dllVa, (void*)t.storage); // :583
-        RegisterRuntimeAddr((uintptr_t)s.dllVa, s.storage);        // :588
-
-    so REG_LIT matches none of them and ~500 registered addresses read as
-    unregistered. That is not hypothetical: the ad-hoc scan behind ce1d8e9
-    reported 94 unregistered doors when the true figure was 62, and 4ef55b6 had
-    to correct it -- an instrument committing, while measuring it, the very
-    blind spot it was measuring.
-
-    Reading the generated .inc directly is deliberate. Parsing rt_data_mint.cpp
-    for the registration calls would just move the blind spot; the .inc IS the
-    table those calls walk, so every row in it is registered whenever the mint
-    is armed. Erring toward INCLUDING an address is also the safe direction
-    here: a false "registered" hides a watch-list row, but a false
-    "unregistered" sends a lane to port something that already works, which is
-    the more expensive mistake and the one that actually happened.
-    """
-    try:
-        text = open(MINT_TABLES, encoding="utf-8", errors="replace").read()
-    except OSError:
-        return set(), False
-    return {int(m.group(0), 16) for m in MINT_ADDR.finditer(text)}, True
+# (mint_addresses() -- the addresses the DATA MINT registered through a variable,
+# read out of standalone/rt_data_mint_tables.inc -- went with the mint at B3R
+# W0-SM M3. Its last two rows are class statics now; nothing registers by
+# variable except the two {addr, "name"} operator-delete tables, see --nonliteral.)
 
 
 def main():
     calls, regs, nonlit, reg_nonlit = scan()
-    minted, mint_found = mint_addresses()
-    if not mint_found:
-        print("WARNING: %s not found -- mint-registered addresses are NOT "
-              "subtracted, so UNREGISTERED below is an OVERCOUNT.\n"
-              % MINT_TABLES, file=sys.stderr)
-    regs = regs | minted
     unreg = {a: s for a, s in calls.items() if a not in regs}
     if "--csv" in sys.argv:
         w = csv.writer(sys.stdout, lineterminator="\n")
@@ -218,8 +183,7 @@ def main():
         return 0
     print("by-address call sites   %d" % sum(len(v) for v in calls.values()))
     print("distinct addresses      %d" % len(calls))
-    print("registered addresses    %d  (%d literal + %d mint-supplied)"
-          % (len(regs), len(regs) - len(minted & regs), len(minted & regs)))
+    print("registered addresses    %d  (literal)" % len(regs))
     print("UNREGISTERED            %d" % len(unreg))
     print("(non-literal call sites %d, non-literal registrations %d -- "
           "invisible to both halves; see --nonliteral)"

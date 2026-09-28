@@ -214,6 +214,10 @@ void RtResolveEarlySummary() {
 //     genuinely CHANGES across RtDataMintInit(). The hazard therefore has a
 //     live subject in the tree today, not a hypothetical one.
 //
+// (History: B3R W0-SM M3 deleted the mint, RtDataMintInit() and RT_DATA_SLOT;
+// every exported DATA cell our tree touches is now its class's own static, so
+// no by-name answer changes across init any more. RT_EXPORT_ONCE remains.)
+//
 // THE RULE. A hit obtained while `!RtResolvePortInitDone()` is returned to the
 // caller but NOT stored. The caller gets a correct answer for right now, and
 // re-resolves next time, so the first call made after the registry is complete
@@ -265,7 +269,7 @@ int RtResolveSlotAudit() {
     if (g_slotCount == 0) {
         std::fprintf(stderr,
             "[RtSlotAudit] 0 names were resolved through the CACHING door "
-            "(RtResolveCached / RT_DATA_SLOT / RT_EXPORT_ONCE) before "
+            "(RtResolveCached / RT_EXPORT_ONCE) before "
             "RuntimePortInit() finished. Nothing could have frozen an early "
             "answer on this path.\n");
         std::fflush(stderr);
