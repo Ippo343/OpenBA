@@ -5,6 +5,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "options.h"
+#include "system/MemoryAllocator.h"   // -Iruntime/types: the instrument seat
 
 #include <cstdarg>
 #include <cstdint>
@@ -26,6 +27,8 @@
 #undef printf
 #endif
 #define printf(...) std::fprintf(stderr, __VA_ARGS__)
+
+extern "C" void RtAllocInstrument_MemFree(void* p);   // alloc_cutover_arm.cpp
 
 namespace {
 
@@ -237,8 +240,14 @@ void* ShimAlloc(void* singleton, uint64_t size, int alignment) {
 // free via ace40's static MemFree). Rewiring the slots at install time makes
 // both channels shimmed and the tracking coherent.
 void ShimFree(void* ptr);
+//
+// B3R W0-A0: these two are also what the allocator's instrument seat
+// (System::g_memoryAllocatorInstrument, MemoryAllocator.h) holds in shim mode,
+// so every System::MemoryAllocator::MemAlloc / MemFree caller is shimmed too.
+// `_singleton` is read LIVE (retail MemAlloc's own read), not the engine_funcs
+// g_pMemAllocSingleton snapshot, which is null until the startup self-test.
 void* ShimAllocStatic(uint64_t size, int alignment) {
-    return ShimAlloc(g_pMemAllocSingleton, size, alignment);
+    return ShimAlloc(System::MemoryAllocator::_singleton, size, alignment);
 }
 void ShimFreeStatic(void* ptr) {
     ShimFree(ptr);
@@ -328,8 +337,15 @@ void RedzoneAlloc_Install() {
     }
     g_live = new std::unordered_map<void*, Entry>();
     g_live->reserve(8192);
+    // g_realAlloc is the composed ?Allocate@ stub (SwapAllocate: lock + raw
+    // Allocate + ALLOCSTATS). g_realFree is its free twin, the composed pair's
+    // RtAllocInstrument_MemFree (lock + ALLOCSTATS + raw Free) — NOT the
+    // original fn_MemFreeStatic, which is System::MemoryAllocator::MemFree and
+    // consults the instrument seat armed below: ShimFree -> MemFree -> seat ->
+    // ShimFree would instrument every free twice. Neither of the two reaches
+    // the seat, so a shimmed call is instrumented exactly once.
     g_realAlloc = fn_MemAlloc;
-    g_realFree  = fn_MemFreeStatic;
+    g_realFree  = &RtAllocInstrument_MemFree;
     g_exeBase   = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     if (Opt().redzoneScan > 0) g_scanEvery = (uint32_t)Opt().redzoneScan;
     if (Opt().redzonePad > 0) g_pad = (size_t)((Opt().redzonePad + 7) & ~7);  // 8-byte multiple
@@ -350,6 +366,14 @@ void RedzoneAlloc_Install() {
         printf("[REDZONE] static MemAlloc/MemFree slots rewired: b60=%p b68=%p\n",
                (void*)sa, (void*)sf);
     }
+    // The allocator's instrument seat (B3R W0-A0, STANDALONE DEVIATION in
+    // allocator.cpp): every MemoryAllocator::MemAlloc / MemFree caller — the
+    // ?MemAlloc@/?MemFree@ name and address doors, InternalMemAlloc/Free, the
+    // container doors — now reaches the shim. Always taken, overriding the
+    // ALLOCSTATS pair if that armed first: the shim feeds the stats underneath.
+    System::g_memoryAllocatorInstrument.memAlloc = &ShimAllocStatic;
+    System::g_memoryAllocatorInstrument.memFree  = &ShimFreeStatic;
+    printf("[REDZONE] instrument seat armed: MemoryAllocator::MemAlloc/MemFree -> shim\n");
     g_mainTid = GetCurrentThreadId();
     g_mainThread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
                               FALSE, g_mainTid);
