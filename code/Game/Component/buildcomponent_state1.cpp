@@ -38,30 +38,24 @@
 #include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
 #include "Component/clearareacomponent_funcs.h" // ClearArea_Finalize8270 (port of ModelComponent_impl_8270)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
 
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
-extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP); // 0x1400ec710
+// GatherRawMaterials_Ctor_Impl (0x1400ec710) is declared in Work/exe_bodies.h.
 // town_workplace_registry.cpp — register a workplace into townMgr+0x100 (profession map).
 extern "C" void  TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
 
-// ---- Exe helpers (all already registered in standalone unless noted) -------------
+// ---- Exe helpers, called directly --------------------------------------------------
 // FUN_140004740 InteractComponent_FindWorkplaceComponent(entity, retIBP) -> retIBP
-typedef void* (*BCS1_FindComp_t)(uintptr_t entity, void* retIBP);
-// FUN_14000a170 find (Model) component; FLAG: registration unverified -> guarded
-typedef void* (*BCS1_FindComp2_t)(uintptr_t entity, void* retIBP);
-// ModelComponent_impl_8270(modelComp) -> reset build variant; FLAG guarded
-typedef void  (*BCS1_ModelReset_t)(uintptr_t modelComp);
 // BuildComponent_helper_7550 == 0x140017550 == BuildComponent_FindInQueue(arrayBase, ibp)
-typedef int   (*BCS1_FindInQueue_t)(void* arrayBase, void* ibp);
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
 // the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 // FUN_140003050 WorkBase_FindComponent_3050(entity, retIBP) -> WorkComponent (0x1401c8070)
-typedef void* (*BCS1_FindWorkComp_t)(uintptr_t entity, void* retIBP);
-// CitizenAI_impl_ec60(workComp, code, flag, workIBP) — reservation-ledger post (deferred)
-typedef void  (*BCS1_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
-// Entity_FindComponent_Storage @ 0x140006270 (entity, retIBP) -> site StorageComponent
-typedef void* (*BCS1_FindStorage_t)(uintptr_t entity, void* retIBP);
+// CitizenAI_impl_ec60 = CitizenAI_WorkScheduler_Post(workComp, code, flag, workIBP)
+// Entity_FindComponent_Storage @ 0x140006270 = WorkBase_FindComponent_6270(entity, retIBP)
+// FUN_140002e10 AttendanceComponent_GetJobHostComponent(entity, retIBP) -> WorkPlaceComponent
 // FUN_14000f090 StorageComponent_DynArrayResize(slotArrayField, count) was
 // Collection::Array<Bytes<0x10,8>>::SetSize monomorphised into the exe
 // (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) — converted below.
@@ -206,30 +200,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     if (!self) return 1;
 
 
-    // resolve helpers once
-    static BCS1_FindComp_t     s_find4740 = nullptr;
-    static BCS1_FindInQueue_t  s_findInQueue = nullptr;
-    static BCS1_FindWorkComp_t s_find3050 = nullptr;
-    static BCS1_PostWork_t     s_postEc60 = nullptr;
-    static BCS1_FindStorage_t  s_findStorage = nullptr;
-    // FUN_140002e10 FindComponent_WorkPlace(entity, retIBP) -> WorkPlaceComponent (0x1401c80e0).
-    // Same finder GRM Execute uses to gate the gather on the site's "accepting" flag (+0x50).
-    static BCS1_FindComp_t     s_findWpc2e10 = nullptr;
-    static bool s_res = false;
-    if (!s_res) {
-        s_find4740    = reinterpret_cast<BCS1_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
-        // 0x14000a170 (FindComponent<ClearAreaComponent>) and 0x140118270
-        // (ModelComponent_impl_8270) are unregistered in standalone; both already have
-        // clean C++ ports (fn_FindComponent_SM / ClearArea_Finalize8270) used elsewhere
-        // in this file's own state machine — call those directly instead of resolving
-        // the raw exe addresses (which would stay permanently null).
-        s_findInQueue = reinterpret_cast<BCS1_FindInQueue_t>(ResolveAddr(Module::Exe, 0x140017550));
-        s_find3050    = reinterpret_cast<BCS1_FindWorkComp_t>(ResolveAddr(Module::Exe, 0x140003050));
-        s_postEc60    = reinterpret_cast<BCS1_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-        s_findStorage = reinterpret_cast<BCS1_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-        s_findWpc2e10 = reinterpret_cast<BCS1_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
-        s_res = true;
-    }
+    // 0x14000a170 (FindComponent<ClearAreaComponent>) and 0x140118270
+    // (ModelComponent_impl_8270) are unregistered in standalone; both already have
+    // clean C++ ports (fn_FindComponent_SM / ClearArea_Finalize8270), called below.
 
     // ---- Construction-demo gate (see g_pConstructionDemoSite header note) ----------
     // Must run BEFORE any mutation (multiplier write / model reset / storage reset).
@@ -247,7 +220,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
     // multiplier from workplace component (+0x58)
     uintptr_t wpIbp = 0;
-    if (s_find4740) s_find4740(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpIbp);
+    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpIbp);
     if (wpIbp != 0) {
         // Retail: bc+0x4c = WorkplaceComponent+0x58 (the build-effort multiplier). In the
         // standalone exe the WorkPlaceComponent lifecycle is inert so +0x58 stays 0, which
@@ -273,8 +246,8 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     uintptr_t siteIbp = 0;
     new (&siteIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
-    if (townMgr && s_findInQueue) {
-        int idx = s_findInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &siteIbp);
+    if (townMgr) {
+        int idx = BuildComponent_FindInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &siteIbp);
         if (idx < 0) {
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             int newCount = *reinterpret_cast<int*>(townMgr + 0xd8) + 1;
@@ -306,15 +279,15 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
         // find the WorkComponent (0x1401c8070) the work posts under
         uintptr_t workCompIbp = 0;
-        if (s_find3050) s_find3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
+        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
 
         // POST to the reservation ledger (brick 2b): CitizenAI_impl_ec60 inserts the
         // gather work into the gw+0x118 priority AVL (via 0x1400f88a0) keyed by the
         // WorkComponent, so an idle citizen claims it and runs GatherRawMaterials::Execute
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
         // Needs the live-citizen action stack + pathfinder.
-        if (s_postEc60 && workCompIbp != 0) {
-            s_postEc60(workCompIbp, 0x2001, 1, &workIbp);
+        if (workCompIbp != 0) {
+            CitizenAI_WorkScheduler_Post(workCompIbp, 0x2001, 1, &workIbp);
         }
 
         // configure the site StorageComponent accept-mask + capacity
@@ -324,7 +297,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                            ::Object::IsDerivedFromNullSafe(descObj, buildDescTid)) ? descObj : nullptr;
 
         uintptr_t storageIbp = 0;
-        if (s_findStorage) s_findStorage(*reinterpret_cast<uintptr_t*>(self + 0x10), &storageIbp);
+        WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x10), &storageIbp);
 
         if (storageIbp != 0) {
             // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
@@ -432,9 +405,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     // reproducing the accepting state a live WorkPlaceComponent would hold. (The full
     // WorkPlaceComponent_SetAccepting also drives a status-icon warning; only the
     // gate-relevant +0x50 is reproduced here — the visual is deferred to the live WPC.)
-    if (s_findWpc2e10) {
+    {
         uintptr_t wpcIbp = 0;
-        s_findWpc2e10(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
+        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
         if (wpcIbp != 0) {
             void* wpc = *reinterpret_cast<void**>(&wpcIbp);
             if (wpc) {
