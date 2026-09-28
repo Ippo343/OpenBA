@@ -429,6 +429,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
             // static fresh now.
             void* memAllocSingleton = System::MemoryAllocator::_singleton;
             printf("[GameMain] MemAllocSingleton (fresh) = %p\n", memAllocSingleton);
+            (void)memAllocSingleton;   // B3R: its last reader was the MemAlloc door; the perf build strips the printf
 
             // Validate per-class factory registrations end-to-end now that
             // Engine::Engine::Engine has populated the MemoryAllocator
