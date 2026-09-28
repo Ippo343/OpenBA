@@ -53,12 +53,10 @@
 // YES. IT MUST. Nothing else does, and the "ARMED" line above does not mean
 // what it looks like it means.
 //
-// `RtSystemAllocatorRegister()`'s cutover branch (allocator.cpp) calls
-// `RtAllocSwapArmCutover`, which stores two function pointers and returns, and
-// then `RegisterAllocatorExports()`, which is 27 `RegisterRuntimeExport` calls.
-// **Neither constructs a MemoryAllocator, and neither reserves one byte of
-// arena.** "ARMED" means the export names now point at our bodies. It does not
-// mean an arena exists.
+// `RtSystemAllocatorArm()` (allocator.cpp) installs the platform seam and calls
+// the host's `RtAllocSwapArmCutover`, which arms BANISHED_ALLOC_STATS and
+// returns. **Neither constructs a MemoryAllocator, and neither reserves one byte
+// of arena.** "ARMED" does not mean an arena exists.
 //
 // The arena is created in exactly one place in the whole process. Lane E2
 // proved it two independent ways and printed the proof:
@@ -93,10 +91,10 @@
 // own 0x1800c7620 and the arena is created by retail's code exactly as before.
 //
 // The alternative — "arm from Startup and stop arming early" — was considered
-// and rejected: `RtSystemAllocatorRegister()` must run inside `RuntimePortInit`
-// because ~1,180 call sites resolve MemAlloc/MemFree before GameMain, and a
-// registration that happened during `Engine::Startup` would leave every
-// early-resolved site frozen on a null (WAVE9_LANE_H.md §5).
+// and rejected at the time: the allocator's registration had to run inside the
+// boot-time registry init because ~1,180 call sites resolved MemAlloc/MemFree
+// before GameMain (WAVE9_LANE_H.md §5). (B3R W2-RES: the registry is gone; every
+// caller reaches MemAlloc/MemFree by name.)
 //
 // ---------------------------------------------------------------------------
 // 3. THE .data GLOBALS ARE THE REAL CUTOVER HAZARD, NOT THE ALLOCATOR

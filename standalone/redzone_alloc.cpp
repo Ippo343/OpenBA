@@ -228,24 +228,16 @@ void* ShimAlloc(uint64_t size, int alignment) {
     return p;
 }
 
-// Static-signature wrappers for the System::MemoryAllocator::MemAlloc/MemFree
-// dispatch slots (0x140152b60/b68). Several reimpls (tool_base_highlight*.cpp,
-// work_act_*.cpp) allocate/free through those static exports, NOT through
-// fn_MemAlloc/fn_MemFreeStatic. Un-shimmed, an alloc through one channel and a
-// free through the other leaves a stale g_live entry; when the engine reuses
-// that memory the canary scan reports a PHANTOM overflow (seen twice as a
-// "corrupt decal vertex pool" at town load — alloc via f8d0's fn_MemAlloc,
-// free via ace40's static MemFree). Rewiring the slots at install time makes
-// both channels shimmed and the tracking coherent.
+// The pair the allocator's instrument seat (System::g_memoryAllocatorInstrument,
+// MemoryAllocator.h) holds in shim mode, so every System::MemoryAllocator::
+// MemAlloc / MemFree caller is shimmed, and an allocation and its free always
+// go through the same channel. (Before the seat, a block allocated through one
+// door and freed through another left a stale g_live entry, and the canary scan
+// reported a PHANTOM overflow when the engine reused the memory -- seen twice as
+// a "corrupt decal vertex pool" at town load.) `_singleton` is read LIVE
+// (retail MemAlloc's own read), inside the real pair RtAllocInstrument_MemAlloc
+// / _MemFree.
 void ShimFree(void* ptr);
-//
-// B3R W0-A0: these two are also what the allocator's instrument seat
-// (System::g_memoryAllocatorInstrument, MemoryAllocator.h) holds in shim mode,
-// so every System::MemoryAllocator::MemAlloc / MemFree caller is shimmed too.
-// `_singleton` is read LIVE (retail MemAlloc's own read), inside the real pair
-// RtAllocInstrument_MemAlloc / _MemFree. (B3R STORAGE: the engine_funcs
-// g_pMemAllocSingleton snapshot is gone; every reader reads live. B3R W2-EZ: so
-// is fn_MemAlloc, the old seat; ShimAlloc no longer carries a singleton.)
 void* ShimAllocStatic(uint64_t size, int alignment) {
     return ShimAlloc(size, alignment);
 }
@@ -337,14 +329,6 @@ void RedzoneAlloc_Install() {
     // consult the instrument seat armed below: ShimFree -> MemFree -> seat ->
     // ShimFree would instrument every call twice. Neither of the two reaches
     // the seat, so a shimmed call is instrumented exactly once.
-    //
-    // B3R W2-EZ: g_realAlloc used to be read from the engine_funcs global
-    // fn_MemAlloc (bound to the ?Allocate@ address row 0x1800c6e60, whose value
-    // was SwapAllocate: the same ComposedAllocate body RtAllocInstrument_MemAlloc
-    // runs, with `_singleton` passed in instead of read live — the one value
-    // ShimAllocStatic ever passed). The "cannot install" refusal on a null
-    // global and the writes of ShimAlloc / ShimFree back into fn_MemAlloc /
-    // fn_MemFreeStatic (read by nothing since B3R W1) went with the globals.
     g_realAlloc = &RtAllocInstrument_MemAlloc;
     g_realFree  = &RtAllocInstrument_MemFree;
     g_exeBase   = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
@@ -354,14 +338,10 @@ void RedzoneAlloc_Install() {
         g_watchIntervalMs = Opt().redzoneWatchMs;  // 0 = tight spin
     }
     g_zeroOnAlloc = Opt().redzoneZero;
-    // (B3R W2-EXE: the rewrite of the static MemAlloc/MemFree dispatch-slot cells
-    // 0x140152b60 / 0x140152b68 is gone with the cells. No code read either cell
-    // any more -- every allocation reaches the instrument seat below.)
     // The allocator's instrument seat (B3R W0-A0, STANDALONE DEVIATION in
-    // allocator.cpp): every MemoryAllocator::MemAlloc / MemFree caller — the
-    // ?MemAlloc@/?MemFree@ name and address doors, InternalMemAlloc/Free, the
-    // container doors — now reaches the shim. Always taken, overriding the
-    // ALLOCSTATS pair if that armed first: the shim feeds the stats underneath.
+    // allocator.cpp): every MemoryAllocator::MemAlloc / MemFree caller reaches
+    // the shim. Always taken, overriding the ALLOCSTATS pair if that armed
+    // first: the shim feeds the stats underneath.
     System::g_memoryAllocatorInstrument.memAlloc = &ShimAllocStatic;
     System::g_memoryAllocatorInstrument.memFree  = &ShimFreeStatic;
     printf("[REDZONE] instrument seat armed: MemoryAllocator::MemAlloc/MemFree -> shim\n");

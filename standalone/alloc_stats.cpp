@@ -45,7 +45,7 @@ uint64_t g_lastReportMs = 0;
 // heap and the CRT heap.
 struct BlockRec { void* ptr; uint64_t size; void* caller; void* ctx; };
 }  // namespace
-// Set by callers (GenericArrayResize) right before fn_MemAlloc so the block table can
+// Set by callers (GenericArrayResize) right before MemAlloc so the block table can
 // remember WHICH array header owns a buffer; cleared after the call.
 extern "C" { thread_local void* g_allocStatsCtx = nullptr; }
 namespace {

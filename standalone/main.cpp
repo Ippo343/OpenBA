@@ -25,6 +25,7 @@
 #include "sampler.h"
 #include "hw_watch.h"
 #include "redzone_alloc.h"
+#include "alloc_cutover_arm.h"            // RtAllocSwapArmCutover
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetCutoverArmer
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
@@ -52,10 +53,6 @@ extern "C" {
     __declspec(dllexport) unsigned long AmdPowerXpressRequestHighPerformance = 1;
 }
 
-// Session-3 diagnostic installer (standalone/filename_dtor_check.cpp).
-// The composed (locked) MemoryAllocator entry points (standalone/alloc_cutover_arm.cpp).
-extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
-                                      void** outComposedAllocate, void** outComposedFree);
 
 // ============================================================
 // Reset Video* registry keys to known-safe values BEFORE Engine::Startup.

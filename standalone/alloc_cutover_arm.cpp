@@ -10,14 +10,14 @@
 // DLL-internal callers to redirect and nothing to compare against; both were
 // deleted with the rest of the raw door (ENDGAME.md A.3/A.4).
 //
-// WHAT IS STILL NEEDED. `RtSystemAllocatorRegister()` would otherwise register
-// the RAW ported Allocate/Free for ?Allocate@/?Free@. Those bodies are
-// byte-faithful and therefore take no lock, exactly as retail's do. Our
-// standalone needs the lock (see standalone/allocator_lock.h: Runtime-internal
-// code called the raw Free directly, which races Allocate), so we hand back
-// composed stubs that take the allocator critical section at self+0x640 around
-// the raw members. Composing it here rather than inside the port keeps
-// runtime/src free of <windows.h> and free of non-retail behaviour.
+// WHAT IS STILL NEEDED. The RAW ported Allocate/Free members are byte-faithful
+// and therefore take no lock, exactly as retail's do. The instrument seat's pair
+// below composes them with the allocator critical section at self+0x640 (and the
+// ALLOCSTATS record and the teardown heap check). Composing it here rather than
+// inside the port keeps runtime/src free of <windows.h> and free of non-retail
+// behaviour. (B3R W2-RES: the composed pair used to be handed back through the
+// cutover armer for registration under ?Allocate@ / ?Free@; the registry is
+// gone, and SwapAllocate, whose one use that was, with it.)
 //
 // System::MemoryAllocator::MemAlloc/MemFree take the same lock themselves,
 // faithfully, as retail's statics do.
@@ -63,10 +63,6 @@ void* ComposedAllocate(MemoryAllocator* self, uint64_t size, int align, void* ca
     return r;
 }
 
-void* SwapAllocate(MemoryAllocator* self, uint64_t size, uintptr_t align) {
-    return ComposedAllocate(self, size, static_cast<int>(align), __builtin_return_address(0));
-}
-
 void SwapFree(MemoryAllocator* self, void* p) {
     if (!p) return;                       // retail's TEST RDX,RDX; JZ
     LPCRITICAL_SECTION cs = AllocCs(self);
@@ -90,9 +86,7 @@ void SwapFree(MemoryAllocator* self, void* p) {
 // through MemAlloc / MemFree, so the seat cannot re-enter itself and an
 // allocation is instrumented once.
 //
-// `_singleton` is read LIVE here, exactly as retail's MemAlloc reads it (not
-// the engine_funcs g_pMemAllocSingleton snapshot, which is null until the
-// startup self-test refreshes it).
+// `_singleton` is read LIVE here, exactly as retail's MemAlloc reads it.
 //
 // ALLOCSTATS caller attribution on this path is the return address into the
 // allocator entry (MemAlloc, or its caller when the compiler tail-calls the
@@ -108,27 +102,17 @@ extern "C" void RtAllocInstrument_MemFree(void* p) {
     SwapFree(System::MemoryAllocator::_singleton, p);
 }
 
-// Handed to RtSystemAllocatorSetCutoverArmer() BEFORE RuntimePortInit().
-// Signature matches RtAllocCutoverArmer in runtime/types/system/MemoryAllocator.h.
+// Handed to RtSystemAllocatorSetCutoverArmer() BEFORE RuntimeInit() (see
+// alloc_cutover_arm.h); RtSystemAllocatorArm() calls it once.
 //
 // Nothing here installs a detour, and that is not a shortcut: a detour existed
 // only to redirect the DLL's OWN internal callers, which were direct rel32 CALLs
-// inside the DLL. With no DLL there are none, so registering the exports IS the
-// complete swap. The composed stubs call the RAW members directly; the two
-// pointers handed in are checked, not stored.
+// inside the DLL. With no DLL there are none.
 //
-// This is also where BANISHED_ALLOC_STATS arms the instrument seat: the place
-// that installs its feeder (SwapAllocate) for ?Allocate@. The seat is taken
-// only if nothing holds it; a redzone shim that holds it already feeds the
-// stats (its g_realAlloc is SwapAllocate, its g_realFree RtAllocInstrument_MemFree).
-extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
-                                      void** outComposedAllocate,
-                                      void** outComposedFree) {
-    if (!ourAllocate || !ourFree || !outComposedAllocate || !outComposedFree) return false;
-    *outComposedAllocate = reinterpret_cast<void*>(&SwapAllocate);
-    *outComposedFree     = reinterpret_cast<void*>(&SwapFree);
-    fprintf(stderr, "[RtAlloc] cutover arm: ?Allocate@/?Free@ will be the composed "
-                    "stubs, which take the allocator CS at self+0x640.\n");
+// This is where BANISHED_ALLOC_STATS arms the instrument seat. The seat is taken
+// only if nothing holds it; a redzone shim that holds it already feeds the stats
+// (its g_realAlloc / g_realFree are RtAllocInstrument_MemAlloc / _MemFree).
+extern "C" bool RtAllocSwapArmCutover() {
     if (Opt().allocStats && System::g_memoryAllocatorInstrument.memAlloc == nullptr) {
         System::g_memoryAllocatorInstrument.memAlloc = &RtAllocInstrument_MemAlloc;
         System::g_memoryAllocatorInstrument.memFree  = &RtAllocInstrument_MemFree;

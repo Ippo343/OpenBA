@@ -1163,9 +1163,8 @@ void RtSystemAllocatorArm() {
         return;
     }
 
-    // There is no DLL, so no detour is possible OR necessary. The one thing that
-    // does NOT come for free is the critical section; the host composes it
-    // (standalone/alloc_cutover_arm.cpp), and the cutover armer is its hook.
+    // There is no DLL, so no detour is possible OR necessary; the cutover armer
+    // is the host's hook (standalone/alloc_cutover_arm.cpp).
     if (g_armCutover == nullptr) {
         printf("[RtPort] MemoryAllocator: REFUSING to arm -- Runtime-x64.dll is absent "
                "and no cutover armer is installed. "
@@ -1173,19 +1172,13 @@ void RtSystemAllocatorArm() {
         AttestArming("REFUSED: cutover, no armer installed");
         return;
     }
-    void* composedAlloc = nullptr;
-    void* composedFree  = nullptr;
-    if (!g_armCutover(reinterpret_cast<void*>(&rtalloc::Allocate),
-                      reinterpret_cast<void*>(&rtalloc::Free),
-                      &composedAlloc, &composedFree) ||
-        composedAlloc == nullptr || composedFree == nullptr) {
+    if (!g_armCutover()) {
         printf("[RtPort] MemoryAllocator: cutover armer REFUSED\n");
         AttestArming("REFUSED: cutover armer said no");
         return;
     }
     printf("[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- no detour installed "
-           "because there are no DLL-internal callers to redirect; the composed entry "
-           "points take the allocator critical section.\n");
+           "because there are no DLL-internal callers to redirect.\n");
     AttestArming("ARMED (cutover, DLL absent)");
 }
 

@@ -425,39 +425,19 @@ struct RtSysMemPlatform {
 } // namespace system
 } // namespace rt
 
-// Installed by the host (standalone/) before RtSystemAllocatorRegister() runs.
+// Installed by the host (standalone/) before RtSystemAllocatorArm() runs.
 // Declared extern "C" so the _win file can be a plain translation unit.
 extern "C" void RtSysMemPlatformInstall(const rt::system::RtSysMemPlatform* p);
 
-// The atomic-swap installer. The host detours BOTH MemoryAllocator::Allocate
-// (0x1800c6e60) and ::Free (0x1800c6c00) to the two function pointers it is
-// handed, and returns true only if BOTH took. It must also RETIRE the
-// allocator_lock patches on the same two prologues first — see
-// docs/runtime_port/WAVE2_ALLOCATOR.md §4. Without this installed,
-// RtSystemAllocatorRegister() registers nothing.
-
 // ---- CUTOVER ARMING (Wave 9 lane E4) ---------------------------------------
 //
-// The seam above is a DLL-PRESENT concept from top to bottom, and that is why
-// the allocator could not arm with the DLL renamed aside: the detour exists
-// solely to redirect the DLL's OWN internal callers, and the prologue guard
-// reads the DLL's bytes to check nobody else owns them. With no DLL there are
-// no internal callers and no bytes, so the guard resolves null, reports
-// "unresolved", and REFUSES — correctly by its own logic, and wrongly for the
-// situation.
-//
-// With no DLL there is also no second allocator, so the whole reason the swap
-// had to be atomic disappears: registering the exports IS the complete swap.
-// This seam is that path. The host hands back the COMPOSED (locked) entry
-// points to register for the two member exports, because with no DLL there is
-// nothing for allocator_lock.cpp to patch and the critical section has to come
-// from somewhere.
-//
-// Returns false to refuse; RtSystemAllocatorRegister() then registers nothing,
-// exactly as it does when the detour installer refuses.
-typedef bool (*RtAllocCutoverArmer)(void* ourAllocate, void* ourFree,
-                                    void** outComposedAllocate,
-                                    void** outComposedFree);
+// The host's hook into the allocator's arming (standalone/alloc_cutover_arm.cpp,
+// RtAllocSwapArmCutover): it arms BANISHED_ALLOC_STATS on the instrument seat.
+// Returns false to refuse; RtSystemAllocatorArm() then reports REFUSED. (B3R
+// W2-RES: it used to hand back the composed (locked) Allocate / Free entry
+// points to be registered for ?Allocate@ / ?Free@; with the registry gone that
+// hand-back had no reader and went.)
+typedef bool (*RtAllocCutoverArmer)();
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn);
 
 // runtime/src/system/allocator.cpp -- installs the platform seam, calls the

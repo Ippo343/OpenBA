@@ -7,12 +7,11 @@
 // out-of-bounds WRITE past a buffer corrupts the neighbouring block's tag and
 // crashes LATER during free-list coalescing — far from the actual bad write.
 //
-// This shim interposes the fn_MemAlloc / fn_MemFreeStatic global pointers
-// (which ALL of code/Game/ routes through), the MemAlloc/MemFree dispatch
-// slots, and — since B3R W0-A0 — the allocator's own instrument seat
+// This shim sits on the allocator's instrument seat
 // (System::g_memoryAllocatorInstrument, consulted at the entry of
-// MemoryAllocator::MemAlloc / MemFree) with wrappers that over-allocate by
-// a tail redzone and stamp a canary right after the requested size. The bad
+// MemoryAllocator::MemAlloc / MemFree, which every caller reaches by name) with
+// wrappers that over-allocate by a tail redzone and stamp a canary right after
+// the requested size. The bad
 // write trips the canary; RedzoneAlloc_ValidateAll(tag) — called at checkpoints
 // in MenuScene::Slot5 / Geometry::Serialize — reports the overflowing buffer by
 // size + allocation backtrace BEFORE the displaced crash.
@@ -24,9 +23,10 @@
 
 #pragma once
 
-// Swap fn_MemAlloc / fn_MemFreeStatic for the redzone wrappers if the
-// BANISHED_REDZONE env var is set. Call once, right after EngineFuncsInit().
-// No-op (and leaves the real pointers in place) when the env var is unset.
+// Arm the instrument seat with the redzone wrappers (or, for
+// BANISHED_REDZONE=watch, start only the heap watchdog) if BANISHED_REDZONE is
+// set. Called once from standalone/main.cpp's Init(), before Engine::Startup.
+// No-op when the flag is unset.
 void RedzoneAlloc_Install();
 
 // True if the shim is active (env var was set and install succeeded).
