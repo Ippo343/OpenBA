@@ -483,9 +483,7 @@ int fn_StorageComponent_QueryCount(void* storageComp) {
         void* resourceType = nullptr;
         for (int j = 0; j < compCount; j++) {
             void* comp = *(void**)(compArray + (uintptr_t)j * 8);
-            // GetTypeId via vtable slot +0x10
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
             if (typeId == RawMaterialDescription::TypeId()) {
                 if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
                     resourceType = comp;

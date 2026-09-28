@@ -380,11 +380,8 @@ void ModelComponent::OnAdded() {
         if (s_fn_Time_Ctor) {
             uint8_t timeObj[8];
             s_fn_Time_Ctor(timeObj, 0.0f);
-            typedef void (*fn_MeshVtable8_t)(void*, void*);
-            fn_MeshVtable8_t updateFn = *(fn_MeshVtable8_t*)(*(uintptr_t*)(s + 0x28) + 0x8);
-            if (updateFn) {
-                updateFn((void*)(s + 0x28), timeObj);
-            }
+            reinterpret_cast<Graphics::Geometry*>(s + 0x28)->Update(
+                *reinterpret_cast<const System::Time*>(timeObj));   // B.3.x bridge (Geometry slot 1)
         }
 
         // Add to scene
@@ -451,9 +448,10 @@ void ModelComponent::Tick(void* time) {
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Call MeshInstance vtable +0x8 (Update) — RDX contains time pointer
-    typedef void (*fn_MeshVtable8_t)(void*, void*);
-    fn_MeshVtable8_t updateFn = *(fn_MeshVtable8_t*)(*(uintptr_t*)(s + 0x28) + 0x8);
-    if (updateFn) {
+    // The embedded MeshInstance (+0x28) is always constructed (the ctor builds it), so
+    // the old null-slot test of its table is gone with the by-name call.
+    Graphics::Geometry* mesh = reinterpret_cast<Graphics::Geometry*>(s + 0x28);   // B.3.x bridge (slot 1)
+    {
         // [PerfX ANIM_CULL -- NON-RETAIL] On the last speed-iteration retail poses every
         // animated mesh (AnimationState::UpdateNodes). A mesh outside the camera frustum
         // is never drawn, so its pose is left root-only (the animation clock and the
@@ -474,10 +472,10 @@ void ModelComponent::Tick(void* time) {
         if (PerfX::AnimCullSkip(this)) {
             uint8_t* flag = PerfX::RootOnlyFlag();
             *flag = 1;
-            updateFn((void*)(s + 0x28), timeArg);
+            mesh->Update(*reinterpret_cast<const System::Time*>(timeArg));
             *flag = 0;
         } else {
-            updateFn((void*)(s + 0x28), timeArg);
+            mesh->Update(*reinterpret_cast<const System::Time*>(timeArg));
         }
     }
 

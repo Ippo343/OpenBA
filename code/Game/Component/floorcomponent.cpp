@@ -163,11 +163,7 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
         void* comp = *slot;
-        // Virtual GetTypeId at vtable+0x10.
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*fn_GetTypeId_t)(void* self);
-        fn_GetTypeId_t getId = *reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10);
-        uint32_t tid = getId ? getId(comp) : 0;
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (tid == wantTypeId) {
             void* c = *slot;
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantTypeId)) found = c;
@@ -205,10 +201,7 @@ void FloorComponent_SubF390(void* selfV) {
 
     // If floorId (+0x2c) >= 0, remove the existing mesh first via vtable slot +0x38.
     if (*reinterpret_cast<int*>(sb + 0x2c) >= 0) {
-        uintptr_t vt = *self;
-        typedef void (*fn_slot38_t)(void* self);
-        fn_slot38_t slot38 = *reinterpret_cast<fn_slot38_t*>(vt + 0x38);
-        if (slot38) slot38(selfV);
+        reinterpret_cast<Component*>(selfV)->OnRemove();   // B.3.x bridge (slot 7)
     }
 
     uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);

@@ -41,7 +41,7 @@ static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t 
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
         void* comp = *slot;
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
             found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
@@ -160,7 +160,7 @@ void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
                 uint32_t cflags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(node) + 0x20);
                 bool visits = ((cflags >> 1) & 1) != 0;
                 if (visits) {
-                    (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(node) + 0x38))(node);
+                    reinterpret_cast<Component*>(node)->OnRemove();   // B.3.x bridge (slot 7)
                 }
             }
         }

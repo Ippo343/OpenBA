@@ -158,7 +158,7 @@ void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
         void* comp = *slot;
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
             found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
@@ -321,7 +321,7 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
     *reinterpret_cast<uint16_t*>(c + 0x164) = variant;
     if (*reinterpret_cast<int16_t*>(c + 0x166) >= 0) {
         // vtable +0x38 — hide/deactivate current model (RCX = comp)
-        (*reinterpret_cast<void(**)(int64_t*)>(*comp + 0x38))(comp);
+        reinterpret_cast<Component*>(comp)->OnRemove();   // B.3.x bridge (slot 7)
     }
     *reinterpret_cast<int16_t*>(c + 0x166) = subVariant;
     if (subVariant >= 0) {
@@ -341,7 +341,7 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
         reinterpret_cast<Graphics::MeshInstance*>(c + 0x28)
             ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
         // vtable +0x30 — show/activate model (RCX = comp)
-        (*reinterpret_cast<void(**)(int64_t*)>(*comp + 0x30))(comp);
+        reinterpret_cast<Component*>(comp)->OnAdded();   // B.3.x bridge (slot 6)
     }
     if (s_fn_ModelComp_2b70) s_fn_ModelComp_2b70(*reinterpret_cast<void**>(c + 0x10), 0);
 }

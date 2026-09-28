@@ -1254,10 +1254,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
             for (int ci = 0; ci < compCount; ci++) {
                 uintptr_t* compSlot = (uintptr_t*)(compArray + ci * 8);
                 uintptr_t comp = *compSlot;
-                // Call vtable[2] = GetTypeId
-                uintptr_t vtable = *(uintptr_t*)comp;
-                typedef uint32_t (*GetTypeId_t)(void*);
-                uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(vtable + 0x10)))((void*)comp);
+                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (typeId == wpTypeId) {
                     // Verify with IsDerivedFrom
                     compSlot = (uintptr_t*)(compArray + ci * 8);
@@ -1811,8 +1808,8 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             }
             int64_t timeVal = 0;
             if (s_fn_TimeFromFloat) s_fn_TimeFromFloat(&timeVal, 0.0f);
-            typedef void (*slot40_t)(int64_t*, int64_t*);
-            (*reinterpret_cast<slot40_t*>(*param_1 + 0x40))(param_1, &timeVal);
+            // param_1 is a Component (the +0x10 entity / +0x20 flag-notify idiom below).
+            reinterpret_cast<Component*>(param_1)->Tick(&timeVal);   // B.3.x bridge (slot 8)
             uint32_t before = *reinterpret_cast<uint32_t*>(param_1 + 4);
             uint32_t after = before | 4;
             *reinterpret_cast<uint32_t*>(param_1 + 4) = after;

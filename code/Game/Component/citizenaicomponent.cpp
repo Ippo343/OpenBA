@@ -175,11 +175,9 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         int64_t compRef = *reinterpret_cast<int64_t*>(ibpAddr);
         uint32_t dVar3 = *s_pStorageTypeId;
 
-        // vtable[2] = GetTypeId at +0x10
-        int64_t compVtable = *reinterpret_cast<int64_t*>(compRef);
-        typedef uint32_t (*fn_GetType_t)();
-        fn_GetType_t getType = *reinterpret_cast<fn_GetType_t*>(compVtable + 0x10);
-        uint32_t typeId = getType();
+        // Object::Base::Type() (slot 2). The old C call dropped `this`; the
+        // by-name call passes it, as retail does.
+        uint32_t typeId = reinterpret_cast<Object::Base*>(compRef)->Type();   // B.3.x bridge (slot 2)
 
         if (typeId == dVar3) {
             // Re-read by index with CheckPtr (matches original)
