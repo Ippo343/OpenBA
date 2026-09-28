@@ -80,7 +80,7 @@ behaviour is unchanged; none has been read against retail's call site yet.
 
 | where | address | mismatch |
 |---|---|---|
-| `code/Game/Action/action_base_move.cpp` | `0x1400a6a30`, `0x1400a68b0`, `0x14009c480`, `0x1400a6b20`, `0x1400a6c10` | the door passed `int` arguments; the bodies take pointer-width parameters |
+| `code/Game/Action/action_base_move.cpp` | `0x1400a6a30`, `0x1400a68b0`, `0x1400a6b20`, `0x1400a6c10` | the door passed `int` arguments; the bodies take pointer-width parameters (`0x14009c480` was here too: it takes one parameter now, entry 7) |
 | `code/Game/Action/action_pf_road.cpp` | `0x1400aa810` | the door took a `uint64` bit pattern where the body takes a pointer |
 | `code/Game/Action/action_pf_region.cpp` | `0x14001dc00` | `param_4` goes through a `void*` cast |
 | `code/Game/Action/` | `0x14012c560`, `0x140087fb0` | return type `int` against `uint32_t` |
@@ -104,7 +104,7 @@ members (B.4).
 The 19 misnamed `engine_funcs` globals of `b3r_session/INVENTORY_E_ENGINE_FUNCS.md` §5.8 die with
 the globals and are not repeated here.
 
-## 7. `Pf_ZoneRefresh_9c480` declares three parameters retail does not have — CONFIRMED (signature only)
+## 7. `Pf_ZoneRefresh_9c480` declares three parameters retail does not have — FIXED (signature only)
 
 **Where.** The body of retail `0x14009c480`, and its callers in `code/Game/Work` (commits
 `6067e8a1`, `4b9d6b19`), `code/Game/Game/gamegrid_serialize.cpp` (`e200bbb6`) and `code/Game/Action`.
@@ -123,6 +123,22 @@ no diff on any route or resave.
 **What a fix must do.** Declare the body with ONE parameter and make its three former parameters
 locals; drop the zeros at the callers. No behaviour change. Same check for `0x14009c170`'s list.
 
+**Fixed** 2026-09-28 by the registry teardown's LEFTOVERS block (commit titled `behaviour:`, "the
+zone refresh 0x14009c480 takes one parameter, the flood fill 0x14009c170 three"), after
+re-reading both functions. `0x14009c480`: EDX is written at `0x14009c4bd` and per cell at
+`0x14009c524` (= EDI, the cell index), R8D at `0x14009c520` (= R14W, the region id), R9 never;
+those two locals already existed in the body (`uVar2`, `sVar6`), so the "three former
+parameters" needed no new local: two were those locals, the third existed only to be passed on.
+`0x14009c170`: the entry spills R9D to its home slot, every read of the slot follows a write
+(`0x14009c365`, `0x14009c3e8`) and R9D is overwritten at `0x14009c26f`, so Ghidra's `param_4`
+is the local `local_res20` (initial value never read, left uninitialised). Declarations:
+`Pf_ZoneRefresh_9c480(int*)`, `Pf_FloodFillRegion_9c170(int*, uint32_t, uint16_t)`. All 15
+call sites of `0x14009c480` (Action, Component, Game, Work; most passed non-zero values, e.g.
+`(grid, out, flags, destCell)`, `(mapGrid, zr_a, zr_b, 1)`, `(mapInfo, mapInfo, 0, 0)`) and the
+two of `0x14009c170` lost their trailing arguments; none had side effects. The caller-less
+second body `WorkAcc_ZoneRefresh_9c480` (`work_base_accessor.cpp`) got the same list. No value
+that is ever read changed.
+
 ## 8. Wrong BINDINGS found in `code/Game/Dialog` — SUSPECTED
 
 | door | bound to | problem |
@@ -135,7 +151,7 @@ locals; drop the zeros at the callers. No behaviour change. Same check for `0x14
 
 Each call keeps today's bits. The first two need retail's call site read before anything changes.
 
-## 9. Bodies declared `void` whose callers read a return value — SUSPECTED
+## 9. Bodies declared `void` whose callers read a return value — FIXED / no reader
 
 | address | body | what the caller reads |
 |---|---|---|
@@ -145,6 +161,22 @@ Each call keeps today's bits. The first two need retail's call site read before 
 
 Today the callers read whatever the body's last computation left in EAX. **What a fix must do:**
 read each function's epilogue in retail, give the body its return type and value.
+
+**2026-09-28, the registry teardown's LEFTOVERS block:**
+- `0x14009ce00` — FIXED (commit titled `behaviour:`, "the road A* 0x14009ce00 returns the path
+  length"). Retail ends in a tail `JMP 0x1400a6e30` at `0x14009cf41` (only callee-saved
+  registers restored before it); `0x1400a6e30` takes EAX from its `CALL 0x1400a6d50` at
+  `0x1400a6edf` and leaves it to the `RET` at `0x1400a6ef8`. So the value IS computed by the
+  body: our `RoadTool_helper_6e30` already returned it as `int`. `RoadTool_sub_ce00` now
+  returns `int` (`return RoadTool_helper_6e30(...)`), and the five readers in `roadtool.cpp` /
+  `roadtool_calcpath.cpp` call it by name. Its 5th parameter is never read (retail overwrites
+  its stack slot at `0x14009cf22`). `standalone/reg_keystone_a_zone.cpp` still has a local
+  `void` prototype of it (return types are not mangled; W2 deletes the row).
+- `0x1400fd960` (`PlacementToolPlace_FlipVariant_d960`) and `0x1400af370`
+  (`Pf_RoadMeshRebuild_f370`) — no reader reads a value any more: their callers
+  (`placementtool.cpp`, `tool_base_tile.cpp`, `keystone_a_removalcalcpath.cpp`) call them by
+  name as `void`, and the only "value" the old doors read was the upper bytes of RAX under a
+  `bool` slot whose contract is AL. Nothing to fix unless a caller is found that reads more.
 
 ## 10. `0x140172248` is 1000.0f; the code around it says otherwise — SUSPECTED
 
