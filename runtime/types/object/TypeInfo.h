@@ -754,3 +754,17 @@ constexpr const char* LastComponent(const char* s) {
 }  // namespace detail
 
 }  // namespace Object
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+namespace RtObjFactoryDtor {
+// ---- object/factory_dtors.cpp
+void RtObject_Factory_Dtor(void* self);  // 0x1800071a0
+void RtObject_InternalFactory_Dtor(void* self);  // 0x18002f860
+void RtObject_ExternalFactory_Dtor(void* self);  // 0x1800be760
+}  // namespace RtObjFactoryDtor
+// ==== end B3R W0-P0c ====

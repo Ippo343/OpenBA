@@ -503,3 +503,13 @@ static_assert(offsetof(MaterialInstance, _shaderClass) == sizeof(Object::Externa
               "MaterialInstance's own fields begin at the end of the base");
 
 }  // namespace Graphics
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- system/closure_batch2b.cpp
+extern "C" void RtGraphics_Material_OperatorDelete(void* p);  // 0x180061ae0
+// ==== end B3R W0-P0c ====

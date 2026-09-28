@@ -259,3 +259,14 @@ static_assert(sizeof(Application) == 0x30,
 // `namespace Application` exists at global scope -- spell the class
 // `Application::Application` instead.
 namespace RtApplication { using Application = ::Application::Application; }
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+namespace rtsetavl { struct Node; }   // runtime/src/collection/set_avl.h
+
+// ---- application/application_lifecycle.cpp
+extern "C" void RtApp_SetDestroyTree(void* self, rtsetavl::Node* n);  // 0x18000a4f0
+// ==== end B3R W0-P0c ====

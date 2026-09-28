@@ -281,3 +281,30 @@ static_assert(std::is_standard_layout<Modification>::value,
               "the doors reach these fields through a reinterpret_cast");
 
 }  // namespace IO
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+namespace RtIo {
+// ---- io/iobase_vtables.cpp
+extern "C" void RtIo_Modification_Dtor(RtIO::Modification* self);  // 0x1800b0470
+}  // namespace RtIo
+
+namespace RtIO {
+// ---- io/modification_sort.cpp
+extern "C" void RtIo_Modification_SortMods(void* data, int32_t count, void*);  // 0x180028760
+// ---- io/modification.cpp
+void* RtColl_ArrayFilenameDtor_1800098d0(void* av);  // 0x1800098d0
+void* RtColl_ArrayI32Dtor_1800111a0(void* a);  // 0x1800111a0
+void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv);  // 0x180010110
+void* RtColl_ArrayModDtor_180010b80(void* av);  // 0x180010b80
+void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);  // 0x180011220
+void* RtColl_ArrayU8Dtor_1800112a0(void* a);  // 0x1800112a0
+void* RtIo_Mod_Assign_180026ef0(void* dstv, const void* srcv);  // 0x180026ef0
+void* RtIo_Mod_CopyCtor_1800101e0(void* dstv, const void* srcv);  // 0x1800101e0
+void RtIo_Mod_Dtor_180011460(void* selfv);  // 0x180011460
+}  // namespace RtIO
+// ==== end B3R W0-P0c ====

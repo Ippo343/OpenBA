@@ -343,3 +343,23 @@ static_assert(offsetof(Scene, _cellCounts)   == 0x50, "Scene::_cellCounts @ +0x5
 static_assert(offsetof(Scene, _globals)      == 0x60, "Scene::_globals @ +0x60 (AddGlobalObject 0x180102540)");
 
 }  // namespace Graphics
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- graphics/closure_batch2b.cpp
+extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src);  // 0x18001be60
+
+namespace rtgfxbig {
+// ---- graphics/wave27_lane_gfxbig.cpp
+extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void*);  // 0x180062d60
+}  // namespace rtgfxbig
+
+namespace rtgfxd {
+// ---- graphics/wave9_lane_gfxd.cpp
+extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill);  // 0x1800637b0
+}  // namespace rtgfxd
+// ==== end B3R W0-P0c ====

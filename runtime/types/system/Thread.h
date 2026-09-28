@@ -352,3 +352,14 @@ static_assert(offsetof(Thread, _hStop)     == offsetof(RtSystem::Thread, hStop),
 static_assert(offsetof(Thread, _hFinished) == offsetof(RtSystem::Thread, hFinished), "alias hFinished");
 
 }  // namespace System
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- system/thread_win.cpp
+RtSystem::CriticalSection* RtSystem_CriticalSection_Ctor(RtSystem::CriticalSection* self);  // 0x18000c5c0
+void RtSystem_CriticalSection_Dtor(RtSystem::CriticalSection* self);  // 0x18000c5b0
+// ==== end B3R W0-P0c ====

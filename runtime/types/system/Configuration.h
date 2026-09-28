@@ -261,3 +261,17 @@ static_assert(!std::is_trivially_destructible<Configuration>::value,
 // ============================================================================
 
 }  // namespace System
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+namespace RtSystem { struct String; }   // system/String.h
+namespace System { class String; }       // system/String.h
+
+// ---- system/configuration.cpp
+extern "C" void* RtSystem_ConfigMap_Find(void* map, const RtSystem::String* wanted);  // 0x18002ace0
+// ---- system/value_types.cpp
+System::String* RtSystem_Configuration_CurrentBuildId(System::String* ret);  // 0x1800c4c60
+// ==== end B3R W0-P0c ====

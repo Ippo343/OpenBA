@@ -125,3 +125,27 @@ struct Frustum {
 };
 static_assert(sizeof(struct Frustum) == 0x64, "Volume::Frustum must be 0x64 (100) bytes");
 static_assert(offsetof(struct Frustum, isOrthographic) == 0x60, "Volume::Frustum::isOrthographic @ +0x60");
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- volume/box.cpp
+Box* RtVolume_Box_Ctor(Box* self);  // 0x180011ea0
+Box* RtVolume_Box_Assign(Box* self, const Box* other);  // 0x180011e70
+Box* RtVolume_Box_Extend(const Box* self, Box* ret, const Math::Vector3* p);  // 0x180011ff0
+void RtVolume_Box_GetCorners(const Box* self, Math::Vector3* out);  // 0x1800121b0
+bool RtVolume_Box_Intersect(const Box* self, const Box* other);  // 0x180012160
+// ---- volume/rectangle.cpp
+struct Rectangle* RtVolume_Rectangle_Ctor(struct Rectangle* self);  // 0x18005ddd0
+// ---- volume/frustum.cpp
+Frustum* RtVolume_Frustum_Ctor_Perspective(Frustum* self, const Math::Scalar* nearZ, const Math::Scalar* farZ, const Math::Scalar* fovX, const Math::Scalar* fovY);  // 0x1800fa1e0
+Frustum* RtVolume_Frustum_Ctor_General(Frustum* self, bool isOrthographic, const Math::Scalar* nearZ, const Math::Scalar* farZ, const Math::Scalar* edgeA, const Math::Scalar* edgeB, const Math::Scalar* edgeC, const Math::Scalar* edgeD);  // 0x1800fa3d0
+Frustum* RtVolume_Frustum_MulTransform3(const Frustum* self, Frustum* ret, const Math::Transform3* t);  // 0x1800f9310
+unsigned int RtVolume_Frustum_Contains(const Frustum* self, const Box* box, unsigned int mask);  // 0x1800f8e80
+void RtVolume_Frustum_GetCorners(const Frustum* self, Math::Vector3* out);  // 0x1800f9850
+Math::Vector3* RtVolume_Frustum_GetScreenDirection(const Frustum* self, Math::Vector3* ret, float u, float v);  // 0x1800f9c80
+Math::Matrix* RtVolume_Frustum_Projection(const Frustum* self, Math::Matrix* ret, bool zeroToOneDepth);  // 0x1800f9dc0
+// ==== end B3R W0-P0c ====

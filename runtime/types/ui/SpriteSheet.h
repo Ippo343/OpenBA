@@ -292,3 +292,14 @@ inline constexpr size_t kSpriteSheetWrittenBytes = 0x51;
 // saveload_draw.cpp and runtime/types/common.h spell.
 using SpriteSheet = UI::SpriteSheet;
 using SpriteInfo  = UI::SpriteInfo;
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+namespace rt { namespace io { struct Serializer; } }   // io/Serializer.h
+
+// ---- ui/spritesheet_vtable.cpp
+extern "C" void RtUi_SpriteSheet_SerializeEntries(rt::io::Serializer* ser, int32_t count, UI::SpriteInfo* entries);  // 0x180078ad0
+// ==== end B3R W0-P0c ====

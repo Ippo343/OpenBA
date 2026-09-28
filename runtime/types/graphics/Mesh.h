@@ -1018,3 +1018,13 @@ static_assert(sizeof(EdgeMesh::TriangleVertex) == 8,  "EdgeMesh::TriangleVertex 
 static_assert(sizeof(EdgeMesh::EdgeVertex)     == 16, "EdgeMesh::EdgeVertex is 16 bytes");
 
 }  // namespace Graphics
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- graphics/closure_batch2b.cpp
+extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int count, void* data);  // 0x180014850
+// ==== end B3R W0-P0c ====

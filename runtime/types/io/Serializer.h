@@ -1014,3 +1014,13 @@ inline BinaryWriter::~BinaryWriter() {
 inline Visitor::Visitor(Serializer& ser, int ver) : ReaderWriter(ser), version(ver) {}
 
 } // namespace IO
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- io/text_codec.cpp
+extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav, void*);  // 0x180029bb0
+// ==== end B3R W0-P0c ====

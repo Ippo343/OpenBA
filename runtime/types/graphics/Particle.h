@@ -747,3 +747,16 @@ static_assert(offsetof(ParticleSystem, _gravScale) - offsetof(ParticleSystem, _a
 
 
 }  // namespace Graphics
+
+// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
+// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
+// address in its trailing comment and read through the registry today. It is
+// declared here, copied from its definition (linkage, namespace, types), so the
+// reader can call it by name. Nothing calls it through this declaration yet.
+
+// ---- graphics/wave27_lane_gfxpart.cpp
+extern "C" void* RtGraphics_Emitter_OperatorNew(void);  // 0x1800205a0
+extern "C" void RtGraphics_Emitter_OperatorDelete(void* p);  // 0x180020600
+extern "C" void* RtGraphics_Emitter_DeleteDtor(void* p);  // 0x180020d60
+extern "C" void* RtGraphics_ParticlePoolRecord_Ctor(void* recv, void* particlev);  // 0x180103bf0
+// ==== end B3R W0-P0c ====
