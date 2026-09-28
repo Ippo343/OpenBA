@@ -603,29 +603,3 @@ extern "C" void RtSave_SaveLoad_SaveMetaData(SaveLoad* self, void* pixels,
                                              String* name, int nameMode) {
     self->Save::SaveLoad::SaveMetaData(pixels, width, height, RtSystem::Sys(name), nameMode);
 }
-
-// ============================================================================
-// Registration — BOTH doors.
-// ============================================================================
-// The mangled name is a STRING LITERAL because tools/runtime_census.py only
-// sees literals (reference_census_cannot_see_nonliteral_registrations.md), and
-// it was checked byte for byte against the shipped export table: a phantom name
-// resolves NULL in silence.
-//
-// The address door is NOT redundant with it. UpdateSave reaches this function
-// by name, but the DLL's own internal callers and any exe dispatch slot reach
-// it by address, and a by-address door with nothing registered behind it is a
-// call through null at cutover.
-//
-// GREPPED FIRST: neither "?SaveMetaData@SaveLoad@Save@@" nor 0x1800c1490 is
-// registered anywhere else in runtime/, code/, engine/ or standalone/ — a
-// duplicate RegisterRuntimeAddr is last-binding-wins and would silently make
-// one of the two bodies dead code
-// (reference_grep_for_the_port_before_writing_it.md).
-int RtSaveSaveMetaDataRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z",
-                          (void*)&RtSave_SaveLoad_SaveMetaData); ++n;
-    RegisterRuntimeAddr(0x1800c1490, (void*)&RtSave_SaveLoad_SaveMetaData);
-    return n;
-}

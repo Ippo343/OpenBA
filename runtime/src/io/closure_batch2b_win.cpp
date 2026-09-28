@@ -235,7 +235,5 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
 
 int RtClosure2bIoRegister() {
     int n = 0;
-    RegisterRuntimeAddr(0x1800b6aa0, (void*)&RtIo_PersistenceWorker_Load);   ++n;
-    RegisterRuntimeAddr(0x1800b69c0, (void*)&RtIo_PersistenceWorker_Delete); ++n;
     return n;
 }

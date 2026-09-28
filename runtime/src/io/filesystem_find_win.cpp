@@ -762,23 +762,13 @@ int RtIoFileSystemFindRegister() {
         (void*)&RtIo_FileSystem_ExistsInPackfile); ++n;
     RegisterRuntimeAddr(0x1800ab180, (void*)&RtIo_FileSystem_ExistsInPackfile);
 
-    RegisterRuntimeExport(
-        "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_PlatformExists); ++n;
-    RegisterRuntimeAddr(0x1800adc70, (void*)&RtIo_FileSystem_PlatformExists);
 
-    RegisterRuntimeExport(
-        "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z",
-        (void*)&RtIo_FileSystem_FindFiles); ++n;
-    RegisterRuntimeAddr(0x1800ad7a0, (void*)&RtIo_FileSystem_FindFiles);
 
     // The two internals. RegisterRuntimeAddr ONLY — neither has a name in
     // either shipped build, so there is nothing to register under. Both were
     // grepped for an existing `RegisterRuntimeAddr(0x…` across runtime/,
     // standalone/, engine/ and code/ before being claimed here; neither was
     // registered by any lane. §6b bounds what the second one claims.
-    RegisterRuntimeAddr(0x180026880, (void*)&RtColl_ArraySetSizeFill_180026880);
-    RegisterRuntimeAddr(0x180009af0, (void*)&DestroyFilenameArray);
 
     printf("[RtPort]   IO::FileSystem find/exists: %d exports registered\n", n);
     return n;

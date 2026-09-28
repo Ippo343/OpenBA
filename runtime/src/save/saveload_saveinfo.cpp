@@ -329,24 +329,3 @@ int SaveInfoCompareSignedMutant(const void* a, const void* b) {
 }
 
 }  // namespace
-
-
-// ============================================================================
-// Registration
-// ============================================================================
-//
-// ADDRESSES ONLY. Neither row has a mangled name: Wave 23's export screen ran
-// all 183 address-keyed census rows through the export table with 100% recall
-// and 0 false positives on 1,125 in-population controls and recovered 0 names.
-// "AEAA means PRIVATE, not unexported" does not bite here — these two have no
-// name at all, not a private one.
-//
-// REGISTERING 0x1800c3db0 IS WHAT MAKES IT SURVIVE CUTOVER. saveload_update.cpp
-// hands the comparator's ADDRESS to retail's own qsort as data; without a
-// registration that address is the DLL's, and at cutover it is nothing.
-// ============================================================================
-int RtSaveInfoRegister() {
-    RegisterRuntimeAddr(0x1800c3db0, (void*)&RtSave_SaveInfo_Compare);
-    RegisterRuntimeAddr(0x1800c3de0, (void*)&RtSave_SaveInfo_SetThumbnail);
-    return 2;
-}

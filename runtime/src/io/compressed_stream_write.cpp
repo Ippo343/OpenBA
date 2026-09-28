@@ -848,13 +848,7 @@ int RtIoCompressedStreamWriteRegister() {
                           (void*)&RtIo_CompressedStream_Commit); ++n;
     RegisterRuntimeAddr(0x1800a9ee0, (void*)&RtIo_CompressedStream_Commit);
 
-    RegisterRuntimeExport("?CompressWindow@CompressedStream@IO@@AEAAXH@Z",
-                          (void*)&RtIo_CompressedStream_CompressWindow); ++n;
-    RegisterRuntimeAddr(0x1800a9810, (void*)&RtIo_CompressedStream_CompressWindow);
 
-    RegisterRuntimeExport("?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z",
-                          (void*)&RtIo_CompressedStream_Create); ++n;
-    RegisterRuntimeAddr(0x1800aa4b0, (void*)&RtIo_CompressedStream_Create);
 
     printf("[RtPort]   IO::CompressedStream write path (lane CSTREAM): %d exports registered\n", n);
 

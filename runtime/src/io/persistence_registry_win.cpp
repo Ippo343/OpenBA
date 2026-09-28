@@ -977,13 +977,7 @@ void Persistence::WriteSettings() const {
 // ============================================================================
 int RtIoPersistenceRegistryRegister() {
     int n = 0;
-    RegisterRuntimeExport("?ReadSettings@Persistence@IO@@QEAAXXZ",
-                          (void*)&RtIo_Persistence_ReadSettings); ++n;
-    RegisterRuntimeAddr(0x1800b84b0, (void*)&RtIo_Persistence_ReadSettings);
 
-    RegisterRuntimeExport("??0Registry@IO@@QEAA@PEBD@Z",
-                          (void*)&RtIo_Registry_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800b9500, (void*)&RtIo_Registry_Ctor);
 
     // WAVE 9 LANE SAVE2. `QEBA` -- the CONST spelling -- verified against the
     // shipped export table by RVA before this line was written; `QEAA` here

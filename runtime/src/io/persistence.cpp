@@ -296,8 +296,6 @@ int RtIoPersistenceRegister() {
                           (void*)&RtIo_Persistence_SetInt); ++n;
     RegisterRuntimeExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z",
                           (void*)&RtIo_Persistence_SetBool); ++n;
-    RegisterRuntimeExport("?GetSavePath@Persistence@IO@@QEBA?AVString@System@@XZ",
-                          (void*)&RtIo_Persistence_GetSavePath); ++n;
 
     // Address fallbacks too (WAVE3_LANE_A.md §6's lesson: engine_funcs.cpp
     // falls back to ResolveAddr(Module::Runtime, ...) on a failed name
@@ -307,7 +305,6 @@ int RtIoPersistenceRegister() {
     RegisterRuntimeAddr(0x1800b8290, (void*)&RtIo_Persistence_GetBool);
     RegisterRuntimeAddr(0x1800b80c0, (void*)&RtIo_Persistence_SetInt);
     RegisterRuntimeAddr(0x1800b8380, (void*)&RtIo_Persistence_SetBool);
-    RegisterRuntimeAddr(0x180007ad0, (void*)&RtIo_Persistence_GetSavePath);
 
     // CORRECTED 2026-09-08 (Wave 9 lanes BOOT2 and SAVE2). This line used to
     // read "(ReadSettings/WriteSettings held back -- see WAVE4_LANE_C.md)".

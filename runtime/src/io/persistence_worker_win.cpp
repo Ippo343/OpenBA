@@ -836,18 +836,3 @@ void IO::PersistenceWorker::Run() {
             return;
     }
 }
-
-// ============================================================================
-// Registration — ADDRESSES ONLY (no mangled name exists; see the banner).
-// ============================================================================
-int RtIoPersistenceWorkerRegister() {
-    RegisterRuntimeAddr(0x1800b7390, (void*)&RtIo_PersistenceWorker_EnqueueDelete);
-    RegisterRuntimeAddr(0x1800b7460, (void*)&RtIo_PersistenceWorker_EnqueueLoad);
-    RegisterRuntimeAddr(0x1800b75c0, (void*)&RtIo_PersistenceWorker_EnqueueSave);
-    // ENDGAME B.3.9 IO (W2): the destructor (0x1800b7740) and Run (0x1800b7260)
-    // doors are the class's own members now (PersistenceWorker.h); ??1Persistence
-    // ends the worker directly and the compiler table carries Run.
-    // BATCH 8: the SAVE job, `Run`'s command-0 arm.
-    RegisterRuntimeAddr(0x1800b6e00, (void*)&RtIo_PersistenceWorker_SaveJob);
-    return 4;
-}

@@ -466,40 +466,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
 }  // namespace RtIO
 
 // ============================================================================
-// Registration
-// ============================================================================
-// BOTH DOORS, as every row in this lane gets. The name was read out of
-// Runtime-x64.dll's own export directory with pefile (ordinal 3461,
-// 0x1800b46b0) rather than transcribed from a decompile — lane PKG2 nearly
-// shipped `SetWindowCount` with the private `AEAA` spelling when it is public
-// `QEAA`, and a name the DLL does not contain resolves NULL silently and
-// forever behind the ResolveAddr fallback.
-int RtIoPackageFileReadRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    // THE NAME IS SPELT OUT AS A LITERAL HERE, not as `kReadPackfile`, and that
-    // is not style. `tools/unsatisfied_export_scan.py` and
-    // `tools/runtime_census.py` match `RegisterRuntimeExport("` followed by a
-    // STRING; a named constant is invisible to both
-    // (reference_census_cannot_see_nonliteral_registrations.md, which cost six
-    // LANDED Wave 3 ports their visibility). The first version of this line used
-    // the constant and the scan duly reported ReadPackfile as still unsatisfied
-    // on a build where it was registered and running -- caught by the
-    // instrument, not by review, which is this wave's pattern.
-    RegisterRuntimeExport("?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_PackageFile_ReadPackfile); ++n;
-    RegisterRuntimeAddr(0x1800b46b0, (void*)&RtIo_PackageFile_ReadPackfile);
-
-    // A LANE-OWNED IDENTITY MARKER, for the same reason package_file.cpp has
-    // one: tools/pkg2_run.sh gates on a banner the RUN wrote, and a banner that
-    // keys on a shared total moves whenever any other lane lands in IO.
-    printf("[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): "
-                "%d exports registered\n", n);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile::ReadPackfile`'s member body
 // ============================================================================
 namespace IO {

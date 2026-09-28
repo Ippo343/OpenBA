@@ -447,10 +447,3 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     self->Save::SaveLoad::LoadMetaData(*reinterpret_cast<System::String*>(description),   // B.3.7 bridge
                                        pixels, *width, *height, *version, *mods);
 }
-
-int RtSaveLoadMetaDataRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z", (void*)&RtSave_SaveLoad_LoadMetaData); ++n;
-    RegisterRuntimeAddr(0x1800c1b30, (void*)&RtSave_SaveLoad_LoadMetaData);
-    return n;
-}

@@ -375,12 +375,3 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
     bfsObj->IO::BinaryFileStream::~BinaryFileStream();                      // 0x1800b694f..
     fs->platformExistsGate = savedGate;                                 // 0x1800b69a3
 }
-
-// ============================================================================
-// Registration — ADDRESS ONLY (unexported; measured, not assumed).
-// The address is a LITERAL so tools/runtime_census.py sees the door.
-// ============================================================================
-int RtIoPersistenceSaveInfoRegister() {
-    RegisterRuntimeAddr(0x1800b65b0, (void*)&RtIo_PersistenceWorker_GetSaveInfo);
-    return 1;
-}

@@ -715,39 +715,16 @@ int RtIoModificationRefreshRegister();   // modification_refresh.cpp (lane MOD, 
 int RtIoModificationRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?GetCount@Modification@IO@@QEBAHXZ",
-                          (void*)&RtIo_Modification_GetCount); ++n;
-    RegisterRuntimeExport("?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z",
-                          (void*)&RtIo_Modification_GetMod); ++n;
-    RegisterRuntimeExport("?Enable@Modification@IO@@QEAAXH_N@Z",
-                          (void*)&RtIo_Modification_Enable); ++n;
-    RegisterRuntimeExport("?Swap@Modification@IO@@QEAAXHH@Z",
-                          (void*)&RtIo_Modification_Swap); ++n;
     RegisterRuntimeExport("?SaveList@Modification@IO@@QEAAXXZ",
                           (void*)&RtIo_Modification_SaveList); ++n;
 
-    RegisterRuntimeAddr(0x18000da90, (void*)&RtIo_Modification_GetCount);
-    RegisterRuntimeAddr(0x18000da80, (void*)&RtIo_Modification_GetMod);
-    RegisterRuntimeAddr(0x1800aeab0, (void*)&RtIo_Modification_Enable);
-    RegisterRuntimeAddr(0x1800aeb20, (void*)&RtIo_Modification_Swap);
     RegisterRuntimeAddr(0x1800b05f0, (void*)&RtIo_Modification_SaveList);
 
     // The unexported internals. Address door only — there is no name to
     // register, in retail or in the profile build.
-    RegisterRuntimeAddr(0x1800101e0, (void*)&RtIo_Mod_CopyCtor_1800101e0);
-    RegisterRuntimeAddr(0x180026ef0, (void*)&RtIo_Mod_Assign_180026ef0);
-    RegisterRuntimeAddr(0x180011460, (void*)&RtIo_Mod_Dtor_180011460);
     RegisterRuntimeAddr(0x180010110, (void*)&RtColl_ArrayModAssign_180010110);
-    RegisterRuntimeAddr(0x180010b80, (void*)&RtColl_ArrayModDtor_180010b80);
-    RegisterRuntimeAddr(0x180011110, (void*)&RtColl_ArrayI32Assign_180011110);
-    RegisterRuntimeAddr(0x1800111a0, (void*)&RtColl_ArrayI32Dtor_1800111a0);
     RegisterRuntimeAddr(0x180011220, (void*)&RtColl_ArrayU8Assign_180011220);
     RegisterRuntimeAddr(0x1800112a0, (void*)&RtColl_ArrayU8Dtor_1800112a0);
-    RegisterRuntimeAddr(0x1800091f0, (void*)&RtColl_ArrayFilenameAssign_1800091f0);
-    RegisterRuntimeAddr(0x1800098d0, (void*)&RtColl_ArrayFilenameDtor_1800098d0);
-    RegisterRuntimeAddr(0x1800104f0, (void*)&RtColl_SetCloneSubtree_1800104f0);
-    RegisterRuntimeAddr(0x180010470, (void*)&RtColl_SetDestroySubtree_180010470);
-    RegisterRuntimeAddr(0x180010570, (void*)&RtColl_SetNodeNew_180010570);
     // 0x180009c30 is NOT registered here any more -- it was registered by three
     // files at once (this one, collection/linkedlist.cpp, system/allocator.cpp)
     // and the registry's last binding won, so two bodies were dead code and

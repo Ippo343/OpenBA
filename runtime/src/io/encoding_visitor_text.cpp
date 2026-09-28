@@ -109,4 +109,3 @@ ReaderWriter* TextEncoding::CreateWriter(Serializer& ser, int version) {
 }
 
 }  // namespace IO
-

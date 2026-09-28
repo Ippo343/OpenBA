@@ -942,21 +942,12 @@ System::Filename PackageFile::GetFileName(int index) const {
 int RtIoFileSystemPackagesRegister() {
     using namespace RtIO;
     int n = 0;
-    RegisterRuntimeExport("?LoadPackages@FileSystem@IO@@QEAAXXZ",
-                          (void*)&RtIo_FileSystem_LoadPackages); ++n;
-    RegisterRuntimeAddr(0x1800ab460, (void*)&RtIo_FileSystem_LoadPackages);
 
     RegisterRuntimeExport("?ClosePackages@FileSystem@IO@@QEAAXXZ",
                           (void*)&RtIo_FileSystem_ClosePackages); ++n;
     RegisterRuntimeAddr(0x1800abab0, (void*)&RtIo_FileSystem_ClosePackages);
 
-    RegisterRuntimeExport("?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
-                          (void*)&RtIo_FileSystem_GetPackDirectory); ++n;
-    RegisterRuntimeAddr(0x180007c10, (void*)&RtIo_FileSystem_GetPackDirectory);
 
-    RegisterRuntimeExport("?GetFileName@PackageFile@IO@@QEBA?AVFilename@System@@H@Z",
-                          (void*)&RtIo_PackageFile_GetFileName); ++n;
-    RegisterRuntimeAddr(0x180025450, (void*)&RtIo_PackageFile_GetFileName);
 
     // DELIBERATELY ABSENT — the callees this row exposes. Sizes and reasons in
     // §4; each is called through its proper door above, so reaching one is a

@@ -690,19 +690,8 @@ int RtIoFileSystemCreateFileRegister() {
 
     // The three closure rows — not on the Wave 19 list, required by the
     // screenshot path. See the header note.
-    RegisterRuntimeExport(
-        "?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_CreateFileW); ++n;
-    RegisterRuntimeAddr(0x1800acc50, (void*)&RtIo_FileSystem_CreateFileW);
 
-    RegisterRuntimeExport(
-        "?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_PlatformCreateFile); ++n;
-    RegisterRuntimeAddr(0x1800ade60, (void*)&RtIo_FileSystem_PlatformCreateFile);
 
-    RegisterRuntimeExport("?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z",
-                          (void*)&RtIo_FileSystem_PlatformCloseFile); ++n;
-    RegisterRuntimeAddr(0x1800ae020, (void*)&RtIo_FileSystem_PlatformCloseFile);
 
     printf("[RtPort]   IO::FileSystem create/close (wave 19 lane FILE): "
            "%d exports registered\n", n);

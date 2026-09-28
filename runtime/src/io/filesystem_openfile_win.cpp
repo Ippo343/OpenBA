@@ -587,28 +587,15 @@ int RtIoFileSystemOpenFileRegister() {
     using namespace RtIO;
     int n = 0;
 
-    RegisterRuntimeExport(
-        "?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_OpenFile); ++n;
-    RegisterRuntimeAddr(0x1800ac880, (void*)&RtIo_FileSystem_OpenFile);
 
     RegisterRuntimeExport("?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z",
                           (void*)&RtIo_FileSystem_ReadFile); ++n;
     RegisterRuntimeAddr(0x1800ace00, (void*)&RtIo_FileSystem_ReadFile);
 
-    RegisterRuntimeExport(
-        "?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z",
-        (void*)&RtIo_FileSystem_PlatformOpenFile); ++n;
-    RegisterRuntimeAddr(0x1800adce0, (void*)&RtIo_FileSystem_PlatformOpenFile);
 
-    RegisterRuntimeExport("?GetFileInfo@PackageFile@IO@@QEBA?AUFileInfo@FileSystem@2@XZ",
-                          (void*)&RtIo_PackageFile_GetFileInfo); ++n;
-    RegisterRuntimeAddr(0x180025400, (void*)&RtIo_PackageFile_GetFileInfo);
 
     // The FileInfo copy ctor and operator= are UNEXPORTED, so they get the
     // address door only — the same shape as lane Q's Collection helpers.
-    RegisterRuntimeAddr(0x18000c110, (void*)&RtIo_FileInfo_CopyCtor);
-    RegisterRuntimeAddr(0x18000c200, (void*)&RtIo_FileInfo_Assign);   // rung 4
 
     printf("[RtPort]   IO::FileSystem open/read (lane PKG2 rung 3): %d exports registered\n", n);
 

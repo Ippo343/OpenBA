@@ -305,23 +305,9 @@ Persistence::~Persistence() {
 }  // namespace IO
 
 // ---------------------------------------------------------------------------
-int RtIoPersistenceSavesWinRegister();   // persistence_saves_win.cpp
-
 int RtIoPersistenceSavesRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?GetSaveCount@Persistence@IO@@QEBAHXZ",
-                          (void*)&RtIo_Persistence_GetSaveCount); ++n;
-    RegisterRuntimeExport("?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z",
-                          (void*)&RtIo_Persistence_GetSaveInfo); ++n;
-    RegisterRuntimeExport(
-        "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z",
-        (void*)&RtIo_Persistence_GetSaveFilename); ++n;
-    RegisterRuntimeExport("?BeginDelete@Persistence@IO@@QEAA_NAEBVString@System@@@Z",
-                          (void*)&RtIo_Persistence_BeginDelete); ++n;
-    RegisterRuntimeExport(
-        "?BeginLoad@Persistence@IO@@QEAA_NAEBVString@System@@HPEBUSaveBlock@12@@Z",
-        (void*)&RtIo_Persistence_BeginLoad); ++n;
     RegisterRuntimeExport("??1Persistence@IO@@QEAA@XZ",
                           (void*)&RtIo_Persistence_dtor); ++n;
 
@@ -329,16 +315,9 @@ int RtIoPersistenceSavesRegister() {
     // silently on the DLL, and ResolveAddr(Module::Runtime, ...) is
     // registry-first, so the two registrations are not redundant
     // (reference_resolveaddr_consults_port_registry_first.md).
-    RegisterRuntimeAddr(0x1800b7c60, (void*)&RtIo_Persistence_GetSaveCount);
-    RegisterRuntimeAddr(0x1800b7bd0, (void*)&RtIo_Persistence_GetSaveInfo);
-    RegisterRuntimeAddr(0x1800b7c80, (void*)&RtIo_Persistence_GetSaveFilename);
-    RegisterRuntimeAddr(0x1800b7ab0, (void*)&RtIo_Persistence_BeginDelete);
-    RegisterRuntimeAddr(0x1800b7970, (void*)&RtIo_Persistence_BeginLoad);
     RegisterRuntimeAddr(0x1800b7fb0, (void*)&RtIo_Persistence_dtor);
 
-    n += RtIoPersistenceSavesWinRegister();
-
-    printf("[RtPort] IO::Persistence saves: %d/7 exports registered "
-           "(6 here + 1 in the _win twin), each by name AND address\n", n);
+    printf("[RtPort] IO::Persistence saves: %d export registered "
+           "(~Persistence), by name AND address\n", n);
     return n;
 }

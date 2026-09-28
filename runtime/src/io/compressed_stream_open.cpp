@@ -158,15 +158,6 @@ int RtIoCompressedStreamOpenRegister() {
     using namespace RtIo;
     int n = 0;
 
-    RegisterRuntimeExport(// NOT `AEAAXH@Z`. I wrote the PRIVATE spelling first, from the
-    // assumption that a helper like this would be private; the export
-    // table says PUBLIC (`QEAA`). A name the DLL does not contain resolves
-    // NULL silently and forever behind the ResolveAddr fallback
-    // (reference_resolveexport_phantom_names), so this was checked before
-    // the line was believed, not after.
-                          "?SetWindowCount@CompressedStream@IO@@QEAAXH@Z",
-                          (void*)&RtIo_CompressedStream_SetWindowCount); ++n;
-    RegisterRuntimeAddr(0x1800aa020, (void*)&RtIo_CompressedStream_SetWindowCount);
 
     RegisterRuntimeExport("?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z",
                           (void*)&RtIo_CompressedStream_Open); ++n;

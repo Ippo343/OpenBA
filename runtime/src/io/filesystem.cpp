@@ -52,8 +52,6 @@
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
-extern int RtIoFileSystemWinRegister();   // filesystem_win.cpp — GetSaveDirectory
-
 namespace RtIO {
 
 using RtSystem::String;
@@ -403,24 +401,10 @@ int RtIoFileSystemRegister() {
     // agent's "all N ported" claim, so a registration it cannot see is worse
     // than no registration. It also keeps a human grep for the mangled name
     // landing on the registration site. The census now WARNS on this pattern.
-    RegisterRuntimeExport("?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_FileSystem_Exists); ++n;
     RegisterRuntimeExport("?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
                           (void*)&RtIo_FileSystem_GetDataDirectory); ++n;
-    RegisterRuntimeExport("?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
-                          (void*)&RtIo_FileSystem_GetSourceDirectory); ++n;
-    RegisterRuntimeExport("?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z",
-                          (void*)&RtIo_FileSystem_GetPackfileId); ++n;
-    RegisterRuntimeExport("?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z",
-                          (void*)&RtIo_Modification_Find); ++n;
 
-    RegisterRuntimeAddr(0x1800ab310, (void*)&RtIo_FileSystem_Exists);
     RegisterRuntimeAddr(0x180007bd0, (void*)&RtIo_FileSystem_GetDataDirectory);
-    RegisterRuntimeAddr(0x180007b90, (void*)&RtIo_FileSystem_GetSourceDirectory);
-    RegisterRuntimeAddr(0x1800ab050, (void*)&RtIo_FileSystem_GetPackfileId);
-    RegisterRuntimeAddr(0x1800aea10, (void*)&RtIo_Modification_Find);
-
-    n += RtIoFileSystemWinRegister();   // GetSaveDirectory, filesystem_win.cpp
 
     printf("[RtPort]   IO::FileSystem/Modification: %d exports registered\n", n);
     return n;

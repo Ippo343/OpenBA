@@ -139,19 +139,3 @@ IO::CompressedStream::~CompressedStream() {
     rtcoll::RtColl_ArrayDtor_1800249c0(base + 0x40);         // 1800aa684
     rtcoll::RtColl_ArrayDtor_1800248e0(base + 0x30);         // 1800aa68e
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoCompressedStreamReleaseRegister() {
-    using namespace RtIo;
-    int n = 0;
-
-    RegisterRuntimeExport("?Release@CompressedStream@IO@@QEAAXXZ",
-                          (void*)&RtIo_CompressedStream_Release); ++n;
-    RegisterRuntimeAddr(0x1800aa100, (void*)&RtIo_CompressedStream_Release);
-
-    printf("[RtPort]   IO::CompressedStream Release/dtor (lane PKG2 rung 4b-iii, "
-                "lane W's rows): %d exports registered\n", n);
-    return n;
-}

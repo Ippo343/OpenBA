@@ -349,10 +349,6 @@ void RtSaveDetail::ArrayModInfoDtor(Collection::Array<Save::SaveLoad::ModInfo>* 
     arr->_size = 0;
     arr->_capacity = 0;
 }
-// The registered address door (0x1800331f0): `(Array*)` in RCX.
-static void ArrayModInfo_Dtor(Collection::Array<Save::SaveLoad::ModInfo>* arr) {
-    RtSaveDetail::ArrayModInfoDtor(arr);
-}
 
 // ============================================================================
 // Save::SaveLoad::SaveInfo::~SaveInfo()   FUN_1800c3f40 (unexported)
@@ -415,10 +411,6 @@ void RtSaveDetail::ArraySaveInfoDtor(Save::SaveLoad::SaveInfoArray* arr) {
     arr->_data = nullptr;
     arr->_size = 0;
     arr->_capacity = 0;
-}
-// The registered address door (0x1800329c0).
-static void ArraySaveInfo_Dtor(Save::SaveLoad::SaveInfoArray* arr) {
-    RtSaveDetail::ArraySaveInfoDtor(arr);
 }
 
 // The ??1SaveLoad DOOR keeps its body (the class declares no destructor: see
@@ -1140,46 +1132,22 @@ int RtSaveLoadRegister() {
     // reaches our transcription and not a null. A faithful port that calls DLL
     // internals by address grows the cutover surface; owning the internals
     // instead is the version of that which shrinks it.
-    RegisterRuntimeAddr(0x1800329c0, (void*)&ArraySaveInfo_Dtor);
     RegisterRuntimeAddr(0x1800c3f40, (void*)&SaveInfo_Dtor);
-    RegisterRuntimeAddr(0x1800331f0, (void*)&ArrayModInfo_Dtor);
-    RegisterRuntimeExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z", (void*)&RtSave_SaveLoad_CheckMod); ++n;
     // Wave 8 lane E: engine_funcs.cpp's ResolveExport call for CheckMod was a
     // phantom-name typo (QEAAHHI, not this real QEBAHHH) that had been dead
     // since it was written; fixed at its source there. Registering by
     // address too closes the WAVE7.md §3 failure mode where a phantom-name
     // fix, once corrected, is still the ONLY door — a second port reached by
     // address stays correct even if the name is mistyped again.
-    RegisterRuntimeAddr(0x1800c1090, (void*)&RtSave_SaveLoad_CheckMod);
-    RegisterRuntimeExport("?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GenerateSaveName); ++n;
-    RegisterRuntimeAddr(0x1800c1250, (void*)&RtSave_SaveLoad_GenerateSaveName);
-    RegisterRuntimeExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ", (void*)&RtSave_SaveLoad_GetOperation); ++n;
     // WAVE 23 LANE TAIL. Both doors; the banner above records why neither
     // breaks ProbeSaveLoadSingleton's oracle.
-    RegisterRuntimeExport("?Get@SaveLoad@Save@@SAPEAV12@XZ", (void*)&RtSave_SaveLoad_Get); ++n;
-    RegisterRuntimeAddr(0x180030d40, (void*)&RtSave_SaveLoad_Get);
-    RegisterRuntimeAddr(0x1800c3c80, (void*)&RtSave_SaveLoad_GetOperation);
     // Wave 14 lane AUTONAME. Registered both ways from the start (not a
     // retrofit): saveload_update.cpp's UpdateSave/UpdateList already call
     // this by NAME through RT_EXPORT_ONCE (:1159, :1753), so the address door
     // closes the same silent-reversion class those two call sites would
     // otherwise be exposed to if the export name were ever mistyped again.
-    RegisterRuntimeExport("?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GetAutoSaveName); ++n;
-    RegisterRuntimeAddr(0x1800c1440, (void*)&RtSave_SaveLoad_GetAutoSaveName);
-    RegisterRuntimeExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ", (void*)&RtSave_SaveLoad_GetSaveCount); ++n;
-    RegisterRuntimeExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z", (void*)&RtSave_SaveLoad_GetSaveInfo); ++n;
-    RegisterRuntimeExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ", (void*)&RtSave_SaveLoad_GetSaveState); ++n;
-    RegisterRuntimeAddr(0x1800c3b50, (void*)&RtSave_SaveLoad_GetSaveState);
-    RegisterRuntimeExport("?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z", (void*)&RtSave_SavedState_Retrieve); ++n;
-    RegisterRuntimeExport("?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z", (void*)&RtSave_SaveLoad_SetMinOperationTime); ++n;
-    RegisterRuntimeExport("?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z", (void*)&RtSave_SaveLoad_SetOperation); ++n;
-    RegisterRuntimeExport("?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z", (void*)&RtSave_SaveLoad_SetSaveName); ++n;
     // Wave 8 lane E: same phantom-name fix as CheckMod above, applied to
     // engine_funcs.cpp's SetSaveName resolve; registered by address too.
-    RegisterRuntimeAddr(0x1800c3bb0, (void*)&RtSave_SaveLoad_SetSaveName);
-    RegisterRuntimeExport("?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z", (void*)&RtSave_SaveLoad_SetSaveSprite); ++n;
-    RegisterRuntimeExport("?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z", (void*)&RtSave_SavedState_Store); ++n;
-    RegisterRuntimeExport("?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z", (void*)&RtSave_SaveLoad_Update); ++n;
     return n;
 }
 

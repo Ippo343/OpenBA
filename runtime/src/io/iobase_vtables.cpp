@@ -373,9 +373,6 @@ int RtIoBaseVtablesRegister() {
 
     // ENDGAME B.3.4 callers batch H — by NAME (what runtime_census.py reads)
     // and by ADDRESS, the same pair the GetSource row above uses.
-    RegisterRuntimeExport("?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ",
-                          (void*)&RtIo_Stream_GetDirection); ++n;
-    RegisterRuntimeAddr(0x180006200, (void*)&RtIo_Stream_GetDirection);
 
     // ---- IO::Modification ---------------------------------------------------
     RegisterRuntimeExport("??1Modification@IO@@QEAA@XZ",

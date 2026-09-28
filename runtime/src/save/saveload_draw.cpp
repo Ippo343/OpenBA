@@ -841,30 +841,3 @@ void RtSave_SaveLoad_Draw(SaveLoad* self, Context* ctx, void* material) {
     self->Save::SaveLoad::Draw(*ctx, Object::ExternalPtr<Graphics::Material>(
                                          static_cast<Graphics::Material*>(material)));
 }
-
-// ============================================================================
-// 7. Registration — BOTH doors, for the reason saveload.cpp's own block states:
-//    a name door alone is one typo away from resolving NULL in silence, and an
-//    address door alone is invisible to anything that resolves by name.
-//    `code/Game/Game/gameupdateloop.cpp:645` reaches this export BY NAME, so
-//    the name door is the live one; the address door is the belt.
-//
-//    NO OTHER ADDRESS IS REGISTERED HERE. Every callee is an exported name and
-//    the four unexported internals are transcribed above, so this port does not
-//    grow the `called` column with by-address doors
-//    (reference_porting_can_grow_the_cutover_surface.md).
-// ============================================================================
-int RtSaveLoadDrawRegister() {
-    int n = 0;
-    // ON ONE LINE, DELIBERATELY. tools/runtime_census.py matches
-    // `RegisterRuntimeExport\s*\(\s*(?=")` and its "non-literal first argument"
-    // guard matches `(?!")[A-Za-z_]` -- a call split so that the open paren and
-    // the literal are on DIFFERENT lines satisfies neither, so a line-oriented
-    // scan would count this port as unregistered AND not flag it. That is the
-    // same silent-blind-spot family as
-    // reference_census_cannot_see_nonliteral_registrations.md, reached by
-    // formatting rather than by a named constant.
-    RegisterRuntimeExport("?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z", (void*)&RtSave_SaveLoad_Draw); ++n;
-    RegisterRuntimeAddr(0x1800c2eb0, (void*)&RtSave_SaveLoad_Draw);
-    return n;
-}

@@ -579,10 +579,7 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
 // port registry first, so no call site changes.
 // ============================================================================
 int RtIoTextCodecRegister() {
-    RegisterRuntimeAddr(0x1800c9d60, (void*)&RtIo_TextCodec_DetectFormat);
     RegisterRuntimeAddr(0x1800c9fc0, (void*)&RtIo_TextCodec_DecodeOne);
-    RegisterRuntimeAddr(0x1800c9b60, (void*)&RtIo_TextCodec_EncodeOne);
-    RegisterRuntimeAddr(0x1800ca260, (void*)&RtIo_TextCodec_ConvertText);
     RegisterRuntimeAddr(0x180029bb0, (void*)&RtIo_SerializeStringArray);
     return 5;
 }

@@ -221,28 +221,3 @@ void Save::SavedState::Discard() {
 SaveBlock* RtSave_SavedState_SetupLoad(SavedState* self, SaveBlock* ret) {
     return new (ret) SaveBlock(self->Save::SavedState::SetupLoad());
 }
-
-// ============================================================================
-// Registration — BOTH doors.
-//
-// The name door is what the census scanner sees and what our own ported
-// UpdateList / UpdateLoad / UpdateLoadFromFile resolve through; the address
-// door is what a by-address caller and the cutover boot need. The mangled name
-// below was checked byte for byte against the shipped export table before it
-// was written (reference_resolveexport_phantom_names.md), and `QEAA` here means
-// PUBLIC non-virtual, not "unexported"
-// (reference_aeaa_is_private_not_unexported.md).
-//
-// Neither door existed before this lane: `SetupLoad` and `0x1800c0c60` were
-// grepped across runtime/, code/, engine/ and standalone/ first, and the only
-// hits were saveload_update.cpp's three RT_EXPORT_ONCE *call sites* and the
-// WAVE9 planning doc — no registration, so this is not a duplicate
-// (reference_grep_for_the_port_before_writing_it.md).
-// ============================================================================
-int RtSaveSetupLoadRegister() {
-    RegisterRuntimeExport(
-        "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ",
-        (void*)&RtSave_SavedState_SetupLoad);
-    RegisterRuntimeAddr(0x1800c0c60, (void*)&RtSave_SavedState_SetupLoad);
-    return 1;
-}

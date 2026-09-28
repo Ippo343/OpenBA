@@ -153,10 +153,3 @@ bool Persistence::BeginGetSaveGameInfo(const RtSystem::String& nameRef, int coun
 }  // namespace IO
 
 // ---------------------------------------------------------------------------
-int RtIoPersistenceSavesWinRegister() {
-    RegisterRuntimeExport(
-        "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z",
-        (void*)&RtIo_Persistence_BeginGetSaveGameInfo);
-    RegisterRuntimeAddr(0x1800b7870, (void*)&RtIo_Persistence_BeginGetSaveGameInfo);
-    return 1;
-}

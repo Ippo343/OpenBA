@@ -153,6 +153,5 @@ extern "C" void* RtSave_SavedState_Delete(void* self) {
 int RtClosure2bSaveRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x180032f70, (void*)&RtSave_MetaData_CopyCtor); ++n;
-    RegisterRuntimeAddr(0x180032320, (void*)&RtSave_SavedState_Delete); ++n;
     return n;
 }

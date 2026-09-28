@@ -488,30 +488,3 @@ void FileSystem::SetupDirectories() {
 }
 
 }  // namespace IO
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoSetupDirectoriesRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    RegisterRuntimeExport("?SetupDirectories@FileSystem@IO@@QEAAXXZ",
-                          (void*)&RtIo_FileSystem_SetupDirectories); ++n;
-    RegisterRuntimeExport("?GetRootDirectory@FileSystem@IO@@QEAA?AVFilename@System@@XZ",
-                          (void*)&RtIo_FileSystem_GetRootDirectory); ++n;
-
-    RegisterRuntimeAddr(0x1800abd00, (void*)&RtIo_FileSystem_SetupDirectories);
-    RegisterRuntimeAddr(0x1800ad650, (void*)&RtIo_FileSystem_GetRootDirectory);
-
-    // DELIBERATELY ABSENT — the four unreached callees, each named with the
-    // branch that keeps it unreached in the file header:
-    //   ?ExistsInPackfile@FileSystem@IO@@   0x1800ab180  ord 2322
-    //   ?OpenFile@FileSystem@IO@@           0x1800ac880  ord 3309
-    //   ?ReadFile@FileSystem@IO@@           0x1800ace00  ord 3460
-    //   ?CloseFile@FileSystem@IO@@          0x1800accc0  ord 1726
-    //   ?GetCommandLineString@Configuration@System@@  0x1800c5300  ord 2495
-    // and the row DIRECTLY BEHIND this one, which this lane does not touch:
-    //   ?LoadPackages@FileSystem@IO@@QEAAXXZ  0x1800ab460  ord 3209
-    return n;
-}

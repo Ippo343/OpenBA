@@ -164,17 +164,3 @@ uint64_t FileSystem::GetFileTimeStamp(const RtSystem::Filename& pathRef) const {
 }
 
 }  // namespace IO
-
-// ============================================================================
-// Registration — BOTH DOORS. `QEBA` is public and the name is ordinal 2607 in
-// the retail export directory, verified with pefile before this was written.
-// The name is spelled as a LITERAL so tools/runtime_census.py can see it.
-// ============================================================================
-int RtIoFileSystemTimeStampRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@"
-                          "AEBVFilename@4@@Z",
-                          (void*)&RtIO::RtIo_FileSystem_GetFileTimeStamp); ++n;
-    RegisterRuntimeAddr(0x1800ae270, (void*)&RtIO::RtIo_FileSystem_GetFileTimeStamp);
-    return n;
-}

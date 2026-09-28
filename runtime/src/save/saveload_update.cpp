@@ -2036,35 +2036,3 @@ void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
 void RtSave_SaveLoad_UpdateList(SaveLoad* self) {
     self->Save::SaveLoad::UpdateList();
 }
-
-// ============================================================================
-// Registration. Both doors, for the reason saveload.cpp's own registration
-// block states: a name door alone is one typo away from resolving NULL in
-// silence, and an address door alone is invisible to anything that resolves by
-// name. `n` counts PORTED FUNCTIONS, so the address registrations do not
-// increment it — they are second doors onto functions already counted, and
-// incrementing would inflate the census figure this project treats as
-// authoritative over any agent's claim.
-// ============================================================================
-int RtSaveLoadUpdateRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?UpdateDelete@SaveLoad@Save@@QEAAXXZ",
-                          (void*)&RtSave_SaveLoad_UpdateDelete); ++n;
-    RegisterRuntimeAddr(0x1800c2d70, (void*)&RtSave_SaveLoad_UpdateDelete);
-    RegisterRuntimeExport("?OnVideoRestart@SaveLoad@Save@@QEAAXXZ",
-                          (void*)&RtSave_SaveLoad_OnVideoRestart); ++n;
-    RegisterRuntimeAddr(0x1800c0f10, (void*)&RtSave_SaveLoad_OnVideoRestart);
-    RegisterRuntimeExport("?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ",
-                          (void*)&RtSave_SaveLoad_UpdateLoadFromFile); ++n;
-    RegisterRuntimeAddr(0x1800c2560, (void*)&RtSave_SaveLoad_UpdateLoadFromFile);
-    RegisterRuntimeExport("?UpdateLoad@SaveLoad@Save@@QEAAXXZ",
-                          (void*)&RtSave_SaveLoad_UpdateLoad); ++n;
-    RegisterRuntimeAddr(0x1800c2690, (void*)&RtSave_SaveLoad_UpdateLoad);
-    RegisterRuntimeExport("?UpdateSave@SaveLoad@Save@@QEAAXXZ",
-                          (void*)&RtSave_SaveLoad_UpdateSave); ++n;
-    RegisterRuntimeAddr(0x1800c2a80, (void*)&RtSave_SaveLoad_UpdateSave);
-    RegisterRuntimeExport("?UpdateList@SaveLoad@Save@@QEAAXXZ",
-                          (void*)&RtSave_SaveLoad_UpdateList); ++n;
-    RegisterRuntimeAddr(0x1800c1ea0, (void*)&RtSave_SaveLoad_UpdateList);
-    return n;
-}

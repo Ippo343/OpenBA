@@ -794,21 +794,10 @@ int RtIoModificationRefreshRegister() {
 
     RegisterRuntimeExport("?RefreshList@Modification@IO@@QEAAXXZ",
                           (void*)&RtIo_Modification_RefreshList); ++n;
-    RegisterRuntimeExport("?GetIconData@PackageFile@IO@@QEBA?BV?$Array@I@Collection@@XZ",
-                          (void*)&RtIo_PackageFile_GetIconData); ++n;
-    RegisterRuntimeExport("?GetPreviewData@PackageFile@IO@@QEBA?BV?$Array@E@Collection@@XZ",
-                          (void*)&RtIo_PackageFile_GetPreviewData); ++n;
 
     RegisterRuntimeAddr(0x1800af5f0, (void*)&RtIo_Modification_RefreshList);
-    RegisterRuntimeAddr(0x180025530, (void*)&RtIo_PackageFile_GetIconData);
-    RegisterRuntimeAddr(0x180025580, (void*)&RtIo_PackageFile_GetPreviewData);
 
     // Unexported in both shipped builds — address door only.
-    RegisterRuntimeAddr(0x180028610, (void*)&RtColl_ArrayModSetSizeFill_180028610);
-    RegisterRuntimeAddr(0x1800274c0, (void*)&RtColl_SetInsertFixup_1800274c0);
-    RegisterRuntimeAddr(0x180027f50, (void*)&AvlRotateRight);
-    RegisterRuntimeAddr(0x180027e20, (void*)&AvlRotateLeft);
-    RegisterRuntimeAddr(0x18007f034, (void*)&RtCrt_ParseInt10_18007f034);
 
     printf("[RtPort]   IO::Modification::RefreshList (lane MOD2): "
            "%d exports + 8 addresses\n", n);

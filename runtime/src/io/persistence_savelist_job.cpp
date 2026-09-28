@@ -265,20 +265,3 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
         found.data[i].~Filename();                              // 0x1800b64e4
     if (found.data) MemFree(found.data);                        // 0x1800b6541
 }
-
-// ============================================================================
-// Registration — ADDRESS ONLY.
-//
-// Unexported: `persistence_worker_win.cpp` measured this against the retail
-// export directory with pefile when it opened the door ("the nearest preceding
-// export to every one of them is `?Serialize@PackageFile@IO@@` several hundred
-// bytes back"), so there is no mangled name to register under and "unexported"
-// is a measurement rather than a reading of an `AEAA`
-// (reference_aeaa_is_private_not_unexported.md).
-//
-// The address is a LITERAL so tools/runtime_census.py can see the door.
-// ============================================================================
-int RtIoPersistenceSaveListRegister() {
-    RegisterRuntimeAddr(0x1800b6290, (void*)&RtIo_PersistenceWorker_GetSaveList);
-    return 1;
-}
