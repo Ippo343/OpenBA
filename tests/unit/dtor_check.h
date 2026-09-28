@@ -99,6 +99,10 @@ inline void CallD0(void* obj) { CompilerEntry<DtorEntry>(obj, 1)(obj); }
 // `count` / `order` are the test's destructor log: the class's destructor (or
 // the stand-in's) must append `this` exactly once per object.
 // ---------------------------------------------------------------------------
+// Set only by dtor_check_test.cpp while it shows the helper failing on
+// purpose: the failure is still counted, but not printed as a FAIL line.
+inline bool g_quietExpectedFailure = false;
+
 template <class T, class Order>
 inline void CheckArrayDelete(int& count, const Order& order, const char* file, int line) {
     T* a = new T[3];
@@ -108,7 +112,7 @@ inline void CheckArrayDelete(int& count, const Order& order, const char* file, i
     count = 0;
     delete[] a;
     if (count != 3 || order[0] != e2 || order[1] != e1 || order[2] != e0) {
-        std::printf("  FAIL %s:%d: delete[] of 3: %d destructor runs, want 3 in downward order\n",
+        if (!g_quietExpectedFailure) std::printf("  FAIL %s:%d: delete[] of 3: %d destructor runs, want 3 in downward order\n",
                     file, line, count);
         ++unit::Failures();
     }

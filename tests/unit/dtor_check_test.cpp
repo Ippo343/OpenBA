@@ -52,7 +52,9 @@ struct Plain {
 template <class Fn>
 int FailuresOf(Fn fn) {
     const int before = unit::Failures();
+    dtor_check::g_quietExpectedFailure = true;
     fn();
+    dtor_check::g_quietExpectedFailure = false;
     const int added = unit::Failures() - before;
     unit::Failures() = before;
     return added;
