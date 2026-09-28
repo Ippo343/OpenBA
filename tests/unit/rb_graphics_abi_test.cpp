@@ -20,6 +20,7 @@
 // link here; the inline InitFields of Particle / ParticleInstance are REAL.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/graphics/Geometry.h"
 #include "runtime/types/graphics/ParticleInstance.h"
@@ -352,14 +353,6 @@ UNIT_TEST(rb_graphics_bases_shape) {
 // ===========================================================================
 // ENDGAME B.3.9 block GFX -- the Light family concrete (B39_RULES D1, B9-16).
 // ===========================================================================
-template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
 
 UNIT_TEST(b39_gfx_lights_shape_and_slot_order) {
     CHECK(!std::is_abstract<Graphics::AmbientLight>::value);
@@ -371,18 +364,18 @@ UNIT_TEST(b39_gfx_lights_shape_and_slot_order) {
     CHECK(!std::has_virtual_destructor<Graphics::SpotLight>::value);
     using A = Graphics::AmbientLight;
     using S = Graphics::SpotLight;
-    CHECK_EQ(GfxSlotOffset(&A::DeletingDtor),  (uintptr_t)0x00);   // 0x180059080
-    CHECK_EQ(GfxSlotOffset(&A::Update),        (uintptr_t)0x08);   // 0x1800fa7a0
-    CHECK_EQ(GfxSlotOffset(&A::Draw),          (uintptr_t)0x10);   // 0x1800fa790
-    CHECK_EQ(GfxSlotOffset(&A::AddDrawItems),  (uintptr_t)0x18);   // 0x1800fa890
-    CHECK_EQ(GfxSlotOffset(&A::DrawShadowMap), (uintptr_t)0x48);   // 0x1800fa880
-    CHECK_EQ(GfxSlotOffset(&A::DrawLight),     (uintptr_t)0x50);   // 0x1800fa7b0
-    CHECK_EQ(GfxSlotOffset(&S::DeletingDtor),  (uintptr_t)0x00);   // 0x1800642b0
-    CHECK_EQ(GfxSlotOffset(&S::Update),        (uintptr_t)0x08);   // 0x180105950
-    CHECK_EQ(GfxSlotOffset(&S::Draw),          (uintptr_t)0x10);   // 0x180105940
-    CHECK_EQ(GfxSlotOffset(&S::AddDrawItems),  (uintptr_t)0x18);   // 0x180105e30
-    CHECK_EQ(GfxSlotOffset(&S::DrawShadowMap), (uintptr_t)0x48);   // 0x180105d00
-    CHECK_EQ(GfxSlotOffset(&S::DrawLight),     (uintptr_t)0x50);   // 0x180105960
+    CHECK_DTOR_SLOT(A);   // 0x180059080
+    CHECK_SLOT(A, Update,        0x08/8);   // 0x1800fa7a0
+    CHECK_SLOT(A, Draw,          0x10/8);   // 0x1800fa790
+    CHECK_SLOT(A, AddDrawItems,  0x18/8);   // 0x1800fa890
+    CHECK_SLOT(A, DrawShadowMap, 0x48/8);   // 0x1800fa880
+    CHECK_SLOT(A, DrawLight,     0x50/8);   // 0x1800fa7b0
+    CHECK_DTOR_SLOT(S);   // 0x1800642b0
+    CHECK_SLOT(S, Update,        0x08/8);   // 0x180105950
+    CHECK_SLOT(S, Draw,          0x10/8);   // 0x180105940
+    CHECK_SLOT(S, AddDrawItems,  0x18/8);   // 0x180105e30
+    CHECK_SLOT(S, DrawShadowMap, 0x48/8);   // 0x180105d00
+    CHECK_SLOT(S, DrawLight,     0x50/8);   // 0x180105960
 }
 
 // ??0AmbientLight 0x1800fa940: Geometry(), the colour zeroed, 10.0f at +0xd0,
@@ -475,8 +468,8 @@ UNIT_TEST(b39_gfx_particle_slot0_is_the_classs_own_both_arms) {
     // Particle stays abstract (three pure slots); its slot 0 is concrete now.
     CHECK(std::is_abstract<Graphics::Particle>::value);
     CHECK(!std::is_destructible<Graphics::Particle>::value);
-    CHECK_EQ(GfxSlotOffset(&Graphics::Particle::DeletingDtor), (uintptr_t)0x00);   // 0x180020160
-    CHECK_EQ(GfxSlotOffset(&Graphics::Particle::CreateSystem), (uintptr_t)0x40);   // _purecall, B5-16
+    CHECK_DTOR_SLOT(Graphics::Particle);   // 0x180020160
+    CHECK_SLOT(Graphics::Particle, CreateSystem, 0x40/8);   // _purecall, B5-16
 
     void* m = Object::detail::InternalMemAlloc(sizeof(RbParticleLeaf), 8);
     RbParticleLeaf* p = ::new (m) RbParticleLeaf();
@@ -500,15 +493,15 @@ UNIT_TEST(b39_gfx_particlesystem_concrete_slot_order_and_both_slot0_arms) {
     CHECK(!std::is_abstract<PS>::value);
     CHECK(!std::is_destructible<PS>::value);
     CHECK(!std::has_virtual_destructor<PS>::value);
-    CHECK_EQ(GfxSlotOffset(&PS::DeletingDtor),   (uintptr_t)0x00);   // 0x180020a70
-    CHECK_EQ(GfxSlotOffset(&PS::TypeName),       (uintptr_t)0x08);   // 0x1800203e0
-    CHECK_EQ(GfxSlotOffset(&PS::Type),           (uintptr_t)0x10);   // 0x1800203c0
-    CHECK_EQ(GfxSlotOffset(&PS::GetFileVersion), (uintptr_t)0x18);   // 0x1800a4d10
-    CHECK_EQ(GfxSlotOffset(&PS::Serialize),      (uintptr_t)0x28);   // 0x1800a4d20
-    CHECK_EQ(GfxSlotOffset(&PS::Reconstruct),    (uintptr_t)0x30);   // 0x180020560
-    CHECK_EQ(GfxSlotOffset(&PS::Destruct),       (uintptr_t)0x38);   // 0x180020590
-    CHECK_EQ(GfxSlotOffset(&PS::CreateSystem),   (uintptr_t)0x40);   // 0x1800a5140
-    CHECK_EQ(GfxSlotOffset(&PS::Construct),      (uintptr_t)0x48);   // 0x180020580
+    CHECK_DTOR_SLOT(PS);   // 0x180020a70
+    CHECK_SLOT(PS, TypeName,       0x08/8);   // 0x1800203e0
+    CHECK_SLOT(PS, Type,           0x10/8);   // 0x1800203c0
+    CHECK_SLOT(PS, GetFileVersion, 0x18/8);   // 0x1800a4d10
+    CHECK_SLOT(PS, Serialize,      0x28/8);   // 0x1800a4d20
+    CHECK_SLOT(PS, Reconstruct,    0x30/8);   // 0x180020560
+    CHECK_SLOT(PS, Destruct,       0x38/8);   // 0x180020590
+    CHECK_SLOT(PS, CreateSystem,   0x40/8);   // 0x1800a5140
+    CHECK_SLOT(PS, Construct,      0x48/8);   // 0x180020580
 
     // Particle's six stores run under the base ctor (the marker ctor adds _f48).
     alignas(8) unsigned char buf[sizeof(PS)];
@@ -666,17 +659,17 @@ UNIT_TEST(b39_gfx_framecopy_concrete_ctor_dtor_and_exe_scalar_slot0) {
     CHECK(!std::is_abstract<F>::value);
     CHECK(!std::is_destructible<F>::value);            // ~F protected
     CHECK(!std::has_virtual_destructor<F>::value);
-    CHECK_EQ(GfxSlotOffset(&F::DeletingDtor),   (uintptr_t)0x00);   // exe copy 0x140019d50
-    CHECK_EQ(GfxSlotOffset(&F::TypeName),       (uintptr_t)0x08);   // 0x18001efb0
-    CHECK_EQ(GfxSlotOffset(&F::Type),           (uintptr_t)0x10);   // 0x18001ef90
-    CHECK_EQ(GfxSlotOffset(&F::GetFileVersion), (uintptr_t)0x18);   // 0x1800a3c70
-    CHECK_EQ(GfxSlotOffset(&F::Serialize),      (uintptr_t)0x28);   // 0x1800a3c40
-    CHECK_EQ(GfxSlotOffset(&F::Reconstruct),    (uintptr_t)0x30);   // 0x18001f130
-    CHECK_EQ(GfxSlotOffset(&F::Destruct),       (uintptr_t)0x38);   // 0x18001f160
-    CHECK_EQ(GfxSlotOffset(&F::Construct),      (uintptr_t)0x40);   // 0x18001f150
-    CHECK_EQ(GfxSlotOffset(&F::Create),         (uintptr_t)0x48);   // 0x1800a3b70
-    CHECK_EQ(GfxSlotOffset(&F::Generate),       (uintptr_t)0x50);   // 0x1800a3b20
-    CHECK_EQ(GfxSlotOffset(&F::Render),         (uintptr_t)0x58);   // 0x1800a3b10
+    CHECK_DTOR_SLOT(F);   // exe copy 0x140019d50
+    CHECK_SLOT(F, TypeName,       0x08/8);   // 0x18001efb0
+    CHECK_SLOT(F, Type,           0x10/8);   // 0x18001ef90
+    CHECK_SLOT(F, GetFileVersion, 0x18/8);   // 0x1800a3c70
+    CHECK_SLOT(F, Serialize,      0x28/8);   // 0x1800a3c40
+    CHECK_SLOT(F, Reconstruct,    0x30/8);   // 0x18001f130
+    CHECK_SLOT(F, Destruct,       0x38/8);   // 0x18001f160
+    CHECK_SLOT(F, Construct,      0x40/8);   // 0x18001f150
+    CHECK_SLOT(F, Create,         0x48/8);   // 0x1800a3b70
+    CHECK_SLOT(F, Generate,       0x50/8);   // 0x1800a3b20
+    CHECK_SLOT(F, Render,         0x58/8);   // 0x1800a3b10
 
     // The chain: ImageBuffer() -> GeneratedImageBuffer() (`_generation = 0`)
     // -> the FrameCopy body under FrameCopy's (compiler) table.
@@ -708,9 +701,9 @@ UNIT_TEST(b39_gfx_generatedimagebuffer_slot0_is_the_classs_own_both_arms) {
     CHECK(!std::is_destructible<G>::value);
     CHECK(!std::has_virtual_destructor<G>::value);
     CHECK_EQ(sizeof(RbGeneratedLeaf), (size_t)0x70);
-    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor), (uintptr_t)0x00);   // 0x18001eee0
-    CHECK_EQ(GfxSlotOffset(&G::Generate),     (uintptr_t)0x50);
-    CHECK_EQ(GfxSlotOffset(&G::Render),       (uintptr_t)0x58);
+    CHECK_DTOR_SLOT(G);   // 0x18001eee0
+    CHECK_SLOT(G, Generate, 0x50/8);
+    CHECK_SLOT(G, Render,   0x58/8);
 
     alignas(8) unsigned char buf[sizeof(RbGeneratedLeaf)];
     std::memset(buf, 0xCD, sizeof buf);
@@ -767,11 +760,11 @@ UNIT_TEST(b39_gfx_particlesysteminstance_concrete_ctor_and_both_slot0_arms) {
     CHECK(!std::is_abstract<P>::value);
     CHECK(!std::is_destructible<P>::value);
     CHECK(!std::has_virtual_destructor<P>::value);
-    CHECK_EQ(GfxSlotOffset(&P::DeletingDtor),         (uintptr_t)0x00);   // 0x180020ce0
-    CHECK_EQ(GfxSlotOffset(static_cast<void (P::*)(const System::Time&)>(&P::Update)),
-             (uintptr_t)0x08);                                            // 0x1800a5600
-    CHECK_EQ(GfxSlotOffset(&P::GetInstanceTransform), (uintptr_t)0x30);   // PI 0x1801047f0
-    CHECK_EQ(GfxSlotOffset(&P::SetParticle),          (uintptr_t)0x48);   // 0x1800a6a80
+    CHECK_DTOR_SLOT(P);   // 0x180020ce0
+    CHECK_PMF_SLOT(static_cast<void (P::*)(const System::Time&)>(&P::Update),
+                   0x08/8);                                               // 0x1800a5600
+    CHECK_SLOT(P, GetInstanceTransform, 0x30/8);   // PI 0x1801047f0
+    CHECK_SLOT(P, SetParticle,          0x48/8);   // 0x1800a6a80
 
     // Retail 0x1800a55a0: Geometry(), +0xc0/+0xc8 = 0, +0xd0 = -1, +0xd8 = 0.
     g_n = 0;
@@ -819,7 +812,7 @@ UNIT_TEST(b39_gfx_particleinstance_slot0_is_the_classs_own_both_arms) {
     using PI = Graphics::ParticleInstance;
     CHECK(std::is_abstract<PI>::value);
     CHECK(!std::is_destructible<PI>::value);
-    CHECK_EQ(GfxSlotOffset(&PI::DeletingDtor), (uintptr_t)0x00);   // 0x180020310
+    CHECK_DTOR_SLOT(PI);   // 0x180020310
     CHECK_EQ(sizeof(RbPiLeaf), (size_t)0xd8);
 
     void* m = Object::detail::InternalMemAlloc(sizeof(RbPiLeaf), 8);
@@ -874,8 +867,8 @@ UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
     CHECK(!std::is_abstract<E>::value);
     CHECK(!std::is_destructible<E>::value);
     CHECK(!std::has_virtual_destructor<E>::value);
-    CHECK_EQ(GfxSlotOffset(&E::DeletingDtor),         (uintptr_t)0x00);   // 0x1800175d0
-    CHECK_EQ(GfxSlotOffset(&E::GetInstanceTransform), (uintptr_t)0x30);   // 0x1800a3840 RETSLOT
+    CHECK_DTOR_SLOT(E);   // 0x1800175d0
+    CHECK_SLOT(E, GetInstanceTransform, 0x30/8);   // 0x1800a3840 RETSLOT
 
     // Retail 0x1800a3ab0: Geometry(), +0xc0 = 0; +0xc8 NOT written.
     g_n = 0;
@@ -936,7 +929,7 @@ UNIT_TEST(b39_gfx_geometry_slot0_is_the_classs_own_both_arms) {
     CHECK(std::is_abstract<G>::value);
     CHECK(!std::is_destructible<G>::value);
     CHECK(!std::has_virtual_destructor<G>::value);
-    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor), (uintptr_t)0x00);   // 0x180015e90
+    CHECK_DTOR_SLOT(G);   // 0x180015e90
     CHECK_EQ(sizeof(RbGeoLeaf), (size_t)0xc0);
 
     // Scalar arm, flags 1: ~Geometry under Geometry's table, freed, returns this.

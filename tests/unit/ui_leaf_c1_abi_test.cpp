@@ -34,6 +34,7 @@
 // members as its own markers (runtime/src/ui does not link into a host test).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -83,14 +84,18 @@ void Note(const void* self, int who, int slot, long long arg = 0) {
 }
 void Reset() { g_self = nullptr; g_who = kNone; g_slot = -1; g_arg = 0; g_trailN = 0; }
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
+// Retail slot n of a table in this file, as the compiler numbers it.
+constexpr long Retail(int n) { return RetailSlot<Object::Base>(n); }
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
@@ -531,11 +536,11 @@ UNIT_TEST(ui_c1_buttonelement_slot_order_is_retails) {
 
     // INHERITED from UI::Element: 3 Persist, 9 Contains, 10 SetColor, 11 GetBorder.
     for (int off : { kE3_Persist, kE9_Contains, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == pv[off / 8]);
+        CHECK(vt[Retail(off / 8)] == pv[Retail(off / 8)]);
     // ... and the six own ones are NOT the parent's.
     for (int off : { kE1_TypeName, kE2_Type, kE4_ComputeSize, kE5_ComputeLayout,
                      kE6_Draw, kE7_Update, kE8_Enable })
-        CHECK(vt[off / 8] != pv[off / 8]);
+        CHECK(vt[Retail(off / 8)] != pv[Retail(off / 8)]);
 
     CHECK(static_cast<void*>(static_cast<UI::Element*>(&probe)) == raw);
 }
@@ -553,11 +558,11 @@ UNIT_TEST(ui_c1_checkelement_slot_order_is_retails) {
     for (int off : { kE1_TypeName, kE2_Type, kE4_ComputeSize, kE5_ComputeLayout, kE6_Draw })
         ExpectElementSlot(raw, off, kCheckE);
     // Slot 8 is ButtonElement::Enable, INHERITED (0x180110cc0 in both tables).
-    CHECK(vt[kE8_Enable / 8] == bv[kE8_Enable / 8]);
+    CHECK(vt[Retail(kE8_Enable / 8)] == bv[Retail(kE8_Enable / 8)]);
     ExpectElementSlot(raw, kE8_Enable, kButtonE);
     for (int off : { kE3_Persist, kE9_Contains, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
-    CHECK(vt[kE7_Update / 8] != bv[kE7_Update / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
+    CHECK(vt[Retail(kE7_Update / 8)] != bv[Retail(kE7_Update / 8)]);
     CHECK(static_cast<void*>(static_cast<UI::ButtonElement*>(&probe)) == raw);
 }
 
@@ -569,7 +574,7 @@ UNIT_TEST(ui_c1_buttondescription_slot_order_is_retails) {
                      kD6_Reconstruct, kD7_Destruct, kD9_Construct })
         ExpectDescriptionSlot(raw, off, kButtonD);
     // Slot 4 is Object::External::Compile, inherited (RULE B6-1.5).
-    CHECK(VTableOf(raw)[kD4_Compile / 8] == VTableOf(static_cast<void*>(&bare))[kD4_Compile / 8]);
+    CHECK(RetailEntry<Object::Base>(raw, kD4_Compile / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8));
     // Ten distinct entries; Construct (9) is BEHIND CreateInstance (8) — B6-1.1.
     const void* const* vt = VTableOf(raw);
     for (int i = 0; i < 10; ++i)
@@ -588,9 +593,9 @@ UNIT_TEST(ui_c1_checkdescription_slot_order_is_retails) {
     // parent's: B36_SLOTS.md marks only slot 4 inherited.
     const void* const* vt = VTableOf(raw);
     const void* const* bv = VTableOf(static_cast<void*>(&button));
-    CHECK(vt[kD4_Compile / 8] == bv[kD4_Compile / 8]);
+    CHECK(vt[Retail(kD4_Compile / 8)] == bv[Retail(kD4_Compile / 8)]);
     for (int i = 1; i < 10; ++i)
-        if (i != kD4_Compile / 8) CHECK(vt[i] != bv[i]);
+        if (i != kD4_Compile / 8) CHECK(vt[Retail(i)] != bv[Retail(i)]);
 }
 
 // ===========================================================================
@@ -648,7 +653,7 @@ UNIT_TEST(ui_c1_qualified_calls_do_not_reenter_the_door) {
     const void* minted[12] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 12; ++i) minted[i] = real[i];
-    minted[kE7_Update / 8] = reinterpret_cast<const void*>(&MintedCheckUpdateDoor);
+    minted[RetailSlot<Object::Base>(kE7_Update / 8)] = reinterpret_cast<const void*>(&MintedCheckUpdateDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x9000));
@@ -716,12 +721,12 @@ UNIT_TEST(ui_c1_comboelement_slot_order_is_retails) {
     ExpectElementSlot(raw, kE2_Type, kComboE);
     // 4/5/6/8 are ButtonElement's (B36_SLOTS.md: inherited-from UI::ButtonElement).
     for (int off : { kE4_ComputeSize, kE5_ComputeLayout, kE6_Draw, kE8_Enable }) {
-        CHECK(vt[off / 8] == bv[off / 8]);
+        CHECK(vt[Retail(off / 8)] == bv[Retail(off / 8)]);
         ExpectElementSlot(raw, off, kButtonE);
     }
     for (int off : { kE3_Persist, kE9_Contains, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
-    CHECK(vt[kE7_Update / 8] != bv[kE7_Update / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
+    CHECK(vt[Retail(kE7_Update / 8)] != bv[Retail(kE7_Update / 8)]);
 
     // Slot 7 is Combo's own and chains to ButtonElement's, qualified.
     void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x5000));
@@ -745,9 +750,9 @@ UNIT_TEST(ui_c1_combodescription_slot_order_is_retails) {
         ExpectDescriptionSlot(raw, off, kComboD);
     const void* const* vt = VTableOf(raw);
     const void* const* bv = VTableOf(static_cast<void*>(&button));
-    CHECK(vt[kD4_Compile / 8] == bv[kD4_Compile / 8]);
+    CHECK(vt[Retail(kD4_Compile / 8)] == bv[Retail(kD4_Compile / 8)]);
     for (int i = 1; i < 10; ++i)
-        if (i != kD4_Compile / 8) CHECK(vt[i] != bv[i]);
+        if (i != kD4_Compile / 8) CHECK(vt[Retail(i)] != bv[Retail(i)]);
     ExpectCreateInstanceRetslot(raw, kComboD, 0xC0C0C0C0u);
 }
 
@@ -812,7 +817,7 @@ UNIT_TEST(ui_c1_borderelement_slot_order_is_retails) {
         ExpectElementSlot(raw, off, kBorderE);
     for (int off : { kE3_Persist, kE7_Update, kE8_Enable, kE9_Contains, kE10_SetColor,
                      kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
 }
 
 UNIT_TEST(ui_c1_clipregionelement_slot_order_is_retails) {
@@ -831,23 +836,23 @@ UNIT_TEST(ui_c1_clipregionelement_slot_order_is_retails) {
         raw, nullptr, nullptr, &handle, &state);
     CHECK_EQ(g_who, (int)kClipE); CHECK_EQ(g_slot, 7);
     // Slot 9 Contains is ClipRegion's own (the only one in this block).
-    CHECK(vt[kE9_Contains / 8] != ev[kE9_Contains / 8]);
+    CHECK(vt[Retail(kE9_Contains / 8)] != ev[Retail(kE9_Contains / 8)]);
     for (int off : { kE3_Persist, kE8_Enable, kE10_SetColor, kE11_GetBorder })
-        CHECK(vt[off / 8] == ev[off / 8]);
+        CHECK(vt[Retail(off / 8)] == ev[Retail(off / 8)]);
 }
 
 UNIT_TEST(ui_c1_border_clipregion_description_slots) {
     BorderDescriptionProbe border;
     ClipRegionDescriptionProbe clip;
     BareExternalProbe bare;
-    const void* compile = VTableOf(static_cast<void*>(&bare))[kD4_Compile / 8];
+    const void* compile = RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8);
     for (int off : { kD1_TypeName, kD2_Type, kD3_GetFileVersion, kD5_Serialize,
                      kD6_Reconstruct, kD7_Destruct, kD9_Construct }) {
         ExpectDescriptionSlot(static_cast<void*>(&border), off, kBorderD);
         ExpectDescriptionSlot(static_cast<void*>(&clip), off, kClipD);
     }
-    CHECK(VTableOf(static_cast<void*>(&border))[kD4_Compile / 8] == compile);
-    CHECK(VTableOf(static_cast<void*>(&clip))[kD4_Compile / 8] == compile);
+    CHECK(RetailEntry<Object::Base>(static_cast<void*>(&border), kD4_Compile / 8) == compile);
+    CHECK(RetailEntry<Object::Base>(static_cast<void*>(&clip), kD4_Compile / 8) == compile);
     ExpectCreateInstanceRetslot(static_cast<void*>(&border), kBorderD, 0xBDBDBDBDu);
     ExpectCreateInstanceRetslot(static_cast<void*>(&clip), kClipD, 0xC1C2C1C2u);
 }
@@ -869,7 +874,7 @@ UNIT_TEST(ui_c1_clipregion_contains_reaches_the_base_without_reentry) {
     const void* minted[12] = {};
     const void* const* real = VTableOf(raw);
     for (int i = 0; i < 12; ++i) minted[i] = real[i];
-    minted[kE9_Contains / 8] = reinterpret_cast<const void*>(&MintedClipContainsDoor);
+    minted[RetailSlot<Object::Base>(kE9_Contains / 8)] = reinterpret_cast<const void*>(&MintedClipContainsDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
     g_containsDoorEntries = 0;
@@ -890,16 +895,6 @@ UNIT_TEST(ui_c1_clipregion_contains_reaches_the_base_without_reentry) {
 // ENDGAME B.3.9 UI-A (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
 namespace {
-// Itanium PMF -> vtable byte offset: 1 + offset for a virtual, adjustment 0.
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
 
 // Build three elements behind an array cookie, run the ARRAY arm of slot 0 and
 // check it destroys downward, frees and returns the block; then the scalar
@@ -930,22 +925,22 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 
 UNIT_TEST(b39_uia_border_slot_order_by_pmf) {
     using BE = UI::BorderElement;
-    CHECK_EQ(SlotOffset(&BE::DeletingDtor),  (uintptr_t)0x00);   // 0x1800414f0
-    CHECK_EQ(SlotOffset(&BE::TypeName),      (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&BE::Type),          (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&BE::ComputeSize),   (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&BE::ComputeLayout), (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&BE::Draw),          (uintptr_t)0x30);
+    CHECK_DTOR_SLOT(BE);   // 0x1800414f0
+    CHECK_SLOT(BE, TypeName,      0x08/8);
+    CHECK_SLOT(BE, Type,          0x10/8);
+    CHECK_SLOT(BE, ComputeSize,   0x20/8);
+    CHECK_SLOT(BE, ComputeLayout, 0x28/8);
+    CHECK_SLOT(BE, Draw,          0x30/8);
     using BD = UI::BorderDescription;
-    CHECK_EQ(SlotOffset(&BD::DeletingDtor),   (uintptr_t)0x00);  // 0x180040ff0
-    CHECK_EQ(SlotOffset(&BD::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&BD::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&BD::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&BD::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&BD::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&BD::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&BD::CreateInstance), (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&BD::Construct),      (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(BD);  // 0x180040ff0
+    CHECK_SLOT(BD, TypeName,       0x08/8);
+    CHECK_SLOT(BD, Type,           0x10/8);
+    CHECK_SLOT(BD, GetFileVersion, 0x18/8);
+    CHECK_SLOT(BD, Serialize,      0x28/8);
+    CHECK_SLOT(BD, Reconstruct,    0x30/8);
+    CHECK_SLOT(BD, Destruct,       0x38/8);
+    CHECK_SLOT(BD, CreateInstance, 0x40/8);
+    CHECK_SLOT(BD, Construct,      0x48/8);
 }
 
 // ??0BorderElement 0x18010fd40: Element(), then nine {sheet 0, index -1}; each
@@ -997,22 +992,22 @@ UNIT_TEST(b39_uia_border_deletingdtor_both_arms) {
 
 UNIT_TEST(b39_uia_clipregion_slot_order_by_pmf) {
     using CE = UI::ClipRegionElement;
-    CHECK_EQ(SlotOffset(&CE::DeletingDtor),  (uintptr_t)0x00);   // 0x180038370
-    CHECK_EQ(SlotOffset(&CE::TypeName),      (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&CE::Type),          (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&CE::ComputeSize),   (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&CE::ComputeLayout), (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&CE::Draw),          (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&CE::Update),        (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&CE::Contains),      (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(CE);   // 0x180038370
+    CHECK_SLOT(CE, TypeName,      0x08/8);
+    CHECK_SLOT(CE, Type,          0x10/8);
+    CHECK_SLOT(CE, ComputeSize,   0x20/8);
+    CHECK_SLOT(CE, ComputeLayout, 0x28/8);
+    CHECK_SLOT(CE, Draw,          0x30/8);
+    CHECK_SLOT(CE, Update,        0x38/8);
+    CHECK_SLOT(CE, Contains,      0x48/8);
     using CD = UI::ClipRegionDescription;
-    CHECK_EQ(SlotOffset(&CD::DeletingDtor),   (uintptr_t)0x00);  // 0x180037eb0
-    CHECK_EQ(SlotOffset(&CD::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&CD::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&CD::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&CD::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&CD::CreateInstance), (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&CD::Construct),      (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(CD);  // 0x180037eb0
+    CHECK_SLOT(CD, GetFileVersion, 0x18/8);
+    CHECK_SLOT(CD, Serialize,      0x28/8);
+    CHECK_SLOT(CD, Reconstruct,    0x30/8);
+    CHECK_SLOT(CD, Destruct,       0x38/8);
+    CHECK_SLOT(CD, CreateInstance, 0x40/8);
+    CHECK_SLOT(CD, Construct,      0x48/8);
 }
 
 // ??0ClipRegionElement 0x1800cbe60: Element(), then 100, 100, 0, 0, 0, 0.
@@ -1054,18 +1049,18 @@ UNIT_TEST(b39_uia_clipregion_deletingdtor_both_arms) {
 }
 
 UNIT_TEST(b39_uia_button_family_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::ButtonElement::DeletingDtor),     (uintptr_t)0x00);   // 0x1800485b0
-    CHECK_EQ(SlotOffset(&UI::ButtonElement::Enable),           (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&UI::CheckElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180048d80
-    CHECK_EQ(SlotOffset(&UI::CheckElement::Update),            (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&UI::ComboElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180075390
-    CHECK_EQ(SlotOffset(&UI::ComboElement::Update),            (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&UI::ButtonDescription::DeletingDtor), (uintptr_t)0x00);   // 0x1800481a0
-    CHECK_EQ(SlotOffset(&UI::ButtonDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::CheckDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x1800489c0
-    CHECK_EQ(SlotOffset(&UI::CheckDescription::Construct),     (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::ComboDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x180074e70
-    CHECK_EQ(SlotOffset(&UI::ComboDescription::Construct),     (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(UI::ButtonElement);   // 0x1800485b0
+    CHECK_SLOT(UI::ButtonElement, Enable, 0x40/8);
+    CHECK_DTOR_SLOT(UI::CheckElement);   // 0x180048d80
+    CHECK_SLOT(UI::CheckElement, Update, 0x38/8);
+    CHECK_DTOR_SLOT(UI::ComboElement);   // 0x180075390
+    CHECK_SLOT(UI::ComboElement, Update, 0x38/8);
+    CHECK_DTOR_SLOT(UI::ButtonDescription);   // 0x1800481a0
+    CHECK_SLOT(UI::ButtonDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::CheckDescription);   // 0x1800489c0
+    CHECK_SLOT(UI::CheckDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::ComboDescription);   // 0x180074e70
+    CHECK_SLOT(UI::ComboDescription, Construct, 0x48/8);
 }
 
 // The real ctors' stores; untouched bytes stay 0xCD.

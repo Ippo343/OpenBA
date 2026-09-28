@@ -16,6 +16,7 @@
 //   - member offsets are static_asserted in each class header.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -106,16 +107,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
 // One Description leaf: 10 retail slots, the leaf's Construct at slot 9.
 template <class D>
 int CheckDescriptionLeaf(size_t size) {
@@ -126,16 +117,16 @@ int CheckDescriptionLeaf(size_t size) {
     bad += std::is_abstract<D>::value;
     bad += std::has_virtual_destructor<D>::value;
     bad += !(std::is_base_of<Description, D>::value);
-    bad += SlotOffset(&D::DeletingDtor)     != 0x00;
-    bad += SlotOffset(&D::TypeName)         != 0x08;
-    bad += SlotOffset(&D::Type)             != 0x10;
-    bad += SlotOffset(&D::GetFileVersion)   != 0x18;
-    bad += SlotOffset(&D::Compile)          != 0x20;
-    bad += SlotOffset(&D::Serialize)        != 0x28;
-    bad += SlotOffset(&D::Reconstruct)      != 0x30;
-    bad += SlotOffset(&D::Destruct)         != 0x38;
-    bad += SlotOffset(&D::GetComponentType) != 0x40;
-    bad += SlotOffset(&D::Construct)        != 0x48;
+    bad += !slot_check::DtorSlotOk<D>();
+    bad += !slot_check::SlotOk(&D::TypeName,         0x08/8);
+    bad += !slot_check::SlotOk(&D::Type,             0x10/8);
+    bad += !slot_check::SlotOk(&D::GetFileVersion,   0x18/8);
+    bad += !slot_check::SlotOk(&D::Compile,          0x20/8);
+    bad += !slot_check::SlotOk(&D::Serialize,        0x28/8);
+    bad += !slot_check::SlotOk(&D::Reconstruct,      0x30/8);
+    bad += !slot_check::SlotOk(&D::Destruct,         0x38/8);
+    bad += !slot_check::SlotOk(&D::GetComponentType, 0x40/8);
+    bad += !slot_check::SlotOk(&D::Construct,        0x48/8);
     return bad;
 }
 
@@ -260,15 +251,15 @@ int CheckExternalLeaf(size_t size) {
     bad += std::has_virtual_destructor<D>::value;
     bad += std::is_base_of<Description, D>::value;
     bad += !(std::is_base_of<Object::External, D>::value);
-    bad += SlotOffset(&D::DeletingDtor)     != 0x00;
-    bad += SlotOffset(&D::TypeName)         != 0x08;
-    bad += SlotOffset(&D::Type)             != 0x10;
-    bad += SlotOffset(&D::GetFileVersion)   != 0x18;
-    bad += SlotOffset(&D::Compile)          != 0x20;
-    bad += SlotOffset(&D::Serialize)        != 0x28;
-    bad += SlotOffset(&D::Reconstruct)      != 0x30;
-    bad += SlotOffset(&D::Destruct)         != 0x38;
-    bad += SlotOffset(&D::Construct)        != 0x40;
+    bad += !slot_check::DtorSlotOk<D>();
+    bad += !slot_check::SlotOk(&D::TypeName,       0x08/8);
+    bad += !slot_check::SlotOk(&D::Type,           0x10/8);
+    bad += !slot_check::SlotOk(&D::GetFileVersion, 0x18/8);
+    bad += !slot_check::SlotOk(&D::Compile,        0x20/8);
+    bad += !slot_check::SlotOk(&D::Serialize,      0x28/8);
+    bad += !slot_check::SlotOk(&D::Reconstruct,    0x30/8);
+    bad += !slot_check::SlotOk(&D::Destruct,       0x38/8);
+    bad += !slot_check::SlotOk(&D::Construct,      0x40/8);
     return bad;
 }
 
@@ -288,10 +279,10 @@ UNIT_TEST(k1_component_entity) {
     CHECK(!std::is_abstract<E>::value);
     CHECK(!std::has_virtual_destructor<E>::value);
     CHECK((std::is_base_of<Object::Internal, E>::value));
-    CHECK_EQ(SlotOffset(&E::DeletingDtor), (size_t)0x00);
-    CHECK_EQ(SlotOffset(&E::TypeName),     (size_t)0x08);
-    CHECK_EQ(SlotOffset(&E::Type),         (size_t)0x10);
-    CHECK_EQ(SlotOffset(&E::Persist),      (size_t)0x18);
+    CHECK_DTOR_SLOT(E);
+    CHECK_SLOT(E, TypeName, 0x08/8);
+    CHECK_SLOT(E, Type,     0x10/8);
+    CHECK_SLOT(E, Persist,  0x18/8);
     CHECK_EQ(offsetof(E, _description), (size_t)0x28);
     CHECK_EQ(offsetof(E, _entityFlags), (size_t)0x40);
 }

@@ -14,6 +14,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -30,16 +31,6 @@ int                   g_elDtorCount = 0;
 Object::ExternalList* g_elDtorOrder[8] = {};
 int                   g_elLastSlot = -1;
 
-
-template <typename PMF>
-uintptr_t ElSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);          // this-adjustment
-    return words[0] - 1;
-}
 
 const void* ElVTableOf(const void* o) { return *reinterpret_cast<const void* const*>(o); }
 
@@ -76,15 +67,15 @@ UNIT_TEST(b39_obj_externallist_is_concrete_with_protected_nonvirtual_dtor) {
 // (??_7ExternalList@Object@@6B@ 0x180154800, nine slots).
 UNIT_TEST(b39_obj_externallist_slot_order_by_pmf) {
     using EL = Object::ExternalList;
-    CHECK_EQ(ElSlotOffset(&EL::DeletingDtor),   (uintptr_t)0x00);   // 0x180007800
-    CHECK_EQ(ElSlotOffset(&EL::TypeName),       (uintptr_t)0x08);   // 0x180007370
-    CHECK_EQ(ElSlotOffset(&EL::Type),           (uintptr_t)0x10);   // 0x180007350
-    CHECK_EQ(ElSlotOffset(&EL::GetFileVersion), (uintptr_t)0x18);   // 0x1800bfa10
-    CHECK_EQ(ElSlotOffset(&EL::Compile),        (uintptr_t)0x20);   // 0x1800066e0 (External's)
-    CHECK_EQ(ElSlotOffset(&EL::Serialize),      (uintptr_t)0x28);   // 0x1800bfa20
-    CHECK_EQ(ElSlotOffset(&EL::Reconstruct),    (uintptr_t)0x30);   // 0x180007570
-    CHECK_EQ(ElSlotOffset(&EL::Destruct),       (uintptr_t)0x38);   // 0x180007640
-    CHECK_EQ(ElSlotOffset(&EL::Construct),      (uintptr_t)0x40);   // 0x1800075e0
+    CHECK_DTOR_SLOT(EL);   // 0x180007800
+    CHECK_SLOT(EL, TypeName,       0x08/8);   // 0x180007370
+    CHECK_SLOT(EL, Type,           0x10/8);   // 0x180007350
+    CHECK_SLOT(EL, GetFileVersion, 0x18/8);   // 0x1800bfa10
+    CHECK_SLOT(EL, Compile,        0x20/8);   // 0x1800066e0 (External's)
+    CHECK_SLOT(EL, Serialize,      0x28/8);   // 0x1800bfa20
+    CHECK_SLOT(EL, Reconstruct,    0x30/8);   // 0x180007570
+    CHECK_SLOT(EL, Destruct,       0x38/8);   // 0x180007640
+    CHECK_SLOT(EL, Construct,      0x40/8);   // 0x1800075e0
 }
 
 // The real constructor makes retail's factory stores (0x1800074c3..f4): the

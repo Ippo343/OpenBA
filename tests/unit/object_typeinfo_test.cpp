@@ -29,6 +29,7 @@
 // would land in whichever test happened to run second.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include <cstring>
 #include <type_traits>
@@ -428,10 +429,10 @@ UNIT_TEST(base_is_one_vptr_with_three_slots_and_no_virtual_dtor) {
     void** vt = *reinterpret_cast<void***>(&leaf);
     using TypeNameFn = const char* (*)(const void*);
     using TypeFn     = uint32_t (*)(const void*);
-    CHECK_STREQ(reinterpret_cast<TypeNameFn>(vt[1])(&leaf), "TestLeaf");
+    CHECK_STREQ(reinterpret_cast<TypeNameFn>(vt[RetailSlot<TestLeaf>(1)])(&leaf), "TestLeaf");
     // The id is the SENTINEL, not the CRC: no Factory::Startup has run over
     // these three statics, and `Type()` is not self-initialising (§2.5).
-    CHECK_EQ(reinterpret_cast<TypeFn>(vt[2])(&leaf), TestLeaf::TypeId());
+    CHECK_EQ(reinterpret_cast<TypeFn>(vt[RetailSlot<TestLeaf>(2)])(&leaf), TestLeaf::TypeId());
     CHECK_EQ(TestLeaf::TypeId(), 0xFFFFFFFFu);
 }
 

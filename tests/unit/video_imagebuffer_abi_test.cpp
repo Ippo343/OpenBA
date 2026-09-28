@@ -47,6 +47,7 @@
 #include <type_traits>
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include "video/ImageBuffer.h"
 #include "video/RenderState.h"
@@ -56,11 +57,12 @@
 namespace {
 
 // The one instruction every raw caller idiom compiles to.
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class, here the mirror) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 const void* g_lastSelf = nullptr;
@@ -224,30 +226,30 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
     using GenerateFn  = void (*)(const void*, void*, int32_t);
     using RenderFn    = void (*)(const void*, void*, const void*, const void*, int32_t);
 
-    Reset(); SlotAt<DelDtorFn>(&probe, 0x00)(&probe, 3u);
+    Reset(); SlotAt<DelDtorFn, ProbeGenerated>(&probe, 0x00)(&probe, 3u);
     CHECK_EQ(g_lastMark, 0); CHECK_EQ(g_lastArg, 3LL);
     CHECK_EQ((const void*)g_lastSelf, (const void*)&probe);
 
-    Reset(); SlotAt<TypeNameFn>(&probe, 0x08)(&probe);  CHECK_EQ(g_lastMark, 1);
-    Reset(); SlotAt<TypeFn>(&probe, 0x10)(&probe);      CHECK_EQ(g_lastMark, 2);
-    Reset(); SlotAt<VersionFn>(&probe, 0x18)(&probe);   CHECK_EQ(g_lastMark, 3);
-    Reset(); SlotAt<CompileFn>(&probe, 0x20)(&probe, nullptr); CHECK_EQ(g_lastMark, 4);
-    Reset(); SlotAt<SerializeFn>(&probe, 0x28)(&probe, nullptr); CHECK_EQ(g_lastMark, 5);
-    Reset(); SlotAt<PtrFn>(&probe, 0x30)(&probe);      CHECK_EQ(g_lastMark, 6);
-    Reset(); SlotAt<VoidFn>(&probe, 0x38)(&probe);     CHECK_EQ(g_lastMark, 7);
+    Reset(); (SlotAt<TypeNameFn, ProbeGenerated>(&probe, 0x08)(&probe));  CHECK_EQ(g_lastMark, 1);
+    Reset(); (SlotAt<TypeFn, ProbeGenerated>(&probe, 0x10)(&probe));      CHECK_EQ(g_lastMark, 2);
+    Reset(); (SlotAt<VersionFn, ProbeGenerated>(&probe, 0x18)(&probe));   CHECK_EQ(g_lastMark, 3);
+    Reset(); (SlotAt<CompileFn, ProbeGenerated>(&probe, 0x20)(&probe, nullptr)); CHECK_EQ(g_lastMark, 4);
+    Reset(); (SlotAt<SerializeFn, ProbeGenerated>(&probe, 0x28)(&probe, nullptr)); CHECK_EQ(g_lastMark, 5);
+    Reset(); (SlotAt<PtrFn, ProbeGenerated>(&probe, 0x30)(&probe));      CHECK_EQ(g_lastMark, 6);
+    Reset(); (SlotAt<VoidFn, ProbeGenerated>(&probe, 0x38)(&probe));     CHECK_EQ(g_lastMark, 7);
 
     // SLOT 8 IS `Construct`, INTRODUCED BY THIS BRANCH (RULE B5-16).
     // `Object::External`'s and `CompiledExternal`'s retail tables are EIGHT
     // entries each, so `Construct` is not inherited — it is `virtual`, not
     // `override`, on `Video::ImageBuffer`.
-    Reset(); SlotAt<PtrFn>(&probe, 0x40)(&probe);      CHECK_EQ(g_lastMark, 8);
+    Reset(); (SlotAt<PtrFn, ProbeGenerated>(&probe, 0x40)(&probe));      CHECK_EQ(g_lastMark, 8);
 
     // SLOT 9 IS `Create`, +0x48 — the offset
     // `imagebuffer_platform_serialize.cpp` used to hand-index and
     // `runtime/src/graphics/imagebuffer_derived.cpp`'s reflection rebuild used to
     // spell as `vt[9]`. `usage = 1` is what makes a reflection's depth member a
     // depth buffer, so it is the argument checked.
-    Reset(); SlotAt<CreateFn>(&probe, 0x48)(&probe, 0, 1, 7, 0u, 0, 0, 0, 1, 1, 1, nullptr);
+    Reset(); SlotAt<CreateFn, ProbeGenerated>(&probe, 0x48)(&probe, 0, 1, 7, 0u, 0, 0, 0, 1, 1, 1, nullptr);
     CHECK_EQ(g_lastMark, 9); CHECK_EQ(g_lastArg, 1LL);
 
     // SLOTS 10 AND 11 ARE `Generate` AND `Render`, INTRODUCED BY
@@ -255,9 +257,9 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
     // +0x50 is the offset `runtime/src/save/saveload_draw.cpp:83` walks by hand
     // to find `?Generate@FrameCopyImageBuffer@Graphics@@`, which is the
     // independent corroboration of this index.
-    Reset(); SlotAt<GenerateFn>(&probe, 0x50)(&probe, nullptr, 42);
+    Reset(); SlotAt<GenerateFn, ProbeGenerated>(&probe, 0x50)(&probe, nullptr, 42);
     CHECK_EQ(g_lastMark, 10); CHECK_EQ(g_lastArg, 42LL);
-    Reset(); SlotAt<RenderFn>(&probe, 0x58)(&probe, nullptr, nullptr, nullptr, 7);
+    Reset(); SlotAt<RenderFn, ProbeGenerated>(&probe, 0x58)(&probe, nullptr, nullptr, nullptr, 7);
     CHECK_EQ(g_lastMark, 11); CHECK_EQ(g_lastArg, 7LL);
 
     // TWELVE slots and not thirteen: no virtual destructor anywhere in the

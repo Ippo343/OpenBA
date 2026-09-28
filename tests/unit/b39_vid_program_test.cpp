@@ -14,6 +14,7 @@
 // slot 0) are the real ones from the headers.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/video/RenderState.h"
 #include "runtime/types/video/ShaderProgram.h"
@@ -39,16 +40,6 @@ void NoteDtor(const void* self) {
 // What the marker PlatformConstruct stores into the companion field, so the
 // ctor test can see the call happened (retail: DeviceData slot N's result).
 void* const kMarkerData = reinterpret_cast<void*>(uintptr_t(0x0DA7A0DA7A0ull));
-
-template <typename PMF>
-uintptr_t PmfSlot(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);          // adjustment must be 0
-    return words[0] - 1;
-}
 
 // Both arms of a class's inline VECTOR deleting destructor: flags 1 destroys
 // one and frees it; flags 3 reads the count at `this - 8`, destroys downward
@@ -136,15 +127,15 @@ UNIT_TEST(b39_vid_videoprogram_shape) {
 
 UNIT_TEST(b39_vid_videoprogram_slot_order_by_pmf) {
     using V = Video::VideoProgram;
-    CHECK_EQ(PmfSlot(&V::DeletingDtor),   (uintptr_t)0x00);   // 0x18004efb0
-    CHECK_EQ(PmfSlot(&V::TypeName),       (uintptr_t)0x08);   // 0x18004ec50
-    CHECK_EQ(PmfSlot(&V::Type),           (uintptr_t)0x10);   // 0x18004ec30
-    CHECK_EQ(PmfSlot(&V::GetFileVersion), (uintptr_t)0x18);   // 0x1800f46a0
-    CHECK_EQ(PmfSlot(&V::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
-    CHECK_EQ(PmfSlot(&V::Serialize),      (uintptr_t)0x28);   // 0x1800f46b0
-    CHECK_EQ(PmfSlot(&V::Reconstruct),    (uintptr_t)0x30);   // 0x18004edd0
-    CHECK_EQ(PmfSlot(&V::Destruct),       (uintptr_t)0x38);   // 0x18004ee00
-    CHECK_EQ(PmfSlot(&V::Construct),      (uintptr_t)0x40);   // 0x18004edf0
+    CHECK_DTOR_SLOT(V);   // 0x18004efb0
+    CHECK_SLOT(V, TypeName,       0x08/8);   // 0x18004ec50
+    CHECK_SLOT(V, Type,           0x10/8);   // 0x18004ec30
+    CHECK_SLOT(V, GetFileVersion, 0x18/8);   // 0x1800f46a0
+    CHECK_SLOT(V, Compile,        0x20/8);   // External's 0x1800066e0
+    CHECK_SLOT(V, Serialize,      0x28/8);   // 0x1800f46b0
+    CHECK_SLOT(V, Reconstruct,    0x30/8);   // 0x18004edd0
+    CHECK_SLOT(V, Destruct,       0x38/8);   // 0x18004ee00
+    CHECK_SLOT(V, Construct,      0x40/8);   // 0x18004edf0
 }
 
 // ??0VideoProgram 0x1800f45b0: External's three zero qwords (+0x08..+0x1f), the
@@ -183,15 +174,15 @@ UNIT_TEST(b39_vid_vertexlayout_shape) {
 
 UNIT_TEST(b39_vid_vertexlayout_slot_order_by_pmf) {
     using L = Video::VertexLayout;
-    CHECK_EQ(PmfSlot(&L::DeletingDtor),   (uintptr_t)0x00);   // 0x18004e000
-    CHECK_EQ(PmfSlot(&L::TypeName),       (uintptr_t)0x08);   // 0x18004dcd0
-    CHECK_EQ(PmfSlot(&L::Type),           (uintptr_t)0x10);   // 0x18004dcb0
-    CHECK_EQ(PmfSlot(&L::GetFileVersion), (uintptr_t)0x18);   // 0x1800f5e60
-    CHECK_EQ(PmfSlot(&L::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
-    CHECK_EQ(PmfSlot(&L::Serialize),      (uintptr_t)0x28);   // 0x1800f5e70
-    CHECK_EQ(PmfSlot(&L::Reconstruct),    (uintptr_t)0x30);   // 0x18004de50
-    CHECK_EQ(PmfSlot(&L::Destruct),       (uintptr_t)0x38);   // 0x18004de80
-    CHECK_EQ(PmfSlot(&L::Construct),      (uintptr_t)0x40);   // 0x18004de70
+    CHECK_DTOR_SLOT(L);   // 0x18004e000
+    CHECK_SLOT(L, TypeName,       0x08/8);   // 0x18004dcd0
+    CHECK_SLOT(L, Type,           0x10/8);   // 0x18004dcb0
+    CHECK_SLOT(L, GetFileVersion, 0x18/8);   // 0x1800f5e60
+    CHECK_SLOT(L, Compile,        0x20/8);   // External's 0x1800066e0
+    CHECK_SLOT(L, Serialize,      0x28/8);   // 0x1800f5e70
+    CHECK_SLOT(L, Reconstruct,    0x30/8);   // 0x18004de50
+    CHECK_SLOT(L, Destruct,       0x38/8);   // 0x18004de80
+    CHECK_SLOT(L, Construct,      0x40/8);   // 0x18004de70
 }
 
 // ??0VertexLayout 0x1800f5d50: External's three zero qwords, the two Array
@@ -230,15 +221,15 @@ UNIT_TEST(b39_vid_renderstate_shape) {
 
 UNIT_TEST(b39_vid_renderstate_slot_order_by_pmf) {
     using R = Video::RenderState;
-    CHECK_EQ(PmfSlot(&R::DeletingDtor),   (uintptr_t)0x00);   // 0x18004b9d0
-    CHECK_EQ(PmfSlot(&R::TypeName),       (uintptr_t)0x08);   // 0x18004b570
-    CHECK_EQ(PmfSlot(&R::Type),           (uintptr_t)0x10);   // 0x18004b550
-    CHECK_EQ(PmfSlot(&R::GetFileVersion), (uintptr_t)0x18);   // 0x1800f4c80
-    CHECK_EQ(PmfSlot(&R::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
-    CHECK_EQ(PmfSlot(&R::Serialize),      (uintptr_t)0x28);   // 0x1800f4c90
-    CHECK_EQ(PmfSlot(&R::Reconstruct),    (uintptr_t)0x30);   // 0x18004b6f0
-    CHECK_EQ(PmfSlot(&R::Destruct),       (uintptr_t)0x38);   // 0x18004b720
-    CHECK_EQ(PmfSlot(&R::Construct),      (uintptr_t)0x40);   // 0x18004b710
+    CHECK_DTOR_SLOT(R);   // 0x18004b9d0
+    CHECK_SLOT(R, TypeName,       0x08/8);   // 0x18004b570
+    CHECK_SLOT(R, Type,           0x10/8);   // 0x18004b550
+    CHECK_SLOT(R, GetFileVersion, 0x18/8);   // 0x1800f4c80
+    CHECK_SLOT(R, Compile,        0x20/8);   // External's 0x1800066e0
+    CHECK_SLOT(R, Serialize,      0x28/8);   // 0x1800f4c90
+    CHECK_SLOT(R, Reconstruct,    0x30/8);   // 0x18004b6f0
+    CHECK_SLOT(R, Destruct,       0x38/8);   // 0x18004b720
+    CHECK_SLOT(R, Construct,      0x40/8);   // 0x18004b710
 }
 
 // ??0RenderState 0x1800f4b60: External's zeros, AlphaBlend {0,1,0,0,0xf},
@@ -304,31 +295,31 @@ UNIT_TEST(b39_vid_shaderprogram_family_shape) {
 
 UNIT_TEST(b39_vid_shaderprogram_family_slot_order_by_pmf) {
     using S = Video::ShaderProgram;
-    CHECK_EQ(PmfSlot(&S::DeletingDtor),   (uintptr_t)0x00);   // 0x18004e360
-    CHECK_EQ(PmfSlot(&S::TypeName),       (uintptr_t)0x08);   // 0x18004e0c0
-    CHECK_EQ(PmfSlot(&S::Type),           (uintptr_t)0x10);   // 0x18004e0a0
-    CHECK_EQ(PmfSlot(&S::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
-    CHECK_EQ(PmfSlot(&S::Serialize),      (uintptr_t)0x28);   // 0x1800f5110
+    CHECK_DTOR_SLOT(S);   // 0x18004e360
+    CHECK_SLOT(S, TypeName,  0x08/8);   // 0x18004e0c0
+    CHECK_SLOT(S, Type,      0x10/8);   // 0x18004e0a0
+    CHECK_SLOT(S, Compile,   0x20/8);   // External's 0x1800066e0
+    CHECK_SLOT(S, Serialize, 0x28/8);   // 0x1800f5110
     using V = Video::VertexProgram;
-    CHECK_EQ(PmfSlot(&V::DeletingDtor),   (uintptr_t)0x00);   // 0x18004e810
-    CHECK_EQ(PmfSlot(&V::TypeName),       (uintptr_t)0x08);   // 0x18004e560
-    CHECK_EQ(PmfSlot(&V::Type),           (uintptr_t)0x10);   // 0x18004e540
-    CHECK_EQ(PmfSlot(&V::GetFileVersion), (uintptr_t)0x18);   // 0x1800f6230
-    CHECK_EQ(PmfSlot(&V::Compile),        (uintptr_t)0x20);
-    CHECK_EQ(PmfSlot(&V::Serialize),      (uintptr_t)0x28);   // 0x1800f6240
-    CHECK_EQ(PmfSlot(&V::Reconstruct),    (uintptr_t)0x30);   // 0x18004e6e0
-    CHECK_EQ(PmfSlot(&V::Destruct),       (uintptr_t)0x38);   // 0x18004e710
-    CHECK_EQ(PmfSlot(&V::Construct),      (uintptr_t)0x40);   // 0x18004e700
+    CHECK_DTOR_SLOT(V);   // 0x18004e810
+    CHECK_SLOT(V, TypeName,       0x08/8);   // 0x18004e560
+    CHECK_SLOT(V, Type,           0x10/8);   // 0x18004e540
+    CHECK_SLOT(V, GetFileVersion, 0x18/8);   // 0x1800f6230
+    CHECK_SLOT(V, Compile,        0x20/8);
+    CHECK_SLOT(V, Serialize,      0x28/8);   // 0x1800f6240
+    CHECK_SLOT(V, Reconstruct,    0x30/8);   // 0x18004e6e0
+    CHECK_SLOT(V, Destruct,       0x38/8);   // 0x18004e710
+    CHECK_SLOT(V, Construct,      0x40/8);   // 0x18004e700
     using P = Video::PixelProgram;
-    CHECK_EQ(PmfSlot(&P::DeletingDtor),   (uintptr_t)0x00);   // 0x18004eb90
-    CHECK_EQ(PmfSlot(&P::TypeName),       (uintptr_t)0x08);   // 0x18004e8e0
-    CHECK_EQ(PmfSlot(&P::Type),           (uintptr_t)0x10);   // 0x18004e8c0
-    CHECK_EQ(PmfSlot(&P::GetFileVersion), (uintptr_t)0x18);   // 0x1800f3a80
-    CHECK_EQ(PmfSlot(&P::Compile),        (uintptr_t)0x20);
-    CHECK_EQ(PmfSlot(&P::Serialize),      (uintptr_t)0x28);   // 0x1800f3a90
-    CHECK_EQ(PmfSlot(&P::Reconstruct),    (uintptr_t)0x30);   // 0x18004ea60
-    CHECK_EQ(PmfSlot(&P::Destruct),       (uintptr_t)0x38);   // 0x18004ea90
-    CHECK_EQ(PmfSlot(&P::Construct),      (uintptr_t)0x40);   // 0x18004ea80
+    CHECK_DTOR_SLOT(P);   // 0x18004eb90
+    CHECK_SLOT(P, TypeName,       0x08/8);   // 0x18004e8e0
+    CHECK_SLOT(P, Type,           0x10/8);   // 0x18004e8c0
+    CHECK_SLOT(P, GetFileVersion, 0x18/8);   // 0x1800f3a80
+    CHECK_SLOT(P, Compile,        0x20/8);
+    CHECK_SLOT(P, Serialize,      0x28/8);   // 0x1800f3a90
+    CHECK_SLOT(P, Reconstruct,    0x30/8);   // 0x18004ea60
+    CHECK_SLOT(P, Destruct,       0x38/8);   // 0x18004ea90
+    CHECK_SLOT(P, Construct,      0x40/8);   // 0x18004ea80
 }
 
 // ??0VertexProgram 0x1800f6100 / ??0PixelProgram 0x1800f3950: ??0ShaderProgram

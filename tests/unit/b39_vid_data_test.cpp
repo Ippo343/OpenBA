@@ -14,6 +14,7 @@
 // (which cannot link into the host test), so they are defined HERE as markers.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/video/CompanionData.h"
 
@@ -32,16 +33,6 @@ void NoteDtor(const void* self) {
     ++g_dtorCount;
 }
 
-template <typename PMF>
-uintptr_t PmfSlot(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
-
 void* const kOwner = reinterpret_cast<void*>(uintptr_t(0x0E0E0E0E0ull));
 
 template <class T>
@@ -50,7 +41,7 @@ void CheckData() {
     CHECK(!std::has_virtual_destructor<T>::value);
     CHECK(std::is_destructible<T>::value);          // PUBLIC: RULE B5-3
     CHECK(!std::is_default_constructible<T>::value); // the owner is required
-    CHECK_EQ(PmfSlot(&T::DeletingDtor), (uintptr_t)0x00);
+    CHECK_DTOR_SLOT(T);
 
     // The ctor's one data store: owner at +0x08.
     alignas(8) uint8_t buf[0x10];
@@ -120,18 +111,18 @@ UNIT_TEST(b39_vid_videoprogramdata_concrete)   { CheckData<Video::VideoProgramDa
 // VideoProgram +0x90), so these are the offsets that must not move.
 UNIT_TEST(b39_vid_devicedata_factory_slots_by_pmf) {
     using D = Video::DeviceData;
-    CHECK_EQ(PmfSlot(&D::EnumerateInterfaces),      (uintptr_t)0x08);
-    CHECK_EQ(PmfSlot(&D::SetImageBuffer),           (uintptr_t)0x40);
-    CHECK_EQ(PmfSlot(&D::CreateContextData),        (uintptr_t)0x48);
-    CHECK_EQ(PmfSlot(&D::CreateConstantBufferData), (uintptr_t)0x58);
-    CHECK_EQ(PmfSlot(&D::CreateVertexLayoutData),   (uintptr_t)0x70);
-    CHECK_EQ(PmfSlot(&D::CreateVertexProgramData),  (uintptr_t)0x78);
-    CHECK_EQ(PmfSlot(&D::CreatePixelProgramData),   (uintptr_t)0x80);
-    CHECK_EQ(PmfSlot(&D::CreateRenderStateData),    (uintptr_t)0x88);
-    CHECK_EQ(PmfSlot(&D::CreateVideoProgramData),   (uintptr_t)0x90);
-    CHECK_EQ(PmfSlot(&D::CreateRenderBufferData),   (uintptr_t)0x98);
+    CHECK_SLOT(D, EnumerateInterfaces,      0x08/8);
+    CHECK_SLOT(D, SetImageBuffer,           0x40/8);
+    CHECK_SLOT(D, CreateContextData,        0x48/8);
+    CHECK_SLOT(D, CreateConstantBufferData, 0x58/8);
+    CHECK_SLOT(D, CreateVertexLayoutData,   0x70/8);
+    CHECK_SLOT(D, CreateVertexProgramData,  0x78/8);
+    CHECK_SLOT(D, CreatePixelProgramData,   0x80/8);
+    CHECK_SLOT(D, CreateRenderStateData,    0x88/8);
+    CHECK_SLOT(D, CreateVideoProgramData,   0x90/8);
+    CHECK_SLOT(D, CreateRenderBufferData,   0x98/8);
     using C = Video::ContextData;
-    CHECK_EQ(PmfSlot(&C::BeginCommands),                (uintptr_t)0x08);
-    CHECK_EQ(PmfSlot(&C::DrawIndexed),                  (uintptr_t)0x60);
-    CHECK_EQ(PmfSlot(&C::EndInstancedIndexedVertices),  (uintptr_t)0x98);
+    CHECK_SLOT(C, BeginCommands,               0x08/8);
+    CHECK_SLOT(C, DrawIndexed,                 0x60/8);
+    CHECK_SLOT(C, EndInstancedIndexedVertices, 0x98/8);
 }

@@ -9,6 +9,7 @@
 // does not link into the host test); each marker calls B39NoteDtor(this), so
 // the arms can be counted and ordered.
 #include "unit.h"
+#include "slot_check.h"
 
 #include <cstdint>
 #include <cstring>
@@ -25,17 +26,6 @@ inline void B39NoteDtor(const void* self) {
     ++g_b39DtorCount;
 }
 
-// Itanium PMF: {1 + vtable byte offset, this adjustment} for a virtual.
-template <typename P>
-uintptr_t B39SlotOffset(P pmf) {
-    static_assert(sizeof(P) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
-
 template <typename T>
 constexpr bool B39IsConcreteShape() {
     return !std::is_abstract<T>::value && !std::is_destructible<T>::value &&
@@ -46,36 +36,36 @@ constexpr bool B39IsConcreteShape() {
 // [9] Construct introduced behind CreateInstance.
 template <typename T>
 void B39CheckDescriptionPmf() {
-    CHECK_EQ(B39SlotOffset(&T::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(B39SlotOffset(&T::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(B39SlotOffset(&T::Type),           (uintptr_t)0x10);
-    CHECK_EQ(B39SlotOffset(&T::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(B39SlotOffset(&T::Compile),        (uintptr_t)0x20);
-    CHECK_EQ(B39SlotOffset(&T::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(B39SlotOffset(&T::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(B39SlotOffset(&T::Destruct),       (uintptr_t)0x38);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,       0x08/8);
+    CHECK_SLOT(T, Type,           0x10/8);
+    CHECK_SLOT(T, GetFileVersion, 0x18/8);
+    CHECK_SLOT(T, Compile,        0x20/8);
+    CHECK_SLOT(T, Serialize,      0x28/8);
+    CHECK_SLOT(T, Reconstruct,    0x30/8);
+    CHECK_SLOT(T, Destruct,       0x38/8);
     // (static_cast: a leaf may also declare the non-virtual applier overload)
     using CreateFn = Object::InternalPtr<UI::Element>* (T::*)(
         Object::InternalPtr<UI::Element>*, const UI::Dialog*) const;
-    CHECK_EQ(B39SlotOffset(static_cast<CreateFn>(&T::CreateInstance)), (uintptr_t)0x40);
-    CHECK_EQ(B39SlotOffset(&T::Construct),      (uintptr_t)0x48);
+    CHECK_PMF_SLOT(static_cast<CreateFn>(&T::CreateInstance), 0x40/8);
+    CHECK_SLOT(T, Construct, 0x48/8);
 }
 
 // An element's twelve slots.
 template <typename T>
 void B39CheckElementPmf() {
-    CHECK_EQ(B39SlotOffset(&T::DeletingDtor),  (uintptr_t)0x00);
-    CHECK_EQ(B39SlotOffset(&T::TypeName),      (uintptr_t)0x08);
-    CHECK_EQ(B39SlotOffset(&T::Type),          (uintptr_t)0x10);
-    CHECK_EQ(B39SlotOffset(&T::Persist),       (uintptr_t)0x18);
-    CHECK_EQ(B39SlotOffset(&T::ComputeSize),   (uintptr_t)0x20);
-    CHECK_EQ(B39SlotOffset(&T::ComputeLayout), (uintptr_t)0x28);
-    CHECK_EQ(B39SlotOffset(&T::Draw),          (uintptr_t)0x30);
-    CHECK_EQ(B39SlotOffset(&T::Update),        (uintptr_t)0x38);
-    CHECK_EQ(B39SlotOffset(&T::Enable),        (uintptr_t)0x40);
-    CHECK_EQ(B39SlotOffset(&T::Contains),      (uintptr_t)0x48);
-    CHECK_EQ(B39SlotOffset(&T::SetColor),      (uintptr_t)0x50);
-    CHECK_EQ(B39SlotOffset(&T::GetBorder),     (uintptr_t)0x58);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,      0x08/8);
+    CHECK_SLOT(T, Type,          0x10/8);
+    CHECK_SLOT(T, Persist,       0x18/8);
+    CHECK_SLOT(T, ComputeSize,   0x20/8);
+    CHECK_SLOT(T, ComputeLayout, 0x28/8);
+    CHECK_SLOT(T, Draw,          0x30/8);
+    CHECK_SLOT(T, Update,        0x38/8);
+    CHECK_SLOT(T, Enable,        0x40/8);
+    CHECK_SLOT(T, Contains,      0x48/8);
+    CHECK_SLOT(T, SetColor,      0x50/8);
+    CHECK_SLOT(T, GetBorder,     0x58/8);
 }
 
 // Both arms of slot 0, exactly as the retired RT_DELDTOR row ran them: flags 0

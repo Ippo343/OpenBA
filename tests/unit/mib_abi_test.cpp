@@ -23,6 +23,7 @@
 // pointer (RCX = this, RDX = out), not as a hidden return: no retslot here.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Component/ResourceProduceComponent.h"
 #include "Component/ConsumeProduceComponent.h"
@@ -47,17 +48,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
-constexpr uintptr_t S(int slot) { return static_cast<uintptr_t>(slot) * 8; }
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -97,16 +87,16 @@ UNIT_TEST(mib_rp_base_shape) {
     CHECK(!std::has_virtual_destructor<ResourceProduceComponent>::value);
     CHECK((std::is_base_of<ControllerComponent, ResourceProduceComponent>::value));
     CHECK_EQ(alignof(ResourceProduceComponent), (size_t)8);
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::DeletingDtor),     S(0));
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::Persist),          S(3));
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::CommandMask),      S(13));   // 0x14012b520
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::Command),          S(14));   // 0x14012b5a0
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::GetDefaultState),  S(16));   // 0x1400026c0
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::GetController),    S(17));   // 0x140004080
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::CreateWork),       S(18));   // _purecall
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::OnEnterProducing), S(19));   // 0x140006b10
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::OnExitProducing),  S(20));   // 0x140006b10
-    CHECK_EQ(SlotOffset(&ResourceProduceComponent::ProduceTick),      S(21));   // 0x140006b10
+    CHECK_DTOR_SLOT(ResourceProduceComponent);
+    CHECK_SLOT(ResourceProduceComponent, Persist,          3);
+    CHECK_SLOT(ResourceProduceComponent, CommandMask,      13);   // 0x14012b520
+    CHECK_SLOT(ResourceProduceComponent, Command,          14);   // 0x14012b5a0
+    CHECK_SLOT(ResourceProduceComponent, GetDefaultState,  16);   // 0x1400026c0
+    CHECK_SLOT(ResourceProduceComponent, GetController,    17);   // 0x140004080
+    CHECK_SLOT(ResourceProduceComponent, CreateWork,       18);   // _purecall
+    CHECK_SLOT(ResourceProduceComponent, OnEnterProducing, 19);   // 0x140006b10
+    CHECK_SLOT(ResourceProduceComponent, OnExitProducing,  20);   // 0x140006b10
+    CHECK_SLOT(ResourceProduceComponent, ProduceTick,      21);   // 0x140006b10
 }
 
 template <typename T>
@@ -119,9 +109,9 @@ void CheckRpLeafShape() {
     CHECK((std::is_base_of<ControllerComponent, T>::value));
     CHECK((std::is_base_of<Object::Internal, T>::value));
     CHECK_EQ(alignof(T), (size_t)8);
-    CHECK_EQ(SlotOffset(&T::DeletingDtor), S(0));
-    CHECK_EQ(SlotOffset(&T::Persist),      S(3));
-    CHECK_EQ(SlotOffset(&T::CreateWork),   S(18));
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, Persist,    3);
+    CHECK_SLOT(T, CreateWork, 18);
     // the controller is the base's member at +0x28 for all six (B38_SLOTS §2 "-")
     CHECK_EQ(offsetof(T, _controller), (size_t)0x28);
 }
@@ -139,13 +129,13 @@ UNIT_TEST(mib_rp_leaf_shape_rules) {
 // PART C — SLOT ORDER (the leaves' own slots, B38_SLOTS.md §6)
 // ===========================================================================
 UNIT_TEST(mib_rp_own_slots_land_on_retail_indices) {
-    CHECK_EQ(SlotOffset(&ConsumeProduceComponent::Startup),     S(4));    // 0x140118ef0
-    CHECK_EQ(SlotOffset(&FishingComponent::OnEnterProducing),   S(19));   // 0x14011ee80
-    CHECK_EQ(SlotOffset(&FishingComponent::OnExitProducing),    S(20));   // 0x14011ee50
-    CHECK_EQ(SlotOffset(&FishingComponent::ProduceTick),        S(21));   // 0x14011ec10
-    CHECK_EQ(SlotOffset(&ForesterComponent::CommandMask),       S(13));   // 0x14011f920
-    CHECK_EQ(SlotOffset(&ForesterComponent::Command),           S(14));   // 0x14011f890
-    CHECK_EQ(SlotOffset(&HuntComponent::Update),                S(9));    // 0x140122740
+    CHECK_SLOT(ConsumeProduceComponent, Startup,   4);    // 0x140118ef0
+    CHECK_SLOT(FishingComponent, OnEnterProducing, 19);   // 0x14011ee80
+    CHECK_SLOT(FishingComponent, OnExitProducing,  20);   // 0x14011ee50
+    CHECK_SLOT(FishingComponent, ProduceTick,      21);   // 0x14011ec10
+    CHECK_SLOT(ForesterComponent, CommandMask,     13);   // 0x14011f920
+    CHECK_SLOT(ForesterComponent, Command,         14);   // 0x14011f890
+    CHECK_SLOT(HuntComponent, Update,              9);    // 0x140122740
 }
 
 // ===========================================================================
@@ -175,10 +165,10 @@ void CheckCtlLeaf(size_t memberOff) {
     CHECK_EQ(offsetof(T, _controller) + offsetof(ControllerComponent::Controller, _owner),
              memberOff + 0x18);
     CHECK_EQ(sizeof(typename T::StateController), (size_t)0x20);
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),    S(0));
-    CHECK_EQ(SlotOffset(&T::Persist),         S(3));
-    CHECK_EQ(SlotOffset(&T::GetDefaultState), S(16));
-    CHECK_EQ(SlotOffset(&T::GetController),   S(17));
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, Persist,         3);
+    CHECK_SLOT(T, GetDefaultState, 16);
+    CHECK_SLOT(T, GetController,   17);
 }
 
 UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
@@ -190,13 +180,13 @@ UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
     CheckCtlLeaf<WorkPlaceComponent>(0x28);        // slot 17 0x140004080
     CheckCtlLeaf<MarketLocationComponent>(0x28);   // slot 17 0x140004080 (D9 #8: the tree had none)
     CHECK_EQ(sizeof(MarketLocationComponent), (size_t)0x48);   // create 0x1400086c0
-    CHECK_EQ(SlotOffset(&MarketLocationComponent::OnRemove), S(7));   // 0x14004ef60
+    CHECK_SLOT(MarketLocationComponent, OnRemove, 7);   // 0x14004ef60
     CheckCtlLeaf<MultiObjectComponent>(0x28);      // slot 17 0x140004080 (D9 #8: the tree had none)
     CHECK_EQ(sizeof(MultiObjectComponent), (size_t)0x60);      // create 0x140035ef0
     CHECK_EQ(offsetof(MultiObjectComponent, field48),    (size_t)0x48);
     CHECK_EQ(offsetof(MultiObjectComponent, multiCount), (size_t)0x58);
-    CHECK_EQ(SlotOffset(&MultiObjectComponent::OnRemove), S(7));      // 0x1401257c0
-    CHECK_EQ(SlotOffset(&MultiObjectComponent::OnEvent),  S(12));     // 0x140125490
+    CHECK_SLOT(MultiObjectComponent, OnRemove, 7);      // 0x1401257c0
+    CHECK_SLOT(MultiObjectComponent, OnEvent,  12);     // 0x140125490
 }
 
 UNIT_TEST(mib_controller_member_fields) {
@@ -215,27 +205,27 @@ UNIT_TEST(mib_controller_member_fields) {
 }
 
 UNIT_TEST(mib_controller_own_slots_land_on_retail_indices) {
-    CHECK_EQ(SlotOffset(&CropFieldComponent::Startup),     S(4));    // 0x14011ae60
-    CHECK_EQ(SlotOffset(&CropFieldComponent::CommandMask), S(13));   // 0x14011ada0
-    CHECK_EQ(SlotOffset(&CropFieldComponent::Command),     S(14));   // 0x14011acc0
-    CHECK_EQ(SlotOffset(&CropFieldComponent::OnMessage),   S(15));   // 0x14011ab50
-    CHECK_EQ(SlotOffset(&OrchardComponent::Startup),       S(4));    // 0x140051dd0
-    CHECK_EQ(SlotOffset(&OrchardComponent::CommandMask),   S(13));   // 0x140051c90
-    CHECK_EQ(SlotOffset(&OrchardComponent::Command),       S(14));   // 0x140051ba0
-    CHECK_EQ(SlotOffset(&OrchardComponent::OnMessage),     S(15));   // 0x140051990
-    CHECK_EQ(SlotOffset(&PastureComponent::Startup),       S(4));    // 0x140127a50
-    CHECK_EQ(SlotOffset(&PastureComponent::OnAdded),       S(6));    // 0x140127a30
-    CHECK_EQ(SlotOffset(&PastureComponent::OnRemove),      S(7));    // 0x1401277e0
-    CHECK_EQ(SlotOffset(&PastureComponent::OnEvent),       S(12));   // 0x140127540
-    CHECK_EQ(SlotOffset(&PastureComponent::CommandMask),   S(13));   // 0x140127dd0
-    CHECK_EQ(SlotOffset(&PastureComponent::Command),       S(14));   // 0x140127a60
-    CHECK_EQ(SlotOffset(&PastureComponent::OnMessage),     S(15));   // 0x140127720
-    CHECK_EQ(SlotOffset(&StorageLocationComponent::OnRemove), S(7)); // 0x14012d270
-    CHECK_EQ(SlotOffset(&TradeComponent::OnAdded),         S(6));    // 0x14005c1d0
-    CHECK_EQ(SlotOffset(&TradeComponent::OnRemove),        S(7));    // 0x14005c190
-    CHECK_EQ(SlotOffset(&TradeComponent::CommandMask),     S(13));   // 0x14005c140
-    CHECK_EQ(SlotOffset(&TradeComponent::Command),         S(14));   // 0x14005c000
-    CHECK_EQ(SlotOffset(&WorkPlaceComponent::OnRemove),    S(7));    // 0x14012f090
+    CHECK_SLOT(CropFieldComponent, Startup,        4);    // 0x14011ae60
+    CHECK_SLOT(CropFieldComponent, CommandMask,    13);   // 0x14011ada0
+    CHECK_SLOT(CropFieldComponent, Command,        14);   // 0x14011acc0
+    CHECK_SLOT(CropFieldComponent, OnMessage,      15);   // 0x14011ab50
+    CHECK_SLOT(OrchardComponent, Startup,          4);    // 0x140051dd0
+    CHECK_SLOT(OrchardComponent, CommandMask,      13);   // 0x140051c90
+    CHECK_SLOT(OrchardComponent, Command,          14);   // 0x140051ba0
+    CHECK_SLOT(OrchardComponent, OnMessage,        15);   // 0x140051990
+    CHECK_SLOT(PastureComponent, Startup,          4);    // 0x140127a50
+    CHECK_SLOT(PastureComponent, OnAdded,          6);    // 0x140127a30
+    CHECK_SLOT(PastureComponent, OnRemove,         7);    // 0x1401277e0
+    CHECK_SLOT(PastureComponent, OnEvent,          12);   // 0x140127540
+    CHECK_SLOT(PastureComponent, CommandMask,      13);   // 0x140127dd0
+    CHECK_SLOT(PastureComponent, Command,          14);   // 0x140127a60
+    CHECK_SLOT(PastureComponent, OnMessage,        15);   // 0x140127720
+    CHECK_SLOT(StorageLocationComponent, OnRemove, 7); // 0x14012d270
+    CHECK_SLOT(TradeComponent, OnAdded,            6);    // 0x14005c1d0
+    CHECK_SLOT(TradeComponent, OnRemove,           7);    // 0x14005c190
+    CHECK_SLOT(TradeComponent, CommandMask,        13);   // 0x14005c140
+    CHECK_SLOT(TradeComponent, Command,            14);   // 0x14005c000
+    CHECK_SLOT(WorkPlaceComponent, OnRemove,       7);    // 0x14012f090
 }
 
 // ===========================================================================

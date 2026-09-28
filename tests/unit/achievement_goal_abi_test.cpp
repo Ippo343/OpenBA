@@ -36,6 +36,7 @@
 // bodies are verified by the real run.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/achievement/Goal.h"
 #include "runtime/types/achievement/AchievementManager.h"
@@ -53,19 +54,6 @@ using Achievement::GoalList;
 using AchClass = Achievement::Achievement;
 using Achievement::AchievementInstance;
 using Achievement::AchievementManager;
-
-// The vtable byte offset a pointer-to-VIRTUAL-member names (Itanium ABI:
-// ptr = 1 + offset, adj = 0 for single inheritance). Returns ~0 for a
-// non-virtual member, so a test that expects a slot fails loudly on one.
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -143,45 +131,45 @@ UNIT_TEST(achievement_class_shape_rules) {
 
 UNIT_TEST(achievement_goal_slots_are_retail_order) {
     // ??_7Goal@Achievement@@6B@ 0x1801546b0, ten slots.
-    CHECK_EQ(SlotOffset(&Goal::DeletingDtor),    (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&Goal::TypeName),        (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&Goal::Type),            (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&Goal::GetFileVersion),  (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&Goal::Compile),         (uintptr_t)0x20);   // External's, inherited
-    CHECK_EQ(SlotOffset(&Goal::Serialize),       (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&Goal::Reconstruct),     (uintptr_t)0x30);   // pure, inherited
-    CHECK_EQ(SlotOffset(&Goal::Destruct),        (uintptr_t)0x38);   // pure, inherited
-    CHECK_EQ(SlotOffset(&Goal::CheckGoalState),  (uintptr_t)0x40);   // pure, Goal's own
-    CHECK_EQ(SlotOffset(&Goal::GetInstanceType), (uintptr_t)0x48);   // Goal.h's old kGetInstanceType
+    CHECK_DTOR_SLOT(Goal);
+    CHECK_SLOT(Goal, TypeName,        0x08/8);
+    CHECK_SLOT(Goal, Type,            0x10/8);
+    CHECK_SLOT(Goal, GetFileVersion,  0x18/8);
+    CHECK_SLOT(Goal, Compile,         0x20/8);   // External's, inherited
+    CHECK_SLOT(Goal, Serialize,       0x28/8);
+    CHECK_SLOT(Goal, Reconstruct,     0x30/8);   // pure, inherited
+    CHECK_SLOT(Goal, Destruct,        0x38/8);   // pure, inherited
+    CHECK_SLOT(Goal, CheckGoalState,  0x40/8);   // pure, Goal's own
+    CHECK_SLOT(Goal, GetInstanceType, 0x48/8);   // Goal.h's old kGetInstanceType
 }
 
 UNIT_TEST(achievement_goalinstance_slots_are_retail_order) {
     // ??_7GoalInstance@Achievement@@6B@ 0x180154678, seven slots (B7-1.8).
-    CHECK_EQ(SlotOffset(&GoalInstance::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&GoalInstance::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&GoalInstance::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&GoalInstance::Persist),        (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&GoalInstance::Startup),        (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&GoalInstance::Update),         (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&GoalInstance::CheckGoalState), (uintptr_t)0x30);
+    CHECK_DTOR_SLOT(GoalInstance);
+    CHECK_SLOT(GoalInstance, TypeName,       0x08/8);
+    CHECK_SLOT(GoalInstance, Type,           0x10/8);
+    CHECK_SLOT(GoalInstance, Persist,        0x18/8);
+    CHECK_SLOT(GoalInstance, Startup,        0x20/8);
+    CHECK_SLOT(GoalInstance, Update,         0x28/8);
+    CHECK_SLOT(GoalInstance, CheckGoalState, 0x30/8);
 }
 
 UNIT_TEST(achievement_achievement_slots_are_retail_order) {
     // ??_7Achievement@0@6B@ 0x180154740, nine slots.
-    CHECK_EQ(SlotOffset(&AchClass::DeletingDtor),   (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&AchClass::TypeName),       (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&AchClass::Type),           (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&AchClass::GetFileVersion), (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&AchClass::Compile),        (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&AchClass::Serialize),      (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&AchClass::Reconstruct),    (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&AchClass::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&AchClass::Construct),      (uintptr_t)0x40);
+    CHECK_DTOR_SLOT(AchClass);
+    CHECK_SLOT(AchClass, TypeName,       0x08/8);
+    CHECK_SLOT(AchClass, Type,           0x10/8);
+    CHECK_SLOT(AchClass, GetFileVersion, 0x18/8);
+    CHECK_SLOT(AchClass, Compile,        0x20/8);
+    CHECK_SLOT(AchClass, Serialize,      0x28/8);
+    CHECK_SLOT(AchClass, Reconstruct,    0x30/8);
+    CHECK_SLOT(AchClass, Destruct,       0x38/8);
+    CHECK_SLOT(AchClass, Construct,      0x40/8);
     // ??_7AchievementInstance@Achievement@@6B@ 0x180154700, four slots.
-    CHECK_EQ(SlotOffset(&AchievementInstance::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&AchievementInstance::TypeName),     (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&AchievementInstance::Type),         (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&AchievementInstance::Persist),      (uintptr_t)0x18);
+    CHECK_DTOR_SLOT(AchievementInstance);
+    CHECK_SLOT(AchievementInstance, TypeName, 0x08/8);
+    CHECK_SLOT(AchievementInstance, Type,     0x10/8);
+    CHECK_SLOT(AchievementInstance, Persist,  0x18/8);
 }
 
 // ===========================================================================
@@ -243,7 +231,7 @@ UNIT_TEST(achievement_goal_slot9_takes_this_then_retslot) {
     ProbeGoalLeaf g; g.typeId = 0x1234abcdu;
     // GoalList::Initialize (0x18009f13f): RCX = the goal, RDX = &slot, CALL [RAX+0x48].
     using RetailOrder = Object::Type* (*)(const void* self, Object::Type* ret);
-    void* slot9 = (*reinterpret_cast<void***>(&g))[0x48 / 8];
+    void* slot9 = (*reinterpret_cast<void***>(&g))[RetailSlot<ProbeGoalLeaf>(0x48 / 8)];
     Object::Type slot; slot._type = 0xdeadbeefu;
     Object::Type* got = reinterpret_cast<RetailOrder>(slot9)(&g, &slot);
     CHECK_EQ(got, &slot);                   // RAX == the caller's storage
