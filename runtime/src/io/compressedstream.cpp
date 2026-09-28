@@ -119,7 +119,6 @@
 #include <initializer_list>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 
 using RtIo::CompressedMemoryStream;
@@ -150,8 +149,6 @@ namespace {
 // Raw here would be a NULL call the instant Runtime-x64.dll is absent; through
 // the registry it is instead a named unresolved import if the neighbour is
 // still unported at cutover, which is a work-list row rather than a crash.
-
-using VoidThisFn  = void (*)(void*);
 
 // ENDGAME B.3.9 IO (W2): the by-name vtable reads (CompressedMemoryStream,
 // CompressedStream, Stream) went with the ??0 doors that stamped them.
@@ -529,8 +526,8 @@ void CompressedMemoryStream::Close() {
 
     const bool committed = _headerSize > 0 && _direction == 1;
     if (committed)
-        RT_EXPORT_ONCE(::VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(
-            static_cast<CompressedStream*>(this));
+        RtIo::RtIo_CompressedStream_Commit(                        // B.3.x bridge
+            reinterpret_cast<RtIo::CompressedStream*>(static_cast<CompressedStream*>(this)));
 
     ::CallStreamCloseVirtual(
         reinterpret_cast<RtIo::MemoryStream*>(&_memoryStream));

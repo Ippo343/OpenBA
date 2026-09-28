@@ -239,10 +239,8 @@
 // merely bookkeeping.
 //
 // `0x180010b80` (`Collection::Array<Mod>::~Array`) is ALREADY PORTED —
-// `RtColl_ArrayModDtor_180010b80`, modification.cpp:573, registered by address
-// at :905 — so it is reached through the ADDRESS door, which is registry-first
-// and therefore lands on our body, not the DLL's
-// (reference_resolveaddr_consults_port_registry_first.md).
+// `RtColl_ArrayModDtor_180010b80` (modification.cpp) — and is called by name
+// (B3R RT-IO; it was reached through the address door before).
 // ============================================================================
 
 #include <cstdint>
@@ -258,25 +256,7 @@
 #include "../../types/io/Modification.h"
 #include "../../types/system/String.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
-
 namespace RtIo {
-
-namespace {
-
-// Collection::Array<Mod>::~Array, 0x180010b80. Already ported by lane MOD
-// (modification.cpp:573) and registered BY ADDRESS at :905, so the address
-// door — which is registry-first — reaches our body.
-using ArrayDtorFn = void* (*)(void*);
-inline void ArrayModDtor(void* arrayField) {
-    static ArrayDtorFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<ArrayDtorFn>(
-                      ResolveAddr(Module::Runtime, 0x180010b80ull));
-    fn(arrayField);
-}
-
-}  // namespace
 
 // ===========================================================================
 // ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ   0x18000c6a0
@@ -321,8 +301,8 @@ extern "C" void RtIo_Modification_Dtor(RtIO::Modification* self) {
     // Publish into the DLL's exported slot; see header §5.
     ::IO::Modification::_singleton = nullptr;                   // 1800b0486  (B.3.9 IO: the class static)
 
-    ArrayModDtor(&self->savedMods);                             // 1800b0495  +0x18
-    ArrayModDtor(&self->mods);                                  // 1800b04a4  +0x08  TAIL
+    RtIO::RtColl_ArrayModDtor_180010b80(&self->savedMods);      // 1800b0495  +0x18
+    RtIO::RtColl_ArrayModDtor_180010b80(&self->mods);           // 1800b04a4  +0x08  TAIL
 }
 
 }  // namespace RtIo

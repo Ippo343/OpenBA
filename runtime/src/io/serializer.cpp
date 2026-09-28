@@ -144,12 +144,10 @@ using rt::io::Stream;
 // is already a direct call. A reader arriving from blocks 1-2 should expect the
 // `Class::` and not find it — this is why.
 //
-// THE 22 REGISTRATION LINES BELOW DO NOT MOVE AND DO NOT CHANGE. They are the
-// door every unconverted caller still uses, `tools/runtime_census.py` can only
-// see a LITERAL mangled name at a `RegisterRuntimeExport(` call, and the 14 exe
-// dispatch slots at 0x1401524xx (standalone/address_registry.cpp:1628-1645) are
-// PE IMPORT slots bound to these same function pointers. Converting the
-// Serializer changes the TARGET's spelling, never a row.
+// B3R RT-IO: the registration rows of these doors are gone except the ctor's
+// (one unconverted reader in runtime/src/ui). The door BODIES stay reachable by
+// name: the exe dispatch slots at 0x1401524xx in standalone/address_registry.cpp
+// are PE IMPORT slots filled directly with these function pointers.
 //
 // WHAT THE PER-CALL SITE PROVES, AND WHAT IT DOES NOT
 //
@@ -168,12 +166,12 @@ static inline IO::Serializer* Ser(Serializer* self) {          // B.3.4 bridge
     return reinterpret_cast<IO::Serializer*>(self);
 }
 
-#define RT_SER_SCALAR(FN, T, LABEL, MANGLED)                                   \
+#define RT_SER_SCALAR(FN, T)                                                   \
     void FN(Serializer* self, T* v, const char* name) {                        \
         Ser(self)->Serialize(*v, name);                                        \
     }
 
-#define RT_SER_ARRAY(FN, T, LABEL, MANGLED)                                    \
+#define RT_SER_ARRAY(FN, T)                                                    \
     void FN(Serializer* self, int n, T* d, const char* name) {                 \
         Ser(self)->Serialize(n, d, name);                                      \
     }
@@ -181,65 +179,29 @@ static inline IO::Serializer* Ser(Serializer* self) {          // B.3.4 bridge
 extern "C" {
 
 // ---- scalars ---------------------------------------------------------------
-RT_SER_SCALAR(RtSerializer_Serialize_Bool,   bool,
-              "IO::Serializer::Serialize(bool&)",
-              "?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_SChar,  int8_t,
-              "IO::Serializer::Serialize(schar&)",
-              "?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_UChar,  uint8_t,
-              "IO::Serializer::Serialize(uchar&)",
-              "?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_Short,  int16_t,
-              "IO::Serializer::Serialize(short&)",
-              "?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_UShort, uint16_t,
-              "IO::Serializer::Serialize(ushort&)",
-              "?Serialize@Serializer@IO@@QEAAXAEAGPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_Int,    int32_t,
-              "IO::Serializer::Serialize(int&)",
-              "?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z")
+RT_SER_SCALAR(RtSerializer_Serialize_Bool, bool)   // IO::Serializer::Serialize(bool&)
+RT_SER_SCALAR(RtSerializer_Serialize_SChar, int8_t)   // IO::Serializer::Serialize(schar&)
+RT_SER_SCALAR(RtSerializer_Serialize_UChar, uint8_t)   // IO::Serializer::Serialize(uchar&)
+RT_SER_SCALAR(RtSerializer_Serialize_Short, int16_t)   // IO::Serializer::Serialize(short&)
+RT_SER_SCALAR(RtSerializer_Serialize_UShort, uint16_t)   // IO::Serializer::Serialize(ushort&)
+RT_SER_SCALAR(RtSerializer_Serialize_Int, int32_t)   // IO::Serializer::Serialize(int&)
 // ENDGAME B.3.4b SYSTEM (5) — the 24th door. `_J` is MSVC's `__int64`, which is
 // `int64_t` on this toolchain; `long` is FOUR bytes on Win64 and would bind
 // neither overload, so there is no ambiguity to create here.
-RT_SER_SCALAR(RtSerializer_Serialize_Int64,  int64_t,
-              "IO::Serializer::Serialize(int64&)",
-              "?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_UInt,   uint32_t,
-              "IO::Serializer::Serialize(uint&)",
-              "?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z")
-RT_SER_SCALAR(RtSerializer_Serialize_Float,  float,
-              "IO::Serializer::Serialize(float&)",
-              "?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z")
+RT_SER_SCALAR(RtSerializer_Serialize_Int64, int64_t)   // IO::Serializer::Serialize(int64&)
+RT_SER_SCALAR(RtSerializer_Serialize_UInt, uint32_t)   // IO::Serializer::Serialize(uint&)
+RT_SER_SCALAR(RtSerializer_Serialize_Float, float)   // IO::Serializer::Serialize(float&)
 
 // ---- arrays ----------------------------------------------------------------
-RT_SER_ARRAY(RtSerializer_Serialize_CharArr,   char,
-             "IO::Serializer::Serialize(n,char*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_SCharArr,  int8_t,
-             "IO::Serializer::Serialize(n,schar*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_BoolArr,   bool,
-             "IO::Serializer::Serialize(n,bool*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_UCharArr,  uint8_t,
-             "IO::Serializer::Serialize(n,uchar*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_ShortArr,  int16_t,
-             "IO::Serializer::Serialize(n,short*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_UShortArr, uint16_t,
-             "IO::Serializer::Serialize(n,ushort*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_IntArr,    int32_t,
-             "IO::Serializer::Serialize(n,int*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_UIntArr,   uint32_t,
-             "IO::Serializer::Serialize(n,uint*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEAIPEBD@Z")
-RT_SER_ARRAY(RtSerializer_Serialize_FloatArr,  float,
-             "IO::Serializer::Serialize(n,float*)",
-             "?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z")
+RT_SER_ARRAY(RtSerializer_Serialize_CharArr, char)   // IO::Serializer::Serialize(n,char*)
+RT_SER_ARRAY(RtSerializer_Serialize_SCharArr, int8_t)   // IO::Serializer::Serialize(n,schar*)
+RT_SER_ARRAY(RtSerializer_Serialize_BoolArr, bool)   // IO::Serializer::Serialize(n,bool*)
+RT_SER_ARRAY(RtSerializer_Serialize_UCharArr, uint8_t)   // IO::Serializer::Serialize(n,uchar*)
+RT_SER_ARRAY(RtSerializer_Serialize_ShortArr, int16_t)   // IO::Serializer::Serialize(n,short*)
+RT_SER_ARRAY(RtSerializer_Serialize_UShortArr, uint16_t)   // IO::Serializer::Serialize(n,ushort*)
+RT_SER_ARRAY(RtSerializer_Serialize_IntArr, int32_t)   // IO::Serializer::Serialize(n,int*)
+RT_SER_ARRAY(RtSerializer_Serialize_UIntArr, uint32_t)   // IO::Serializer::Serialize(n,uint*)
+RT_SER_ARRAY(RtSerializer_Serialize_FloatArr, float)   // IO::Serializer::Serialize(n,float*)
 
 // ---- SerializeBytes --------------------------------------------------------
 // Its own retail name, not an overload: the payload is `void*`, which would
@@ -383,72 +345,13 @@ void RtSerializer_Dtor(Serializer* self) {
 // Registration
 // ============================================================================
 //
-// BY NAME ONLY, deliberately. call_surface_20260906.csv lists all 20 of these
-// as ResolveExport rows and not one as a ResolveAddr(Module::Runtime, …) row,
-// so there is no address site to protect; and all 20 manglings were verified
-// present in the shipped DLL's export directory with pefile before this file
-// was written, so none of them is the silent-NULL phantom of
-// reference_resolveexport_phantom_names.md.
-//
-// If ANY retail body fails verification the whole family stays on the DLL. All
-// or nothing is the right granularity: these 20 share one stream, and a mixed
-// state where some records go through our slot table and some through the
-// DLL's is the half-ported-class hazard.
 int RtIoSerializerRegister() {
-    // Registered with the mangled name spelled out LITERALLY at each call, not
-    // in a loop. tools/runtime_census.py scans the source for
-    // `RegisterRuntimeExport("<literal>"` and cannot see a table-driven loop:
-    // written as a loop, this whole lane reported as 3 ported functions instead
-    // of 22 and the wave would have looked half-landed.
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z",  (void*)&RtSerializer_Serialize_Bool);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z",   (void*)&RtSerializer_Serialize_SChar);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z",   (void*)&RtSerializer_Serialize_UChar);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z",   (void*)&RtSerializer_Serialize_Short);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEAGPEBD@Z",   (void*)&RtSerializer_Serialize_UShort);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z",   (void*)&RtSerializer_Serialize_Int);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z",   (void*)&RtSerializer_Serialize_UInt);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z",   (void*)&RtSerializer_Serialize_Float);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z",  (void*)&RtSerializer_Serialize_CharArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z",  (void*)&RtSerializer_Serialize_SCharArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z", (void*)&RtSerializer_Serialize_BoolArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z",  (void*)&RtSerializer_Serialize_UCharArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z",  (void*)&RtSerializer_Serialize_ShortArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z",  (void*)&RtSerializer_Serialize_UShortArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z",  (void*)&RtSerializer_Serialize_IntArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEAIPEBD@Z",  (void*)&RtSerializer_Serialize_UIntArr);
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z",  (void*)&RtSerializer_Serialize_FloatArr);
-    RegisterRuntimeExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z", (void*)&RtSerializer_SerializeBytes);
-    RegisterRuntimeExport("?GetVersion@Serializer@IO@@QEBAHXZ",          (void*)&RtSerializer_GetVersion);
-    RegisterRuntimeExport("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ", (void*)&RtSerializer_GetEncoding);
+    // B3R RT-IO: the other 25 rows had no reader left (every Serializer caller
+    // calls the member); the ctor row is read by runtime/src/ui/dialog_settings.cpp
+    // and stays until that reader converts (W2 deletes it).
     RegisterRuntimeExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z",     (void*)&RtSerializer_Ctor);
-    RegisterRuntimeExport("??1Serializer@IO@@QEAA@XZ",                   (void*)&RtSerializer_Dtor);
-    // ENDGAME B.3.4 callers batch H — the 23rd door. Registered by NAME and by
-    // ADDRESS: the name is what `tools/runtime_census.py` reads (a LITERAL
-    // mangled string at a `RegisterRuntimeExport(` call), and the address is
-    // what a by-address resolver finds, exactly as iobase_vtables.cpp does for
-    // `RtIo_Stream_GetSource`. No exe dispatch slot imports this member, so no
-    // row in standalone/address_registry.cpp moves and
-    // `tools/dispatch_slot_map.py --check` is unaffected.
-    RegisterRuntimeExport("?GetDirection@Serializer@IO@@QEAA?AW4Direction@Stream@2@XZ",
-                          (void*)&RtSerializer_GetDirection);
-    RegisterRuntimeAddr(0x180006210, (void*)&RtSerializer_GetDirection);
 
-    // ENDGAME B.3.4b SYSTEM (5) — the 24th door, `Serialize(int64_t&)`.
-    // By NAME and by ADDRESS, same reasoning as GetDirection above:
-    // `tools/runtime_census.py` reads only a LITERAL mangled string at a
-    // `RegisterRuntimeExport(` call, and the address is what a by-address
-    // resolver finds. **NO EXE DISPATCH SLOT IMPORTS THIS MEMBER** — swept
-    // `standalone/address_registry.cpp` and every `standalone/reg_*.cpp` for
-    // `?Serialize@Serializer@IO@@QEAAXAEA_J`, and for the uint64 sibling
-    // `AEA_K` as well: zero hits for either, and the fourteen
-    // `RegisterDispatchSlot` rows at 0x1401524xx bind the bool / uchar / short
-    // / int / uint / float scalars and the array forms only. So no row moves
-    // and `tools/dispatch_slot_map.py --check` is unaffected.
-    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z",
-                          (void*)&RtSerializer_Serialize_Int64);
-    RegisterRuntimeAddr(0x180035000, (void*)&RtSerializer_Serialize_Int64);
-
-    const int total = 24;
+    const int total = 1;
     printf("[RtIO/Serializer] %d exports registered\n", total);
     return total;
 }

@@ -133,14 +133,12 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/system/MemoryAllocator.h"
 
 namespace RtIo {
 
 namespace {
-
-using MemAllocFn = void* (*)(uint64_t, int);
 
 // ---------------------------------------------------------------------------
 // ATTENDANCE COUNTERS — NOT A VERIFICATION
@@ -196,16 +194,14 @@ namespace IO {
 // null unconstructed (retail's XOR EAX,EAX path, unguarded).
 ReaderWriter* BinaryEncoding::CreateReader(Serializer& ser, int version) {
     ++RtIo::g_encCounts.createReader;
-    void* p = RT_EXPORT_ONCE(RtIo::MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(BinaryReader), 4);
+    void* p = ::System::MemoryAllocator::MemAlloc(sizeof(BinaryReader), 4);
     if (p == nullptr) return nullptr;
     return ::new (p) BinaryReader(ser, version);
 }
 
 ReaderWriter* BinaryEncoding::CreateWriter(Serializer& ser, int version) {
     ++RtIo::g_encCounts.createWriter;
-    void* p = RT_EXPORT_ONCE(RtIo::MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(BinaryWriter), 4);
+    void* p = ::System::MemoryAllocator::MemAlloc(sizeof(BinaryWriter), 4);
     if (p == nullptr) return nullptr;
     return ::new (p) BinaryWriter(ser, version);
 }

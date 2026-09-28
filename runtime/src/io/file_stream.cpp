@@ -156,14 +156,6 @@
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-// standalone/resolve.h:108. The RAW door: it answers from the loaded DLL and
-// never consults the port registry, which is what makes it usable as the
-// "theirs" side of a comparison. Declared here rather than by including
-// standalone/resolve.h, matching how ResolveAddr is already declared above.
-
 // Rung 4 of Wave 9 lane PKG2 (filesystem_openfile_win.cpp), already ported and
 // registered. Declared here rather than pulled in from a header because that
 // lane publishes none and this lane does not edit another lane's files.
