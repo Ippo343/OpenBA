@@ -4,6 +4,3 @@
 
 #include "AmbientEmitterComponent.h"
 #include <cstdint>
-
-// Init: resolve all internal function pointers (called once at startup)
-void AmbientEmitterComponent_InitFuncs();

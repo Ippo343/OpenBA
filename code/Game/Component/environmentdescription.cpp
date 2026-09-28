@@ -13,17 +13,16 @@
 //
 // Factory  : MemAlloc 0x1b8 + External ctor + vtable + 12 weather-entry defaults.
 // Serialize (vtable +0x28, 0x140094040), stream order:
-//   ExternalPtr @ +0x20  (FUN_140002340 / fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x20  (FUN_140002340 / Reimpl_ExternalPtr_Serialize_StringTable)
 //   int count   @ +0x30
-//   [if loading: fn_WeatherResize(+0x28, count)]
+//   [if loading: Reimpl_WeatherArray_Resize(+0x28, count)]
 //   for each array entry (stride 16): WeatherExternalSerialize(entry) + ExternalPtr(entry+8)
 //   12 weather entries @ +0x38 (each: 3 Color + 5 float, all 4-byte Serialize)
 // GetVersion (vtable +0x18, 0x1400941b0): mov eax,7; ret -> version 7.
 // Dtor (vtable +0x00, 0x140019190): MemFree(array @+0x28) + External::~External + free.
 //
-// NOTE: fn_WeatherResize (0x1400198a0) and fn_WeatherExternalSerialize (0x1400196a0)
-// resolve via ResolveAddr(Module::Exe,..) — null in standalone until those addrs are
-// registered (REPORTED). fn_ExternalPtr_BuildSerialize (0x140002340) is already registered.
+// The three helpers (0x1400198a0 Reimpl_WeatherArray_Resize, 0x1400196a0
+// Reimpl_ExternalPtr_Serialize_Weather, 0x140002340) are called directly (B.3R).
 //
 // Field knowledge harvested from engine/reimpl/environmentdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
@@ -42,6 +41,8 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -72,7 +73,7 @@ EnvironmentDescription::EnvironmentDescription()
 // dtor (slot 0 0x140019190 minus the stamps): free the dynamic weather array.
 // The compiler then runs ~External.
 EnvironmentDescription::~EnvironmentDescription() {
-    if (fn_MemFreeStatic && _weatherArray) fn_MemFreeStatic(_weatherArray);
+    if (_weatherArray) ::System::MemoryAllocator::MemFree(_weatherArray);
     _weatherArray = nullptr;
     _weatherCount = 0;
     _weatherCap = 0;
@@ -80,13 +81,9 @@ EnvironmentDescription::~EnvironmentDescription() {
 
 // [5] 0x140094040.
 bool EnvironmentDescription::Serialize(void* stream) {
-    // standalone: the two weather doors are unwired (see the banner).
-    if (!fn_ExternalPtr_BuildSerialize || !fn_WeatherResize || !fn_WeatherExternalSerialize) {
-        return true;
-    }
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
-    fn_ExternalPtr_BuildSerialize(&_environmentRef, &ser);   // ExternalPtr +0x20
+    Reimpl_ExternalPtr_Serialize_StringTable(&_environmentRef, &ser);   // ExternalPtr +0x20
 
     // count through a local (the resize below owns +0x30)
     uint32_t count = _weatherCount;
@@ -94,13 +91,13 @@ bool EnvironmentDescription::Serialize(void* stream) {
 
     // On load: resize the dynamic weather-entry array.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        fn_WeatherResize(&_weatherArray, (int)count);
+        Reimpl_WeatherArray_Resize(&_weatherArray, (int)count);
     }
 
     uintptr_t* arrPtr = static_cast<uintptr_t*>(_weatherArray);
     for (uint32_t i = 0; i < count; ++i) {
-        fn_WeatherExternalSerialize(arrPtr, &ser);
-        fn_ExternalPtr_BuildSerialize(arrPtr + 1, &ser);
+        Reimpl_ExternalPtr_Serialize_Weather(arrPtr, &ser);
+        Reimpl_ExternalPtr_Serialize_StringTable(arrPtr + 1, &ser);
         arrPtr += 2;   // 16-byte entries
     }
 

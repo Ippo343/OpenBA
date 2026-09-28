@@ -14,7 +14,7 @@
 //   int          @ +0x4c = 0
 //   int/enum     @ +0x50 = 0xb (11)
 // Serialize (vtable +0x28, 0x1401190e0), stream order (verified disasm CALLs):
-//   ExternalPtr @ +0x20  (FUN_14000bf40 -> fn_ExternalPtr_BuildSerialize)
+//   ExternalPtr @ +0x20  (FUN_14000bf40 -> Reimpl_ExternalPtr_Serialize_StringTable)
 //   int count   @ +0x30 -> resize +0x28 outer array (stride 0x28), per outer element:
 //        inner int count @+0x08 -> resize inner array @+0x00 (stride 0x10):
 //             per inner element: ExternalPtr @+0x00 (FUN_140002340), int @+0x08
@@ -51,6 +51,9 @@
 #include "system/String.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
+#include "system/MemoryAllocator.h"
+#include "object/Type.h"
 
 namespace {
 // serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
@@ -84,27 +87,27 @@ ConsumeProduceDescription::~ConsumeProduceDescription() {
     // free inner arrays then the outer recipe array (the tree walks the CAPACITY)
     int outerN = _recipeCap;
     uint8_t* e = static_cast<uint8_t*>(_recipes);
-    if (e && fn_MemFreeStatic) {
+    if (e) {
         for (int i = 0; i < outerN; ++i, e += 0x28) {
             void* inner = *(void**)(e + 0x00);
-            if (inner) fn_MemFreeStatic(inner);
+            if (inner) ::System::MemoryAllocator::MemFree(inner);
             reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
         }
-        fn_MemFreeStatic(_recipes);
+        ::System::MemoryAllocator::MemFree(_recipes);
     }
     _recipes = nullptr;
 }
 
 // [5] 0x1401190e0: stream order as retail.
 bool ConsumeProduceDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
+    if (!::System::MemoryAllocator::_singleton) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
     ser.Serialize(_recipeCount, nullptr);
     int outerN = _recipeCount;
     if (SerStreamErr(ser) == 0 && outerN > 0) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)outerN * 0x28, 8);
+        void* buf = ::System::MemoryAllocator::MemAlloc((uint64_t)outerN * 0x28, 8);
         _recipes = buf;
         _recipeCap = outerN;
         if (buf) for (uint64_t b = 0; b < (uint64_t)outerN * 0x28; ++b) ((uint8_t*)buf)[b] = 0;
@@ -116,30 +119,25 @@ bool ConsumeProduceDescription::Serialize(void* stream) {
             ser.Serialize(*reinterpret_cast<int*>(e + 0x08), nullptr);
             int innerN = *(int32_t*)(e + 0x08);
             if (SerStreamErr(ser) == 0 && innerN > 0) {
-                void* ibuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)innerN * 0x10, 8);
+                void* ibuf = ::System::MemoryAllocator::MemAlloc((uint64_t)innerN * 0x10, 8);
                 *(void**)(e + 0x00) = ibuf;
                 if (ibuf) for (uint64_t b = 0; b < (uint64_t)innerN * 0x10; ++b) ((uint8_t*)ibuf)[b] = 0;
             }
             uint8_t* ie = *(uint8_t**)(e + 0x00);
             for (int j = 0; j < innerN && ie; ++j, ie += 0x10) {
-                fn_ExternalPtr_BuildSerialize(ie + 0x00, &ser); // ExternalPtr
+                Reimpl_ExternalPtr_Serialize_StringTable(ie + 0x00, &ser); // ExternalPtr
                 ser.Serialize(*reinterpret_cast<int*>(ie + 0x08), nullptr);
             }
-            fn_ExternalPtr_BuildSerialize(e + 0x10, &ser);      // ExternalPtr +0x10
+            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x10, &ser);      // ExternalPtr +0x10
             ser.Serialize(*reinterpret_cast<unsigned int*>(e + 0x18), nullptr);   // enum +0x18
             reinterpret_cast<System::String*>(e + 0x20)->Serialize(&ser);        // B.3.1 bridge: String +0x20
         }
     }
     ser.Serialize(_i40, nullptr);
     ser.Serialize(_u50, nullptr);
-    {
-        // Type @ +0x38 via Object::Type::Serialize dispatch slot 0x1401516b0
-        uintptr_t slotAddr = ResolveAddr(Module::Exe, 0x1401516b0);
-        typedef void (*TypeSer_t)(void* typeField, void* serializer);
-        TypeSer_t fnTypeSer = slotAddr ? *reinterpret_cast<TypeSer_t*>(slotAddr) : nullptr;
-        if (fnTypeSer) fnTypeSer(&_toolType, &ser);
-        // else: slot unwired in standalone — Type read skipped (would desync)
-    }
+    // Type @ +0x38: Object::Type::Serialize (import slot 0x1401516b0; body
+    // RtObject_Type_Serialize, runtime/types/object/Type.h).
+    RtObject::RtObject_Type_Serialize(&_toolType, &ser);
     ser.Serialize(_i3c, nullptr);
     ser.Serialize(_f44, nullptr);
     ser.Serialize(_i48, nullptr);

@@ -33,6 +33,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x140030f00 / createInPlace 0x140030f80):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -50,12 +51,11 @@ ClearAreaDescription::ClearAreaDescription()
 
 // [5] 0x1401180f0: stream order as retail.
 bool ClearAreaDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // 1. ExternalPtr (+0x20). Same stream layout as the StringTable ExternalPtr
     //    helper (FUN_14000bf40); only the validated typeId differs (trusted in
     //    standalone via IsDerivedFromOrTrust).
-    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
     ser.Serialize(_flag0, nullptr);
     ser.Serialize(_flag1, nullptr);
     ser.Serialize(_flag2, nullptr);

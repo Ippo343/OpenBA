@@ -19,5 +19,3 @@ inline void BuildComponent_Serialize(BuildComponent* /*self*/, void* /*stream*/)
 inline void BuildComponent_OnUpdate2(BuildComponent* /*self*/) {}
 
 
-// Init: resolve all internal function pointers (called once at startup)
-void BuildComponent_InitFuncs();

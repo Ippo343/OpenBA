@@ -77,6 +77,10 @@
 #include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7b68 cell class
 #include "Component/RawMaterialDescription.h"        // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include <cstring>
 
 // Work reimpl resolvers — see the note in CF_MakeAreaWork.
 bool PlantArea_ResolveFuncs();
@@ -90,43 +94,29 @@ extern "C" void* g_pCropPlantWork = nullptr;
 // CropFieldCtrlTag lives in CropFieldComponent.h (the member type needs it).
 using CropFieldDispatch = ::ControllerLive::Dispatcher<CropFieldCtrlTag>;
 
-// ── Resolved helpers ──────────────────────────────────────────────────────────────
-// 0x140002e10 FindComponent_WorkPlace(entity, outIBP) -> WorkPlaceComponent.
-// 0x14012fc00 WorkPlace SetAccepting(wpc, accepting)  -> drives WPC+0x50.
+// ── Helpers ───────────────────────────────────────────────────────────────────────
+// 0x140002e10 FindComponent_WorkPlace(entity, outIBP) -> WorkPlaceComponent
+//             (AttendanceComponent_GetJobHostComponent), called directly.
+// 0x14012fc00 WorkPlaceComponent_SetAccepting(wpc, accepting) -> drives WPC+0x50.
+// .rdata: 0x1401721d4 = 33.0f, 0x14017225c = 3600.0f, 0x1401721b8 = 12.0f (exe_constants.h).
 namespace {
 
-typedef void (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);
-typedef void (*fn_SetAccepting_t)(uintptr_t wpc, char accepting);
-
-fn_FindComp_t     s_findWpc      = nullptr;   // 0x140002e10
-fn_SetAccepting_t s_setAccepting = nullptr;   // 0x14012fc00
-const float*      s_fTempMin     = nullptr;   // 0x1401721d4 = 33.0f
-const float*      s_fYearSeconds = nullptr;   // 0x14017225c = 3600.0f
-const float*      s_fYearMonths  = nullptr;   // 0x1401721b8 = 12.0f
-bool              s_resolved     = false;
-
-void CF_Resolve() {
-    if (s_resolved) return;
-    s_findWpc      = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_setAccepting = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
-    s_fTempMin     = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721d4));
-    s_fYearSeconds = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017225c));
-    s_fYearMonths  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721b8));
-    s_resolved = true;
-}
+float BitsF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+const float kTempMin     = kRdata_1401721d4;               // 33.0f
+const float kYearSeconds = BitsF(kRdata_14017225c);        // 3600.0f
+const float kYearMonths  = BitsF(kRdata_1401721b8);        // 12.0f
 
 // Push the component's +0x48 master switch into the workplace's accepting flag.
 // Shared by state-2 enter and the event-3 plant command, both of which do exactly
 // this before doing anything else.
 void CF_PushAccepting(uintptr_t comp) {
-    CF_Resolve();
-    if (!s_findWpc || !s_setAccepting) return;
     uintptr_t wpcIbp = 0;
-    s_findWpc(*reinterpret_cast<uintptr_t*>(comp + 0x10), &wpcIbp);
+    AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(comp + 0x10), &wpcIbp);
     if (!wpcIbp) return;
     // wpcIbp already IS the component — the finder returns its out-param's address, so
     // there is no second dereference here (the trap that crashed the RP family).
-    s_setAccepting(wpcIbp, *reinterpret_cast<char*>(comp + 0x48));
+    WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIbp),
+                                    *reinterpret_cast<char*>(comp + 0x48) != 0);
 }
 
 }  // namespace
@@ -144,47 +134,13 @@ namespace {
 
 constexpr int kSlotStride = 0x20;
 
-// 0x1400335b0 (CropFieldComponent_ResizeEntityList) is NOT converted: ENDGAME
-// B.3.2 step 2 read the body (cropfieldcomponent.cpp) and its new-tail write is
-// a PARTIAL zero — offsets +8 and +16 of the 0x20-byte element are zeroed but
-// +0, +4 and +24 are left whatever MemAlloc returned. That is not expressible
-// as a single SpecFor<T> init function for a plain element type, so this stays
-// a resolved pointer (see report).
-typedef void (*fn_ArrayResize_t)(void* vec, int count);        // 0x1400335b0 slots
-typedef void (*fn_SlotRefresh_t)(uintptr_t comp);              // 0x14011aa20
-typedef void (*fn_FindComp_t2)(uintptr_t entity, uintptr_t* out);
-typedef void (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP);
-typedef bool (*fn_SlotOccupied_t)(uintptr_t comp);
-typedef void (*fn_SlotRelease_t)(uintptr_t comp);
-typedef void (*fn_MapInit_t)(uintptr_t mapComp);               // 0x140124750
-typedef uint32_t (*fn_Rand_t)(void* rng, uint32_t bound);
-
-fn_ArrayResize_t     s_slotResize   = nullptr;
-fn_SlotRefresh_t     s_slotRefresh  = nullptr;
-fn_FindComp_t2       s_findMap      = nullptr;   // 0x140004680
-fn_FindComp_t2       s_findWork     = nullptr;   // 0x140003050
-fn_FindComp_t2       s_findCropComp = nullptr;   // 0x140005380
-fn_PostWork_t        s_postWork     = nullptr;   // 0x14012ec60
-fn_SlotOccupied_t    s_slotOccupied = nullptr;   // 0x14012ead0
-fn_SlotRelease_t     s_slotRelease  = nullptr;   // 0x14012eb50
-fn_MapInit_t         s_mapInit      = nullptr;   // 0x140124750
-const float*         s_fRipe        = nullptr;   // 0x140172144 = 0.99f
-bool                 s_res2         = false;
-
-void CF_Resolve2() {
-    if (s_res2) return;
-    s_slotResize   = reinterpret_cast<fn_ArrayResize_t>(ResolveAddr(Module::Exe, 0x1400335b0));
-    s_slotRefresh  = reinterpret_cast<fn_SlotRefresh_t>(ResolveAddr(Module::Exe, 0x14011aa20));
-    s_findMap      = reinterpret_cast<fn_FindComp_t2>(ResolveAddr(Module::Exe, 0x140004680));
-    s_findWork     = reinterpret_cast<fn_FindComp_t2>(ResolveAddr(Module::Exe, 0x140003050));
-    s_findCropComp = reinterpret_cast<fn_FindComp_t2>(ResolveAddr(Module::Exe, 0x140005380));
-    s_postWork     = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_slotOccupied = reinterpret_cast<fn_SlotOccupied_t>(ResolveAddr(Module::Exe, 0x14012ead0));
-    s_slotRelease  = reinterpret_cast<fn_SlotRelease_t>(ResolveAddr(Module::Exe, 0x14012eb50));
-    s_mapInit      = reinterpret_cast<fn_MapInit_t>(ResolveAddr(Module::Exe, 0x140124750));
-    s_fRipe        = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172144));
-    s_res2 = true;
-}
+// Called directly: 0x1400335b0 CropFieldComponent_ResizeEntityList (the slot array;
+// its new-tail write is a PARTIAL zero, +8/+16 only, so it is not a SpecFor<T> resize),
+// 0x14011aa20 CropFieldComponent_ValidateEntityRefs (slot refresh), 0x140004680 the
+// MapComponent finder (FloorComponent_FindResData), 0x140003050 / 0x140005380 the
+// Work / CropField component finders, 0x14012ec60 CitizenAI_WorkScheduler_Post,
+// 0x14012ead0 / 0x14012eb50 WorkComponent_CheckWorkSlot / _RegisterWorkSlot,
+// 0x140124750 MapComponent_DetachOccupancy_4750. .rdata 0x140172144 = 0.99f (ripe).
 
 uint8_t* SlotAt(uintptr_t comp, int i) {
     uintptr_t base = *reinterpret_cast<uintptr_t*>(comp + 0x58);
@@ -198,7 +154,7 @@ void* FindInDescList(uintptr_t list, uint32_t tid) {
     const int n = *reinterpret_cast<int32_t*>(list + 0x30);
     void** items = *reinterpret_cast<void***>(list + 0x28);
     for (int i = 0; i < n && items; ++i)
-        if (items[i] && fn_IsDerivedFrom && fn_IsDerivedFrom(items[i], tid)) return items[i];
+        if (items[i] && ::Object::IsDerivedFromNullSafe(items[i], tid)) return items[i];
     return nullptr;
 }
 
@@ -217,7 +173,6 @@ void* FindInDescList(uintptr_t list, uint32_t tid) {
 enum class CF_AreaWork { PlantArea, HarvestArea, TendArea };
 void* CF_MakeAreaWork(uintptr_t comp, int size, CF_AreaWork kind,
                       bool perSlotArray, uint64_t descListField, bool hasDescField) {
-    CF_Resolve2();
     // Each Work reimpl resolves its engine-function pointers in a *_ResolveFuncs() that
     // ONLY the factory path calls. These works are constructed directly, exactly as
     // retail does, so the resolver has to be called here or the work ships with null
@@ -228,8 +183,8 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, CF_AreaWork kind,
     PlantArea_ResolveFuncs();
     TendArea_ResolveFuncs();
     HarvestArea_ResolveFuncs();
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, size, 8);
+    if (!::System::MemoryAllocator::_singleton) return nullptr;
+    void* mem = ::System::MemoryAllocator::MemAlloc(size, 8);
     if (!mem) return nullptr;
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
@@ -261,9 +216,9 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, CF_AreaWork kind,
     }
     if (hasDescField) *reinterpret_cast<uint64_t*>(w + 0x68) = descListField;
 
-    if (perSlotArray && s_findCropComp) {
+    if (perSlotArray) {
         uintptr_t cropIbp = 0;
-        s_findCropComp(*reinterpret_cast<uintptr_t*>(w + 0x10), &cropIbp);
+        WorkAcc_FindComponent_5380(*reinterpret_cast<uintptr_t*>(w + 0x10), &cropIbp);
         if (cropIbp) {
             // B.3.2 bridge: exe 0x14000a590 IS Collection::Array<uint8>::SetSize(n).
             GameColl::AsArray<GameColl::U8>(reinterpret_cast<void*>(w + 0x58))
@@ -278,32 +233,29 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, CF_AreaWork kind,
 
 // Post a freshly built work to the reservation ledger, exactly as every state enter does.
 void CF_PostWork(uintptr_t comp, void* work) {
-    CF_Resolve2();
-    if (!work || !s_findWork || !s_postWork) {
+    if (!work) {
         return;
     }
     uintptr_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+    new (&workIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-    else workIbp = reinterpret_cast<uintptr_t>(work);
     uintptr_t workCompIbp = 0;
-    s_findWork(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
+    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
     if (!workCompIbp) {
         return;
     }
-    s_postWork(workCompIbp, 1, 0, &workIbp);
+    CitizenAI_WorkScheduler_Post(workCompIbp, 1, 0, &workIbp);
     g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
 }
 
 // Release the held work slot if one is occupied (the 3050 -> ead0 -> eb50 idiom every
 // crop-field per-frame handler opens with).
 void CF_ReleaseWorkSlot(uintptr_t comp) {
-    CF_Resolve2();
-    if (!s_findWork || !s_slotOccupied || !s_slotRelease) return;
     uintptr_t workCompIbp = 0;
-    s_findWork(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
+    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
     if (!workCompIbp) return;
-    if (s_slotOccupied(workCompIbp)) s_slotRelease(workCompIbp);
+    if (WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(workCompIbp)))
+        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(workCompIbp));
 }
 
 // Count slots in a given state.
@@ -321,10 +273,9 @@ int CountSlots(uintptr_t comp, int state) {
 // state 1, divided by the TOTAL slot count (not by the number of growing slots, so a
 // half-planted field can never read ripe).
 float CF_Maturity(uintptr_t comp) {
-    CF_Resolve2();
     const int total = SlotCount(comp);
     if (total == 0) return 0.0f;
-    if (s_slotRefresh) s_slotRefresh(comp);
+    CropFieldComponent_ValidateEntityRefs(comp);
     const float cap = g_fUVScale ? *g_fUVScale : 1.0f;
     float sum = 0.0f;
     for (int i = 0; i < total; ++i) {
@@ -378,21 +329,19 @@ static char CropField_Event3Plant(void* self, void* sm) {
 // silently drop the entire v < 3 arm and the field would only ever plant late in the
 // year. Kept as an explicit unsigned cast so the behaviour cannot drift.
 static char CropField_State2PerFrame(void* self, void* sm, void* /*time*/) {
-    CF_Resolve();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
-    if (!s_fTempMin || !s_fYearSeconds || !s_fYearMonths) return 1;
 
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     const uintptr_t seasonMgr = *reinterpret_cast<uintptr_t*>(gw + 0x128);
     const uintptr_t weather   = *reinterpret_cast<uintptr_t*>(gw + 0x130);
     if (!seasonMgr || !weather) return 1;
 
-    if (*reinterpret_cast<float*>(weather + 0x18) < *s_fTempMin) return 1;
+    if (*reinterpret_cast<float*>(weather + 0x18) < kTempMin) return 1;
 
     const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(seasonMgr + 8))->AsSeconds();   // B.3.4b bridge
-    const int v = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
+    const int v = static_cast<int>((secs / kYearSeconds) * kYearMonths);
     if (v < 0) return 1;
     if (static_cast<uint32_t>(v - 3) > 8u)
         CropField_Event3Plant(self, sm);
@@ -408,19 +357,17 @@ static char CropField_State2PerFrame(void* self, void* sm, void* /*time*/) {
 // 4. Shuffle those marks (Fisher-Yates over the game RNG) so rows are not identical.
 // 5. Re-init the map component, then post a PlantArea work carrying the desc list.
 static char CropField_State9Enter(void* self, void* /*sm*/) {
-    CF_Resolve2();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-    if (!s_findMap || !s_slotResize) return 1;
 
     uintptr_t mapIbp = 0;
-    s_findMap(*reinterpret_cast<uintptr_t*>(comp + 0x10), &mapIbp);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(comp + 0x10), &mapIbp);
     if (!mapIbp) return 1;
     const int ox = *reinterpret_cast<int16_t*>(mapIbp + 0x28);
     const int oy = *reinterpret_cast<int16_t*>(mapIbp + 0x2a);
     const int w  = *reinterpret_cast<int16_t*>(mapIbp + 0x2c);
     const int h  = *reinterpret_cast<int16_t*>(mapIbp + 0x2e);
 
-    s_slotResize(reinterpret_cast<void*>(comp + 0x58), w * h);
+    CropFieldComponent_ResizeEntityList(reinterpret_cast<void*>(comp + 0x58), w * h);
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -434,10 +381,10 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
             if (!s) continue;
             *reinterpret_cast<int32_t*>(s + 0x00) = (row + oy) * mapW + col + ox;
             uintptr_t nullIbp = 0;
-            if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<uintptr_t*>(s + 0x10) = nullIbp;
             nullIbp = 0;
-            if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *reinterpret_cast<uintptr_t*>(s + 0x08) = nullIbp;
             *reinterpret_cast<int32_t*>(s + 0x04) = 0;
         }
@@ -446,8 +393,8 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
     const int count = SlotCount(comp);
     if (count <= 0) return 1;
     uint8_t* marks = reinterpret_cast<uint8_t*>(
-        (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton, count, 1) : nullptr);
+        (::System::MemoryAllocator::_singleton)
+            ? ::System::MemoryAllocator::MemAlloc(count, 1) : nullptr);
     if (!marks) return 1;
 
     // Crop type: ENDGAME B.3.9 C1 (D5) -- 0x1401c7b68 is NaturalResourceDescription
@@ -487,7 +434,7 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
         if (s) s[0x18] = marks[i];
     }
 
-    if (s_mapInit) s_mapInit(mapIbp);
+    MapComponent_DetachOccupancy_4750(reinterpret_cast<void*>(mapIbp));
 
     // PlantArea is 0x70 and carries the desc list at +0x68 (vtable 0x140161890).
     void* work = CF_MakeAreaWork(comp, 0x70, CF_AreaWork::PlantArea, /*perSlotArray=*/true,
@@ -495,16 +442,15 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
                                  /*hasDescField=*/true);
     CF_PostWork(comp, work);
 
-    if (fn_MemFree && g_pMemAllocSingleton) fn_MemFree(g_pMemAllocSingleton, marks);
+    if (::System::MemoryAllocator::_singleton) ::System::MemoryAllocator::MemFree(marks);
     return 1;
 }
 
 // ── state 9 per-frame — 0x14011a1e0 ───────────────────────────────────────────────
 // Refresh the slots, then: all done -> 21; all either growing or done -> 10 (tend).
 static char CropField_State9PerFrame(void* self, void* sm, void* /*time*/) {
-    CF_Resolve2();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-    if (s_slotRefresh) s_slotRefresh(comp);
+    CropFieldComponent_ValidateEntityRefs(comp);
     const int total   = SlotCount(comp);
     const int growing = CountSlots(comp, 1);
     const int done    = CountSlots(comp, 2);
@@ -558,9 +504,8 @@ static char CropField_Event4Harvest(void* self, void* sm) {
 // The (unsigned)(month - 6) > 5 test is again retail's "outside [6,11]" idiom — true
 // for month < 6 via underflow as well as for month > 11.
 static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
-    CF_Resolve2();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-    if (s_slotRefresh) s_slotRefresh(comp);
+    CropFieldComponent_ValidateEntityRefs(comp);
 
     const int total = SlotCount(comp);
     if (CountSlots(comp, 2) == total)
@@ -569,8 +514,6 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
     if (*reinterpret_cast<char*>(comp + 0x49) == 0) return 1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
-    if (!s_fTempMin || !s_fYearSeconds || !s_fYearMonths || !s_fRipe)
-        return 1;
 
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     const uintptr_t weather   = *reinterpret_cast<uintptr_t*>(gw + 0x130);
@@ -580,13 +523,13 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     bool harvestNow = false;
     int  monthDbg = -1;
     const float temp = *reinterpret_cast<float*>(weather + 0x18);
-    if (temp >= *s_fTempMin) {
+    if (temp >= kTempMin) {
         const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(seasonMgr + 8))->AsSeconds();   // B.3.4b bridge
-        monthDbg = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
+        monthDbg = static_cast<int>((secs / kYearSeconds) * kYearMonths);
         if (static_cast<uint32_t>(monthDbg - 6) <= 5u) { harvestNow = true; }
     }
     const float maturity = CF_Maturity(comp);
-    if (!harvestNow && maturity > *s_fRipe) harvestNow = true;
+    if (!harvestNow && maturity > kRdata_140172144) harvestNow = true;
 
     if (harvestNow) CropField_Event4Harvest(self, sm);
     return 1;
@@ -606,9 +549,8 @@ static char CropField_State11Enter(void* self, void* /*sm*/) {
 // ── state 11 per-frame — 0x140119d80 ──────────────────────────────────────────────
 // When every slot reads done, release the work slot and go to 21.
 static char CropField_State11PerFrame(void* self, void* sm, void* /*time*/) {
-    CF_Resolve2();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-    if (s_slotRefresh) s_slotRefresh(comp);
+    CropFieldComponent_ValidateEntityRefs(comp);
     if (CountSlots(comp, 2) == SlotCount(comp)) {
         CF_ReleaseWorkSlot(comp);
         ::ControllerLive::RequestStateTransition(sm, 21);

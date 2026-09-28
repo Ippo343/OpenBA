@@ -20,19 +20,10 @@
 #include <cstdio>
 #include <new>
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
 // The +0x30 int array. ENDGAME B.3.2 step 2: FUN_1400021d0 IS
 // `Collection::Array<int32>::SetSize`, MSVC-monomorphised into the exe, so the
 // resolved pointer is gone and the member call takes its place.
-
-// IsDerivedFrom dispatch slot
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-static bool s_initialized = false;
+// The IsDerivedFrom import slot 0x140152a98 is Object::Base::IsDerivedFrom.
 
 // ============================================================
 // AutoPickupComponent::Serialize (vtable slot [4], 0x140044990)
@@ -40,37 +31,21 @@ static bool s_initialized = false;
 // Checks IsDerivedFrom on +0x18 with type DAT_1401c3fe8 (AutoPickupDescription::TypeId();
 // ENDGAME B.3.9 CB -- the cell is unregistered, so the old pointer read made this a no-op),
 // reads byte at +0x20 from the derived object and stores in isEnabled (+0x28).
-void AutoPickupComponent_InitFuncs();
 void AutoPickupComponent_Serialize(AutoPickupComponent* self) {
-    AutoPickupComponent_InitFuncs();   // its only user now (B.3.8: Persist is folded into the member)
     uintptr_t selfAddr = (uintptr_t)self;
 
     void* obj = *(void**)(selfAddr + 0x18);
     void* config = nullptr;
 
-    if (obj && s_fn_IsDerivedFrom_dispatch) {
-        bool derived = s_fn_IsDerivedFrom_dispatch(obj, AutoPickupDescription::TypeId());
+    if (obj) {
+        bool derived = reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(
+            AutoPickupDescription::TypeId());   // B.3.x bridge
         if (derived) config = obj;
     }
 
     if (config) {
         *(uint8_t*)(selfAddr + 0x28) = *(uint8_t*)((uintptr_t)config + 0x20);
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void AutoPickupComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_initialized = true;
-
 }
 
 // ============================================================================

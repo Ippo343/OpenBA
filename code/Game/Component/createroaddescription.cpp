@@ -27,6 +27,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Game/exe_bodies.h"
 
 // ctor (inlined into create 0x140032d30 / createInPlace 0x140032da0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -38,10 +39,9 @@ CreateRoadDescription::CreateRoadDescription()
 
 // [5] 0x140119c80: stream order as retail.
 bool CreateRoadDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize3) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_b20, nullptr);
-    fn_ExternalPtr_Serialize3(&_created, &ser);
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_created, &ser);
     return true;
 }
 

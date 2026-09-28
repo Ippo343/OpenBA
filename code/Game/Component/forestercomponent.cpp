@@ -27,11 +27,6 @@
 // ~Serializer()
 
 // ============================================================
-// Init: nothing left to resolve (the base Persist is a direct member call now)
-// ============================================================
-void ForesterComponent_InitFuncs() {}
-
-// ============================================================
 // Vtable slots 13/14 — the panel COMMAND pair
 // ============================================================
 // Unlike ConsumeProduce/Market (which inherit the ResourceProduce base pair verbatim),

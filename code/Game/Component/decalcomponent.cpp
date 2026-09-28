@@ -25,21 +25,13 @@
 #include <new>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers, called directly: IsDerivedFrom (import slot 0x140152a98) is
+// Object::Base::IsDerivedFrom; the terrain-decal remove FUN_1400b0d00 is
+// DecalComponent_TerrainDecalRemove below.
 // ============================================================
-
-
-// IsDerivedFrom dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// Type ID for DecalDescription at DAT_1401c75b8
-
-// Terrain decal remove: FUN_1400b0d00(terrainDecalSys, decalId)
-typedef void (*fn_TerrainDecalRemove_t)(void* terrainDecalSys, int decalId);
-static fn_TerrainDecalRemove_t s_fn_TerrainDecalRemove = nullptr;
 
 // Sub-callees of the terrain-decal-slot release (FUN_1400b0d00) were
 // Collection::Array<T>::SetSize monomorphised into the exe (ENDGAME B.3.2
@@ -51,8 +43,6 @@ static fn_TerrainDecalRemove_t s_fn_TerrainDecalRemove = nullptr;
 // count==0). FUN_14001c890 is the already-catalogued U16 SetSize (stride 2,
 // align 2, zero tail — also never exercised at count==0). Both are converted
 // below; the two typedefs and resolves are gone.
-
-static bool s_initialized = false;
 
 // ============================================================
 // Reimpl of FUN_1400b0d00 (TerrainDecalSystem release one decal slot)
@@ -81,9 +71,9 @@ void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
 // ============================================================
 static void* GetDecalDescription(void* self) {
     void* obj = *(void**)((uintptr_t)self + 0x18);
-    if (!obj || !s_fn_IsDerivedFrom_dispatch)
+    if (!obj)
         return nullptr;
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, DecalDescription::TypeId());
+    bool derived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(DecalDescription::TypeId());   // B.3.x bridge
     return derived ? obj : nullptr;
 }
 
@@ -123,18 +113,13 @@ extern "C" int TradeWork_impl_0d80(int64_t sys, int minX, int minY, int maxX, in
                                    uint32_t uv2, uint32_t uv3, char p15, int p16, int p17,
                                    uint64_t p18, uint8_t p19);
 
-// Draw-path helpers (resolved independently of DecalComponent_InitFuncs, which is
-// not invoked — the driver calls Draw without InitFuncs).
-typedef void* (*fn_FindComp_t)(void* entityInner, void* retIBP);
-static fn_FindComp_t      s_fn_FindComp_Map    = nullptr;   // 0x140004680 (MapComponent)
-static fn_FindComp_t      s_fn_FindComp_Model  = nullptr;   // 0x140003f60 (ModelComponent)
-static void**             s_pGameStateDraw      = nullptr;   // DAT_1401c3dd8
-// RefreshEntityFlags (0x1400c3470) — re-aggregate the owning entity's component flags
-// and (un)register it in the update tree; used to bucket the decal's owner via the draw
-// flag so the tree walk's +0x40 slot drives the build-once, then un-bucket once placed.
-typedef void (*fn_EntityFlagUpdate_t)(void* entity);
-static fn_EntityFlagUpdate_t s_fn_EntityFlagUpdate = nullptr;
-static bool s_drawHelpersInit = false;
+// Draw-path helpers, called directly: 0x140004680 FindComponent(MapComponent)
+// (FloorComponent_FindResData), 0x140003f60 FindComponent(ModelComponent)
+// (ActCNR_FindComponent_3f60), DAT_1401c3dd8 = g_pGameWorldSingleton.
+// RefreshEntityFlags (0x1400c3470, ActHunt_NotifyEntityChanged_c3470) — re-aggregate
+// the owning entity's component flags and (un)register it in the update tree; used to
+// bucket the decal's owner via the draw flag so the tree walk's +0x40 slot drives the
+// build-once, then un-bucket once placed.
 
 // ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c75b8 is DecalDescription's
 // registered type-id cell (INVENTORY_C Table 1); it always holds
@@ -143,19 +128,6 @@ static bool s_drawHelpersInit = false;
 // call.
 static uint32_t DecalDescTypeId() {
     return DecalDescription::TypeId();
-}
-
-static void EnsureDrawHelpers() {
-    if (s_drawHelpersInit) return;
-    s_fn_FindComp_Map   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_FindComp_Model = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_pGameStateDraw    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_fn_EntityFlagUpdate = reinterpret_cast<fn_EntityFlagUpdate_t>(ResolveAddr(Module::Exe, 0x1400c3470));
-    if (!s_fn_IsDerivedFrom_dispatch) {
-        uintptr_t s = ResolveAddr(Module::Exe, 0x140152a98);
-        if (s) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(s);
-    }
-    s_drawHelpersInit = true;
 }
 
 // FindComponent(ModelComponent) — SA-safe. The exe helper 0x140003f60 matches on the
@@ -173,9 +145,9 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
     // (DWORD_1401c7a50) is seeded by reg_pipeline_typeids.cpp (gated on BANISHED_LIVE_DECAL).
     // Fall back to the manual GetTypeIdByName walk if the seeding is absent (e.g. the exe
     // helper unresolved). One-shot log records which path resolved the model.
-    if (ownerEnt && s_fn_FindComp_Model) {
+    if (ownerEnt) {
         uintptr_t exeBuf[2] = {0, 0};
-        s_fn_FindComp_Model(ownerEnt, exeBuf);
+        ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(ownerEnt), exeBuf);
         if (exeBuf[0]) {
             return reinterpret_cast<void*>(exeBuf[0]);
         }
@@ -197,29 +169,6 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
         }
     }
     return nullptr;
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void DecalComponent_InitFuncs() {
-    if (s_initialized) return;
-
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_fn_TerrainDecalRemove = reinterpret_cast<fn_TerrainDecalRemove_t>(
-        ResolveAddr(Module::Exe, 0x1400b0d00));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[DecalComponent] Funcs resolved: DecalRemove=%p\n",
-           (void*)s_fn_TerrainDecalRemove);
-#endif
 }
 
 // ============================================================================
@@ -272,14 +221,13 @@ DecalComponent::DecalComponent()
 // it no-ops safely if the entityList isn't set yet (the flag itself is then picked up by
 // the later EntityList registration). Setting the flag ⇒ eventual bucketing either way.
 static void DecalComponent_SetDrawFlag(void* s, bool on) {
-    EnsureDrawHelpers();
     uintptr_t c = reinterpret_cast<uintptr_t>(s);
     uint32_t oldFlags = *reinterpret_cast<uint32_t*>(c + 0x20);
     uint32_t newFlags = on ? (oldFlags | 0x4u) : (oldFlags & ~0x4u);
     if (newFlags == oldFlags) return;
     *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10)) {
-        if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*reinterpret_cast<void**>(c + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(c + 0x10));
     }
 }
 
@@ -292,7 +240,6 @@ static void DecalComponent_SetDrawFlag(void* s, bool on) {
 //   2. Serializer(version=1): serialize decalScale (float at +0x30)
 //   3. If version > 0: serialize decalState (int at +0x28)
 void DecalComponent::Persist(void* stream) {
-    DecalComponent_InitFuncs();
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
@@ -313,15 +260,14 @@ void DecalComponent::Persist(void* stream) {
 void DecalComponent::Startup() { DecalComponent_SetDrawFlag(this, true); }
 // [6] 0x14011b560 — Draw: build + submit the terrain decal.
 void DecalComponent::OnAdded() {
-    EnsureDrawHelpers();
-    if (!s_pGameStateDraw || !*s_pGameStateDraw) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
         return;
     }
     uintptr_t selfA = reinterpret_cast<uintptr_t>(this);
 
     // CheckPtr(owner) then FindComponent(MapComponent) for the tile footprint.
     uintptr_t mapBuf[2] = {0, 0};
-    if (s_fn_FindComp_Map) s_fn_FindComp_Map(*reinterpret_cast<void**>(selfA + 0x10), mapBuf);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(selfA + 0x10), mapBuf);
     uintptr_t mapComp = mapBuf[0];
     if (!mapComp) {
         return;
@@ -348,8 +294,8 @@ void DecalComponent::OnAdded() {
     void* obj = *reinterpret_cast<void**>(selfA + 0x18);
     uint32_t decalTid = DecalDescTypeId();
     void* decalDesc = nullptr;
-    if (s_fn_IsDerivedFrom_dispatch && decalTid && obj &&
-        s_fn_IsDerivedFrom_dispatch(obj, decalTid))
+    if (decalTid && obj &&
+        reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(decalTid))   // B.3.x bridge
         decalDesc = obj;
     if (!decalDesc) {
         return;
@@ -391,7 +337,7 @@ void DecalComponent::OnAdded() {
         }
     }
 
-    uintptr_t gs = reinterpret_cast<uintptr_t>(*s_pGameStateDraw);
+    uintptr_t gs = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     uintptr_t decalSys = *reinterpret_cast<uintptr_t*>(gs + 0x110);
     if (!decalSys) {
         return;
@@ -425,15 +371,12 @@ void DecalComponent::OnAdded() {
 // ============================================================
 // If decalId >= 0, removes the decal from terrain, resets decalId to -1.
 void DecalComponent::OnRemove() {
-    // lazy-resolve (nothing calls InitFuncs; without this the terrain-decal remover
-    // stays null and every released clear-job icon persists on screen forever)
-    DecalComponent_InitFuncs();
     if (decalId >= 0) {
         // Remove decal from terrain decal subsystem
-        if (s_fn_TerrainDecalRemove && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* terrainDecalSys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x110);
             if (terrainDecalSys)
-                s_fn_TerrainDecalRemove(terrainDecalSys, decalId);
+                DecalComponent_TerrainDecalRemove(terrainDecalSys, decalId);
         }
     }
     decalId = -1;

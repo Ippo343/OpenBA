@@ -27,11 +27,6 @@
 // s.Serialize(&self[0x54], null)  // float: fishingRate
 // ~Serializer()
 
-// ============================================================
-// Init: nothing left to resolve (the base Persist is a direct member call now)
-// ============================================================
-void FishingComponent_InitFuncs() {}
-
 // ============================================================================
 // ENDGAME B.3.8 MI-B — FishingComponent as a REAL class (FishingComponent.h).
 //
