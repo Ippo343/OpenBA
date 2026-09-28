@@ -95,6 +95,7 @@
 #include "Component/CharacterComponent.h"       // ENDGAME B.3.9 C1: 0x1401c7078 cell class
 #include "Component/CitizenDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7190 cell class
 #include "Component/StatusIconComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7e08 cell class
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
                                                   long long arrayBase, void* deadInit);
@@ -122,9 +123,7 @@ void ResizeCitizenExternalArray(int64_t* header, int newCount) {
         *capPtr = newCount;
         if (newCount == oldCount + 1 && oldCount != 0)
             *capPtr = newCount * 3;
-        void* newPtr = fn_MemAllocStatic
-            ? fn_MemAllocStatic(static_cast<uint64_t>(*capPtr) * 8, 8)
-            : nullptr;
+        void* newPtr = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*capPtr) * 8, 8);
         header[0] = reinterpret_cast<int64_t>(newPtr);
     }
 
@@ -140,15 +139,8 @@ void ResizeCitizenExternalArray(int64_t* header, int newCount) {
         }
     }
 
-    if (oldPtr != reinterpret_cast<void*>(header[0]) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldPtr);
-}
-
-bool s_resolved = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_resolved = true;
+    if (oldPtr != reinterpret_cast<void*>(header[0]))
+        System::MemoryAllocator::MemFree(oldPtr);
 }
 
 inline bool Loading(void* stream) {
@@ -158,8 +150,8 @@ inline bool Loading(void* stream) {
 void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
     reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
-    const bool checked = (obj && fn_IsDerivedFrom && tid);
-    const bool derived = checked ? fn_IsDerivedFrom(obj, tid) : true;
+    const bool checked = (obj && tid);
+    const bool derived = checked ? Object::IsDerivedFromNullSafe(obj, tid) : true;
     if (checked && !derived)
         *reinterpret_cast<uint64_t*>(ibp) = 0;
 
@@ -170,7 +162,6 @@ void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
 // [3] 0x140114160.
 void CitizenComponent::Persist(void* stream) {
     if (!stream) return;
-    Resolve();
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];

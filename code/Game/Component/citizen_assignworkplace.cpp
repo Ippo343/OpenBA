@@ -41,6 +41,10 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 #include "Component/exe_bodies.h"
+#include "Component/firecomponent_funcs.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_constants.h"
 
 // ============================================================
 // Roster array record: storage+0x50 points at an array of these, indexed by
@@ -61,71 +65,6 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
 extern "C" uint64_t CitizenRoster_CountWorkers_129ff0(int64_t storageComp);
 
 namespace {
-
-// ------------------------------------------------------------
-// Lazily-resolved exe sub-helpers + dispatch-slot fn ptrs. All null-guarded at each
-// call: an unregistered/absent callee turns the call into a no-op.
-// ------------------------------------------------------------
-typedef void* (*fn_FindComp_t)(int64_t entity, void* retIBP);       // member ABI RCX,RDX
-typedef void  (*fn_ModelComp2b70_t)(int64_t comp, uint32_t arg);    // 0x1400c2b70 model refresh
-typedef void  (*fn_StatusIcon_t)(int64_t comp, int flagIdx, char v);// 0x14012c3f0 status-icon toggle
-typedef char  (*fn_IsMarked_t)(int64_t obj);                        // 0x14012ead0 marked-for-destroy?
-typedef void  (*fn_Reserve_t)(int64_t obj);                         // 0x14012eb50 material reserve
-typedef void  (*fn_Audio2c60_t)(int64_t emData, uint32_t arg);      // 0x140042c60 emitter setup
-
-// Runtime dispatch-slot signatures (Ghidra drops trailing args on indirect slot CALLs;
-// verified from the disassembly register setup).
-typedef char (*fn_Vec3Eq_t)(const void* a, const void* b);                             // slot a70
-typedef void (*fn_GrowArray_t)(int64_t* arrayStruct, int newCount, void* elemIBP);     // 0x140003110
-
-fn_FindComp_t      s_fn_FindCompStorage = nullptr;  // 0x140008090 Entity_FindComponent_Storage
-fn_FindComp_t      s_fn_3050            = nullptr;   // 0x140003050 find (material/work) component
-fn_FindComp_t      s_fn_3f60           = nullptr;    // 0x140003f60 find model/transform component
-fn_FindComp_t      s_fn_2f90           = nullptr;    // 0x140002f90 find MeshInstance component
-fn_FindComp_t      s_fn_2280           = nullptr;    // 0x140002280 find audio emitter data
-fn_ModelComp2b70_t s_fn_2b70           = nullptr;    // 0x1400c2b70
-fn_StatusIcon_t    s_fn_2c3f0          = nullptr;    // 0x14012c3f0
-fn_IsMarked_t      s_fn_ead0           = nullptr;    // 0x14012ead0
-fn_Reserve_t       s_fn_eb50           = nullptr;    // 0x14012eb50
-fn_Audio2c60_t     s_fn_42c60          = nullptr;    // 0x140042c60
-fn_GrowArray_t     s_fn_3110           = nullptr;    // 0x140003110
-
-fn_Vec3Eq_t        s_slot_Vec3Eq       = nullptr;    // 0x140152a70
-
-const float* s_p_uvScale = nullptr;                  // g_fUVScale @ 0x14017214c
-
-bool s_resolved = false;
-
-template <class T>
-inline T R(uintptr_t a) { return reinterpret_cast<T>(ResolveAddr(Module::Exe, a)); }
-
-// Resolve a runtime fn ptr stored in an exe .rdata dispatch slot.
-inline void* RSlot(uintptr_t slotAddr) {
-    uintptr_t slot = ResolveAddr(Module::Exe, slotAddr);
-    return slot ? *reinterpret_cast<void**>(slot) : nullptr;
-}
-
-void EnsureFns() {
-    if (s_resolved) return;
-    s_resolved = true;
-
-    s_fn_FindCompStorage = R<fn_FindComp_t>(0x140008090);
-    s_fn_3050  = R<fn_FindComp_t>(0x140003050);
-    s_fn_3f60  = R<fn_FindComp_t>(0x140003f60);
-    s_fn_2f90  = R<fn_FindComp_t>(0x140002f90);
-    s_fn_2280  = R<fn_FindComp_t>(0x140002280);
-    s_fn_2b70  = R<fn_ModelComp2b70_t>(0x1400c2b70);
-    s_fn_2c3f0 = R<fn_StatusIcon_t>(0x14012c3f0);
-    s_fn_ead0  = R<fn_IsMarked_t>(0x14012ead0);
-    s_fn_eb50  = R<fn_Reserve_t>(0x14012eb50);
-    s_fn_42c60 = R<fn_Audio2c60_t>(0x140042c60);
-    s_fn_3110  = R<fn_GrowArray_t>(0x140003110);
-
-    s_slot_Vec3Eq        = reinterpret_cast<fn_Vec3Eq_t>(RSlot(0x140152a70));
-
-    s_p_uvScale = R<const float*>(0x14017214c);
-}
-
 
 // The live Audio::Scene lives at gameWorld+0x78 (disasm: MOV RAX,[0x1401c3dd8];
 // MOV RDI,[RAX+0x78]). Null in standalone unless the audio scene was built.
@@ -190,7 +129,6 @@ extern "C" uint64_t CitizenRoster_CountWorkers_129ff0(int64_t storageComp) {
 // icon + 3D audio emitter — that whole branch is inert and guarded here.
 // ============================================================
 extern "C" void CitizenComponent_helper_a550(int64_t storageComp, int slotIndex, void* selfIBP) {
-    EnsureFns();
     uint8_t* s = reinterpret_cast<uint8_t*>(storageComp);
 
     // --- Find the worker's index in this profession's array (raw 8-byte ptrs). ---
@@ -230,22 +168,21 @@ extern "C" void CitizenComponent_helper_a550(int64_t storageComp, int slotIndex,
     // --- Inert: building became empty -> clear status icon + tear down audio emitter. ---
     if (CitizenRoster_CountWorkers_129ff0(storageComp) == 0) {
         // Status-icon toggles (flags 6 and 7 off). MeshInstance may be null-wrapped.
-        if (s_fn_2f90 && s_fn_2c3f0) {
-            for (int flag = 6; flag <= 7; ++flag) {
-                int64_t meshIBP[2] = {0, 0};
-                s_fn_2f90(*reinterpret_cast<int64_t*>(s + 0x10), meshIBP);
-                if (meshIBP[0])
-                    s_fn_2c3f0(meshIBP[0], flag, 0);
-            }
+        for (int flag = 6; flag <= 7; ++flag) {
+            int64_t meshIBP[2] = {0, 0};
+            WorkBase_FindComponent_2f90(*reinterpret_cast<uintptr_t*>(s + 0x10), meshIBP);
+            if (meshIBP[0])
+                CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(meshIBP[0]),
+                                          static_cast<uint8_t>(flag), 0);
         }
         // Model refresh (variant 3 = idle/empty).
-        if (s_fn_2b70) {
-            s_fn_2b70(*reinterpret_cast<int64_t*>(s + 0x10), 3);
-        }
+        ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(s + 0x10), 3);
         // 3D positional audio teardown.
-        if (s_fn_2280) {
+        {
             int64_t emIBP[2] = {0, 0};
-            s_fn_2280(*reinterpret_cast<int64_t*>(s + 0x10), emIBP);
+            // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
+            // here (entity, emIBP). The null arm leaves emIBP null, so the teardown below
+            // does not run.
             int64_t emData = emIBP[0];
             void* scene = AudioScene();
             if (emData && scene) {
@@ -270,27 +207,26 @@ extern "C" void CitizenComponent_helper_a550(int64_t storageComp, int slotIndex,
 // grow-array append of the citizen ptr, then qsort the slot when it now holds >1 worker.
 // ============================================================
 extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex, void* selfIBP) {
-    EnsureFns();
     uint8_t* s = reinterpret_cast<uint8_t*>(storageComp);
 
     // --- Material reserve (guarded; the found component may be null-wrapped). ---
     int64_t matIBP[2] = {0, 0};
-    if (s_fn_3050) s_fn_3050(*reinterpret_cast<int64_t*>(s + 0x10), matIBP);
-    if (matIBP[0] && s_fn_ead0 && s_fn_ead0(matIBP[0])) {
-        if (s_fn_eb50) s_fn_eb50(matIBP[0]);
+    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), matIBP);
+    if (matIBP[0] && WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(matIBP[0]))) {
+        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(matIBP[0]));
     }
 
     // --- Inert: building was empty -> move emitter to model position + set volume. ---
     if (CitizenRoster_CountWorkers_129ff0(storageComp) == 0) {
         int64_t emIBP[2] = {0, 0};
-        if (s_fn_2280) {
-            s_fn_2280(*reinterpret_cast<int64_t*>(s + 0x10), emIBP);
-        }
+        // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
+        // here (entity, emIBP). The null arm leaves emIBP null, so the emitter block
+        // below does not run.
         // Model/transform position (guarded; component may be null-wrapped).
         float pos[3] = {0.0f, 0.0f, 0.0f};
-        if (s_fn_3f60) {
+        {
             int64_t mdlIBP[2] = {0, 0};
-            void* r = s_fn_3f60(*reinterpret_cast<int64_t*>(s + 0x10), mdlIBP);
+            void* r = ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), mdlIBP);
             int64_t modelComp = r ? *reinterpret_cast<int64_t*>(r) : 0;
             if (modelComp) {
                 pos[0] = *reinterpret_cast<float*>(modelComp + 0x158);
@@ -302,7 +238,10 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
         void* scene = AudioScene();
         if (emData) {
             const void* emPos = reinterpret_cast<const void*>(emData + 0x28);
-            char same = s_slot_Vec3Eq ? s_slot_Vec3Eq(pos, emPos) : 1;
+            (void)emPos;
+            // PORT GAP 0x140152a70 Math::Vector3::operator==: not ported; retail calls it
+            // here (pos, emPos). The null arm answers "equal".
+            char same = 1;
             if (!same) {
                 if (scene) {
                     int nEm = *reinterpret_cast<int*>(emData + 0x40);
@@ -319,12 +258,12 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
                 *reinterpret_cast<float*>(emData + 0x2c) = pos[1];
                 *reinterpret_cast<float*>(emData + 0x30) = pos[2];
             }
-            if (s_fn_42c60) s_fn_42c60(emData, 1);
+            FireComp_StartAudioEmitter_42c60(reinterpret_cast<void*>(emData), 1);
             int64_t desc = *reinterpret_cast<int64_t*>(emData + 0x38);
             if (*reinterpret_cast<uint32_t*>(desc + 0x10) == 0) {
                 *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
             } else {
-                float uv = s_p_uvScale ? *s_p_uvScale : 1.0f;
+                float uv = kRdata_14017214c;   // g_fUVScale 0x14017214c
                 if (*reinterpret_cast<float*>(desc + 0x14) != uv) {
                     *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
                     if (scene)
@@ -338,12 +277,11 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
 
     // --- FAITHFUL CORE: model refresh on first worker of this profession, then append. ---
     RosterRec* rec = Roster(storageComp, slotIndex);
-    if (rec->count == 0 && s_fn_2b70) {
-        s_fn_2b70(*reinterpret_cast<int64_t*>(s + 0x10), 2);   // variant 2 = staffed
+    if (rec->count == 0) {
+        ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(s + 0x10), 2);   // variant 2 = staffed
     }
     // Grow the slot array to count+1 and append the citizen pointer (*selfIBP).
-    if (s_fn_3110)
-        s_fn_3110(reinterpret_cast<int64_t*>(rec), rec->count + 1, selfIBP);
+    ActHunt_DynArraySetCount_3110(rec, rec->count + 1, selfIBP);
     // Re-read count (3110 updated it) and sort the slot when it holds >1 worker.
     int newCount = rec->count;
     if (newCount > 1)
@@ -360,7 +298,6 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
 // same assignment to every family member on the +0x260/+0x268 circular list.
 // ============================================================
 extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP, int slotIndex) {
-    EnsureFns();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
 
     int64_t* pWorkplace = reinterpret_cast<int64_t*>(self + 0x238);  // current workplace IBP
@@ -392,9 +329,9 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
     // --- Remove from the old workplace roster. ---
     if (*pWorkplace != 0) {
         int64_t storageIBP[2] = {0, 0};
-        if (s_fn_FindCompStorage) s_fn_FindCompStorage(*pWorkplace, storageIBP);
+        CitizenComp_Entity_FindComponent_Storage(*pWorkplace, storageIBP);
         int64_t selfIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) new (selfIBP) ::Object::InternalBasePtr(
+        new (selfIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         // Guard: a force-assigned / partially-built workplace may lack a Storage
         // component (null-wrapped IBP); the original relies on the invariant that an
@@ -410,9 +347,9 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
     // --- Add to the new workplace roster. ---
     if (*pWorkplace != 0) {
         int64_t storageIBP[2] = {0, 0};
-        if (s_fn_FindCompStorage) s_fn_FindCompStorage(*pWorkplace, storageIBP);
+        CitizenComp_Entity_FindComponent_Storage(*pWorkplace, storageIBP);
         int64_t selfIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) new (selfIBP) ::Object::InternalBasePtr(
+        new (selfIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         if (storageIBP[0] != 0)
             CitizenComponent_helper_a710(storageIBP[0], *pSlot, selfIBP);

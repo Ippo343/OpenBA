@@ -113,32 +113,11 @@
 #include <set>
 #include <vector>
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_constants.h"
 
 namespace {
-
-// ---- leaf helper typedefs --------------------------------------------------
-typedef void  (*fn_AssignHousing_t)(void* citizen, void* ibpArg);   // 0x140111ee0
-typedef void* (*fn_FindWorkplace_t)(int64_t entity, void* outIBP);  // 0x140002e10 member ABI
-typedef int   (*fn_CellOf_t)(void* entityIBP, float* outPos);       // 0x140087fb0
-
-fn_AssignHousing_t s_assignHousing = nullptr;
-fn_FindWorkplace_t s_findWorkplace = nullptr;
-fn_CellOf_t        s_cellOf        = nullptr;
-const float*       s_uvScale       = nullptr;
-bool               s_resolved      = false;
-
-template <class T> inline T R(uintptr_t a) {
-    return reinterpret_cast<T>(ResolveAddr(Module::Exe, a));
-}
-
-void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_assignHousing = R<fn_AssignHousing_t>(0x140111ee0);
-    s_findWorkplace = R<fn_FindWorkplace_t>(0x140002e10);
-    s_cellOf        = R<fn_CellOf_t>(0x140087fb0);
-    s_uvScale       = R<const float*>(0x14017214c);
-}
 
 // Path cost between two grid cells — self-contained equivalent of sub_6060
 // (0x1400d6060) minus its region-pair cache (a pure optimization that returns the
@@ -149,9 +128,10 @@ void EnsureResolved() {
 static const int kUnreachable = 0x1000000;
 int ComputeCost(int32_t* pathData, int fromCell, int toCell) {
     if (fromCell < 0 || toCell < 0) return kUnreachable;
-    if (fn_Map_CanPathTo &&
-        !fn_Map_CanPathTo(pathData, 0xe1f, static_cast<uint32_t>(fromCell),
-                          static_cast<uint32_t>(toCell)))
+    // The body returns its bool in the low byte of a uint64 (work_base_reimpl.cpp).
+    if (!static_cast<bool>(static_cast<uint8_t>(
+            WorkBase_ValidateCell_a00f0(pathData, 0xe1f, static_cast<uint32_t>(fromCell),
+                                        static_cast<int>(static_cast<uint32_t>(toCell))))))
         return kUnreachable;
 
     int W = pathData[0];
@@ -168,9 +148,8 @@ int ComputeCost(int32_t* pathData, int fromCell, int toCell) {
     int regionB = *reinterpret_cast<int*>(nav + 0x18 + static_cast<int64_t>(toCell)   * 0x30);
     if (regionA < 0 || regionB < 0) return euclid();
 
-    int cost = fn_Map_CalcPathCost
-                 ? fn_Map_CalcPathCost(pathData, static_cast<uint32_t>(fromCell), toCell, 0)
-                 : 0;
+    int cost = Pf_IsDstReachable_f810(pathData, static_cast<uint32_t>(fromCell),
+                                      static_cast<uint32_t>(toCell), 0);
     if (cost < 2) cost = euclid();
     return cost;
 }
@@ -196,19 +175,19 @@ inline bool IsIdleHealthy(void* citizenV) {
 
 // Find the workplace component inside an assigned entity (+0x248 value), or null.
 inline void* FindWorkplaceComp(void* entityRaw) {
-    if (!entityRaw || !s_findWorkplace) return nullptr;
+    if (!entityRaw) return nullptr;
     void* raw = entityRaw;
     int64_t outIBP[2] = {0, 0};
-    s_findWorkplace(reinterpret_cast<int64_t>(raw), outIBP);
+    AttendanceComponent_GetJobHostComponent(raw, outIBP);   // 0x140002e10
     void* comp = reinterpret_cast<void*>(outIBP[0]);
     return comp;
 }
 
 // Grid cell id of an entity (its Position component). Returns -1 when absent.
 inline int CellOfEntity(void* entityRaw) {
-    if (!entityRaw || !s_cellOf) return -1;
+    if (!entityRaw) return -1;
     void* raw = entityRaw;
-    return s_cellOf(&raw, nullptr);
+    return Pf_EntityAnchorCell_7fb0(&raw, nullptr);   // 0x140087fb0
 }
 
 // Phase-1/3 normalization: an idle citizen whose current workplace requires a
@@ -235,7 +214,7 @@ void NormalizeMismatched(void* citizenV, uintptr_t reg) {
     if (curProf == defaultKey && *reinterpret_cast<int64_t*>(c + 0x248) == 0) return;
 
     int64_t nullWp = 0;
-    if (s_assignHousing) s_assignHousing(citizenV, &nullWp);   // clear +0x248
+    CitizenComp_AssignHousing(static_cast<CitizenComponent*>(citizenV), &nullWp);   // clear +0x248
     *reinterpret_cast<int64_t*>(c + 0x1f0) = defaultKey;
 }
 
@@ -317,10 +296,6 @@ extern bool g_wpcRosterOnly;
 // ===========================================================================
 extern "C" void CitizenAssignCitizens(void* ctxV) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    EnsureResolved();
-    if (!s_assignHousing || !s_findWorkplace || !s_cellOf) {
-        return;
-    }
     (void)ctxV;   // ctx (PathGraph) — its cache is subsumed by ComputeCost
 
     uintptr_t gw  = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -332,7 +307,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     uintptr_t citArray = *reinterpret_cast<uintptr_t*>(townMgr + 0xa0);
     int       citCount = *reinterpret_cast<int32_t*>(townMgr + 0xa8);
     uintptr_t mapRoot  = *reinterpret_cast<uintptr_t*>(townMgr + 0x100);
-    float     uvScale  = s_uvScale ? *s_uvScale : 1.0f;
+    float     uvScale  = kRdata_14017214c;   // g_fUVScale 0x14017214c
 
     // Hold the roster-only guard for every AssignHousing call below (no early returns
     // remain past this point). Restored just before the trace/return.
@@ -423,7 +398,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         if (*reinterpret_cast<int64_t*>(c + 0x1f0) != reqProf ||
             *reinterpret_cast<int64_t*>(c + 0x248) != wpEntity) {
             int64_t wpArg = wpEntity;
-            s_assignHousing(citizen, &wpArg);                        // set +0x248 = workplace
+            CitizenComp_AssignHousing(static_cast<CitizenComponent*>(citizen), &wpArg);  // set +0x248 = workplace
             *reinterpret_cast<int64_t*>(c + 0x1f0) = reqProf;        // set profession
         }
 
@@ -475,7 +450,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
             // was an unguarded b310 in ConsumeProduce_Execute pausing the building
             // (see consumeproduce.cpp).
             int64_t nullWp = 0;
-            s_assignHousing(c, &nullWp);
+            CitizenComp_AssignHousing(static_cast<CitizenComponent*>(c), &nullWp);
             *reinterpret_cast<int64_t*>(cb + 0x1f0) = key;
         }
         idle.erase(idle.begin());

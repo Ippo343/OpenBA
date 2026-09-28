@@ -51,7 +51,7 @@
 //
 // Engine helpers (engine_funcs.h): fn_ObjectInternal_Ctor, fn_InternalBasePtr_Ctor,
 //   fn_InternalBasePtr_CheckPtr, fn_InternalBasePtr_DeletePtr, fn_Time_Ctor_Float,
-//   fn_MemAlloc(g_pMemAllocSingleton,size,8), g_pGameWorldSingleton.
+//   System::MemoryAllocator::MemAlloc(size, 8), g_pGameWorldSingleton.
 //
 // Action vtables (exe .rdata): vtable_Action 0x14015faa0, vtable_PerformWork 0x14015fea0,
 //   vtable_PlayAnimation 0x140158950 (all confirmed from the ctor disasm `LEA RAX,[...]`).
@@ -83,75 +83,24 @@
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include "system/Value.h"   // RtSystem_Time_Ctor
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
-// --- registered exe sub-callees (resolved via ResolveAddr) ---
-typedef void  (*fn_actCleanup_t)(int64_t* stackAt48);                                 // 0x1400c5400
-typedef void  (*fn_actPush_t)(int64_t* stackAt48, void* srcIBP);                      // 0x1400c54e0
-typedef void* (*fn_sendMsg_t)(void* mem, uint64_t* entityIBP, uint32_t* msgId,
-                              uint32_t a4, void* destIBP, uint32_t a6);               // 0x1400cb1d0
-typedef void* (*fn_moveTo_t)(void* self, void* familyIBP, uint32_t pathType, int a4,
-                             float* dest, int a6, int a7, float speed);              // 0x1400c9170
-typedef void* (*fn_completeTask_t)(void* mem, uint32_t p2, uint64_t* p3,
-                                   uint64_t* p4, uint32_t p5);                        // 0x1400c5da0
-typedef void* (*fn_findFamily_t)(uintptr_t entity, void* retIBP);                    // 0x1400012d0
-typedef float (*fn_entity29a0_t)(float* dest, void* entityIBP);                       // 0x1400c29a0
-typedef void* (*fn_dropOffRaw_t)(void* mem, uint64_t* p2, uint64_t* p3, uint64_t p4,
-                                 uint32_t p5, uint8_t p6);                            // 0x1400c7cd0
-typedef void* (*fn_consumeRaw_t)(void* mem, uint64_t* p2, int64_t p3, uint64_t p4,
-                                 uint8_t p5);                                          // 0x1400c63b0
-typedef void* (*fn_pickupStored_t)(void* mem, uint64_t* p2, uint64_t* p3, int64_t p4,
-                                   int p5, uint8_t p6);                               // 0x1400ca520
-typedef void* (*fn_showTool_t)(void* mem, void* p2, int p3);                          // 0x140042890
-
-static fn_actCleanup_t   s_fn_cleanup     = nullptr;
-static fn_actPush_t      s_fn_push        = nullptr;
-static fn_sendMsg_t      s_fn_sendMsg     = nullptr;
-static fn_moveTo_t       s_fn_moveTo      = nullptr;
-static fn_completeTask_t s_fn_completeTask= nullptr;
-static fn_findFamily_t   s_fn_findFamily  = nullptr;
-static fn_entity29a0_t   s_fn_entity29a0  = nullptr;
-static fn_dropOffRaw_t   s_fn_dropOffRaw  = nullptr;
-static fn_consumeRaw_t   s_fn_consumeRaw  = nullptr;
-static fn_pickupStored_t s_fn_pickupStored= nullptr;
-static fn_showTool_t     s_fn_showTool    = nullptr;
-
-
-// --- message targets: 70e8 (CitizenAIComponent) / 42c0 (HappinessComponent) are the
-//     PORT GAP constants of their class headers (ENDGAME B.3.9 CB). ---
-
-// --- float consts (exe .rdata) ---
-static const float* s_pf_172124 = nullptr;  // 0.75
-static const float* s_pf_172174 = nullptr;  // 2.0
-static const float* s_pf_172194 = nullptr;  // 4.0
-static const float* s_pf_172198 = nullptr;  // 5.0
-static const float* s_pf_17214c = nullptr;  // 1.0
-static const float* s_pf_172280 = nullptr;  // -1.0
-
-static bool s_init = false;
-static void EnsureInit() {
-    if (s_init) return;
-    s_fn_cleanup      = reinterpret_cast<fn_actCleanup_t  >(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_push         = reinterpret_cast<fn_actPush_t     >(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_fn_sendMsg      = reinterpret_cast<fn_sendMsg_t     >(ResolveAddr(Module::Exe, 0x1400cb1d0));
-    s_fn_moveTo       = reinterpret_cast<fn_moveTo_t      >(ResolveAddr(Module::Exe, 0x1400c9170));
-    s_fn_completeTask = reinterpret_cast<fn_completeTask_t>(ResolveAddr(Module::Exe, 0x1400c5da0));
-    s_fn_findFamily   = reinterpret_cast<fn_findFamily_t  >(ResolveAddr(Module::Exe, 0x1400012d0));
-    s_fn_entity29a0   = reinterpret_cast<fn_entity29a0_t  >(ResolveAddr(Module::Exe, 0x1400c29a0));
-    s_fn_dropOffRaw   = reinterpret_cast<fn_dropOffRaw_t  >(ResolveAddr(Module::Exe, 0x1400c7cd0));
-    s_fn_consumeRaw   = reinterpret_cast<fn_consumeRaw_t  >(ResolveAddr(Module::Exe, 0x1400c63b0));
-    s_fn_pickupStored = reinterpret_cast<fn_pickupStored_t>(ResolveAddr(Module::Exe, 0x1400ca520));
-    s_fn_showTool     = reinterpret_cast<fn_showTool_t    >(ResolveAddr(Module::Exe, 0x140042890));
-    s_pf_172124 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
-    s_pf_172174 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172174));
-    s_pf_172194 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172194));
-    s_pf_172198 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172198));
-    s_pf_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pf_172280 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
-    s_init = true;
-}
-
+// Registered exe sub-callees, called by name: WorkBase_TaskListCleanup_c5400 0x1400c5400,
+// Pf_ActStackPush_54e0 0x1400c54e0, Pf_SendComponentMessageCopyCtor_b1d0 0x1400cb1d0,
+// Pf_MoveToCtor_9170 0x1400c9170, Pf_CompleteTaskCopyCtor_5da0 0x1400c5da0,
+// ActMv_FindComponentFamily_12d0 0x1400012d0, ActChild_Entity29a0_c29a0 0x1400c29a0,
+// ActChild_DropOffRawCopyCtor_c7cd0 0x1400c7cd0, ActChild_ConsumeRawCopyCtor_c63b0
+// 0x1400c63b0, ActChild_PickupStoredCopyCtor_ca520 0x1400ca520,
+// ActChild_ShowToolCtor_42890 0x140042890. Message targets: 70e8 (CitizenAIComponent) /
+// 42c0 (HappinessComponent) are the PORT GAP constants of their class headers
+// (ENDGAME B.3.9 CB). The .rdata floats are exe_constants.h's kRdata_140172124 (0.75),
+// _140172174 (2.0), _140172194 (4.0), _140172198 (5.0), _14017214c (1.0), _140172280 (-1.0).
 
 // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7158 is CitizenComponent's registered
 // type-id cell (INVENTORY_C Table 1); it always holds CitizenComponent's id after
@@ -161,9 +110,8 @@ static void EnsureInit() {
 static inline uint32_t MsgId7158() {
     return CitizenComponent::TypeId();
 }
-static inline float    Fc(const float* p, float dflt) { return p ? *p : dflt; }
 static inline void*    MemA(uint64_t sz) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, sz, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc(sz, 8);
 }
 
 // Build a raw inline PerformWork action at `mem` (0x48 bytes). animIdx is the XMM float
@@ -189,7 +137,7 @@ static int64_t* PrologueResolveStack(void* param_1, int64_t* outChar, bool doCle
     int64_t ch = *reinterpret_cast<int64_t*>(self + 0x278);
     *outChar = ch;
     int64_t* stack = reinterpret_cast<int64_t*>(ch + 0x48);
-    if (doCleanup && s_fn_cleanup) s_fn_cleanup(stack);
+    if (doCleanup) WorkBase_TaskListCleanup_c5400(stack);
     return stack;
 }
 
@@ -200,16 +148,16 @@ static void InstallLeadMessage(void* param_1, int64_t ch) {
     void* act = nullptr;
     if (mem) {
         int64_t destIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-        act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 0, &destIBP, 0) : mem;
+        act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0);
     }
     int64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+    new (&ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
     if (*reinterpret_cast<int64_t*>(ch + 0x58) != 0) {
-        if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(ch + 0x58))->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(ch + 0x58))->DeletePtr(
             );   // B.3.3 bridge
     }
     *reinterpret_cast<int64_t*>(ch + 0x58) = ibp;
@@ -222,14 +170,14 @@ static void PushMoveTo(void* param_1, int64_t* stack, uint32_t pathType, float* 
     if (mem) {
         int64_t entityVal = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
         int64_t fam = 0;
-        if (s_fn_findFamily) s_fn_findFamily(static_cast<uintptr_t>(entityVal), &fam);
-        float speed = Fc(s_pf_172280, -1.0f);
-        act = s_fn_moveTo ? s_fn_moveTo(mem, &fam, pathType, 0, dest, mask, 0, speed) : mem;
+        ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entityVal), &fam);
+        float speed = kRdata_140172280;
+        act = Pf_MoveToCtor_9170(mem, &fam, pathType, 0, dest, mask, 0, speed);
     }
     int64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+    new (&ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-    if (s_fn_push) s_fn_push(stack, &ibp);
+    Pf_ActStackPush_54e0(stack, &ibp);
 }
 
 // Locate the storage-limit component (GetTypeId == DWORD_1401c7cb8) on the entity-list
@@ -248,7 +196,7 @@ static void* FindLimitComponent(int64_t listObj) {
             if (tid == want) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(listObj + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + static_cast<int64_t>(idx) * 8);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(match, want))
+                if (Object::IsDerivedFromNullSafe(match, want))
                     found = match;
                 break;
             }
@@ -280,14 +228,13 @@ namespace { static const int kShowToolAxeArg = static_cast<int>(0xfffffffe); }
 
 void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* param_3,
                                       int param_4, uint8_t param_5, uint32_t param_6) {
-    EnsureInit();
     int64_t ch = 0;
     // Ctor4 gates BOTH the stack cleanup and the lead block behind param_6 (disasm:
     // `CMP byte[RBP+0x68],DIL; JZ` skips cleanup + lead to the cell-flags math).
     int64_t* stack = PrologueResolveStack(param_1, &ch, /*doCleanup=*/false);
 
     if (static_cast<char>(param_6) != '\0') {
-        if (s_fn_cleanup) s_fn_cleanup(stack);
+        WorkBase_TaskListCleanup_c5400(stack);
         // lead SendComponentMessage -> CharacterComponent+0x58
         InstallLeadMessage(param_1, ch);
         // DropOffRaw action (also stored at +0x58, replacing the message) — faithful: the
@@ -296,15 +243,15 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
         void* act = nullptr;
         if (mem) {
             int64_t destIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_1);  // *(undefined8*)param_1
-            act = s_fn_dropOffRaw ? s_fn_dropOffRaw(mem, &entityIBP, reinterpret_cast<uint64_t*>(&destIBP),
-                                                    0, 0xffffffff, param_5) : mem;
+            act = ActChild_DropOffRawCopyCtor_c7cd0(mem, &entityIBP, reinterpret_cast<uint64_t*>(&destIBP),
+                                                    0, 0xffffffff, param_5);
         }
         int64_t ibp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 
     // work mask bit from the cell flags byte
@@ -318,7 +265,7 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
     uint32_t animIdx = 0;
     {
         int64_t targetIBP = target;
-        float f = s_fn_entity29a0 ? s_fn_entity29a0(param_3, &targetIBP) : 0.0f;
+        float f = ActChild_Entity29a0_c29a0(param_3, &targetIBP);
         animIdx = *reinterpret_cast<uint32_t*>(&f);
     }
 
@@ -327,12 +274,12 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_172124, 0.75f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_140172124);
             InitPerformWork(mem, entityVal, animIdx, 7, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // ShowTool (equip)
     {
@@ -340,11 +287,11 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
         void* act = nullptr;
         if (mem) {
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_1);
-            act = s_fn_showTool ? s_fn_showTool(mem, &entityIBP, kShowToolAxeArg) : mem;
+            act = ActChild_ShowToolCtor_42890(mem, &entityIBP, kShowToolAxeArg);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // DropOffRaw
     {
@@ -353,23 +300,23 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
         if (mem) {
             uint64_t targetIBP = *reinterpret_cast<uint64_t*>(param_2);
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_1);
-            act = s_fn_dropOffRaw ? s_fn_dropOffRaw(mem, &entityIBP, &targetIBP, 0, 0xffffffff, param_5) : mem;
+            act = ActChild_DropOffRawCopyCtor_c7cd0(mem, &entityIBP, &targetIBP, 0, 0xffffffff, param_5);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // PerformWork (type 6) @0.75s
     {
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_172124, 0.75f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_140172124);
             InitPerformWork(mem, entityVal, animIdx, 6, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // MoveTo (Faster=4, disasm `LEA R8D,[R9+0x4]`) with mask = (1<<bit)|0xe1f
     PushMoveTo(param_1, stack, 4 /*Faster*/, param_3, (1 << (bit & 0x1f)) | 0xe1f);
@@ -379,11 +326,11 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
         void* act = nullptr;
         if (mem) {
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_1);
-            act = s_fn_showTool ? s_fn_showTool(mem, &entityIBP, kShowToolAxeArg) : mem;
+            act = ActChild_ShowToolCtor_42890(mem, &entityIBP, kShowToolAxeArg);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 }
 
@@ -396,7 +343,6 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
 //   param_4 = entity-list object (for the limit scan + ConsumeRaw resType list).
 // ============================================================
 void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* param_3, int64_t param_4) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -404,7 +350,7 @@ void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* p
     uint32_t animIdx;
     {
         uint64_t srcIBP = *param_2;
-        float f = s_fn_entity29a0 ? s_fn_entity29a0(param_3, &srcIBP) : 0.0f;
+        float f = ActChild_Entity29a0_c29a0(param_3, &srcIBP);
         animIdx = *reinterpret_cast<uint32_t*>(&f);
     }
 
@@ -416,15 +362,15 @@ void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* p
         void* act = nullptr;
         if (mem) {
             int64_t destIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = MsgId7158();
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
             uint32_t a6 = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(limit) + 0x54);
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 1, &destIBP, a6) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, 1, reinterpret_cast<uint64_t*>(&destIBP), a6);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // ConsumeRaw(resType list = *param_2, list = param_4, flag a4=1?  see disasm: param_4(arg) is `param_4=1` byte)
     {
@@ -432,23 +378,23 @@ void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* p
         void* act = nullptr;
         if (mem) {
             uint64_t resType = *param_2;  // local_res10 = *local_res10
-            act = s_fn_consumeRaw ? s_fn_consumeRaw(mem, &resType, param_4, 1, 1) : mem;
+            act = ActChild_ConsumeRawCopyCtor_c63b0(mem, &resType, param_4, 1, 1);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // PerformWork (type 8) @1.0s
     {
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_17214c, 1.0f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_14017214c);
             InitPerformWork(mem, entityVal, animIdx, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // MoveTo (Slow=1) mask 0xe1f
     PushMoveTo(param_1, stack, 1 /*Slow*/, param_3, 0xe1f);
@@ -463,7 +409,6 @@ void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* p
 //   param_4 = "first message" flag byte.
 // ============================================================
 void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* param_3, char param_4) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -471,7 +416,7 @@ void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* pa
     uint32_t animIdx;
     {
         int64_t targetIBP = *param_2;
-        float f = s_fn_entity29a0 ? s_fn_entity29a0(param_3, &targetIBP) : 0.0f;
+        float f = ActChild_Entity29a0_c29a0(param_3, &targetIBP);
         animIdx = *reinterpret_cast<uint32_t*>(&f);
     }
 
@@ -483,11 +428,11 @@ void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* pa
             uint64_t destIBP = *reinterpret_cast<uint64_t*>(param_2);  // local_res8 = *param_2
             uint32_t msgId = MsgId7158();
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, a4, &destIBP, 0) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, a4, reinterpret_cast<uint64_t*>(&destIBP), 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     };
 
     if (param_4 != '\0') pushMsg7158(0);
@@ -498,12 +443,12 @@ void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* pa
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_172174, 2.0f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_140172174);
             InitPerformWork(mem, entityVal, animIdx, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     PushMoveTo(param_1, stack, 1 /*Slow*/, param_3, 0xe1f);
 }
@@ -515,7 +460,6 @@ void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* pa
 //   param_1 = CitizenComponent IBP ; param_2 = &targetEntityIBP ; param_3 = float* dest.
 // ============================================================
 void CitizenAI_PerformWorkCtor8_bd790(void* param_1, uint64_t* param_2, float* param_3) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -528,23 +472,23 @@ void CitizenAI_PerformWorkCtor8_bd790(void* param_1, uint64_t* param_2, float* p
             uint64_t destIBP = *param_2;
             uint32_t msgId = MsgId7158();
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 0, &destIBP, 0) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // PerformWork (type 8) animIdx = 0xc47a0000 literal, time 4.0
     {
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_172194, 4.0f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_140172194);
             InitPerformWork(mem, entityVal, 0xc47a0000u, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     PushMoveTo(param_1, stack, 1 /*Slow*/, param_3, 0xe1f);
 }
@@ -559,7 +503,6 @@ void CitizenAI_PerformWorkCtor8_bd790(void* param_1, uint64_t* param_2, float* p
 //   param_4 = entity-list object.
 // ============================================================
 void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* param_3, uint64_t param_4) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -567,7 +510,7 @@ void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* 
     uint32_t animIdx;
     {
         uint64_t srcIBP = *param_2;
-        float f = s_fn_entity29a0 ? s_fn_entity29a0(param_3, &srcIBP) : 0.0f;
+        float f = ActChild_Entity29a0_c29a0(param_3, &srcIBP);
         animIdx = *reinterpret_cast<uint32_t*>(&f);
     }
 
@@ -581,14 +524,14 @@ void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* 
         void* act = nullptr;
         if (mem) {
             int64_t destIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = MsgId7158();
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, a4, &destIBP, 0) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, a4, reinterpret_cast<uint64_t*>(&destIBP), 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // ConsumeRaw(resType=*param_2, list=param_4, flag=a4)
     {
@@ -596,23 +539,23 @@ void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* 
         void* act = nullptr;
         if (mem) {
             uint64_t resType = *param_2;
-            act = s_fn_consumeRaw ? s_fn_consumeRaw(mem, &resType, static_cast<int64_t>(param_4), a4, 1) : mem;
+            act = ActChild_ConsumeRawCopyCtor_c63b0(mem, &resType, static_cast<int64_t>(param_4), a4, 1);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // PerformWork (type 8) @1.0s
     {
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_17214c, 1.0f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_14017214c);
             InitPerformWork(mem, entityVal, animIdx, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     PushMoveTo(param_1, stack, 1 /*Slow*/, param_3, 0xe1f);
 }
@@ -630,7 +573,6 @@ void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* 
 // ============================================================
 void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* param_3,
                                        float* param_4, int64_t* param_5, float* param_6) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -638,12 +580,12 @@ void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* 
     uint32_t animIdxA, animIdxB;
     {
         int64_t srcIBP = *param_3;
-        float f = s_fn_entity29a0 ? s_fn_entity29a0(param_4, &srcIBP) : 0.0f;
+        float f = ActChild_Entity29a0_c29a0(param_4, &srcIBP);
         animIdxA = *reinterpret_cast<uint32_t*>(&f);
     }
     {
         int64_t dstIBP = *param_5;
-        float f = s_fn_entity29a0 ? s_fn_entity29a0(param_6, &dstIBP) : 0.0f;
+        float f = ActChild_Entity29a0_c29a0(param_6, &dstIBP);
         animIdxB = *reinterpret_cast<uint32_t*>(&f);
     }
 
@@ -653,14 +595,14 @@ void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* 
         void* act = nullptr;
         if (mem) {
             int64_t destIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = MsgId7158();
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 3, &destIBP, 0) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, 3, reinterpret_cast<uint64_t*>(&destIBP), 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // ConsumeRaw(entity=*param_1.entity, list=param_2, flag=3, reserve=0)
     {
@@ -668,23 +610,23 @@ void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* 
         void* act = nullptr;
         if (mem) {
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            act = s_fn_consumeRaw ? s_fn_consumeRaw(mem, &entityIBP, param_2, 3, 0) : mem;
+            act = ActChild_ConsumeRawCopyCtor_c63b0(mem, &entityIBP, param_2, 3, 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // PerformWork (type 8) animIdxB @5.0s
     {
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_172198, 5.0f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_140172198);
             InitPerformWork(mem, entityVal, animIdxB, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // MoveTo(Slow) dest = param_6
     PushMoveTo(param_1, stack, 1 /*Slow*/, param_6, 0xe1f);
@@ -695,23 +637,23 @@ void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* 
         if (mem) {
             uint64_t srcIBP = *reinterpret_cast<uint64_t*>(param_3);
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_1);
-            act = s_fn_pickupStored ? s_fn_pickupStored(mem, &entityIBP, &srcIBP, param_2, 1, 0) : mem;
+            act = ActChild_PickupStoredCopyCtor_ca520(mem, &entityIBP, &srcIBP, param_2, 1, 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // PerformWork (type 8) animIdxA @1.0s
     {
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_17214c, 1.0f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_14017214c);
             InitPerformWork(mem, entityVal, animIdxA, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // MoveTo(Slow) dest = param_4
     PushMoveTo(param_1, stack, 1 /*Slow*/, param_4, 0xe1f);
@@ -726,7 +668,6 @@ void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* 
 // ============================================================
 void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2,
                                             uint32_t* param_3, uint8_t /*param_4*/) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -736,12 +677,12 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2,
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, Fc(s_pf_172198, 5.0f));
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), kRdata_140172198);
             InitPerformWork(mem, entityVal, 0xc47a0000u, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // SendComponentMessage(7158, a4=0) toward *param_2
     {
@@ -751,11 +692,11 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2,
             uint64_t destIBP = *reinterpret_cast<uint64_t*>(param_2);
             uint32_t msgId = MsgId7158();
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 0, &destIBP, 0) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     PushMoveTo(param_1, stack, 1 /*Slow*/, reinterpret_cast<float*>(param_3), 0xe1f);
 }
@@ -770,7 +711,6 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2,
 // ============================================================
 void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, uint32_t* param_3,
                                              uint32_t param_4, float param_5, uint32_t param_6) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -781,36 +721,36 @@ void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, ui
             void* mem = MemA(0x38);
             if (mem) {
                 int64_t destIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_1);  // local_48 = *param_1
-                act = s_fn_completeTask ? s_fn_completeTask(mem, param_2, &entityIBP,
-                                                            reinterpret_cast<uint64_t*>(&destIBP), 0) : mem;
+                act = Pf_CompleteTaskCopyCtor_5da0(mem, param_2, &entityIBP,
+                                                            reinterpret_cast<uint64_t*>(&destIBP), 0);
             }
         } else {
             void* mem = MemA(0x40);
             if (mem) {
                 int64_t destIBP = 0;
-                if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 uint32_t msgId = MsgId7158();
                 uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-                act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, param_4, &destIBP, 0) : mem;
+                act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, param_4, reinterpret_cast<uint64_t*>(&destIBP), 0);
             }
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // PerformWork (type 8) animIdx 0xc47a0000, time = param_5
     {
         void* mem = MemA(0x48);
         if (mem) {
             uint64_t entityVal = *reinterpret_cast<uint64_t*>(param_1);
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, param_5);
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), param_5);
             InitPerformWork(mem, entityVal, 0xc47a0000u, 8, t);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     PushMoveTo(param_1, stack, 1 /*Slow*/, reinterpret_cast<float*>(param_3), 0xe1f);
 }
@@ -826,7 +766,6 @@ void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, ui
 // ============================================================
 void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_t* param_3,
                                         float param_4, uint32_t param_5) {
-    EnsureInit();
     int64_t ch = 0;
     int64_t* stack = PrologueResolveStack(param_1, &ch);
     InstallLeadMessage(param_1, ch);
@@ -837,14 +776,14 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
         void* act = nullptr;
         if (mem) {
             int64_t destIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = MsgId7158();
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 8, &destIBP, 0) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, 8, reinterpret_cast<uint64_t*>(&destIBP), 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // optional SendComponentMessage(DAT_1401c42c0, dest=*param_2)
     if (*param_2 != 0) {
@@ -852,20 +791,20 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
         void* act = nullptr;
         if (mem) {
             int64_t destIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             uint32_t msgId = kHappinessMessageTargetTypeId;  // PORT GAP: HappinessComponent::OnMessage (see HappinessComponent.h)
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_2);  // local_res10 = *param_2
-            act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 0, &destIBP, 0) : mem;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, &msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0);
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(act));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     // raw inline PlayAnimation action (0x40 bytes)
     {
         void* mem = MemA(0x40);
         if (mem) {
-            uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, param_4);
+            uint64_t t = 0; RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), param_4);
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
             // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
             // two stamps); then retail's inlined leaf stores.
@@ -875,9 +814,9 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
             *reinterpret_cast<uint64_t*>(&a->_field30) = t;
             a->_field38                                 = nullptr;
         }
-        int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-        if (s_fn_push) s_fn_push(stack, &ibp);
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
     PushMoveTo(param_1, stack, 1 /*Slow*/, reinterpret_cast<float*>(param_3), 0xe1f);
 }

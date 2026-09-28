@@ -46,11 +46,10 @@ SelectDescription::SelectDescription()
 
 // [5] 0x140055630: stream order as retail.
 bool SelectDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_Serialize(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     _s28.Serialize(&ser);
-    fn_ExternalPtr_Serialize2(&_ref30, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
     _s38.Serialize(&ser);
     ser.Serialize(_u40, nullptr);
     return true;

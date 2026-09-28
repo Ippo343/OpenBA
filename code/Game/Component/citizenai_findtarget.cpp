@@ -57,25 +57,12 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
 
 namespace {
 
-// --- registered exe sub-callees (resolved lazily via ResolveAddr) ---
-typedef uint32_t (*fn_7fb0_t)(void* ibpOut, float* p2);                       // 0x140087fb0
-typedef int      (*fn_f810_t)(int* mapGrid, uint32_t fromCell, uint32_t toCell, char addCache); // 0x14009f810
-typedef int      (*fn_edb0_t)(int64_t entity, uint32_t goalCell, float* outVec3); // 0x14004edb0
-typedef void     (*fn_ef40_t)(int* mapGrid, int64_t* outRes, void* ibp, uint32_t cat); // 0x14008ef40
-typedef int      (*fn_d5d0_t)(int64_t entity, uint32_t goalCell, float* outVec3, uint64_t ctx); // 0x14012d5d0
-typedef float    (*fn_sqrtf_t)(float v);                                      // 0x140132010
-typedef void*    (*fn_findStorage_t)(int64_t entity, void* outIBP);           // 0x140006270
-
-static fn_7fb0_t        s_fn_7fb0        = nullptr;
-static fn_f810_t        s_fn_f810        = nullptr;
-static fn_edb0_t        s_fn_edb0        = nullptr;
-static fn_ef40_t        s_fn_ef40        = nullptr;
-static fn_d5d0_t        s_fn_d5d0        = nullptr;
-static fn_sqrtf_t       s_fn_sqrtf       = nullptr;
-static fn_findStorage_t s_fn_findStorage = nullptr;
+// --- registered exe sub-callees: called by name (Component/Action/Work exe_bodies.h) ---
 
 // --- type ids (self-contained via GetTypeIdByName; see header note) ---
 static uint32_t s_tid_RadiusDescription      = 0;  // DWORD_1401c4870
@@ -87,13 +74,6 @@ static uint32_t s_tid_MarketLocationComp     = 0;  // DAT_1401c4560
 static bool s_init = false;
 static void EnsureInit() {
     if (s_init) return;
-    s_fn_7fb0        = reinterpret_cast<fn_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_fn_f810        = reinterpret_cast<fn_f810_t>(ResolveAddr(Module::Exe, 0x14009f810));
-    s_fn_edb0        = reinterpret_cast<fn_edb0_t>(ResolveAddr(Module::Exe, 0x14004edb0));
-    s_fn_ef40        = reinterpret_cast<fn_ef40_t>(ResolveAddr(Module::Exe, 0x14008ef40));
-    s_fn_d5d0        = reinterpret_cast<fn_d5d0_t>(ResolveAddr(Module::Exe, 0x14012d5d0));
-    s_fn_sqrtf       = reinterpret_cast<fn_sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_fn_findStorage = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
 
     if (s_tid_RadiusDescription == 0)      s_tid_RadiusDescription      = RadiusDescription::TypeId();
     if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = RawMaterialDescription::TypeId();
@@ -133,7 +113,7 @@ void* CitizenAI_sub_78c0(int64_t param_1, void* param_2) {
                 int64_t* ibp2 = reinterpret_cast<int64_t*>(
                     *reinterpret_cast<int64_t*>(param_1 + 0x30) + static_cast<int64_t>(i) * 8);
                 void* cand = reinterpret_cast<void*>(*ibp2);
-                if (cand && fn_IsDerivedFrom && fn_IsDerivedFrom(cand, tid)) {
+                if (cand && Object::IsDerivedFromNullSafe(cand, tid)) {
                     ptr = cand;
                 }
                 goto done;
@@ -144,7 +124,7 @@ void* CitizenAI_sub_78c0(int64_t param_1, void* param_2) {
     }
     ptr = nullptr;
 done:
-    if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(
+    new (param_2) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
     return param_2;
 }
@@ -188,7 +168,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
         do {
             int64_t local_a0 = *reinterpret_cast<int64_t*>(lVar21 + param_1[2]);  // candidate entity
             int64_t local_90 = local_a0;                                         // IBP scratch
-            uint32_t cell = s_fn_7fb0 ? s_fn_7fb0(&local_90, nullptr) : 0;        // entity -> cell idx
+            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_90, nullptr);        // entity -> cell idx
 
             // -- find RadiusDescription (DWORD_1401c4870) in candidate component-list2 (+0x28) --
             int64_t lVar16 = *reinterpret_cast<int64_t*>(local_a0 + 0x28);
@@ -202,7 +182,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                     if (CompTypeId(compSlot) == s_tid_RadiusDescription) {
                         void* c = reinterpret_cast<void*>(
                             *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar16 + 0x28) + off * 8));
-                        if (c && fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid_RadiusDescription))
+                        if (c && Object::IsDerivedFromNullSafe(c, s_tid_RadiusDescription))
                             pvVar12 = c;
                         break;
                     }
@@ -214,31 +194,31 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
             // -- compute whether candidate is within the "B" (param_4) distance band --
             bool bVar5 = false;
             if (-1 < static_cast<int>(param_4)) {
-                int iVar8 = s_fn_f810 ? s_fn_f810(local_80, cell, param_4, '\x01') : -1;
+                int iVar8 = Pf_IsDstReachable_f810(local_80, cell, param_4, '\x01');
                 if (iVar8 < 0) {
                     int w = *local_80;
                     int dRow = static_cast<int>(cell) / w - static_cast<int>(param_4) / w;
                     int dCol = static_cast<int>(cell) % w - static_cast<int>(param_4) % w;
-                    float r = s_fn_sqrtf ? s_fn_sqrtf(static_cast<float>(dRow * dRow + dCol * dCol)) : 0.0f;
+                    float r = WorkImpl_Sqrtf_132010(static_cast<float>(dRow * dRow + dCol * dCol));
                     iVar8 = static_cast<int>(r) + w;
                 }
                 bVar5 = (iVar8 <= iVar15);
             }
 
             // -- compute path cost from candidate to the "A" (param_3) goal cell --
-            int iVar15cost = s_fn_f810 ? s_fn_f810(local_80, cell, param_3, '\x01') : -1;
+            int iVar15cost = Pf_IsDstReachable_f810(local_80, cell, param_3, '\x01');
             if (iVar15cost < 0) {
                 int w = *local_80;
                 int dRow = static_cast<int>(cell) / w - static_cast<int>(param_3) / w;
                 int dCol = static_cast<int>(cell) % w - static_cast<int>(param_3) % w;
-                float r = s_fn_sqrtf ? s_fn_sqrtf(static_cast<float>(dRow * dRow + dCol * dCol)) : 0.0f;
+                float r = WorkImpl_Sqrtf_132010(static_cast<float>(dRow * dRow + dCol * dCol));
                 iVar15cost = static_cast<int>(r) + w;
             }
 
             if (iVar15cost < local_a8_best) {
                 local_90 = local_a0;
                 int64_t local_88 = 0;
-                if (s_fn_ef40) s_fn_ef40(local_80, &local_88, &local_90, param_7);  // pick free slot
+                CitizenComp_Entity_impl_ef40(local_80, &local_88, &local_90, param_7);  // pick free slot
                 if (local_88 != 0) {
                     uint32_t newFlag = local_98_flag & 0xff;
                     if (bVar5) newFlag = 1;
@@ -248,7 +228,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                     int64_t local_50_ibp[2] = {0, 0};
                     void* pIVar10 = CitizenAI_sub_78c0(local_a0, local_50_ibp);  // find MarketLocationComponent
                     int64_t marketComp = *reinterpret_cast<int64_t*>(pIVar10);
-                    int cost = (marketComp && s_fn_edb0) ? s_fn_edb0(marketComp, param_3, local_78) : -1;
+                    int cost = (marketComp) ? Pf_PickReachableCell_edb0(marketComp, param_3, local_78) : -1;
                     if ((-1 < cost) && (cost < local_a8_best)) {
                         *param_2 = local_a0;
                         param_6[0] = local_78[0];
@@ -277,15 +257,15 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
         do {
             int64_t local_a0 = *reinterpret_cast<int64_t*>(lVarItr + *param_1);  // candidate entity
             int64_t local_58 = local_a0;                                        // IBP scratch
-            uint32_t cell = s_fn_7fb0 ? s_fn_7fb0(&local_58, nullptr) : 0;
+            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_58, nullptr);
 
             // path cost candidate -> param_3
-            int iVar8 = s_fn_f810 ? s_fn_f810(local_80, cell, param_3, '\x01') : -1;
+            int iVar8 = Pf_IsDstReachable_f810(local_80, cell, param_3, '\x01');
             if (iVar8 < 0) {
                 int w = *local_80;
                 int dRow = static_cast<int>(cell) / w - static_cast<int>(param_3) / w;
                 int dCol = static_cast<int>(cell) % w - static_cast<int>(param_3) % w;
-                float r = s_fn_sqrtf ? s_fn_sqrtf(static_cast<float>(dRow * dRow + dCol * dCol)) : 0.0f;
+                float r = WorkImpl_Sqrtf_132010(static_cast<float>(dRow * dRow + dCol * dCol));
                 iVar8 = static_cast<int>(r) + w;
             }
 
@@ -293,7 +273,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                 uint64_t uVar19 = static_cast<uint64_t>(param_7);  // ctx forwarded to d5d0
                 local_58 = local_a0;
                 int64_t local_50[2] = {0, 0};
-                if (s_fn_ef40) s_fn_ef40(local_80, local_50, &local_58, param_7);  // pick free slot
+                CitizenComp_Entity_impl_ef40(local_80, local_50, &local_58, param_7);  // pick free slot
                 int64_t lVar21 = local_50[0];
                 if (local_50[0] != 0) {
                     // -- find RawMaterialDescription (DWORD_1401c7cb8) in slot's list (lVar21+0x28) --
@@ -307,7 +287,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                             if (CompTypeId(compSlot) == s_tid_RawMaterialDescription) {
                                 void* c = reinterpret_cast<void*>(
                                     *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar21 + 0x28) + off * 8));
-                                if (c && fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid_RawMaterialDescription))
+                                if (c && Object::IsDerivedFromNullSafe(c, s_tid_RawMaterialDescription))
                                     pvVar12 = c;
                                 break;
                             }
@@ -327,7 +307,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                             if (comp && CompTypeId(comp) == s_tid_StorageLocationComp) {
                                 int64_t* slot2 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar16 + 0x30) + off * 8);
                                 void* c = reinterpret_cast<void*>(*slot2);
-                                if (c && fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid_StorageLocationComp))
+                                if (c && Object::IsDerivedFromNullSafe(c, s_tid_StorageLocationComp))
                                     pvVar14 = c;
                                 break;
                             }
@@ -336,19 +316,19 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                     }
 
                     int64_t local_98_ibp = 0;  // CONCAT44(uStack_94, local_98) — IBP for pvVar14
-                    if (fn_InternalBasePtr_Ctor) new (&local_98_ibp) ::Object::InternalBasePtr(
+                    new (&local_98_ibp) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(pvVar14));   // B.3.3 bridge
 
                     if (local_98_ibp != 0) {
                         int64_t lVarComp = local_98_ibp;
                         // IsDerivedFrom((found+0x18), StorageLocationDescription) -> read +0x20 mask
                         void* sub = *reinterpret_cast<void**>(lVarComp + 0x18);
-                        void* derived = (sub && fn_IsDerivedFrom && fn_IsDerivedFrom(sub, s_tid_StorageLocationDesc)) ? sub : nullptr;
+                        void* derived = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_StorageLocationDesc)) ? sub : nullptr;
                         uint32_t mask = derived ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(derived) + 0x20) : 0;
                         if (mask == 0) {
                             // fall back to Entity_FindComponent_Storage(found+0x10)->+0x3c
                             float local_78s[4] = {0,0,0,0};
-                            void* pIVar10 = s_fn_findStorage ? s_fn_findStorage(*reinterpret_cast<int64_t*>(lVarComp + 0x10), local_78s) : nullptr;
+                            void* pIVar10 = WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(lVarComp + 0x10), local_78s);
                             int64_t stor = pIVar10 ? *reinterpret_cast<int64_t*>(pIVar10) : 0;
                             // [M-D SCOPED FALLBACK] the registered 6270-family finder reads
                             // dead .rdata typeid 0x1401c7e78 (unregistered in standalone) ->
@@ -388,7 +368,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                                     if (comp && CompTypeId(comp) == s_tid_StorageLocationComp) {
                                         int64_t* slot2 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lVar16b + 0x30) + off * 8);
                                         void* c = reinterpret_cast<void*>(*slot2);
-                                        if (c && fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid_StorageLocationComp))
+                                        if (c && Object::IsDerivedFromNullSafe(c, s_tid_StorageLocationComp))
                                             pvVar12b = c;
                                         break;
                                     }
@@ -397,10 +377,10 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                             }
 
                             int64_t local_88_ibp = 0;
-                            if (fn_InternalBasePtr_Ctor) new (&local_88_ibp) ::Object::InternalBasePtr(
+                            new (&local_88_ibp) ::Object::InternalBasePtr(
                                 reinterpret_cast<RtObject::Internal*>(pvVar12b));   // B.3.3 bridge
                             int64_t costSrc = local_88_ibp;
-                            int cost = (costSrc && s_fn_d5d0) ? s_fn_d5d0(costSrc, param_3, local_68, uVar19) : -1;
+                            int cost = (costSrc) ? Pf_FindBestAdjacentCell_d5d0(costSrc, param_3, local_68, uVar19) : -1;
                             if ((-1 < cost) && (cost < local_a8_best)) {
                                 *param_2 = local_a0;
                                 param_6[0] = local_68[0];

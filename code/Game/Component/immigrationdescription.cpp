@@ -33,6 +33,8 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 #include <cstdint>
 #include <new>
 
@@ -71,21 +73,20 @@ ImmigrationDescription::ImmigrationDescription()
 // dtor (slot 0 0x140007b00 minus the stamps): frees the External* array buffer.
 // The compiler then chains ~Description -> ~External.
 ImmigrationDescription::~ImmigrationDescription() {
-    if (_refs && fn_MemFreeStatic) fn_MemFreeStatic(_refs);
+    if (_refs) System::MemoryAllocator::MemFree(_refs);
     _refs = nullptr;
 }
 
 // [5] 0x14004e7f0: stream order as retail.
 bool ImmigrationDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     ser.Serialize(_i28, nullptr);
     // External*-array @ +0x30 (count @ +0x38, cap @ +0x3c, stride 8)
     ser.Serialize(_refCount, nullptr);
     int n = _refCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * 8, 8);
+    if (SerStreamErr(ser) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
+        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
         _refs = buf;
         _refCap = n;
         if (buf) for (int i = 0; i < n; ++i) static_cast<void**>(buf)[i] = nullptr;

@@ -39,6 +39,7 @@
 #include "Component/RawMaterialComponent.h"
 #include "Component/AutoPickupComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "Object/factory_registration.h"
 #include "resolve.h"
 #include <cstdint>
@@ -48,134 +49,62 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Game/exe_constants.h"
 
 // Spawn side (pasturecomponent_spawn.cpp).
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
+// The exe helpers this file calls, by retail address:
+//   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
+//   0x140003110 ActHunt_DynArraySetCount_3110 (DynArray8_ResizeFill; count+1 appends)
+//   0x140004680 FloorComponent_FindResData    0x140005500 ActHunt_FindComponent_5500
+//   0x140002ed0 WorkBase_FindComponent_2ed0   0x140002e10 AttendanceComponent_GetJobHostComponent
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470
+//   0x140105ed0 PastureComponent_Helper5ed0   0x1401240a0 PastureComponent_ReassignEntityRef
+//   0x140128570 PastureComponent_ComputeCapacity
+//   0x14012fc00 WorkPlaceComponent_SetAccepting
+//   0x14009f770 MapGrid_StampCellRefs_9f770 (below)
+//   0x140123070 Pf_RecursiveChildSum_123070 (footprint cell count)
+//   0x140122e20 Pf_EntityResolvePos_2e20     (footprint cell position)
+//   0x140006330 WorkAcc_FindComponent_6330   (RawMaterialDescription on a template)
+//   0x140129760 ActRm_PositionEntity_9760
+//   0x140013320 ActRm_FindComp_013320 (TrackerComponent finder; NOT a storage finder,
+//               the fifth instance of the "misnamed component finders" trap)
+//   0x140058fd0 ActRm_ArrayUpsert_58fd0 (the tracker's {template,count} upsert, which
+//               alone feeds the production-statistics panel)
+//   0x140088f90 ActRm_GetResourceCategory_88f90
+//   0x140003050 WorkBase_FindComponent_3050   0x14012eb50 WorkComponent_RegisterWorkSlot
+//   0x14012ec60 CitizenAI_WorkScheduler_Post  0x140044810 ActRm_DynArrayPush4_44810
+//   0x1400c48a0 EntityList_RegisterEntity_Impl
+//   0x1400c3720 ComponentEntity_CtorFromDescription
+//   .rdata 0x140172204 = 90.0f, the quarter-turn the dropped pile is rotated by.
 namespace {
-
-typedef void  (*fn_EraseByValue_t)(void* arrayField, void* valueIBP);         // 0x140002cc0
-typedef void  (*fn_ResizeFill_t)(void* arrayField, int newCount, void* val);  // 0x140003110
-typedef void* (*fn_Find_t)(int64_t entity, void* outIBP);
-typedef void  (*fn_FlagNotify_t)(void* entity);                               // 0x1400c3470
-typedef void  (*fn_Helper5ed0_t)(void* animalComp);                           // 0x140105ed0
-typedef void  (*fn_Reassign_t)(uintptr_t animalComp);                         // 0x1401240a0
-typedef uint64_t (*fn_Capacity_t)(uintptr_t pasture);                         // 0x140128570
-typedef void  (*fn_ActivateWorkplace_t)(int64_t wpc, char enable);            // 0x14012fc00
-typedef uint64_t (*fn_StampPastureCells_t)(void* grid, int x, int y, int w, int h,
-                                           void* tmpl);                       // 0x14009f770
-typedef int   (*fn_FootprintCount_t)(int64_t posComp, int kind);              // 0x140123070
-typedef void  (*fn_FootprintCell_t)(int64_t posComp, float* out3, int kind,
-                                    int idx, float* opt);                     // 0x140122e20
-typedef void* (*fn_FindRawMatDesc_t)(int64_t tmpl, void* outIBP);             // 0x140006330
-typedef void* (*fn_CellOccupant_t)(int64_t occ, void* outIBP);                // 0x1400223c0
-typedef void  (*fn_GridDirty_t)(int64_t fine, int x, int y);                  // 0x1400a8c90
-typedef void  (*fn_GridEnqueue_t)(void* thread, int cell, int kind, uint64_t);// 0x1400a6fe0
-typedef void  (*fn_PlaceEntityAtCell_t)(int64_t comp, int cell, float yaw);   // 0x140129760
-// NAME CORRECTION (2026-08-09): 0x140013320 is NOT a storage finder — engine_funcs.h:797
-// documents it as fn_FindComponent_Tracker (type-id .rdata DWORD_1401c4b10 =
-// TrackerComponent), and 0x140058fd0 is the generation-aware {template,count} upsert
-// into that tracker (ported as ActRm_ArrayUpsert_58fd0). The old "Storage"/"StorageNote"
-// names are the FIFTH instance of the documented "misnamed component finders" trap, and
-// they are exactly why this call pair sat unused: it reads as optional storage
-// bookkeeping when it is in fact the ONLY thing that feeds the production-statistics
-// panel (ProductionUI reads TrackerComponent+0x28/+0x38).
-typedef void* (*fn_FindTracker_13320_t)(int64_t entity, void* outIBP);        // 0x140013320
-typedef void  (*fn_TrackerUpsert_8fd0_t)(int64_t tracker, int64_t tmpl, int n);// 0x140058fd0
-typedef uint32_t (*fn_ResourceIndex_t)(void* world, int64_t tmpl);            // 0x140088f90
-typedef void* (*fn_FindWorkComp_t)(int64_t entity, void* outIBP);             // 0x140003050
-typedef void  (*fn_StopWorkSlot_t)(uintptr_t workComp);                       // 0x14012eb50
-typedef void  (*fn_PostWorkSched_t)(uintptr_t workComp, uint32_t code,
-                                    char flag, void* workIBP);                // 0x14012ec60
-typedef void  (*fn_WorkSetAmount_t)(int64_t comp, uint32_t v);                // 0x140044810
-typedef void  (*fn_RegisterEntity_t)(void* entityList, void* entIBP, int cat);// 0x1400c48a0
-typedef void* (*fn_EntityCopyCtor_t)(void* mem, int64_t tmpl);                // 0x1400c3720
-
-fn_EraseByValue_t       s_Erase        = nullptr;
-fn_ResizeFill_t         s_Append       = nullptr;
-fn_Find_t               s_FindMapComp  = nullptr;   // 0x140004680
-fn_Find_t               s_FindAnimal   = nullptr;   // 0x140005500
-fn_Find_t               s_FindPosition = nullptr;   // 0x140002ed0
-fn_Find_t               s_FindWorkplace= nullptr;   // 0x140002e10
-fn_FlagNotify_t         s_FlagNotify   = nullptr;
-fn_Helper5ed0_t         s_Helper5ed0   = nullptr;
-fn_Reassign_t           s_Reassign     = nullptr;
-fn_Capacity_t           s_Capacity     = nullptr;
-fn_ActivateWorkplace_t  s_ActivateWP   = nullptr;
-fn_StampPastureCells_t  s_StampCells   = nullptr;
-fn_FootprintCount_t     s_FootprintN   = nullptr;
-fn_FootprintCell_t      s_FootprintAt  = nullptr;
-fn_FindRawMatDesc_t     s_FindRawDesc  = nullptr;
-fn_CellOccupant_t       s_CellOccupant = nullptr;
-fn_GridDirty_t          s_GridDirty    = nullptr;
-fn_GridEnqueue_t        s_GridEnqueue  = nullptr;
-fn_PlaceEntityAtCell_t  s_PlaceAtCell  = nullptr;
-fn_FindTracker_13320_t  s_FindTracker  = nullptr;
-fn_TrackerUpsert_8fd0_t s_TrackerUpsert= nullptr;
-fn_ResourceIndex_t      s_ResIndex     = nullptr;
-fn_FindWorkComp_t       s_FindWork     = nullptr;
-fn_StopWorkSlot_t       s_StopWork     = nullptr;
-fn_PostWorkSched_t      s_PostWork     = nullptr;
-fn_WorkSetAmount_t      s_WorkSetAmt   = nullptr;
-fn_RegisterEntity_t     s_RegEntity    = nullptr;
-fn_EntityCopyCtor_t     s_EntityCopy   = nullptr;
 
 uint32_t s_tidAnimalComp   = 0;   // 0x1401c6f98  AnimalComponent
 uint32_t s_tidLivestockDsc = 0;   // 0x1401c79a8  LivestockDescription
 uint32_t s_tidRawMatComp   = 0;   // 0x1401c7c80  RawMaterialComponent
-// 0x140172204 = 90.0f — the quarter-turn the dropped pile is rotated by.
-const float* s_pQuarterTurn = nullptr;
 
 bool s_resolved = false;
-
-template <class T> T R(uintptr_t a) { return reinterpret_cast<T>(ResolveAddr(Module::Exe, a)); }
 
 void Resolve() {
     if (s_resolved) return;
     s_resolved = true;
-    s_Erase        = R<fn_EraseByValue_t>(0x140002cc0);
-    s_Append       = R<fn_ResizeFill_t>(0x140003110);
-    s_FindMapComp  = R<fn_Find_t>(0x140004680);
-    s_FindAnimal   = R<fn_Find_t>(0x140005500);
-    s_FindPosition = R<fn_Find_t>(0x140002ed0);
-    s_FindWorkplace= R<fn_Find_t>(0x140002e10);
-    s_FlagNotify   = R<fn_FlagNotify_t>(0x1400c3470);
-    s_Helper5ed0   = R<fn_Helper5ed0_t>(0x140105ed0);
-    s_Reassign     = R<fn_Reassign_t>(0x1401240a0);
-    s_Capacity     = R<fn_Capacity_t>(0x140128570);
-    s_ActivateWP   = R<fn_ActivateWorkplace_t>(0x14012fc00);
-    s_StampCells   = R<fn_StampPastureCells_t>(0x14009f770);
-    s_FootprintN   = R<fn_FootprintCount_t>(0x140123070);
-    s_FootprintAt  = R<fn_FootprintCell_t>(0x140122e20);
-    s_FindRawDesc  = R<fn_FindRawMatDesc_t>(0x140006330);
-    s_CellOccupant = R<fn_CellOccupant_t>(0x1400223c0);
-    s_GridDirty    = R<fn_GridDirty_t>(0x1400a8c90);
-    s_GridEnqueue  = R<fn_GridEnqueue_t>(0x1400a6fe0);
-    s_PlaceAtCell  = R<fn_PlaceEntityAtCell_t>(0x140129760);
-    s_FindTracker  = R<fn_FindTracker_13320_t>(0x140013320);
-    s_TrackerUpsert= R<fn_TrackerUpsert_8fd0_t>(0x140058fd0);
-    s_ResIndex     = R<fn_ResourceIndex_t>(0x140088f90);
-    s_FindWork     = R<fn_FindWorkComp_t>(0x140003050);
-    s_StopWork     = R<fn_StopWorkSlot_t>(0x14012eb50);
-    s_PostWork     = R<fn_PostWorkSched_t>(0x14012ec60);
-    s_WorkSetAmt   = R<fn_WorkSetAmount_t>(0x140044810);
-    s_RegEntity    = R<fn_RegisterEntity_t>(0x1400c48a0);
-    s_EntityCopy   = R<fn_EntityCopyCtor_t>(0x1400c3720);
     s_tidAnimalComp   = AnimalComponent::TypeId();       // cell 0x1401c6f98 (D5)
     s_tidLivestockDsc = LivestockDescription::TypeId();  // cell 0x1401c79a8 (D5)
     s_tidRawMatComp   = RawMaterialComponent::TypeId();  // cell 0x1401c7c80 (D5)
-    s_pQuarterTurn    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172204));
 }
 
 
 inline uint64_t MakeIBP(void* obj) {
     uint64_t r = 0;
-    if (fn_InternalBasePtr_Ctor) new (&r) ::Object::InternalBasePtr(
+    new (&r) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
-    else r = reinterpret_cast<uint64_t>(obj);
     return r;
 }
 inline uintptr_t World() {
@@ -209,7 +138,7 @@ void* FindCompOnEntity(uintptr_t entity, uint32_t tid) {
         if (!comp) continue;
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (t != tid) continue;
-        return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) ? comp : nullptr;
+        return (Object::IsDerivedFromNullSafe(comp, tid)) ? comp : nullptr;
     }
     return nullptr;
 }
@@ -225,7 +154,7 @@ void* FindDescOnTemplate(uintptr_t tmpl, uint32_t tid) {
         if (!d) continue;
         uint32_t t = reinterpret_cast<Object::Base*>(d)->Type();   // B.3.8 bridge
         if (t != tid) continue;
-        return (fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) ? d : nullptr;
+        return (Object::IsDerivedFromNullSafe(d, tid)) ? d : nullptr;
     }
     return nullptr;
 }
@@ -255,24 +184,24 @@ extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP) {
     uintptr_t gs = GameState();
     uint64_t selfIBP = MakeIBP(animalComp);
     if (cur == nullptr) {
-        if (gs && s_Erase) s_Erase(reinterpret_cast<void*>(gs + 0x80), &selfIBP);
+        if (gs) CemeteryListErase_Reimpl(reinterpret_cast<void*>(gs + 0x80), &selfIBP);
     } else {
-        if (s_Erase) s_Erase(reinterpret_cast<void*>((uintptr_t)cur + 0x30), &selfIBP);
+        CemeteryListErase_Reimpl(reinterpret_cast<void*>((uintptr_t)cur + 0x30), &selfIBP);
         uint64_t animIBP = 0;
-        if (s_FindAnimal) s_FindAnimal(*reinterpret_cast<int64_t*>(a + 0x10), &animIBP);
-        if (animIBP && s_Helper5ed0) s_Helper5ed0(reinterpret_cast<void*>(animIBP));
+        ActHunt_FindComponent_5500(*reinterpret_cast<uintptr_t*>(a + 0x10), &animIBP);
+        if (animIBP) PastureComponent_Helper5ed0(reinterpret_cast<void*>(animIBP));
     }
 
     *reinterpret_cast<void**>(a + 0x28) = target;
     uint64_t againIBP = MakeIBP(animalComp);
     if (target) {
         uintptr_t t = reinterpret_cast<uintptr_t>(target);
-        if (s_Append) s_Append(reinterpret_cast<void*>(t + 0x30),
-                               *reinterpret_cast<int*>(t + 0x38) + 1, &againIBP);
-        if (s_Reassign) s_Reassign(a);
-    } else if (gs && s_Append) {
-        s_Append(reinterpret_cast<void*>(gs + 0x80),
-                 *reinterpret_cast<int*>(gs + 0x88) + 1, &againIBP);
+        ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(t + 0x30),
+                                      *reinterpret_cast<int*>(t + 0x38) + 1, &againIBP);
+        PastureComponent_ReassignEntityRef(a);
+    } else if (gs) {
+        ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(gs + 0x80),
+                                      *reinterpret_cast<int*>(gs + 0x88) + 1, &againIBP);
     }
 }
 
@@ -301,7 +230,7 @@ extern "C" void Pasture_AdoptWanderers(void* pasture) {
     int freeCount = *reinterpret_cast<int*>(gs + 0x88);
     if (freeCount == 0) return;
 
-    const int capacity = s_Capacity ? static_cast<int>(s_Capacity((uintptr_t)pasture)) : 0;
+    const int capacity = static_cast<int>(PastureComponent_ComputeCapacity((uintptr_t)pasture));
     if (PastureCount(pasture) >= capacity) return;
 
     void* wanted = PastureType(pasture);
@@ -341,7 +270,7 @@ extern "C" void Pasture_AdoptWanderers(void* pasture) {
 extern "C" void Pasture_Reproduce(void* pasture) {
     Resolve();
     if (!pasture) return;
-    const int limit = (s_Capacity ? static_cast<int>(s_Capacity((uintptr_t)pasture)) : 0) + 3;
+    const int limit = static_cast<int>(PastureComponent_ComputeCapacity((uintptr_t)pasture)) + 3;
 
     for (int i = 0; i < PastureCount(pasture); ++i) {
         uintptr_t arr = PastureAnimals(pasture);
@@ -360,7 +289,7 @@ extern "C" void Pasture_Reproduce(void* pasture) {
         uint32_t newFlags = oldFlags & ~0x200000u;
         *reinterpret_cast<uint32_t*>(an + 0x20) = newFlags;
         if (((newFlags ^ oldFlags) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
-            if (s_FlagNotify) s_FlagNotify(*reinterpret_cast<void**>(an + 0x10));
+            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(an + 0x10));
         }
         if (PastureCount(pasture) < limit) {
             std::fprintf(stderr, "[Pasture] BIRTH: pasture=%p parent=%p (count=%d limit=%d)\n",
@@ -406,7 +335,7 @@ void PastureComponent::OnMessage(int msg, void* /*data*/, uint32_t /*arg0*/, uin
 
     uint64_t entIBP = *reinterpret_cast<uint64_t*>((uintptr_t)*slot + 0x10);
     uint64_t animalIBP = 0;
-    if (s_FindAnimal) s_FindAnimal(static_cast<int64_t>(entIBP), &animalIBP);
+    ActHunt_FindComponent_5500(static_cast<uintptr_t>(entIBP), &animalIBP);
     if (!animalIBP) return;
 
     uintptr_t an = static_cast<uintptr_t>(animalIBP);
@@ -414,7 +343,7 @@ void PastureComponent::OnMessage(int msg, void* /*data*/, uint32_t /*arg0*/, uin
     uint32_t newF = oldF | 0x800000u;
     *reinterpret_cast<uint32_t*>(an + 0x20) = newF;
     if (((newF ^ oldF) & 0xffffu) != 0 && *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
-        if (s_FlagNotify) s_FlagNotify(*reinterpret_cast<void**>(an + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(an + 0x10));
     }
 }
 
@@ -463,21 +392,21 @@ extern "C" void Pasture_ReleaseAllAnimals(void* pasture) {
         if (cur == nullptr) break;                  // already free: retail would spin here
 
         uint64_t ibp = MakeIBP(animal);
-        if (s_Erase) s_Erase(reinterpret_cast<void*>((uintptr_t)cur + 0x30), &ibp);
+        CemeteryListErase_Reimpl(reinterpret_cast<void*>((uintptr_t)cur + 0x30), &ibp);
         void* animalComp = FindCompOnEntity(*reinterpret_cast<uintptr_t*>(a + 0x10),
                                             s_tidAnimalComp);
         uint64_t animalIBP = MakeIBP(animalComp);
-        if (animalIBP && s_Helper5ed0) s_Helper5ed0(reinterpret_cast<void*>(animalIBP));
+        if (animalIBP) PastureComponent_Helper5ed0(reinterpret_cast<void*>(animalIBP));
 
         *reinterpret_cast<void**>(a + 0x28) = nullptr;
         uint64_t backIBP = MakeIBP(animal);
-        if (gs && s_Append)
-            s_Append(reinterpret_cast<void*>(gs + 0x80),
-                     *reinterpret_cast<int*>(gs + 0x88) + 1, &backIBP);
+        if (gs)
+            ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(gs + 0x80),
+                                          *reinterpret_cast<int*>(gs + 0x88) + 1, &backIBP);
     }
 
     uint64_t selfIBP = MakeIBP(pasture);
-    if (gs && s_Erase) s_Erase(reinterpret_cast<void*>(gs + 0x90), &selfIBP);
+    if (gs) CemeteryListErase_Reimpl(reinterpret_cast<void*>(gs + 0x90), &selfIBP);
 }
 
 // ============================================================
@@ -498,13 +427,13 @@ extern "C" char Pasture_State2Enter(void* data, void* /*sm*/) {
 
     uintptr_t gs = GameState();
     uint64_t selfIBP = MakeIBP(data);
-    if (gs && s_Append)
-        s_Append(reinterpret_cast<void*>(gs + 0x90),
-                 *reinterpret_cast<int*>(gs + 0x98) + 1, &selfIBP);
+    if (gs)
+        ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(gs + 0x90),
+                                      *reinterpret_cast<int*>(gs + 0x98) + 1, &selfIBP);
 
     uint64_t wpc = 0;
-    if (s_FindWorkplace) s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)data + 0x10), &wpc);
-    if (wpc && s_ActivateWP) s_ActivateWP(static_cast<int64_t>(wpc), 0);
+    AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>((uintptr_t)data + 0x10), &wpc);
+    if (wpc) WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpc), false);
 
     return 0;
 }
@@ -542,7 +471,7 @@ extern "C" char Pasture_State3Enter(void* data, void* /*sm*/) {
 // write (rawComp+0x28 = perUnit) that retail does in the same statement group landed
 // with it.
 //
-// DEFERRED (resolved above so the addresses stay recorded, still not called): retail's
+// DEFERRED (still not called): retail's
 // cell path also RESERVES the target cell when it is occupied — FUN_1400223c0 to read
 // the occupant, then tile flag byte +0x29 = 2 plus FUN_1400a8c90 / FUN_1400a6fe0 to
 // republish it to the pathfinder — and pokes the work component through FUN_140003050
@@ -553,7 +482,6 @@ namespace {
 
 
 void PastureProduce(void* self) {
-    if (!s_FindMapComp || !s_Capacity || !s_FindRawDesc) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* tmpl = PastureType(self);
     if (!tmpl) return;
@@ -564,14 +492,13 @@ void PastureProduce(void* self) {
     if (!grid) return;
 
     uint64_t mapIBP = 0;
-    s_FindMapComp(*reinterpret_cast<int64_t*>(s + 0x10), &mapIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(s + 0x10), &mapIBP);
     if (!mapIBP) return;
     uintptr_t mc = static_cast<uintptr_t>(mapIBP);
-    if (s_StampCells)
-        s_StampCells(grid, *reinterpret_cast<int16_t*>(mc + 0x28),
-                     *reinterpret_cast<int16_t*>(mc + 0x2a),
-                     *reinterpret_cast<int16_t*>(mc + 0x2c),
-                     *reinterpret_cast<int16_t*>(mc + 0x2e), tmpl);
+    MapGrid_StampCellRefs_9f770(grid, *reinterpret_cast<int16_t*>(mc + 0x28),
+                                *reinterpret_cast<int16_t*>(mc + 0x2a),
+                                *reinterpret_cast<int16_t*>(mc + 0x2c),
+                                *reinterpret_cast<int16_t*>(mc + 0x2e), tmpl);
 
     void* lsDesc = FindDescOnTemplate(reinterpret_cast<uintptr_t>(tmpl), s_tidLivestockDsc);
     if (!lsDesc) return;
@@ -579,13 +506,13 @@ void PastureProduce(void* self) {
     if (produced == 0) return;
 
     uint64_t rawDescIBP = 0;
-    s_FindRawDesc(produced, &rawDescIBP);
+    WorkAcc_FindComponent_6330(static_cast<uintptr_t>(produced), &rawDescIBP);
     if (!rawDescIBP) return;
     const int perUnit = *reinterpret_cast<int*>(static_cast<uintptr_t>(rawDescIBP) + 0x40);
     if (perUnit <= 0) return;
 
     uint64_t posIBP = 0;
-    if (s_FindPosition) s_FindPosition(*reinterpret_cast<int64_t*>(s + 0x10), &posIBP);
+    WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(s + 0x10), &posIBP);
 
     uintptr_t stockTable = *reinterpret_cast<uintptr_t*>(gs + 0x170);
     const int resIdx = *reinterpret_cast<int*>((uintptr_t)lsDesc + 0x28);
@@ -603,16 +530,16 @@ void PastureProduce(void* self) {
         const int limit = *reinterpret_cast<int*>(stockTable + (uintptr_t)resIdx * 0x20 + 8);
         const int stock = *reinterpret_cast<int*>(stockTable + (uintptr_t)resIdx * 0x20);
         if (stock >= limit) { continue; }
-        if (!posIBP || !s_FootprintN || !s_FootprintAt || !s_EntityCopy) {
+        if (!posIBP) {
             continue;
         }
 
         // Find a footprint cell with no occupant and drop the produce pile there.
-        const int nCells = s_FootprintN(static_cast<int64_t>(posIBP), 2);
+        const int nCells = Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIBP), 2);
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
             float xy[3] = {0, 0, 0};
-            s_FootprintAt(static_cast<int64_t>(posIBP), xy, 2, c, nullptr);
+            Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), xy, 2, c, nullptr);
             const int dim = *grid;
             int gx = static_cast<int>(xy[0] + static_cast<float>(dim >> 1));
             int gy = static_cast<int>(xy[1] + static_cast<float>(dim >> 1));
@@ -636,18 +563,20 @@ void PastureProduce(void* self) {
             break;
         }
 
-        void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
-        void* ent = mem ? s_EntityCopy(mem, produced) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+        void* ent = mem ? ComponentEntity_CtorFromDescription(
+                              reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(produced))
+                        : nullptr;
         if (!ent) break;
         uint64_t entIBP = MakeIBP(ent);
         void* rawComp = FindCompOnEntity(reinterpret_cast<uintptr_t>(ent), s_tidRawMatComp);
-        if (rawComp && s_PlaceAtCell) {
+        if (rawComp) {
             // Position the pile on the cell with a random quarter-turn:
             // CreateRawMaterial_helper_9760(comp, cell, RandTol(rng,2) * 90.0f).
-            const float quarter = s_pQuarterTurn ? *s_pQuarterTurn : 90.0f;
+            const float quarter = kRdata_140172204;
             int roll = reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(w + 0xd8))->RandTol(2);   // B.3.4b bridge
-            s_PlaceAtCell(reinterpret_cast<int64_t>(rawComp), placedCell,
-                          static_cast<float>(roll) * quarter);
+            ActRm_PositionEntity_9760(reinterpret_cast<int64_t>(rawComp), placedCell,
+                                      static_cast<float>(roll) * quarter);
         }
         // Retail writes the pile's quantity onto the RawMaterialComponent right here
         // (0x1401267e0: `*(local_c8+0x28) = *(rawDesc+0x40); *(local_c8+0x30) = 0;`).
@@ -669,18 +598,16 @@ void PastureProduce(void* self) {
         // when piles are appearing. Same three-call shape as the already-ported
         // ActRm_RegisterRawMaterial_88ef0 (0x140088ef0), which is a useful cross-check.
         int64_t pastureEntity = *reinterpret_cast<int64_t*>(s + 0x10);
-        if (pastureEntity && s_FindTracker) {
+        if (pastureEntity) {
             uint64_t trackerIBP = 0;
-            s_FindTracker(pastureEntity, &trackerIBP);
+            ActRm_FindComp_013320(static_cast<uintptr_t>(pastureEntity), &trackerIBP);
             if (trackerIBP) {
-                if (s_TrackerUpsert)
-                    s_TrackerUpsert(static_cast<int64_t>(trackerIBP), produced, perUnit);
+                ActRm_ArrayUpsert_58fd0(static_cast<uintptr_t>(trackerIBP), produced, perUnit);
             }
         }
 
-        if (s_RegEntity)
-            s_RegEntity(*reinterpret_cast<void**>(w + 0xe8), &entIBP,
-                        *reinterpret_cast<int*>(produced + 0x20));
+        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(w + 0xe8), &entIBP,
+                                       *reinterpret_cast<int*>(produced + 0x20));
         // NB (pre-existing, unchanged): retail calls RegisterEntity AFTER the stock
         // bump, we call it before. Left as-is rather than reordered under this task.
         // FUN_140088f90's first argument is unused by the callee
@@ -688,8 +615,9 @@ void PastureProduce(void* self) {
         // register-shared `puVar21` — gameWorld, or the entity, or the tracker,
         // depending on which branch ran — is observationally irrelevant; passing the
         // world here is equivalent.
-        if (s_ResIndex) {
-            uint32_t idx = s_ResIndex(reinterpret_cast<void*>(w), produced);
+        {
+            uint32_t idx = static_cast<uint32_t>(ActRm_GetResourceCategory_88f90(
+                reinterpret_cast<void*>(w), static_cast<uintptr_t>(produced)));
             if (static_cast<int>(idx) >= 0 && stockTable) {
                 int* pStock = reinterpret_cast<int*>(stockTable + (uintptr_t)(int)idx * 0x20 + 0x10);
                 *pStock += perUnit;
@@ -705,10 +633,10 @@ void PastureProduce(void* self) {
         if (void* autoPickup = FindCompOnEntity(static_cast<uintptr_t>(pastureEntity),
                                                 AutoPickupComponent::TypeId())) {
             uint64_t found = 0;
-            void* compRef = s_FindWork(static_cast<int64_t>(entIBP), &found);
+            void* compRef = WorkBase_FindComponent_3050(static_cast<uintptr_t>(entIBP), &found);
             const uint32_t v = *reinterpret_cast<uint32_t*>(
                 *reinterpret_cast<uintptr_t*>(compRef) + 0x28);
-            s_WorkSetAmt(reinterpret_cast<int64_t>(autoPickup), v);
+            ActRm_DynArrayPush4_44810(reinterpret_cast<uintptr_t>(autoPickup), v);
         }
 
         std::fprintf(stderr, "[Pasture] produce: pasture=%p resource=%p cell=%d "
@@ -788,7 +716,7 @@ uint32_t PastureComponent::CommandMask(int cmd) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
         if (!p || p == this) continue;
         if (PastureType(p) != PastureType(this)) continue;
-        freeElsewhere += static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
+        freeElsewhere += static_cast<int>(PastureComponent_ComputeCapacity((uintptr_t)p))
                          - PastureCount(p);
     }
 
@@ -804,8 +732,7 @@ uint32_t PastureComponent::CommandMask(int cmd) {
     }
     if (cmd == 2) {
         uint64_t wpcIBP = 0;
-        if (s_FindWorkplace)
-            s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)this + 0x10), &wpcIBP);
+        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>((uintptr_t)this + 0x10), &wpcIBP);
         uint64_t r = hasType;
         if (wpcIBP && *reinterpret_cast<char*>(wpcIBP + 0x50) != 0) r |= 2;
         return r;
@@ -849,9 +776,9 @@ void PastureComponent::Command(int cmd) {
     if (cmd == 2) {
         uint8_t* selfB = reinterpret_cast<uint8_t*>(this);
         uint64_t wcIBP = 0, wpcIBP = 0;
-        if (s_FindWork)      s_FindWork(*reinterpret_cast<int64_t*>(selfB + 0x10), &wcIBP);
-        if (s_FindWorkplace) s_FindWorkplace(*reinterpret_cast<int64_t*>(selfB + 0x10), &wpcIBP);
-        if (!wcIBP || !wpcIBP || !s_ActivateWP) {   // standalone guard; retail assumes both
+        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(selfB + 0x10), &wcIBP);
+        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(selfB + 0x10), &wpcIBP);
+        if (!wcIBP || !wpcIBP) {   // standalone guard; retail assumes both
             std::fprintf(stderr, "[Pasture] cmd 2: missing %s%s on %p — herder toggle skipped\n",
                          wcIBP ? "" : "WorkComponent ", wpcIBP ? "" : "WorkPlaceComponent",
                          this);
@@ -860,16 +787,16 @@ void PastureComponent::Command(int cmd) {
         }
 
         const char cur = *reinterpret_cast<char*>(wpcIBP + 0x50);
-        s_ActivateWP(static_cast<int64_t>(wpcIBP), cur == 0 ? 1 : 0);
+        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIBP), cur == 0);
         if (*reinterpret_cast<char*>(wpcIBP + 0x50) == 0) {
-            if (s_StopWork) s_StopWork(static_cast<uintptr_t>(wcIBP));
-            s_ActivateWP(static_cast<int64_t>(wpcIBP), 0);
+            WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(wcIBP));   // 0x14012eb50
+            WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIBP), false);
         } else {
             uint64_t entRef = *reinterpret_cast<uint64_t*>(selfB + 0x10);
             void* work = PastureWork_CreateForEntity(&entRef);
             uint64_t workIBP = MakeIBP(work);
-            if (s_PostWork) s_PostWork(static_cast<uintptr_t>(wcIBP), 1, 1, &workIBP);
-            s_ActivateWP(static_cast<int64_t>(wpcIBP), 1);
+            CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(wcIBP), 1, 1, &workIBP);
+            WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIBP), true);
         }
         return;
     }
@@ -887,7 +814,7 @@ void PastureComponent::Command(int cmd) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
         if (!p || p == this) continue;
         if (PastureType(p) != PastureType(this)) continue;
-        const int freeN = static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
+        const int freeN = static_cast<int>(PastureComponent_ComputeCapacity((uintptr_t)p))
                           - PastureCount(p);
         if (freeN > bestFree) { bestFree = freeN; best = p; }
     }
@@ -895,7 +822,7 @@ void PastureComponent::Command(int cmd) {
     int moved = 0;
     auto transferInto = [&](void* dst) {
         while (keep < PastureCount(this)) {
-            if (static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)dst) : 0)
+            if (static_cast<int>(PastureComponent_ComputeCapacity((uintptr_t)dst))
                     <= PastureCount(dst)) break;
             uintptr_t arr = PastureAnimals(this);
             if (!arr) break;                        // standalone guard
@@ -928,7 +855,7 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
 // into cell+0x10 for every cell of the (x,y,w,h) footprint rect. Cell array at
 // mapGrid+0x80, stride 0x30. Retail callers: the pasture state-2 per-frame
 // (sub_67e0 — stamps the pasture's cells so pathing/occupancy queries see it)
-// and HarvestOrchard_impl_0800. Was resolved by s_StampCells above but never
+// and HarvestOrchard_impl_0800. Was resolved through the registry but never
 // registered — the null guard made footprint stamping a silent no-op until
 // 2026-07-30 (deferred item from the animal wave's Update 2).
 // ============================================================

@@ -9,9 +9,9 @@
 // Field table (self is the 0xa8-byte TradeComponent body):
 //   +0x50/+0x58  ComponentRef table, stride 0x10, count @+0x58
 //                elem+0x00 ComponentRef (ExternalPtr<ComponentDescription>,
-//                          fn_ExternalPtr_BuildSerialize / retail 0x140002340)
+//                          Reimpl_ExternalPtr_Serialize_StringTable / retail 0x140002340)
 //                elem+0x08 int   elem+0x0c int
-//                resize (load only) via fn_SummaryArray_Init (retail 0x14000f090,
+//                resize (load only) via StorageComponent_DynArrayResize (retail 0x14000f090,
 //                already registered elsewhere as StorageComponent_DynArrayResize —
 //                same generic 0x10-stride array-resize body, reused as-is).
 //   +0x2c        int — selected-merchant index (-1 = none; see the ctor note
@@ -28,7 +28,7 @@
 //                          elem+0x18, resized (load only) via
 //                          Collection::Array<Ptr8>::SetSize
 //                          (retail 0x140001bb0), contents via
-//                          fn_ExternalRefArray_Serialize (retail 0x1400049c0,
+//                          Reimpl_ExternalPtrArray_Serialize (retail 0x1400049c0,
 //                          already ported as Reimpl_ExternalPtrArray_Serialize
 //                          in serialize_externals_array.cpp).
 //   +0x40/+0x48  item table, stride 0xc, count @+0x48 (TradeComponent_ResizeItems,
@@ -84,6 +84,9 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "system/MemoryAllocator.h"
+#include "Component/exe_bodies.h"   // StorageComponent_DynArrayResize (0x14000f090)
+#include "Game/exe_bodies.h"        // Reimpl_ExternalPtr_Serialize_StringTable, Reimpl_ExternalPtrArray_Serialize
 
 // TradeComponent's own array-resize helpers (tradecomponent.cpp, file-scope,
 // external linkage — not declared in tradecomponent_funcs.h).
@@ -202,8 +205,7 @@ void TradeBst_Retrace(void* treeHdr, uint8_t* startNode) {
 }
 
 void* TradeBst_NewNode(uint64_t key, int64_t value, void* parent) {
-    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-        ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x30, 8);
     if (!mem) return nullptr;
     uint8_t* n = reinterpret_cast<uint8_t*>(mem);
     *reinterpret_cast<uint64_t*>(n + 0x00) = key;
@@ -225,7 +227,7 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     if (Loading(ser)) {
         for (int32_t i = 0; i < count; ++i) {
             uint64_t key = 0;
-            if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(&key, ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(&key, ser);
             int64_t value = 0;
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(&value), nullptr);   // B.3.4 bridge
 
@@ -272,7 +274,7 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     if (!n) return;
     while (uint8_t* l = *reinterpret_cast<uint8_t**>(n + 0x18)) n = l;
     while (n) {
-        if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(n, ser);
+        Reimpl_ExternalPtr_Serialize_StringTable(n, ser);
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(n + 0x08), nullptr);   // B.3.4 bridge
 
         uint8_t* r = *reinterpret_cast<uint8_t**>(n + 0x20);
@@ -376,12 +378,12 @@ void TradeComponent::Persist(void* stream) {
     // +0x50/+0x58: ComponentRef table, stride 0x10 {ComponentRef, int, int}.
     int32_t refCount = *reinterpret_cast<int32_t*>(At(this, 0x58));
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(refCount, nullptr);   // B.3.4 bridge
-    if (Loading(ser) && fn_SummaryArray_Init)
-        fn_SummaryArray_Init(At(this, 0x50), refCount);
+    if (Loading(ser))
+        StorageComponent_DynArrayResize(At(this, 0x50), refCount);
     {
         uint8_t* elem = *reinterpret_cast<uint8_t**>(At(this, 0x50));
         for (int32_t i = 0; i < refCount && elem; ++i, elem += 0x10) {
-            if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(elem + 0x0, ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x0, ser);
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0xc), nullptr);   // B.3.4 bridge
         }
@@ -408,9 +410,8 @@ void TradeComponent::Persist(void* stream) {
             // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
             if (Loading(ser))
                 GameColl::ArrayAt<GameColl::Ptr8>(elem, 0x10).SetSize(innerCount);
-            if (fn_ExternalRefArray_Serialize)
-                fn_ExternalRefArray_Serialize(ser, innerCount,
-                    *reinterpret_cast<void**>(elem + 0x10), nullptr);
+            Reimpl_ExternalPtrArray_Serialize(ser, innerCount,
+                *reinterpret_cast<long long*>(elem + 0x10), nullptr);
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
         }
     }
@@ -442,8 +443,8 @@ void TradeComponent::Persist(void* stream) {
     reinterpret_cast<Object::InternalBasePtr*>(At(this, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     {
         void* obj = *reinterpret_cast<void**>(At(this, 0x80));
-        if (obj && fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(obj, ComponentEntity::TypeId()))
+        if (obj &&
+            !Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()))
             *reinterpret_cast<uint64_t*>(At(this, 0x80)) = 0;
     }
 

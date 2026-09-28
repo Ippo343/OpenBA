@@ -21,7 +21,7 @@
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 #include "Component/ModelDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -37,48 +37,14 @@
 // they pull runtime/types/volume/Volume.h, whose global-scope `struct Rectangle`
 // is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen.
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// System::Time::Time(Time*, float) — dispatch slot at 0x140152b00
-typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
-static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
-
+// Helpers, called by name (B3R): RtSystem_Time_Ctor (import slot 0x140152b00,
+// ??0Time@System@@QEAA@M@Z), ModelComponentNotify_Reimpl (0x1400c2b70, below),
+// ActHunt_NotifyEntityChanged_c3470 (0x1400c3470).
+//
 // ENDGAME B.3.9 GFX (coordinator ruling 4, B9-13 foreign site): the
 // embedded Graphics::MeshInstance at +0x28 is built and destroyed by the real
 // class (`::new` / `->~MeshInstance()`), not through import slots 0x140151490
 // / 0x1401514a8, so those two resolutions are gone from this file.
-
-// ModelComponent_helper_2b70 (0x1400c2b70) — notifies entity of model change
-typedef void (*fn_ModelHelper_2b70_t)(void* entity, int param);
-static fn_ModelHelper_2b70_t s_fn_ModelHelper_2b70 = nullptr;
-
-// FUN_1400c3470 — entity notification callback
-typedef void (*fn_EntityNotify_t)(void* entity);
-static fn_EntityNotify_t s_fn_EntityNotify = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    uintptr_t slot;
-
-    // Dispatch slots — read function pointer from .rdata slot at runtime
-
-    slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
-
-    // Direct exe addresses
-    s_fn_ModelHelper_2b70 = reinterpret_cast<fn_ModelHelper_2b70_t>(
-        ResolveAddr(Module::Exe, 0x1400c2b70));
-
-    s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
-        ResolveAddr(Module::Exe, 0x1400c3470));
-
-    s_helpersResolved = true;
-}
 
 // ============================================================
 // Reimpl of FUN_1400c2b70 (notify each child object of a model change)
@@ -101,8 +67,6 @@ extern "C" void ModelComponentNotify_Reimpl(void* entity, int param) {
 // Helper: Get MultiObjectDescription sibling component
 // ============================================================
 static void* GetMultiObjDescription(uintptr_t self) {
-    EnsureHelpers();
-
     void* obj = *(void**)(self + 0x18);
     if (!obj) return nullptr;
 
@@ -154,7 +118,6 @@ static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t mode
 // a specific variant GROUP (e.g. gender: retail uses variantIdx=(gender==0)?1:0);
 // pass -1 to keep the original random pick over the group count.
 extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
-    EnsureHelpers();
     if (!modelComp) return -1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
     uintptr_t s = (uintptr_t)modelComp;
@@ -194,18 +157,6 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
 
 
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void ModelComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    // The six Graphics doors this used to print are members now (B.3.5 caller
-    // batch I2); only the two exe helpers are still resolved pointers.
-    printf("[ModelComponent] Funcs resolved: Helper2b70=%p EntityNotify=%p\n",
-           (void*)s_fn_ModelHelper_2b70, (void*)s_fn_EntityNotify);
-#endif
-}
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — ModelComponent as a REAL class (ModelComponent.h).
@@ -228,7 +179,6 @@ void ModelComponent_InitFuncs() {
 // flags |= 0x83.
 ModelComponent::ModelComponent()
     : meshInstance{}, transform{}, _pad164{}, modelId(-1) {
-    EnsureHelpers();
     ::new (static_cast<void*>(meshInstance)) Graphics::MeshInstance();   // +0x28, retail CALL [??0MeshInstance] (B.3.9 GFX)
     ::new (static_cast<void*>(transform)) Math::Transform();   // +0x148 Math::Transform (slot 0x140151328)   // B.3.1 bridge
     OrFlagsInCtor(0x83);
@@ -238,7 +188,6 @@ ModelComponent::ModelComponent()
 // ~Internal (the old slot 0 guarded ~Internal with ObjAudit::IsRegistered for
 // never-registered instances; the real ctor always registers).
 ModelComponent::~ModelComponent() {
-    EnsureHelpers();
     // retail CALL [??1MeshInstance] on +0x28 -- a destructor call, no delete (B.3.9 GFX).
     reinterpret_cast<Graphics::MeshInstance*>(meshInstance)->Graphics::MeshInstance::~MeshInstance();
 }
@@ -254,7 +203,6 @@ ModelComponent::~ModelComponent() {
 // Also conditionally calls vtable Draw (+0x30) to re-add to scene.
 
 void ModelComponent::Persist(void* stream) {
-    EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Base class serialize
@@ -312,7 +260,6 @@ void ModelComponent::Persist(void* stream) {
 // optionally randomizes variant, calls SetMesh if variant >= 0.
 
 void ModelComponent::Startup() {
-    EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     void* desc = GetMultiObjDescription(s);
@@ -360,7 +307,6 @@ static std::atomic<int> s_modelDrawLog{0};
 #endif
 
 void ModelComponent::OnAdded() {
-    EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     int16_t modelVariant = *(int16_t*)(s + 0x166);
@@ -369,18 +315,16 @@ void ModelComponent::OnAdded() {
     if (modelVariant >= 0 && modelId < 0) {
         // IsDerivedFrom check (result unused in original — just side effect?)
         // cell 0x1401c7a88 = ModelDescription (the old "MultiObjDesc" name lied)
-        if (fn_IsDerivedFrom) {
-            fn_IsDerivedFrom(*(void**)(s + 0x18), ModelDescription::TypeId());
-        }
+        (void)::Object::IsDerivedFromNullSafe(*(void**)(s + 0x18), ModelDescription::TypeId());
 
         // Set transform on the geometry sub-object
         reinterpret_cast<Graphics::Geometry*>(s + 0x28)
             ->SetTransform(*reinterpret_cast<const Math::Transform*>(s + 0x148));   // B.3.5 bridge
 
         // Call MeshInstance::Update with Time(0) via vtable +0x8
-        if (s_fn_Time_Ctor) {
+        {
             uint8_t timeObj[8];
-            s_fn_Time_Ctor(timeObj, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), 0.0f);   // slot 0x140152b00
             reinterpret_cast<Graphics::Geometry*>(s + 0x28)->Update(
                 *reinterpret_cast<const System::Time*>(timeObj));   // B.3.x bridge (Geometry slot 1)
         }
@@ -411,7 +355,6 @@ void ModelComponent::OnAdded() {
 // Removes mesh from Scene and resets modelId. Notifies owner entity.
 
 void ModelComponent::OnRemove() {
-    EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     int16_t modelVariant = *(int16_t*)(s + 0x166);
@@ -432,8 +375,8 @@ void ModelComponent::OnRemove() {
 
         // Check owner and notify
         void* ownerEntity = *(void**)(s + 0x10);
-        if (ownerEntity && s_fn_ModelHelper_2b70) {
-            s_fn_ModelHelper_2b70(ownerEntity, 0);
+        if (ownerEntity) {
+            ModelComponentNotify_Reimpl(ownerEntity, 0);   // 0x1400c2b70
         }
     }
 }
@@ -445,7 +388,6 @@ void ModelComponent::OnRemove() {
 // NOTE: RDX (time) is forwarded implicitly by the caller.
 
 void ModelComponent::Tick(void* time) {
-    EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Call MeshInstance vtable +0x8 (Update) — RDX contains time pointer
@@ -494,9 +436,7 @@ void ModelComponent::Tick(void* time) {
             if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
                 void* ownerEntity = *(void**)(s + 0x10);
                 if (ownerEntity != nullptr) {
-                    if (s_fn_EntityNotify) {
-                        s_fn_EntityNotify(*(void**)(s + 0x10));
-                    }
+                    ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));   // 0x1400c3470
                 }
             }
         }

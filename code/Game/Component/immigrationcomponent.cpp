@@ -122,8 +122,7 @@ void ImmigrationComponent::Persist(void* stream) {
     for (int64_t remaining = arrayCount; remaining > 0; --remaining, element += 8) {
         reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(ser);   // B.3.8 bridge (the array is raw bytes)
         void* obj = *reinterpret_cast<void**>(element);
-        if (obj != nullptr && fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(obj, ComponentEntity::TypeId()))
+        if (obj != nullptr && !::Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()))
             *reinterpret_cast<uint64_t*>(element) = 0;
     }
     reinterpret_cast<System::Time*>(&field48)->Serialize(ser);   // B.3.8 bridge (field48 is a Time)

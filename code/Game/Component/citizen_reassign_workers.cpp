@@ -82,6 +82,8 @@
 #include "Component/ResidenceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
 #include "Component/StorageComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7e78 cell class
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
 
 // Build-time roster-only guard, shared with citizen_assign_citizens.cpp: while set,
 // the workplace/housing attach-detach helpers skip the Graphics::Scene mesh toggle
@@ -93,25 +95,16 @@ extern bool g_wpcRosterOnly;
 namespace {
 
 
-// ---- consumer leaf pointers resolved lazily -----------------------------------
-typedef void (*fn_AssignWorkplace_t)(void* citizen, void* targetIBP, int flag);  // 0x1401163d0
-typedef void (*fn_StorageSubtract_t)(void* storageComp, void* descriptor, int qty);  // 0x14012d150
-
-fn_AssignWorkplace_t s_assignWorkplace = nullptr;
-fn_StorageSubtract_t s_storageSubtract = nullptr;
+// The consumer leaves are called by name: CitizenComponent_AssignWorkplace
+// (0x1401163d0) and ActRm_StorageSubtract_d150 (0x14012d150).
 uint32_t             s_tidResidence    = 0;
 uint32_t             s_tidStorage      = 0;
 bool                 s_resolved        = false;
 
-template <class T> inline T RExe(uintptr_t a) {
-    return reinterpret_cast<T>(ResolveAddr(Module::Exe, a));
-}
-
+// Resolves no door: it only caches the two component type ids.
 void EnsureResolved() {
     if (s_resolved) return;
     s_resolved = true;
-    s_assignWorkplace = RExe<fn_AssignWorkplace_t>(0x1401163d0);
-    s_storageSubtract = RExe<fn_StorageSubtract_t>(0x14012d150);
     // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7cf0 / 0x1401c7e78 are registered
     // type-id cells (INVENTORY_C Table 1: ResidenceComponent, StorageComponent).
     s_tidResidence = ResidenceComponent::TypeId();
@@ -130,7 +123,7 @@ void* FindComponentDerived(void* entity, uint32_t typeId) {
         if (!comp) continue;
         uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();   // vtable slot +0x10   // B.3.8 bridge (slot 2)
         if (id == typeId) {
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, typeId)) ? comp : nullptr;
+            return Object::IsDerivedFromNullSafe(comp, typeId) ? comp : nullptr;
         }
     }
     return nullptr;
@@ -165,12 +158,10 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
     void* ownerEntity = *reinterpret_cast<void**>(
         *reinterpret_cast<uintptr_t*>(param_3) + 0x10);
     int64_t posIBP[1] = {0};
-    void* posComp = fn_Entity_FindComponent_Position
-        ? fn_Entity_FindComponent_Position(reinterpret_cast<uintptr_t>(ownerEntity), posIBP)
-        : nullptr;
+    void* posComp = WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(ownerEntity), posIBP);
     float pos[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // pos[0]=x (local_48), pos[1]=y (local_44)
-    if (fn_Entity_GetPosition && posComp)
-        fn_Entity_GetPosition(*reinterpret_cast<void**>(posComp), pos, 0, 0, nullptr);
+    if (posComp)
+        Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(posComp), pos, 0, 0, nullptr);
 
     int width = *pathData;
     if (width <= 0) return 0;
@@ -202,11 +193,11 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
             *reinterpret_cast<int64_t*>(worker + 0x1f0) !=                    // profession != default
                 *reinterpret_cast<int64_t*>(reg + 0x30)) {
             void* workplaceIBP = *reinterpret_cast<void**>(worker + 0x248);
-            uint32_t wpCell = fn_Entity_GetGridId
-                ? static_cast<uint32_t>(fn_Entity_GetGridId(&workplaceIBP, nullptr)) : 0;
-            if (fn_Map_CanPathTo && fn_Map_CanPathTo(pathData, 0xe1f, targetCell, wpCell)) {
-                if (fn_PathDistance)
-                    total += static_cast<uint32_t>(fn_PathDistance(pathData, targetCell, wpCell));
+            uint32_t wpCell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&workplaceIBP, nullptr));
+            // WorkBase_ValidateCell_a00f0 returns its bool in the low byte of a uint64.
+            if (static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(pathData, 0xe1f, targetCell,
+                                                                  static_cast<int>(wpCell)))) {
+                total += static_cast<uint32_t>(WorkBase_CalcDistance_8830(pathData, targetCell, wpCell));
             }
         }
         ++i;
@@ -220,7 +211,7 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
 extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     EnsureResolved();
-    if (!s_assignWorkplace || !s_tidResidence) {
+    if (!s_tidResidence) {
         return;
     }
 
@@ -288,7 +279,7 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
                 uintptr_t data   = *reinterpret_cast<uintptr_t*>(occList);
                 void* worker     = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(j) * 8);
                 void* targetOwner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bestDest) + 0x10);
-                s_assignWorkplace(worker, &targetOwner, 0);
+                CitizenComponent_AssignWorkplace(worker, &targetOwner, 0);
                 ++j;
             }
 
@@ -308,14 +299,16 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
                     int   avail      = *reinterpret_cast<int*>(entry + 0x08);
                     int   reserved   = *reinterpret_cast<int*>(entry + 0x0c);
                     int   amount     = avail - reserved;
-                    if (fn_StorageCanAdd && fn_StorageCanAdd(dstStorage, descriptor, amount)) {
-                        if (fn_StorageAddItem) fn_StorageAddItem(dstStorage, descriptor, amount);
+                    if (Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(dstStorage),
+                                                 reinterpret_cast<int64_t>(descriptor), amount)) {
+                        ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(dstStorage),
+                                              reinterpret_cast<int64_t>(descriptor), amount);
                         toSubtract.emplace_back(descriptor, amount);
                     }
                 }
-                if (s_storageSubtract)
-                    for (auto& s : toSubtract)
-                        s_storageSubtract(srcStorage, s.first, s.second);
+                for (auto& s : toSubtract)
+                    ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(srcStorage),
+                                               reinterpret_cast<int64_t>(s.first), s.second);
             }
 
             // --- retire the now-occupied destination from the empty set ---

@@ -46,9 +46,13 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "picking/PickingMesh.h"   // ENDGAME B.3.7 callers (K2)
+#include "Component/exe_bodies.h"   // Destroy_FindDecalComponent_b630, FloorComponent_FindResData
+#include "Action/exe_bodies.h"      // ActCNR_FindComponent_3f60, Entity_FindConsumeProduce_b6f0
+#include "Game/exe_constants.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 // ------------------------------------------------------------
 // Ported elsewhere; linked by name.
@@ -63,44 +67,31 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 
 namespace {
 
-typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
-typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
+// The four component finders (entity, outIbp) this file uses, by retail address.
+void FindModel(void* e, void* out) { ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(e), out); }        // 0x140003f60
+void FindMap(void* e, void* out)   { FloorComponent_FindResData(e, out); }                                       // 0x140004680
+void FindDecal(void* e, void* out) { Destroy_FindDecalComponent_b630(reinterpret_cast<uintptr_t>(e), out); }  // 0x14000b630
+void FindCP(void* e, void* out)    { Entity_FindConsumeProduce_b6f0(reinterpret_cast<int64_t>(e), out); }     // 0x14000b6f0
 
-fn_FindCompOut_t     s_fn_FindComp_Model = nullptr;   // 0x140003f60
-fn_FindCompOut_t     s_fn_FindComp_Map   = nullptr;   // 0x140004680
-fn_FindCompOut_t     s_fn_FindComp_Decal = nullptr;   // 0x14000b630
-fn_FindCompOut_t     s_fn_FindComp_CP    = nullptr;   // 0x14000b6f0
-fn_IsDerivedFromId_t s_fn_IsDerivedFrom  = nullptr;   // slot 0x140152a98
-bool s_deformInit = false;
-
-// .rdata constants, each verified with read_memory:
-//   0x140172100 = 0.25   vertex bias      0x140172114 = 0.5    cell-centre bias
-//   0x140172130 = 0.85   slope cutoff     0x140172230 = 256.0  heightmap scale
-//   0x140172274 = -0.25  corner offset    0x140172280 = -1.0   ray direction (down)
-// Raw .rdata reads are null in standalone unless registered, so each keeps its
-// verified literal as the fallback.
-float s_bias = 0.25f, s_centreBias = 0.5f, s_slopeCut = 0.85f;
-float s_heightScale = 256.0f, s_cornerNeg = -0.25f, s_rayDown = -1.0f;
-
-void QuarryDeformResolve() {
-    if (s_deformInit) return;
-    s_deformInit = true;
-    s_fn_FindComp_Model = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_FindComp_Map   = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_FindComp_Decal = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x14000b630));
-    s_fn_FindComp_CP    = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x14000b6f0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a98); if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFromId_t*>(slot);
-
-    struct RF { static void Get(uintptr_t a, float& dst) {
-        const float* p = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, a));
-        if (p) dst = *p;
-    } };
-    RF::Get(0x140172100, s_bias);       RF::Get(0x140172114, s_centreBias);
-    RF::Get(0x140172130, s_slopeCut);   RF::Get(0x140172230, s_heightScale);
-    RF::Get(0x140172274, s_cornerNeg);  RF::Get(0x140172280, s_rayDown);
+// ?IsDerivedFrom@Base@Object@@ (import slot 0x140152a98).
+bool IsDerived(void* p, uint32_t tid) {
+    return reinterpret_cast<const Object::Base*>(p)->IsDerivedFrom(tid);   // B.3.x bridge
 }
+
+float RdataF32(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+
+// .rdata constants:
+//   0x140172100 = 0.25   vertex bias      0x140172114 = 0.5    cell-centre bias
+//   0x140172230 = 256.0  heightmap scale  0x140172280 = -1.0   ray direction (down)
+const float s_bias = kRdata_140172100, s_centreBias = kRdata_140172114;
+const float s_heightScale = RdataF32(kRdata_140172230), s_rayDown = kRdata_140172280;
+// PORT GAP 0x140172130 slope cutoff: not registered; retail reads the .rdata float
+// here. The literal below is the value this file has always used (0.85, noted as
+// read with read_memory, not re-checked against the image).
+const float s_slopeCut = 0.85f;
+// PORT GAP 0x140172274 corner offset: not registered; retail reads the .rdata float
+// here. The literal below is the value this file has always used (-0.25, same note).
+const float s_cornerNeg = -0.25f;
 
 
 // Every way the carve can silently do nothing gets named once. A deformation that
@@ -119,8 +110,8 @@ void* QuarryOwnerEntity(uintptr_t self) {
     return *reinterpret_cast<void**>(self + 0x10);
 }
 
-void* QuarryFindComp(fn_FindCompOut_t finder, void* entity) {
-    if (!finder || !entity) return nullptr;
+void* QuarryFindComp(void (*finder)(void*, void*), void* entity) {
+    if (!entity) return nullptr;
     uintptr_t out[2] = {0, 0};
     finder(entity, out);
     if (!out[0]) return nullptr;
@@ -132,7 +123,7 @@ void* QuarryFindComp(fn_FindCompOut_t finder, void* entity) {
 // (entity+0x28 -> array +0x28, count +0x30) — NOT the component array at +0x30/+0x38.
 // The two lists are one deref apart and picking the wrong one finds nothing.
 void* QuarryFindDescription(void* entity) {
-    if (!entity || !s_fn_IsDerivedFrom) return nullptr;
+    if (!entity) return nullptr;
     const uint32_t tid = QuarryDescription::TypeId();
     if (tid == 0) return nullptr;
     const uintptr_t descList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(entity) + 0x28);
@@ -142,7 +133,7 @@ void* QuarryFindDescription(void* entity) {
     if (n <= 0 || !arr) return nullptr;
     for (int i = 0; i < n; ++i) {
         void* d = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (d && s_fn_IsDerivedFrom(d, tid)) return d;
+        if (d && IsDerived(d, tid)) return d;
     }
     return nullptr;
 }
@@ -151,7 +142,7 @@ void* QuarryFindDescription(void* entity) {
 // decal is projected onto the terrain, so it has to be rebuilt after the ground moves.
 // vtable +0x38 = suspend (index 7), +0x30 = resume (index 6).
 void* QuarryDecalSuspend(void* entity) {
-    void* decal = QuarryFindComp(s_fn_FindComp_Decal, entity);
+    void* decal = QuarryFindComp(FindDecal, entity);
     if (!decal) return nullptr;
     reinterpret_cast<Component*>(decal)->OnRemove();   // B.3.8 bridge (slot 7; the DecalComponent)
     return decal;
@@ -174,19 +165,17 @@ void QuarryDecalResume(void* decal) {
 // falls toward _maxDepth (-7.0), so as it drops, progressively more of the floor
 // mesh's low geometry is allowed through and the floor sinks.
 extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
-    QuarryDeformResolve();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
 
     void* descRaw = *reinterpret_cast<void**>(self + 0x18);
-    if (!s_fn_IsDerivedFrom) { QuarryBail("ApplyDepth", "IsDerivedFrom slot 0x140152a98 unresolved"); return; }
     const uint32_t tidDesc = QuarryDescription::TypeId();
     if (tidDesc == 0) { QuarryBail("ApplyDepth", "QuarryDescription type id is 0"); return; }
-    if (!descRaw || !s_fn_IsDerivedFrom(descRaw, tidDesc)) {
+    if (!descRaw || !IsDerived(descRaw, tidDesc)) {
         QuarryBail("ApplyDepth", "component +0x18 is not a QuarryDescription"); return;
     }
 
     void* entity = QuarryOwnerEntity(self);
-    void* model  = QuarryFindComp(s_fn_FindComp_Model, entity);
+    void* model  = QuarryFindComp(FindModel, entity);
     if (!model) { QuarryBail("ApplyDepth", "owner has no ModelComponent (finder 0x140003f60 returned null)"); return; }
 
     // Retail copy-constructs a Transform on the stack (??0Transform@Math@@QEAA@AEBV01@@Z,
@@ -247,7 +236,6 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
 // msg 4 = build complete: carve the pit once at _initialDepth.
 void QuarryComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
-    QuarryDeformResolve();
     void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(this));
 
     void* desc = QuarryFindDescription(entity);
@@ -274,15 +262,14 @@ extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
 //   1. re-carve the floor at lerp(_initialDepth, _maxDepth, produced/_maximumProduction)
 //   2. walk the footprint and convert the dug cells' terrain type to 5 (quarried rock)
 void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
-    QuarryDeformResolve();
     void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(this));
 
     // ---- production progress -> depth -------------------------------------------
-    void* cp = QuarryFindComp(s_fn_FindComp_CP, entity);
+    void* cp = QuarryFindComp(FindCP, entity);
     if (!cp) { QuarryBail("Slot15", "owner has no ConsumeProduceComponent"); return; }
     void* cpDescRaw = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cp) + 0x18);
     const uint32_t tidCP = ConsumeProduceDescription::TypeId();
-    void* cpDesc = (cpDescRaw && s_fn_IsDerivedFrom && tidCP && s_fn_IsDerivedFrom(cpDescRaw, tidCP))
+    void* cpDesc = (cpDescRaw && tidCP && IsDerived(cpDescRaw, tidCP))
                  ? cpDescRaw : nullptr;
     if (!cpDesc) { QuarryBail("Slot15", "ConsumeProduce +0x18 is not a ConsumeProduceDescription"); return; }
 
@@ -311,7 +298,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
     int* tileGrid = *reinterpret_cast<int**>(gameWorld + 0xF8);
     if (!terrainGrid || !tileGrid) { QuarryBail("Slot15", "gameWorld terrain/tile grid null"); return; }
 
-    void* map = QuarryFindComp(s_fn_FindComp_Map, entity);
+    void* map = QuarryFindComp(FindMap, entity);
     if (!map) { QuarryBail("Slot15", "owner has no MapComponent (finder 0x140004680 returned null)"); return; }
     const uintptr_t mapA = reinterpret_cast<uintptr_t>(map);
     const int baseX = *reinterpret_cast<int16_t*>(mapA + 0x28);

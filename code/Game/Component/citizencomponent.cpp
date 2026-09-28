@@ -46,15 +46,15 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Entity/componententity_funcs.h"
+#include "Game/exe_constants.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
 // Resolved helpers for Update
 // ============================================================
-
-// System::Time::Time(float seconds) — construct Time from seconds
-// Dispatch slot at 0x140152a80
-typedef void (*fn_Time_FromSeconds_t)(void* outTime, float seconds);
-static fn_Time_FromSeconds_t s_fn_Time_FromSeconds = nullptr;
 
 // CitizenComponent_TryEnrolInSchool(self, outIBP) -> char (bool)
 // At 0x140111840. Ghidra called it TryFindPartner for months; it is school enrolment
@@ -62,55 +62,35 @@ static fn_Time_FromSeconds_t s_fn_Time_FromSeconds = nullptr;
 // 2026-08-15 — the misnomer had already propagated into four files. The resolve site
 // below is the authority on the address; the old "0x14010fe40" note here was a different
 // function entirely (helper_fe40).
-typedef char (*fn_TryEnrolInSchool_t)(void* self, void* outIBP);
-static fn_TryEnrolInSchool_t s_fn_TryEnrolInSchool = nullptr;
 
 // CitizenComponent_PostLifeEvent(self, eventType, severity, strParam)
 // At 0x140113af0 — posts a life-event message to the event log (gw+0x138).
 // Formerly misnamed "AssignState" (it assigns nothing). Ported in
 // citizen_lifeevent.cpp, registered by reg_eventlog_citizen.cpp.
-typedef void (*fn_PostLifeEvent_t)(void* self, int eventType, int severity, const char* strParam);
-static fn_PostLifeEvent_t s_fn_PostLifeEvent = nullptr;
 
 // CitizenComponent_HandleLifeEvent(self, eventType, strParam) -> char (bool)
 // At 0x140112450
-typedef char (*fn_HandleLifeEvent_t)(void* self, int eventType, const char* strParam);
-static fn_HandleLifeEvent_t s_fn_HandleLifeEvent = nullptr;
 
 // CitizenComponent_UpdateHealth(self, pTime) -> char (bool: 0=dead, nonzero=alive)
 // At 0x140111b90
-typedef char (*fn_UpdateHealth_t)(void* self, void* pTime);
-static fn_UpdateHealth_t s_fn_UpdateHealth = nullptr;
 
 // CitizenComponent_ConsumeFood(self)
 // At 0x140111890
-typedef void (*fn_ConsumeFood_t)(void* self);
-static fn_ConsumeFood_t s_fn_ConsumeFood = nullptr;
 
 // CitizenComponent_ConsumeFuel(self)
 // At 0x140111a70
-typedef void (*fn_ConsumeFuel_t)(void* self);
-static fn_ConsumeFuel_t s_fn_ConsumeFuel = nullptr;
 
 // CitizenComponent_FindCareBuilding(self) — the SICK citizen's hospital finder
 // (desc+0x30 -> citizen+0x228), gated on the disease pointer citizen+0x68. Not a
 // workplace finder despite the old name; see the resolve site below for the address.
-typedef void (*fn_FindCareBuilding_t)(void* self);
-static fn_FindCareBuilding_t s_fn_FindCareBuilding = nullptr;
 
 // CitizenComponent_FindStorage(self)
 // At 0x140115770
-typedef void (*fn_FindStorage_t)(void* self);
-static fn_FindStorage_t s_fn_FindStorage = nullptr;
 
-// FUN_14012c3f0 — HealthComponent status flag setter
-// At 0x14012c3f0: (healthComp*, flagIndex, flagValue)
-typedef void (*fn_HealthSetFlag_t)(void* healthComp, int flagIndex, char value);
-static fn_HealthSetFlag_t s_fn_HealthSetFlag = nullptr;
 
 // --- Citizen status-icon driver (standalone wiring) ---
 // The 5 health-flag call sites in Update (bit 0 no-workplace, 1 hungry, 2 cold,
-// 3 unemployed/homeless, 5 has-profession) call s_fn_HealthSetFlag, which in the
+// 3 unemployed/homeless, 5 has-profession) call CitizenStatusIcon_SetFlag, which in the
 // original is FUN_14012c3f0 (the StatusIcon flag setter). That exe fn IS registered
 // now (CitizenComp_FUN_14012c3f0, reg_component_people.cpp) — it is generic, keyed on
 // the StatusIconComponent layout (mask +0xf0 / scene id +0x100), which is why the
@@ -125,7 +105,7 @@ static fn_HealthSetFlag_t s_fn_HealthSetFlag = nullptr;
 class StatusIconComponent;
 void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
 
-// Adapter matching fn_HealthSetFlag_t. Null-guards the cached StatusIconComponent IBP
+// Adapter for FUN_14012c3f0 (healthComp*, flagIndex, flagValue). Null-guards the cached StatusIconComponent IBP
 // (CitizenComponent+0x280): a partial-world citizen lacking a live status-icon component
 // has it null, and StatusIcon_Toggle dereferences self+0x10 immediately. The original
 // never sees a null here (every citizen carries the component) — this guard is a
@@ -138,8 +118,6 @@ static void CitizenStatusIcon_SetFlag(void* icon, int flagIndex, char value) {
 
 // CitizenComponent_AssignWorkplace(self, workplaceIBP, slotIndex)
 // At 0x140114ca0
-typedef void (*fn_AssignWorkplace_t)(void* self, void* workplaceIBP, int slotIndex);
-static fn_AssignWorkplace_t s_fn_AssignWorkplace = nullptr;
 
 // CitizenComponent_AssignHousing(self, housingPtr)
 // At 0x140111ee0 (writes citizen+0x248). The address in this comment used to read
@@ -147,38 +125,24 @@ static fn_AssignWorkplace_t s_fn_AssignWorkplace = nullptr;
 // that resolve this function (citizencomponent_lifecycle.cpp, citizen_assign_citizens.cpp
 // x2) — all four agree on 0x140111ee0. Corrected 2026-08-15: a stale ADDRESS in a comment
 // is the same trap as a wrong binding, just slower-acting.
-typedef void (*fn_AssignHousing_t)(void* self, void* housingPtr);
-static fn_AssignHousing_t s_fn_AssignHousing = nullptr;
 
 // CitizenComponent_sub_ffc0 — find unassigned housing
 // At 0x14010ffc0
-typedef void (*fn_FindHousingUnassigned_t)(int64_t self, void* outIBP);
-static fn_FindHousingUnassigned_t s_fn_FindHousingUnassigned = nullptr;
 
 // CitizenComponent_sub_0470 — find assigned housing
 // At 0x140110470
-typedef void (*fn_FindHousingAssigned_t)(int64_t self, void* outIBP);
-static fn_FindHousingAssigned_t s_fn_FindHousingAssigned = nullptr;
 
 // CitizenComponent_helper_ff80 — find new workplace (after ShouldSwitch)
 // At 0x14010ff80
-typedef void* (*fn_FindNewWorkplace_t)(int64_t self, void* outIBP);
-static fn_FindNewWorkplace_t s_fn_FindNewWorkplace = nullptr;
 
 // CitizenComponent_Update_sub_0e70 — find work (workplace search)
 // At 0x140110e70
-typedef void (*fn_FindWork_t)(int64_t self, void* outEntityIBP, int* outSlotIndex, char noWorkplace);
-static fn_FindWork_t s_fn_FindWork = nullptr;
 
 // CitizenComponent_sub_1fa0 — release current workplace assignment
 // At 0x140111fa0
-typedef void (*fn_ReleaseWork_t)(void* self, void* outIBP);
-static fn_ReleaseWork_t s_fn_ReleaseWork = nullptr;
 
 // CitizenComponent_helper_fe40 — find partner
 // At 0x14010fe40
-typedef void* (*fn_FindPartner_t)(int64_t self, void* outIBP);
-static fn_FindPartner_t s_fn_FindPartner = nullptr;
 
 // CitizenComponent_helper_1b90 (0x140111b90–0x140111ecb) — CHILDBIRTH. It opens with a
 // scan over the citizen list (partner link +0x250 empty, age +0x3c <= desc+0x4c) but
@@ -187,17 +151,12 @@ static fn_FindPartner_t s_fn_FindPartner = nullptr;
 // (see the LAB_140113873 block) — the rare branch is death in childbirth.
 // NOT UpdateHealth — UpdateHealth is 0x1401127d0, ported in citizen_updatehealth.cpp
 // (disambiguated 2026-07-19; branch semantics corrected 2026-07-26).
-typedef void (*fn_HandleRepro_t)(void* self);
 
 // CitizenComponent_helper_a4f0 — check storage has capacity for item type
 // At 0x14012a4f0
-typedef bool (*fn_CheckStorageCapacity_t)(int64_t storageComp, int itemType);
-static fn_CheckStorageCapacity_t s_fn_CheckStorageCapacity = nullptr;
 
 // Entity_FindComponent_Storage(entity, outIBP) -> InternalBasePtr*
 // At 0x140008090 (or 0x140006270 depending on which variant)
-typedef void* (*fn_FindCompStorage_t)(int64_t entity, void* outIBP);
-static fn_FindCompStorage_t s_fn_FindCompStorage = nullptr;
 
 // UI::StringTable::GetText — use the typedef from engine_funcs.h
 // Signature: (self, retval, textIndex) -> void
@@ -205,84 +164,15 @@ static fn_FindCompStorage_t s_fn_FindCompStorage = nullptr;
 
 // (removed: UIString_ToSysString — handled inline via dispatch slot)
 
-// Float constants from .rdata
-static float* s_DAT_14017225c = nullptr;  // hunger divisor
-static float* s_DAT_140172234 = nullptr;  // thirst/time multiplier (used as fVar14 init)
-static float* s_DAT_140172114 = nullptr;  // hunger threshold fraction (0.75?)
-static float* s_DAT_140172100 = nullptr;  // thirst threshold fraction
-static uint32_t* s_DAT_1401722c0 = nullptr; // XOR mask for happiness timer
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    uintptr_t slot;
-
-    // Dispatch slot for Time::Time(float) (seconds -> Time ticks). Correct slot is
-    // 0x140152b00 (Ghidra: the food/fuel-consume loops call `CALL qword ptr
-    // [0x140152b00]` @0x1401133ca/0x140113409 before ConsumeFood/ConsumeFuel). The
-    // previous value (0x140152a80) resolved to SoundEffect::_typeInfo.
-    slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) s_fn_Time_FromSeconds = *reinterpret_cast<fn_Time_FromSeconds_t*>(slot);
-
-    // Direct exe addresses for CitizenComponent sub-functions
-    s_fn_TryEnrolInSchool = reinterpret_cast<fn_TryEnrolInSchool_t>(
-        ResolveAddr(Module::Exe, 0x140111840));  // CitizenComponent::TryFindPartner (CALL @140112f82 in Update); 0x14010fe40 was helper_fe40 (wrong fn)
-    s_fn_PostLifeEvent = reinterpret_cast<fn_PostLifeEvent_t>(
-        ResolveAddr(Module::Exe, 0x140113af0));  // CitizenComponent::PostLifeEvent (CALL @140112f9e in Update; ex-"AssignState")
-    s_fn_HandleLifeEvent = reinterpret_cast<fn_HandleLifeEvent_t>(
-        ResolveAddr(Module::Exe, 0x140116dd0));  // CitizenComponent::HandleLifeEvent (6 CALLs in Update)
-    s_fn_UpdateHealth = reinterpret_cast<fn_UpdateHealth_t>(
-        ResolveAddr(Module::Exe, 0x1401127d0));  // CitizenComponent::UpdateHealth (CALL @1401131b9 in Update); 0x140111b90 was helper_1b90 (repro helper, wrong fn)
-    s_fn_ConsumeFood = reinterpret_cast<fn_ConsumeFood_t>(
-        ResolveAddr(Module::Exe, 0x140112990));  // CitizenComponent::ConsumeFood (CALL @1401133e7 in Update)
-    s_fn_ConsumeFuel = reinterpret_cast<fn_ConsumeFuel_t>(
-        ResolveAddr(Module::Exe, 0x140112ae0));  // CitizenComponent::ConsumeFuel (CALL @14011342a in Update)
-    s_fn_FindCareBuilding = reinterpret_cast<fn_FindCareBuilding_t>(
-        ResolveAddr(Module::Exe, 0x140111590));  // CitizenComponent::FindWorkplace (CALL @140113219 in Update)
-    s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
-        ResolveAddr(Module::Exe, 0x1401116f0));  // CitizenComponent::FindStorage (CALL @14011322b in Update)
-    // 0x14012c3f0 is registered (reg_component_people.cpp) but these five call sites keep
-    // routing through the StatusIcon_Toggle port, which resolves the citizen's own cached
-    // StatusIconComponent at +0x280 (see CitizenStatusIcon_SetFlag above).
-    s_fn_HealthSetFlag = reinterpret_cast<fn_HealthSetFlag_t>(&CitizenStatusIcon_SetFlag);
-    s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
-        ResolveAddr(Module::Exe, 0x1401163d0));  // CitizenComponent::AssignWorkplace (7 CALLs in Update)
-    s_fn_AssignHousing = reinterpret_cast<fn_AssignHousing_t>(
-        ResolveAddr(Module::Exe, 0x140111ee0));  // CitizenComponent::AssignHousing (CALL @140113621 in Update)
-    s_fn_FindHousingUnassigned = reinterpret_cast<fn_FindHousingUnassigned_t>(
-        ResolveAddr(Module::Exe, 0x14010ffc0));
-    s_fn_FindHousingAssigned = reinterpret_cast<fn_FindHousingAssigned_t>(
-        ResolveAddr(Module::Exe, 0x140110470));
-    s_fn_FindNewWorkplace = reinterpret_cast<fn_FindNewWorkplace_t>(
-        ResolveAddr(Module::Exe, 0x14010ff80));
-    s_fn_FindWork = reinterpret_cast<fn_FindWork_t>(
-        ResolveAddr(Module::Exe, 0x140110e70));
-    s_fn_ReleaseWork = reinterpret_cast<fn_ReleaseWork_t>(
-        ResolveAddr(Module::Exe, 0x140111fa0));
-    // CitizenComponent_helper_fe40 (0x14010fe40) — the marriage/partner finder used by
-    // the Update tail at 0x140113827. This assignment was MISSING: s_fn_FindPartner was
-    // declared and null-checked but never resolved, so the whole marriage block (the
-    // `*(pCVar1) = partner; partner->+0x250 = self` pair that establishes the spouse
-    // link) silently no-op'd and CitizenComponent+0x250 stayed 0 for every citizen.
-    // (Was opt-in as BANISHED_LIVE_CITIZEN_FAMILY; graduated 2026-09-13.)
-    s_fn_FindPartner = reinterpret_cast<fn_FindPartner_t>(
-        ResolveAddr(Module::Exe, 0x14010fe40));
-    s_fn_CheckStorageCapacity = reinterpret_cast<fn_CheckStorageCapacity_t>(
-        ResolveAddr(Module::Exe, 0x14012a4f0));
-    s_fn_FindCompStorage = reinterpret_cast<fn_FindCompStorage_t>(
-        ResolveAddr(Module::Exe, 0x140008090));
-
-    // Float constants from .rdata
-    s_DAT_14017225c = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017225c));
-    s_DAT_140172234 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172234));
-    s_DAT_140172114 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_DAT_140172100 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172100));
-    s_DAT_1401722c0 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401722c0));
-
-    s_helpersResolved = true;
+// Float constants from .rdata (Game/exe_constants.h): 0x14017225c hunger divisor,
+// 0x140172234 thirst/time multiplier, 0x140172114 hunger threshold fraction,
+// 0x140172100 thirst threshold fraction, 0x1401722c0 happiness-timer XOR mask.
+static inline float RdataF(uint32_t bits) {
+    float f;
+    std::memcpy(&f, &bits, sizeof f);
+    return f;
 }
+
 
 // ============================================================
 // Helper: read citizen description pointer
@@ -302,7 +192,6 @@ static inline int64_t GetDescription(CitizenComponent* self) {
 // Parameters: RCX = this (CitizenComponent*), RDX = Time* (pointer to Time)
 
 void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
-    EnsureHelpers();
 
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     uint8_t* gameWorld = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -351,7 +240,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
             // Not yet had partner — try to find one
             int64_t localIBP = 0;
             new (&localIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            char found = s_fn_TryEnrolInSchool ? s_fn_TryEnrolInSchool(self, &localIBP) : 0;
+            char found = CitizenComp_TryEnrolInSchool(self, &localIBP);
             eventType = 10;
             if (found == 0) {
                 eventType = 9;
@@ -359,7 +248,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         } else {
             eventType = 9;
         }
-        if (s_fn_PostLifeEvent) s_fn_PostLifeEvent(self, eventType, 0, nullptr);
+        CitizenComponent_PostLifeEvent(self, eventType, 0, nullptr);
     }
 
     // --- Education cap: update max education from description ---
@@ -383,14 +272,14 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     // --- Hunger accumulation ---
     if ((gameFlags >> 1 & 1) == 0) {
         float hungerRate = *reinterpret_cast<float*>(desc + 0xC0);
-        float hungerDiv = s_DAT_14017225c ? *s_DAT_14017225c : 1.0f;
+        float hungerDiv = RdataF(kRdata_14017225c);
         *reinterpret_cast<float*>(p + 0x44) += (dt_sec * hungerRate) / hungerDiv;
     } else {
         *reinterpret_cast<uint32_t*>(p + 0x44) = 0;
     }
 
     // --- Thirst accumulation ---
-    float fVar14 = s_DAT_140172234 ? *s_DAT_140172234 : 1.0f;
+    float fVar14 = kRdata_140172234;
     float thirstThreshTemp = *reinterpret_cast<float*>(desc + 0xF4);
     float weatherTemp = *reinterpret_cast<float*>(weatherData + 0x18);
     if ((gameFlags >> 2 & 1) != 0 || thirstThreshTemp < weatherTemp || thirstThreshTemp == weatherTemp) {
@@ -425,7 +314,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         System::String localRes18(localRes8);
         char* strPtr = localRes18._data;
 
-        char eventResult = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 7, strPtr) : 0;
+        char eventResult = CitizenComponent_HandleLifeEvent(self, 7, strPtr);
 
         if (eventResult != 0) return;
     }
@@ -436,7 +325,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         *reinterpret_cast<uint32_t*>(p + 0x44) = *reinterpret_cast<uint32_t*>(desc + 0xD0);
         int64_t healthComp = *reinterpret_cast<int64_t*>(p + 0x278);
         if (*reinterpret_cast<int*>(healthComp + 0x60) + 1 < 1) {
-            char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 0, nullptr) : 0;
+            char r = CitizenComponent_HandleLifeEvent(self, 0, nullptr);
             if (r != 0) return;
         }
     }
@@ -447,7 +336,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         *reinterpret_cast<uint32_t*>(p + 0x48) = *reinterpret_cast<uint32_t*>(desc + 0xF0);
         int64_t healthComp = *reinterpret_cast<int64_t*>(p + 0x278);
         if (*reinterpret_cast<int*>(healthComp + 0x60) + 1 < 1) {
-            char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 1, nullptr) : 0;
+            char r = CitizenComponent_HandleLifeEvent(self, 1, nullptr);
             if (r != 0) return;
         }
     }
@@ -455,12 +344,12 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     // --- Old age death check ---
     float maxAge = *reinterpret_cast<float*>(p + 0x40);
     if (maxAge <= *reinterpret_cast<float*>(p + 0x3C)) {
-        char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 2, nullptr) : 0;
+        char r = CitizenComponent_HandleLifeEvent(self, 2, nullptr);
         if (r != 0) return;
     }
 
     // --- Health update ---
-    char healthOk = s_fn_UpdateHealth ? s_fn_UpdateHealth(self, deltaTime) : 1;
+    char healthOk = CitizenComp_UpdateHealth(self, reinterpret_cast<int64_t*>(deltaTime));
     if (healthOk == 0) {
         // Citizen died from health — get death cause string
         System::String localRes8;
@@ -473,7 +362,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
                 ::new (&localRes8) System::String(
                     reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
                 char* deathStr = localRes8._data;
-                char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 3, deathStr) : 0;
+                char r = CitizenComponent_HandleLifeEvent(self, 3, deathStr);
                 if (r != 0) return;
             }
         }
@@ -484,13 +373,13 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     if (*reinterpret_cast<int64_t*>(p + 0x68) != 0) {
         *reinterpret_cast<uint32_t*>(p + 0x88) |= 1;
         if (*reinterpret_cast<int64_t*>(p + 0x228) == 0) {
-            if (s_fn_FindCareBuilding) s_fn_FindCareBuilding(self);
+            CitizenComp_FindCareBuilding(self);
         }
     }
 
     // --- Find storage if needed ---
     if (*reinterpret_cast<int64_t*>(p + 0x230) == 0) {
-        if (s_fn_FindStorage) s_fn_FindStorage(self);
+        CitizenComp_FindStorage(self);
     }
 
     // --- Health status flags (via HealthComponent at +0x280) ---
@@ -498,26 +387,23 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     int64_t workplaceRef = *reinterpret_cast<int64_t*>(pSelf238);
     uint8_t* pCVar1 = p + 0x280;    // health component IBP
 
-    if (s_fn_HealthSetFlag)
-        s_fn_HealthSetFlag(*reinterpret_cast<void**>(pCVar1), 0, workplaceRef == 0);
+    CitizenStatusIcon_SetFlag(*reinterpret_cast<void**>(pCVar1), 0, workplaceRef == 0);
 
     // Hunger warning flag
     float hungerThreshLow = *reinterpret_cast<float*>(desc + 0xCC);
     float hungerThreshHigh = *reinterpret_cast<float*>(desc + 0xD0);
-    float fVar4 = s_DAT_140172114 ? *s_DAT_140172114 : 0.75f;
+    float fVar4 = kRdata_140172114;
     float hungerWarnLevel = (hungerThreshHigh - hungerThreshLow) * fVar4 + hungerThreshLow;
     float curHunger = *reinterpret_cast<float*>(p + 0x44);
-    if (s_fn_HealthSetFlag)
-        s_fn_HealthSetFlag(*reinterpret_cast<void**>(pCVar1), 1, hungerWarnLevel < curHunger);
+    CitizenStatusIcon_SetFlag(*reinterpret_cast<void**>(pCVar1), 1, hungerWarnLevel < curHunger);
 
     // Thirst warning flag
     float thirstThreshLow = *reinterpret_cast<float*>(desc + 0xEC);
     float thirstThreshHigh = *reinterpret_cast<float*>(desc + 0xF0);
-    float fThirstFrac = s_DAT_140172100 ? *s_DAT_140172100 : 0.75f;
+    float fThirstFrac = kRdata_140172100;
     float thirstWarnLevel = (thirstThreshHigh - thirstThreshLow) * fThirstFrac + thirstThreshLow;
     float curThirst = *reinterpret_cast<float*>(p + 0x48);
-    if (s_fn_HealthSetFlag)
-        s_fn_HealthSetFlag(*reinterpret_cast<void**>(pCVar1), 2, thirstWarnLevel < curThirst);
+    CitizenStatusIcon_SetFlag(*reinterpret_cast<void**>(pCVar1), 2, thirstWarnLevel < curThirst);
 
     // Unemployed flag
     char isUnemployed;
@@ -543,14 +429,12 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     } else {
         isUnemployed = 0;
     }
-    if (s_fn_HealthSetFlag)
-        s_fn_HealthSetFlag(*reinterpret_cast<void**>(pCVar1), 3, isUnemployed);
+    CitizenStatusIcon_SetFlag(*reinterpret_cast<void**>(pCVar1), 3, isUnemployed);
 
     // Homeless flag (flag 4 — implicitly from profession being nonzero)
     // Flag 5: has a profession
     int64_t profPtr68 = *reinterpret_cast<int64_t*>(p + 0x68);
-    if (s_fn_HealthSetFlag)
-        s_fn_HealthSetFlag(*reinterpret_cast<void**>(pCVar1), 5, profPtr68 != 0);
+    CitizenStatusIcon_SetFlag(*reinterpret_cast<void**>(pCVar1), 5, profPtr68 != 0);
 
     // --- Hunger/thirst urgency bit flags at +0x54 and +0x88 ---
     desc = GetDescription(self);  // re-read (may have changed)
@@ -573,11 +457,11 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     {
         float eatInterval = *reinterpret_cast<float*>(desc + 0x78) * fVar14;
         int64_t eatTicks = 0;
-        if (s_fn_Time_FromSeconds) s_fn_Time_FromSeconds(&eatTicks, eatInterval);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&eatTicks), eatInterval);
         if (eatTicks > 0) {
             while (eatTicks < *reinterpret_cast<int64_t*>(p + 0x58)) {
                 *reinterpret_cast<int64_t*>(p + 0x58) -= eatTicks;
-                if (s_fn_ConsumeFood) s_fn_ConsumeFood(self);
+                CitizenComp_ConsumeFood(self);
             }
         }
     }
@@ -586,11 +470,11 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     {
         float fuelInterval = *reinterpret_cast<float*>(desc + 0xA0) * fVar14;
         int64_t fuelTicks = 0;
-        if (s_fn_Time_FromSeconds) s_fn_Time_FromSeconds(&fuelTicks, fuelInterval);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&fuelTicks), fuelInterval);
         if (fuelTicks > 0) {
             while (fuelTicks < *reinterpret_cast<int64_t*>(p + 0x90)) {
                 *reinterpret_cast<int64_t*>(p + 0x90) -= fuelTicks;
-                if (s_fn_ConsumeFuel) s_fn_ConsumeFuel(self);
+                CitizenComp_ConsumeFuel(self);
             }
         }
     }
@@ -602,8 +486,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         localRes10 = nullIBP;
     } else {
-        void* storageIBP = s_fn_FindCompStorage ?
-            s_fn_FindCompStorage(*reinterpret_cast<int64_t*>(pSelf238), &localRes10) : nullptr;
+        void* storageIBP = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(pSelf238), &localRes10);
         if (storageIBP) localRes10 = *reinterpret_cast<int64_t*>(storageIBP);
     }
 
@@ -620,8 +503,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     int64_t healthCompVal = *reinterpret_cast<int64_t*>(pCVar1);
     if (*reinterpret_cast<int*>(healthCompVal + 0x60) + 1 < 1 && workplaceRef != 0) {
         int64_t localRes8 = workplaceRef;
-        char valid = fn_CitizenComponent_CheckWorkplaceValid ?
-            fn_CitizenComponent_CheckWorkplaceValid(self, &localRes8) : 1;
+        char valid = CitizenComp_CheckWorkplaceValid(self, &localRes8);
         if (valid == 0) {
             // [DIAG] This is the ONLY writer that clears a citizen's home (+0x238) in
             // normal play, and in the stress town it fired for ~8% of the housed
@@ -643,9 +525,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
                 if (ty < 0) ty = 0; if (ty >= mapW) ty = mapW - 1;
                 uint32_t czCell = (uint32_t)(mapW * ty + tx);
                 int64_t homeIBP = workplaceRef;
-                typedef int (*fn7fb0_t)(int64_t*, void*);
-                static fn7fb0_t s_hi7fb0 = reinterpret_cast<fn7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-                int homeCell = s_hi7fb0 ? s_hi7fb0(&homeIBP, nullptr) : -1;
+                int homeCell = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
                 unsigned sk = 0, sr = 0, dk = 0, dr = 0;
                 if (tiles && mapW > 0) {
                     const uint8_t* ts = tiles + (size_t)czCell * 0x30;
@@ -709,7 +589,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
             }
             int64_t nullIBP = 0;
             new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(self, &nullIBP, -1);
+            CitizenComponent_AssignWorkplace(self, &nullIBP, -1);
         }
     }
 
@@ -727,14 +607,13 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
                 if (*reinterpret_cast<int64_t*>(partnerComp + 0x238) != 0) {
                     partnerComp = *reinterpret_cast<int64_t*>(selfPartner);
                     int64_t localRes8 = *reinterpret_cast<int64_t*>(partnerComp + 0x238);
-                    char valid = fn_CitizenComponent_CheckWorkplaceValid ?
-                        fn_CitizenComponent_CheckWorkplaceValid(self, &localRes8) : 0;
+                    char valid = CitizenComp_CheckWorkplaceValid(self, &localRes8);
                     if (valid != 0) {
                         partnerComp = *reinterpret_cast<int64_t*>(selfPartner);
                         int slotIdx = *reinterpret_cast<int*>(partnerComp + 0x240);
                         partnerComp = *reinterpret_cast<int64_t*>(selfPartner);
                         int64_t wpIBP = *reinterpret_cast<int64_t*>(partnerComp + 0x238);
-                        if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(self, &wpIBP, slotIdx);
+                        CitizenComponent_AssignWorkplace(self, &wpIBP, slotIdx);
                     }
                 }
             }
@@ -764,25 +643,21 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         char profByte634 = (profData1F0 != 0) ? *reinterpret_cast<char*>(profData1F0 + 0x4C) : 0;
         if (profByte634 == 0) {
             // Unassigned profession type
-            if (s_fn_FindHousingUnassigned)
-                s_fn_FindHousingUnassigned(reinterpret_cast<int64_t>(self), &housingResult);
+            CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(self), &housingResult);
         } else {
-            if (s_fn_FindHousingAssigned)
-                s_fn_FindHousingAssigned(reinterpret_cast<int64_t>(self), &housingResult);
+            CitizenComp_sub_0470(reinterpret_cast<int64_t>(self), &housingResult);
         }
         int64_t localRes8 = housingResult;
-        if (s_fn_AssignHousing) s_fn_AssignHousing(self, &localRes8);
+        CitizenComp_AssignHousing(self, &localRes8);
     } else {
         // Check if should switch workplace (already reimplemented)
         bool shouldSwitch = CitizenComponent_ShouldSwitchWorkplace(self);
         if (shouldSwitch) {
             int64_t newWpResult = 0;
-            if (s_fn_FindNewWorkplace) {
-                void* result = s_fn_FindNewWorkplace(
-                    reinterpret_cast<int64_t>(self), &newWpResult);
-                int64_t localRes8 = *reinterpret_cast<int64_t*>(result);
-                if (s_fn_AssignHousing) s_fn_AssignHousing(self, &localRes8);
-            }
+            void* result = CitizenComp_helper_ff80(
+                reinterpret_cast<int64_t>(self), &newWpResult);
+            int64_t localRes8 = *reinterpret_cast<int64_t*>(result);
+            CitizenComp_AssignHousing(self, &localRes8);
         }
     }
 
@@ -796,8 +671,7 @@ FindWorkLabel:
             int64_t localRes8_work = 0;
             int64_t localRes18_entity = 0;
             *reinterpret_cast<int*>(&localRes8_work) = -1;
-            if (s_fn_FindWork)
-                s_fn_FindWork(reinterpret_cast<int64_t>(self), &localRes18_entity,
+            CitizenComp_Update_sub_0e70(reinterpret_cast<int64_t>(self), &localRes18_entity,
                               reinterpret_cast<int*>(&localRes8_work), workplaceRef == 0);
             if (localRes18_entity != 0) {
                 if (*reinterpret_cast<int64_t*>(p + 600) != 0) {
@@ -805,25 +679,24 @@ FindWorkLabel:
                 }
                 int64_t releaseIBP = 0;
                 new (&releaseIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                if (s_fn_ReleaseWork) s_fn_ReleaseWork(self, &releaseIBP);
+                CitizenComp_sub_1fa0(reinterpret_cast<int64_t>(self), &releaseIBP);
 
                 releaseIBP = localRes18_entity;
                 int slotIdx = *reinterpret_cast<int*>(&localRes8_work);
-                if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(self, &releaseIBP, slotIdx);
+                CitizenComponent_AssignWorkplace(self, &releaseIBP, slotIdx);
 
                 // Also assign partner if exists
                 if (*reinterpret_cast<int64_t*>(p + 0x250) != 0) {
                     int64_t partnerWp = localRes18_entity;
-                    if (s_fn_AssignWorkplace)
-                        s_fn_AssignWorkplace(*reinterpret_cast<void**>(p + 0x250),
+                    CitizenComponent_AssignWorkplace(*reinterpret_cast<void**>(p + 0x250),
                                             &partnerWp, slotIdx);
                 }
 
                 // Re-find storage for the new workplace
                 workplaceRef = *reinterpret_cast<int64_t*>(pSelf238);
-                if (s_fn_FindCompStorage && workplaceRef != 0) {
+                if (workplaceRef != 0) {
                     int64_t storBuf[8] = {};
-                    void* result = s_fn_FindCompStorage(workplaceRef, storBuf);
+                    void* result = CitizenComp_Entity_FindComponent_Storage(workplaceRef, storBuf);
                     localRes10 = *reinterpret_cast<int64_t*>(result);
                 }
             }
@@ -843,17 +716,15 @@ FindWorkLabel:
             int64_t localRes8_extra = 0;
             int64_t localC8_entity = 0;
             *reinterpret_cast<int*>(&localRes8_extra) = -1;
-            if (s_fn_FindWork)
-                s_fn_FindWork(reinterpret_cast<int64_t>(self), &localC8_entity,
+            CitizenComp_Update_sub_0e70(reinterpret_cast<int64_t>(self), &localC8_entity,
                               reinterpret_cast<int*>(&localRes8_extra), 0);
             if (localC8_entity != 0) {
                 int slotIdx = *reinterpret_cast<int*>(&localRes8_extra);
                 int64_t local98 = localC8_entity;
-                if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(self, &local98, slotIdx);
+                CitizenComponent_AssignWorkplace(self, &local98, slotIdx);
                 if (*reinterpret_cast<int64_t*>(p + 0x250) != 0) {
                     int64_t partnerWp2 = localC8_entity;
-                    if (s_fn_AssignWorkplace)
-                        s_fn_AssignWorkplace(*reinterpret_cast<void**>(p + 0x250),
+                    CitizenComponent_AssignWorkplace(*reinterpret_cast<void**>(p + 0x250),
                                             &partnerWp2, slotIdx);
                 }
             }
@@ -868,34 +739,31 @@ FindWorkLabel:
             float partnerAge = *reinterpret_cast<float*>(desc + 0x48);
             if (partnerAge <= *reinterpret_cast<float*>(p + 0x3C)) {
                 int64_t partnerBuf[2] = {};
-                if (s_fn_FindPartner) {
-                    void* result = s_fn_FindPartner(
-                        reinterpret_cast<int64_t>(self), partnerBuf);
-                    int64_t partnerIBP = *reinterpret_cast<int64_t*>(result);
-                    *reinterpret_cast<int64_t*>(pPartner) = partnerIBP;
-                    if (partnerIBP != 0) {
-                        *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x200;
-                        int64_t partner = *reinterpret_cast<int64_t*>(pPartner);
-                        *reinterpret_cast<uint32_t*>(partner + 0x88) |= 0x200;
+                void* result = CitizenComp_helper_fe40(
+                    reinterpret_cast<int64_t>(self), partnerBuf);
+                int64_t partnerIBP = *reinterpret_cast<int64_t*>(result);
+                *reinterpret_cast<int64_t*>(pPartner) = partnerIBP;
+                if (partnerIBP != 0) {
+                    *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x200;
+                    int64_t partner = *reinterpret_cast<int64_t*>(pPartner);
+                    *reinterpret_cast<uint32_t*>(partner + 0x88) |= 0x200;
 
-                        // Release partner's current work
-                        int64_t releaseIBP = 0;
-                        new (&releaseIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                        if (s_fn_ReleaseWork) s_fn_ReleaseWork(
-                            *reinterpret_cast<void**>(pPartner), &releaseIBP);
+                    // Release partner's current work
+                    int64_t releaseIBP = 0;
+                    new (&releaseIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                    CitizenComp_sub_1fa0(
+                        *reinterpret_cast<int64_t*>(pPartner), &releaseIBP);
 
-                        // Set partner's partner reference to this citizen
-                        new (&releaseIBP) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-                        *reinterpret_cast<int64_t*>(
-                            *reinterpret_cast<int64_t*>(pPartner) + 0x250) = releaseIBP;
+                    // Set partner's partner reference to this citizen
+                    new (&releaseIBP) ::Object::InternalBasePtr(
+                        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+                    *reinterpret_cast<int64_t*>(
+                        *reinterpret_cast<int64_t*>(pPartner) + 0x250) = releaseIBP;
 
-                        // Assign partner to this citizen's workplace
-                        releaseIBP = workplaceRef;
-                        if (s_fn_AssignWorkplace)
-                            s_fn_AssignWorkplace(*reinterpret_cast<void**>(pPartner),
-                                                &releaseIBP, *reinterpret_cast<int*>(p + 0x240));
-                    }
+                    // Assign partner to this citizen's workplace
+                    releaseIBP = workplaceRef;
+                    CitizenComponent_AssignWorkplace(*reinterpret_cast<void**>(pPartner),
+                                            &releaseIBP, *reinterpret_cast<int*>(p + 0x240));
                 }
             }
         }
@@ -977,12 +845,7 @@ LAB_140113873:
                                            deathChanceAtZeroHealth;
                     if (pMaternalDeath <= roll) {
                         // Mother survives: deliver the baby.
-                        typedef void (*fn_GiveBirth_t)(void* self);
-                        static fn_GiveBirth_t s_fn_GiveBirth = nullptr;
-                        if (!s_fn_GiveBirth)
-                            s_fn_GiveBirth = reinterpret_cast<fn_GiveBirth_t>(
-                                ResolveAddr(Module::Exe, 0x140111b90));
-                        if (s_fn_GiveBirth) s_fn_GiveBirth(self);
+                        CitizenComp_helper_1b90(reinterpret_cast<int64_t>(self));
 
                         // Post-partum recovery interval.
                         desc = GetDescription(self);
@@ -1003,13 +866,13 @@ LAB_140113873:
                         float cooldown = roll2 * timerRange + timerBase;
                         uint32_t bits;
                         std::memcpy(&bits, &cooldown, sizeof(bits));
-                        bits ^= (s_DAT_1401722c0 ? *s_DAT_1401722c0 : 0x80000000u);
+                        bits ^= kRdata_1401722c0;
                         std::memcpy(p + 0x4C, &bits, sizeof(bits));
                     } else {
                         // Mother died in childbirth — event type 6. 0x140116dd0 is the
                         // DEATH handler (tombstone + queue-for-removal), so no baby is
                         // produced on this branch and Update returns immediately.
-                        char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 6, nullptr) : 0;
+                        char r = CitizenComponent_HandleLifeEvent(self, 6, nullptr);
                         if (r != 0) return;
                     }
                 }
@@ -1028,8 +891,7 @@ LAB_140113873:
                     // Check storage capacity for the item type
                     int64_t wpVal = *reinterpret_cast<int64_t*>(pSelf238);
                     int64_t storBuf = 0;
-                    void* storResult = s_fn_FindCompStorage ?
-                        s_fn_FindCompStorage(wpVal, &storBuf) : nullptr;
+                    void* storResult = CitizenComp_Entity_FindComponent_Storage(wpVal, &storBuf);
                     if (storResult) {
                         int64_t storComp = *reinterpret_cast<int64_t*>(storResult);
                         // [NAMING CORRECTION 2026-07-26] This is not a storage query at all.
@@ -1041,8 +903,7 @@ LAB_140113873:
                         // this branch look like a bug. desc+0x24 is the per-household OCCUPANT
                         // cap (distinct from desc+0x20, the household SLOT count).
                         int slotIdx = *reinterpret_cast<int*>(p + 0x240);
-                        bool householdFull = s_fn_CheckStorageCapacity ?
-                            s_fn_CheckStorageCapacity(storComp, slotIdx) : false;
+                        bool householdFull = CitizenComp_helper_a4f0(storComp, slotIdx);
                         if (!householdFull) {
                             // Room for another occupant — start the reproduction timer.
                             *reinterpret_cast<uint32_t*>(p + 0x4C) =
@@ -1166,7 +1027,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
         uintptr_t currentWorkplace = *(uintptr_t*)(selfAddr + 0x248);
 
         uintptr_t storageLocIBP = 0;
-        void* storageLocResult = fn_FindStorageLocationComp(currentWorkplace, &storageLocIBP);
+        void* storageLocResult = WorkBase_FindComponent_3050(currentWorkplace, &storageLocIBP);
 
         uintptr_t storageLocComp = *(uintptr_t*)storageLocResult;
         int32_t regionId = *(int32_t*)(storageLocComp + 0x28);
@@ -1187,7 +1048,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 
         // Check if current workplace is valid (reachable)
         uintptr_t workplaceRef = *(uintptr_t*)(selfAddr + 0x248);
-        char valid = fn_CitizenComponent_CheckWorkplaceValid(self, &workplaceRef);
+        char valid = CitizenComp_CheckWorkplaceValid(self, &workplaceRef);
         if (!valid) {
             return true; // workplace not reachable -> should switch
         }
@@ -1198,11 +1059,11 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 
             // CheckPtr + FindWorkplaceComponent
             uintptr_t workplaceCompIBP = 0;
-            fn_FindWorkplaceComp(entityIBP, &workplaceCompIBP);
+            AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityIBP), &workplaceCompIBP);
 
             // CheckPtr + FindStorageLocationComponent
             uintptr_t otherStorageLocIBP = 0;
-            fn_FindStorageLocationComp(entityIBP, &otherStorageLocIBP);
+            WorkBase_FindComponent_3050(entityIBP, &otherStorageLocIBP);
 
             // Skip if this is the current workplace
             if (entityIBP == *(uintptr_t*)(selfAddr + 0x248))
@@ -1260,7 +1121,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
                     // Verify with IsDerivedFrom
                     compSlot = (uintptr_t*)(compArray + ci * 8);
                     uintptr_t finalComp = *compSlot;
-                    if (fn_IsDerivedFrom((void*)finalComp, wpTypeId)) {
+                    if (Object::IsDerivedFromNullSafe((void*)finalComp, wpTypeId)) {
                         wpComp = finalComp;
                     }
                     break;
@@ -1278,7 +1139,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 
             // Check workplace validity
             uintptr_t entityRef = entityIBP;
-            char isValid = fn_CitizenComponent_CheckWorkplaceValid(self, &entityRef);
+            char isValid = CitizenComp_CheckWorkplaceValid(self, &entityRef);
             if (!isValid)
                 continue;
 
@@ -1287,7 +1148,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
             uintptr_t parentEntity = *(uintptr_t*)(wpBase + 0x10);
 
             uintptr_t slcIBP = 0;
-            void* slcResult = fn_FindStorageLocationComp(parentEntity, &slcIBP);
+            void* slcResult = WorkBase_FindComponent_3050(parentEntity, &slcIBP);
             uintptr_t slc = *(uintptr_t*)slcResult;
 
             // Calculate worker slots (lazy-compute cached at +0x30)
@@ -1322,130 +1183,19 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 // the old local names lied about the class at their cell: 0x1401c8070 is
 // WorkComponent (not "StorageLocationComponent") and 0x1401c7158 is CitizenComponent
 // (not "CitizenAIComponent") -- both already converted below.
-static uint32_t* s_pDAT_1401722b0     = nullptr; // abs-value mask used by helper_fe40
-static float*    s_pUVScale           = nullptr; // g_fUVScale (DAT_14017214c)
 
-typedef int    (*fn_CalcWorkerSlots_t)(int64_t comp);                // FUN_14012e5c0
-typedef char   (*fn_CheckWorkplaceValid_t)(CitizenComponent* self, void* ibp); // 0x1401158d0
-typedef void*  (*fn_FindComp_Mat_t)(int64_t comp, void* outIBP);     // FUN_140003050
-typedef void   (*fn_helper_02a0_sort_t)(void* arr, int n, void* tmp);// CitizenComponent_helper_02a0 (0x1400302a0)
-typedef void   (*fn_PostLifeEvent_real_t)(CitizenComponent* self, int eventType, int severity, const char* str); // 0x140113af0 (ex-"AssignState")
-typedef void   (*fn_sub_2040_t)(int64_t comp, void* ibp);           // CitizenComponent_sub_2040
-typedef void   (*fn_helper_68a0_t)(void* comp, void* ibp);          // CitizenComponent_helper_68a0
-typedef void*  (*fn_CopyCtor_t)(void* dst, void* desc);             // ComponentEntity_CopyCtor
 // Arg 5 is the citizen AGE and is a FLOAT in retail (stored to citizen+0x3c, a float
 // field). It was declared `int` here until 2026-07-26 — harmless only because the birth
 // path passes literal 0 (bit-identical to 0.0f). Stack slot 5 is typed the same either
 // way in the MS x64 ABI, so the fix is representational, but every new caller (the
 // founding spawn port) must pass a real float.
-typedef void   (*fn_FUN_140117080_t)(int64_t a, void* b, uint32_t c, char d, float age, char f, int64_t* g, int64_t h);
-typedef void   (*fn_FUN_1400c48a0_t)(void* a, void* ibp, int idx);  // FUN_1400c48a0
-typedef void   (*fn_FUN_1400c3470_t)(void* internal);              // FUN_1400c3470
-typedef void*  (*fn_Entity_FindCompStorage_t)(int64_t entity, void* outIBP); // 0x140008090
-typedef void   (*fn_Entity_impl_ef40_t)(void* a, int64_t* outRes, void* ibp, int z); // 0x14008ef40
-typedef void   (*fn_FUN_14012d150_t)(int64_t a, int64_t b, int c);  // FUN_14012d150
-typedef uint32_t (*fn_FUN_140088f90_t)(int64_t a, int64_t b);      // FUN_140088f90
-typedef void   (*fn_Entity_impl_2e20_t)(int64_t a, void* outVec, int b, int c, float* d); // 0x140122e20
-typedef void   (*fn_FUN_14009c480_t)(int* a, int* b, int c, int d); // FUN_14009c480
-typedef void   (*fn_FUN_140004680_t)(int64_t a, void* outIBP);     // FUN_140004680
-typedef void   (*fn_TimeFromFloat_t)(void* outTime, float v);
-// Callees for the two newly-reimplemented helpers (CheckWorkplaceValid / Entity_impl_ef40):
-typedef int    (*fn_Entity_impl_7fb0_t)(void* ibp, float* p2);                 // 0x140087fb0
-typedef char   (*fn_FUN_140a00f0_t)(int* world, int eventId, uint64_t cellIdx, int param); // 0x1400a00f0
-typedef void*  (*fn_Entity_FindCompStorage6270_t)(int64_t entity, void* outIBP); // 0x140006270
 // Callees for the citizen-lifecycle cascade (AssignHousing / sub_1930 / sub_40f0 / Find*):
-typedef void*  (*fn_Entity_FindBuilding2e10_t)(int64_t entity, void* outIBP);   // 0x140002e10
-typedef void   (*fn_DetachWorkplace7e0_t)(int64_t buildingComp, void* citizenIBP);  // 0x14012f7e0
-typedef void   (*fn_AttachWorkplacea20_t)(int64_t buildingComp, void* citizenIBP);  // 0x14012fa20
-typedef int    (*fn_PathCost8830_t)(int* mapInfo, uint32_t fromRegion, uint32_t toRegion); // 0x140008830
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
-typedef void*  (*fn_Entity_FindPos_ed0_t)(int64_t entity, void* outIBP);        // 0x140002ed0
 
-static fn_CalcWorkerSlots_t      s_fn_CalcWorkerSlots = nullptr;
-static fn_CheckWorkplaceValid_t  s_fn_CheckWorkplaceValid = nullptr;
-static fn_FindComp_Mat_t         s_fn_FindComp_Mat = nullptr;
-static fn_helper_02a0_sort_t     s_fn_helper_02a0 = nullptr;
-static fn_PostLifeEvent_real_t   s_fn_PostLifeEventReal = nullptr;
-static fn_sub_2040_t             s_fn_sub_2040 = nullptr;
-static fn_helper_68a0_t          s_fn_helper_68a0 = nullptr;
-static fn_CopyCtor_t             s_fn_CopyCtor = nullptr;
-static fn_FUN_140117080_t        s_fn_FUN_140117080 = nullptr;
-static fn_FUN_1400c48a0_t        s_fn_FUN_1400c48a0 = nullptr;
-static fn_FUN_1400c3470_t        s_fn_FUN_1400c3470 = nullptr;
-static fn_Entity_FindCompStorage_t s_fn_EntityFindCompStorage = nullptr;
-static fn_Entity_impl_ef40_t     s_fn_Entity_impl_ef40 = nullptr;
-static fn_FUN_14012d150_t        s_fn_FUN_14012d150 = nullptr;
-static fn_FUN_140088f90_t        s_fn_FUN_140088f90 = nullptr;
-static fn_Entity_impl_2e20_t     s_fn_Entity_impl_2e20 = nullptr;
-static fn_FUN_14009c480_t        s_fn_FUN_14009c480 = nullptr;
-static fn_FUN_140004680_t        s_fn_FUN_140004680 = nullptr;
-static fn_TimeFromFloat_t        s_fn_TimeFromFloat = nullptr;
-static fn_Entity_impl_7fb0_t     s_fn_Entity_impl_7fb0 = nullptr;
-static fn_FUN_140a00f0_t         s_fn_FUN_140a00f0 = nullptr;
-static fn_Entity_FindCompStorage6270_t s_fn_EntityFindCompStorage6270 = nullptr;
-static fn_Entity_FindBuilding2e10_t s_fn_Entity_FindBuilding2e10 = nullptr;
-static fn_DetachWorkplace7e0_t   s_fn_DetachWorkplace7e0 = nullptr;
-static fn_AttachWorkplacea20_t   s_fn_AttachWorkplacea20 = nullptr;
-static fn_PathCost8830_t         s_fn_PathCost8830 = nullptr;
-static fn_Entity_FindPos_ed0_t   s_fn_Entity_FindPos_ed0 = nullptr;
-// .rdata float/double constants used by ConsumeFood / ConsumeFuel.
-static float*  s_DAT_140172180 = nullptr;
-static float*  s_DAT_1401721a8 = nullptr;
-static float*  s_DAT_140172174 = nullptr;
-static float*  s_DAT_140172194 = nullptr;
-static double* s_DAT_140172168 = nullptr;
-static float*  s_DAT_1401720ec = nullptr;
+// .rdata float/double constants used by ConsumeFood / ConsumeFuel come from
+// Game/exe_constants.h (kRdata_140172180/1a8/174/194/168/0ec, kRdata_14017214c).
 
-static bool s_calleeResolved = false;
-static void EnsureCallees() {
-    if (s_calleeResolved) return;
-    s_pDAT_1401722b0     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
-    s_pUVScale           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-
-    s_fn_CalcWorkerSlots     = reinterpret_cast<fn_CalcWorkerSlots_t>(ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_fn_CheckWorkplaceValid = reinterpret_cast<fn_CheckWorkplaceValid_t>(ResolveAddr(Module::Exe, 0x1401158d0));
-    s_fn_FindComp_Mat        = reinterpret_cast<fn_FindComp_Mat_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_helper_02a0         = reinterpret_cast<fn_helper_02a0_sort_t>(ResolveAddr(Module::Exe, 0x1400302a0));
-    s_fn_PostLifeEventReal   = reinterpret_cast<fn_PostLifeEvent_real_t>(ResolveAddr(Module::Exe, 0x140113af0));
-    s_fn_sub_2040            = reinterpret_cast<fn_sub_2040_t>(ResolveAddr(Module::Exe, 0x140112040));
-    s_fn_helper_68a0         = reinterpret_cast<fn_helper_68a0_t>(ResolveAddr(Module::Exe, 0x1401168a0));
-    s_fn_CopyCtor            = reinterpret_cast<fn_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_fn_FUN_140117080       = reinterpret_cast<fn_FUN_140117080_t>(ResolveAddr(Module::Exe, 0x140117080));
-    s_fn_FUN_1400c48a0       = reinterpret_cast<fn_FUN_1400c48a0_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_fn_FUN_1400c3470       = reinterpret_cast<fn_FUN_1400c3470_t>(ResolveAddr(Module::Exe, 0x1400c3470));
-    s_fn_EntityFindCompStorage = reinterpret_cast<fn_Entity_FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140008090));
-    s_fn_Entity_impl_ef40    = reinterpret_cast<fn_Entity_impl_ef40_t>(ResolveAddr(Module::Exe, 0x14008ef40));
-    s_fn_FUN_14012d150       = reinterpret_cast<fn_FUN_14012d150_t>(ResolveAddr(Module::Exe, 0x14012d150));
-    s_fn_FUN_140088f90       = reinterpret_cast<fn_FUN_140088f90_t>(ResolveAddr(Module::Exe, 0x140088f90));
-    s_fn_Entity_impl_2e20    = reinterpret_cast<fn_Entity_impl_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_fn_FUN_14009c480       = reinterpret_cast<fn_FUN_14009c480_t>(ResolveAddr(Module::Exe, 0x14009c480));
-    s_fn_FUN_140004680       = reinterpret_cast<fn_FUN_140004680_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_Entity_impl_7fb0    = reinterpret_cast<fn_Entity_impl_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_fn_FUN_140a00f0        = reinterpret_cast<fn_FUN_140a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_EntityFindCompStorage6270 = reinterpret_cast<fn_Entity_FindCompStorage6270_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_DAT_140172180 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172180));
-    s_DAT_1401721a8 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721a8));
-    s_DAT_140172174 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172174));
-    s_DAT_140172194 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172194));
-    s_DAT_140172168 = reinterpret_cast<double*>(ResolveAddr(Module::Exe, 0x140172168));
-    s_DAT_1401720ec = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720ec));
-    s_fn_Entity_FindBuilding2e10 = reinterpret_cast<fn_Entity_FindBuilding2e10_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_DetachWorkplace7e0  = reinterpret_cast<fn_DetachWorkplace7e0_t>(ResolveAddr(Module::Exe, 0x14012f7e0));
-    s_fn_AttachWorkplacea20  = reinterpret_cast<fn_AttachWorkplacea20_t>(ResolveAddr(Module::Exe, 0x14012fa20));
-    s_fn_PathCost8830        = reinterpret_cast<fn_PathCost8830_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_fn_Entity_FindPos_ed0  = reinterpret_cast<fn_Entity_FindPos_ed0_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
-    // ⚠ was 0x140152a80 — which this file's own note (lines ~218-221) identifies as
-    // SoundEffect::_typeInfo, NOT the Time ctor. It was harmless only because that slot
-    // is unregistered (null → guarded no-op) and Time(0.0) happens to be all-zero bits
-    // anyway. The real Time::Time(float) slot is 0x140152b00 (audit 2026-07-26).
-    {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00); // Time::Time(float)
-        if (slot) s_fn_TimeFromFloat = *reinterpret_cast<fn_TimeFromFloat_t*>(slot);
-    }
-    s_calleeResolved = true;
-}
 
 // Helper: scan an entity component array for a type id (vtable+0x10), returning the
 // derived-checked component pointer (or null). Mirrors the inlined finder pattern.
@@ -1460,7 +1210,7 @@ static void* FindCompByTypeId(int64_t entity, uint32_t typeId) {
         if (tid == typeId) {
             void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)i * 8);
             void* resolved = *ibp2;
-            return fn_IsDerivedFrom(resolved, typeId) ? resolved : nullptr;
+            return Object::IsDerivedFromNullSafe(resolved, typeId) ? resolved : nullptr;
         }
     }
     return nullptr;
@@ -1470,9 +1220,10 @@ static void* FindCompByTypeId(int64_t entity, uint32_t typeId) {
 // find a "partner" citizen within the description's age window (+0x48/+0x4c) and
 // matching family-id (+0x38), returning an InternalBasePtr (param_2) to it.
 void* CitizenComp_helper_fe40(int64_t self, void* outIBP) {
-    EnsureCallees();
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
-    uint32_t mask = s_pDAT_1401722b0 ? *s_pDAT_1401722b0 : 0x7fffffff;
+    // The old door read the registered 8-byte cell 0x1401722b0 as a uint32_t: its low
+    // dword (little-endian) of 0x7fffffffffffffff.
+    uint32_t mask = static_cast<uint32_t>(kRdata_1401722b0);
     int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
     int64_t n = *reinterpret_cast<int*>(list + 0xa8);
     uint8_t* sp = reinterpret_cast<uint8_t*>(self);
@@ -1503,7 +1254,6 @@ void* CitizenComp_helper_fe40(int64_t self, void* outIBP) {
 // reassign the citizen's residence link (+600 qwords == +0x258 bytes? note: param_1
 // is Internal*, "param_1 + 600" is byte offset 0x258). Detach from old, attach to new.
 void CitizenComp_sub_1fa0(int64_t selfV, void* param2) {
-    EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     int64_t cur = 0;
     if (*reinterpret_cast<int64_t*>(param2) != *reinterpret_cast<int64_t*>(self + 600)) {
@@ -1511,13 +1261,13 @@ void CitizenComp_sub_1fa0(int64_t selfV, void* param2) {
             int64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(selfV));   // B.3.3 bridge
-            if (s_fn_sub_2040) s_fn_sub_2040(*reinterpret_cast<int64_t*>(self + 600), &ibp);
+            CitizenComp_LeaveRoster_2040(*reinterpret_cast<int64_t*>(self + 600), &ibp);
         }
         if (*reinterpret_cast<int64_t*>(param2) != 0) {
             int64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(selfV));   // B.3.3 bridge
-            if (s_fn_helper_68a0) s_fn_helper_68a0(*reinterpret_cast<void**>(param2), &ibp);
+            CitizenComp_JoinRoster_68a0(*reinterpret_cast<void**>(param2), &ibp);
         }
     }
     (void)cur;
@@ -1527,10 +1277,9 @@ void CitizenComp_sub_1fa0(int64_t selfV, void* param2) {
 // returns whether the citizen's education level (residence comp +0x24) is <= the
 // storage row capacity at +0x50 + param2*0x10 + 8.
 bool CitizenComp_helper_a4f0(int64_t self, int param2) {
-    EnsureCallees();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     void* obj = *reinterpret_cast<void**>(s + 0x18);
-    void* res = fn_IsDerivedFrom(obj, ResidenceDescription::TypeId()) ? obj : nullptr;
+    void* res = Object::IsDerivedFromNullSafe(obj, ResidenceDescription::TypeId()) ? obj : nullptr;
     int eduLevel = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x24) : 0;
     int cap = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(s + 0x50) + 8 + (int64_t)param2 * 0x10);
     return eduLevel <= cap;
@@ -1546,7 +1295,6 @@ void* CitizenComp_helper_ff80(int64_t self, void* outIBP);   // fwd (defined aft
 // free worker slots whose footprint footstep matches; scans the world workplace
 // red-black tree keyed by the citizen's residence id (+0x1f0).
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
-    EnsureCallees();
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     *param_2 = 0;
     int64_t tree = *reinterpret_cast<int64_t*>(gw + 0xf0);
@@ -1584,26 +1332,22 @@ int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
         int64_t slocIBP = 0;
         new (&slocIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sloc));   // B.3.3 bridge
         int maxSlots = *reinterpret_cast<int*>(slocIBP + 0x30);
-        if (maxSlots == 0 && s_fn_CalcWorkerSlots) {
-            maxSlots = s_fn_CalcWorkerSlots(slocIBP);
+        if (maxSlots == 0) {
+            maxSlots = WorkComponent_CalcMaxWorkers(slocIBP);
             *reinterpret_cast<int*>(slocIBP + 0x30) = maxSlots;
         }
 
         if (curWorkers < maxSlots) {
             if (*reinterpret_cast<char*>(wpIBP + 0x50) != '\0') {
                 int64_t local = entryIBP;
-                char ok = s_fn_CheckWorkplaceValid
-                              ? s_fn_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(param_1), &local)
-                              : 0;
+                char ok = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(param_1), &local);
                 if (ok != '\0') {
                     int64_t sub2IBP = 0;
-                    void* sloc2 = s_fn_FindComp_Mat
-                                      ? s_fn_FindComp_Mat(*reinterpret_cast<int64_t*>(wpIBP + 0x10), &sub2IBP)
-                                      : nullptr;
+                    void* sloc2 = WorkBase_FindComponent_3050(*reinterpret_cast<int64_t*>(wpIBP + 0x10), &sub2IBP);
                     int64_t s2 = *reinterpret_cast<int64_t*>(sloc2);
                     int s2slots = *reinterpret_cast<int*>(s2 + 0x30);
-                    if (s2slots == 0 && s_fn_CalcWorkerSlots) {
-                        s2slots = s_fn_CalcWorkerSlots(s2);
+                    if (s2slots == 0) {
+                        s2slots = WorkComponent_CalcMaxWorkers(s2);
                         *reinterpret_cast<int*>(s2 + 0x30) = s2slots;
                     }
                     int gap = s2slots - *reinterpret_cast<int*>(wpIBP + 0x60);
@@ -1623,7 +1367,6 @@ int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
 // sorts via helper_02a0, then returns the first whose free-slot count exceeds the
 // workplace's current workers. Same scanning structure as sub_ffc0 plus a grow-array.
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
-    EnsureCallees();
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int64_t tree = *reinterpret_cast<int64_t*>(gw + 0xf0);
     uint64_t key = *reinterpret_cast<uint64_t*>(param_1 + 0x1f0);
@@ -1661,26 +1404,24 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
         int64_t slocIBP = 0;
         new (&slocIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sloc));   // B.3.3 bridge
         int maxSlots = *reinterpret_cast<int*>(slocIBP + 0x30);
-        if (maxSlots == 0 && s_fn_CalcWorkerSlots) {
-            maxSlots = s_fn_CalcWorkerSlots(slocIBP);
+        if (maxSlots == 0) {
+            maxSlots = WorkComponent_CalcMaxWorkers(slocIBP);
             *reinterpret_cast<int*>(slocIBP + 0x30) = maxSlots;
         }
 
         if (curWorkers < maxSlots) {
             if (*reinterpret_cast<char*>(wpIBP + 0x50) != '\0') {
                 int64_t local = entryIBP;
-                char ok = s_fn_CheckWorkplaceValid
-                              ? s_fn_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(param_1), &local)
-                              : 0;
+                char ok = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(param_1), &local);
                 if (ok != '\0') {
                     // append entryIBP to candidate array (grow with 3x policy)
                     int newCount = candCount + 1;
                     if (candCap < newCount) {
                         candCap = (candCount != 0) ? newCount * 3 : newCount;
                         int64_t* nb = reinterpret_cast<int64_t*>(
-                            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)candCap * 8, 8));
+                            System::MemoryAllocator::MemAlloc((uint64_t)candCap * 8, 8));
                         for (int k = 0; k < candCount; k++) nb[k] = cand[k];
-                        if (cand) fn_MemFreeStatic(cand);
+                        if (cand) System::MemoryAllocator::MemFree(cand);
                         cand = nb;
                     }
                     cand[candCount] = entryIBP;
@@ -1692,11 +1433,11 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
 
     if (candCount == 0) {
         new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        if (cand) fn_MemFreeStatic(cand);
+        if (cand) System::MemoryAllocator::MemFree(cand);
         return param_2;
     }
-    if (candCount > 1 && s_fn_helper_02a0) {
-        s_fn_helper_02a0(cand, candCount, reinterpret_cast<void*>(param_1));
+    if (candCount > 1) {
+        CitizenComp_SortByProfession_02a0(cand, candCount, reinterpret_cast<void*>(param_1));
     }
     for (int k = 0; k < candCount; k++) {
         int64_t entryIBP = cand[k];
@@ -1708,23 +1449,22 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
         int64_t slocIBP = 0;
         new (&slocIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sloc));   // B.3.3 bridge
         int maxSlots = *reinterpret_cast<int*>(slocIBP + 0x30);
-        if (maxSlots == 0 && s_fn_CalcWorkerSlots) {
-            maxSlots = s_fn_CalcWorkerSlots(slocIBP);
+        if (maxSlots == 0) {
+            maxSlots = WorkComponent_CalcMaxWorkers(slocIBP);
             *reinterpret_cast<int*>(slocIBP + 0x30) = maxSlots;
         }
         if (*reinterpret_cast<int*>(wpIBP + 0x60) < maxSlots) {
             *param_2 = entryIBP;
-            fn_MemFreeStatic(cand);
+            System::MemoryAllocator::MemFree(cand);
             return param_2;
         }
     }
     new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    fn_MemFreeStatic(cand);
+    System::MemoryAllocator::MemFree(cand);
     return param_2;
 }
 
 void* CitizenComp_helper_ff80(int64_t self, void* outIBP) {
-    EnsureCallees();
     if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(self + 0x1f0) + 0x4c) != '\0') {
         CitizenComp_sub_0470(self, reinterpret_cast<int64_t*>(outIBP));
     } else {
@@ -1738,7 +1478,6 @@ void* CitizenComp_helper_ff80(int64_t self, void* outIBP) {
 // becomes empty/non-empty, add/remove the geometry from the scene and toggle the +0x20
 // scene id and the +4 "in scene" flag, then notify the owning entity.
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
-    EnsureCallees();
     if (((*reinterpret_cast<uint32_t*>(param_1[2] + 0x40) >> 10 & 1) == 0) || (value == '\0')) {
         uint32_t bit = 1u << (flagIndex & 0x1f);
         if (value == '\0') {
@@ -1808,7 +1547,7 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
                 SceneWatch_Note(id, reinterpret_cast<void*>(param_1 + 5), "StatusIcon(12c3f0)::Add");
             }
             int64_t timeVal = 0;
-            if (s_fn_TimeFromFloat) s_fn_TimeFromFloat(&timeVal, 0.0f);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), 0.0f);
             // param_1 is a Component (the +0x10 entity / +0x20 flag-notify idiom below).
             reinterpret_cast<Component*>(param_1)->Tick(&timeVal);   // B.3.x bridge (slot 8)
             uint32_t before = *reinterpret_cast<uint32_t*>(param_1 + 4);
@@ -1817,7 +1556,7 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             changed = after ^ before;
         }
         if ((changed & 0xffff) != 0 && param_1[2] != 0) {
-            if (s_fn_FUN_1400c3470) s_fn_FUN_1400c3470(reinterpret_cast<void*>(param_1[2]));
+            ActHunt_NotifyEntityChanged_c3470(reinterpret_cast<void*>(param_1[2]));
         }
     }
 }
@@ -1827,7 +1566,6 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
 // currently buildable, else samples the citizen's current world position against the
 // terrain buildable grid.
 char CitizenComp_CanFindHousing(int64_t selfV) {
-    EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     int* grid = *reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
 
@@ -1848,12 +1586,12 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
 
     if (*reinterpret_cast<int64_t*>(self + 0x238) != 0) {
         int64_t res8 = 0;
-        if (s_fn_FUN_140004680) s_fn_FUN_140004680(*reinterpret_cast<int64_t*>(self + 0x238), &res8);
+        FloorComponent_FindResData(*reinterpret_cast<void**>(self + 0x238), &res8);
         if (tileBuildable(res8)) return 1;
     }
     if (*reinterpret_cast<int64_t*>(self + 0x248) != 0) {
         int64_t res8 = 0;
-        if (s_fn_FUN_140004680) s_fn_FUN_140004680(*reinterpret_cast<int64_t*>(self + 0x248), &res8);
+        FloorComponent_FindResData(*reinterpret_cast<void**>(self + 0x248), &res8);
         if (tileBuildable(res8)) return 1;
     }
     int64_t mc = *reinterpret_cast<int64_t*>(self + 0x278);
@@ -1883,7 +1621,6 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
 // (DAT_1401c7158), spawn it at the parent's world position, assign it state 8, and
 // flag both parent + linked entity (+0x88 |= 0x100).
 void CitizenComp_helper_1b90(int64_t selfV) {
-    EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
@@ -1912,12 +1649,10 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     }
 
     // allocate + copy-construct the child entity
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     void* child = nullptr;
     if (mem) {
-        child = s_fn_CopyCtor
-                    ? s_fn_CopyCtor(mem, *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(self + 0x10) + 0x28))
-                    : nullptr;
+        child = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(self + 0x10) + 0x28));
     }
     int64_t childIBP = 0;
     new (&childIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(child));   // B.3.3 bridge
@@ -1968,18 +1703,16 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     pos[1] = *reinterpret_cast<float*>(geom + 0x15c);
     pos[2] = *reinterpret_cast<float*>(geom + 0x160);
 
-    if (s_fn_FUN_140117080)
-        s_fn_FUN_140117080(aiIBP, pos, gender, '\x01', 0, '\0', &parentIBP, spawnArg);
+    CitizenComp_DeferredInit_117080(aiIBP, pos, gender, '\x01', 0, '\0', &parentIBP, spawnArg);
 
     int64_t addArg = childIBP;
-    if (s_fn_FUN_1400c48a0) {
+    {
         int64_t desc = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self + 0x10) + 0x28);
-        s_fn_FUN_1400c48a0(*reinterpret_cast<void**>(gw + 0xe8), &addArg,
-                           *reinterpret_cast<int*>(desc + 0x20));
+        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(gw + 0xe8), &addArg,
+                                       *reinterpret_cast<int*>(desc + 0x20));
     }
     // Post "child born" (event type 8) for the newborn.
-    if (s_fn_PostLifeEventReal)
-        s_fn_PostLifeEventReal(reinterpret_cast<CitizenComponent*>(aiIBP), 8, 0, nullptr);
+    CitizenComponent_PostLifeEvent(reinterpret_cast<CitizenComponent*>(aiIBP), 8, 0, nullptr);
 
     *reinterpret_cast<uint32_t*>(self + 0x88) |= 0x100;
     if (*reinterpret_cast<int64_t*>(self + 0x250) != 0) {
@@ -2018,7 +1751,6 @@ static int64_t StandaloneFindStorageComp(void* entity) {
     return 0;
 }
 void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
-    EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     if (*reinterpret_cast<int64_t*>(param2) == 0) return;
 
@@ -2028,7 +1760,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
     // (DAT_1401c7e78), NOT 0x140008090 (that one is the ResidenceComponent finder,
     // DAT_1401c7cf0 — the previous code here used it by mistake, so the eat loop
     // found no storage on storage-only food buildings).
-    if (s_fn_EntityFindCompStorage6270) s_fn_EntityFindCompStorage6270((int64_t)entity, &storeIBP);
+    WorkBase_FindComponent_6270((int64_t)entity, &storeIBP);
     // Scoped standalone fallback — see StandaloneFindStorageComp.
     if (storeIBP == 0) storeIBP = StandaloneFindStorageComp(entity);
     if (storeIBP == 0) {
@@ -2044,13 +1776,13 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
         return;
     }
 
-    float uv = s_pUVScale ? *s_pUVScale : 1.0f;
+    float uv = kRdata_14017214c;
     float hours = *reinterpret_cast<float*>(self + 0x44);
     do {
         if (hours <= 0.0f) return;
         int64_t arg = *reinterpret_cast<int64_t*>(param2);
         int64_t res10 = 0;
-        if (s_fn_Entity_impl_ef40) s_fn_Entity_impl_ef40(entity, &res10, &arg, 0);
+        CitizenComp_Entity_impl_ef40(entity, &res10, &arg, 0);
         int64_t work = res10;
         if (res10 == 0) return;
 
@@ -2071,7 +1803,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
             if (*reinterpret_cast<int*>(self + 0xa4) < newCount) {
                 *reinterpret_cast<int*>(self + 0xa4) = (count != 0) ? newCount * 3 : newCount;
                 int64_t* nb = reinterpret_cast<int64_t*>(
-                    fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)*reinterpret_cast<int*>(self + 0xa4) * 8, 8));
+                    System::MemoryAllocator::MemAlloc((uint64_t)*reinterpret_cast<int*>(self + 0xa4) * 8, 8));
                 *reinterpret_cast<int64_t**>(self + 0x98) = nb;
             }
             int64_t* dst = *reinterpret_cast<int64_t**>(self + 0x98);
@@ -2079,17 +1811,17 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
             for (int i = start; i < newCount; i++) {
                 dst[i] = (i < count) ? old[i] : res10;
             }
-            if (old != dst && old) fn_MemFreeStatic(old);
+            if (old != dst && old) System::MemoryAllocator::MemFree(old);
         }
 
         // subtract one unit from the storage + bump the town per-category
         // consumed counter (townMgr = *(gameWorld+0xf0), counters at +0x170,
         // 0x20-byte stride, count at +0xC).
-        if (s_fn_FUN_14012d150) s_fn_FUN_14012d150(storeIBP, work, 1);
+        ActRm_StorageSubtract_d150(storeIBP, work, 1);
         int64_t worldGrid = *reinterpret_cast<int64_t*>(
             reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
-        if (s_fn_FUN_140088f90) {
-            uint32_t idx = s_fn_FUN_140088f90(storeIBP, work);
+        {
+            uint32_t idx = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(storeIBP), work);
             if (-1 < (int)idx) {
                 int* p = reinterpret_cast<int*>((int64_t)(int)idx * 0x20 + 0xc +
                                                 *reinterpret_cast<int64_t*>(worldGrid + 0x170));
@@ -2111,7 +1843,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == matTid) {
                 void* obj = reinterpret_cast<void*>(comp);
-                mat = fn_IsDerivedFrom(obj, matTid) ? obj : nullptr;
+                mat = Object::IsDerivedFromNullSafe(obj, matTid) ? obj : nullptr;
                 break;
             }
         }
@@ -2138,7 +1870,6 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
 // NOTE: this is a long, deeply engine-coupled scan; ported structurally from Ghidra.
 // param_3 receives a slot index; returns an InternalBasePtr (param_2) to the workplace.
 void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, char param_4) {
-    EnsureCallees();
     uint8_t* sp = reinterpret_cast<uint8_t*>(param_1);
     int bestSlot = -1;
     int64_t self250 = *reinterpret_cast<int64_t*>(sp + 0x250);
@@ -2148,13 +1879,11 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
         self250 = *reinterpret_cast<int64_t*>(sp + 0x250);
         if (*reinterpret_cast<int64_t*>(self250 + 0x238) != 0) {
             int64_t cur = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(sp + 0x250) + 0x238);
-            char ok = s_fn_CheckWorkplaceValid
-                          ? s_fn_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(param_1), &cur)
-                          : 0;
+            char ok = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(param_1), &cur);
             if (ok != '\0') {
                 int64_t wpEntity = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(sp + 0x250) + 0x238);
                 int64_t storeIBP = 0;
-                void* st = s_fn_EntityFindCompStorage ? s_fn_EntityFindCompStorage(wpEntity, &storeIBP) : nullptr;
+                void* st = CitizenComp_Entity_FindComponent_Storage(wpEntity, &storeIBP);
                 if (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(st) + 0x58) < 2) {
                     *param_3 = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(sp + 0x250) + 0x240);
                     int64_t v = *reinterpret_cast<int64_t*>(sp + 0x250);
@@ -2185,7 +1914,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
             if (ctid == tid) {
                 void** ibp2 = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
                 void* resolved = *ibp2;
-                return fn_IsDerivedFrom(resolved, tid) ? resolved : nullptr;
+                return Object::IsDerivedFromNullSafe(resolved, tid) ? resolved : nullptr;
             }
         }
         return nullptr;
@@ -2198,8 +1927,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
     // or if our workplace is nearly full while a coworker's still has room.
     if (*reinterpret_cast<int64_t*>(sp + 0x238) != 0) {
         int64_t ownStoreIBP = 0;
-        if (s_fn_EntityFindCompStorage)
-            s_fn_EntityFindCompStorage(*reinterpret_cast<int64_t*>(sp + 0x238), &ownStoreIBP);
+        CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(sp + 0x238), &ownStoreIBP);
         int citCount = *reinterpret_cast<int*>(townMgr + 0xa8);
         for (int64_t i = 0; i < citCount; i++) {
             int64_t other = *reinterpret_cast<int64_t*>(
@@ -2214,8 +1942,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
                 }
                 int64_t otherWp = *reinterpret_cast<int64_t*>(other + 0x238);
                 int64_t otherStoreIBP = 0;
-                if (s_fn_EntityFindCompStorage)
-                    s_fn_EntityFindCompStorage(otherWp, &otherStoreIBP);
+                CitizenComp_Entity_FindComponent_Storage(otherWp, &otherStoreIBP);
                 if (*reinterpret_cast<int*>(ownStoreIBP + 0x58) == 1) {
                     if (1 < *reinterpret_cast<int*>(otherStoreIBP + 0x58)) {
                         new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge  // LAB_140111497
@@ -2275,8 +2002,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
                 int64_t rosterBase = *reinterpret_cast<int64_t*>(resIBP + 0x50);
                 if (*reinterpret_cast<int*>(rosterBase + 8 + rosterOff) < 1) {  // free slot
                     float pos[3] = {0.0f, 0.0f, 0.0f};
-                    if (s_fn_Entity_impl_2e20)
-                        s_fn_Entity_impl_2e20(interactIBP, pos, 0, 0, nullptr);
+                    Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP), pos, 0, 0, nullptr);
                     int mw = *mapInfo;
                     int wpX = static_cast<int>(pos[0] + static_cast<float>(mw >> 1));
                     int wpY = static_cast<int>(pos[1] + static_cast<float>(mw >> 1));
@@ -2284,7 +2010,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
                     if (mw <= wpX) wpX = mw - 1;
                     if (wpY < 0) wpY = 0;
                     if (mw <= wpY) wpY = mw - 1;
-                    if (s_fn_FUN_14009c480) s_fn_FUN_14009c480(mapInfo, mapInfo, 0, 0);
+                    Pf_ZoneRefresh_9c480(mapInfo, mapInfo, 0, 0);
                     int64_t cellBase = *reinterpret_cast<int64_t*>(
                         reinterpret_cast<uint8_t*>(mapInfo) + 0x80);
                     int64_t homeCellPtr = homeCellIdx * 0x30 + cellBase;
@@ -2330,7 +2056,6 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
 // to the world reachability test FUN_1400a00f0(world, 0xE1F, cellIndex, regionId).
 // Returns nonzero if the candidate is a valid (reachable) workplace for the citizen.
 char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
-    EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
@@ -2349,9 +2074,9 @@ char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
     if (mapW <= tileY) tileY = mapW - 1;
 
     int64_t ibpVal = *reinterpret_cast<int64_t*>(param_2);
-    int regionId = s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&ibpVal, nullptr) : 0;
+    int regionId = Pf_EntityAnchorCell_7fb0(&ibpVal, nullptr);
     uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
-    char res = s_fn_FUN_140a00f0 ? (char)s_fn_FUN_140a00f0(mapInfo, 0xe1f, cellIdx, regionId) : 0;
+    char res = static_cast<char>(static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapInfo, 0xe1f, cellIdx, regionId)));
     return res;
 }
 
@@ -2363,7 +2088,6 @@ char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
 // The category selects which bit of the material's +0x5c flags word gates a slot:
 //   0->bit5, 1->bit6, 2->bit9, 3->bit13, 4->bit14.
 int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4) {
-    EnsureCallees();
     (void)param_1;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     uint32_t rawMatTid = RawMaterialDescription::TypeId();
@@ -2378,8 +2102,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     int shift = catShift(param_4);
 
     int64_t storeIBP = 0;
-    if (s_fn_EntityFindCompStorage6270)
-        s_fn_EntityFindCompStorage6270(*reinterpret_cast<int64_t*>(param_3), &storeIBP);
+    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(param_3), &storeIBP);
     // Scoped standalone fallback (registered 6270 port's typeid is dead .rdata) +
     // null bail: retail asserts the storage exists; in standalone an entity in a
     // town search list may still lack a live StorageComponent — treat as no slot.
@@ -2400,7 +2123,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == rawMatTid) {
                 void* obj = reinterpret_cast<void*>(comp);
-                return fn_IsDerivedFrom(obj, rawMatTid) ? obj : nullptr;
+                return Object::IsDerivedFromNullSafe(obj, rawMatTid) ? obj : nullptr;
             }
         }
         return nullptr;
@@ -2452,15 +2175,13 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
 // [0, description+0x70] and the flag word is reset. Disabled (flag-cleared) when the
 // world's no-hunger debug bit (gameFlags>>3) is set.
 void CitizenComp_ConsumeFood(CitizenComponent* param_1) {
-    EnsureHelpers();
-    EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
-    float uv   = s_pUVScale ? *s_pUVScale : 1.0f;
-    float c114 = s_DAT_140172114 ? *s_DAT_140172114 : 0.0f;
-    float c100 = s_DAT_140172100 ? *s_DAT_140172100 : 0.0f;
-    float c180 = s_DAT_140172180 ? *s_DAT_140172180 : 1.0f;
+    float uv   = kRdata_14017214c;
+    float c114 = kRdata_140172114;
+    float c100 = kRdata_140172100;
+    float c180 = kRdata_140172180;
 
     if ((*reinterpret_cast<uint32_t*>(gw + 0xd0) >> 3 & 1) != 0) {
         *reinterpret_cast<uint32_t*>(p + 0x50) = *reinterpret_cast<uint32_t*>(desc + 0x70);
@@ -2491,17 +2212,15 @@ void CitizenComp_ConsumeFood(CitizenComponent* param_1) {
 // (world map-info gw+0xf8 -> tile +0x80, via Entity_impl_7fb0 region index) and the
 // workplace storage demand. Closure-safe: callees 0x140087fb0/0x140008090 registered.
 void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
-    EnsureHelpers();
-    EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
-    float uv   = s_pUVScale ? *s_pUVScale : 1.0f;
-    float c114 = s_DAT_140172114 ? *s_DAT_140172114 : 0.0f;
-    float c1a8 = s_DAT_1401721a8 ? *s_DAT_1401721a8 : 0.0f;
-    float c174 = s_DAT_140172174 ? *s_DAT_140172174 : 0.0f;
-    float c194 = s_DAT_140172194 ? *s_DAT_140172194 : 0.0f;
-    float c0ec = s_DAT_1401720ec ? *s_DAT_1401720ec : 0.0f;
-    double c168 = s_DAT_140172168 ? *s_DAT_140172168 : 0.0;
+    float uv   = kRdata_14017214c;
+    float c114 = kRdata_140172114;
+    float c1a8 = kRdata_1401721a8;
+    float c174 = kRdata_140172174;
+    float c194 = kRdata_140172194;
+    float c0ec = kRdata_1401720ec;
+    double c168 = kRdata_140172168;
 
     uint32_t f = *reinterpret_cast<uint32_t*>(p + 0x88);
     float* acc = reinterpret_cast<float*>(p + 0x80);
@@ -2540,7 +2259,7 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
     int64_t wpIBP = *reinterpret_cast<int64_t*>(p + 0x238);
     if (wpIBP != 0) {
         int64_t mapInfo = *reinterpret_cast<int64_t*>(gw + 0xf8);
-        int region = s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&wpIBP, nullptr) : 0;
+        int region = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
         int64_t tile = (int64_t)region * 0x30 + *reinterpret_cast<int64_t*>(mapInfo + 0x80);
         int climate = ((*reinterpret_cast<char*>(tile + 0x20) != 0) +
                        (*reinterpret_cast<char*>(tile + 0x1f) != 0) +
@@ -2550,9 +2269,7 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
                       (int)*reinterpret_cast<uint8_t*>(tile + 0x21);
         if (climate < 0) climate = 0;
         int64_t storeIBP = 0;
-        void* st = s_fn_EntityFindCompStorage
-                       ? s_fn_EntityFindCompStorage(*reinterpret_cast<int64_t*>(p + 0x238), &storeIBP)
-                       : nullptr;
+        void* st = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(p + 0x238), &storeIBP);
         if (st && *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(st) + 0x58) > 1) climate >>= 2;
         fVar5 += (float)climate;
     }
@@ -2582,24 +2299,23 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
 // On detach: find the residence's building component (002e10) and call DetachWorkplace
 // (12f7e0) with a back-IBP to this citizen. Symmetric on attach via AttachWorkplace (12fa20).
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
-    EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t* slot = reinterpret_cast<int64_t*>(p + 0x248);
     if (*slot != 0) {
         int64_t buildingIBP = 0;
-        if (s_fn_Entity_FindBuilding2e10) s_fn_Entity_FindBuilding2e10(*slot, &buildingIBP);
+        AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(*slot), &buildingIBP);
         int64_t selfIBP = 0;
         new (&selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
-        if (s_fn_DetachWorkplace7e0) s_fn_DetachWorkplace7e0(buildingIBP, &selfIBP);
+        WorkplaceComponent_Detach(buildingIBP, &selfIBP);
     }
     int64_t newHousing = *param_2;
     *slot = newHousing;
     if (newHousing != 0) {
         int64_t buildingIBP = 0;
-        if (s_fn_Entity_FindBuilding2e10) s_fn_Entity_FindBuilding2e10(*slot, &buildingIBP);
+        AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(*slot), &buildingIBP);
         int64_t selfIBP = 0;
         new (&selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
-        if (s_fn_AttachWorkplacea20) s_fn_AttachWorkplacea20(buildingIBP, &selfIBP);
+        WorkplaceComponent_Attach(buildingIBP, &selfIBP);
     }
 }
 
@@ -2618,12 +2334,11 @@ void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
 int g_sub40f0_exit = 0, g_sub40f0_count = 0, g_sub40f0_cap = 0, g_sub40f0_attTid = 0;
 
 bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
-    EnsureCallees();
     g_sub40f0_exit = 0;
     uint8_t* cp = reinterpret_cast<uint8_t*>(param_1);
     void* obj = *reinterpret_cast<void**>(cp + 0x18);
     uint32_t attTid = AttendanceDescription::TypeId();   // cell 0x1401c3f78 (NOT Residence)
-    void* res = (obj && attTid && fn_IsDerivedFrom(obj, attTid)) ? obj : nullptr;
+    void* res = (obj && attTid && Object::IsDerivedFromNullSafe(obj, attTid)) ? obj : nullptr;
     int cap = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x20) : 0;
     g_sub40f0_attTid = (int)attTid;
     g_sub40f0_cap    = cap;
@@ -2631,15 +2346,15 @@ bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
     if (*reinterpret_cast<int*>(cp + 0x30) >= cap) { g_sub40f0_exit = 1; return false; }
 
     int64_t bldgIBP = 0;
-    if (s_fn_Entity_FindBuilding2e10) s_fn_Entity_FindBuilding2e10(*reinterpret_cast<int64_t*>(cp + 0x10), &bldgIBP);
+    AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(cp + 0x10), &bldgIBP);
     if (*reinterpret_cast<int*>(bldgIBP + 0x60) == 0) { g_sub40f0_exit = 2; return false; }
 
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
     int64_t posIBP = 0;
-    if (s_fn_Entity_FindPos_ed0) s_fn_Entity_FindPos_ed0(*reinterpret_cast<int64_t*>(cp + 0x10), &posIBP);
+    WorkBase_FindComponent_2ed0(*reinterpret_cast<int64_t*>(cp + 0x10), &posIBP);
     float pos[3] = {0,0,0};
-    if (s_fn_Entity_impl_2e20) s_fn_Entity_impl_2e20(posIBP, pos, 0, 0, nullptr);
+    Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);
 
     int64_t citizen = *reinterpret_cast<int64_t*>(param_2);
     int64_t home = *reinterpret_cast<int64_t*>(citizen + 0x278);
@@ -2659,7 +2374,7 @@ bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
     int posY  = clampTile(pos[1]);
     uint32_t fromCell = (uint32_t)(mapW * posY + posX);
     uint32_t toCell   = (uint32_t)(mapW * homeY + homeX);
-    char ok = s_fn_FUN_140a00f0 ? s_fn_FUN_140a00f0(mapInfo, 0xe1f, fromCell, toCell) : 0;
+    char ok = WorkBase_ValidateCell_a00f0(mapInfo, 0xe1f, fromCell, toCell);
     if (!ok) g_sub40f0_exit = 3;
     return ok != 0;
 }
@@ -2680,7 +2395,6 @@ int g_sub1930_lastExit = 0, g_sub1930_lastCount = 0, g_sub1930_lastCap = 0;
 extern int g_sub40f0_exit, g_sub40f0_count, g_sub40f0_cap;
 
 int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, int64_t param_4) {
-    EnsureCallees();
     g_sub1930_walked = g_sub1930_haveWpc = g_sub1930_profMatch =
         g_sub1930_reject40f0 = g_sub1930_accepted = 0;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -2692,7 +2406,7 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
     uint32_t srcRegion = 0xffffffff;
     if (srcWp != 0) {
         int64_t srcIBP = srcWp;
-        srcRegion = (uint32_t)(s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&srcIBP, nullptr) : 0);
+        srcRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&srcIBP, nullptr));
     }
     uint32_t wpTid = WorkPlaceComponent::TypeId();
 
@@ -2712,7 +2426,7 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
             if (tid == wpTid) {
                 void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)j * 8);
                 void* o = *ibp2;
-                wp = fn_IsDerivedFrom(o, wpTid) ? o : nullptr;
+                wp = Object::IsDerivedFromNullSafe(o, wpTid) ? o : nullptr;
                 break;
             }
         }
@@ -2737,11 +2451,11 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
         ++g_sub1930_accepted;
 
         int64_t candSubIBP = *reinterpret_cast<int64_t*>(cand + 0x10);
-        uint32_t dstRegion = (uint32_t)(s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&candSubIBP, nullptr) : 0);
+        uint32_t dstRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&candSubIBP, nullptr));
         int cost = 1;
-        if ((int)srcRegion >= 0 && s_fn_PathCost8830) {
+        if ((int)srcRegion >= 0) {
             int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
-            cost = s_fn_PathCost8830(mapInfo, dstRegion, srcRegion);
+            cost = WorkBase_CalcDistance_8830(mapInfo, dstRegion, srcRegion);
         }
         if (bestCost < 0 || cost < bestCost) {
             *param_2 = cand;
@@ -2786,7 +2500,6 @@ static bool CareTraceOn() {
 }
 
 char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
-    EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
     int64_t found = 0;
@@ -2844,7 +2557,6 @@ char CitizenComp_FindCareBuilding(CitizenComponent* param_1) {
 // Reimpl of CitizenComponent_FindStorage (0x1401116f0):
 // same as FindWorkplace but keyed by description+0x28 and stores at +0x230.
 void CitizenComp_FindStorage(CitizenComponent* param_1) {
-    EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
     int64_t found = 0;
@@ -2890,7 +2602,6 @@ void CitizenComp_FindStorage(CitizenComponent* param_1) {
 // short soak is therefore CORRECT, not a defect — you need a citizen that actually grows
 // up while a staffed school exists. See [[project_wpc_first_seat_and_attendance_keys]].
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
-    EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
     int64_t found = 0;
@@ -2911,23 +2622,6 @@ char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
         }
     }
     return 0;
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void CitizenComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[CitizenComponent] Funcs resolved: PostLifeEvent=%p HandleLifeEvent=%p "
-           "UpdateHealth=%p ConsumeFood=%p ConsumeFuel=%p FindWorkplace=%p "
-           "FindStorage=%p HealthSetFlag=%p AssignWorkplace=%p\n",
-           (void*)s_fn_PostLifeEvent, (void*)s_fn_HandleLifeEvent,
-           (void*)s_fn_UpdateHealth, (void*)s_fn_ConsumeFood,
-           (void*)s_fn_ConsumeFuel, (void*)s_fn_FindCareBuilding,
-           (void*)s_fn_FindStorage, (void*)s_fn_HealthSetFlag,
-           (void*)s_fn_AssignWorkplace);
-#endif
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
@@ -2970,7 +2664,7 @@ static void* CitizenComp_FindSiblingByTypeId(int64_t ownerEntity, uint32_t want)
         if (!comp) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want)
-            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+            return Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
     }
     return nullptr;
 }

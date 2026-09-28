@@ -20,6 +20,3 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
 void HerdComponent_Populate(int64_t herdComp, int count);
 
 void HerdComponent_OnRemove(void* self);
-
-// Init: resolve all internal function pointers (called once at startup)
-void HerdComponent_InitFuncs();

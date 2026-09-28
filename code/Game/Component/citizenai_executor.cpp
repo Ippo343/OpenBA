@@ -62,6 +62,9 @@
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include "Action/Action.h"     // B.3.x W0: the executor's Action slots by name
 #include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
 
 namespace {
 
@@ -96,15 +99,8 @@ static inline void CallExit(int64_t* node, void* stack) {
 }
 
 
-// FUN_1400c5400 — TaskListCleanup, called when a main-slot returns 2 (push-more / requeue).
-typedef void (*fn_taskCleanup_t)(void* stack);   // 0x1400c5400 (registered: WorkBase_TaskListCleanup_c5400)
-static fn_taskCleanup_t s_fn_taskCleanup = nullptr;
-static bool s_init = false;
-static void EnsureInit() {
-    if (s_init) return;
-    s_fn_taskCleanup = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_init = true;
-}
+// FUN_1400c5400 — TaskListCleanup, called when a main-slot returns 2 (push-more / requeue):
+// WorkBase_TaskListCleanup_c5400, called by name.
 
 } // namespace
 
@@ -119,7 +115,6 @@ static void EnsureInit() {
 // (An older note here read it as RCX-only; the disassembly loads RDX.)
 // ===========================================================================
 extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
-    EnsureInit();
     int64_t* node = *reinterpret_cast<int64_t**>(param_1 + 0x10);
     if (node != nullptr) {
         do {
@@ -128,12 +123,11 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
             if (iVar1 != 1) break;
             node = reinterpret_cast<int64_t*>(node[2]);          // advance via node+0x10
         } while (node != nullptr);
-        if (fn_InternalBasePtr_DeletePtr)
-            reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(param_1 + 0x10))->DeletePtr(
-                );   // B.3.3 bridge
+        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(param_1 + 0x10))->DeletePtr(
+            );   // B.3.3 bridge
         // re-Ctor a default InternalBasePtr (null internal) and store into [stack+0x10]
         node = nullptr;
-        if (fn_InternalBasePtr_Ctor) new (&node) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&node) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<int64_t*>(param_1 + 0x10) = reinterpret_cast<int64_t>(node);
     }
 }
@@ -143,7 +137,6 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
 // param_1 = stack object (== CharacterComponent+0x48); param_2 = Time* (forwarded to main).
 // ===========================================================================
 extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2) {
-    EnsureInit();
     bool bVar2 = false;            // R14: "stay" sticky flag → break the outer loop
     do {
         int iVar1 = static_cast<int>(param_1[3]);                       // top index (stack+0x18)
@@ -193,11 +186,10 @@ LAB_d85:
                                 CallExit(local_res8, param_1);
                             }
                         }
-                        if (fn_InternalBasePtr_DeletePtr)
-                            reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>( *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8))->DeletePtr(
-                                );   // B.3.3 bridge
+                        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>( *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8))->DeletePtr(
+                            );   // B.3.3 bridge
                         int64_t local_res18 = 0;
-                        if (fn_InternalBasePtr_Ctor) new (&local_res18) ::Object::InternalBasePtr(
+                        new (&local_res18) ::Object::InternalBasePtr(
                             nullptr);   // B.3.3 bridge
                         *reinterpret_cast<int64_t*>(
                             *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8) = local_res18;
@@ -206,7 +198,7 @@ LAB_d85:
                     }
                 }
                 if (iVar3 == 2) {
-                    if (s_fn_taskCleanup) s_fn_taskCleanup(param_1);
+                    WorkBase_TaskListCleanup_c5400(param_1);   // 0x1400c5400
                 }
             }
 LAB_e38:
@@ -229,39 +221,29 @@ LAB_e38:
 // ===========================================================================
 namespace {
 
-// --- exe .rdata read by the tail ---
-static const float* s_pDAT_172220 = nullptr;
-static const float* s_pDAT_172238 = nullptr;
-static const float* s_pDAT_1720e4 = nullptr;
-static const float* s_pDAT_1720cc = nullptr;
-static const float* s_pDAT_172114 = nullptr;
-static const float* s_pDAT_17214c = nullptr;
-static const float* s_pDAT_1722a0 = nullptr;
-static const uint64_t* s_pDAT_1722b0 = nullptr;   // double abs mask
-static const uint32_t* s_pDAT_1722c0 = nullptr;   // float sign-flip mask (XOR)
-static const float* s_pUVScale = nullptr;         // g_fUVScale (0x140172148 region — read via 0x14017214c sibling)
+// --- exe .rdata read by the tail: exe_constants.h (kRdata_140172220 180,
+//     kRdata_140172238 360, kRdata_1401720e4 0.1, kRdata_1401720cc pi/180,
+//     kRdata_140172114 0.5, kRdata_14017214c 1.0, kRdata_1401722a0 -180). The
+//     0x1401722b0 abs mask / 0x1401722c0 sign-flip mask are expressed as fabs_f and a
+//     negation below. A .rdata float stored as its bit pattern is read through RdataF.
+static inline float RdataF(uint32_t bits) {
+    float f;
+    std::memcpy(&f, &bits, sizeof f);
+    return f;
+}
 
-// --- exe sub-callees used by the tail (some registered, some NOT) ---
-typedef float  (*fn_f1_t)(float);                          // 131090 / 131c90 / 132010
-typedef float* (*fn_gridToWorld_t)(void* game, float* out3, float* inXY2, char flag, void* outTri); // 9f3e0 (REG)
-typedef void   (*fn_sub8660_t)(float* arr, int idx);       // 018660
-static fn_f1_t          s_fn_131090 = nullptr;   // CharacterComponent_helper_1090 (NOT REG)
-static fn_f1_t          s_fn_131c90 = nullptr;   // FUN_140131c90 sin-ish           (NOT REG)
-static fn_f1_t          s_fn_132010 = nullptr;   // WorkImpl_Sqrtf_132010           (REG)
-static fn_gridToWorld_t s_fn_9f3e0  = nullptr;   // GridToWorld / impl_f3e0         (REG)
-static fn_sub8660_t     s_fn_18660  = nullptr;   // CharacterComponent_sub_8660     (NOT REG)
+// --- exe sub-callees used by the tail, called by name ---
+//   0x14009f3e0 GridToWorld = Reimpl_MapGetTerrainPos; 0x140018660 = CharMgr_sub_8660.
+//   sinf / cosf (0x140131c90 / 0x140131090) come from CharacterComponent_SinCosf and
+//   sqrtf (0x140132010) is __builtin_sqrtf, see the tail.
 
-// --- engine dispatch slots used by the tail (all rendering-layer) ---
+// --- engine calls the tail makes through exe import slots (all rendering-layer) ---
 // Value-return ABIs (CLAUDE.md gotcha): MeshInstance::RootAnimationOffset returns
 // Vector3 by value (RCX=this, RDX=hidden retbuf); Vector3::Dot returns Scalar by value
 // (RCX=this, RDX=retbuf, R8=other); Scalar::Max is a const member returning Scalar by
 // value (RCX=this, RDX=retbuf, R8=other). Verified vs disasm at 0x14010967b/0x14010968b/
-// 0x140109802.
-typedef void  (*fn_vec3Dot_t)(void* thisVec, void* retScalar, void* other); // [0x140151298]
-typedef void* (*fn_vec3Ctor_t)(void* self, float x, float y, float z); // [0x140152a30]
-typedef void  (*fn_transformAssign_t)(void* dst, void* src);          // [0x140151280]
-typedef void  (*fn_transformCtor_t)(void* self, void* src);          // [0x140151418]
-typedef void* (*fn_scalarMax_t)(void* thisScalar, void* retScalar, void* other); // [0x140151e78]
+// 0x140109802. Transform::operator= [0x140151280] and the Transform copy ctor
+// [0x140151418] are Math::Transform's own.
 
 // PERF (2026-09-04): bit-identical inline copies of the trivial Runtime math exports
 // the hot paths called through dispatch slots (a DLL call per 3-float store). Bodies
@@ -300,56 +282,30 @@ static inline void* InlScalarMax(const void* a, void* ret, const void* b) {
     return ret;
 }
 
-static fn_vec3Dot_t         s_slot_dot      = nullptr;
-static fn_vec3Ctor_t        s_slot_vec3     = nullptr;
-static fn_transformAssign_t s_slot_xfAssign = nullptr;
-static fn_transformCtor_t   s_slot_xfCtor   = nullptr;
+// PerfX's deferred pick push (perf-only, PICK_CULL) builds its transform copy through
+// this: the Math::Transform copy constructor, which the exe slot 0x140151418 names.
+static void PickXfCtorMember(void* xformOut, void* transformIn) {
+    ::new (xformOut) Math::Transform(*static_cast<const Math::Transform*>(transformIn));   // B.3.1 bridge
+}
 // PerfX's deferred pick push (perf-only, PICK_CULL) replays through this: the
 // member Picking::Scene::SetTransform, which the exe slot 0x1401529a8 used to
 // be resolved for (the slot's registered target is the same member's door).
 static void PickSetXfMember(void* scene, uint32_t id, void* xform) {
     reinterpret_cast<Picking::Scene*>(scene)->SetTransform(id, *static_cast<const Math::Transform*>(xform));   // B.3.7 bridge
 }
-static fn_scalarMax_t       s_slot_max      = nullptr;
 
 // Picking::Scene::AddMesh (Runtime 0x1801252e0) registers a pick mesh and returns its
 // id (stored at PickingComponent+0x28); ABI from Entity_impl_8f50 (exe 0x140128f50):
 // (scene, meshHandle, &transform, ownerIBP, 0, 0, 0). ENDGAME B.3.7: called as a
 // member (RegisterCitizenPickMesh); its file-local cache went with the last reader.
-typedef bool     (*fn_isDerived_t)(void* obj, uint32_t typeId);   // [0x140152a98]
-static fn_isDerived_t   s_slot_isDerived = nullptr;
+// IsDerivedFrom is called through the import slot 0x140152a98 = Object::Base's member.
 static uint32_t         s_tidPickingDesc = 0;
 
-static void* ResolveSlot(uintptr_t slotAddr) {
-    uintptr_t s = ResolveAddr(Module::Exe, slotAddr);
-    return s ? *reinterpret_cast<void**>(s) : nullptr;
-}
-
+// Resolves no door: it only caches the PickingDescription type id.
 static bool s_tailInit = false;
 static void EnsureTailInit() {
     if (s_tailInit) return;
-    s_pDAT_172220 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172220));
-    s_pDAT_172238 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172238));
-    s_pDAT_1720e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720e4));
-    s_pDAT_1720cc = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720cc));
-    s_pDAT_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_pDAT_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pDAT_1722a0 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401722a0));
-    s_pDAT_1722b0 = reinterpret_cast<const uint64_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
-    s_pDAT_1722c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401722c0));
-    s_pUVScale    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172148));
-    s_fn_131090 = reinterpret_cast<fn_f1_t>(ResolveAddr(Module::Exe, 0x140131090));
-    s_fn_131c90 = reinterpret_cast<fn_f1_t>(ResolveAddr(Module::Exe, 0x140131c90));
-    s_fn_132010 = reinterpret_cast<fn_f1_t>(ResolveAddr(Module::Exe, 0x140132010));
-    s_fn_9f3e0  = reinterpret_cast<fn_gridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_18660  = reinterpret_cast<fn_sub8660_t>(ResolveAddr(Module::Exe, 0x140018660));
-    s_slot_dot      = reinterpret_cast<fn_vec3Dot_t>(ResolveSlot(0x140151298));
-    s_slot_vec3     = reinterpret_cast<fn_vec3Ctor_t>(ResolveSlot(0x140152a30));
-    s_slot_xfAssign = reinterpret_cast<fn_transformAssign_t>(ResolveSlot(0x140151280));
-    s_slot_xfCtor   = reinterpret_cast<fn_transformCtor_t>(ResolveSlot(0x140151418));
-    s_slot_max      = reinterpret_cast<fn_scalarMax_t>(ResolveSlot(0x140151e78));
     // Picking-registration closure (port of Entity_impl_8f50 = PickingComponent OnAdded).
-    s_slot_isDerived = reinterpret_cast<fn_isDerived_t>(ResolveSlot(0x140152a98));
     s_tidPickingDesc = PickingDescription::TypeId();
     s_tailInit = true;
 }
@@ -382,10 +338,12 @@ static int RegisterCitizenPickMesh(uint8_t* self) {
     // be a PickingDescription. Its pick-mesh table is at desc+0x20, indexed exactly
     // like the render mesh: *(*(desc+0x20) + variantIdx*0x10) + modelVariant*8.
     void* desc = *reinterpret_cast<void**>(pickComp + 0x18);
-    if (desc == nullptr || s_slot_isDerived == nullptr || s_tidPickingDesc == 0) {
-        PickRegFail("desc null / isDerived null / tidPickingDesc 0"); return -1;
+    if (desc == nullptr || s_tidPickingDesc == 0) {
+        PickRegFail("desc null / tidPickingDesc 0"); return -1;
     }
-    if (!s_slot_isDerived(desc, s_tidPickingDesc)) { PickRegFail("desc !PickingDescription"); return -1; }
+    if (!reinterpret_cast<const Object::Base*>(desc)->IsDerivedFrom(s_tidPickingDesc)) {   // B.3.x bridge
+        PickRegFail("desc !PickingDescription"); return -1;
+    }
     int64_t meshTable = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
     if (meshTable == 0) { PickRegFail("meshTable(desc+0x20) null"); return -1; }
     int64_t group = *reinterpret_cast<int64_t*>(meshTable + static_cast<int64_t>(variantIdx) * 0x10);
@@ -420,7 +378,6 @@ static inline float fabs_f(float v) {
 extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // character_trig.cpp
 
 extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
-    EnsureInit();
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
     if (-1 < *reinterpret_cast<int*>(self + 0x60)) {
@@ -452,20 +409,16 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     float fVar10 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x168) -
                    *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
     float fVar13 = fVar14 - fVar10;
-    // Exe .rdata math constants. In STANDALONE mode ResolveAddr(Module::Exe, dataAddr)
-    // returns null for these (the registry only maps reimplemented functions/vtables, not
-    // raw .rdata floats), so the ternaries MUST fall back to the real values — a 0.0f
-    // fallback collapses the angle normalization (180<=|d| becomes 0<=|d|, always true)
-    // and the lerp (uvScale 1.0 -> 0.0), making the applied yaw diverge unboundedly.
-    // Values read from the exe .rdata (verified): 0x140172220=180, 0x140172238=360,
-    // 0x1401720e4=0.1 (turn epsilon), 0x1401722a0=-180, 0x14017214c=1.0 (g_fUVScale).
-    float c172220 = s_pDAT_172220 ? *s_pDAT_172220 : 180.0f;
-    float c172238 = s_pDAT_172238 ? *s_pDAT_172238 : 360.0f;
-    float c1720e4 = s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.1f;
-    float c1722a0 = s_pDAT_1722a0 ? *s_pDAT_1722a0 : -180.0f;
+    // Exe .rdata math constants (exe_constants.h; values verified against the exe):
+    // 0x140172220=180, 0x140172238=360, 0x1401720e4=0.1 (turn epsilon),
+    // 0x1401722a0=-180, 0x14017214c=1.0 (g_fUVScale).
+    float c172220 = kRdata_140172220;
+    float c172238 = RdataF(kRdata_140172238);
+    float c1720e4 = RdataF(kRdata_1401720e4);
+    float c1722a0 = RdataF(kRdata_1401722a0);
     // g_fUVScale is loaded from 0x14017214c (=1.0) per disasm at 0x14010961f — NOT the
-    // 0x140172148 sibling (=0.99897) the old s_pUVScale pointed at.
-    float uvScale = s_pDAT_17214c ? *s_pDAT_17214c : 1.0f;
+    // 0x140172148 sibling (=0.99897).
+    float uvScale = kRdata_14017214c;
 
     if (c172220 <= fabs_f(fVar13)) {
         if (fVar13 <= 0.0f) {
@@ -534,7 +487,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
             if (rootOnly == 0) {
                 float triOut[4] = { 0, 0, 0, 0 };
                 float* pf = nullptr;
-                if (s_fn_9f3e0) pf = s_fn_9f3e0(gameWorld, triOut, pos, '\0', nullptr);
+                pf = Reimpl_MapGetTerrainPos(gameWorld, triOut, pos, '\0', nullptr);   // 0x14009f3e0
                 // pos.z = Scalar(gridZ).Max(desc+0x44)  — clamp terrain height to the
                 // description's min. Const-member by-value ABI: (this=gridZ, retbuf, other).
                 float maxThis  = pf ? pf[2] : 0.0f;
@@ -554,13 +507,12 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     // LAB_14010981e:
     fVar14 = fVar14 + *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
     // deg->half-angle: 0x1401720cc=0.0174533 (pi/180) * 0x140172114=0.5 (half angle for
-    // the (-sin,cos) heading pair). Real-value fallbacks for standalone (see above).
-    float c1720cc = s_pDAT_1720cc ? *s_pDAT_1720cc : 0.017453292f;
-    float c172114 = s_pDAT_172114 ? *s_pDAT_172114 : 0.5f;
+    // the (-sin,cos) heading pair).
+    float c1720cc = RdataF(kRdata_1401720cc);
+    float c172114 = kRdata_140172114;
     float ang = fVar14 * c1720cc * c172114;
     // Retail calls sinf (0x140131c90) then cosf (0x140131090) on the same angle; both
-    // are ours (character_trig.cpp), so take the pair from one reduction. The registry
-    // slots stay resolved for any other caller.
+    // are ours (character_trig.cpp), so take the pair from one reduction.
     float s_ang = 0.0f, c_ang = 0.0f;
     CharacterComponent_SinCosf(ang, &s_ang, &c_ang);
     float negSin = -s_ang;
@@ -580,9 +532,9 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     xform[6] = pos[2]; xform[7] = 0.0f;
 
     model = *reinterpret_cast<int64_t*>(self + 0x68);
-    if (s_slot_xfAssign) s_slot_xfAssign(reinterpret_cast<void*>(model + 0x148), xform);
+    *reinterpret_cast<Math::Transform*>(model + 0x148) =
+        *reinterpret_cast<const Math::Transform*>(xform);   // B.3.1 bridge (Transform::operator=)
     *reinterpret_cast<float*>(model + 0x168) = fVar14;
-    if (s_fn_132010) { /* unused result guard symmetry */ }
     // [PerfX GEOMXF_LASTONLY -- NON-RETAIL] retail pushes the transform into the
     // Geometry (bounds, attached children, scene quadtree) on EVERY speed iteration; only
     // the last one is ever drawn, and the render-side interpolation is snapped from that
@@ -643,8 +595,9 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
 
     if ((*reinterpret_cast<int64_t*>(self + 0x70) != 0) && (rootOnly == 0)) {
         uint8_t localXform[136];
-        if (s_slot_xfCtor)
-            s_slot_xfCtor(localXform, reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x148));
+        ::new (static_cast<void*>(localXform)) Math::Transform(
+            *reinterpret_cast<const Math::Transform*>(
+                *reinterpret_cast<int64_t*>(self + 0x68) + 0x148));   // B.3.1 bridge (Transform copy ctor)
         uint32_t pickId = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x70) + 0x28);
         // First time through (pick-id still unregistered) register the citizen mesh in
         // the Picking::Scene so it becomes clickable.
@@ -665,16 +618,14 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
             // [PerfX PICK_CULL -- NON-RETAIL] an off-screen citizen cannot be clicked, so
             // its pick-scene transform is deferred; PerfX replays it if the sim pauses.
             if (!PerfX::PickCullSkip(reinterpret_cast<void*>(model), pickScene, pickId,
-                                     reinterpret_cast<PerfX::PickXfCtor_t>(s_slot_xfCtor),
+                                     &PickXfCtorMember,
                                      &PickSetXfMember)) {
                 reinterpret_cast<Picking::Scene*>(pickScene)->SetTransform(pickId, *reinterpret_cast<const Math::Transform*>(localXform));   // B.3.7 bridge
             }
         }
     }
 
-    if (s_fn_18660) {
-        s_fn_18660(*reinterpret_cast<float**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x88),
-                   *reinterpret_cast<int*>(self + 0x40));
-    }
+    CharMgr_sub_8660(*reinterpret_cast<float**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x88),
+                     *reinterpret_cast<int*>(self + 0x40));   // 0x140018660
 }
 

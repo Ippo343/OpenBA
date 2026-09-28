@@ -32,7 +32,8 @@
 //
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // Pf_SetTileRoadFlag_9f2f0, ActHunt_*_c3470 / _c2ea0
+#include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
 #include "Component/coll_bridge.h"
 #include "Component/MapDescription.h"
 #include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
@@ -69,32 +70,10 @@ extern "C" void MapComponent_ReportDc20Evictions(const char* tag) {
 
 namespace {
 
-// --- registered exe sub-callees, resolved on first use ----------------------
-typedef int      (*fn_e2c0_t)(int* map, int cellIndex);                 // 0x14009e2c0 (this file)
-typedef void     (*fn_9f2f0_t)(int* map, int cellIndex, uint32_t val);  // 0x14009f2f0
-typedef void     (*fn_a4d30_t)(void* p1, uint32_t p2, int x0, int y0,   // 0x1400a4d30
-                               int x1, int y1);
-typedef void     (*fn_c3470_t)(void* internal);                         // 0x1400c3470
-typedef void     (*fn_c2ea0_t)(int64_t internal);                       // 0x1400c2ea0
-typedef float*   (*fn_f3e0_t)(int* map, float* outVec, float* inXY,     // 0x14009f3e0
-                              char flag, uint32_t* outMat);
-
-static fn_9f2f0_t  s_9f2f0  = nullptr;
-static fn_a4d30_t  s_a4d30  = nullptr;
-static fn_c3470_t  s_c3470  = nullptr;
-static fn_c2ea0_t  s_c2ea0  = nullptr;
-static fn_f3e0_t   s_f3e0   = nullptr;
-static bool        s_init   = false;
-
-static void EnsureInit() {
-    if (s_init) return;
-    s_9f2f0  = reinterpret_cast<fn_9f2f0_t >(ResolveAddr(Module::Exe, 0x14009f2f0));
-    s_a4d30  = reinterpret_cast<fn_a4d30_t >(ResolveAddr(Module::Exe, 0x1400a4d30));
-    s_c3470  = reinterpret_cast<fn_c3470_t >(ResolveAddr(Module::Exe, 0x1400c3470));
-    s_c2ea0  = reinterpret_cast<fn_c2ea0_t >(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_f3e0   = reinterpret_cast<fn_f3e0_t  >(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_init = true;
-}
+// --- registered exe sub-callees, called by name (B3R) ------------------------
+//   0x14009f2f0 Pf_SetTileRoadFlag_9f2f0        0x1400a4d30 MapTerrainClear_Reimpl
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470
+//   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0 0x14009f3e0 Reimpl_MapGetTerrainPos
 
 // e2c0 terrain classification thresholds (named DAT floats, exact bit values).
 constexpr float kHalf     = 0.5f;    // DAT_140172114 = 0x3f000000
@@ -119,8 +98,6 @@ constexpr float kT_Ret6   = 2.0f;    // DAT_140172174 = 0x40000000
 //   else height < 2.0          -> 10, else 6
 // Returned byte is consumed by callers as `1 << (b & 0x1f) & 0x1e0`.
 int CreateNaturalResource_helper_e2c0(int* param_1, int param_2) {
-    EnsureInit();
-
     // Stack layout mirrors the original (e2c0 disasm):
     //   local_18 (RSP+0x50) = out vec3   -> [0],[1] = world XY, local_10 (RSP+0x58)=height
     //   local_38 (RSP+0x30) = in XY      -> local_38=x, local_34=y
@@ -134,8 +111,7 @@ int CreateNaturalResource_helper_e2c0(int* param_1, int param_2) {
     inXY[0] = (float)(param_2 % *param_1) - half;            // local_38 = col - half
     inXY[1] = (float)(param_2 / *param_1) - half;            // local_34 = row - half
 
-    if (s_f3e0)
-        s_f3e0(param_1, outVec, inXY, '\x01', outMat);
+    Reimpl_MapGetTerrainPos(param_1, outVec, inXY, '\x01', outMat);   // 0x14009f3e0
 
     float height = outVec[2];                                       // local_10
     float slope  = *reinterpret_cast<float*>(&outMat[2]);           // local_20
@@ -162,8 +138,6 @@ int CreateNaturalResource_helper_e2c0(int* param_1, int param_2) {
 void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                int param_4, int param_5, int param_6, int param_7,
                                int64_t* param_8, int param_9) {
-    EnsureInit();
-
     int iVar18 = 0;
     int iVar4 = param_7;
     if (0 < param_7) {
@@ -212,7 +186,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                         }
                                         if (participating == 0) ++g_dc20EvictNoParticipant;
                                     }
-                                    if (s_c2ea0) s_c2ea0(local_68);
+                                    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(local_68));   // 0x1400c2ea0
                                     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                                     GameColl::AsArray<GameColl::Ptr8>(
                                         reinterpret_cast<void*>(lVar3 + 0xd0))
@@ -275,7 +249,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                     if (bVar7) {
                         bVar10 = bVar16;
                     }
-                    if (s_9f2f0) s_9f2f0(param_1, iVar15, (uint32_t)bVar10);
+                    Pf_SetTileRoadFlag_9f2f0(param_1, iVar15, (uint32_t)bVar10);
 
                     int64_t local_60;
                     int64_t local_58[3];
@@ -284,8 +258,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         local_60 = *param_2;
                         plVar9 = &local_60;
                     } else {
-                        if (fn_InternalBasePtr_Ctor)
-                            new (local_58) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                        new (local_58) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                         plVar9 = local_58;
                     }
                     iVar13 = iVar13 + 1;
@@ -308,8 +281,6 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
 void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
                                      int param_4, int param_5, int param_6,
                                      int64_t* param_7, int param_8) {
-    EnsureInit();
-
     int iVar16 = 0;
     int iVar3 = param_6;
     if (0 < param_6) {
@@ -363,12 +334,11 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
                                 bVar13 = 2;
                             }
                         }
-                        if (s_9f2f0) s_9f2f0(param_1, iVar14, (uint32_t)bVar13);
+                        Pf_SetTileRoadFlag_9f2f0(param_1, iVar14, (uint32_t)bVar13);
                     }
 
                     int64_t local_40 = 0;
-                    if (fn_InternalBasePtr_Ctor)
-                        new (&local_40) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                    new (&local_40) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                     iVar12 = iVar12 + 1;
                     plVar11[1] = local_40;
                 } while (iVar12 < param_5);
@@ -387,27 +357,23 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
 // grid-update (dc20). Finally sets bit-20 and, if the low-16 flag bits changed and
 // the IBP at +0x10 is non-null, NotifyEntityChanged (0x1400c3470).
 void MapComponent_sub_41b0(int64_t param_1) {
-    EnsureInit();
-
     if ((*reinterpret_cast<uint32_t*>(param_1 + 0x20) >> 0x14 & 1) != 0) return;
 
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
     int* piVar2 = *reinterpret_cast<int**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
-    bool bVar3 = (fn_IsDerivedFrom && typeId) ? fn_IsDerivedFrom(obj, typeId) : false;
+    bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
     void* pvVar5 = bVar3 ? obj : nullptr;
 
     if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(pvVar5) + 0x32) != '\0') {
-        if (s_a4d30) {
-            s_a4d30(*reinterpret_cast<void**>(
-                        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x148),
-                    *reinterpret_cast<uint32_t*>(reinterpret_cast<int64_t>(pvVar5) + 0x34),
-                    (int)*reinterpret_cast<short*>(param_1 + 0x28),
-                    (int)*reinterpret_cast<short*>(param_1 + 0x2a),
-                    (int)*reinterpret_cast<short*>(param_1 + 0x2c),
-                    (int)*reinterpret_cast<short*>(param_1 + 0x2e));
-        }
+        MapTerrainClear_Reimpl(*reinterpret_cast<void**>(   // 0x1400a4d30
+                                   reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0x148),
+                               static_cast<int>(*reinterpret_cast<uint32_t*>(reinterpret_cast<int64_t>(pvVar5) + 0x34)),
+                               (int)*reinterpret_cast<short*>(param_1 + 0x28),
+                               (int)*reinterpret_cast<short*>(param_1 + 0x2a),
+                               (int)*reinterpret_cast<short*>(param_1 + 0x2c),
+                               (int)*reinterpret_cast<short*>(param_1 + 0x2e));
     }
 
     if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(pvVar5) + 0x31) == '\0') {
@@ -427,7 +393,7 @@ void MapComponent_sub_41b0(int64_t param_1) {
         *reinterpret_cast<uint32_t*>(param_1 + 0x20) = uVar4;
         if ((((uVar4 ^ uVar1) & 0xffff) != 0) &&
             (*reinterpret_cast<int64_t*>(param_1 + 0x10) != 0)) {
-            if (s_c3470) s_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
+            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
         }
     }
 }
@@ -439,15 +405,13 @@ void MapComponent_sub_41b0(int64_t param_1) {
 // the AreaDescription, runs the map-init grid-update (dee0), then CLEARS bit-20 and,
 // if the low-16 flag bits changed and the IBP at +0x10 is non-null, NotifyEntityChanged.
 void CreateNaturalResource_impl_4750(int64_t param_1) {
-    EnsureInit();
-
     if ((*reinterpret_cast<uint32_t*>(param_1 + 0x20) >> 0x14 & 1) == 0) return;
 
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
     int* piVar2 = *reinterpret_cast<int**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
-    bool bVar3 = (fn_IsDerivedFrom && typeId) ? fn_IsDerivedFrom(obj, typeId) : false;
+    bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
     int64_t local_res8 = *reinterpret_cast<int64_t*>(param_1 + 0x10);
     void* pvVar5 = bVar3 ? obj : nullptr;
 
@@ -465,6 +429,6 @@ void CreateNaturalResource_impl_4750(int64_t param_1) {
     *reinterpret_cast<uint32_t*>(param_1 + 0x20) = uVar4;
     if ((((uVar4 ^ uVar1) & 0xffff) != 0) &&
         (*reinterpret_cast<int64_t*>(param_1 + 0x10) != 0)) {
-        if (s_c3470) s_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
     }
 }

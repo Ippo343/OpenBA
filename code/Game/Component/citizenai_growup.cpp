@@ -84,84 +84,32 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
 
-// --- registered exe sub-callees ---
-typedef void*    (*fn_findComp_t)(int64_t entity, void* outIBP);                       // 0x140006270 / 0x140002ed0
-typedef int      (*fn_queryCount_t)(int64_t storageComp);                              // 0x14012cf10
-typedef int64_t* (*fn_dd30_t)(int64_t*, int64_t*, uint32_t, uint32_t, int64_t*, float*, uint32_t); // 0x14008dd30
-typedef uint32_t (*fn_7fb0_t)(void* ibp, float* outVec3orNull);                        // 0x140087fb0
-typedef void     (*fn_ctor11_t)(void* holder, int64_t resCountObj, int64_t* srcIBP,
-                                float* destA, int64_t* dstIBP, float* destB);           // 0x1400bc790
-typedef int64_t* (*fn_d590_t)(int64_t** listPair, int64_t* outBest, uint32_t cell,
-                              uint64_t storageComp, int count, char flag,
-                              uint32_t* outVec3, void* matchIBP);                        // 0x14008d590
-typedef void     (*fn_ctor4_t)(void* holder, int64_t* entityIBP, float* dest,
-                               int cell, uint8_t p5, uint32_t p6);                        // 0x1400c1070
-typedef uint32_t (*fn_cd80_t)(int64_t storageComp, int64_t descComp, int amount);        // 0x14012cd80
-typedef void     (*fn_executor_t)(int64_t* stack, void* time);                            // 0x1400c4c50
-// --- f230 closure ---
-typedef float*   (*fn_gridToWorld_t)(int* mapGrid, float* outTri, float* worldPos, char flag, void* outTri2); // 0x14009f3e0
-typedef void     (*fn_2e20_t)(int64_t comp, float* outVec3, int, int, float*);            // 0x140122e20
-typedef int      (*fn_8830_t)(int* mapGrid, uint32_t cellA, uint32_t cellB);              // 0x140008830
-typedef uint64_t (*fn_a00f0_t)(int* mapGrid, uint32_t pathType, uint64_t destCell, uint32_t srcCell); // 0x1400a00f0
-
-static fn_findComp_t   s_findStor   = nullptr;  // 0x140006270
-static fn_findComp_t   s_findPos    = nullptr;  // 0x140002ed0
-static fn_queryCount_t s_queryCount = nullptr;  // 0x14012cf10
-static fn_dd30_t       s_dd30       = nullptr;
-static fn_7fb0_t       s_7fb0       = nullptr;
-static fn_ctor11_t     s_ctor11     = nullptr;
-static fn_d590_t       s_d590       = nullptr;
-static fn_ctor4_t      s_ctor4      = nullptr;
-static fn_cd80_t       s_cd80       = nullptr;
-static fn_executor_t   s_executor   = nullptr;
-static fn_gridToWorld_t s_f3e0      = nullptr;  // 0x14009f3e0
-static fn_2e20_t       s_2e20       = nullptr;
-static fn_8830_t       s_8830       = nullptr;
-static fn_a00f0_t      s_a00f0      = nullptr;
-
-// --- Math::Vector3::Vector3(Vector3*, const Scalar&) dispatch slot 0x140151320 ---
-typedef void* (*fn_v3ctorScalar_t)(void* self, void* scalar);
-static fn_v3ctorScalar_t s_v3ctorScalar = nullptr;
+// --- registered exe sub-callees (incl. the f230 closure): called by name ---
+// --- Math::Vector3::Vector3(const Scalar&) (import slot 0x140151320): Math::Vector3's own ---
 
 static uint32_t s_tid_RawMaterialDescription = 0;  // DWORD_1401c7cb8
 static uint32_t s_tid_StorageComponent       = 0;  // DWORD_1401c7e78
 static uint32_t s_tid_WorkPlaceComponent     = 0;  // DWORD_1401c80e0
 static uint32_t s_tid_CitizenDescription     = 0;  // DWORD_1401c7190 (GrowUp cooldown desc)
 
-static float s_walkScale = 0.0f;  // DAT_1401721fc (read from exe rdata)
+static const float s_walkScale = kRdata_1401721fc;  // DAT_1401721fc (75.0)
 
-static void* ResolveSlot(uintptr_t slotAddr) {
-    uintptr_t s = ResolveAddr(Module::Exe, slotAddr);
-    return s ? *reinterpret_cast<void**>(s) : nullptr;
-}
-
+// Resolves no door: it only caches the type ids.
 static bool s_init = false;
 static void EnsureInit() {
     if (s_init) return;
-    s_findStor   = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_findPos    = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_queryCount = reinterpret_cast<fn_queryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    s_dd30       = reinterpret_cast<fn_dd30_t>(ResolveAddr(Module::Exe, 0x14008dd30));
-    s_7fb0       = reinterpret_cast<fn_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
-    s_ctor11     = reinterpret_cast<fn_ctor11_t>(ResolveAddr(Module::Exe, 0x1400bc790));
-    s_d590       = reinterpret_cast<fn_d590_t>(ResolveAddr(Module::Exe, 0x14008d590));
-    s_ctor4      = reinterpret_cast<fn_ctor4_t>(ResolveAddr(Module::Exe, 0x1400c1070));
-    s_cd80       = reinterpret_cast<fn_cd80_t>(ResolveAddr(Module::Exe, 0x14012cd80));
-    s_executor   = reinterpret_cast<fn_executor_t>(ResolveAddr(Module::Exe, 0x1400c4c50));
-    s_f3e0       = reinterpret_cast<fn_gridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_2e20       = reinterpret_cast<fn_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_8830       = reinterpret_cast<fn_8830_t>(ResolveAddr(Module::Exe, 0x140008830));
-    s_a00f0      = reinterpret_cast<fn_a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_v3ctorScalar = reinterpret_cast<fn_v3ctorScalar_t>(ResolveSlot(0x140151320));
     if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = RawMaterialDescription::TypeId();
     if (s_tid_StorageComponent == 0)       s_tid_StorageComponent       = StorageComponent::TypeId();
     if (s_tid_WorkPlaceComponent == 0)     s_tid_WorkPlaceComponent     = WorkPlaceComponent::TypeId();
     if (s_tid_CitizenDescription == 0)     s_tid_CitizenDescription     = CitizenDescription::TypeId();
-    const float* p = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721fc));
-    if (p) s_walkScale = *p;
     s_init = true;
 }
 
@@ -223,7 +171,7 @@ static void* ScanForType(int64_t node, uint32_t typeId,
         // vtable+0x10 = GetTypeId()
         uint32_t tid = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
         if (tid == typeId) {
-            bool ok = fn_IsDerivedFrom ? fn_IsDerivedFrom(reinterpret_cast<void*>(obj), typeId) : false;
+            bool ok = Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(obj), typeId);
             return ok ? reinterpret_cast<void*>(obj) : nullptr;
         }
     }
@@ -242,7 +190,7 @@ static void* ScanForType(int64_t node, uint32_t typeId,
 extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint32_t param_3, float* param_4) {
     EnsureInit();
     if (*reinterpret_cast<int*>(param_1 + 0x78) == 0) {
-        if (fn_InternalBasePtr_Ctor) new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         return param_2;
     }
     int* mapGrid = MapGrid();
@@ -251,15 +199,14 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
     // use is feeding f3e0 (terrain sample) which the original immediately overwrites with a
     // fresh per-candidate position; the seed call's result is discarded (local_80 zeroed
     // right after). We faithfully zero the running pos and rely on the per-candidate path.
-    const float* pBias = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    float bias = static_cast<float>(w >> 1) - (pBias ? *pBias : 0.0f);
+    float bias = static_cast<float>(w >> 1) - kRdata_140172114;   // DAT_140172114 = 0.5
     float seedXY[3] = {
         static_cast<float>(static_cast<int>(param_3) % w) - bias,
         static_cast<float>(static_cast<int>(param_3) / w) - bias,
         0.0f
     };
     float seedTri[4] = {0, 0, 0, 0};
-    if (s_f3e0) s_f3e0(mapGrid, seedTri, seedXY, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, seedTri, seedXY, '\0', nullptr);
 
     // running best
     float bestX = 0.0f, bestY = 0.0f, bestZ = 0.0f;
@@ -280,29 +227,29 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
             int64_t obj = *cslot;
             uint32_t tid = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (tid == s_tid_WorkPlaceComponent) {
-                bool ok = fn_IsDerivedFrom ? fn_IsDerivedFrom(reinterpret_cast<void*>(obj), s_tid_WorkPlaceComponent) : false;
+                bool ok = Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(obj), s_tid_WorkPlaceComponent);
                 wp = ok ? reinterpret_cast<void*>(obj) : nullptr;
                 break;
             }
         }
         int64_t wpIBP = 0;  // local_98
-        if (fn_InternalBasePtr_Ctor) new (&wpIBP) ::Object::InternalBasePtr(
+        new (&wpIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
         // wp+0x60 != 0 → this workplace accepts a worker
         if (wpIBP != 0 && *reinterpret_cast<int*>(wpIBP + 0x60) != 0) {
             int64_t posBuf[2] = {0, 0};
-            if (s_findPos) s_findPos(entity, posBuf);
+            WorkBase_FindComponent_2ed0(entity, posBuf);
             float wpos[4] = {0, 0, 0, 0};
-            if (posBuf[0] && s_2e20) s_2e20(posBuf[0], wpos, 0, 0, nullptr);
+            if (posBuf[0]) Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posBuf[0]), wpos, 0, 0, nullptr);
             int dim = *mapGrid;
             int ix = static_cast<int>(wpos[0] + static_cast<float>(dim >> 1));
             int iy = static_cast<int>(wpos[1] + static_cast<float>(dim >> 1));
             if (ix < 0) ix = 0; if (dim <= ix) ix = dim - 1;
             if (iy < 0) iy = 0; if (dim <= iy) iy = dim - 1;
             uint32_t cell = static_cast<uint32_t>(dim * iy + ix);
-            uint64_t reachable = s_a00f0 ? s_a00f0(mapGrid, 0xe1f, param_3, cell) : 0;
+            uint64_t reachable = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, cell);
             if (static_cast<char>(reachable) != '\0') {
-                int cost = s_8830 ? s_8830(mapGrid, param_3, cell) : 0x7fffffff;
+                int cost = WorkBase_CalcDistance_8830(mapGrid, param_3, cell);
                 if (cost < bestCost) {
                     bestX = wpos[0]; bestY = wpos[1]; bestZ = wpos[2];
                     bestEntity = *reinterpret_cast<int64_t*>(*slot + 0x10);
@@ -330,7 +277,7 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
 
     // citizen storage component (local_res20)
     int64_t storBuf[2] = {0, 0};
-    if (s_findStor) s_findStor(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
+    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
     int64_t citStorNode = storBuf[0];
 
     // dynamic array A: entity IBP pairs (stride 0x10 bytes = 2*8). base/cap at local_70/local_68.
@@ -366,11 +313,11 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
             // find that entry's StorageComponent
             void* sc = ScanForType(entry, s_tid_StorageComponent);
             int64_t scIBP = 0;
-            if (fn_InternalBasePtr_Ctor) new (&scIBP) ::Object::InternalBasePtr(
+            new (&scIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(sc));   // B.3.3 bridge
             int64_t descComp = *reinterpret_cast<int64_t*>(rowBase);   // row entity (RawMaterialDescription)
             int amount = *reinterpret_cast<int*>(rowBase + 8);
-            uint32_t hit = (scIBP && s_cd80) ? s_cd80(scIBP, descComp, amount) : 0;
+            uint32_t hit = (scIBP) ? Pf_StorageCanAccept_cd80(scIBP, descComp, amount) : 0;
             if (static_cast<char>(hit) != '\0') { satisfied = true; break; }
         }
         if (satisfied) { committed = true; break; }
@@ -379,7 +326,7 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
         uint32_t outVec[3] = {0, 0, 0};      // local_80
         int64_t  matchIBP  = 0;              // local_a8
         int64_t  outBest   = 0;              // local_98
-        if (s_d590) s_d590(reinterpret_cast<int64_t**>(listPair), &outBest, homeCell,
+        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(listPair), &outBest, homeCell,
                            static_cast<uint64_t>(*reinterpret_cast<int64_t*>(rowBase)),
                            *reinterpret_cast<int*>(rowBase + 8), '\x01',
                            outVec, &matchIBP);
@@ -398,15 +345,14 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
                     int newCap = newCount;
                     if (arrACount != 0) newCap = newCount * 3;
                     arrACap = newCap;
-                    float* nb = reinterpret_cast<float*>(fn_MemAlloc
-                        ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(newCap) << 3, 8) : nullptr);
+                    float* nb = reinterpret_cast<float*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) << 3, 8));
                     // copy old
                     // 8-byte stride (one int64 per entry, alloc is newCap << 3) — matches the
                     // search loop's `arrA + k*2` float arithmetic and the original's pfVar14 += 2.
                     for (int c = 0; c < arrACount; ++c) {
                         reinterpret_cast<int64_t*>(nb)[c] = reinterpret_cast<int64_t*>(arrA)[c];
                     }
-                    if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
+                    if (arrA) System::MemoryAllocator::MemFree(arrA);
                     arrA = nb;
                 }
                 reinterpret_cast<int64_t*>(arrA)[arrACount] = outBest;
@@ -421,14 +367,13 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
                     int newCap = newCount;
                     if (arrBCount != 0) newCap = newCount * 3;
                     arrBCap = newCap;
-                    float* nb = reinterpret_cast<float*>(fn_MemAlloc
-                        ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(newCap) * 0xc, 4) : nullptr);
+                    float* nb = reinterpret_cast<float*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) * 0xc, 4));
                     for (int c = 0; c < arrBCount; ++c) {
                         nb[c * 3 + 0] = arrB[c * 3 + 0];
                         nb[c * 3 + 1] = arrB[c * 3 + 1];
                         nb[c * 3 + 2] = arrB[c * 3 + 2];
                     }
-                    if (arrB && fn_MemFreeStatic) fn_MemFreeStatic(arrB);
+                    if (arrB) System::MemoryAllocator::MemFree(arrB);
                     arrB = nb;
                 }
                 arrB[arrBCount * 3 + 0] = *reinterpret_cast<float*>(&outVec[0]);
@@ -443,26 +388,28 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     // push a PerformWork(Ctor4) per candidate and run the executor.
     if (arrACount != 0) {
         int64_t firstIBP = 0;       // local_90
-        if (fn_InternalBasePtr_Ctor) new (&firstIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&firstIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         int64_t selfIBP = 0;        // local_98
-        if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
+        new (&selfIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
 
         // Vector3((Scalar&)0) — the first push uses a zero-vector built from local_res10 (=0).
         float zeroScalar = 0.0f;
         float vecBuf[3] = {0, 0, 0};   // Vector3 retbuf (local_80)
-        void* vec = s_v3ctorScalar ? s_v3ctorScalar(vecBuf, &zeroScalar) : vecBuf;
+        ::new (static_cast<void*>(vecBuf)) Math::Vector3(
+            *reinterpret_cast<const Math::Scalar*>(&zeroScalar));   // B.3.1 bridge (splat ctor)
+        void* vec = vecBuf;
 
-        if (s_ctor4) s_ctor4(&selfIBP, &firstIBP, reinterpret_cast<float*>(vec), homeCell, 1, 1);
+        CitizenAI_PerformWorkCtor4_c1070(&selfIBP, &firstIBP, reinterpret_cast<float*>(vec), homeCell, 1, 1);
 
         // remaining candidates (the original loops uVar16 times over arrA/arrB).
         for (int i = 0; i < arrACount; ++i) {
             int64_t entIBP = reinterpret_cast<int64_t*>(arrA)[i];  // local_res8 = *pfVar11
             int64_t citizenIBP = 0;     // local_res10
-            if (fn_InternalBasePtr_Ctor) new (&citizenIBP) ::Object::InternalBasePtr(
+            new (&citizenIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
             float* destB = &arrB[i * 3];
-            if (s_ctor4) s_ctor4(&citizenIBP, &entIBP, destB, homeCell, 0, 0);
+            CitizenAI_PerformWorkCtor4_c1070(&citizenIBP, &entIBP, destB, homeCell, 0, 0);
         }
 
         // commit the action-state flags on the citizen and run the executor.
@@ -471,18 +418,18 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
         *reinterpret_cast<int32_t*>(param_1 + 0xb0) = 0;
 
         int64_t timeStamp = 0;
-        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStamp, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStamp), 0.0f);
         int64_t ch = *reinterpret_cast<int64_t*>(param_1 + 0x278);
         if (-1 < *reinterpret_cast<int*>(ch + 0x48 + 0x18)) {
-            if (s_executor) s_executor(reinterpret_cast<int64_t*>(ch + 0x48), &timeStamp);
+            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(ch + 0x48), &timeStamp);
         }
         (void)committed;
     }
 
     // free the dynamic arrays (LAB_140116387 epilogue).
-    if (arrB && fn_MemFreeStatic) fn_MemFreeStatic(arrB);
+    if (arrB) System::MemoryAllocator::MemFree(arrB);
     arrB = nullptr; arrBCount = 0;
-    if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
+    if (arrA) System::MemoryAllocator::MemFree(arrA);
     arrA = nullptr; arrACount = 0;
 }
 
@@ -508,8 +455,8 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     // citizen home StorageComponent → QueryCount (food on hand?)
     int64_t citizen2 = *reinterpret_cast<int64_t*>(param_1 + 0x38);
     int64_t storBuf[2] = {0, 0};
-    if (s_findStor) s_findStor(*reinterpret_cast<int64_t*>(citizen2 + 0x10), storBuf);
-    int count = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
+    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(citizen2 + 0x10), storBuf);
+    int count = (storBuf[0]) ? CitizenComp_StorageComponent_QueryCount(storBuf[0]) : 0;
 
     if (count >= 1) {
         // Citizen's own storage is non-empty (QueryCount >= 1) → defer to LongTermPlan
@@ -522,7 +469,7 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     // FOOD-SHORTAGE branch (count < 1): stamp the food-cooldown into citizen+0x60,
     // find the best food source via dd30, then scan its storage for an eatable item.
     int64_t cd = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&cd, s_walkScale);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&cd), s_walkScale);
     *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd;
 
     int64_t resEntity = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x238); // citizen+0x238
@@ -531,12 +478,12 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
         bGoal = 0xffffffff;
     } else {
         int64_t resIBP = resEntity;
-        bGoal = s_7fb0 ? s_7fb0(&resIBP, nullptr) : 0xffffffff;
+        bGoal = Pf_EntityAnchorCell_7fb0(&resIBP, nullptr);
     }
 
     int64_t found = 0;        // local_b0
     int64_t outComp = 0;      // local_res18
-    if (s_dd30) s_dd30(reinterpret_cast<int64_t*>(listPair), &found, homeCell, bGoal, &outComp, destA, 3);
+    CitizenAI_FindBestTarget_dd30(reinterpret_cast<int64_t*>(listPair), &found, homeCell, bGoal, &outComp, destA, 3);
     if (found == 0) {
         return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;   // no source → return 0
     }
@@ -544,7 +491,7 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     // found a source entity. find its StorageComponent (local_b8).
     int64_t target = found;
     int64_t tStorBuf[2] = {0, 0};
-    if (s_findStor) s_findStor(target, tStorBuf);
+    WorkBase_FindComponent_6270(target, tStorBuf);
     int64_t tStorNode = tStorBuf[0];
     if (tStorNode == 0) {
         return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
@@ -609,7 +556,7 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
                     int64_t holderCitizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
                     int64_t srcIBP = found;        // local_res18 = lVar4 = local_b0 (food source entity)
                     int64_t dstIBP = bestWp[0];    // local_res10 (workplace entity from f230)
-                    if (s_ctor11) s_ctor11(&holderCitizen, resCountObj, &srcIBP, destA, &dstIBP, destB);
+                    CitizenAI_PerformWorkCtor11_bc790(&holderCitizen, resCountObj, &srcIBP, destA, &dstIBP, destB);
 
                     // success epilogue: flag triplet on cz = *(param_1+0x38) = citizen.
                     int64_t cz = *reinterpret_cast<int64_t*>(param_1 + 0x38);
@@ -621,11 +568,11 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
                     // (DWORD_1401c7190); wt = desc+0x78 * DAT_1401721fc. Stamp → param_1+0x60.
                     int64_t cdesc = *reinterpret_cast<int64_t*>(cz + 0x18);
                     float wt = 0.0f;
-                    if (cdesc && fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(cdesc), s_tid_CitizenDescription)) {
+                    if (cdesc && Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(cdesc), s_tid_CitizenDescription)) {
                         wt = *reinterpret_cast<float*>(static_cast<uintptr_t>(cdesc) + 0x78);
                     }
                     int64_t cd2 = 0;
-                    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&cd2, wt * s_walkScale);
+                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&cd2), wt * s_walkScale);
                     *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd2;
 
                     return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;

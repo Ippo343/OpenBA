@@ -23,34 +23,15 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Work/exe_bodies.h"   // WorkBase_FindComponent_3050
+#include "system/MemoryAllocator.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
-
-// FUN_140002cc0 — register entity with world entity list
-typedef void (*fn_RegisterEntity_t)(void* listPtr, void* entityPtr);
-static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
-
-// FUN_140003110 — add entity to world pending list
-
-// FUN_14005c220 — trade component setup (called after adding to pending list)
-typedef void (*fn_TradeSetup_t)(void* self);
-static fn_TradeSetup_t s_fn_TradeSetup = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_fn_TradeSetup = reinterpret_cast<fn_TradeSetup_t>(
-        ResolveAddr(Module::Exe, 0x14005c220));
-
-    s_initialized = true;
-}
+// FUN_140002cc0 CemeteryListErase_Reimpl — the world entity-list erase (by value).
+// FUN_140003110 — add entity to world pending list (GameColl SetSizeFill).
+// FUN_14005c220 TradeComponent_Setup (below) — called after adding to pending list.
 
 // 0x14005c1d0 door: registered by address (standalone/reg_component_economy.cpp).
 void TradeComponent_Draw(TradeComponent* self) {
@@ -82,40 +63,26 @@ void TradeComponent_OnCreate(TradeComponent* self) {
 // They must be promoted together. Slot 13 alone would report a state that slot 14
 // is not able to change; slot 14 alone would change a state nothing reads.
 
-// FUN_140002e10 — find the WorkPlaceComponent (type 0x1401c80e0) on an entity.
-typedef void (*fn_FindWorkPlace_t)(int64_t entity, void* outIBP);      // 0x140002e10
-// FUN_140003050 — find the component the work scheduler is posted through.
-typedef void (*fn_FindWorkSched_t)(int64_t entity, void* outIBP);      // 0x140003050
-// FUN_14012ec60 — post a Work to the scheduler (stop existing slot, then install).
-typedef void (*fn_PostWork_t)(int64_t sched, uint32_t code, char flag, void* workIBP); // 0x14012ec60
-// FUN_14012eb50 — cancel whatever work is currently posted on that scheduler.
-typedef void (*fn_CancelWork_t)(int64_t sched);                        // 0x14012eb50
-// FUN_14012fc00 — commit the new accepting state onto the WorkPlaceComponent.
-typedef void (*fn_SetAccepting_t)(int64_t workPlaceComp, char accepting); // 0x14012fc00
+// FUN_140002e10 AttendanceComponent_GetJobHostComponent — find the WorkPlaceComponent
+//   (type 0x1401c80e0) on an entity.
+// FUN_140003050 WorkBase_FindComponent_3050 — the component the work scheduler is
+//   posted through.
+// FUN_14012ec60 CitizenAI_WorkScheduler_Post — post a Work to the scheduler (stop
+//   existing slot, then install).
+// FUN_14012eb50 WorkComponent_RegisterWorkSlot — cancel whatever work is currently
+//   posted on that scheduler.
+// FUN_14012fc00 WorkPlaceComponent_SetAccepting — commit the new accepting state.
 
-static fn_FindWorkPlace_t  s_tc_FindWorkPlace = nullptr;
-static fn_FindWorkSched_t  s_tc_FindWorkSched = nullptr;
-static fn_PostWork_t       s_tc_PostWork = nullptr;
-static fn_CancelWork_t     s_tc_CancelWork = nullptr;
-static fn_SetAccepting_t   s_tc_SetAccepting = nullptr;
-static bool s_tcWorkResolved = false;
-
-static void EnsureTradeWorkHelpers() {
-    if (s_tcWorkResolved) return;
-    s_tc_FindWorkPlace = reinterpret_cast<fn_FindWorkPlace_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_tc_FindWorkSched = reinterpret_cast<fn_FindWorkSched_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_tc_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_tc_CancelWork    = reinterpret_cast<fn_CancelWork_t>(ResolveAddr(Module::Exe, 0x14012eb50));
-    s_tc_SetAccepting  = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
-    s_tcWorkResolved = true;
-
-    // Report the OUTCOME of each dependency, not "resolve ran". A single null here
-    // silently turns the toggle into a no-op that still repaints — believable and
-    // wrong, the failure mode this subsystem keeps producing.
+// The first call into the work pair prints the five dependencies once, as it always has.
+static void TC_ReportWorkDepsOnce() {
+    static bool s_reported = false;
+    if (s_reported) return;
+    s_reported = true;
     fprintf(stderr, "[TradeComp] work deps: findWP=%p findSched=%p post=%p "
             "cancel=%p setAccept=%p\n",
-            (void*)s_tc_FindWorkPlace, (void*)s_tc_FindWorkSched,
-            (void*)s_tc_PostWork, (void*)s_tc_CancelWork, (void*)s_tc_SetAccepting);
+            (void*)&AttendanceComponent_GetJobHostComponent, (void*)&WorkBase_FindComponent_3050,
+            (void*)&CitizenAI_WorkScheduler_Post, (void*)&WorkComponent_RegisterWorkSlot,
+            (void*)&WorkPlaceComponent_SetAccepting);
     fflush(stderr);
 }
 
@@ -139,42 +106,18 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
 // trade-name array (+0x30) to desc+0x50 and fills each with a random merchant
 // name from FUN_1400a4c60; resizes the item table (+0x40) to desc+0x40 and copies
 // resource ids from desc+0x38 (0x18 stride -> 0xc stride).
-typedef void (*fn_TC_ResizeNames_t)(int64_t* field, int count);   // 0x14000e760
-typedef void (*fn_TC_ResizeItems_t)(int64_t* field, int count);   // 0x14000e8d0
-typedef void* (*fn_TC_GenName_t)(void* outStr, void* random, char which);  // 0x1400a4c60
-typedef void (*fn_TC_StrAssign_t)(void* dst, void* src);          // slot 0x1401514c0
-typedef void (*fn_TC_StrDtor_t)(void* str);                       // slot 0x140152af0
-static fn_TC_ResizeNames_t s_tc_ResizeNames = nullptr;
-static fn_TC_ResizeItems_t s_tc_ResizeItems = nullptr;
-static fn_TC_GenName_t    s_tc_GenName = nullptr;
-static fn_TC_StrAssign_t  s_tc_StrAssign = nullptr;
-static fn_TC_StrDtor_t    s_tc_StrDtor = nullptr;
-static bool s_tcSetupResolved = false;
-static void EnsureTradeSetupHelpers() {
-    if (s_tcSetupResolved) return;
-    s_tc_ResizeNames = reinterpret_cast<fn_TC_ResizeNames_t>(ResolveAddr(Module::Exe, 0x14000e760));
-    s_tc_ResizeItems = reinterpret_cast<fn_TC_ResizeItems_t>(ResolveAddr(Module::Exe, 0x14000e8d0));
-    s_tc_GenName     = reinterpret_cast<fn_TC_GenName_t>(ResolveAddr(Module::Exe, 0x1400a4c60));
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401514c0);
-    if (slot) s_tc_StrAssign = *reinterpret_cast<fn_TC_StrAssign_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152af0);
-    if (slot) s_tc_StrDtor = *reinterpret_cast<fn_TC_StrDtor_t*>(slot);
-    s_tcSetupResolved = true;
-}
-
+// Helpers: 0x14000e760 TradeComponent_ResizeNames, 0x14000e8d0 TradeComponent_ResizeItems
+// (below), 0x1400a4c60 NameDB_PickAndGenerate, import slots 0x1401514c0
+// System::String::operator= and 0x140152af0 System::String::~String.
 void TradeComponent_Setup(void* selfP) {
-    EnsureTradeSetupHelpers();
     uintptr_t self = (uintptr_t)selfP;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     void* descObj = *(void**)(self + 0x18);
-    void* desc = (fn_IsDerivedFrom &&
-                  fn_IsDerivedFrom(descObj, TradeDescription::TypeId())) ? descObj : nullptr;
+    void* desc = (Object::IsDerivedFromNullSafe(descObj, TradeDescription::TypeId())) ? descObj : nullptr;
 
     // Resize the name array (+0x30) to desc+0x50
-    if (s_tc_ResizeNames)
-        s_tc_ResizeNames((int64_t*)(self + 0x30), *(int*)((uintptr_t)desc + 0x50));
+    TradeComponent_ResizeNames((int64_t*)(self + 0x30), *(int*)((uintptr_t)desc + 0x50));
 
     // Fill each name slot with a random merchant name
     int nameCount = *(int*)(self + 0x38);
@@ -182,10 +125,11 @@ void TradeComponent_Setup(void* selfP) {
     for (int i = 0; i < nameCount; i++) {
         uint32_t r = reinterpret_cast<System::Random*>(random)->Rand(2u);   // B.3.4b bridge
         uint8_t strBuf[8] = {0};
-        if (s_tc_GenName) s_tc_GenName(strBuf, random, (char)(r == 0));
+        NameDB_PickAndGenerate(strBuf, random, (char)(r == 0));   // 0x1400a4c60
         void* dst = (void*)((int64_t)i * 0x20 + *(int64_t*)(self + 0x30));
-        if (s_tc_StrAssign) s_tc_StrAssign(dst, strBuf);
-        if (s_tc_StrDtor) s_tc_StrDtor(strBuf);
+        *reinterpret_cast<System::String*>(dst) =
+            *reinterpret_cast<const System::String*>(strBuf);      // B.3.1 bridge (slot 0x1401514c0)
+        reinterpret_cast<System::String*>(strBuf)->~String();    // B.3.1 bridge (slot 0x140152af0)
     }
 
     // Report the OUTCOME, not the call. A populated +0x30 is the whole point of
@@ -195,7 +139,7 @@ void TradeComponent_Setup(void* selfP) {
     fprintf(stderr, "[TradeComp] Setup: desc=%p names=%d array=%p\n",
             desc, nameCount, (void*)*(int64_t*)(self + 0x30));
     // ...and the names themselves. A populated array is NOT evidence the names are
-    // real: while 0x1400a4c60 was unregistered, s_tc_GenName was null, strBuf stayed
+    // real: while 0x1400a4c60 was unregistered, its door was null, strBuf stayed
     // zeroed, and every slot got an EMPTY string — which reads identically to a
     // healthy array from the line above.
     {
@@ -207,8 +151,7 @@ void TradeComponent_Setup(void* selfP) {
     }
 
     // Resize the item table (+0x40) to desc+0x40
-    if (s_tc_ResizeItems)
-        s_tc_ResizeItems((int64_t*)(self + 0x40), *(int*)((uintptr_t)desc + 0x40));
+    TradeComponent_ResizeItems((int64_t*)(self + 0x40), *(int*)((uintptr_t)desc + 0x40));
 
     // Copy resource ids from desc+0x38 (0x18 stride) into item table (0xc stride)
     int itemCount = *(int*)(self + 0x48);
@@ -229,15 +172,14 @@ void TradeComponent_Setup(void* selfP) {
 // source pointers in. Faithful 1:1 port of TradeComponent_helper_e6b0; closure =
 // MemAlloc/MemFree only.
 int64_t* TradeComponent_CopyPtrArray(int64_t* dst, int64_t* src) {
-    if (fn_MemFreeStatic) fn_MemFreeStatic((void*)dst[0]);
+    System::MemoryAllocator::MemFree((void*)dst[0]);
     dst[1] = 0;
     dst[0] = 0;
     int count = (int)src[1];
     *(int*)(dst + 1) = count;
     if (count > 0) {
         *(int*)((int64_t)dst + 0xc) = count;
-        void* buf = (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 8, 8) : nullptr;
+        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)count * 8, 8);
         dst[0] = (int64_t)buf;
     }
     int n = (int)dst[1];
@@ -260,7 +202,7 @@ void TradeComponent_DtorNameArray(void* /*unused*/, int64_t arrayBase, int count
     // puVar1 starts at arrayBase + 0x10 (the inner ptr-array of element 0).
     int64_t* p = (int64_t*)(arrayBase + 0x10);
     for (int64_t k = count; k != 0; k--) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic((void*)p[0]);
+        System::MemoryAllocator::MemFree((void*)p[0]);
         p[0] = 0;
         p[1] = 0;
         // String::~String on (p - 2) == element start (+0x00).
@@ -289,9 +231,8 @@ void TradeComponent_ResizeNames(int64_t* field, int count) {
         *(int*)((int64_t)field + 0xc) = count;
         if (count == oldCount + 1 && oldCount != 0)
             *(int*)((int64_t)field + 0xc) = count * 3;
-        void* buf = (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton,
-                          (uint64_t)(*(int*)((int64_t)field + 0xc)) * 0x20, 8) : nullptr;
+        void* buf = System::MemoryAllocator::MemAlloc(
+            (uint64_t)(*(int*)((int64_t)field + 0xc)) * 0x20, 8);
         field[0] = (int64_t)buf;
     }
 
@@ -327,7 +268,7 @@ void TradeComponent_ResizeNames(int64_t* field, int count) {
                                          oldCount - count);
     } else {
         TradeComponent_DtorNameArray(nullptr, (int64_t)oldBuf, oldCount);
-        if (fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+        System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 
@@ -350,10 +291,8 @@ void TradeComponent_ResizeItems(int64_t* field, int count) {
         if (count == oldCount + 1 && oldCount != 0) {
             *(int*)((int64_t)field + 0xc) = count * 3;
         }
-        void* newBuf = (fn_MemAlloc && g_pMemAllocSingleton)
-            ? fn_MemAlloc(g_pMemAllocSingleton,
-                          (uint64_t)(*(int*)((int64_t)field + 0xc)) * 0xc, 4)
-            : nullptr;
+        void* newBuf = System::MemoryAllocator::MemAlloc(
+            (uint64_t)(*(int*)((int64_t)field + 0xc)) * 0xc, 4);
         field[0] = (int64_t)newBuf;
     }
 
@@ -374,21 +313,8 @@ void TradeComponent_ResizeItems(int64_t* field, int count) {
     }
 
     if (oldBuf != (void*)field[0]) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+        System::MemoryAllocator::MemFree(oldBuf);
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void TradeComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[TradeComponent] Funcs resolved: RegisterEntity=%p "
-           "TradeSetup=%p\n",
-           (void*)s_fn_RegisterEntity,
-           (void*)s_fn_TradeSetup);
-#endif
 }
 
 // ===== ENDGAME B.3.8 MI-B — TradeComponent as a REAL class =====
@@ -482,10 +408,7 @@ void* TradeComponent::CreateInPlaceObject(void* storage) {
 //   CALL FUN_14005c220           ; trade setup
 
 void TradeComponent::OnAdded() {
-    EnsureHelpers();
-
-    if (!s_fn_TradeSetup ||
-        !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return;
 
     uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
@@ -500,7 +423,7 @@ void TradeComponent::OnAdded() {
         .SetSizeFill(currentCount + 1, &entityPtr);
 
     // Call trade setup
-    s_fn_TradeSetup(this);
+    TradeComponent_Setup(this);   // 0x14005c220
 }
 // ============================================================
 // TradeComponent::OnRemove (vtable slot [7]; Ghidra "OnCreate", 0x14005c190)
@@ -517,9 +440,7 @@ void TradeComponent::OnAdded() {
 //   CALL FUN_140002cc0           ; register entity
 
 void TradeComponent::OnRemove() {
-    EnsureHelpers();
-
-    if (!s_fn_RegisterEntity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return;
 
     uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
@@ -528,7 +449,7 @@ void TradeComponent::OnRemove() {
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
 
     // Register entity at worldMgr+0x30 (trade entity list)
-    s_fn_RegisterEntity((void*)(worldMgr + 0x30), &entityPtr);
+    CemeteryListErase_Reimpl((void*)(worldMgr + 0x30), &entityPtr);   // 0x140002cc0
 }
 // [13] 0x14005c140 / [14] 0x14005c000 — the work-enable pair; they go together (a
 // live query over a stub toggle reports a state nothing can change). Neither
@@ -536,12 +457,11 @@ void TradeComponent::OnRemove() {
 // TradeComponent::Slot13 (vtable index 13, 0x14005c140) — work-state query.
 //   return -(WPC[0x50] != 0) & 2 | 1   =>  3 when accepting, 1 when not.
 uint32_t TradeComponent::CommandMask(int /*command*/) {
-    EnsureTradeWorkHelpers();
+    TC_ReportWorkDepsOnce();
     uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    if (!s_tc_FindWorkPlace) return 1;
 
     uint64_t wpc[2] = {0, 0};
-    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
+    AttendanceComponent_GetJobHostComponent(*(void**)(self + 0x10), &wpc);   // 0x140002e10
     if (!wpc[0]) return 1;
 
     return (*(char*)(wpc[0] + 0x50) != 0) ? 3 : 1;
@@ -552,15 +472,14 @@ uint32_t TradeComponent::CommandMask(int /*command*/) {
 //   currently ON  -> cancel the posted work,          commit accepting = 0
 // TradeComponent+0x70 caches the new state for the panel.
 void TradeComponent::Command(int /*command*/) {
-    EnsureTradeWorkHelpers();
+    TC_ReportWorkDepsOnce();
     uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    if (!s_tc_FindWorkPlace || !s_tc_FindWorkSched || !s_tc_SetAccepting) return;
 
     int64_t sched = 0;
-    s_tc_FindWorkSched(*(int64_t*)(self + 0x10), &sched);
+    WorkBase_FindComponent_3050(*(uintptr_t*)(self + 0x10), &sched);   // 0x140003050
 
     int64_t wpc = 0;
-    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
+    AttendanceComponent_GetJobHostComponent(*(void**)(self + 0x10), &wpc);   // 0x140002e10
 
     if (!wpc) return;
 
@@ -576,26 +495,24 @@ void TradeComponent::Command(int /*command*/) {
         // runs TradeWork_ResolveFuncs (the reason the hand build had to call it) and
         // zeroes +0x48/+0x50, the compiler stamps its table, and Work::InitFromEntity is
         // Work_Ctor25's body (0x1400f72e0). No more read-back of 0x140161a10.
-        if (fn_MemAlloc && g_pMemAllocSingleton) {
-            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
-            if (mem) {
-                int64_t entityIBP = *(int64_t*)(self + 0x10);
-                TradeWork* tw = new (mem) TradeWork();
-                tw->InitFromEntity(&entityIBP);
-                work = mem;
-            }
+        void* mem = System::MemoryAllocator::MemAlloc(0x58, 8);
+        if (mem) {
+            int64_t entityIBP = *(int64_t*)(self + 0x10);
+            TradeWork* tw = new (mem) TradeWork();
+            tw->InitFromEntity(&entityIBP);
+            work = mem;
         }
         uint64_t workIBP[1] = {0};
-        if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
+        new (workIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-        if (s_tc_PostWork) s_tc_PostWork(sched, 1, '\0', workIBP);
+        CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(sched), 1, '\0', workIBP);   // 0x14012ec60
         newState = '\x01';
     } else {
-        if (s_tc_CancelWork) s_tc_CancelWork(sched);
+        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(sched));   // 0x14012eb50
         newState = '\0';
     }
 
-    s_tc_SetAccepting(wpc, newState);
+    WorkPlaceComponent_SetAccepting(wpc, newState != '\0');   // 0x14012fc00
 
     fprintf(stderr, "[TradeComp] Slot14 toggle: wpc=%p was=%d now=%d\n",
             (void*)wpc, !enable, (int)newState);

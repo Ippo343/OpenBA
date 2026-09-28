@@ -36,7 +36,8 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340, 0x140018020)
+#include "system/Value.h"      // RtSystem_Time_Ctor
 #include <cstring>
 #include <cstdint>
 #include <new>
@@ -70,20 +71,14 @@ NaturalResourceDescription::NaturalResourceDescription()
       _b64(false),
       _profession(nullptr),
       _u80(0xb) {
-    if (fn_Time_Ctor_Float) {
-        fn_Time_Ctor_Float(&_time68, 1.0f);
-        fn_Time_Ctor_Float(&_time70, 1.0f);
-    } else {
-        _time68._ticks = 0;
-        _time70._ticks = 0;
-    }
+    RtSystem_Time_Ctor(&_time68, 1.0f);   // ??0Time@System@@QEAA@M@Z
+    RtSystem_Time_Ctor(&_time70, 1.0f);
 }
 
 // [5] 0x140125e10: stream order as retail.
 bool NaturalResourceDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_building, &ser);   // +0x20 ExternalPtr<BuildingDescription>
+    Reimpl_ExternalPtr_Serialize_StringTable(&_building, &ser);   // +0x20 ExternalPtr<BuildingDescription>
     ser.Serialize(_f28, nullptr);
     ser.Serialize(_f2c, nullptr);
     ser.Serialize(_f30, nullptr);
@@ -102,13 +97,7 @@ bool NaturalResourceDescription::Serialize(void* stream) {
     _time68.Serialize(ser);
     _time70.Serialize(ser);
     ser.Serialize(_u80, nullptr);   // enum through the UINT door
-    {
-        // +0x78 ExternalRef<Profession> (exe 0x140018020, resolved by address).
-        typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer);
-        fn_ExternalRefSerialize_t f =
-            reinterpret_cast<fn_ExternalRefSerialize_t>(ResolveAddr(Module::Exe, 0x140018020));
-        if (f) f(&_profession, &ser);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(&_profession, &ser);   // +0x78 ExternalRef<Profession> (0x140018020)
     ser.Serialize(_f60, nullptr);
     return true;
 }
