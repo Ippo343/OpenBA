@@ -142,8 +142,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x18003fae0
-    uint32_t    Type() const override;                           // [2] 0x18003fac0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003fae0, Type 0x18003fac0, TypeId 0x18003fad0, _TypeName 0x18003faa0
+    //         _ParentTypeName 0x18003fab0, CreateNewObject 0x18003fbd0, CreateInPlaceObject 0x18003fc50
+    DECLARE_TYPE(EditElement)
+public:
     void ComputeSize() override;                                 // [4] 0x1800d0c10
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;           // [5] 0x1800d0ab0
@@ -169,9 +173,6 @@ public:
 
     EditElement(const EditElement& src);                         // 0x18003fc90  not ported (door retired: no caller)
     EditElement& operator=(const EditElement& src);              // 0x18003fd70  not ported
-    static uint32_t TypeId();                                    // 0x18003fad0  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x18003fbd0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x18003fc50  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x18003faf0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18003fb60  not ported
     static void  operator delete(void* p);                       // 0x18003fb70  not ported
@@ -183,9 +184,6 @@ protected:
     ~EditElement();
 
 private:
-    static const char* _TypeName();                              // 0x18003faa0 -> "EditElement"
-    static const char* _ParentTypeName();                        // 0x18003fab0 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801f9f60 (minted)
 
 public:
     // ---- the 0x38 bytes EditElement adds ------------------------------------

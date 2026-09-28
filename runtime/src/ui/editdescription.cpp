@@ -50,7 +50,6 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     }
     return p;
 }
-std::atomic<void*> g_typeInfoSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z through an atomic slot:
@@ -60,11 +59,6 @@ void FreeStringBlock(void* p) {
     using MemFreeFn = void (*)(void*);
     reinterpret_cast<MemFreeFn>(AtomicExport(
         g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
-}
-
-const uint8_t* EditTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
 // The refcounted System::String RELEASE (retail's asymmetry: the freeing
@@ -108,14 +102,6 @@ void AssignStringField(char*& d, char* const s) {
 
 namespace UI {
 
-uint32_t EditDescription::Type() const { return TypeId(); }
-// ?TypeId@EditDescription@UI@@SAIXZ 0x18003f6c0 — the record's first dword.
-uint32_t EditDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, EditTypeInfo(), sizeof v); return v;
-}
-const char* EditDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, EditTypeInfo() + 8, sizeof v); return v;
-}
 int32_t EditDescription::GetFileVersion() const { return 0x204; }
 
 // 0x18003f870: null test (it sat in the retired door), then a JMP to the ctor.
@@ -236,3 +222,12 @@ int RtUiEditDescriptionRegister() {
     RegisterRuntimeAddr(0x18003f840ull, (void*)&UI::EditDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::EditDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@EditDescription@UI@@ (0x1801f9f28): name "EditDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@EditDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::EditDescription, "ElementDescription", nullptr)

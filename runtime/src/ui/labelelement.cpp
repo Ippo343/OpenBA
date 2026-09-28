@@ -61,12 +61,6 @@ using namespace rtuielem;
 
 namespace {
 
-std::atomic<void*> g_typeInfoSlot{nullptr};   // RULE B6-5
-
-const uint8_t* LabelElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 const System::String& AsString(char* const& field) {
     return *reinterpret_cast<const System::String*>(&field);
 }
@@ -74,11 +68,6 @@ const System::String& AsString(char* const& field) {
 }  // namespace
 
 namespace UI {
-
-uint32_t LabelElement::Type() const { return TypeId(); }
-// ?TypeId@LabelElement@UI@@SAIXZ 0x1800427e0 — the record's first dword.
-uint32_t LabelElement::TypeId() { return TypeIdOf(LabelElementTypeInfo()); }
-const char* LabelElement::TypeName() const { return TypeNameOf(LabelElementTypeInfo()); }
 
 // ??1LabelElement@UI@@UEAA@XZ   0x1800d25f0 -- restamp, then TAIL JMP to
 // ~TextElement. ENDGAME B.3.9 UI-A: EMPTY; the compiler's chain.
@@ -357,3 +346,12 @@ int RtUiLabelElementRegister() {
     RegisterRuntimeAddr(0x180042960ull, (void*)&UI::LabelElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::LabelElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@LabelElement@UI@@ (0x1801fa040): name "LabelElement", parent
+// "TextElement" (retail ?_ParentTypeName@LabelElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::LabelElement, "TextElement", nullptr)

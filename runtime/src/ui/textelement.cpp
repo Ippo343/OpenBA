@@ -49,13 +49,6 @@
 
 namespace {
 
-std::atomic<void*> g_typeInfoSlot{nullptr};   // RULE B6-5
-
-const uint8_t* TypeInfo() {
-    return static_cast<const uint8_t*>(rtuielem::AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 using ArrayDtorFn = void (*)(void* hdr);
 
 // System::String is ONE char* (runtime/types/system/String.h): the member
@@ -68,13 +61,6 @@ const System::String& AsString(char* const& field) {
 }  // namespace
 
 namespace UI {
-
-// slot 2 — 0x180041ed0 / slot 1 — 0x180041ef0: the minted BaseTypeInfo's first
-// dword and its +8 name. TypeName is the key function (GCC emits the table here).
-uint32_t TextElement::Type() const { return TypeId(); }
-// ?TypeId@TextElement@UI@@SAIXZ 0x180041ee0 — the record's first dword.
-uint32_t TextElement::TypeId() { return rtuielem::TypeIdOf(TypeInfo()); }
-const char* TextElement::TypeName() const { return rtuielem::TypeNameOf(TypeInfo()); }
 
 // ??1TextElement@UI@@UEAA@XZ   0x18011eda0 — retail's body, moved here from the
 // retired door (ENDGAME B.3.9 UI-A). The entry restamp is the compiler's. The
@@ -196,3 +182,12 @@ int RtUiTextElementRegister() {
     RegisterRuntimeAddr(0x180042060ull, (void*)&UI::TextElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::TextElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@TextElement@UI@@ (0x1801faee8): name "TextElement", parent
+// "Element" (retail ?_ParentTypeName@TextElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::TextElement, "Element", nullptr)

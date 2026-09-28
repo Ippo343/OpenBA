@@ -201,8 +201,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x18004a820
-    uint32_t    Type() const override;                           // [2] 0x18004a800
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18004a820, Type 0x18004a800, TypeId 0x18004a810, _TypeName 0x18004a7e0
+    //         _ParentTypeName 0x18004a7f0, CreateNewObject 0x18004a910, CreateInPlaceObject 0x18004a990
+    DECLARE_TYPE(NumberElement)
+public:
     void ComputeSize() override;                                 // [4] 0x180119000
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;           // [5] 0x180119080
@@ -225,9 +229,6 @@ public:
 
     NumberElement(const NumberElement& src);                     // 0x18004a9d0  not ported
     NumberElement& operator=(const NumberElement& src);          // 0x18004aa80  not ported
-    static uint32_t TypeId();                                    // 0x18004a810  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x18004a910  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x18004a990  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x18004a830  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18004a8a0  not ported
     static void  operator delete(void* p);                       // 0x18004a8b0  not ported
@@ -239,9 +240,6 @@ protected:
     ~NumberElement();
 
 private:
-    static const char* _TypeName();                              // 0x18004a7e0 -> "NumberElement"
-    static const char* _ParentTypeName();                        // 0x18004a7f0 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801facb8 (minted)
 
 public:
     Font*    _font;          // +0xc0  ExternalPtr<UI::Font>

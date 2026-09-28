@@ -104,8 +104,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x180041ad0
-    uint32_t    Type() const override;                           // [2] 0x180041ab0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180041ad0, Type 0x180041ab0, TypeId 0x180041ac0, _TypeName 0x180041a90
+    //         _ParentTypeName 0x180041aa0, CreateNewObject 0x180041bc0, CreateInPlaceObject 0x180041c40
+    DECLARE_TYPE(TextDescription)
+public:
     int32_t     GetFileVersion() const override;                 // [3] 0x18011ee20
     // [4] Compile — Object::External's own body, inherited (B6-1.5).
     bool        Serialize(void* stream) override;                // [5] 0x18011ee30 (IO::Stream&)
@@ -131,9 +135,6 @@ public:
     TextDescription& operator=(const TextDescription& src);      // 0x180041d40  not ported
 
     // Reflection statics / allocation. `_typeInfo` is the MINTED record.
-    static uint32_t TypeId();                                    // 0x180041ac0  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x180041bc0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180041c40  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180041ae0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180041b50  not ported
     static void  operator delete(void* p);                       // 0x180041b60  not ported
@@ -146,9 +147,6 @@ protected:
     ~TextDescription();
 
 private:
-    static const char* _TypeName();                              // 0x180041a90 -> "TextDescription"
-    static const char* _ParentTypeName();                        // 0x180041aa0 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801faeb0 (minted)
 
 public:
     // ---- the 0x28 bytes TextDescription adds (public: doors and the applier

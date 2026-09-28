@@ -56,14 +56,6 @@
 
 namespace {
 
-// RULE B6-5: the members resolve through namespace-scope atomics.
-std::atomic<void*> g_typeInfoSlot{nullptr};
-
-const uint8_t* NumberDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(rtuielem::AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -87,14 +79,6 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 namespace UI {
 
-uint32_t NumberDescription::Type() const { return TypeId(); }
-// ?TypeId@NumberDescription@UI@@SAIXZ 0x18004a230 — the record's first dword.
-uint32_t NumberDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, NumberDescriptionTypeInfo(), sizeof v); return v;
-}
-const char* NumberDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, NumberDescriptionTypeInfo() + 8, sizeof v); return v;
-}
 int32_t NumberDescription::GetFileVersion() const { return 0x104; }
 
 // 0x18004a570: null test (in the DOOR), the INLINED ctor, `MOV RAX,RCX`.
@@ -231,3 +215,12 @@ int RtUiNumberDescriptionRegister() {
     RegisterRuntimeAddr(0x18004a420ull, (void*)&UI::NumberDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@NumberDescription@UI@@ (0x1801fac80): name "NumberDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@NumberDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::NumberDescription, "ElementDescription", nullptr)

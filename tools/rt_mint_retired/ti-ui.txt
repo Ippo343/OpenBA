@@ -26,3 +26,15 @@
 ?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::AnimatedImageElement, "ImageElement") in animatedimageelement.cpp; readers: own accessor slot gone
 ?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ImageDescription, "ElementDescription") in imagedescription.cpp; readers: own accessor slot gone
 ?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::AnimatedImageDescription, "ImageDescription") in animatedimagedescription.cpp; readers: own accessor slot gone
+
+# -- cluster 3: Text / Label / Edit / NumberEdit / Number --
+?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TextDescription, "ElementDescription") in textdescription.cpp; readers: own accessor slot gone
+?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LabelDescription, "TextDescription") in labeldescription.cpp; readers: own accessor slot gone
+?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::EditDescription, "ElementDescription") in editdescription.cpp; readers: own accessor slot gone
+?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberEditDescription, "ElementDescription") in numbereditdescription.cpp; readers: own accessor slot gone
+?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberDescription, "ElementDescription") in numberdescription.cpp; readers: own accessor slot gone
+?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TextElement, "Element") in textelement.cpp; readers: own accessor slot gone, comboelement / widgets_input -> TextElement::TypeId() (cluster 1)
+?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LabelElement, "TextElement") in labelelement.cpp; readers: own accessor slot gone, widgets_input -> LabelElement::TypeId() (cluster 1)
+?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::EditElement, "Element") in editelement.cpp; readers: own accessor slot gone
+?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberEditElement, "EditElement") in numbereditelement.cpp; readers: own accessor slot gone, spinnerelement, widgets_input by-address 0x1801fa190 -> NumberEditElement::TypeId() (cluster 1)
+?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberElement, "Element") in numberelement.cpp; readers: own accessor slot gone, element_bodies_b5 -> NumberElement::TypeId() (cluster 1)

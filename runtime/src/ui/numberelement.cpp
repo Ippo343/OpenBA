@@ -41,13 +41,6 @@ using namespace rtuielem;
 
 namespace {
 
-std::atomic<void*> g_typeInfoSlot{nullptr};   // RULE B6-5
-
-const uint8_t* TypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 using MemFreeFn = void (*)(void* p);
 // `?Format@String@System@@SA?AV12@PEBDZZ` — hidden return slot first.
 using FormatIntFn    = void* (*)(void* ret, const char* fmt, int64_t v);
@@ -93,11 +86,6 @@ void ReleaseStringField(char*& field) {
 }  // namespace
 
 namespace UI {
-
-// ?TypeId@NumberElement@UI@@SAIXZ 0x18004a810 — the record's first dword.
-uint32_t NumberElement::TypeId() { return TypeIdOf(TypeInfo()); }
-uint32_t NumberElement::Type() const { return TypeId(); }
-const char* NumberElement::TypeName() const { return TypeNameOf(TypeInfo()); }
 
 // ??1NumberElement@UI@@UEAA@XZ 0x180118ce0 — retail's body, moved here from
 // the retired door (ENDGAME B.3.9 UI-A): release the cached text; the restamp
@@ -249,3 +237,12 @@ int RtUiNumberElementRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@NumberElement@UI@@ (0x1801facb8): name "NumberElement", parent
+// "Element" (retail ?_ParentTypeName@NumberElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::NumberElement, "Element", nullptr)

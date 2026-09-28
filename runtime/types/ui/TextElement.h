@@ -179,8 +179,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x180041ef0
-    uint32_t    Type() const override;                           // [2] 0x180041ed0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180041ef0, Type 0x180041ed0, TypeId 0x180041ee0, _TypeName 0x180041eb0
+    //         _ParentTypeName 0x180041ec0, CreateNewObject 0x180041fe0, CreateInPlaceObject 0x180042060
+    DECLARE_TYPE(TextElement)
+public:
     void ComputeSize() override;                                 // [4] 0x18011f060
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;           // [5] 0x18011f120
@@ -209,9 +213,6 @@ public:
 
     TextElement(const TextElement& src);                         // 0x1800420d0  not ported
     TextElement& operator=(const TextElement& src);              // 0x1800421c0  not ported
-    static uint32_t TypeId();                                    // 0x180041ee0  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x180041fe0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042060  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180041f00  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180041f70  not ported
     static void  operator delete(void* p);                       // 0x180041f80  not ported
@@ -224,9 +225,6 @@ protected:
     ~TextElement();
 
 private:
-    static const char* _TypeName();                              // 0x180041eb0 -> "TextElement"
-    static const char* _ParentTypeName();                        // 0x180041ec0 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801faee8 (minted)
 
 public:
     // ---- the 0x40 bytes TextElement adds ------------------------------------

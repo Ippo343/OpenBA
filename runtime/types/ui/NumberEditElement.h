@@ -88,8 +88,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x180046250
-    uint32_t    Type() const override;                           // [2] 0x180046230
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180046250, Type 0x180046230, TypeId 0x180046240, _TypeName 0x180046210
+    //         _ParentTypeName 0x180046220, CreateNewObject 0x180046340, CreateInPlaceObject 0x1800463e0
+    DECLARE_TYPE(NumberEditElement)
+public:
     void FinalizeText() override;                                // [12] 0x1800d4a60
 
     // ---- non-virtual ---------------------------------------------------------
@@ -102,9 +106,6 @@ public:
 
     NumberEditElement(const NumberEditElement& src);             // 0x180046450  not ported
     NumberEditElement& operator=(const NumberEditElement& src);  // 0x1800464b0  not ported
-    static uint32_t TypeId();                                    // 0x180046240  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x180046340  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x1800463e0  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180046260  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x1800462d0  not ported
     static void  operator delete(void* p);                       // 0x1800462e0  not ported
@@ -116,9 +117,6 @@ protected:
     ~NumberEditElement();
 
 private:
-    static const char* _TypeName();                              // 0x180046210 -> "NumberEditElement"
-    static const char* _ParentTypeName();                        // 0x180046220 -> "EditElement"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801fa190 (minted)
 
 public:
     int32_t _min;   // +0xf8  ctor 0xffff8001 (-32767)
