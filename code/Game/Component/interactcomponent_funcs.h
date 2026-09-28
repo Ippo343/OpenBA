@@ -10,7 +10,3 @@
 // Vtable: 0x1401638b0
 // Size: 0x38 bytes
 // ============================================================
-
-
-// Init: resolve all internal function pointers (called once at startup)
-void InteractComponent_InitFuncs();

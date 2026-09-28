@@ -11,7 +11,9 @@
 
 #include "Component/huntcomponent_funcs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent
+#include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050
+#include "Tutorial/exe_bodies.h"    // WorkComponent_CalcMaxWorkers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
@@ -20,61 +22,14 @@
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
 
 // ============================================================
-// Resolved helpers
+// Helpers, called by name (B3R):
+//   0x140002e10 AttendanceComponent_GetJobHostComponent — find the terrain/character component
+//   0x140003050 WorkBase_FindComponent_3050             — find the map tile component
+//   0x14012e5c0 WorkComponent_CalcMaxWorkers — the description-derived, footprint-scaled
+//     worker capacity, cached at workComp+0x30. HuntComponent::Update reuses that same cache
+//     as its speed divisor (the old name here was "ComputeTerrainSpeed"). The single body
+//     lives in code/Game/Tutorial/tutorial_base.cpp.
 // ============================================================
-
-// FUN_140002e10: Find component on entity by type (terrain/character component)
-typedef void* (*fn_FindComponent1_t)(int64_t entity, void* outPtr);
-static fn_FindComponent1_t s_fn_FindComponent1 = nullptr;
-
-// FUN_140003050: Find component on entity by type (map tile component)
-typedef void* (*fn_FindComponent2_t)(int64_t entity, void* outPtr);
-static fn_FindComponent2_t s_fn_FindComponent2 = nullptr;
-
-// FUN_14012e5c0: WorkComponent::CalcMaxWorkers — the description-derived, footprint-scaled
-// worker capacity, cached at workComp+0x30. HuntComponent::Update reuses that same cache as
-// its speed divisor, which is why the old name here was "ComputeTerrainSpeed". The single
-// body lives in code/Game/Tutorial/tutorial_base.cpp (WorkComponent_CalcMaxWorkers) and is
-// registered ONCE, from standalone/reg_tutorial_base.cpp. A second, identically-behaving
-// copy used to be registered from reg_component_nature.cpp; whichever batch ran last won.
-typedef int (*fn_CalcMaxWorkers_t)(int64_t workComp);
-static fn_CalcMaxWorkers_t s_fn_CalcMaxWorkers = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_FindComponent1 = reinterpret_cast<fn_FindComponent1_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-
-    s_fn_FindComponent2 = reinterpret_cast<fn_FindComponent2_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-
-    s_fn_CalcMaxWorkers = reinterpret_cast<fn_CalcMaxWorkers_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-
-    s_initialized = true;
-}
-
-// ============================================================
-// HuntComponent::Update (vtable slot [9], 0x140122740)
-// ============================================================
-// Computes hunt progress: accumulates delta time scaled by the
-// terrain speed ratio (base speed / terrain speed).
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void HuntComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[HuntComponent] Funcs resolved: FindComponent1=%p FindComponent2=%p "
-           "CalcMaxWorkers=%p\n",
-           (void*)s_fn_FindComponent1, (void*)s_fn_FindComponent2,
-           (void*)s_fn_CalcMaxWorkers);
-#endif
-}
 
 // ============================================================
 // HuntComponent::Shutdown — vtable slot 3, retail 0x140122820
@@ -104,17 +59,13 @@ void HuntComponent::Persist(void* stream) {
 // `void*`, so its bits are the tick count.
 void HuntComponent::Update(void* time) {
     const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));   // the elapsed ticks travel in the pointer slot
-    EnsureHelpers();
-
-    if (!s_fn_FindComponent1 || !s_fn_FindComponent2 || !s_fn_CalcMaxWorkers)
-        return;
 
     // Find the terrain/character component on our owner entity
     int64_t entityPtr = *reinterpret_cast<int64_t*>(
         reinterpret_cast<uintptr_t>(this) + 0x10);
 
     int64_t terrainComponent = 0;
-    s_fn_FindComponent1(entityPtr, &terrainComponent);
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityPtr), &terrainComponent);
 
     // Read terrain base speed from component+0x60
     int terrainBaseSpeed = *reinterpret_cast<int*>(terrainComponent + 0x60);
@@ -122,7 +73,7 @@ void HuntComponent::Update(void* time) {
     // Find the map tile component via terrainComponent's owner
     int64_t tileOwner = *reinterpret_cast<int64_t*>(terrainComponent + 0x10);
     int64_t tileComponentPtr = 0;
-    void* result = s_fn_FindComponent2(tileOwner, &tileComponentPtr);
+    void* result = WorkBase_FindComponent_3050(static_cast<uintptr_t>(tileOwner), &tileComponentPtr);
 
     // Dereference to get actual tile data
     int64_t tileData = *reinterpret_cast<int64_t*>(result);
@@ -130,7 +81,7 @@ void HuntComponent::Update(void* time) {
     // Lazily compute the capacity divisor if not cached
     int terrainSpeed = *reinterpret_cast<int*>(tileData + 0x30);
     if (terrainSpeed == 0) {
-        terrainSpeed = s_fn_CalcMaxWorkers(tileData);
+        terrainSpeed = WorkComponent_CalcMaxWorkers(static_cast<uintptr_t>(tileData));
         *reinterpret_cast<int*>(tileData + 0x30) = terrainSpeed;
     }
 

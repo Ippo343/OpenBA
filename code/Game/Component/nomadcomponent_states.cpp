@@ -33,9 +33,14 @@
 // 0x14004f420 .. 0x14004fb60 and 0x1400c49d0.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/CharacterComponent.h"
 #include "Component/ControllerComponent.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // Pf_ActStackPush_54e0, Pf_MoveToCtor_9170, ActHunt_MarkEntityRemoval_c2ea0
+#include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos, fn_Random_RandFloatTol
+#include "Game/exe_constants.h"  // kRdata_1401721cc
+#include "Player/exe_bodies.h"   // PlayerPath_FindComponent_3ea0
+#include "Work/exe_bodies.h"     // WorkBase_TaskListCleanup_c5400
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
 #include "Component/coll_bridge.h"
@@ -49,41 +54,26 @@
 namespace {
 
 constexpr float kWanderRandRange = 15.0f;   // DAT_1401721bc
-constexpr float kWanderBase      = 30.0f;   // DAT_1401721cc (g_pNotifyTimerDuration)
 constexpr float kWanderJitter    = 0.33f;   // DAT_14017210c
 constexpr float kHalfCell        = 0.5f;    // DAT_140172114
 constexpr float kMoveSpeed       = -1.0f;   // DAT_140172280 (MoveTo speed arg: default)
 
-typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retIBP);
-typedef void  (*fn_TaskListCleanup_t)(void* stack);
-typedef void  (*fn_ActStackPush_t)(int64_t* stack, void* ibp);
-typedef void* (*fn_MoveToCtor_t)(void* self, void* ibp, uint32_t pathType, int p4,
-                                 float* dest, int p6, int p7, float speed);
-typedef void  (*fn_MarkRemoval_t)(void* entity);
+// Helpers, called by name (B3R):
+//   0x140003ea0 PlayerPath_FindComponent_3ea0 (the StateMachineComponent)
+//   0x1400c5400 WorkBase_TaskListCleanup_c5400   0x1400c54e0 Pf_ActStackPush_54e0
+//   0x1400c9170 Pf_MoveToCtor_9170               0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
+//               (ComponentEntity::MarkForRemoval)
+//   0x14009f3e0 Reimpl_MapGetTerrainPos
 
-fn_FindComp_t        s_FindSM      = nullptr;   // 0x140003ea0 StateMachineComponent
-fn_TaskListCleanup_t s_Cleanup     = nullptr;   // 0x1400c5400
-fn_ActStackPush_t    s_Push        = nullptr;   // 0x1400c54e0
-fn_MoveToCtor_t      s_MoveToCtor  = nullptr;   // 0x1400c9170
-fn_MarkRemoval_t     s_MarkRemoval = nullptr;   // 0x1400c2ea0 ComponentEntity::MarkForRemoval
-bool s_resolved = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_FindSM      = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_Cleanup     = reinterpret_cast<fn_TaskListCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    s_Push        = reinterpret_cast<fn_ActStackPush_t>(ResolveAddr(Module::Exe, 0x1400c54e0));
-    s_MoveToCtor  = reinterpret_cast<fn_MoveToCtor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
-    s_MarkRemoval = reinterpret_cast<fn_MarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_resolved = true;
-}
+// The .rdata float constants (Game/exe_constants.h) that are stored as bit patterns.
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 uint32_t TidCharacter() { return CharacterComponent::TypeId(); }
 
 
 inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
-inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(obj)); else *reinterpret_cast<void**>(dst) = obj; }   // B.3.3 bridge
+inline void MakeIBP(void* dst, void* obj) { new (dst) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
 // Entity_FindComponent_Family (0x1400012d0) — the CharacterComponent (DAT_1401c7078).
 uintptr_t FindCharacter(void* entity) {
@@ -98,7 +88,7 @@ uintptr_t FindCharacter(void* entity) {
         if (!c) continue;
         if (reinterpret_cast<Object::Base*>(c)->Type() != tid) continue;   // B.3.8 bridge (slot 2)
         c = *slot;
-        return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? reinterpret_cast<uintptr_t>(c) : 0;
+        return ::Object::IsDerivedFromNullSafe(c, tid) ? reinterpret_cast<uintptr_t>(c) : 0;
     }
     return 0;
 }
@@ -120,12 +110,11 @@ bool Idle(uintptr_t nomad, uintptr_t* chrOut) {
 // removal array (entityList+0xd0/+0xd8), unless already marked (flag 0x400).
 // ============================================================
 extern "C" void Nomad_Remove(void* entityList, void* entityIBP) {
-    Resolve();
     uint64_t* ibp = reinterpret_cast<uint64_t*>(entityIBP);
     if (*ibp == 0) return;
     uintptr_t e = static_cast<uintptr_t>(*ibp);
     if ((*reinterpret_cast<uint32_t*>(e + 0x40) >> 10) & 1) return;
-    if (s_MarkRemoval) s_MarkRemoval(reinterpret_cast<void*>(*ibp));
+    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(*ibp));   // 0x1400c2ea0
     uint8_t* el = reinterpret_cast<uint8_t*>(entityList);
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     GameColl::AsArray<GameColl::Ptr8>(el + 0xd0)
@@ -137,21 +126,20 @@ extern "C" void Nomad_Remove(void* entityList, void* entityIBP) {
 // MoveTo(dest) (Slow, mask 0xe1f, default speed).
 // ============================================================
 extern "C" void Nomad_MoveTo(void* nomadV, float* dest) {
-    Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(nomadV);
     uintptr_t chr = FindCharacter(*reinterpret_cast<void**>(nomad + 0x10));
     uint64_t chrIBP = 0; MakeIBP(&chrIBP, reinterpret_cast<void*>(chr));
     chr = static_cast<uintptr_t>(chrIBP);
-    if (!chr || !s_MoveToCtor || !fn_MemAlloc) return;
-    if (s_Cleanup) s_Cleanup(reinterpret_cast<void*>(chr + 0x48));
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x480, 8);
+    if (!chr) return;
+    WorkBase_TaskListCleanup_c5400(reinterpret_cast<void*>(chr + 0x48));   // 0x1400c5400
+    void* mem = System::MemoryAllocator::MemAlloc(0x480, 8);
     void* act = nullptr;
     if (mem) {
         uint64_t ownerIBP = chrIBP;
-        act = s_MoveToCtor(mem, &ownerIBP, 1 /*Slow*/, 0, dest, 0xe1f, 0, kMoveSpeed);
+        act = Pf_MoveToCtor_9170(mem, &ownerIBP, 1 /*Slow*/, 0, dest, 0xe1f, 0, kMoveSpeed);
     }
     uint64_t actIBP = 0; MakeIBP(&actIBP, act);
-    if (s_Push) s_Push(reinterpret_cast<int64_t*>(chr + 0x48), &actIBP);
+    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(chr + 0x48), &actIBP);   // 0x1400c54e0
 }
 
 // ============================================================
@@ -160,13 +148,11 @@ extern "C" void Nomad_MoveTo(void* nomadV, float* dest) {
 
 // state 0 enter 0x14004faf0: walk to the meeting point
 extern "C" char Nomad_State0_Enter(void* data, void* /*sm*/) {
-    Resolve();
     Nomad_MoveTo(data, reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(data) + 0x3c));
     return 1;
 }
 // state 0 tick 0x14004f9c0: arrived -> tell the hall (event 6) -> state 1
 extern "C" char Nomad_State0_Tick(void* data, void* sm, void* /*time*/) {
-    Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
     if (!Idle(nomad, nullptr)) return 1;
     uint8_t* gw = GW();
@@ -176,7 +162,7 @@ extern "C" char Nomad_State0_Tick(void* data, void* sm, void* /*time*/) {
         return 1;
     }
     uint64_t smcIBP = 0;
-    if (s_FindSM) s_FindSM(static_cast<uintptr_t>(*reinterpret_cast<uint64_t*>(nomad + 0x28)), &smcIBP);
+    PlayerPath_FindComponent_3ea0(static_cast<uintptr_t>(*reinterpret_cast<uint64_t*>(nomad + 0x28)), &smcIBP);   // 0x140003ea0
     uintptr_t smc = static_cast<uintptr_t>(smcIBP);
     if (smc) {
         void* node = *reinterpret_cast<void**>(smc + 0x48);
@@ -192,7 +178,6 @@ extern "C" char Nomad_State0_Tick(void* data, void* sm, void* /*time*/) {
 }
 // event 1 0x14004f4a0: LEAVE -> state 2, forget the hall
 extern "C" char Nomad_Event1_Leave(void* data, void* sm) {
-    Resolve();
     ::ControllerLive::RequestStateTransition(sm, 2);
     uint64_t nullIBP = 0; MakeIBP(&nullIBP, nullptr);
     *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(data) + 0x28) = nullIBP;
@@ -202,7 +187,6 @@ extern "C" char Nomad_Event1_Leave(void* data, void* sm) {
 extern "C" char Nomad_State1_Enter(void* /*data*/, void* /*sm*/) { return 1; }
 // state 1 tick 0x14004f600: loiter around the meeting point
 extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
-    Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
     if (!Idle(nomad, nullptr)) return 1;
     int64_t* timer = reinterpret_cast<int64_t*>(nomad + 0x48);
@@ -212,9 +196,9 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
     if (!gw) return 1;
     void* rng = *reinterpret_cast<void**>(gw + 0xd8);
     float secs = fn_Random_RandFloatTol(rng) * kWanderRandRange +
-                 (g_pNotifyTimerDuration ? *g_pNotifyTimerDuration : kWanderBase);
+                 RdataF(kRdata_1401721cc);   // DAT_1401721cc = 30.0f, wander base
     int64_t t = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), secs);
     *timer = t;
 
     int* grid = *reinterpret_cast<int**>(gw + 0xf8);
@@ -242,7 +226,7 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
             if (*reinterpret_cast<uint8_t*>(tiles + static_cast<uintptr_t>(c) * 0x30 + 0x29) < 3) cand[nc++] = c;
         }
     }
-    if (nc != 0 && fn_MapGetTerrainPos) {
+    if (nc != 0) {
         uint32_t pick = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(nc));   // B.3.4b bridge
         float jx = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar18
         float jy = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar19
@@ -250,7 +234,7 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         float pos[3] = {0, 0, 0};
-        fn_MapGetTerrainPos(grid, pos, cellPos, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(grid, pos, cellPos, '\0', nullptr);
         float dest[3] = { jy + pos[0], jx + pos[1], pos[2] + 0.0f };
         Nomad_MoveTo(data, dest);
     }
@@ -258,7 +242,6 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
 }
 // event 0 0x14004f420: DESTROY (the nomad became a citizen)
 extern "C" char Nomad_Event0_Destroy(void* data, void* /*sm*/) {
-    Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
     uint8_t* gw = GW();
     uint64_t ibp = *reinterpret_cast<uint64_t*>(nomad + 0x10);
@@ -267,13 +250,11 @@ extern "C" char Nomad_Event0_Destroy(void* data, void* /*sm*/) {
 }
 // state 2 enter 0x14004f5e0: walk back to the spawn point
 extern "C" char Nomad_State2_Enter(void* data, void* /*sm*/) {
-    Resolve();
     Nomad_MoveTo(data, reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(data) + 0x30));
     return 1;
 }
 // state 2 tick 0x14004f530: back at the edge -> destroy
 extern "C" char Nomad_State2_Tick(void* data, void* /*sm*/, void* /*time*/) {
-    Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
     if (!Idle(nomad, nullptr)) return 1;
     uint8_t* gw = GW();

@@ -10,6 +10,3 @@
 // Vtable: 0x140163ba0
 // Size: 0x170 bytes
 // ============================================================
-
-// Init: resolve all internal function pointers (called once at startup)
-void ModelComponent_InitFuncs();

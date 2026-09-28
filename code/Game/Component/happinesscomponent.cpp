@@ -15,7 +15,7 @@
 #include "Component/happinesscomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"   // WorkBase_FindComponent_6270
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
@@ -29,76 +29,26 @@
 #include "Component/exe_bodies.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers, called by name (B3R)
 // ============================================================
-
-
-// 0x140002cc0 DynArray8_EraseByValue -- REMOVES every element equal to *value, shifting
-// the tail down and decrementing the count. It is NOT a push, despite the name this
-// typedef carried until 2026-08-25; the append counterpart is DynArray8_ResizeFill
-// (0x140003110), which is what Register uses. Ghidra's own plate comment on the callee
-// records that leaving it unnamed already caused two component OnCreate/OnRemove vtable
-// entries to be mislabelled as the create side. Renamed here so nobody "fixes"
-// Unregister into duplicating the source it is supposed to remove.
-typedef void (*fn_ArrayEraseByValue_t)(void* arrayBase, void* internalBasePtr);
-static fn_ArrayEraseByValue_t s_fn_ArrayEraseByValue = nullptr;
-
-// FishingComponent_impl_a300 -- sets index on entity to given value
-// Complex helper that looks up building type, finds linked component, sets map index.
-typedef void (*fn_SetEntityIndex_t)(void* self, int16_t index);
-static fn_SetEntityIndex_t s_fn_SetEntityIndex = nullptr;
-
-// FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
-// into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-// (0x140002cc0 above, despite its legacy name, is the ERASE -- see the 1:1 port in
-// cemeterycomponent.cpp. The two are the register/unregister pair for townMgr+0x50.)
-
+// 0x140002cc0 CemeteryListErase_Reimpl = DynArray8_EraseByValue -- REMOVES every element
+// equal to *value, shifting the tail down and decrementing the count. It is NOT a push; the
+// append counterpart is DynArray8_ResizeFill (0x140003110), which is what Register uses.
+// Ghidra's own plate comment on the callee records that leaving it unnamed already caused
+// two component OnCreate/OnRemove vtable entries to be mislabelled as the create side.
+// 0x14004a300 FishingComponent_NotifyTile (below) -- sets index on entity to given value.
+// FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into the exe
+// (ENDGAME B.3.2 step 2) — converted at its call site below.
 // 0x140002e10 AttendanceComponent_GetJobHostComponent(entity, outIBP) -- the owner's
 // workplace, used by the "needs staff" arm of IsActive.
-typedef void (*fn_GetJobHost_t)(uintptr_t entity, void* outIBP);
-static fn_GetJobHost_t s_fn_GetJobHost = nullptr;
-
-// 0x140006270 Entity_FindComponent_Storage(entity, outIBP) -- the "needs goods" arm.
-typedef void (*fn_FindStorage_t)(uintptr_t entity, void* outIBP);
-static fn_FindStorage_t s_fn_FindStorage = nullptr;
-
-// IsDerivedFrom (slot 0x140152a98).
-typedef bool (*fn_IsDerivedFrom_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_t s_fn_IsDerivedFrom = nullptr;
-
+// 0x140006270 WorkBase_FindComponent_6270(entity, outIBP) -- the storage, "needs goods" arm.
+// IsDerivedFrom (slot 0x140152a98) is Object::Base::IsDerivedFrom.
+// DAT_1401c3dd8 (the game world) is read through g_pGameWorldSingleton, the engine_funcs
+// global bound to the same cell.
+//
 // ENDGAME B.3.9 C1 (D5): 0x1401c42f8 (HappinessDescription) and 0x1401c7cb8
 // (RawMaterialDescription, whose +0x5c flags the goods test masks) are read
 // BY CELL below, as the class's static TypeId().
-
-// Global: DAT_1401c3dd8 -- pointer to game world/population manager
-static void** s_pGameWorld = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-
-    s_fn_ArrayEraseByValue = reinterpret_cast<fn_ArrayEraseByValue_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-    s_fn_SetEntityIndex = reinterpret_cast<fn_SetEntityIndex_t>(
-        ResolveAddr(Module::Exe, 0x14004a300));
-
-    s_pGameWorld = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_fn_GetJobHost = reinterpret_cast<fn_GetJobHost_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFrom_t*>(slot);
-
-    s_initialized = true;
-}
 
 // ============================================================
 // HappinessComponent::Shutdown (vtable slot [3], 0x14004aa80) — the Persist member below
@@ -132,18 +82,7 @@ static void EnsureHelpers() {
 // (type 0x1401c4870 -- Table 1, not a generic "fishing-target component") on the
 // host, the MapComponent (FUN_140004680) for tile coords, maps desc+0x20 (0..4)
 // to a state id, and calls the helper below (0x14009f990).
-typedef void* (*fn_FC_FindMap_t)(uintptr_t entity, void* retbuf);   // 0x140004680
-typedef void (*fn_FC_Helper_f990_t)(int* mgr, int state, int x, int y,
-                                    int resourceId, short param6);    // 0x14009f990
-static fn_FC_FindMap_t      s_fc_FindMap = nullptr;
-static fn_FC_Helper_f990_t  s_fc_Helper = nullptr;
-static bool s_fcResolved = false;
-static void EnsureFishingHelpers() {
-    if (s_fcResolved) return;
-    s_fc_FindMap = reinterpret_cast<fn_FC_FindMap_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fc_Helper  = reinterpret_cast<fn_FC_Helper_f990_t>(ResolveAddr(Module::Exe, 0x14009f990));
-    s_fcResolved = true;
-}
+// 0x140004680 is FloorComponent_FindResData, 0x14009f990 FishingComponent_BrushTile (below).
 
 // ============================================================
 // Reimpl of FishingComponent_helper_f990 (0x14009f990) — Component reg wave B.
@@ -186,14 +125,12 @@ void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, shor
 }
 
 void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
-    EnsureHelpers();
-    EnsureFishingHelpers();
     uintptr_t self = (uintptr_t)selfP;
-    if (!s_pGameWorld || !*s_pGameWorld) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     void* descObj = *(void**)(self + 0x18);
-    void* desc = (fn_IsDerivedFrom &&
-                  fn_IsDerivedFrom(descObj, HappinessDescription::TypeId())) ? descObj : nullptr;
+    void* desc = ::Object::IsDerivedFromNullSafe(descObj, HappinessDescription::TypeId())
+                     ? descObj : nullptr;
 
     int64_t host = *(int64_t*)(*(int64_t*)(self + 0x10) + 0x28);
 
@@ -207,7 +144,7 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
             void* comp = *(void**)(arr + (int64_t)i * 8);
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == tidTarget) {
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tidTarget))
+                if (::Object::IsDerivedFromNullSafe(comp, tidTarget))
                     targetComp = comp;
                 break;
             }
@@ -216,7 +153,7 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
 
     // Find the MapComponent for tile coords
     uint8_t mapBuf[8] = {0};
-    if (s_fc_FindMap) s_fc_FindMap(*(uintptr_t*)(self + 0x10), mapBuf);
+    FloorComponent_FindResData(*(void**)(self + 0x10), mapBuf);   // 0x140004680
     int64_t mapComp = *(int64_t*)mapBuf;
 
     // Map description mode (desc+0x20) to a state id (default 5)
@@ -234,8 +171,8 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
     int y = ((int)*(int16_t*)(mapComp + 0x2e) >> 1) + (int)*(int16_t*)(mapComp + 0x2a);
     int resourceId = targetComp ? *(int*)((uintptr_t)targetComp + 0x28) : 0;
 
-    if (s_fc_Helper)
-        s_fc_Helper(*(int**)((uintptr_t)*s_pGameWorld + 0xf8), state, x, y, resourceId, param2);
+    FishingComponent_BrushTile(*(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8), state, x, y,
+                               resourceId, param2);   // 0x14009f990
 }
 
 // ============================================================
@@ -263,13 +200,12 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
 // it ever faults, the good in storage is what is wrong.
 extern "C" bool HappinessComponent_IsActive(void* selfV) {
     HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
-    EnsureHelpers();
 
     const uintptr_t su = reinterpret_cast<uintptr_t>(self);
     void* descRaw = *reinterpret_cast<void**>(su + 0x18);
     const uintptr_t desc =
-        (descRaw && s_fn_IsDerivedFrom &&
-         s_fn_IsDerivedFrom(descRaw, HappinessDescription::TypeId()))
+        (descRaw && reinterpret_cast<const Object::Base*>(descRaw)->IsDerivedFrom(
+                        HappinessDescription::TypeId()))   // B.3.x bridge (slot 0x140152a98)
             ? reinterpret_cast<uintptr_t>(descRaw) : 0;
 
     if (*reinterpret_cast<int*>(desc + 0x20) == 5) return true;
@@ -279,7 +215,7 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
         ownerSlot = *reinterpret_cast<void**>(su + 0x10);
 
         void* wpIbp = nullptr;
-        if (s_fn_GetJobHost) s_fn_GetJobHost(reinterpret_cast<uintptr_t>(ownerSlot), &wpIbp);
+        AttendanceComponent_GetJobHostComponent(ownerSlot, &wpIbp);   // 0x140002e10
         if (wpIbp) {
             const uintptr_t wp = reinterpret_cast<uintptr_t>(wpIbp);
             if (*reinterpret_cast<int*>(wp + 0x60) == 0) return false;
@@ -293,7 +229,7 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
     void* owner = *reinterpret_cast<void**>(su + 0x10);
 
     void* storeIbp = nullptr;
-    if (s_fn_FindStorage) s_fn_FindStorage(reinterpret_cast<uintptr_t>(owner), &storeIbp);
+    WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(owner), &storeIbp);   // 0x140006270
 
     const uint32_t wantMask = *reinterpret_cast<uint32_t*>(desc + 0x28);
     bool matched = false;
@@ -316,7 +252,7 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
                 if (!c) continue;
                 const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
                 if (tid == tidRawMat) {
-                    if (s_fn_IsDerivedFrom && s_fn_IsDerivedFrom(c, tidRawMat))
+                    if (reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(tidRawMat))   // B.3.x bridge
                         rawMatDesc = reinterpret_cast<uintptr_t>(c);
                     break;
                 }
@@ -337,17 +273,16 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
 // and latch self[+0x28] so it is not registered twice.
 extern "C" void HappinessComponent_Register(void* selfV) {
     HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
-    EnsureHelpers();
 
-    if (s_fn_SetEntityIndex) s_fn_SetEntityIndex(self, 1);
+    FishingComponent_NotifyTile(self, 1);   // 0x14004a300
 
     uint8_t basePtr[24] = {};
-    if (fn_InternalBasePtr_Ctor) new (basePtr) ::Object::InternalBasePtr(
+    new (basePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
-    if (s_pGameWorld && *s_pGameWorld) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*s_pGameWorld) + 0xF0);
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
         if (townMgr) {
             const int count = *reinterpret_cast<int*>(townMgr + 0x58);
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
@@ -374,19 +309,18 @@ extern "C" void HappinessComponent_Register(void* selfV) {
 // minus their `if (self[+0x28])` guard.
 extern "C" void HappinessComponent_Unregister(void* selfV) {
     HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
-    EnsureHelpers();
 
     uint8_t basePtr[24] = {};
-    if (fn_InternalBasePtr_Ctor) new (basePtr) ::Object::InternalBasePtr(
+    new (basePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
 
-    if (s_fn_ArrayEraseByValue && s_pGameWorld && *s_pGameWorld) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*s_pGameWorld) + 0xF0);
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
         if (townMgr)
-            s_fn_ArrayEraseByValue(reinterpret_cast<void*>(townMgr + 0x50), basePtr);
+            CemeteryListErase_Reimpl(reinterpret_cast<void*>(townMgr + 0x50), basePtr);
     }
-    if (s_fn_SetEntityIndex) s_fn_SetEntityIndex(self, -1);
+    FishingComponent_NotifyTile(self, -1);   // 0x14004a300
     self->happinessFlag = 0;
 }
 
@@ -493,8 +427,6 @@ void* HappinessComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HappinessComponent());
 }
 
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0x140002cc0
-
 // [3] 0x14004aa80 — happinessFlag round-trips (save/load wave 2026-08-28):
 // Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
 // then a scope carrying happinessFlag (+0x28) as a bool.
@@ -515,9 +447,7 @@ void HappinessComponent::Persist(void* stream) {
 void HappinessComponent::OnRemove() {
     if (happinessFlag == 0) return;
     uint8_t basePtr[24];
-    if (fn_InternalBasePtr_Ctor) {
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    }
+    new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         void* happinessArray = reinterpret_cast<void*>(
             *reinterpret_cast<uintptr_t*>(

@@ -23,6 +23,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 #include <cstdint>
 #include <new>
 
@@ -41,9 +42,8 @@ HerdDescription::HerdDescription()
 
 // [5] 0x1401221e0: stream order as retail.
 bool HerdDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     ser.Serialize(_i28, nullptr);
     ser.Serialize(_i2c, nullptr);
     ser.Serialize(_f30, nullptr);

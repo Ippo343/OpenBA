@@ -24,6 +24,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "Game/exe_bodies.h"   // Reimpl_ExternalPtr_Serialize_StringTable (0x140002340)
 #include <cstdint>
 #include <new>
 
@@ -38,9 +39,8 @@ LivestockDescription::LivestockDescription()
 
 // [5] 0x140123f60: stream order as retail.
 bool LivestockDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_byproduct, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_byproduct, &ser);
     ser.Serialize(_f2c, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;
