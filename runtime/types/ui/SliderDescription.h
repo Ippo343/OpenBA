@@ -83,8 +83,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180049750
-    uint32_t    Type() const override;                            // [2] 0x180049730
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180049750, Type 0x180049730, _TypeName 0x180049710, _ParentTypeName 0x180049720
+    DECLARE_TYPE(SliderDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d79f0
     bool        Serialize(void* stream) override;                 // [5] 0x1800d7890 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x1800498d0
@@ -96,9 +99,6 @@ public:
 
     SliderDescription(const SliderDescription& src);              // 0x180049910  not ported
     SliderDescription& operator=(const SliderDescription& src);   // 0x180049a30  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1SliderDescription@UI@@UEAA@XZ` (0x1800d7a00): NON-VIRTUAL (no virtual dtor until
@@ -107,9 +107,6 @@ protected:
     ~SliderDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180049710
-    static const char* _ParentTypeName();                         // 0x180049720
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     void*    _childDescription;   // +0x68  ExternalPtr<UI::ElementDescription> -> children[0]

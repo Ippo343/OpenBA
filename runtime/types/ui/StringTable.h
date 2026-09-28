@@ -89,8 +89,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;              // [1] 0x180002190
-    uint32_t    Type() const override;                  // [2] 0x180002170
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180002190, Type 0x180002170, CreateNewObject 0x180002280, CreateInPlaceObject 0x180002330
+    DECLARE_TYPE(StringTable)
+public:
     int32_t     GetFileVersion() const override;        // [3] 0x18011d930
     // [4] 0x1800066e0 is Object::External::Compile, inherited unchanged.
     bool        Serialize(void* stream) override;       // [5] 0x18011d940
@@ -110,7 +113,6 @@ public:
     StringTable(const StringTable& src);                // 0x180002620  not ported
     StringTable& operator=(const StringTable& src);     // 0x1800026b0  not ported
     // 0x180002180 — the minted record's type id (stringtable_factory.cpp).
-    static uint32_t TypeId();
     // Placement is spelt `::new (p) StringTable()` (B9-5): these stay undefined;
     // `??3` keeps its registered door in stringtable_lifecycle.cpp.
     static void* operator new(std::size_t bytes);              // 0x1800021a0
@@ -118,8 +120,6 @@ public:
     static void  operator delete(void* p);                     // 0x180002220  (door)
     // Retail's factory pair (B39_RULES D2), defined and registered in
     // stringtable_factory.cpp.
-    static Object::Base* CreateNewObject();                    // 0x180002280
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180002330
 
 protected:
     // 0x18011d8f0 — ~Array<TextEntry> (stringtable_factory.cpp), then the

@@ -44,11 +44,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-const uint8_t* CharacterSetTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -80,19 +75,6 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // ############################################################################
 namespace UI {
 
-// [2] 0x180037430: `MOV EAX,[0x1801f9cf8] ; RET` — the first dword of the
-// class's own BaseTypeInfo node.
-uint32_t CharacterSet::Type() const { return TypeId(); }
-// ?TypeId@CharacterSet@UI@@SAIXZ 0x180037440 — the same first dword.
-uint32_t CharacterSet::TypeId() {
-    const uint8_t* ti = CharacterSetTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// [1] 0x180037450: `MOV RAX,[0x1801f9d00] ; RET` — the same node at +8.
-const char* CharacterSet::TypeName() const {
-    const uint8_t* ti = CharacterSetTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // [3] 0x1800cb830: `MOV EAX,0x1 ; RET`. Version 1 — the plainest in the family;
 // the *Description classes run 0x104..0x10204. A LITERAL, never derived.
 int32_t CharacterSet::GetFileVersion() const { return 1; }
@@ -189,3 +171,12 @@ int RtUiCharacterSetRegister() {
     RegisterRuntimeAddr(0x1800375f0ull, (void*)&UI::CharacterSet::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::CharacterSet's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@CharacterSet@UI@@ (0x1801f9cf8): name "CharacterSet", parent
+// "Object::External" (retail ?_ParentTypeName@CharacterSet@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::CharacterSet, "Object::External", nullptr)

@@ -77,22 +77,6 @@ SpriteCopy LoadSprite(const ::Sprite& src) {
     return s;
 }
 
-std::atomic<void*> g_typeInfo{nullptr};
-
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-const uint8_t* TypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 // `?GetBarLayout@ScrollElement@UI@@AEBAXAEAH000@Z` (0x18011a2d0) — declared on
 // the class, body still element_bodies_b5.cpp's door (fragment pass).
 using GetBarLayoutFn = void (*)(const void* self, int32_t* x0, int32_t* y0,
@@ -104,20 +88,6 @@ using GetBarLayoutFn = void (*)(const void* self, int32_t* x0, int32_t* y0,
 // The member bodies (ENDGAME B.3.6 block C4)
 // ============================================================================
 namespace UI {
-
-uint32_t ScrollElement::Type() const {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t ScrollElement::TypeId() {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ScrollElement::TypeName() const {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // slot 4 — ?ComputeSize@ScrollElement@UI@@UEAAXXZ   0x18011ad80
@@ -392,3 +362,12 @@ int RtUiScrollElementRegister() {
     RegisterRuntimeAddr(0x18003a9c0ull, (void*)&UI::ScrollElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ScrollElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ScrollElement@UI@@ (0x1801fad98): name "ScrollElement", parent
+// "Element" (retail ?_ParentTypeName@ScrollElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ScrollElement, "Element", nullptr)

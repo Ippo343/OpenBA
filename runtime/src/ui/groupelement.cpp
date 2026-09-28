@@ -42,27 +42,9 @@ using namespace rtuielem;
 
 namespace {
 
-// RULE B6-5: namespace-scope atomic door caches for the member bodies.
-std::atomic<void*> g_groupElementTypeInfo{nullptr};
-const uint8_t* GroupElementTypeInfoAtomic() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_groupElementTypeInfo, "?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
-
-// ---- slots 1/2: the class's BaseTypeInfo, first dword and the name at +8 ---
-uint32_t GroupElement::Type() const { return TypeId(); }       // 0x180046b90
-// ?TypeId@GroupElement@UI@@SAIXZ 0x180046ba0 — the record's first dword.
-uint32_t GroupElement::TypeId() {
-    return rtuielem::TypeIdOf(GroupElementTypeInfoAtomic());
-}
-// The key function: GCC emits `vtable for UI::GroupElement` here.
-const char* GroupElement::TypeName() const {                    // 0x180046bb0
-    return rtuielem::TypeNameOf(GroupElementTypeInfoAtomic());
-}
 
 // ============================================================================
 // ?ComputeSize@GroupElement@UI@@UEAAXXZ   0x180117f00
@@ -203,3 +185,12 @@ int RtUiGroupElementRegister() {
     RegisterRuntimeAddr(0x180046d30ull, (void*)&UI::GroupElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::GroupElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@GroupElement@UI@@ (0x1801fabd8): name "GroupElement", parent
+// "Element" (retail ?_ParentTypeName@GroupElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::GroupElement, "Element", nullptr)

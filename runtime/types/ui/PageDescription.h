@@ -92,8 +92,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180046ee0
-    uint32_t    Type() const override;                            // [2] 0x180046ec0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180046ee0, Type 0x180046ec0, TypeId 0x180046ed0, _TypeName 0x180046ea0
+    //         _ParentTypeName 0x180046eb0, CreateNewObject 0x180046fd0, CreateInPlaceObject 0x180047050
+    DECLARE_TYPE(PageDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d54a0
     // [4] Compile — Object::External's, inherited.
     bool        Serialize(void* stream) override;                 // [5] 0x1800d5410  (IO::Stream&)
@@ -107,9 +111,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     PageDescription(const PageDescription& src);                  // 0x1800470a0  not ported
     PageDescription& operator=(const PageDescription& src);       // 0x180047110  not ported
-    static uint32_t TypeId();                                     // 0x180046ed0  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180046fd0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047050  the class's own (B39 D2)
 
 protected:
     // `??1PageDescription@UI@@UEAA@XZ` (0x1800d54b0). NON-VIRTUAL and EMPTY
@@ -118,9 +119,6 @@ protected:
     ~PageDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180046ea0 -> "PageDescription"
-    static const char* _ParentTypeName();                         // 0x180046eb0 -> "GroupDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     int32_t  _activePage;     // +0x78  ctor 0 (0x1800d556f, DWORD store)

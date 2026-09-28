@@ -653,8 +653,21 @@ uint32_t TypeNameCRC(const char* name);
 // name because the parent's record may not exist yet when this static runs
 // (`BaseTypeInfo::name` is content-only). The ctor strips the parent's
 // namespace, so "Object::External" and "External" are the same key.
+//
+// DECLARE_TYPE_INHERITED_INPLACE(Class) — the same block WITHOUT the class's
+// own `CreateInPlaceObject`, for the classes whose retail record carries the
+// BASE's in-place factory: `UI::Element` and `UI::DialogInstance` register
+// `?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z` (0x1800070c0)
+// and export no `?CreateInPlaceObject@` of their own. `DEFINE_TYPE`'s
+// `&Class::CreateInPlaceObject` then names the inherited static by ordinary
+// member lookup — which is what retail's macro did (ENDGAME B.3.9 TI-UI).
 // ############################################################################
 #define DECLARE_TYPE(Class)                                                      \
+public:                                                                          \
+    static ::Object::Base* CreateInPlaceObject(void* storage);                     \
+    DECLARE_TYPE_INHERITED_INPLACE(Class)
+
+#define DECLARE_TYPE_INHERITED_INPLACE(Class)                                    \
 public:                                                                          \
     /* vtable slot 1 — retail `MOV RAX,[qword]; RET` over this class's own    */ \
     /* record. `BaseTypeInfo::name` is content-only: never compared by pointer.*/ \
@@ -663,7 +676,6 @@ public:                                                                         
     /* Factory::Startup, exactly as TypeId() is.                              */ \
     uint32_t Type() const override { return _typeInfo.typeId; }                    \
     static ::Object::Base* CreateNewObject();                                     \
-    static ::Object::Base* CreateInPlaceObject(void* storage);                     \
     static uint32_t TypeId() { return _typeInfo.typeId; }                          \
     static const ::Object::BaseTypeInfo& GetTypeInfo() { return _typeInfo; }       \
 private:                                                                          \

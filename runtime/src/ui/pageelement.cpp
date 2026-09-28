@@ -40,33 +40,9 @@ using namespace rtui;
 
 namespace {
 
-// RULE B6-5: a namespace-scope atomic cache for the member bodies.
-std::atomic<void*> g_pageElementTypeInfo{nullptr};
-const uint8_t* PageElementTypeInfo() {
-    void* p = g_pageElementTypeInfo.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached("?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A", &scratch);
-        if (p != nullptr) g_pageElementTypeInfo.store(p, std::memory_order_release);
-    }
-    return static_cast<const uint8_t*>(p);
-}
-
 }  // namespace
 
 namespace UI {
-
-uint32_t PageElement::Type() const { return TypeId(); }        // 0x180047250
-// ?TypeId@PageElement@UI@@SAIXZ 0x180047260 — the record's first dword.
-uint32_t PageElement::TypeId() {
-    const uint8_t* ti = PageElementTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// The key function: GCC emits `vtable for UI::PageElement` here.
-const char* PageElement::TypeName() const {                     // 0x180047270
-    const uint8_t* ti = PageElementTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 
 // ??1PageElement@UI@@UEAA@XZ   0x1800d5220 -- Page stamp, Group stamp,
 // ~Element. ENDGAME B.3.9 UI-A: EMPTY; the compiler's chain through
@@ -102,3 +78,12 @@ int RtUiPageElementRegister() {
     RegisterRuntimeAddr(0x180047400ull, (void*)&UI::PageElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::PageElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@PageElement@UI@@ (0x1801fa200): name "PageElement", parent
+// "GroupElement" (retail ?_ParentTypeName@PageElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::PageElement, "GroupElement", nullptr)

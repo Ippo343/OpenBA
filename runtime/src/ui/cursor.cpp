@@ -56,11 +56,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-const uint8_t* CursorTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -88,18 +83,6 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // ############################################################################
 namespace UI {
 
-// [2] 0x18003af60: `MOV EAX,[0x1801f9e10] ; RET`.
-uint32_t Cursor::Type() const { return TypeId(); }
-// ?TypeId@Cursor@UI@@SAIXZ 0x18003af70 — the same first dword.
-uint32_t Cursor::TypeId() {
-    const uint8_t* ti = CursorTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// [1] 0x18003af80: `MOV RAX,[0x1801f9e18] ; RET` — the same node at +8.
-const char* Cursor::TypeName() const {
-    const uint8_t* ti = CursorTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // [3] 0x1800cd1b0: `MOV EAX,0x1 ; RET`.
 int32_t Cursor::GetFileVersion() const { return 1; }
 
@@ -194,3 +177,12 @@ int RtUiCursorRegister() {
     RegisterRuntimeAddr(0x18003b120ull, (void*)&UI::Cursor::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::Cursor's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@Cursor@UI@@ (0x1801f9e10): name "Cursor", parent
+// "Object::External" (retail ?_ParentTypeName@Cursor@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::Cursor, "Object::External", nullptr)

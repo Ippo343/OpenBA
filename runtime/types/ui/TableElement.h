@@ -113,8 +113,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x1800792d0
-    uint32_t    Type() const override;                            // [2] 0x1800792b0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800792d0, Type 0x1800792b0, _TypeName 0x180079290, _ParentTypeName 0x1800792a0
+    DECLARE_TYPE(TableElement)
+public:
     void ComputeSize() override;                                  // [4] 0x18011df60
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t right, int32_t bottom) override;   // [5] 0x18011dd10
@@ -136,9 +139,6 @@ public:
 
     TableElement(const TableElement& src);                        // 0x180079470  not ported
     TableElement& operator=(const TableElement& src);             // 0x180079520  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1TableElement@UI@@UEAA@XZ` (0x18011e2a0): NON-VIRTUAL (no virtual dtor until
@@ -147,9 +147,6 @@ protected:
     ~TableElement();
 
 private:
-    static const char* _TypeName();                               // 0x180079290 -> "TableElement"
-    static const char* _ParentTypeName();                         // 0x1800792a0 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fae78 (minted)
 
 public:
     // ---- the 0x30 bytes after Element --------------------------------------

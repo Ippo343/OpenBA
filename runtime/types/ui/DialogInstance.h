@@ -402,8 +402,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                        // [1] 0x180045400
-    uint32_t    Type() const override;                            // [2] 0x1800453e0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180045400, Type 0x1800453e0, TypeId 0x1800453f0, CreateNewObject 0x1800454f0
+    DECLARE_TYPE_INHERITED_INPLACE(DialogInstance)
+public:
     void Persist(void* stream) override;                          // [3] 0x180114fa0  RET
     virtual void OnOpened();                                      // [4] 0x180114fb0
     virtual void OnClosed();                                      // [5] 0x180115330
@@ -476,7 +479,6 @@ public:
     DialogInstance(const DialogInstance& other);                               // 0x180045630
     DialogInstance& operator=(const DialogInstance& other);                    // 0x180045790
 
-    static uint32_t      TypeId();                                // 0x1800453f0  (dialog.cpp)
     // System::MemoryAllocator statics — B36_RULES 7 keeps them doors
     // (`??3DialogInstance@UI@@SAXPEAX@Z` is one, in spritesheet_new.cpp).
     static void* operator new(std::size_t bytes);                 // 0x180045410
@@ -484,7 +486,6 @@ public:
     static void* operator new(std::size_t bytes, void* place);    // 0x180045480
     static void  operator delete(void* p);                        // 0x180045490
     // The class's own factory (B.3.9 UI-D; no CreateInPlaceObject export).
-    static Object::Base* CreateNewObject();                       // 0x1800454f0  (dialog.cpp)
 
     // ---- construction (ENDGAME B.3.8 block RB, RULE B8-1) --------------------
     // REAL constructors now. The compiler stamps Base -> Internal ->
@@ -560,8 +561,6 @@ protected:
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
     //   0x1800453c0  ?_TypeName@       -> "DialogInstance"
     //   0x1800453d0  ?_ParentTypeName@ -> "Object::Internal"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     // ---- the 0xa8 bytes DialogInstance adds, in retail order ---------------

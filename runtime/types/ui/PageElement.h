@@ -104,8 +104,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180047270
-    uint32_t    Type() const override;                            // [2] 0x180047250
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180047270, Type 0x180047250, TypeId 0x180047260, _TypeName 0x180047230
+    //         _ParentTypeName 0x180047240, CreateNewObject 0x180047360, CreateInPlaceObject 0x180047400
+    DECLARE_TYPE(PageElement)
+public:
     // [3..11] GroupElement's / Element's, inherited.
 
     // ---- non-virtual ------------------------------------------------------
@@ -118,9 +122,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     PageElement(const PageElement& src);                          // 0x180047450  not ported
     PageElement& operator=(const PageElement& src);               // 0x1800474b0  not ported
-    static uint32_t TypeId();                                     // 0x180047260  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180047360  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047400  the class's own (B39 D2)
 
 protected:
     // `??1PageElement@UI@@UEAA@XZ` (0x1800d5220). NON-VIRTUAL and EMPTY
@@ -129,9 +130,6 @@ protected:
     ~PageElement();
 
 private:
-    static const char* _TypeName();                               // 0x180047230 -> "PageElement"
-    static const char* _ParentTypeName();                         // 0x180047240 -> "GroupElement"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     int32_t  _activePage;     // +0xc0  ctor 0 (0x1800d5260)

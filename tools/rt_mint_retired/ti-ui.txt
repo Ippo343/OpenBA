@@ -1,0 +1,86 @@
+# ENDGAME B.3 step 9 -- the type-info rows block TI-UI retired (B39_RULES.md D3, D6 W3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# Each class now carries DECLARE_TYPE + DEFINE_TYPE(UI::X, "<minted parent literal>", nullptr)
+# in its own TU; the class record is built at CRT init and is the only record of that name.
+
+# -- cluster 1: Button / Check / Combo / Border / ClipRegion --
+?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ButtonElement, "Element") in buttonelement.cpp; readers: own accessor slot gone, spinnerelement.cpp -> ButtonElement::TypeId()
+?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::CheckElement, "ButtonElement") in checkelement.cpp; readers: own accessor slot gone, widgets_input.cpp by-address 0x1801fa9a8 read -> CheckElement::TypeId()
+?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ButtonDescription, "ElementDescription") in buttondescription.cpp; readers: own accessor slot gone
+?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::CheckDescription, "ButtonDescription") in checkdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ComboElement, "ButtonElement") in comboelement.cpp; readers: own accessor slot gone
+?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ComboDescription, "ButtonDescription") in combodescription.cpp; readers: own accessor slot gone
+?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::BorderElement, "Element") in borderelement.cpp; readers: own accessor slot gone
+?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ClipRegionElement, "Element") in clipregionelement.cpp; readers: own accessor slot gone, combodialog_ctor / containerelement / element / listdescription -> ClipRegionElement::TypeId()
+?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::BorderDescription, "ElementDescription") in borderdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ClipRegionDescription, "ElementDescription") in clipregiondescription.cpp; readers: own accessor slot gone
+
+# -- cluster 2: Group / Page / Radio / Image / AnimatedImage --
+?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GroupElement, "Element") in groupelement.cpp; readers: own accessor slot gone, dialog_create.cpp -> GroupElement::TypeId() (cluster 1)
+?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::PageElement, "GroupElement") in pageelement.cpp; readers: own accessor slot gone
+?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RadioElement, "GroupElement") in radioelement.cpp; readers: own accessor slot gone
+?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GroupDescription, "ElementDescription") in groupdescription.cpp; readers: own accessor slot gone
+?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::PageDescription, "GroupDescription") in pagedescription.cpp; readers: own accessor slot gone
+?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RadioDescription, "GroupDescription") in radiodescription.cpp; readers: own accessor slot gone
+?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ImageElement, "Element") in imageelement.cpp; readers: own accessor slot gone
+?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::AnimatedImageElement, "ImageElement") in animatedimageelement.cpp; readers: own accessor slot gone
+?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ImageDescription, "ElementDescription") in imagedescription.cpp; readers: own accessor slot gone
+?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::AnimatedImageDescription, "ImageDescription") in animatedimagedescription.cpp; readers: own accessor slot gone
+
+# -- cluster 3: Text / Label / Edit / NumberEdit / Number --
+?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TextDescription, "ElementDescription") in textdescription.cpp; readers: own accessor slot gone
+?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LabelDescription, "TextDescription") in labeldescription.cpp; readers: own accessor slot gone
+?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::EditDescription, "ElementDescription") in editdescription.cpp; readers: own accessor slot gone
+?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberEditDescription, "ElementDescription") in numbereditdescription.cpp; readers: own accessor slot gone
+?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberDescription, "ElementDescription") in numberdescription.cpp; readers: own accessor slot gone
+?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TextElement, "Element") in textelement.cpp; readers: own accessor slot gone, comboelement / widgets_input -> TextElement::TypeId() (cluster 1)
+?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LabelElement, "TextElement") in labelelement.cpp; readers: own accessor slot gone, widgets_input -> LabelElement::TypeId() (cluster 1)
+?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::EditElement, "Element") in editelement.cpp; readers: own accessor slot gone
+?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberEditElement, "EditElement") in numbereditelement.cpp; readers: own accessor slot gone, spinnerelement, widgets_input by-address 0x1801fa190 -> NumberEditElement::TypeId() (cluster 1)
+?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::NumberElement, "Element") in numberelement.cpp; readers: own accessor slot gone, element_bodies_b5 -> NumberElement::TypeId() (cluster 1)
+
+# -- cluster 4: Container / Layout / List / Scroll / Table --
+?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ContainerDescription, "ElementDescription") in containerdescription.cpp; readers: own accessor slot gone
+?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LayoutDescription, "ElementDescription") in layoutdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ListDescription, "ElementDescription") in listdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ScrollDescription, "ElementDescription") in scrolldescription.cpp; readers: own accessor slot gone
+?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TableDescription, "ElementDescription") in tabledescription.cpp; readers: own accessor slot gone
+?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ContainerElement, "Element") in containerelement.cpp; readers: own accessor slot gone, combodialog_ctor -> ContainerElement::TypeId() (cluster 1)
+?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::LayoutElement, "Element") in layoutelement.cpp; readers: own accessor slot gone
+?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ListElement, "Element") in listelement.cpp; readers: own accessor slot gone, combodialog_ctor / comboelement -> ListElement::TypeId() (cluster 1)
+?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ScrollElement, "Element") in scrollelement.cpp; readers: own accessor slot gone, containerelement / element -> ScrollElement::TypeId() (cluster 1)
+?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TableElement, "Element") in tableelement.cpp; readers: own accessor slot gone
+
+# -- cluster 5: Graph / Progress / Spinner / Slider / Ribbon / Tab / DocumentText --
+?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GraphDescription, "ElementDescription") in graphdescription.cpp; readers: own accessor slot gone
+?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::GraphElement, "Element") in graphelement.cpp; readers: own accessor slot gone
+?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ProgressDescription, "ElementDescription") in progressdescription.cpp; readers: own accessor slot gone
+?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ProgressElement, "Element") in progresselement.cpp; readers: own accessor slot gone
+?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpinnerDescription, "ElementDescription") in spinnerdescription.cpp; readers: own accessor slot gone
+?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpinnerElement, "Element") in spinnerelement.cpp; readers: own accessor slot gone
+?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SliderDescription, "ElementDescription") in sliderdescription.cpp; readers: own accessor slot gone
+?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SliderElement, "Element") in sliderelement.cpp; readers: own accessor slot gone
+?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RibbonDescription, "ElementDescription") in ribbondescription.cpp; readers: own accessor slot gone
+?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::RibbonElement, "Element") in ribbonelement.cpp; readers: own accessor slot gone, listdescription -> RibbonElement::TypeId() (cluster 1)
+?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TabDescription, "ElementDescription") in tabdescription.cpp; readers: own accessor slot gone
+?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::TabElement, "Element") in tabelement.cpp; readers: own accessor slot gone
+?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DocumentTextDescription, "ElementDescription") in documenttextdescription.cpp; readers: own accessor slot gone
+?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DocumentTextElement, "Element") in documenttextelement.cpp; readers: own accessor slot gone
+
+# -- cluster 6: the resources (CharacterSet / Cursor / Font / SpriteCapture / SpriteSheet / StringTable) --
+?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::CharacterSet, "Object::External") in characterset.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp ExternalPtr<CharacterSet> thunk -> EXTPTR_THUNK_OF(UI::CharacterSet)
+?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::Cursor, "Object::External") in cursor.cpp; readers: own accessor slot gone
+?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::Font, "Object::External") in font.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp single + array thunks -> EXTPTR_*THUNK_OF(UI::Font)
+?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpriteCapture, "Object::External") in spritecapture_class.cpp; readers: own accessor slot gone, documenttext / documenttextelement -> SpriteCapture::TypeId() (cluster 1)
+?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::SpriteSheet, "Object::External") in spritesheet_vtable.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp single + array thunks -> EXTPTR_*THUNK_OF(UI::SpriteSheet)
+?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::StringTable, "Object::External") in stringtable_factory.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp thunk -> EXTPTR_THUNK_OF(UI::StringTable)
+
+# -- cluster 7: Element / ElementDescription and the dialog family --
+?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::Element, "Object::Internal") in element_vtable.cpp; readers: own accessor slot gone, record's in-place factory Object::Internal's (DECLARE_TYPE_INHERITED_INPLACE, as retail's row)
+?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ElementDescription, "Object::External") in dialog.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp single + array thunks -> EXTPTR_*THUNK_OF(UI::ElementDescription)
+?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::Dialog, "Object::External") in dialog_vtable.cpp; readers: own accessor slot gone, FOREIGN loops.cpp (cluster 1) and external_ptr_serialize.cpp thunk -> Dialog::TypeId() / EXTPTR_THUNK_OF(UI::Dialog)
+?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DialogController, "Object::Internal") in dialog_controller_base.cpp; readers: own accessor slot gone, dialog_create.cpp -> DialogController::TypeId() (cluster 1)
+?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DialogControllerConfig, "Object::External") in dialogcontrollerconfig.cpp; readers: own accessor slot gone, FOREIGN external_ptr_serialize.cpp thunk -> EXTPTR_THUNK_OF(UI::DialogControllerConfig)
+?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::DialogInstance, "Object::Internal") in dialog.cpp; readers: own accessor slot gone, record's in-place factory Object::Internal's (DECLARE_TYPE_INHERITED_INPLACE, as retail's row)
+?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ComboDialog, "DialogInstance") in combodialog.cpp; readers: own accessor slot gone
+?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A   TI-UI   DEFINE_TYPE(UI::ToolTipDialog, "UI::DialogInstance") in tooltipdialog.cpp; readers: own accessor slot gone, parent literal UI::DialogInstance kept as minted

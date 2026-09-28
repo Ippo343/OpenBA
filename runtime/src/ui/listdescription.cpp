@@ -45,6 +45,8 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/ListDescription.h"
 #include "../../types/ui/ListElement.h"
+#include "../../types/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
+#include "../../types/ui/RibbonElement.h"
 #include "../../types/io/Serializer.h"
 
 // ENDGAME B.3.6 block C4: the layout moved to runtime/types/ui/
@@ -68,30 +70,13 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_ribbonTypeInfo{nullptr};
-std::atomic<void*> g_clipTypeInfo{nullptr};
 std::atomic<void*> g_getSpriteIndex{nullptr};
 std::atomic<void*> g_isDerivedFrom{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
-const uint8_t* ListDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-// The two type ids the tail of CreateInstance tests against, by NAME (both are
-// exported private statics; the addresses 0x1801fa2e0 / 0x1801f9d68 are recorded
-// only so the pairing can be rechecked).
-uint32_t RibbonElementTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
-        g_ribbonTypeInfo, "?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A"));
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-uint32_t ClipRegionElementTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
-        g_clipTypeInfo, "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A"));
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
+// The two type ids the tail of CreateInstance tests against: retail reads the
+// first dword of RibbonElement's (0x1801fa2e0) and ClipRegionElement's
+// (0x1801f9d68) `_typeInfo` -- `X::TypeId()` (ENDGAME B.3.9 TI-UI).
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
@@ -147,19 +132,6 @@ void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDes
 // ============================================================================
 namespace UI {
 
-uint32_t ListDescription::Type() const {
-    const uint8_t* ti = ListDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t ListDescription::TypeId() {
-    const uint8_t* ti = ListDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ListDescription::TypeName() const {
-    const uint8_t* ti = ListDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t ListDescription::GetFileVersion() const { return 0x104; }
 
 // 0x180044d40 — the ctor, placement (the null test sat in the retired door).
@@ -280,14 +252,14 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
         Element* const k1   = elem->_children[1];              // 1800d4777 / 1800d477a
         Element* const kk0  = k1->_children[0];                // 1800d477e / 1800d4785
         Element* const cand = kk0->_children[0];               // 1800d4788 / 1800d478f
-        const bool ok = isDerivedFrom(cand, RibbonElementTypeId());   // 1800d479b
+        const bool ok = isDerivedFrom(cand, UI::RibbonElement::TypeId());   // 1800d479b
         elem->_ribbon = ok ? cand : nullptr;                   // 1800d47a9
     }
 
     {   // TWO levels down: children[1]->children[0]
         Element* const k1   = elem->_children[1];              // 1800d47b0 / 1800d47b3
         Element* const cand = k1->_children[0];                // 1800d47b7 / 1800d47be
-        const bool ok = isDerivedFrom(cand, ClipRegionElementTypeId());  // 1800d47ca
+        const bool ok = isDerivedFrom(cand, UI::ClipRegionElement::TypeId());  // 1800d47ca
         elem->_clip = ok ? cand : nullptr;                     // 1800d47d5
     }
 
@@ -338,3 +310,12 @@ int RtUiListDescriptionRegister() {
     RegisterRuntimeAddr(0x180044d10ull, (void*)&UI::ListDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ListDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ListDescription@UI@@ (0x1801fa0e8): name "ListDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ListDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ListDescription, "ElementDescription", nullptr)

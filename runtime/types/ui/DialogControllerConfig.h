@@ -62,8 +62,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                        // [1] 0x18003b470
-    uint32_t    Type() const override;                            // [2] 0x18003b450
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003b470, Type 0x18003b450, CreateNewObject 0x18003b480, CreateInPlaceObject 0x18003b490
+    DECLARE_TYPE(DialogControllerConfig)
+public:
     // [3] GetFileVersion, [5] Serialize, [6] Reconstruct, [7] Destruct: PURE,
     //     inherited from Object::External unchanged. [4] Compile: External's.
 
@@ -71,11 +74,8 @@ public:
     DialogControllerConfig(const DialogControllerConfig& other);            // 0x18003b520
     DialogControllerConfig& operator=(const DialogControllerConfig& other); // 0x18003b590
     // 0x18003b460 — the minted record's type id (dialogcontrollerconfig.cpp).
-    static uint32_t      TypeId();
     // Retail's factory pair (B39_RULES D2): both are `XOR EAX,EAX ; RET` (the
     // class is abstract). Defined and registered in dialogcontrollerconfig.cpp.
-    static Object::Base* CreateNewObject();                       // 0x18003b480
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18003b490
 
 protected:
     // ??0DialogControllerConfig@UI@@QEAA@XZ  0x18003b4a0 — the REAL
@@ -92,8 +92,6 @@ protected:
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
     //   0x18003b430  ?_TypeName@       -> "DialogControllerConfig"
     //   0x18003b440  ?_ParentTypeName@ -> "Object::External"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 };
 
 static_assert(sizeof(DialogControllerConfig) == 0x20,

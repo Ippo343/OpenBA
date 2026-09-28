@@ -41,11 +41,6 @@ namespace RtUI {
 
 namespace {
 
-const uint8_t* DialogControllerConfigTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 }  // namespace
 
 }  // namespace RtUI
@@ -56,22 +51,6 @@ const uint8_t* DialogControllerConfigTypeInfo() {
 // `this`: both read one exported BaseTypeInfo (+0x08 name, +0x00 type id).
 // ============================================================================
 namespace UI {
-
-// ?TypeName@DialogControllerConfig@UI@@UEBAPEBDXZ   0x18003b470
-const char* DialogControllerConfig::TypeName() const {
-    const char* v = nullptr;
-    __builtin_memcpy(&v, RtUI::DialogControllerConfigTypeInfo() + 8, sizeof v);
-    return v;
-}
-
-// ?Type@DialogControllerConfig@UI@@UEBAIXZ          0x18003b450
-uint32_t DialogControllerConfig::Type() const { return TypeId(); }
-// ?TypeId@DialogControllerConfig@UI@@SAIXZ          0x18003b460 — the same dword.
-uint32_t DialogControllerConfig::TypeId() {
-    uint32_t v = 0;
-    __builtin_memcpy(&v, RtUI::DialogControllerConfigTypeInfo(), sizeof v);
-    return v;
-}
 
 // ?CreateNewObject@ / ?CreateInPlaceObject@DialogControllerConfig@UI@@
 // 0x18003b480 / 0x18003b490: each is `XOR EAX,EAX ; RET` — the class is
@@ -99,3 +78,12 @@ int RtUiDialogControllerConfigRegister() {
     RegisterRuntimeAddr(0x18003b490ull, (void*)&UI::DialogControllerConfig::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::DialogControllerConfig's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@DialogControllerConfig@UI@@ (0x1801f9e80): name "DialogControllerConfig", parent
+// "Object::External" (retail ?_ParentTypeName@DialogControllerConfig@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::DialogControllerConfig, "Object::External", nullptr)

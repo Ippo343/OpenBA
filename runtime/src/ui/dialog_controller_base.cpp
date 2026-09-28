@@ -139,19 +139,6 @@ namespace RtUi {
 
 namespace {
 
-// `Object::BaseTypeInfo` layout (runtime/types/object/TypeInfo.h): +0x00 typeId
-// (uint32), +0x04 an unused word, +0x08 `const char* name`. Spelled as constants
-// here for the same reason dialog.cpp spells them: that header cannot be pulled
-// into this TU without dragging the object-model dependency chain with it.
-constexpr int kBaseTypeInfoTypeId = 0x00;
-constexpr int kBaseTypeInfoName   = 0x08;
-
-// ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A  (DLL 0x1801f9e48).
-// Resolved BY NAME — see the banner on AEAA/private.
-inline const uint8_t* DialogControllerTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A");
-}
 
 }  // namespace
 
@@ -168,21 +155,9 @@ inline const uint8_t* DialogControllerTypeInfo() {
 // ============================================================================
 namespace UI {
 
-// slot 2 — ?Type@DialogController@UI@@UEBAIXZ            0x18003b6b0
-//     MOV EAX,dword ptr [0x1801f9e48] / RET
-uint32_t DialogController::Type() const { return TypeId(); }
-// ?TypeId@DialogController@UI@@SAIXZ 0x18003b6c0 — the same dword.
-uint32_t DialogController::TypeId() {
-    return *reinterpret_cast<const uint32_t*>(
-        RtUi::DialogControllerTypeInfo() + RtUi::kBaseTypeInfoTypeId);
-}
-
-// slot 1 — ?TypeName@DialogController@UI@@UEBAPEBDXZ     0x18003b6d0
-//     MOV RAX,qword ptr [0x1801f9e50] / RET      (= _typeInfo + 0x08)
-const char* DialogController::TypeName() const {
-    return *reinterpret_cast<const char* const*>(
-        RtUi::DialogControllerTypeInfo() + RtUi::kBaseTypeInfoName);
-}
+// slots 1/2 -- ?TypeName@ 0x18003b6d0 (`MOV RAX,[0x1801f9e50]`), ?Type@
+// 0x18003b6b0 / ?TypeId@ 0x18003b6c0 (`MOV EAX,[0x1801f9e48]`): DECLARE_TYPE's
+// inline bodies over the class's own record (ENDGAME B.3.9 TI-UI).
 
 // The seven empty base virtuals. Each is `RET 0` in retail and nothing else;
 // see the banner for the byte evidence.
@@ -266,3 +241,12 @@ int RtUiDialogControllerRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::DialogController's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@DialogController@UI@@ (0x1801f9e48): name "DialogController", parent
+// "Object::Internal" (retail ?_ParentTypeName@DialogController@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::DialogController, "Object::Internal", nullptr)

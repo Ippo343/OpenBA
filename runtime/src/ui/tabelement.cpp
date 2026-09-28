@@ -58,39 +58,11 @@ static_assert(kEdgeRight    == offsetof(UI::TabElement, _edgeRight), "");
 static_assert(kTabBarHeight == offsetof(UI::TabElement, _tabBarHeight), "");
 static_assert(kTabBarWidth  == offsetof(UI::TabElement, _tabBarWidth), "");
 
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* TabTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
 
 }  // namespace
 
 namespace UI {
-
-// [1] 0x18004c700 / [2] 0x18004c6e0
-const char* TabElement::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, TabTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t TabElement::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t TabElement::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // ?UpdateContainers@TabElement@UI@@AEAAXXZ   0x1800d9710
@@ -342,3 +314,12 @@ int RtUiTabElementRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::TabElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@TabElement@UI@@ (0x1801fa468): name "TabElement", parent
+// "Element" (retail ?_ParentTypeName@TabElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::TabElement, "Element", nullptr)

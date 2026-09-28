@@ -110,12 +110,7 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     }
     return p;
 }
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_getSpriteIndex{nullptr};
-const uint8_t* SliderTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ — block D's class, a door.
 int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
     using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
@@ -133,17 +128,7 @@ void Copy4(D& dst, const S& src) {
 
 namespace UI {
 
-// [1] 0x180049750 / [2] 0x180049730 / [3] 0x1800d79f0
-const char* SliderDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, SliderTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t SliderDescription::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t SliderDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
-}
+// [3] 0x1800d79f0
 int32_t SliderDescription::GetFileVersion() const { return 0x304; }
 
 // [9] 0x1800498f0 — the ctor, placement (the null test sat in the retired door).
@@ -329,3 +314,12 @@ int RtUiSliderDescriptionRegister() {
     RegisterRuntimeAddr(0x1800498c0ull, (void*)&UI::SliderDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::SliderDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@SliderDescription@UI@@ (0x1801fa318): name "SliderDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@SliderDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::SliderDescription, "ElementDescription", nullptr)

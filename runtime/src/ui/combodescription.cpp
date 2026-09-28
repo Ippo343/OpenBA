@@ -69,13 +69,8 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_comboTypeInfo{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
-const uint8_t* ComboTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_comboTypeInfo, "?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // rtdesc::MemFree's twin without its function-local cache (it runs inside a
 // member body on the loader thread).
 void MemFreeAtomic(void* p) {
@@ -88,16 +83,6 @@ void MemFreeAtomic(void* p) {
 
 namespace UI {
 
-uint32_t ComboDescription::Type() const { return TypeId(); }
-// ?TypeId@ComboDescription@UI@@SAIXZ 0x180074ad0 — the record's first dword.
-uint32_t ComboDescription::TypeId() {
-    const uint8_t* ti = ComboTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ComboDescription::TypeName() const {
-    const uint8_t* ti = ComboTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t ComboDescription::GetFileVersion() const { return 0x2104; }
 
 // The four stores ComboDescription adds on top of its base's constructor,
@@ -289,3 +274,12 @@ int RtUiComboDescriptionRegister() {
     RegisterRuntimeAddr(0x180074c70ull, (void*)&UI::ComboDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ComboDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ComboDescription@UI@@ (0x1801faa18): name "ComboDescription", parent
+// "ButtonDescription" (retail ?_ParentTypeName@ComboDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ComboDescription, "ButtonDescription", nullptr)

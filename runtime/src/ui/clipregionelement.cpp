@@ -46,12 +46,6 @@ constexpr int kUiClipTop    = 0x100;
 constexpr int kUiClipRight  = 0x104;
 constexpr int kUiClipBottom = 0x108;
 
-// B6-5: namespace-scope atomic door cache for the member bodies.
-std::atomic<void*> g_clipTypeInfo{nullptr};
-const uint8_t* ClipRegionElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_clipTypeInfo, "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // UI::SpriteContext::SetScissor(ctx, Viewport& out, const Viewport& in) —
 // returns the PREVIOUS scissor by value through the hidden slot in RDX.
 // Block D's class, reached by address.
@@ -64,11 +58,6 @@ using Viewport = ::Video::Viewport;
 }  // namespace
 
 namespace UI {
-
-// ?TypeId@ClipRegionElement@UI@@SAIXZ 0x180037f60 — the record's first dword.
-uint32_t ClipRegionElement::TypeId() { return TypeIdOf(ClipRegionElementTypeInfo()); }
-uint32_t ClipRegionElement::Type() const { return TypeId(); }
-const char* ClipRegionElement::TypeName() const { return TypeNameOf(ClipRegionElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@ClipRegionElement@UI@@UEAAXXZ   0x1800cbc60
@@ -266,3 +255,12 @@ int RtUiClipRegionElementRegister() {
     RegisterRuntimeAddr(0x180038110ull, (void*)&UI::ClipRegionElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ClipRegionElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ClipRegionElement@UI@@ (0x1801f9d68): name "ClipRegionElement", parent
+// "Element" (retail ?_ParentTypeName@ClipRegionElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ClipRegionElement, "Element", nullptr)

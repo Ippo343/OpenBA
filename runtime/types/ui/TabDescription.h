@@ -85,8 +85,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x18004c1f0
-    uint32_t    Type() const override;                            // [2] 0x18004c1d0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18004c1f0, Type 0x18004c1d0, _TypeName 0x18004c1b0, _ParentTypeName 0x18004c1c0
+    DECLARE_TYPE(TabDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800da8d0
     bool        Serialize(void* stream) override;                 // [5] 0x1800da760 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x18004c370
@@ -98,9 +101,6 @@ public:
 
     TabDescription(const TabDescription& src);                    // 0x18004c3b0  not ported
     TabDescription& operator=(const TabDescription& src);         // 0x18004c4a0  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1TabDescription@UI@@UEAA@XZ` (0x1800da8e0): NON-VIRTUAL (no virtual dtor until
@@ -109,9 +109,6 @@ protected:
     ~TabDescription();
 
 private:
-    static const char* _TypeName();                               // 0x18004c1b0
-    static const char* _ParentTypeName();                         // 0x18004c1c0
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     void*    _stripBackdropDescription;  // +0x68  ExternalPtr<ElementDescription> -> children[0]

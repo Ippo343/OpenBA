@@ -192,8 +192,12 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;              // [1] 0x180002e50
-    uint32_t    Type() const override;                  // [2] 0x180002e30
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180002e50, Type 0x180002e30, TypeId 0x180002e40, CreateNewObject 0x180002f40
+    //         CreateInPlaceObject 0x180003000
+    DECLARE_TYPE(SpriteSheet)
+public:
     int32_t     GetFileVersion() const override;        // [3] 0x18011d710
     CompileResult Compile(const System::Filename& path) override;  // [4] 0x18011d720 — OVERRIDE
     bool        Serialize(void* stream) override;       // [5] 0x18011d730
@@ -213,7 +217,6 @@ public:
                        float u0, float v0, float u1, float v1);        // 0x180003460
     void Set(int32_t p1, int32_t p2, const System::String& p3,
              const System::String& p4, bool p5);                       // 0x1800034f0
-    static uint32_t TypeId();                                          // 0x180002e40
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     int32_t Width(int32_t index) const;                     // 0x1800031a0
@@ -230,8 +233,6 @@ public:
     static void* operator new(std::size_t bytes);              // 0x180002e60  (door)
     static void* operator new(std::size_t bytes, void* place); // 0x180002ed0
     static void  operator delete(void* p);                     // 0x180002ee0  (door)
-    static Object::Base* CreateNewObject();                    // 0x180002f40
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180003000
 
     // `??0SpriteSheet@UI@@QEAA@XZ` 0x18011d600 — the REAL constructor, PUBLIC:
     // External() and the stamps are the compiler's, then the stores below;

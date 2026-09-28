@@ -53,28 +53,6 @@ namespace {
 
 using namespace rtdesc;
 
-// ---------------------------------------------------------------------------
-// RULE B6-5 door caches. UI is constructed on the LOADER thread while the main
-// thread draws, so a member body keeps no function-local first-call cache
-// (`RT_DATA_SLOT` / `RT_EXPORT_ONCE`'s shape): it resolves through a
-// namespace-scope atomic slot. Never caches a null; a miss is retried.
-// ---------------------------------------------------------------------------
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_buttonTypeInfo{nullptr};
-
-const uint8_t* ButtonTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_buttonTypeInfo, "?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 }  // namespace
 
 // ============================================================================
@@ -82,18 +60,6 @@ const uint8_t* ButtonTypeInfo() {
 // ============================================================================
 namespace UI {
 
-// `Type` returns the FIRST DWORD of the BaseTypeInfo static (0x1801fa900) and
-// `TypeName` the pointer at +0x08.
-uint32_t ButtonDescription::Type() const { return TypeId(); }
-// ?TypeId@ButtonDescription@UI@@SAIXZ 0x180047e20 — the record's first dword.
-uint32_t ButtonDescription::TypeId() {
-    const uint8_t* ti = ButtonTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ButtonDescription::TypeName() const {
-    const uint8_t* ti = ButtonTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t ButtonDescription::GetFileVersion() const { return 0x104; }
 
 // 0x180047fd0: the null test sat in the retired door (a virtual call always
@@ -291,3 +257,12 @@ int RtUiButtonDescriptionRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ButtonDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ButtonDescription@UI@@ (0x1801fa900): name "ButtonDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ButtonDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ButtonDescription, "ElementDescription", nullptr)

@@ -48,12 +48,6 @@ namespace {
 // `_children` indices this class dispatches on.
 constexpr int kChildLabel = 4;
 
-// B6-5: the member bodies' door caches are namespace-scope atomics.
-std::atomic<void*> g_buttonTypeInfo{nullptr};
-const uint8_t* ButtonElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_buttonTypeInfo, "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 using PlayFn            = void  (*)(void* ui, int soundId);
 // Collection::Array<UI::UserInterface::Event>::SetSize(array, newSize, &fill)
 using EventPushFn       = void  (*)(void* array, int newSize, const void* fill);
@@ -93,11 +87,6 @@ constexpr uint32_t kFlagPressStarted = 0x00200000u;
 // The member bodies
 // ============================================================================
 namespace UI {
-
-// ?TypeId@ButtonElement@UI@@SAIXZ 0x180048250 — the record's first dword.
-uint32_t ButtonElement::TypeId() { return TypeIdOf(ButtonElementTypeInfo()); }
-uint32_t ButtonElement::Type() const { return TypeId(); }
-const char* ButtonElement::TypeName() const { return TypeNameOf(ButtonElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@ButtonElement@UI@@UEAAXXZ   0x180110d10
@@ -353,3 +342,12 @@ int RtUiButtonElementRegister() {
     RegisterRuntimeAddr(0x1800483f0ull, (void*)&UI::ButtonElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ButtonElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ButtonElement@UI@@ (0x1801fa938): name "ButtonElement", parent
+// "Element" (retail ?_ParentTypeName@ButtonElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ButtonElement, "Element", nullptr)

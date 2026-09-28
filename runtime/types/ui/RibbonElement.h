@@ -79,8 +79,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x1800446e0
-    uint32_t    Type() const override;                            // [2] 0x1800446c0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800446e0, Type 0x1800446c0, _TypeName 0x1800446a0, _ParentTypeName 0x1800446b0
+    DECLARE_TYPE(RibbonElement)
+public:
     void ComputeSize() override;                                  // [4] 0x1800d6190
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;            // [5] 0x1800d6410
@@ -96,9 +99,6 @@ public:
 
     RibbonElement(const RibbonElement& src);                      // 0x180044980  not ported
     RibbonElement& operator=(const RibbonElement& src);           // 0x180044a00  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1RibbonElement@UI@@UEAA@XZ` (0x1800d5d70): NON-VIRTUAL (no virtual dtor until
@@ -107,9 +107,6 @@ protected:
     ~RibbonElement();
 
 private:
-    static const char* _TypeName();                               // 0x1800446a0 -> "RibbonElement"
-    static const char* _ParentTypeName();                         // 0x1800446b0 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     uint8_t  _vertical;       // +0xc0  lay the children out top-to-bottom

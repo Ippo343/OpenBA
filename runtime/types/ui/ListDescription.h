@@ -82,8 +82,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*   TypeName() const override;                      // [1] 0x180044ba0
-    uint32_t      Type() const override;                          // [2] 0x180044b80
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180044ba0, Type 0x180044b80, _TypeName 0x180044b60, _ParentTypeName 0x180044b70
+    DECLARE_TYPE(ListDescription)
+public:
     int32_t       GetFileVersion() const override;                // [3] 0x1800d4900
     bool          Serialize(void* stream) override;               // [5] 0x1800d4810
     Object::External* Reconstruct() override;                     // [6] 0x180044d20
@@ -96,9 +99,6 @@ public:
     // ---- exported, not ported: declared, deliberately undefined ------------
     ListDescription(const ListDescription& src);                  // 0x180044d60
     ListDescription& operator=(const ListDescription& src);       // 0x180044df0
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1ListDescription@UI@@UEAA@XZ` (0x1800d4910): NON-VIRTUAL (no virtual dtor until
@@ -107,9 +107,6 @@ protected:
     ~ListDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180044b60 -> "ListDescription"
-    static const char* _ParentTypeName();                         // 0x180044b70 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fa0e8 (minted)
 
 public:
     // ---- the 0x28 bytes after ElementDescription ---------------------------

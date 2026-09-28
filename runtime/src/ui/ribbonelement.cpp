@@ -48,37 +48,9 @@ static_assert(kUniform  == offsetof(UI::RibbonElement, _uniform), "");
 static_assert(kSpacing  == offsetof(UI::RibbonElement, _spacing), "");
 static_assert(kExtents  == offsetof(UI::RibbonElement, _extentsData), "");
 
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* RibbonTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
-
-// [1] 0x1800446e0 / [2] 0x1800446c0
-const char* RibbonElement::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, RibbonTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t RibbonElement::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t RibbonElement::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // [4] ?ComputeSize@RibbonElement@UI@@UEAAXXZ   0x1800d6190
@@ -259,3 +231,12 @@ int RtUiRibbonElementRegister() {
     RegisterRuntimeAddr(0x180044880ull, (void*)&UI::RibbonElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::RibbonElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@RibbonElement@UI@@ (0x1801fa2e0): name "RibbonElement", parent
+// "Element" (retail ?_ParentTypeName@RibbonElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::RibbonElement, "Element", nullptr)

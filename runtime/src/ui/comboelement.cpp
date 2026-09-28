@@ -31,6 +31,8 @@
 #include "../../types/ui/ComboElement.h"
 #include "../../types/ui/ComboDialog.h"
 #include "../../types/ui/Dialog.h"
+#include "../../types/ui/ListElement.h"   // B.3.9 TI-UI: X::TypeId()
+#include "../../types/ui/TextElement.h"
 #include <new>
 
 using namespace rtuielem;
@@ -61,26 +63,8 @@ constexpr int kDialogSize = 0xd0;
 constexpr uint32_t kFlagHover        = 0x00020000u;
 constexpr uint32_t kFlagPressStarted = 0x00200000u;
 
-// B6-5: namespace-scope atomic door caches for the member bodies.
-std::atomic<void*> g_comboTypeInfo{nullptr};
-std::atomic<void*> g_listTypeInfo{nullptr};
-std::atomic<void*> g_textTypeInfo{nullptr};
-
-const uint8_t* ComboElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_comboTypeInfo, "?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-uint32_t ListElementTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
-        g_listTypeInfo, "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A"));
-    return p ? *p : 0u;
-}
-uint32_t TextElementTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
-        g_textTypeInfo, "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A"));
-    return p ? *p : 0u;
-}
-
+// ENDGAME B.3.9 TI-UI: the two type ids Update tests against are
+// `UI::ListElement::TypeId()` / `UI::TextElement::TypeId()`, read at the use.
 
 using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
 using StringAssignFn   = void* (*)(void* dst, const void* src);
@@ -98,11 +82,6 @@ using ArrayDtorFn      = void* (*)(void* array);
 }  // namespace
 
 namespace UI {
-
-// ?TypeId@ComboElement@UI@@SAIXZ 0x180074f20 — the record's first dword.
-uint32_t ComboElement::TypeId() { return TypeIdOf(ComboElementTypeInfo()); }
-uint32_t ComboElement::Type() const { return TypeId(); }
-const char* ComboElement::TypeName() const { return TypeNameOf(ComboElementTypeInfo()); }
 
 // ============================================================================
 // ?Update@ComboElement@UI@@   0x1801125d0
@@ -167,7 +146,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
             reinterpret_cast<const ElementDescription*>(_listDesc)       // B.3.6 bridge
                 ->CreateInstance(&listSlot, stackDialog);
         void* madeList = *reinterpret_cast<void**>(made);
-        void* list = isDerived(madeList, ListElementTypeId()) ? madeList : nullptr;
+        void* list = isDerived(madeList, UI::ListElement::TypeId()) ? madeList : nullptr;
 
         const int32_t count = _strings._size;
         for (int32_t i = 0; i < count; ++i) {
@@ -176,7 +155,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
                 reinterpret_cast<const ElementDescription*>(_itemDesc)   // B.3.6 bridge
                     ->CreateInstance(&itemSlot, stackDialog);
             void* madeItemRaw = *reinterpret_cast<void**>(madeItem);
-            void* item = isDerived(madeItemRaw, TextElementTypeId()) ? madeItemRaw : nullptr;
+            void* item = isDerived(madeItemRaw, UI::TextElement::TypeId()) ? madeItemRaw : nullptr;
 
             const uint8_t* strings = reinterpret_cast<const uint8_t*>(_strings._data);
             if (I32(item, kTextParamCount) > 0) {
@@ -292,3 +271,12 @@ int RtUiComboElementRegister() {
     RegisterRuntimeAddr(0x1800750a0ull, (void*)&UI::ComboElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ComboElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ComboElement@UI@@ (0x1801faa50): name "ComboElement", parent
+// "ButtonElement" (retail ?_ParentTypeName@ComboElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ComboElement, "ButtonElement", nullptr)

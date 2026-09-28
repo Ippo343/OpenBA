@@ -83,8 +83,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*   TypeName() const override;                      // [1] 0x18003a120
-    uint32_t      Type() const override;                          // [2] 0x18003a100
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003a120, Type 0x18003a100, _TypeName 0x18003a0e0, _ParentTypeName 0x18003a0f0
+    DECLARE_TYPE(ScrollDescription)
+public:
     int32_t       GetFileVersion() const override;                // [3] 0x18011a930
     bool          Serialize(void* stream) override;               // [5] 0x18011a940
     Object::External* Reconstruct() override;                     // [6] 0x18003a2a0
@@ -97,9 +100,6 @@ public:
     // ---- exported, not ported: declared, deliberately undefined ------------
     ScrollDescription(const ScrollDescription& src);              // 0x18003a2e0
     ScrollDescription& operator=(const ScrollDescription& src);   // 0x18003a450
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1ScrollDescription@UI@@UEAA@XZ` (0x18011a5d0): NON-VIRTUAL (no virtual dtor until
@@ -108,9 +108,6 @@ protected:
     ~ScrollDescription();
 
 private:
-    static const char* _TypeName();                               // 0x18003a0e0 -> "ScrollDescription"
-    static const char* _ParentTypeName();                         // 0x18003a0f0 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fad60 (minted)
 
 public:
     // ---- the 0x60 bytes after ElementDescription ---------------------------

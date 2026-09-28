@@ -100,8 +100,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x1800362b0
-    uint32_t    Type() const override;                            // [2] 0x180036290
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800362b0, Type 0x180036290, TypeId 0x1800362a0, _TypeName 0x180036270
+    //         _ParentTypeName 0x180036280, CreateNewObject 0x1800363a0, CreateInPlaceObject 0x180036450
+    DECLARE_TYPE(ImageElement)
+public:
     // [3] Persist — Element's, inherited.
     void ComputeSize() override;                                  // [4] 0x180118650
     void ComputeLayout(int32_t x, int32_t y,
@@ -125,9 +129,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     ImageElement(const ImageElement& src);                        // 0x1800364c0  not ported (door retired: no caller)
     ImageElement& operator=(const ImageElement& src);             // 0x180036540  not ported
-    static uint32_t TypeId();                                     // 0x1800362a0  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x1800363a0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180036450  the class's own (B39 D2)
 
 protected:
     // `??1ImageElement@UI@@UEAA@XZ` (0x180118470). NON-VIRTUAL and EMPTY
@@ -135,9 +136,6 @@ protected:
     ~ImageElement();
 
 private:
-    static const char* _TypeName();                               // 0x180036270 -> "ImageElement"
-    static const char* _ParentTypeName();                         // 0x180036280 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     Sprite   _sprite;         // +0xC0 .. +0xCF

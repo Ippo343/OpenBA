@@ -77,8 +77,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180039cc0
-    uint32_t    Type() const override;                            // [2] 0x180039ca0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180039cc0, Type 0x180039ca0, _TypeName 0x180039c80, _ParentTypeName 0x180039c90
+    //         CreateNewObject 0x180039db0, CreateInPlaceObject 0x180039e50
+    DECLARE_TYPE(ContainerElement)
+public:
     // [3] Persist — Element's, inherited.
     void ComputeSize() override;                                  // [4] 0x1800cc850
     void ComputeLayout(int32_t x, int32_t y,
@@ -101,10 +105,7 @@ public:
     ContainerElement(const ContainerElement& src);                // 0x180039f00  not ported (no caller)
     ContainerElement& operator=(const ContainerElement& src);     // 0x180039f90  not ported
     // 0x180039cb0 -- over the minted `?_typeInfo@` record until the W3 fold.
-    static uint32_t      TypeId();
     // Retail's factory pair (B39_RULES D2), containerelement.cpp.
-    static Object::Base* CreateNewObject();                       // 0x180039db0
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180039e50
 
 protected:
     // `??1ContainerElement@UI@@UEAA@XZ` (0x1800ccb10): NON-VIRTUAL (no virtual
@@ -113,9 +114,6 @@ protected:
     ~ContainerElement();
 
 private:
-    static const char* _TypeName();                               // 0x180039c80 -> "ContainerElement"
-    static const char* _ParentTypeName();                         // 0x180039c90 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801f9dd8 (minted)
 
 public:
     // ---- the 0x18 bytes after Element --------------------------------------

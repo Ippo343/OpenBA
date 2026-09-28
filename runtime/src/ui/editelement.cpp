@@ -76,13 +76,7 @@ constexpr int kUiEventCount = 0x50;
 constexpr int32_t kEventEditFinished = 0x15;
 
 // RULE B6-5: namespace-scope atomic slots, never a first-call static.
-std::atomic<void*> g_typeInfoSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
-
-const uint8_t* EditElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 // ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
 void** InputDeviceSlot() {
@@ -189,11 +183,6 @@ void* BuildMask(int length) {
 }  // namespace
 
 namespace UI {
-
-// ?TypeId@EditElement@UI@@SAIXZ 0x18003fad0 — the record's first dword.
-uint32_t EditElement::TypeId() { return TypeIdOf(EditElementTypeInfo()); }
-uint32_t EditElement::Type() const { return TypeId(); }
-const char* EditElement::TypeName() const { return TypeNameOf(EditElementTypeInfo()); }
 
 // ??1EditElement@UI@@UEAA@XZ  0x1800d0e50 — retail's body, moved here from the
 // retired door (ENDGAME B.3.9 UI-A): DROP the text-input latch if this element
@@ -533,3 +522,12 @@ int RtUiEditElementRegister() {
     RegisterRuntimeAddr(0x18003fc50ull, (void*)&UI::EditElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::EditElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@EditElement@UI@@ (0x1801f9f60): name "EditElement", parent
+// "Element" (retail ?_ParentTypeName@EditElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::EditElement, "Element", nullptr)

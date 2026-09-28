@@ -87,8 +87,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x1800410b0
-    uint32_t    Type() const override;                            // [2] 0x180041090
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800410b0, Type 0x180041090, TypeId 0x1800410a0, _TypeName 0x180041070
+    //         _ParentTypeName 0x180041080, CreateNewObject 0x1800411a0, CreateInPlaceObject 0x180041220
+    DECLARE_TYPE(BorderElement)
+public:
     void ComputeSize() override;                                  // [4] 0x1801101d0
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;            // [5] 0x180110360
@@ -98,10 +102,7 @@ public:
     BorderElement(const BorderElement& src);                      // 0x180041250  not ported (door retired, no caller)
     BorderElement& operator=(const BorderElement& src);           // 0x180041390  not ported
 
-    static uint32_t TypeId();                                     // 0x1800410a0  borderelement.cpp
     // Retail's factory pair (B39_RULES D2), borderelement.cpp.
-    static Object::Base* CreateNewObject();                       // 0x1800411a0
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180041220
 
 protected:
     // `??1BorderElement@UI@@UEAA@XZ` (0x180041230). NON-VIRTUAL. Retail's body
@@ -109,9 +110,6 @@ protected:
     ~BorderElement();
 
 private:
-    static const char* _TypeName();                               // 0x180041070 -> "BorderElement"
-    static const char* _ParentTypeName();                         // 0x180041080 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fa8c8 (minted)
 
 public:
     // ---- nine UI::Sprite, each ctor-written {0, -1} (0x18010fd40) ---------

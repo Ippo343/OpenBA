@@ -59,13 +59,7 @@
 namespace {
 
 // RULE B6-5: the members resolve through namespace-scope atomics.
-std::atomic<void*> g_typeInfoSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
-
-const uint8_t* NumberEditDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(rtuielem::AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
@@ -128,16 +122,6 @@ void StringReleaseInline(char** slot) {
 
 namespace UI {
 
-uint32_t NumberEditDescription::Type() const { return TypeId(); }
-// ?TypeId@NumberEditDescription@UI@@SAIXZ 0x180045e80 — the record's first dword.
-uint32_t NumberEditDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, NumberEditDescriptionTypeInfo(), sizeof v); return v;
-}
-const char* NumberEditDescription::TypeName() const {
-    const char* v = nullptr;
-    __builtin_memcpy(&v, NumberEditDescriptionTypeInfo() + 8, sizeof v);
-    return v;
-}
 int32_t NumberEditDescription::GetFileVersion() const { return 0x1004; }
 
 // 0x180046030: null test (it sat in the retired door), then the ctor.
@@ -322,3 +306,12 @@ int RtUiNumberEditDescriptionRegister() {
     RegisterRuntimeAddr(0x180046000ull, (void*)&UI::NumberEditDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberEditDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@NumberEditDescription@UI@@ (0x1801fa158): name "NumberEditDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@NumberEditDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::NumberEditDescription, "ElementDescription", nullptr)

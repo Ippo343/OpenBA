@@ -44,6 +44,8 @@
 
 #include "widget_common.h"
 #include "../../types/ui/SpinnerElement.h"
+#include "../../types/ui/ButtonElement.h"       // B.3.9 TI-UI: X::TypeId()
+#include "../../types/ui/NumberEditElement.h"
 
 using namespace rtui;
 
@@ -74,55 +76,11 @@ struct WidgetEvent {
 };
 static_assert(sizeof(WidgetEvent) == 0x30, "");
 
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_numberEditTypeInfo{nullptr};
-std::atomic<void*> g_buttonTypeInfo{nullptr};
-
-const uint8_t* SpinnerTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
-// The two type ids the IsDerivedFrom calls pass, each the FIRST DWORD of the
-// named BaseTypeInfo static (0x1801fa190 and 0x1801fa938 in retail).
-uint32_t NumberEditTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
-        g_numberEditTypeInfo, "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A"));
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-uint32_t ButtonTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
-        g_buttonTypeInfo, "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A"));
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-
 using SetValueFn = void (*)(void* self, int32_t v);
 
 }  // namespace
 
 namespace UI {
-
-// [1] 0x18004b110 / [2] 0x18004b0f0
-const char* SpinnerElement::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, SpinnerTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t SpinnerElement::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t SpinnerElement::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
-}
 
 // [4] 0x1800d83b0
 void SpinnerElement::ComputeSize() {
@@ -219,8 +177,8 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     Object::InternalPtr<DialogInstance> slot = *dialog;
     Element::Update(time, ui, &slot, state);
 
-    const uint32_t kNumberEditTypeId = NumberEditTypeId();
-    const uint32_t kButtonTypeId     = ButtonTypeId();
+    const uint32_t kNumberEditTypeId = UI::NumberEditElement::TypeId();   // retail [0x1801fa190]
+    const uint32_t kButtonTypeId     = UI::ButtonElement::TypeId();       // retail [0x1801fa938]
 
     void* edit = _children.GetData()[0];
     if (!RtAddr<IsDerivedFromFn>(0x1800c0390ull)(edit, kNumberEditTypeId)) return;
@@ -316,3 +274,12 @@ int RtUiSpinnerElementRegister() {
     RegisterRuntimeAddr(0x18004b290ull, (void*)&UI::SpinnerElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::SpinnerElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@SpinnerElement@UI@@ (0x1801fa3c0): name "SpinnerElement", parent
+// "Element" (retail ?_ParentTypeName@SpinnerElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::SpinnerElement, "Element", nullptr)

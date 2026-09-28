@@ -162,25 +162,13 @@ namespace {
 // child" lookup below calls it as one, exactly where retail calls the export.
 
 // RULE B6-5: the namespace-scope door caches the member bodies read through.
-std::atomic<void*> g_numberEditTypeInfo{nullptr};   // 0x1801fa190
-std::atomic<void*> g_checkBoxTypeInfo{nullptr};     // 0x1801fa9a8
-std::atomic<void*> g_textTypeInfo{nullptr};         // ?_typeInfo@TextElement@UI@@...
-std::atomic<void*> g_labelTypeInfo{nullptr};        // ?_typeInfo@LabelElement@UI@@...
 std::atomic<void*> g_memFree{nullptr};              // 0x1800c7ad0
 std::atomic<void*> g_stringArrayCleanup{nullptr};   // 0x180010ab0
 
-// The cached NumberEditElement type id every SpinnerElement export reads as
-// `dword ptr [0x1801fa190]` (disassembly of 0x1800d7cb0 and siblings) — a
-// plain Runtime .data global, not a function; read directly via ResolveAddr
-// exactly like the exe side's `g_TypeId_*` exrefs read the equivalent slot.
-// Retail never lazily initialises this before reading it, so this lane does
-// not either — reading it at the same point in the call retail would is
-// faithful, not a race.
-uint32_t NumberEditElementTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(
-        rtuielem::AtomicAddr(g_numberEditTypeInfo, 0x1801fa190));
-    return p ? *p : 0;
-}
+// The NumberEditElement type id every SpinnerElement export reads as
+// `dword ptr [0x1801fa190]` (disassembly of 0x1800d7cb0 and siblings): the first
+// dword of the class's `_typeInfo`, i.e. `UI::NumberEditElement::TypeId()`, read
+// at the point of use as retail does (ENDGAME B.3.9 TI-UI).
 
 // `NumberEditElement::SetValue` (0x1800d4bb0), used as a dependency by
 // SpinnerElement::SetMinMax/SetValue and NumberEditElement::SetMinMax, is a
@@ -363,25 +351,8 @@ inline void StringAssign(void* dst, const void* src) {
 // The FIRST DWORD of a BaseTypeInfo is the type id: the same reading
 // runtime/src/achievement/achievement_manager.cpp:274 uses, and the one retail's
 // own `MOV EDX,dword ptr [0x1801faee8]` at 0x1800d6cb9 proves.
-inline uint32_t TextElementTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(rtuielem::AtomicExport(
-        g_textTypeInfo, "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A"));
-    return p ? *p : 0u;
-}
-inline uint32_t LabelElementTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(rtuielem::AtomicExport(
-        g_labelTypeInfo, "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A"));
-    return p ? *p : 0u;
-}
-
-// The cached checkbox type id, `dword ptr [0x1801fa9a8]` — a plain Runtime
-// .data global, read the same way NumberEditElementTypeId above reads its own.
-// Retail never lazily initialises it before reading, and neither does this.
-uint32_t CheckBoxTypeId() {
-    const uint32_t* p = static_cast<const uint32_t*>(
-        rtuielem::AtomicAddr(g_checkBoxTypeInfo, 0x1801fa9a8));
-    return p ? *p : 0;
-}
+// ENDGAME B.3.9 TI-UI: each is `X::TypeId()` now -- TextElement, LabelElement,
+// NumberEditElement, and the checkbox's `dword ptr [0x1801fa9a8]` (CheckElement).
 
 // ============================================================================
 // WAVE 9 LANE UIW2 — the tail both "parameter into the wrapped TextElement"
@@ -451,21 +422,21 @@ void NumberEditElement::SetValue(int32_t value) {
 // ---- ?GetMaxValue@SpinnerElement@UI@@QEBAHXZ  0x1800d7cb0 ------------------
 int32_t SpinnerElement::GetMaxValue() const {
     const NumberEditElement* child = static_cast<const NumberEditElement*>(
-        FirstChildIfDerived(this, NumberEditElementTypeId()));
+        FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
     return child->_max;   // NO NULL CHECK — retail has none either.
 }
 
 // ---- ?GetValue@SpinnerElement@UI@@QEBAHXZ  0x1800d7cf0 ---------------------
 int32_t SpinnerElement::GetValue() const {
     const NumberEditElement* child = static_cast<const NumberEditElement*>(
-        FirstChildIfDerived(this, NumberEditElementTypeId()));
+        FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
     return System::String::ToInteger(child->_text);
 }
 
 // ---- ?IsActive@SpinnerElement@UI@@QEBA_NXZ  0x1800d7c30 --------------------
 bool SpinnerElement::IsActive() const {
     const NumberEditElement* child = static_cast<const NumberEditElement*>(
-        FirstChildIfDerived(this, NumberEditElementTypeId()));
+        FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
     return child->_active != 0;
 }
 
@@ -476,7 +447,7 @@ bool SpinnerElement::IsActive() const {
 // 0x180115820, exactly as the two exports are distinct in retail.)
 void SpinnerElement::SetElementId(int32_t id) {
     NumberEditElement* child = static_cast<NumberEditElement*>(
-        FirstChildIfDerived(this, NumberEditElementTypeId()));
+        FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
     child->_elementId = id;
     _elementId = id;
 }
@@ -489,7 +460,7 @@ void SpinnerElement::SetElementId(int32_t id) {
 // text value through it by calling NumberEditElement::SetValue.
 void SpinnerElement::SetMinMax(int32_t minValue, int32_t maxValue) {
     NumberEditElement* child = static_cast<NumberEditElement*>(
-        FirstChildIfDerived(this, NumberEditElementTypeId()));
+        FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
     child->_min = minValue;
     child->_max = maxValue;
     const int32_t clamped = System::String::ToInteger(child->_text);
@@ -499,7 +470,7 @@ void SpinnerElement::SetMinMax(int32_t minValue, int32_t maxValue) {
 // ---- ?SetValue@SpinnerElement@UI@@QEAAXH@Z  0x1800d7dc0 --------------------
 void SpinnerElement::SetValue(int32_t value) {
     NumberEditElement* child = static_cast<NumberEditElement*>(
-        FirstChildIfDerived(this, NumberEditElementTypeId()));
+        FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
     child->SetValue(value);
 }
 
@@ -606,7 +577,7 @@ void ComboElement::RemoveAllItems() {
 void ComboElement::UpdateText() {
     if (_strings._size <= 0) return;
 
-    const uint32_t labelType = LabelElementTypeId();
+    const uint32_t labelType = UI::LabelElement::TypeId();
 
     // children[4], then: EXACT type match short-circuits the search entirely
     // (0x1801121bb `CMP EAX,R12D` against the virtual Type(), slot 2).
@@ -846,12 +817,12 @@ void RadioElement::SetActiveRadio(int32_t index) {
 //  4. **NO NULL CHECK on `*p` or on its vtable.** A null element faults on the
 //     `MOV RAX,[RCX]` in retail too. Not guarded here — CLAUDE.md's rule.
 void RadioElement::FindCheckBoxes(Object::InternalPtr<Element>* root) {
-    const uint32_t typeId = CheckBoxTypeId();          // read BEFORE the vcall
+    const uint32_t typeId = UI::CheckElement::TypeId();          // read BEFORE the vcall
     const uint32_t actual = root->Get()->Type();       // slot 2, virtual
 
     if (typeId == actual) {
         Element* e2 = root->Get();                     // retail re-reads
-        Element* found = e2->IsDerivedFrom(CheckBoxTypeId()) ? e2 : nullptr;
+        Element* found = e2->IsDerivedFrom(UI::CheckElement::TypeId()) ? e2 : nullptr;
         // retail 0x180048fe0 — `kSpec_Fill8Z`, and NOT trait-equivalent: its
         // `Assign8Z` stores a ZERO into the slot and THEN the value (the
         // smart-pointer element's inlined `operator=`), two writes where a
@@ -910,7 +881,7 @@ void RadioElement::FindCheckBoxes() {
 // TextElement's type id — the same shape SpinnerElement's seven exports use.
 void SliderElement::SetParameter(int32_t index, const System::String& text) {
     TextElement* child = static_cast<TextElement*>(
-        FirstChildIfDerived(this, TextElementTypeId()));
+        FirstChildIfDerived(this, UI::TextElement::TypeId()));
 
     // Retail 0x1800d6ccf and 0x1800d6cd4 are TWO separate exits — `JZ` on the
     // cast result and then `JZ` on the pointer itself. The second is redundant
@@ -954,7 +925,7 @@ void SliderElement::SetParameter(int32_t index, const System::String& text) {
 // is not a text widget.
 void ProgressElement::SetProgressTextParameter(int32_t index, const System::String& text) {
     TextElement* child = static_cast<TextElement*>(
-        FirstChildIfDerived(this, TextElementTypeId()));
+        FirstChildIfDerived(this, UI::TextElement::TypeId()));
 
     if (index < 0) return;
     // Faithful to 0x180119b6e — see the header. `child` may be null here.

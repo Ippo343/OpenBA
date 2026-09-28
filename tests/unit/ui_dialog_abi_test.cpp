@@ -154,11 +154,12 @@ using EventFn = void (*)(void*, void*, int32_t, int32_t, int32_t, int32_t, int32
 // Raw-call every DialogInstance-numbered slot; `mark` is the member each
 // slot's marker records, `owner` whose marker it is (0 = DialogInstance's own,
 // otherwise the subclass's).
-void CheckInstanceSlots(void* raw) {
+void CheckInstanceSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
     Reset(); SlotAt<DtorFn>(raw, DI::kDeletingDtor)(raw, 0u);   CHECK_EQ(g_lastMark, 0);
     CHECK(g_lastSelf == raw);
-    Reset(); SlotAt<NameFn>(raw, DI::kTypeName)(raw);           CHECK_EQ(g_lastMark % 100, 1);
-    Reset(); SlotAt<TypeFn>(raw, DI::kType)(raw);               CHECK_EQ(g_lastMark % 100, 2);
+    // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
+    CHECK(SlotAt<NameFn>(raw, DI::kTypeName)(raw) == rec.name);
+    CHECK_EQ(SlotAt<TypeFn>(raw, DI::kType)(raw), rec.typeId);
     Reset(); SlotAt<PtrArgFn>(raw, DI::kPersist)(raw, nullptr); CHECK_EQ(g_lastMark % 100, 3);
     Reset(); SlotAt<VoidFn>(raw, DI::kOnOpened)(raw);           CHECK_EQ(g_lastMark % 100, 4);
     Reset(); SlotAt<VoidFn>(raw, DI::kOnClosed)(raw);           CHECK_EQ(g_lastMark % 100, 5);
@@ -190,7 +191,7 @@ UNIT_TEST(ui_dialoginstance_slot_order_is_retails) {
     FactoryScope scope;   // the probes are Object::Internal objects
     DialogInstanceProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckInstanceSlots(raw);
+    CheckInstanceSlots(raw, UI::DialogInstance::GetTypeInfo());
     CheckDistinct(raw, 10);
     // Persist is DialogInstance's OWN body (0x180114fa0), not Internal's
     // 0x1800bfda0 — so the +0x18 entries must differ.
@@ -204,8 +205,8 @@ UNIT_TEST(ui_dialogcontroller_slot_order_is_one_apart) {
     DialogControllerProbe probe;
     void* raw = static_cast<void*>(&probe);
     Reset(); SlotAt<DtorFn>(raw, DC::kDeletingDtor)(raw, 0u);   CHECK_EQ(g_lastMark, 0);
-    Reset(); SlotAt<NameFn>(raw, DC::kTypeName)(raw);           CHECK_EQ(g_lastMark, 201);
-    Reset(); SlotAt<TypeFn>(raw, DC::kType)(raw);               CHECK_EQ(g_lastMark, 202);
+    CHECK(SlotAt<NameFn>(raw, DC::kTypeName)(raw) == UI::DialogController::GetTypeInfo().name);   // TI-UI
+    CHECK_EQ(SlotAt<TypeFn>(raw, DC::kType)(raw), UI::DialogController::GetTypeInfo().typeId);
     Reset(); SlotAt<VoidFn>(raw, DC::kOnCreated)(raw);          CHECK_EQ(g_lastMark, 204);
     Reset(); SlotAt<VoidFn>(raw, DC::kOnOpened)(raw);           CHECK_EQ(g_lastMark, 205);
     Reset(); SlotAt<VoidFn>(raw, DC::kOnClosed)(raw);           CHECK_EQ(g_lastMark, 206);
@@ -235,9 +236,9 @@ UNIT_TEST(ui_combodialog_slot_order_is_retails) {
     FactoryScope scope;   // the probes are Object::Internal objects
     ComboDialogProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckInstanceSlots(raw);
+    CheckInstanceSlots(raw, UI::ComboDialog::GetTypeInfo());
     // Own: 1, 2, 6, 7, 8 (marks 3xx); inherited from DialogInstance: 3, 4, 5, 9.
-    Reset(); SlotAt<NameFn>(raw, DI::kTypeName)(raw);       CHECK_EQ(g_lastMark, 301);
+    CHECK(SlotAt<NameFn>(raw, DI::kTypeName)(raw) == UI::ComboDialog::GetTypeInfo().name);   // TI-UI
     Reset(); SlotAt<VoidFn>(raw, DI::kOnUpdateLayout)(raw); CHECK_EQ(g_lastMark, 306);
     Reset(); SlotAt<VoidFn>(raw, DI::kOnOpened)(raw);       CHECK_EQ(g_lastMark, 104);
     DialogInstanceProbe base;
@@ -251,9 +252,9 @@ UNIT_TEST(ui_tooltipdialog_overrides_only_slots_0_1_2) {
     FactoryScope scope;   // the probes are Object::Internal objects
     ToolTipDialogProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckInstanceSlots(raw);
-    Reset(); SlotAt<NameFn>(raw, DI::kTypeName)(raw); CHECK_EQ(g_lastMark, 401);
-    Reset(); SlotAt<TypeFn>(raw, DI::kType)(raw);     CHECK_EQ(g_lastMark, 402);
+    CheckInstanceSlots(raw, UI::ToolTipDialog::GetTypeInfo());
+    CHECK(SlotAt<NameFn>(raw, DI::kTypeName)(raw) == UI::ToolTipDialog::GetTypeInfo().name);   // TI-UI
+    CHECK_EQ(SlotAt<TypeFn>(raw, DI::kType)(raw), UI::ToolTipDialog::GetTypeInfo().typeId);
     DialogInstanceProbe base;
     for (int s = DI::kPersist; s <= DI::kOnSerializeSettings; s += 8)
         CHECK(VTableOf(raw)[s / 8] == VTableOf(static_cast<void*>(&base))[s / 8]);
@@ -266,8 +267,8 @@ UNIT_TEST(ui_dialog_slot_order_is_retails_construct_at_8) {
     using SerFn = bool (*)(void*, void*);
     using PtrFn = void* (*)(void*);
     Reset(); SlotAt<DtorFn>(raw, EX::kDeletingDtor)(raw, 0u);   CHECK_EQ(g_lastMark, 0);
-    Reset(); SlotAt<NameFn>(raw, EX::kTypeName)(raw);           CHECK_EQ(g_lastMark, 501);
-    Reset(); SlotAt<TypeFn>(raw, EX::kType)(raw);               CHECK_EQ(g_lastMark, 502);
+    CHECK(SlotAt<NameFn>(raw, EX::kTypeName)(raw) == UI::Dialog::GetTypeInfo().name);   // TI-UI
+    CHECK_EQ(SlotAt<TypeFn>(raw, EX::kType)(raw), UI::Dialog::GetTypeInfo().typeId);
     Reset(); CHECK_EQ(SlotAt<VerFn>(raw, EX::kGetFileVersion)(raw), 6);
     CHECK_EQ(g_lastMark, 503);
     Reset(); SlotAt<SerFn>(raw, EX::kSerialize)(raw, nullptr);  CHECK_EQ(g_lastMark, 505);
@@ -283,8 +284,8 @@ UNIT_TEST(ui_dialog_slot_order_is_retails_construct_at_8) {
 UNIT_TEST(ui_dialogcontrollerconfig_slot_order_is_retails) {
     ConfigProbe probe;
     void* raw = static_cast<void*>(&probe);
-    Reset(); SlotAt<NameFn>(raw, EX::kTypeName)(raw);  CHECK_EQ(g_lastMark, 601);
-    Reset(); SlotAt<TypeFn>(raw, EX::kType)(raw);      CHECK_EQ(g_lastMark, 602);
+    CHECK(SlotAt<NameFn>(raw, EX::kTypeName)(raw) == UI::DialogControllerConfig::GetTypeInfo().name);   // TI-UI
+    CHECK_EQ(SlotAt<TypeFn>(raw, EX::kType)(raw), UI::DialogControllerConfig::GetTypeInfo().typeId);
     // 3/5/6/7 are PURE on the class (retail `_purecall`) — the probe's own.
     using VerFn = int32_t (*)(const void*);
     Reset(); SlotAt<VerFn>(raw, EX::kGetFileVersion)(raw); CHECK_EQ(g_lastMark, 3);
@@ -540,8 +541,6 @@ UNIT_TEST(b39_uid_dialogcontrollerconfig_deleting_dtor_both_arms) {
 // ============================================================================
 namespace UI {
 
-const char* DialogInstance::TypeName() const { Note(this, 101); return "DialogInstance"; }
-uint32_t    DialogInstance::Type() const { Note(this, 102); return 0u; }
 void DialogInstance::Persist(void*) { Note(this, 103); }
 void DialogInstance::OnOpened() { Note(this, 104); }
 void DialogInstance::OnClosed() { Note(this, 105); }
@@ -555,8 +554,6 @@ void DialogInstance::OnSerializeSettings(void*) { Note(this, 109); }
 // ~DialogInstance is inline since ENDGAME B.3.8 block RB (its InitFields /
 // ReleaseFields markers are in rb_ui_abi_test.cpp).
 
-const char* DialogController::TypeName() const { Note(this, 201); return "DialogController"; }
-uint32_t    DialogController::Type() const { Note(this, 202); return 0u; }
 void DialogController::OnCreated() { Note(this, 204); }
 void DialogController::OnOpened() { Note(this, 205); }
 void DialogController::OnClosed() { Note(this, 206); }
@@ -569,8 +566,6 @@ void DialogController::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, 
 void DialogController::OnSerializeSettings(void*) { Note(this, 210); }
 DialogController::~DialogController() { B39UidDlgNoteDtor(this); }
 
-const char* ComboDialog::TypeName() const { Note(this, 301); return "ComboDialog"; }
-uint32_t    ComboDialog::Type() const { Note(this, 302); return 0u; }
 void ComboDialog::OnUpdateLayout() { Note(this, 306); }
 void ComboDialog::OnUpdate(const System::Time& t) { Note(this, 307); g_lastArg = &t; }
 void ComboDialog::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, int32_t,
@@ -579,12 +574,8 @@ void ComboDialog::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, int32
 }
 ComboDialog::~ComboDialog() { B39UidDlgNoteDtor(this); }
 
-const char* ToolTipDialog::TypeName() const { Note(this, 401); return "ToolTipDialog"; }
-uint32_t    ToolTipDialog::Type() const { Note(this, 402); return 0u; }
 ToolTipDialog::~ToolTipDialog() { B39UidDlgNoteDtor(this); }
 
-const char* Dialog::TypeName() const { Note(this, 501); return "Dialog"; }
-uint32_t    Dialog::Type() const { Note(this, 502); return 0u; }
 int32_t     Dialog::GetFileVersion() const { Note(this, 503); return 6; }
 bool        Dialog::Serialize(void*) { Note(this, 505); return true; }
 Object::External* Dialog::Reconstruct() { Note(this, 506); return this; }
@@ -592,8 +583,26 @@ void        Dialog::Destruct() { Note(this, 507); }
 Object::External* Dialog::Construct() { Note(this, 508); return this; }
 Dialog::~Dialog() { B39UidDlgNoteDtor(this); }
 
-const char* DialogControllerConfig::TypeName() const { Note(this, 601); return "DialogControllerConfig"; }
-uint32_t    DialogControllerConfig::Type() const { Note(this, 602); return 0u; }
 DialogControllerConfig::~DialogControllerConfig() { B39UidDlgNoteDtor(this); }
 
 }  // namespace UI
+
+// ENDGAME B.3.9 TI-UI: the six records (literals as runtime/src/ui passes them)
+// and the null factory pair they point at; never called here. DialogInstance's
+// record carries Object::Internal's in-place factory (DECLARE_TYPE_INHERITED_INPLACE).
+#define DLG_TEST_FACTORIES(CLS)                                             \
+    ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \
+    ::Object::Base* UI::CLS::CreateInPlaceObject(void*) { return nullptr; }
+::Object::Base* UI::DialogInstance::CreateNewObject() { return nullptr; }
+DEFINE_TYPE(UI::DialogInstance, "Object::Internal", nullptr)
+DLG_TEST_FACTORIES(DialogController)
+DEFINE_TYPE(UI::DialogController, "Object::Internal", nullptr)
+DLG_TEST_FACTORIES(ComboDialog)
+DEFINE_TYPE(UI::ComboDialog, "DialogInstance", nullptr)
+DLG_TEST_FACTORIES(ToolTipDialog)
+DEFINE_TYPE(UI::ToolTipDialog, "UI::DialogInstance", nullptr)
+DLG_TEST_FACTORIES(Dialog)
+DEFINE_TYPE(UI::Dialog, "Object::External", nullptr)
+DLG_TEST_FACTORIES(DialogControllerConfig)
+DEFINE_TYPE(UI::DialogControllerConfig, "Object::External", nullptr)
+#undef DLG_TEST_FACTORIES

@@ -48,26 +48,9 @@ using namespace rtuielem;
 
 namespace {
 
-// RULE B6-5: a namespace-scope atomic cache for the member bodies.
-std::atomic<void*> g_imageElementTypeInfo{nullptr};
-const uint8_t* ImageElementTypeInfoAtomic() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_imageElementTypeInfo, "?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
-
-uint32_t ImageElement::Type() const { return TypeId(); }      // 0x180036290
-// ?TypeId@ImageElement@UI@@SAIXZ 0x1800362a0 — the record's first dword.
-uint32_t ImageElement::TypeId() {
-    return rtuielem::TypeIdOf(ImageElementTypeInfoAtomic());
-}
-// The key function: GCC emits `vtable for UI::ImageElement` here.
-const char* ImageElement::TypeName() const {                    // 0x1800362b0
-    return rtuielem::TypeNameOf(ImageElementTypeInfoAtomic());
-}
 
 // ============================================================================
 // ?ComputeSize@ImageElement@UI@@UEAAXXZ   0x180118650
@@ -175,3 +158,12 @@ int RtUiImageElementRegister() {
     RegisterRuntimeAddr(0x180036450ull, (void*)&UI::ImageElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ImageElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ImageElement@UI@@ (0x1801fac48): name "ImageElement", parent
+// "Element" (retail ?_ParentTypeName@ImageElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ImageElement, "Element", nullptr)

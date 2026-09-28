@@ -126,9 +126,6 @@ namespace RtUI {
 
 namespace {
 
-const uint8_t* ComboDialogTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A");
-}
 
 
 using SetCurrentItemFn = void (*)(void* combo, int32_t index);
@@ -167,21 +164,6 @@ inline void UiCloseDialog(void* ui, void** dlgPtr) {
 //                                        DialogInstance slot 8)
 // ############################################################################
 namespace UI {
-
-// ?TypeName@ComboDialog@UI@@UEBAPEBDXZ   0x180074760
-const char* ComboDialog::TypeName() const {
-    const char* v = nullptr;
-    __builtin_memcpy(&v, RtUI::ComboDialogTypeInfo() + 8, sizeof v);
-    return v;
-}
-// ?Type@ComboDialog@UI@@UEBAIXZ          0x180074740
-uint32_t ComboDialog::Type() const { return TypeId(); }
-// ?TypeId@ComboDialog@UI@@SAIXZ          0x180074750 — the same dword.
-uint32_t ComboDialog::TypeId() {
-    uint32_t v = 0;
-    __builtin_memcpy(&v, RtUI::ComboDialogTypeInfo(), sizeof v);
-    return v;
-}
 
 // ?CreateNewObject@ComboDialog@UI@@SAPEAVBase@Object@@XZ  0x180074850
 // The FACTUI1 row this replaces: the locked MemAlloc of 0xd0 bytes, align 8;
@@ -303,3 +285,12 @@ int RtUiComboDialogRegister() {
     RegisterRuntimeAddr(0x1800748f0ull, (void*)&UI::ComboDialog::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ComboDialog's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ComboDialog@UI@@ (0x1801fa9e0): name "ComboDialog", parent
+// "DialogInstance" (retail ?_ParentTypeName@ComboDialog@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ComboDialog, "DialogInstance", nullptr)

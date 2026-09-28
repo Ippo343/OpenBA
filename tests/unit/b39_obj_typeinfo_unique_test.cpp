@@ -58,12 +58,18 @@ std::vector<NameCrc> ChainNames() {
 //     { "?_typeInfo@...", 0x...ull, &kTypeInfoStorage[i],
 //       "<name>", "<parent>", <ext>,
 // so the name is the first quoted string on the line after the mangled one.
-bool MintedNames(std::vector<NameCrc>& out) {
+// `declared` is the table's own row count, `kTypeInfoStorage[N]` (ENDGAME B.3.9
+// TI-UI: the parse is checked against it instead of a fixed floor, which every
+// retirement lowers).
+bool MintedNames(std::vector<NameCrc>& out, int* declared) {
     std::FILE* f = std::fopen("standalone/rt_data_mint_tables.inc", "rb");
     if (f == nullptr) return false;
     char line[1024];
     bool inTable = false, wantName = false;
+    *declared = -1;
     while (std::fgets(line, sizeof line, f)) {
+        if (const char* st = std::strstr(line, "BaseTypeInfo kTypeInfoStorage["))
+            std::sscanf(st, "BaseTypeInfo kTypeInfoStorage[%d]", declared);
         if (std::strstr(line, "kMintTypeInfos[] = {")) { inTable = true; continue; }
         if (!inTable) continue;
         if (line[0] == '}') break;
@@ -111,8 +117,9 @@ UNIT_TEST(b39_obj_typeinfo_chain_names_are_unique) {
 UNIT_TEST(b39_obj_typeinfo_chain_plus_minted_names_are_unique) {
     std::vector<NameCrc> all = ChainNames();
     std::vector<NameCrc> minted;
-    CHECK(MintedNames(minted));            // `make unit` runs from the repo root
-    CHECK(minted.size() > 50);             // the table parsed (103 records today)
+    int declared = -1;
+    CHECK(MintedNames(minted, &declared)); // `make unit` runs from the repo root
+    CHECK_EQ((int)minted.size(), declared); // the table parsed: every declared row
     for (const NameCrc& n : minted)
         CHECK(n.name != "Internal");       // the retired duplicate stays retired
     all.insert(all.end(), minted.begin(), minted.end());

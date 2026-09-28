@@ -64,19 +64,6 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: namespace-scope atomic door caches for the member bodies.
-std::atomic<void*> g_animatedImageDescriptionTypeInfo{nullptr};
-const uint8_t* AnimatedImageDescriptionTypeInfo() {
-    void* p = g_animatedImageDescriptionTypeInfo.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached("?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A",
-                            &scratch);
-        if (p != nullptr) g_animatedImageDescriptionTypeInfo.store(p, std::memory_order_release);
-    }
-    return static_cast<const uint8_t*>(p);
-}
-
 }  // namespace
 
 // ============================================================================
@@ -84,17 +71,6 @@ const uint8_t* AnimatedImageDescriptionTypeInfo() {
 // ============================================================================
 namespace UI {
 
-uint32_t AnimatedImageDescription::Type() const { return TypeId(); }  // 0x1800366b0
-// ?TypeId@AnimatedImageDescription@UI@@SAIXZ 0x1800366c0 — the record's first dword.
-uint32_t AnimatedImageDescription::TypeId() {
-    const uint8_t* ti = AnimatedImageDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// The key function: GCC emits `vtable for UI::AnimatedImageDescription` here.
-const char* AnimatedImageDescription::TypeName() const {       // 0x1800366d0
-    const uint8_t* ti = AnimatedImageDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // 0x1800cb6a0: `MOV EAX,0x10204 ; RET` — a THIRD distinct value in this family.
 int32_t AnimatedImageDescription::GetFileVersion() const { return 0x10204; }
 
@@ -267,3 +243,12 @@ int RtUiAnimatedImageDescriptionRegister() {
     RegisterRuntimeAddr(0x180036840ull, (void*)&UI::AnimatedImageDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::AnimatedImageDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@AnimatedImageDescription@UI@@ (0x1801f9c88): name "AnimatedImageDescription", parent
+// "ImageDescription" (retail ?_ParentTypeName@AnimatedImageDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::AnimatedImageDescription, "ImageDescription", nullptr)

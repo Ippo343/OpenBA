@@ -177,8 +177,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;              // [1] 0x18003c810
-    uint32_t    Type() const override;                  // [2] 0x18003c7f0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003c810, Type 0x18003c7f0, CreateNewObject 0x18003c900, CreateInPlaceObject 0x18003c9c0
+    DECLARE_TYPE(SpriteCapture)
+public:
     int32_t     GetFileVersion() const override;        // [3] 0x1800d9520
     // [4] 0x1800066e0 is Object::External::Compile, inherited unchanged.
     bool        Serialize(void* stream) override;       // [5] 0x1800d9530
@@ -210,7 +213,6 @@ public:
     SpriteCapture(const SpriteCapture& src);            // 0x18003cb50
     SpriteCapture& operator=(const SpriteCapture& src); // 0x18003cc20
     // 0x18003c800 — the minted record's type id (spritecapture_class.cpp).
-    static uint32_t TypeId();
     // Placement is spelt `::new (p) SpriteCapture()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x18003c820
     static void* operator new(std::size_t bytes, void* place); // 0x18003c890
@@ -218,8 +220,6 @@ public:
     // Retail's factory pair (B39_RULES D2): MemAlloc(0x58, 8) + the ctor, and
     // the null-tested in-place ctor. Defined and registered in
     // spritecapture_class.cpp.
-    static Object::Base* CreateNewObject();                    // 0x18003c900
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x18003c9c0
 
     // ??0SpriteCapture@UI@@QEAA@XZ 0x1800d9140 — the REAL constructor, PUBLIC:
     // External() and the stamps are the compiler's; then the seven zero

@@ -56,12 +56,6 @@ namespace {
 
 // RULE B6-5: the members below resolve through namespace-scope atomics, never
 // a function-local first-call cache (UI is built on the loader thread).
-std::atomic<void*> g_typeInfoSlot{nullptr};
-
-const uint8_t* TextDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(rtuielem::AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
@@ -93,14 +87,6 @@ namespace UI {
 // 0x180041ab0 / 0x180041ad0: the first dword and the +8 qword of the minted
 // BaseTypeInfo. TypeName is the KEY FUNCTION, so GCC emits this class's table
 // here.
-uint32_t TextDescription::Type() const { return TypeId(); }
-// ?TypeId@TextDescription@UI@@SAIXZ 0x180041ac0 — the record's first dword.
-uint32_t TextDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, TextDescriptionTypeInfo(), sizeof v); return v;
-}
-const char* TextDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, TextDescriptionTypeInfo() + 8, sizeof v); return v;
-}
 // 0x18011ee20: `MOV EAX,0x304 ; RET`. 0x304, not the 0x204 the Image/Ribbon
 // siblings return — the file version is per class and must not be shared.
 int32_t TextDescription::GetFileVersion() const { return 0x304; }
@@ -267,3 +253,12 @@ int RtUiTextDescriptionRegister() {
     RegisterRuntimeAddr(0x180041c40ull, (void*)&UI::TextDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::TextDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@TextDescription@UI@@ (0x1801faeb0): name "TextDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@TextDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::TextDescription, "ElementDescription", nullptr)

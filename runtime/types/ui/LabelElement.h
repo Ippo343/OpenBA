@@ -173,8 +173,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x1800427f0
-    uint32_t    Type() const override;                           // [2] 0x1800427d0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800427f0, Type 0x1800427d0, TypeId 0x1800427e0, _TypeName 0x1800427b0
+    //         _ParentTypeName 0x1800427c0, CreateNewObject 0x1800428e0, CreateInPlaceObject 0x180042960
+    DECLARE_TYPE(LabelElement)
+public:
     void ComputeSize() override;                                 // [4] 0x1800d2490
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;           // [5] 0x1800d2330
@@ -196,9 +200,6 @@ public:
 
     LabelElement(const LabelElement& src);                       // 0x180042a00  not ported (door retired: no caller)
     LabelElement& operator=(const LabelElement& src);            // 0x180042ac0  not ported
-    static uint32_t TypeId();                                    // 0x1800427e0  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x1800428e0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042960  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180042800  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180042870  not ported
     static void  operator delete(void* p);                       // 0x180042880  not ported
@@ -210,9 +211,6 @@ protected:
     ~LabelElement();
 
 private:
-    static const char* _TypeName();                              // 0x1800427b0 -> "LabelElement"
-    static const char* _ParentTypeName();                        // 0x1800427c0 -> "TextElement"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801fa040 (minted)
 
 public:
     // ---- the 0x30 bytes LabelElement adds -----------------------------------

@@ -116,6 +116,8 @@
 #include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/ContainerElement.h"   // fragment pass F2: SetOffsets
+#include "../../types/ui/ClipRegionElement.h"  // B.3.9 TI-UI: the two type ids SetOffsets
+#include "../../types/ui/ScrollElement.h"      // reads (retail `MOV EDX,[0x1801f9d68]`)
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 // `enum class Module` + `ResolveAddr` (declared once there, byte-identical to
 // standalone/resolve.h) and `rtuielem::AtomicExport`, the B6-5 door cache.
@@ -245,19 +247,6 @@ const char* const kGetAlignedStatic =
 // (Element.h, +0xa0), and 0x180076900 is `kSpec_Fill8Z`, trait-equivalent for
 // `Element*` (dialog_create.cpp's banner has the full spec comparison), so
 // `AddChild` below calls `.SetSizeFill()` on the member directly.
-
-// The two Object::BaseTypeInfo statics SetOffsets reads. Their FIRST DWORD is
-// the type id; retail loads it as `MOV EDX,[0x1801f9d68]`.
-uint32_t ClipRegionTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A");
-    return p ? *p : 0u;
-}
-uint32_t ScrollTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A");
-    return p ? *p : 0u;
-}
 
 // Video::Device::_singleton (exported, 0x1801fe7a8). GetPaddedSize reads the
 // screen size out of the pointed-to Device at +0x04 / +0x08. ENDGAME B.3.9
@@ -794,18 +783,18 @@ void ContainerElement::SetOffsets(int32_t x, int32_t y) {
     IsDerivedFromFn isA = BaseIsDerivedFromFn();
 
     Element* child0 = _children.GetData()[0];
-    Element* clip = (isA && isA(child0, ClipRegionTypeId())) ? child0 : nullptr;
+    Element* clip = (isA && isA(child0, UI::ClipRegionElement::TypeId())) ? child0 : nullptr;
     uint8_t* clipBytes = reinterpret_cast<uint8_t*>(clip);
     *reinterpret_cast<int32_t*>(clipBytes + 0xd0) = x;
     *reinterpret_cast<int32_t*>(clipBytes + 0xd4) = y;
 
     Element* child1 = _children.GetData()[1];
     Element* vscroll = nullptr;
-    if (child1 && isA && isA(child1, ScrollTypeId())) vscroll = child1;
+    if (child1 && isA && isA(child1, UI::ScrollElement::TypeId())) vscroll = child1;
 
     Element* child2 = _children.GetData()[2];
     Element* hscroll = nullptr;
-    if (child2 && isA && isA(child2, ScrollTypeId())) hscroll = child2;
+    if (child2 && isA && isA(child2, UI::ScrollElement::TypeId())) hscroll = child2;
 
     if (vscroll) {
         *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(vscroll) + 0x160) =

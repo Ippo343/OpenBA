@@ -34,12 +34,6 @@ using namespace rtuielem;
 
 namespace {
 
-std::atomic<void*> g_typeInfoSlot{nullptr};   // RULE B6-5
-
-const uint8_t* TypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 using ToIntegerFn = int32_t (*)(const char* s);
 using MemFreeFn = void (*)(void* p);
 // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns a
@@ -76,11 +70,6 @@ void ReleaseStringLocal(void** slot) {
 }  // namespace
 
 namespace UI {
-
-// ?TypeId@NumberEditElement@UI@@SAIXZ 0x180046240 — the record's first dword.
-uint32_t NumberEditElement::TypeId() { return TypeIdOf(TypeInfo()); }
-uint32_t NumberEditElement::Type() const { return TypeId(); }
-const char* NumberEditElement::TypeName() const { return TypeNameOf(TypeInfo()); }
 
 // ??1NumberEditElement@UI@@UEAA@XZ 0x1800d4c40 — restamp, then the tail into
 // ~EditElement: EMPTY here, the compiler chains ~EditElement (ENDGAME B.3.9
@@ -144,3 +133,12 @@ int RtUiNumberEditElementRegister() {
     RegisterRuntimeAddr(0x1800463e0ull, (void*)&UI::NumberEditElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberEditElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@NumberEditElement@UI@@ (0x1801fa190): name "NumberEditElement", parent
+// "EditElement" (retail ?_ParentTypeName@NumberEditElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::NumberEditElement, "EditElement", nullptr)

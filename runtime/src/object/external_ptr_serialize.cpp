@@ -164,6 +164,13 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
+#include "../../types/ui/DialogControllerConfig.h"   // ENDGAME B.3.9 TI-UI: UI::DialogControllerConfig::GetTypeInfo()
+#include "../../types/ui/Dialog.h"   // ENDGAME B.3.9 TI-UI: UI::Dialog::GetTypeInfo()
+#include "../../types/ui/ElementDescription.h"   // ENDGAME B.3.9 TI-UI: UI::ElementDescription::GetTypeInfo()
+#include "../../types/ui/CharacterSet.h"   // ENDGAME B.3.9 TI-UI: UI::CharacterSet::GetTypeInfo()
+#include "../../types/ui/Font.h"   // ENDGAME B.3.9 TI-UI: UI::Font::GetTypeInfo()
+#include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.9 TI-UI: UI::SpriteSheet::GetTypeInfo()
+#include "../../types/ui/StringTable.h"   // ENDGAME B.3.9 TI-UI: UI::StringTable::GetTypeInfo()
 #include "../../types/audio/SoundBuffer.h"     // ENDGAME B.3.9 TI-REST: the thunks' records
 #include "../../types/audio/SoundEffect.h"
 #include "../../types/collision2d/Surface.h"
@@ -484,21 +491,17 @@ extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
     }
 
 // 0x180038f90 — ElementDescription+0x48
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ElementDescription,
-             "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_ElementDescription, UI::ElementDescription)
 // 0x180076610 — ElementDescription+0x50 (the field the header called `_userData`)
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Dialog,
-             "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Dialog, UI::Dialog)
 // 0x1800042a0 — ElementDescription+0x58, and Achievement::Goal+0x20
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_StringTable,
-             "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_StringTable, UI::StringTable)
 // 0x180005dc0 — Achievement::GoalInstance+0x18. The oracle route; see the banner.
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Goal, Achievement::Goal)
 // 0x180004590 — Achievement::Achievement+0x38 (WAVE 26 LANE INT33). The FIFTH,
 // and it is registered for the same reason the fourth was: it is on an ORACLE
 // route that already exists. See the registration block below.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SpriteSheet,
-             "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SpriteSheet, UI::SpriteSheet)
 // 0x180014520 — the SIXTH (WAVE 29 LANE WALL). `SpriteSheet+0x30`, and also
 // the four material slots of `Graphics::EdgeMeshInstance` and
 // `Graphics::Particle`. See the registration block below for why it moves now.
@@ -515,8 +518,7 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Material, Graphics::Material)
 // 0x180014230 — Graphics::GraphicsMesh
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_GraphicsMesh, Graphics::GraphicsMesh)
 // 0x1800756d0 — UI::DialogControllerConfig
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_DialogControllerConfig,
-             "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_DialogControllerConfig, UI::DialogControllerConfig)
 // 0x180051790 — Audio::SoundEffect
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundEffect, Audio::SoundEffect)
 // 0x18005b840 — Graphics::AnimationGroup
@@ -541,8 +543,7 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_RenderState, Video::RenderState)
 // standalone/rt_data_mint_tables.inc:4373, where the mint carries that same
 // name at that same address. The class UI::Font itself is NOT ported here and
 // is not needed: this body only ever compares its type id.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Font,
-             "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Font, UI::Font)
 // VTABLE BATCH 7 (2026-09-12): 0x1800594a0 — Graphics::AnimationEvent. Reached
 // from Graphics::AnimationGroup::Serialize's per-clip event-list element loop
 // (runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp), the same
@@ -570,8 +571,7 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_AnimationEvent, Graphics::Animatio
 //   0x18003dc90  <- runtime/src/ui/documenttextdescription.cpp:194 resolves it
 //                   by address for the +0xe0 container field.
 // 0x180076e90 — ExternalPtr<UI::CharacterSet>
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_CharacterSet,
-             "?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_CharacterSet, UI::CharacterSet)
 // 0x180052a50 — ExternalPtr<Audio::SoundBuffer>
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundBuffer, Audio::SoundBuffer)
 // 0x18003dc90 — ExternalPtr<Object::ExternalList>. The export spells the
@@ -632,8 +632,7 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
 // 0x180005220 — Achievement::Goal
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Goal, Achievement::Goal)
 // 0x1800493d0 — UI::ElementDescription
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_ElementDescription,
-                   "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_ElementDescription, UI::ElementDescription)
 // 0x18005d4a0 — Graphics::MaterialInstance
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_MaterialInstance, Graphics::MaterialInstance)
 // 0x1800605e0 -- Video::VideoProgram (Material::_programs; not in the static
@@ -656,10 +655,8 @@ EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_VideoProgram, Video::Vi
 // Three call sites in our tree resolve these by address today and therefore
 // still run retail's copies until this registration block runs:
 // documenttextdescription.cpp:171 and :177, spritecapture_class.cpp:216.
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Font,
-                   "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_SpriteSheet,
-                   "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Font, UI::Font)
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_SpriteSheet, UI::SpriteSheet)
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Surface, Collision2D::Surface)
 
 #undef EXTPTR_ARRAY_THUNK

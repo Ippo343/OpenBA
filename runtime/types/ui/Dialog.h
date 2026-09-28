@@ -339,8 +339,12 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                        // [1] 0x180038440
-    uint32_t    Type() const override;                            // [2] 0x180038420
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180038440, Type 0x180038420, TypeId 0x180038430, CreateNewObject 0x180038530
+    //         CreateInPlaceObject 0x180038610
+    DECLARE_TYPE(Dialog)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1801130b0
     bool        Serialize(void* stream) override;                 // [5] 0x1801130c0
     Object::External* Reconstruct() override;                    // [6] 0x1800386b0
@@ -348,7 +352,6 @@ public:
     virtual Object::External* Construct();                        // [8] 0x180038750
 
     // ---- PORTED non-virtual members ---------------------------------------
-    static uint32_t TypeId();                                     // 0x180038430
     // RETSLOT in retail; plain by-value returns here, the doors placement-new.
     Object::ExternalPtr<ElementDescription> GetTemplate(int32_t index) const;  // 0x1800388b0
     Object::InternalPtr<Element> CreateElement(
@@ -377,8 +380,6 @@ public:
     static void  operator delete(void* p);                        // 0x1800384d0
     // Retail's factory pair (B39_RULES D2): MemAlloc(0x88, 8) + the ctor, and
     // the null-tested in-place ctor. Defined and registered in dialog_factory.cpp.
-    static Object::Base* CreateNewObject();                       // 0x180038530
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x180038610
 
 protected:
     // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array and the +0x28
@@ -388,8 +389,6 @@ protected:
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
     //   0x180038400  ?_TypeName@       -> "Dialog"
     //   0x180038410  ?_ParentTypeName@ -> "Object::External"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     // ---- the 0x68 bytes Dialog adds (evidence: the POD's banner) ---------

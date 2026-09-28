@@ -67,6 +67,10 @@ void Note(const void* self, int mark, long long arg = 0) {
 }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 
+// Slots 1/2 (ENDGAME B.3.9 TI-UI): the record of the class `tag` names.
+const ::Object::BaseTypeInfo* WhoRecord(int tag);
+
+
 template <typename Fn>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
@@ -162,8 +166,6 @@ void B39NoteDtor(const void* self) {
 namespace UI {
 
 #define C3_DESC_MARKERS(CLS, TAG)                                                     \
-    const char* CLS::TypeName() const { Note(this, TAG * 100 + 1); return #CLS; }     \
-    uint32_t CLS::Type() const { Note(this, TAG * 100 + 2); return TAG; }             \
     int32_t CLS::GetFileVersion() const { Note(this, TAG * 100 + 3); return TAG; }    \
     bool CLS::Serialize(void* s) {                                                    \
         Note(this, TAG * 100 + 5, reinterpret_cast<intptr_t>(s)); return true;       \
@@ -187,8 +189,6 @@ C3_DESC_MARKERS(NumberDescription, kND)
 #undef C3_DESC_MARKERS
 
 #define C3_ELEM_TYPE_MARKERS(CLS, TAG)                                                \
-    const char* CLS::TypeName() const { Note(this, TAG * 100 + 1); return #CLS; }     \
-    uint32_t CLS::Type() const { Note(this, TAG * 100 + 2); return TAG; }             \
     CLS::~CLS() { B39NoteDtor(this); }
 #define C3_ELEM_LAYOUT_MARKERS(CLS, TAG)                                              \
     void CLS::ComputeSize() { Note(this, TAG * 100 + 4); }                            \
@@ -228,6 +228,53 @@ void TextElement::CacheText() { ++g_textCacheTextCalls; }
 #undef C3_ELEM_LAYOUT_MARKERS
 
 }  // namespace UI
+
+// ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
+// class's own record, so the host defines the records (the literals are the
+// ones runtime/src/ui passes) and the factory pair they point at; the
+// factories are never called here.
+#define C3_TEST_FACTORIES(CLS)                                              \
+    ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \
+    ::Object::Base* UI::CLS::CreateInPlaceObject(void*) { return nullptr; }
+C3_TEST_FACTORIES(TextDescription)
+DEFINE_TYPE(UI::TextDescription, "ElementDescription", nullptr)
+C3_TEST_FACTORIES(LabelDescription)
+DEFINE_TYPE(UI::LabelDescription, "TextDescription", nullptr)
+C3_TEST_FACTORIES(EditDescription)
+DEFINE_TYPE(UI::EditDescription, "ElementDescription", nullptr)
+C3_TEST_FACTORIES(NumberEditDescription)
+DEFINE_TYPE(UI::NumberEditDescription, "ElementDescription", nullptr)
+C3_TEST_FACTORIES(NumberDescription)
+DEFINE_TYPE(UI::NumberDescription, "ElementDescription", nullptr)
+C3_TEST_FACTORIES(TextElement)
+DEFINE_TYPE(UI::TextElement, "Element", nullptr)
+C3_TEST_FACTORIES(LabelElement)
+DEFINE_TYPE(UI::LabelElement, "TextElement", nullptr)
+C3_TEST_FACTORIES(EditElement)
+DEFINE_TYPE(UI::EditElement, "Element", nullptr)
+C3_TEST_FACTORIES(NumberEditElement)
+DEFINE_TYPE(UI::NumberEditElement, "EditElement", nullptr)
+C3_TEST_FACTORIES(NumberElement)
+DEFINE_TYPE(UI::NumberElement, "Element", nullptr)
+#undef C3_TEST_FACTORIES
+
+namespace {
+const ::Object::BaseTypeInfo* WhoRecord(int tag) {
+    switch (tag) {
+    case kTD: return &UI::TextDescription::GetTypeInfo();
+    case kLD: return &UI::LabelDescription::GetTypeInfo();
+    case kED: return &UI::EditDescription::GetTypeInfo();
+    case kNED: return &UI::NumberEditDescription::GetTypeInfo();
+    case kND: return &UI::NumberDescription::GetTypeInfo();
+    case kTE: return &UI::TextElement::GetTypeInfo();
+    case kLE: return &UI::LabelElement::GetTypeInfo();
+    case kEE: return &UI::EditElement::GetTypeInfo();
+    case kNEE: return &UI::NumberEditElement::GetTypeInfo();
+    case kNE: return &UI::NumberElement::GetTypeInfo();
+    default: return nullptr;
+    }
+}
+}  // namespace
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -341,10 +388,8 @@ namespace {
 void CheckDescriptionSlots(void* raw, int tag, const void* compileEntry) {
     Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, kS0)(raw, 0u);
     CHECK_EQ(g_lastMark, kProbeDtor); CHECK(g_lastSelf == raw);
-    Reset(); SlotAt<const char* (*)(const void*)>(raw, kS1)(raw);
-    CHECK_EQ(g_lastMark, tag * 100 + 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(raw, kS2)(raw);
-    CHECK_EQ(g_lastMark, tag * 100 + 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(raw, kS1)(raw) == WhoRecord(tag)->name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kS2)(raw), WhoRecord(tag)->typeId);
     Reset(); SlotAt<int32_t (*)(const void*)>(raw, kS3)(raw);
     CHECK_EQ(g_lastMark, tag * 100 + 3);
     CHECK(VTableOf(raw)[kS4 / 8] == compileEntry);
@@ -394,8 +439,8 @@ UNIT_TEST(ui_c3_text_and_label_element_slot_order_is_retails) {
     void* t = static_cast<void*>(&te);
     void* l = static_cast<void*>(&le);
 
-    Reset(); SlotAt<const char* (*)(const void*)>(t, kS1)(t); CHECK_EQ(g_lastMark, kTE * 100 + 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(t, kS2)(t);    CHECK_EQ(g_lastMark, kTE * 100 + 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(t, kS1)(t) == WhoRecord(kTE)->name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(t, kS2)(t), WhoRecord(kTE)->typeId);
     Reset(); SlotAt<void (*)(void*)>(t, kS4)(t);              CHECK_EQ(g_lastMark, kTE * 100 + 4);
     Reset(); SlotAt<void (*)(void*, int, int, int, int)>(t, kS5)(t, 7, 0, 0, 9);
     CHECK_EQ(g_lastMark, kTE * 100 + 5); CHECK_EQ(g_lastArg, 7009);
@@ -403,7 +448,7 @@ UNIT_TEST(ui_c3_text_and_label_element_slot_order_is_retails) {
     CHECK_EQ(g_lastMark, kTE * 100 + 6); CHECK_EQ(g_lastArg, 200);
 
     // Label overrides 1,2,4,5,6 and SetColor (10).
-    Reset(); SlotAt<const char* (*)(const void*)>(l, kS1)(l); CHECK_EQ(g_lastMark, kLE * 100 + 1);
+    CHECK(SlotAt<const char* (*)(const void*)>(l, kS1)(l) == WhoRecord(kLE)->name);
     Reset(); SlotAt<void (*)(void*)>(l, kS4)(l);              CHECK_EQ(g_lastMark, kLE * 100 + 4);
     Reset(); SlotAt<void (*)(void*, int, int, int, int)>(l, kS5)(l, 1, 0, 0, 2);
     CHECK_EQ(g_lastMark, kLE * 100 + 5);
@@ -427,7 +472,7 @@ UNIT_TEST(ui_c3_edit_and_numberedit_element_slot_order_is_retails) {
     void* e = static_cast<void*>(&ee);
     void* n = static_cast<void*>(&ne);
 
-    Reset(); SlotAt<const char* (*)(const void*)>(e, kS1)(e); CHECK_EQ(g_lastMark, kEE * 100 + 1);
+    CHECK(SlotAt<const char* (*)(const void*)>(e, kS1)(e) == WhoRecord(kEE)->name);
     Reset(); SlotAt<void (*)(void*)>(e, kS4)(e);              CHECK_EQ(g_lastMark, kEE * 100 + 4);
     Reset(); SlotAt<void (*)(void*, int, int, int, int)>(e, kS5)(e, 3, 0, 0, 4);
     CHECK_EQ(g_lastMark, kEE * 100 + 5);
@@ -437,8 +482,8 @@ UNIT_TEST(ui_c3_edit_and_numberedit_element_slot_order_is_retails) {
     Reset(); SlotAt<void (*)(void*)>(e, kS12)(e);             CHECK_EQ(g_lastMark, kEE * 100 + 12);
 
     // NumberEdit: own 1, 2 and 12; INHERITS 4..7 from EditElement.
-    Reset(); SlotAt<const char* (*)(const void*)>(n, kS1)(n); CHECK_EQ(g_lastMark, kNEE * 100 + 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(n, kS2)(n);    CHECK_EQ(g_lastMark, kNEE * 100 + 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(n, kS1)(n) == WhoRecord(kNEE)->name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(n, kS2)(n), WhoRecord(kNEE)->typeId);
     Reset(); SlotAt<void (*)(void*)>(n, kS12)(n);             CHECK_EQ(g_lastMark, kNEE * 100 + 12);
     for (int s = 3; s <= 11; ++s) CHECK(VTableOf(n)[s] == VTableOf(e)[s]);
     Reset(); SlotAt<void (*)(void*)>(n, kS4)(n);              CHECK_EQ(g_lastMark, kEE * 100 + 4);
@@ -453,8 +498,8 @@ UNIT_TEST(ui_c3_number_element_slot_order_is_retails) {
     NumberElementProbe np{};
     TextElementProbe te{};
     void* n = static_cast<void*>(&np);
-    Reset(); SlotAt<const char* (*)(const void*)>(n, kS1)(n); CHECK_EQ(g_lastMark, kNE * 100 + 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(n, kS2)(n);    CHECK_EQ(g_lastMark, kNE * 100 + 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(n, kS1)(n) == WhoRecord(kNE)->name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(n, kS2)(n), WhoRecord(kNE)->typeId);
     Reset(); SlotAt<void (*)(void*)>(n, kS4)(n);              CHECK_EQ(g_lastMark, kNE * 100 + 4);
     Reset(); SlotAt<void (*)(void*, int, int, int, int)>(n, kS5)(n, 5, 0, 0, 6);
     CHECK_EQ(g_lastMark, kNE * 100 + 5); CHECK_EQ(g_lastArg, 5006);

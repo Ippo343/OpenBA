@@ -31,12 +31,6 @@ using namespace rtuielem;
 
 namespace {
 
-// B6-5: namespace-scope atomic door cache for the member bodies.
-std::atomic<void*> g_borderTypeInfo{nullptr};
-const uint8_t* BorderElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_borderTypeInfo, "?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // UI::SpriteContext (block D's class), reached by address.
 using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, uint32_t color);
 using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
@@ -45,11 +39,6 @@ using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
 }  // namespace
 
 namespace UI {
-
-// ?TypeId@BorderElement@UI@@SAIXZ 0x1800410a0 — the minted record's first dword.
-uint32_t BorderElement::TypeId() { return TypeIdOf(BorderElementTypeInfo()); }
-uint32_t BorderElement::Type() const { return TypeId(); }
-const char* BorderElement::TypeName() const { return TypeNameOf(BorderElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@BorderElement@UI@@UEAAXXZ   0x1801101d0
@@ -204,3 +193,12 @@ int RtUiBorderElementRegister() {
     RegisterRuntimeAddr(0x180041220ull, (void*)&UI::BorderElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::BorderElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@BorderElement@UI@@ (0x1801fa8c8): name "BorderElement", parent
+// "Element" (retail ?_ParentTypeName@BorderElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::BorderElement, "Element", nullptr)

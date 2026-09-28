@@ -84,6 +84,24 @@ void Note(const void* self, int who, int slot, long long arg = 0) {
 }
 void Reset() { g_self = nullptr; g_who = kNone; g_slot = -1; g_arg = 0; g_trailN = 0; }
 
+// Slots 1/2 (ENDGAME B.3.9 TI-UI): the record of the class `who` names.
+const ::Object::BaseTypeInfo* WhoRecord(int who) {
+    switch (who) {
+    case kGroupD: return &UI::GroupDescription::GetTypeInfo();
+    case kPageD: return &UI::PageDescription::GetTypeInfo();
+    case kRadioD: return &UI::RadioDescription::GetTypeInfo();
+    case kGroupE: return &UI::GroupElement::GetTypeInfo();
+    case kPageE: return &UI::PageElement::GetTypeInfo();
+    case kRadioE: return &UI::RadioElement::GetTypeInfo();
+    case kImageD: return &UI::ImageDescription::GetTypeInfo();
+    case kAnimD: return &UI::AnimatedImageDescription::GetTypeInfo();
+    case kImageE: return &UI::ImageElement::GetTypeInfo();
+    case kAnimE: return &UI::AnimatedImageElement::GetTypeInfo();
+    default: return nullptr;
+    }
+}
+
+
 template <typename Fn>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
@@ -203,8 +221,6 @@ void B39NoteDtor(const void* self) {
 namespace UI {
 
 // ---- GroupElement ----
-const char* GroupElement::TypeName() const { Note(this, kGroupE, 1); return "GroupElement"; }
-uint32_t GroupElement::Type() const { Note(this, kGroupE, 2); return 0x6Eu; }
 void GroupElement::ComputeSize() { Note(this, kGroupE, 4); }
 void GroupElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kGroupE, 5, (long long)x * 1000 + h);
@@ -213,13 +229,9 @@ void GroupElement::Draw(SpriteContext&, uint8_t alpha) const { Note(this, kGroup
 GroupElement::~GroupElement() { B39NoteDtor(this); }
 
 // ---- PageElement ----
-const char* PageElement::TypeName() const { Note(this, kPageE, 1); return "PageElement"; }
-uint32_t PageElement::Type() const { Note(this, kPageE, 2); return 0x9Eu; }
 PageElement::~PageElement() { B39NoteDtor(this); }
 
 // ---- RadioElement — Update calls its parent's (Element's) body QUALIFIED.
-const char* RadioElement::TypeName() const { Note(this, kRadioE, 1); return "RadioElement"; }
-uint32_t RadioElement::Type() const { Note(this, kRadioE, 2); return 0xAEu; }
 void RadioElement::Update(const System::Time&, UserInterface*,
                           Object::InternalPtr<DialogInstance>* dialog, const UpdateState& state) {
     Note(this, kRadioE, 7,
@@ -228,8 +240,6 @@ void RadioElement::Update(const System::Time&, UserInterface*,
 RadioElement::~RadioElement() { B39NoteDtor(this); }
 
 // ---- GroupDescription ----
-const char* GroupDescription::TypeName() const { Note(this, kGroupD, 1); return "GroupDescription"; }
-uint32_t GroupDescription::Type() const { Note(this, kGroupD, 2); return 0x6Du; }
 int32_t GroupDescription::GetFileVersion() const { Note(this, kGroupD, 3); return 0x104; }
 bool GroupDescription::Serialize(void* stream) {
     Note(this, kGroupD, 5, reinterpret_cast<intptr_t>(stream)); return true;
@@ -245,8 +255,6 @@ Object::External* GroupDescription::Construct() { Note(this, kGroupD, 9); return
 GroupDescription::~GroupDescription() { B39NoteDtor(this); }
 
 // ---- PageDescription — Serialize calls the PARENT's body QUALIFIED, as the real one does.
-const char* PageDescription::TypeName() const { Note(this, kPageD, 1); return "PageDescription"; }
-uint32_t PageDescription::Type() const { Note(this, kPageD, 2); return 0x9Du; }
 int32_t PageDescription::GetFileVersion() const { Note(this, kPageD, 3); return 0x1104; }
 bool PageDescription::Serialize(void* stream) {
     Note(this, kPageD, 5, reinterpret_cast<intptr_t>(stream));
@@ -263,8 +271,6 @@ Object::External* PageDescription::Construct() { Note(this, kPageD, 9); return t
 PageDescription::~PageDescription() { B39NoteDtor(this); }
 
 // ---- RadioDescription ----
-const char* RadioDescription::TypeName() const { Note(this, kRadioD, 1); return "RadioDescription"; }
-uint32_t RadioDescription::Type() const { Note(this, kRadioD, 2); return 0xADu; }
 int32_t RadioDescription::GetFileVersion() const { Note(this, kRadioD, 3); return 0x1104; }
 bool RadioDescription::Serialize(void* stream) {
     Note(this, kRadioD, 5, reinterpret_cast<intptr_t>(stream));
@@ -281,8 +287,6 @@ Object::External* RadioDescription::Construct() { Note(this, kRadioD, 9); return
 RadioDescription::~RadioDescription() { B39NoteDtor(this); }
 
 // ---- ImageElement ----
-const char* ImageElement::TypeName() const { Note(this, kImageE, 1); return "ImageElement"; }
-uint32_t ImageElement::Type() const { Note(this, kImageE, 2); return 0x1Eu; }
 void ImageElement::ComputeSize() { Note(this, kImageE, 4); }
 void ImageElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kImageE, 5, (long long)x * 1000 + h);
@@ -291,8 +295,6 @@ void ImageElement::Draw(SpriteContext&, uint8_t alpha) const { Note(this, kImage
 ImageElement::~ImageElement() { B39NoteDtor(this); }
 
 // ---- AnimatedImageElement ----
-const char* AnimatedImageElement::TypeName() const { Note(this, kAnimE, 1); return "AnimatedImageElement"; }
-uint32_t AnimatedImageElement::Type() const { Note(this, kAnimE, 2); return 0xA1u; }
 void AnimatedImageElement::Update(const System::Time&, UserInterface*,
                                   Object::InternalPtr<DialogInstance>* dialog,
                                   const UpdateState& state) {
@@ -302,8 +304,6 @@ void AnimatedImageElement::Update(const System::Time&, UserInterface*,
 AnimatedImageElement::~AnimatedImageElement() { B39NoteDtor(this); }
 
 // ---- ImageDescription (+ the non-virtual applier, marker slot 80) ----
-const char* ImageDescription::TypeName() const { Note(this, kImageD, 1); return "ImageDescription"; }
-uint32_t ImageDescription::Type() const { Note(this, kImageD, 2); return 0x1Du; }
 int32_t ImageDescription::GetFileVersion() const { Note(this, kImageD, 3); return 0x204; }
 bool ImageDescription::Serialize(void* stream) {
     Note(this, kImageD, 5, reinterpret_cast<intptr_t>(stream)); return true;
@@ -322,8 +322,6 @@ Object::External* ImageDescription::Construct() { Note(this, kImageD, 9); return
 ImageDescription::~ImageDescription() { B39NoteDtor(this); }
 
 // ---- AnimatedImageDescription — Serialize and slot 8 call the parent QUALIFIED.
-const char* AnimatedImageDescription::TypeName() const { Note(this, kAnimD, 1); return "AnimatedImageDescription"; }
-uint32_t AnimatedImageDescription::Type() const { Note(this, kAnimD, 2); return 0xADu; }
 int32_t AnimatedImageDescription::GetFileVersion() const { Note(this, kAnimD, 3); return 0x10204; }
 bool AnimatedImageDescription::Serialize(void* stream) {
     Note(this, kAnimD, 5, reinterpret_cast<intptr_t>(stream));
@@ -343,6 +341,35 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
 Object::External* AnimatedImageDescription::Construct() { Note(this, kAnimD, 9); return this; }
 AnimatedImageDescription::~AnimatedImageDescription() { B39NoteDtor(this); }
 
+// ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
+// class's own record, so the host defines the records (the literals are the
+// ones runtime/src/ui passes) and the factory pair they point at; the
+// factories are never called here.
+#define UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(CLS)                                              \
+    ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \
+    ::Object::Base* UI::CLS::CreateInPlaceObject(void*) { return nullptr; }
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(GroupDescription)
+DEFINE_TYPE(UI::GroupDescription, "ElementDescription", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(PageDescription)
+DEFINE_TYPE(UI::PageDescription, "GroupDescription", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(RadioDescription)
+DEFINE_TYPE(UI::RadioDescription, "GroupDescription", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(GroupElement)
+DEFINE_TYPE(UI::GroupElement, "Element", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(PageElement)
+DEFINE_TYPE(UI::PageElement, "GroupElement", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(RadioElement)
+DEFINE_TYPE(UI::RadioElement, "GroupElement", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(ImageDescription)
+DEFINE_TYPE(UI::ImageDescription, "ElementDescription", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(AnimatedImageDescription)
+DEFINE_TYPE(UI::AnimatedImageDescription, "ImageDescription", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(ImageElement)
+DEFINE_TYPE(UI::ImageElement, "Element", nullptr)
+UI_LEAF_C2_ABI_TEST_TEST_FACTORIES(AnimatedImageElement)
+DEFINE_TYPE(UI::AnimatedImageElement, "ImageElement", nullptr)
+#undef UI_LEAF_C2_ABI_TEST_TEST_FACTORIES
+
 }  // namespace UI
 
 namespace {
@@ -350,10 +377,8 @@ namespace {
 // Raw-call every Description slot a leaf owns (1,2,3,5,6,7,8,9) and check the
 // marker names the expected class and slot.
 void CheckDescriptionOwnSlots(void* raw, int who) {
-    Reset(); SlotAt<const char* (*)(const void*)>(raw, kD1_TypeName)(raw);
-    CHECK_EQ(g_who, who); CHECK_EQ(g_slot, 1); CHECK(g_self == raw);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(raw, kD2_Type)(raw);
-    CHECK_EQ(g_who, who); CHECK_EQ(g_slot, 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(raw, kD1_TypeName)(raw) == WhoRecord(who)->name);   // TI-UI: own record
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kD2_Type)(raw), WhoRecord(who)->typeId);
     Reset(); SlotAt<int32_t (*)(const void*)>(raw, kD3_GetFileVersion)(raw);
     CHECK_EQ(g_who, who); CHECK_EQ(g_slot, 3);
     Reset(); SlotAt<bool (*)(void*, void*)>(raw, kD5_Serialize)(raw, (void*)0x55);
@@ -474,10 +499,8 @@ UNIT_TEST(ui_leaf_c2_group_elements_slot_order) {
     RadioElementProbe radio{};
     void* g = static_cast<void*>(&group);
 
-    Reset(); SlotAt<const char* (*)(const void*)>(g, kE1_TypeName)(g);
-    CHECK_EQ(g_who, (int)kGroupE); CHECK_EQ(g_slot, 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(g, kE2_Type)(g);
-    CHECK_EQ(g_who, (int)kGroupE); CHECK_EQ(g_slot, 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(g, kE1_TypeName)(g) == WhoRecord(kGroupE)->name);   // TI-UI: own record
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(g, kE2_Type)(g), WhoRecord(kGroupE)->typeId);
     Reset(); SlotAt<void (*)(void*)>(g, kE4_ComputeSize)(g);
     CHECK_EQ(g_who, (int)kGroupE); CHECK_EQ(g_slot, 4);
     Reset(); SlotAt<void (*)(void*, int, int, int, int)>(g, kE5_ComputeLayout)(g, 7, 0, 0, 9);
@@ -503,14 +526,10 @@ UNIT_TEST(ui_leaf_c2_group_elements_slot_order) {
     // Their own 1 and 2.
     void* p = static_cast<void*>(&page);
     void* r = static_cast<void*>(&radio);
-    Reset(); SlotAt<const char* (*)(const void*)>(p, kE1_TypeName)(p);
-    CHECK_EQ(g_who, (int)kPageE); CHECK_EQ(g_slot, 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(p, kE2_Type)(p);
-    CHECK_EQ(g_who, (int)kPageE); CHECK_EQ(g_slot, 2);
-    Reset(); SlotAt<const char* (*)(const void*)>(r, kE1_TypeName)(r);
-    CHECK_EQ(g_who, (int)kRadioE); CHECK_EQ(g_slot, 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(r, kE2_Type)(r);
-    CHECK_EQ(g_who, (int)kRadioE); CHECK_EQ(g_slot, 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(p, kE1_TypeName)(p) == WhoRecord(kPageE)->name);   // TI-UI: own record
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(p, kE2_Type)(p), WhoRecord(kPageE)->typeId);
+    CHECK(SlotAt<const char* (*)(const void*)>(r, kE1_TypeName)(r) == WhoRecord(kRadioE)->name);   // TI-UI: own record
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(r, kE2_Type)(r), WhoRecord(kRadioE)->typeId);
 
     // Radio's slot 7 receives the handle BY POINTER (RULE B6-11), retail's
     // `LEA R9,[…]` shape.
@@ -656,10 +675,8 @@ UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
     void* im = static_cast<void*>(&image);
     void* an = static_cast<void*>(&anim);
 
-    Reset(); SlotAt<const char* (*)(const void*)>(im, kE1_TypeName)(im);
-    CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(im, kE2_Type)(im);
-    CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(im, kE1_TypeName)(im) == WhoRecord(kImageE)->name);   // TI-UI: own record
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(im, kE2_Type)(im), WhoRecord(kImageE)->typeId);
     Reset(); SlotAt<void (*)(void*)>(im, kE4_ComputeSize)(im);
     CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 4);
     Reset(); SlotAt<void (*)(void*, int, int, int, int)>(im, kE5_ComputeLayout)(im, 3, 0, 0, 4);
@@ -677,10 +694,8 @@ UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
         else                     CHECK(va[i] == vi[i]);
     }
 
-    Reset(); SlotAt<const char* (*)(const void*)>(an, kE1_TypeName)(an);
-    CHECK_EQ(g_who, (int)kAnimE); CHECK_EQ(g_slot, 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(an, kE2_Type)(an);
-    CHECK_EQ(g_who, (int)kAnimE); CHECK_EQ(g_slot, 2);
+    CHECK(SlotAt<const char* (*)(const void*)>(an, kE1_TypeName)(an) == WhoRecord(kAnimE)->name);   // TI-UI: own record
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(an, kE2_Type)(an), WhoRecord(kAnimE)->typeId);
 
     void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x9000));
     UI::Element::UpdateState state;
