@@ -193,6 +193,7 @@
 #include <new>          // ENDGAME B.3.9: placement new (FrameCopyImageBuffer, MaterialInstance, ...)
 
 #include "saveload_internal.h"
+#include "../../funcs/runtime_funcs.h"   // B3R RT-IO: the three ??2 bodies by name
 #include "../../types/math/Math.h"
 #include "../../types/volume/Volume.h"
 #include "../../types/video/Context.h"
@@ -328,10 +329,10 @@ void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding
 //    to each so the lookup is reproducible.
 // ============================================================================
 
-using OpNewFn      = void* (*)(uint64_t);
-// ENDGAME B.3.1 step 2: the String::Set door typedef is gone with its one call
-// site — it is `diffuse.Set("diffuse")` now.
-using CameraCtorFn = void  (*)(void*, const Frustum*, const Transform3*, bool);  // return ignored, see above
+// B3R RT-IO: the three `??2` operator-new doors and the Camera ctor door are
+// called by name (runtime/funcs/runtime_funcs.h, runtime/types/graphics/Camera.h);
+// their typedefs are gone. ENDGAME B.3.1 step 2: the String::Set door is
+// `diffuse.Set("diffuse")`.
 
 // The two Video singletons Draw reads. Both are DATA exports whose slot holds
 // the pointer, so the slot is dereferenced, unlike the vtable symbols below.
@@ -427,7 +428,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // port spells its signature — on the DLL-present path AND at cutover.
     ImageBuffer* frameCopy = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z")(0x88);
+        void* p = RtGraphics_FrameCopyImageBuffer_OperatorNew(0x88);   // ??2FrameCopyImageBuffer@Graphics@@
         if (p != nullptr) {
             // ENDGAME B.3.9 GFX (B9-13): the real class's ctor, not the ??0 door.
             ::new (p) Graphics::FrameCopyImageBuffer();
@@ -537,7 +538,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // shape.
     void* mat = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2MaterialInstance@Graphics@@SAPEAX_K@Z")(0x60);
+        void* p = RtGraphics_MaterialInstance_OperatorNew(0x60);       // ??2MaterialInstance@Graphics@@
         if (p != nullptr) {
             // ENDGAME B.3.9 GFX (B9-13): those stores ARE the real ctor inlined
             // (External()'s stamps and zeroes, the MaterialInstance stamp, the
@@ -580,7 +581,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // ---- the one-sprite sheet ---------------------------------------------
     SpriteSheet* sheet = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2SpriteSheet@UI@@SAPEAX_K@Z")(0x58);
+        void* p = RtUi_SpriteSheet_OperatorNew(0x58);                  // ??2SpriteSheet@UI@@
         // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0SpriteSheet inlined is
         // the class's real constructor; the minted-table stamp is retired.
         if (p != nullptr) sheet = ::new (p) SpriteSheet();
@@ -676,9 +677,8 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // copies the frustum and the transform in and calls SetFrustum, which fills
     // the projection at +0x94.
     RtGraphics::Camera camera;
-    RT_EXPORT_ONCE(CameraCtorFn,
-        "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z")(
-            &camera, &frustum, &cameraToWorld, false);
+    // ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
+    RtGraphics_Camera_Ctor(&camera, &frustum, &cameraToWorld, false);
 
     // The view matrix is the camera's Transform3 widened to 4x4 with the
     // fourth column {0,0,0,1}; the projection is copied out whole.
