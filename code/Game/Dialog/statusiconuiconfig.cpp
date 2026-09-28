@@ -56,14 +56,6 @@
 // GetTypeId cache are gone; the compiler emits the table.
 // ============================================================================
 
-// [0] 0x140014320: ~StatusIconUIConfig (restamp + ~DialogControllerConfig + ~External, all
-// the compiler's), MemFree on &1.
-Object::Base* StatusIconUIConfig::DeletingDtor(unsigned flags) {
-    this->~StatusIconUIConfig();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [4] not declared: retail's slot is the imported External::Compile, which
 // the class inherits.
 
@@ -82,7 +74,7 @@ Object::External* StatusIconUIConfig::Reconstruct() {
 
 // [7] 0x140001640, the body shared by 119 exe tables:
 // `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
-void StatusIconUIConfig::Destruct() { DeletingDtor(0); }
+void StatusIconUIConfig::Destruct() { this->~StatusIconUIConfig(); }
 
 // [8] 0x1400142a0 — placement construction (MSVC folded it with createInPlace).
 Object::External* StatusIconUIConfig::Construct() { return new (this) StatusIconUIConfig(); }

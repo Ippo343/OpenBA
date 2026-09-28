@@ -27,13 +27,11 @@ class ZoneComponent final : public Component {
 public:
     ZoneComponent();                                              // 0x1401303c0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14003a870
+    // 0x140130380
+    ~ZoneComponent() override = default;                          // [0] 0x14003a870
     void Persist(void* stream) override;                          // [3] 0x1401302f0
     void OnAdded() override;                                      // [6] 0x1401301f0
     void OnRemove() override;                                     // [7] 0x140130080
-
-protected:
-    ~ZoneComponent() = default;                                   // 0x140130380
 };
 
 static_assert(sizeof(ZoneComponent) == 0x28, "ZoneComponent is 0x28 (create 0x14003a6a0)");

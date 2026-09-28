@@ -108,13 +108,6 @@ MarketLocationComponent::MarketLocationComponent() : _controller(this) {
     OrFlagsInCtor(0x2);
 }
 
-// [0] 0x140008900: restamps + ~Internal (the compiler chain), MemFree on &1.
-Object::Base* MarketLocationComponent::DeletingDtor(unsigned flags) {
-    this->~MarketLocationComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400086c0: MemAlloc(0x48, 8), then the ctor.
 void* MarketLocationComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MarketLocationComponent), 8);

@@ -20,28 +20,21 @@
 #include <cstdint>
 #include <new>
 
-// [0] 0x140003910: ~BoatDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* BoatDescription::DeletingDtor(unsigned flags) {
-    this->~BoatDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1400469c0: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
 bool BoatDescription::Serialize(void* stream) {
     IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     return true;
 }
 
-// [6] 0x140003810: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140003810: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* BoatDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~BoatDescription();
     return new (static_cast<void*>(this)) BoatDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void BoatDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void BoatDescription::Destruct() { this->~BoatDescription(); }
 
 // [8] 0x140003860: BoatComponent's type id through the hidden return slot.
 Object::Type* BoatDescription::GetComponentType(Object::Type* ret) const {

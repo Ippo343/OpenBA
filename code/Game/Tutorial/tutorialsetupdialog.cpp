@@ -47,22 +47,15 @@ TutorialSetupDialog::~TutorialSetupDialog() {
     reinterpret_cast<Collection::Array<System::String>*>(&shownPaths)->~Array();    // B.3.2 bridge
 }
 
-// [0] 0x140028620: the dtor 0x1400e2bf0, MemFree on &1.
-Object::Base* TutorialSetupDialog::DeletingDtor(unsigned flags) {
-    this->~TutorialSetupDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Reconstruct [6] 0x140028600 / Destruct [7] 0x140001640 / Construct [11] 0x1400285f0
 // ============================================================
 // Reconstruct: vtable[0](this, 0), then the ctor 0x1400e2cc0 on `this`.
 Object::External* TutorialSetupDialog::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialSetupDialog();
     return ::new (static_cast<void*>(this)) TutorialSetupDialog();
 }
-void TutorialSetupDialog::Destruct() { DeletingDtor(0); }
+void TutorialSetupDialog::Destruct() { this->~TutorialSetupDialog(); }
 // Construct (also the createInPlace): `TEST RCX,RCX; JZ; CALL ctor`.
 Object::External* TutorialSetupDialog::Construct() {
     return ::new (static_cast<void*>(this)) TutorialSetupDialog();

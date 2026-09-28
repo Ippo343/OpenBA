@@ -94,11 +94,11 @@ Object::External* GroupDescription::Construct() {
     return ::new (this) GroupDescription();                    // 180046996..180046a06
 }
 Object::External* GroupDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 1800468f7
+    this->~GroupDescription();                                           // 1800468f7
     return ::new (this) GroupDescription();
 }
 // 0x180046a20 is a TAIL JUMP into slot 0 with flag 0 (`JMP [RAX]`).
-void GroupDescription::Destruct() { DeletingDtor(0); }
+void GroupDescription::Destruct() { this->~GroupDescription(); }
 
 // ============================================================================
 // ?Serialize@GroupDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x180117d00
@@ -141,7 +141,7 @@ bool GroupDescription::Serialize(void* streamv) {
     using ElemSerFn = void (*)(rtdesc::Serializer* ser, int count, void* data);
     rtdesc::RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _children._data);
 
-    if (rw != nullptr) rw->DeletingDtor(1);                    // 180117d9c
+    if (rw != nullptr) delete rw;                    // 180117d9c
     return true;                                               // MOV AL,1
 }
 

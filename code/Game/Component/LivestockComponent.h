@@ -30,7 +30,8 @@ class LivestockComponent final : public Component {
 public:
     LivestockComponent();                                         // 0x140123ee0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140035680
+    // no own work
+    ~LivestockComponent() override = default;                     // [0] 0x140035680
     void Persist(void* stream) override;                          // [3] 0x140123e10
     void OnAdded() override;                                      // [6] 0x140123c70
     void OnRemove() override;                                     // [7] 0x140123c00
@@ -39,9 +40,6 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint64_t data28;       // +0x28 assigned PastureComponent back-ref
     uint64_t data30;       // +0x30 System::Time production timer
-
-protected:
-    ~LivestockComponent() = default;                              // no own work
 };
 
 static_assert(sizeof(LivestockComponent) == 0x38, "LivestockComponent is 0x38 (create 0x140035480)");

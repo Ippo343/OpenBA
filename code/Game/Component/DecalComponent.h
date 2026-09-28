@@ -39,7 +39,8 @@ class DecalComponent final : public Component {
 public:
     DecalComponent();                                             // 0x14011b8f0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x1400338d0
+    // 0x14011b8b0
+    ~DecalComponent() override = default;                         // [0]  0x1400338d0
     void Persist(void* stream) override;                          // [3]  0x14011b820
     void Startup() override;                                      // [4]  0x14011b7d0 TREE DIVERGENCE
     void OnAdded() override;                                      // [6]  0x14011b560
@@ -53,9 +54,6 @@ public:
     int32_t  decalId;      // +0x2C terrain decal slot (ctor -1 = none)
     float    decalScale;   // +0x30 (ctor 1.0f)
     uint8_t  _pad34[4];    // +0x34
-
-protected:
-    ~DecalComponent() = default;                                  // 0x14011b8b0
 };
 
 static_assert(sizeof(DecalComponent) == 0x38, "DecalComponent is 0x38 (create 0x1400337c0)");

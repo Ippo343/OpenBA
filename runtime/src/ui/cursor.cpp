@@ -93,11 +93,11 @@ Object::External* Cursor::Construct() {
 }
 // [6] 0x18003b180: slot0(this, 0) — VIRTUALLY — then the same inlined ctor.
 Object::External* Cursor::Reconstruct() {
-    DeletingDtor(0);                                      // 18003b197
+    this->~Cursor();                                      // 18003b197
     return ::new (this) Cursor();                         // 18003b19e..18003b1d6
 }
 // [7] 0x18003b240: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void Cursor::Destruct() { DeletingDtor(0); }
+void Cursor::Destruct() { this->~Cursor(); }
 
 // ?CreateNewObject@Cursor@UI@@SAPEAVBase@Object@@XZ  0x18003b070
 // The FACTUI1 row this replaces: the locked MemAlloc of 0x30 bytes, align 8;
@@ -145,7 +145,7 @@ bool Cursor::Serialize(void* streamv) {
     rw->SerializeInt(_hotSpotY, nullptr);
 
     if (rw != nullptr) {                                  // 1800cd190
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;                                          // 1800cd19f MOV AL,1
 }

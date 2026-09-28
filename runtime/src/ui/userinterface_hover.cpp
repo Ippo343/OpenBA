@@ -262,8 +262,8 @@ void UI::UserInterface::EndDragDrop() {
     if (elem) {
         ++g_endDragDestroyed;
         // Element vtable slot 0, flag 1 == deleting destructor (destroy AND
-        // free) — VIRTUAL `Object::Base::DeletingDtor`.
-        reinterpret_cast<Element*>(elem)->DeletingDtor(1);            // 0x180120b58  B.3.6 bridge
+        // free): `delete` through the virtual destructor.
+        delete reinterpret_cast<Element*>(elem);                      // 0x180120b58  B.3.6 bridge
         _dragDropElement = nullptr;                                   // 0x180120b5a
     }
     _dragDropElement   = nullptr;                                     // 0x180120b5e

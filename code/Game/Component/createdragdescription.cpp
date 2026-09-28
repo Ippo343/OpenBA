@@ -55,13 +55,6 @@ CreateDragDescription::CreateDragDescription()
       _i34(1),
       _created(nullptr) {}
 
-// [0] 0x1400329e0: ~CreateDragDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CreateDragDescription::DeletingDtor(unsigned flags) {
-    this->~CreateDragDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140119750: stream order as retail.
 bool CreateDragDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -75,15 +68,15 @@ bool CreateDragDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400329c0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x1400329c0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* CreateDragDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CreateDragDescription();
     return new (static_cast<void*>(this)) CreateDragDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CreateDragDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CreateDragDescription::Destruct() { this->~CreateDragDescription(); }
 
 // [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
 // a data-only description builds no component.

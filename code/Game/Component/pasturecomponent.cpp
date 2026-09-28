@@ -343,12 +343,6 @@ PastureComponent::PastureComponent()
     OrFlagsInCtor(0x8b);
 }
 
-// [0] 0x140036910: ~PastureComponent (0x140128070), MemFree on &1.
-Object::Base* PastureComponent::DeletingDtor(unsigned flags) {
-    this->~PastureComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140128070: MemFree(+0x30), +0x30 = +0x38 = 0, then the restamps and ~Internal
 // (the compiler chain).
 PastureComponent::~PastureComponent() {

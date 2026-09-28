@@ -767,17 +767,6 @@ HuntWork::~HuntWork() {
 }
 
 
-// ============================================================
-// HuntWork::ScalarDtor (0x14002A700)
-// Calls dtor body, then conditional free based on flags.
-// ============================================================
-// [0] 0x14002a700: ~HuntWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* HuntWork::DeletingDtor(unsigned flags) {
-    this->~HuntWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,

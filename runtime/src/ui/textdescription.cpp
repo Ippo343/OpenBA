@@ -99,11 +99,11 @@ Object::External* TextDescription::Construct() {
 }
 // 0x180041c50: slot 0 with flag 0, then a TAIL jump to the ctor.
 Object::External* TextDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 180041c5e
+    this->~TextDescription();                                           // 180041c5e
     return ::new (this) TextDescription();                     // 180041c68
 }
 // 0x180041c80 is three instructions: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void TextDescription::Destruct() { DeletingDtor(0); }
+void TextDescription::Destruct() { this->~TextDescription(); }
 
 // ??1TextDescription@UI@@UEAA@XZ   0x18011eae0 — retail's body, moved here
 // from the retired door (ENDGAME B.3.9 UI-A). TWO String releases in retail,
@@ -181,7 +181,7 @@ bool TextDescription::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {                                       // 18011ef41
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

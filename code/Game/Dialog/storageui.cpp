@@ -646,14 +646,6 @@ void StorageUI::OnUpdate(const System::Time& /*time*/) {
     }
 }
 
-// [0] 0x140021390: ~StorageUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* StorageUI::DeletingDtor(unsigned flags) {
-    this->~StorageUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140021330: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* StorageUI::CreateNewObject() {

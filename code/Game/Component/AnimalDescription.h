@@ -27,7 +27,7 @@ class AnimalDescription final : public Description {
 public:
     AnimalDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14002f100
+    ~AnimalDescription() override;                                         // [0] 0x14002f100
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140107170
     bool              Serialize(void* stream) override;                    // [5] 0x140107050
     Object::External* Reconstruct() override;                              // [6] 0x14002f0d0
@@ -50,9 +50,6 @@ public:
     void* _refs;                                // +0x48 External* array data
     int32_t _refCount;                          // +0x50
     int32_t _refCap;                            // +0x54
-
-protected:
-    ~AnimalDescription();
 };
 
 static_assert(sizeof(AnimalDescription) == 0x58, "AnimalDescription is 0x58 (create 0x14002f080 MemAlloc(0x58))");

@@ -796,16 +796,6 @@ void HarvestOrchard::Persist(void* stream) {
 }
 
 
-// ============================================================
-// HarvestOrchard::ScalarDtor body
-// ============================================================
-// [0] slot 0: ~HarvestOrchard, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* HarvestOrchard::DeletingDtor(unsigned flags) {
-    this->~HarvestOrchard();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // The HarvestOrchard / AutoPickupWork / Work stamps and the `~Internal` call are the
 // compiler's chain.
 HarvestOrchard::~HarvestOrchard() {

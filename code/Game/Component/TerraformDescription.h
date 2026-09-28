@@ -27,7 +27,7 @@ class TerraformDescription final : public Description {
 public:
     TerraformDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000ce30
+    ~TerraformDescription() override = default;                            // [0] 0x14000ce30
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x140057730
     bool              Serialize(void* stream) override;                    // [5] 0x1400576a0
     Object::External* Reconstruct() override;                              // [6] 0x14000cdc0
@@ -40,9 +40,6 @@ public:
     void* _ref28;                               // +0x28 ExternalPtr (a raw pointer)
     uint32_t _u30;                              // +0x30 enum (serialized through the uint door)
     uint32_t _u34;                              // +0x34 enum (serialized through the uint door)
-
-protected:
-    ~TerraformDescription() = default;
 };
 
 static_assert(sizeof(TerraformDescription) == 0x38, "TerraformDescription is 0x38 (create 0x14000ccf0 MemAlloc(0x38))");

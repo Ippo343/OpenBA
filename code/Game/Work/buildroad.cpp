@@ -83,17 +83,6 @@ void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t ce
 }
 
 // ============================================================
-// ScalarDtor (0x1400295b0) — slot 0
-// Set vtables to BuildRoad then Work, call ~Internal, optionally free. ~BuildRoad has
-// no body; the compiler chains ~Work -> ~Internal (the two stamps are its own).
-// ============================================================
-Object::Base* BuildRoad::DeletingDtor(unsigned flags) {
-    this->~BuildRoad();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // Serialize (0x1400e4980)
 // Work_Serialize + Serializer(version=1) + serialize fields
 // Serializes: road type (+0x5c via stream vtable +0x98), cell index (+0x58),

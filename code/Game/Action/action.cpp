@@ -7,14 +7,6 @@
 #include "io/Serializer.h"
 #include "resolve.h"
 
-// [0] 0x140021c90: stamp 0x14015faa0, DeletePtr(+0x10) if set, `~Internal`,
-// MemFree on &1.
-Object::Base* Action::DeletingDtor(unsigned flags) {
-    this->~Action();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(Action, "Object::Internal")

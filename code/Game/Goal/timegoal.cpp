@@ -23,13 +23,6 @@
 // requiredYears = 1, requireOtherGoalsMet = 0.
 TimeGoal::TimeGoal() : requiredYears(1), requireOtherGoalsMet(0), _pad35{} {}
 
-// [0] 0x140026850: ~TimeGoal (empty) -> ~Goal -> ~External, MemFree on &1.
-Object::Base* TimeGoal::DeletingDtor(unsigned flags) {
-    this->~TimeGoal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TimeGoal::Serialize (vtable +0x28, 0x1400dab20)
 // ============================================================
@@ -57,12 +50,12 @@ bool TimeGoal::Serialize(void* stream) {
 // ============================================================
 // TimeGoal::Reconstruct [6] 0x1400267a0 / Destruct [7] 0x140001640
 // ============================================================
-// DeletingDtor(0) (destroy in place), then the ctor on `this`.
+// `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor on `this`.
 Object::External* TimeGoal::Reconstruct() {
-    DeletingDtor(0);
+    this->~TimeGoal();
     return ::new (static_cast<void*>(this)) TimeGoal();
 }
-void TimeGoal::Destruct() { DeletingDtor(0); }
+void TimeGoal::Destruct() { this->~TimeGoal(); }
 
 // ============================================================
 // TimeGoal::GetInstanceType [9] 0x1400267f0

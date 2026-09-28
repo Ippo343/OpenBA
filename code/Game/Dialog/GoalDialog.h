@@ -32,7 +32,7 @@ public:
     GoalDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                Object::InternalPtr<UI::DialogInstance> parent);     // 0x1400b3220 inlined
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140011c10
+    ~GoalDialog() override;                                        // [0] 0x140011c10
     void OnOpened() override;                                      // [4] 0x140069810
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x140069640
@@ -40,9 +40,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x1400697c0
-
-protected:
-    ~GoalDialog();
 
 public:
     uint64_t dataB8;           // +0xB8: goal entry array data (stride 0x18)

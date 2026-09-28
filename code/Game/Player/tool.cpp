@@ -5,13 +5,6 @@
 #include "Object/factory_registration.h"
 #include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
-// [0] 0x14002e9b0: stamp 0x140161f10, `~Internal`, `if (flags & 1) MemFree`.
-Object::Base* Tool::DeletingDtor(unsigned flags) {
-    this->~Tool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(Tool, "Object::Internal")

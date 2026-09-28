@@ -28,7 +28,7 @@ class CharacterDescription final : public Description {
 public:
     CharacterDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14002fa40
+    ~CharacterDescription() override = default;                            // [0] 0x14002fa40
     int32_t           GetFileVersion() const override { return 6; }    // [3] 0x140109ec0
     bool              Serialize(void* stream) override;                    // [5] 0x140109dd0
     Object::External* Reconstruct() override;                              // [6] 0x14002fa10
@@ -48,9 +48,6 @@ public:
     uint8_t _pad3d[3];                          // +0x3d never written by the ctor
     float _f40;                                 // +0x40
     float _f44;                                 // +0x44
-
-protected:
-    ~CharacterDescription() = default;
 };
 
 static_assert(sizeof(CharacterDescription) == 0x48, "CharacterDescription is 0x48 (create 0x14002f9c0 MemAlloc(0x48))");

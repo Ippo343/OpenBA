@@ -29,16 +29,13 @@ class TutorialGoalButton final : public TutorialGoal {
 public:
     TutorialGoalButton();                                          // 0x1400dee90
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x1400273b0
+    ~TutorialGoalButton() override;                                // [0] 0x1400273b0
     int32_t           GetFileVersion() const override { return 2; }// [3] 0x1400dee30
     bool              Serialize(void* stream) override;            // [5] 0x1400deda0
     Object::External* Reconstruct() override;                      // [6] 0x140027350
     void              Destruct() override;                         // [7] 0x140001640
     bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400dece0
     virtual Object::External* Construct();                         // [9] 0x140027300
-
-protected:
-    ~TutorialGoalButton();
 
 public:
     uint64_t elementPath;        // +0x20: System::String — UI element path to find

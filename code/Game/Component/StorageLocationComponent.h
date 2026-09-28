@@ -36,7 +36,8 @@ public:
 
     StorageLocationComponent();                                          // 0x14012d360
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140038fc0
+    // 0x140038fc0: no body
+    ~StorageLocationComponent() override = default;                     // [0]  0x140038fc0
     void          Persist(void* stream) override;                       // [3]  0x14012d2a0
     // PORT GAP (retail 0x14012d270) — B38 D9: the removal hook (erase the owner from
     // the town's storage-location list) is not wired in the tree; the inherited RET
@@ -46,9 +47,6 @@ public:
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080
 
     StateController _controller;   // +0x28 the embedded controller (D6)
-
-protected:
-    ~StorageLocationComponent() = default;                               // 0x140038fc0: no body
 };
 
 static_assert(sizeof(StorageLocationComponent) == 0x48, "StorageLocationComponent is 0x48 (create 0x140038df0)");

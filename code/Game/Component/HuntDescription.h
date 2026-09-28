@@ -27,7 +27,7 @@ class HuntDescription final : public Description {
 public:
     HuntDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400350a0
+    ~HuntDescription() override = default;                                 // [0] 0x1400350a0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x1401229e0
     bool              Serialize(void* stream) override;                    // [5] 0x140122960
     Object::External* Reconstruct() override;                              // [6] 0x140035040
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     float _f20;                                 // +0x20
     uint32_t _type;                             // +0x24 enum (serialized through the uint door)
-
-protected:
-    ~HuntDescription() = default;
 };
 
 static_assert(sizeof(HuntDescription) == 0x28, "HuntDescription is 0x28 (create 0x140034f90 MemAlloc(0x28))");

@@ -44,7 +44,8 @@ class Component : public Object::Internal {
 
 public:
     // ---- the 16 slots, in retail order -------------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override;         // [0]  0x140031cc0
+    // No body in retail (slot 0 only re-stamps the table before ~Internal).
+    ~Component() override = default;                             // [0]  0x140031cc0
     // [1] TypeName / [2] Type: the abstract base answers its own record
     // (DEFINE_EXE_TYPE, ENDGAME B.3.9 RF); every leaf overrides.
     // [1] TypeName 0x140031c40 and [2] Type 0x140031c30: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
@@ -74,8 +75,6 @@ protected:
     // 0x1401188b0. The `Internal()` base constructor is the retail
     // `??0Internal@Object@@` call; the vptr stores are the compiler's.
     Component();
-    // No body in retail (slot 0 only re-stamps the table before ~Internal).
-    ~Component() = default;
 
     // The retail flag-OR idiom every leaf ctor inlines after its own stamps:
     //   old = _flags; _flags |= bits; if ((old ^ _flags) & 0xffff && _entity)

@@ -38,7 +38,8 @@ class ForesterWork final : public AutoPickupWork {
 public:
     ForesterWork();                                                 // (Work_GenericCtor shape)
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a370
+    // frees the +0x48 citizen BST
+    ~ForesterWork() override;                                       // [0]  0x14002a370
     void  Persist(void* stream) override;                           // [3]  0x1400eb970
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400eaec0
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400eaea0
@@ -54,9 +55,6 @@ public:
     uint8_t  _pad54[4];          // +0x54: padding
     uint32_t _field58;           // +0x58: zeroed
     uint8_t  _pad5C[4];          // +0x5C: padding
-
-protected:
-    ~ForesterWork();                                               // frees the +0x48 citizen BST
 };
 
 static_assert(sizeof(ForesterWork) == 0x60, "ForesterWork is 0x60 (retail create MemAlloc)");

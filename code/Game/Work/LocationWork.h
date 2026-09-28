@@ -45,7 +45,8 @@ public:
     // OBJ: replaces the `??0Internal` door + hand stamp at that site.
     explicit LocationWork(void* pEntityIBP);
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a850
+    // nothing of its own to free
+    ~LocationWork() override = default;                             // [0]  0x14002a850
     void  Persist(void* stream) override;                           // [3]  0x1400efba0
     int   Execute(void* citizenIBP, void* context) override;  // [4]  0x1400ef880
     int   OnComplete(void* arg1, void* arg2, int arg3) override;    // [6]  0x1400ef850
@@ -58,9 +59,6 @@ public:
 
     // --- LocationWork fields (+0x48) ---
     void*    _field48;           // +0x48: zeroed
-
-protected:
-    ~LocationWork() = default;                                     // nothing of its own to free
 };
 
 static_assert(sizeof(LocationWork) == 0x50, "LocationWork is 0x50 (retail create MemAlloc)");

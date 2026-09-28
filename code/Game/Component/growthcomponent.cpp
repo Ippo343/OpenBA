@@ -439,13 +439,6 @@ GrowthComponent::GrowthComponent()
     OrFlagsInCtor(0xcb);
 }
 
-// [0] 0x140034c50: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* GrowthComponent::DeletingDtor(unsigned flags) {
-    this->~GrowthComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // GrowthComponent::Startup (vtable slot [4], +0x20, original 0x1401206f0)
 // ============================================================

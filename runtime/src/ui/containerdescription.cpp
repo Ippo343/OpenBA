@@ -72,11 +72,11 @@ Object::External* ContainerDescription::Construct() {
 // 0x180039a50 — slot 0 with flag 0 (destroy, do not free), then the ctor. The
 // slot-0 call is VIRTUAL, as in retail.
 Object::External* ContainerDescription::Reconstruct() {
-    DeletingDtor(0);                                        // 180039a5e
+    this->~ContainerDescription();                                        // 180039a5e
     return ::new (this) ContainerDescription();             // 180039a68 JMP
 }
 // 0x180039a80
-void ContainerDescription::Destruct() { DeletingDtor(0); }
+void ContainerDescription::Destruct() { this->~ContainerDescription(); }
 
 // ============================================================================
 // ?Serialize@ContainerDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cced0
@@ -106,7 +106,7 @@ bool ContainerDescription::Serialize(void* streamv) {
     rw->SerializeBool(reinterpret_cast<bool&>(_clampWidth), nullptr); // 1800ccf9d
     rw->SerializeBool(reinterpret_cast<bool&>(_clampHeight), nullptr); // 1800ccfaf
 
-    if (rw != nullptr) rw->DeletingDtor(1);                 // 1800ccfc5
+    if (rw != nullptr) delete rw;                 // 1800ccfc5
     return true;
 }
 

@@ -43,7 +43,7 @@ class AnimAudioEvent final : public Graphics::AnimationEvent {
 public:
     AnimAudioEvent();                                                    // inlined in 0x140016f00
 
-    Object::Base*     DeletingDtor(unsigned flags) override;             // [0] 0x140017000
+    ~AnimAudioEvent() override = default;                                // [0] 0x140017000
     int32_t           GetFileVersion() const override { return 2; }      // [3] 0x140087f30
     bool              Serialize(void* stream) override;                  // [5] 0x140087ed0
     Object::External* Reconstruct() override;                            // [6] 0x140016fb0
@@ -55,9 +55,6 @@ public:
     void*    _sound;       // +0x20 ExternalPtr: the sound resource (ctor 0)
     float    _chance;      // +0x28 play probability (ctor 1.0f)
     uint8_t  _pad2c[4];    // +0x2c
-
-protected:
-    ~AnimAudioEvent() = default;
 };
 
 static_assert(sizeof(AnimAudioEvent) == 0x30, "AnimAudioEvent is 0x30 (create 0x140016f00)");

@@ -162,7 +162,7 @@ Serializer::Serializer(Stream& stream, int version) {
 Serializer::~Serializer() {
     ReaderWriter* rw = _readerWriter;
     if (rw) {
-        rw->DeletingDtor(1);   // slot 0, flags == 1
+        delete rw;   // slot 0, flags == 1
     }
 }
 
@@ -272,5 +272,9 @@ void Serializer::Serialize(int n, float* d, const char* name) {
 void Serializer::SerializeBytes(int n, void* buf, const char* name) {
     _readerWriter->SerializeBytes(n, buf, name);   // slot 25 +0xC8
 }
+
+// ??1ReaderWriter@IO@@UEAA@XZ 0x1800b9150: a bare base-table stamp, which the
+// compiler emits. The body of the PURE virtual destructor (Serializer.h).
+ReaderWriter::~ReaderWriter() = default;
 
 }  // namespace IO

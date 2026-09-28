@@ -52,24 +52,14 @@ public:
         _f28 = 0;
     }
 
-    // [0] 0x180064ea0 -- MSVC's VECTOR deleting destructor, both arms exactly
-    // as the retired RT_DELDTOR row ran them (read this pass: `TEST DL,2`,
+    // [0] 0x180064ea0 -- MSVC's VECTOR deleting destructor (retail; here
+    // the virtual destructor, B3X W1) (read this pass: `TEST DL,2`,
     // `MOV EDX,0x30`, CALL 0x18007ec98 the eh-vector dtor over ~Surface
     // 0x18010ca00; deleting_dtor.cpp's old "scalar arm only" note was wrong).
     // Nothing `new[]`s a Surface.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Surface*>(self + static_cast<int64_t>(i) * 0x30)->~Surface();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Surface();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1Surface@Collision2D@@UEAA@XZ 0x18010ca00: restamp, then ~External.
+    // VIRTUAL (B3X W1); no owned resource -- the compiler chains ~External.
+    ~Surface() override;
     // [1] 0x180064a70 TypeName / [2] 0x180064a50 Type, the static TypeId
     // 0x180064a60, `_TypeName` / `_ParentTypeName` and the factory pair
     // 0x180064b60 / 0x180064c10 (surface.cpp): retail's macro (ENDGAME B.3.9
@@ -87,11 +77,6 @@ public:
     // in surface.cpp. The class has its own placement `operator new` in retail
     // (0x180064af0, not ported): every placement construction spells
     // `::new (p) Surface()`.
-
-protected:
-    // ??1Surface@Collision2D@@UEAA@XZ 0x18010ca00: restamp, then ~External.
-    // NON-VIRTUAL; no owned resource -- the compiler chains ~External.
-    ~Surface();
 
 public:
     uint32_t _f20;     // +0x20

@@ -43,7 +43,10 @@ class HighlightComponent final : public Component {
 public:
     HighlightComponent();                                         // 0x14004c930
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140007040
+    // PORT GAP (retail 0x14004c8c0) — B38 D2: the retail dtor deletes the
+    // +0xf8 object and destroys the embedded EdgeMeshInstance; the tree never
+    // did (Inert_ScalarDtor) and never constructs it here. Kept as the tree's.
+    ~HighlightComponent() override = default;                     // [0]  0x140007040
     void Persist(void* stream) override;                          // [3]  0x14004c880
     void OnRemove() override;                                     // [7]  = Component's in retail; TREE DIVERGENCE
     void Tick(void* time) override;                               // [8]  0x14004c850 PORT GAP
@@ -57,12 +60,6 @@ public:
     uint8_t  _pad11D[3];             // +0x11D
     int32_t  highlightId;            // +0x120 Scene object id of the outline (ctor -1)
     uint8_t  _pad124[4];             // +0x124
-
-protected:
-    // PORT GAP (retail 0x14004c8c0) — B38 D2: the retail dtor deletes the
-    // +0xf8 object and destroys the embedded EdgeMeshInstance; the tree never
-    // did (Inert_ScalarDtor) and never constructs it here. Kept as the tree's.
-    ~HighlightComponent() = default;
 };
 
 static_assert(sizeof(HighlightComponent) == 0x128, "HighlightComponent is 0x128 (create 0x140006e40)");

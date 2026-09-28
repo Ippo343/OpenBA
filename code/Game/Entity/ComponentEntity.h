@@ -39,7 +39,8 @@ public:
     ComponentEntity();                                            // 0x1400c3620
     explicit ComponentEntity(ComponentDescription* description);  // 0x1400c3720
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140021a00
+    // 0x1400c3550
+    ~ComponentEntity() override;                                  // [0] 0x140021a00
     void          Persist(void* stream) override;                 // [3] 0x1400c3140
 
     // ---- non-virtual members (retail addresses) ----
@@ -64,9 +65,6 @@ public:
                                             //       bit 0 OnAdded, 2 update, 4 draw,
                                             //       7 Startup, 8 Shutdown
     uint8_t               _pad44[4];        // +0x44
-
-protected:
-    ~ComponentEntity();                                           // 0x1400c3550
 };
 
 static_assert(sizeof(ComponentEntity) == 0x48, "ComponentEntity is 0x48 (create 0x1400219c0 MemAlloc(0x48))");

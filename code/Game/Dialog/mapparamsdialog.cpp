@@ -372,13 +372,6 @@ MapParamsDialog::MapParamsDialog(UI::UserInterface* ui, const UI::Dialog* dialog
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
       dataB8(0), dataC0(0), dataC8(0), dataD0(0), dataD8(0), dataE0(0), dataE8(0), dataF0(0) {}
 
-// [0] 0x140012150: ~MapParamsDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* MapParamsDialog::DeletingDtor(unsigned flags) {
-    this->~MapParamsDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140012100: MemAlloc(0xf8, 8), then the ctor.
 void* MapParamsDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MapParamsDialog), 8);

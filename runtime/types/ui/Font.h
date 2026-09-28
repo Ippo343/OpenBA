@@ -167,7 +167,7 @@ enum FontJustify : int32_t {
 // ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE, the
 // CharacterSet.h shape. The real public ctor is the inlined one (21 stores in
 // Construct 0x180031ce0; +0x5c is NOT written), slot 0 the class's own vector
-// deleting dtor, ~Font protected and non-virtual with the retired ??1 door's
+// deleting dtor, ~Font virtual, with the retired ??1 door's
 // body. The factory pair is the class's own (font.cpp), replacing the FACTUI1
 // row; the minted `??_7Font@UI@@6B@` and its RT_DELDTOR row are retired.
 // ############################################################################
@@ -207,19 +207,9 @@ public:
 
     // [0] 0x180032130 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x90`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Font*>(self + static_cast<int64_t>(i) * 0x90)->~Font();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Font();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // 0x1801175a0 — the retired door's body (font.cpp); the compiler runs the
+    // two ~Array and chains ~External.
+    ~Font() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -267,13 +257,8 @@ public:
     // Placement is spelt `::new (p) Font()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x1800319d0
     static void* operator new(std::size_t bytes, void* place); // 0x180031a40
-    static void  operator delete(void* p);                     // 0x180031a50
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x180031a50
     // Retail's factory pair (B39_RULES D2), defined and registered in font.cpp.
-
-protected:
-    // 0x1801175a0 — the retired door's body (font.cpp); the compiler runs the
-    // two ~Array and chains ~External.
-    ~Font();
 
 public:
     // ---- the 0x70 bytes Font adds (public: the doors and AddFont read them) --

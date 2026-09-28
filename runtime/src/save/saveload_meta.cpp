@@ -531,7 +531,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
 
     // ---- inlined ~Serializer ----------------------------------------------
     if (rw != nullptr) {
-        rwc->DeletingDtor(1);                           // slot 0, flags 1
+        delete rwc;                           // slot 0, flags 1
     }
 
     // ---- inlined ?Close@CompressedMemoryStream, then the handoff ----------
@@ -553,12 +553,12 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
 
     // ---- ~CompressedMemoryStream (retail inlines it here) ------------------
     // ENDGAME B.3.9 IO (W2, foreign site): the class's own destructor chain at
-    // the position the inlined one had, through a non-virtual slot-0 call with
-    // flags 0 (no free of the stack object): the Close guard + Commit, the
+    // the position the inlined one had, through a qualified `T::~T()`
+    // call (retail: slot 0, flags 0) (no free of the stack object): the Close guard + Commit, the
     // member's virtual Close, ~MemoryStream (+ its encoding), Release and the
     // three array destructors (all no-ops over what Release zeroed -- the dead
     // frees retail ships), then the base encoding free. Same steps, same order.
-    csObj->IO::CompressedMemoryStream::DeletingDtor(0);
+    csObj->IO::CompressedMemoryStream::~CompressedMemoryStream();
 
     // ---- destroy the BY-VALUE String argument ------------------------------
     // See the banner. This is the callee's half of a contract whose caller half

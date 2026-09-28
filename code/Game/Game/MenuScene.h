@@ -33,16 +33,14 @@ class MenuScene final : public Object::External {
 public:
     MenuScene();                                                  // 0x1400a3d70
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14001b830
+    // body 0x1400a3970
+    ~MenuScene() override;                                        // [0] 0x14001b830
     int32_t GetFileVersion() const override { return 1; }         // [3] 0x1400a3960
     CompileResult Compile(const System::Filename&) override { return 1; }   // [4] 0x1400a3620
     bool Serialize(void* stream) override;                        // [5] 0x1400a3630
     Object::External* Reconstruct() override;                     // [6] 0x14001b810
-    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
+    void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001b800
-
-protected:
-    ~MenuScene();                                                 // body 0x1400a3970
 
 public:
     void*    _field20;           // +0x20: System::String (scene name), serialized

@@ -25,13 +25,6 @@
 // the compiler's; no own store.
 MineComponent::MineComponent() {}
 
-// [0] 0x140008fa0: ~MineComponent (0x14004f2a0: restamp + ~Internal), MemFree on &1.
-Object::Base* MineComponent::DeletingDtor(unsigned flags) {
-    this->~MineComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x14004f260 — Component::Persist + one empty Serializer scope.
 // Retail calls the base body directly (a qualified call).
 void MineComponent::Persist(void* stream) {

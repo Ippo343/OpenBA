@@ -412,19 +412,14 @@ public:
     // [0] 0x180020160 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x48` = the element size).
     // Every subclass (ParticleSystem, the exe's Tornado) declares its own.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Particle*>(self + static_cast<int64_t>(i) * 0x48)->~Particle();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Particle();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1Particle@Graphics@@UEAA@XZ  0x180103c70. VIRTUAL
+    // (B3X W1). PORTED by ENDGAME B.3.8 block RB as `ReleaseFields`
+    // (animation.cpp): free each pool record's +0x18 buffer, zero the record's
+    // +0x18/+0x20, free the record, then free `_records` and zero its header.
+    // The External half that follows in retail is the compiler's ~External.
+    // ENDGAME B.3.9 GFX: the transcribed door in batchc_gfx_leaves.cpp is gone
+    // with the RT_DELDTOR row; this is the only destructor.
+    ~Particle() override { ReleaseFields(); }
 
     // [1] 0x18001ff30 / [2] 0x18001ff10 / [3] 0x180104080.
     //   MEMBERS THAT FORWARD, not doors that delegate: all three bodies live in
@@ -494,14 +489,6 @@ protected:
     // (+0x21..+0x23, +0x2c..+0x2f) stay unwritten.
     Particle() { InitFields(); }
 
-    // ??1Particle@Graphics@@UEAA@XZ  0x180103c70. NON-virtual (ENDGAME section
-    // B.1 decision 2). PORTED by ENDGAME B.3.8 block RB as `ReleaseFields`
-    // (animation.cpp): free each pool record's +0x18 buffer, zero the record's
-    // +0x18/+0x20, free the record, then free `_records` and zero its header.
-    // The External half that follows in retail is the compiler's ~External.
-    // ENDGAME B.3.9 GFX: the transcribed door in batchc_gfx_leaves.cpp is gone
-    // with the RT_DELDTOR row; this is the only destructor.
-    ~Particle() { ReleaseFields(); }
 
 private:
     void InitFields() {
@@ -617,7 +604,7 @@ static_assert(offsetof(Particle, _active) == sizeof(Object::External),
 // ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2) -- the "no real constructor"
 // and "slot 0 pure" paragraphs are HISTORY. The class is CONCRETE: a real
 // public ctor (retail 0x1800a5320, vtbatch7_animgroup_particlesystem.cpp), its
-// own vector slot 0, a protected non-virtual ~ParticleSystem holding the
+// own vector slot 0, a virtual ~ParticleSystem holding the
 // retired ??1 door's body, the factory pair as the class's own statics. The
 // minted table, its RT_DELDTOR row 0x180020a70, the FACTREST row and the ctor /
 // dtor / slot doors are retired (tools/rt_mint_retired/gfx.txt).
@@ -630,19 +617,11 @@ public:
 
     // [0] 0x180020a70 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x108` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ParticleSystem*>(self + static_cast<int64_t>(i) * 0x108)->~ParticleSystem();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ParticleSystem();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0. VIRTUAL
+    // (B3X W1). Retail's body -- the owned pool
+    // walk -- is in vtbatch7_animgroup_particlesystem.cpp; the compiler chains
+    // ~Particle (retail's tail jump 0x1800a530d).
+    ~ParticleSystem() override;
 
     // [1] 0x1800203e0 TypeName / [2] 0x1800203c0 Type, TypeId 0x1800203d0, `_TypeName` / `_ParentTypeName`
     // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
@@ -671,15 +650,8 @@ public:
     //   The three operators stay declared and undefined: placement is `::new`.
     static void* operator new(std::size_t bytes);
     static void* operator new(std::size_t bytes, void* place);
-    static void  operator delete(void* p);
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }
     // (CreateNewObject / CreateInPlaceObject: declared by DECLARE_TYPE above.)
-
-protected:
-    // ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0. NON-virtual (no virtual
-    // dtor until the normal-virtual cutover). Retail's body -- the owned pool
-    // walk -- is in vtbatch7_animgroup_particlesystem.cpp; the compiler chains
-    // ~Particle (retail's tail jump 0x1800a530d).
-    ~ParticleSystem();
 
 public:
     // ---- the 0xc0 bytes ParticleSystem adds --------------------------------

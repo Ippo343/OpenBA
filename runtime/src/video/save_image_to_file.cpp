@@ -388,7 +388,7 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     //   Enter/Free/Leave written out. The only difference is that the inlined
     //   copy stamps FileStream's table directly instead of arriving there
     //   through the thunk, which is the same store.
-    streamObj->IO::BinaryFileStream::DeletingDtor(0);   // B.3.9 IO: ~BinaryFileStream, no free
+    streamObj->IO::BinaryFileStream::~BinaryFileStream();   // B.3.9 IO: ~BinaryFileStream, no free
     // …then the Filename: `target`'s destructor runs here, after the stream's,
     // which is retail's order.
 

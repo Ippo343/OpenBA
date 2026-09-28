@@ -39,7 +39,11 @@ class FishingWork final : public Work {
 public:
     FishingWork();                                                  // (Work_GenericCtor shape)
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a2c0
+    // PORT GAP (retail 0x1400eaa50) — B38 D9: retail's dtor (reached from slot 0
+    // 0x14002a2c0) is its own body and very likely frees the two arrays; the tree's
+    // slot 0 was Work_GenericScalarDtor (stamp Work, ~Internal), which is what this
+    // empty dtor + the compiler chain still does (the arrays leak, as before).
+    ~FishingWork() override = default;                              // [0]  0x14002a2c0
     void  Persist(void* stream) override;                           // [3]  0x1400ea910
     int   Execute(void* citizenIBP, void* time) override;  // [4]  0x1400e9f20
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400e9eb0
@@ -58,13 +62,6 @@ public:
     int32_t  spotCapacity;       // +0x64: capacity of spotStates array
     int32_t  retryCount;         // +0x68: retry counter for fishing spot search
     uint8_t  _pad6C[4];          // +0x6C: padding
-
-protected:
-    // PORT GAP (retail 0x1400eaa50) — B38 D9: retail's dtor (reached from slot 0
-    // 0x14002a2c0) is its own body and very likely frees the two arrays; the tree's
-    // slot 0 was Work_GenericScalarDtor (stamp Work, ~Internal), which is what this
-    // empty dtor + the compiler chain still does (the arrays leak, as before).
-    ~FishingWork() = default;
 };
 
 static_assert(sizeof(FishingWork) == 0x70, "FishingWork is 0x70 (retail create MemAlloc)");

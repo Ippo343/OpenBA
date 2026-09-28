@@ -27,7 +27,7 @@ class AutoPickupDescription final : public Description {
 public:
     AutoPickupDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140003530
+    ~AutoPickupDescription() override = default;                           // [0] 0x140003530
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140044bb0
     bool              Serialize(void* stream) override;                    // [5] 0x140044b60
     Object::External* Reconstruct() override;                              // [6] 0x1400034d0
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     bool _enabled;                              // +0x20
     uint8_t _pad21[7];                          // +0x21 never written by the ctor
-
-protected:
-    ~AutoPickupDescription() = default;
 };
 
 static_assert(sizeof(AutoPickupDescription) == 0x28, "AutoPickupDescription is 0x28 (create 0x140003420 MemAlloc(0x28))");

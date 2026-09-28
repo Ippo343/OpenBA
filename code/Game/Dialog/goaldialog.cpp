@@ -301,13 +301,6 @@ GoalDialog::~GoalDialog() {
     dataC0 = 0;
 }
 
-// [0] 0x140011c10: ~GoalDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* GoalDialog::DeletingDtor(unsigned flags) {
-    this->~GoalDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011b60: MemAlloc(0xc8, 8), then the ctor.
 void* GoalDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(GoalDialog), 8);

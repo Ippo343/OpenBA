@@ -72,24 +72,18 @@ Profession::~Profession() {
     reinterpret_cast<System::String*>(&stringName)->~String();  // +0x30
 }
 
-Object::Base* Profession::DeletingDtor(unsigned flags) {
-    this->~Profession();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Profession::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
 // ============================================================
 // Original: 0x14001e580. Destroys (slot 0, flags 0) then re-constructs in place.
 Object::External* Profession::Reconstruct() {
-    DeletingDtor(0);
+    this->~Profession();
     return ::new (static_cast<void*>(this)) Profession();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void Profession::Destruct() { DeletingDtor(0); }
+void Profession::Destruct() { this->~Profession(); }
 
 // ============================================================
 // Profession::Construct (vtable +0x40)

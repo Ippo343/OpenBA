@@ -581,13 +581,6 @@ ScenarioDialog::~ScenarioDialog() {
     dataE0 = 0;
 }
 
-// [0] 0x140013af0: the body above, ~DialogInstance, MemFree on &1.
-Object::Base* ScenarioDialog::DeletingDtor(unsigned flags) {
-    this->~ScenarioDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140013970: MemAlloc(0xe8, 8), then the ctor.
 void* ScenarioDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ScenarioDialog), 8);

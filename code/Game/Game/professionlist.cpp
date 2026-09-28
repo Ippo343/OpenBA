@@ -68,24 +68,18 @@ ProfessionList::~ProfessionList() {
     reinterpret_cast<Collection::Array<void*>*>(&arrayData)->~Array();
 }
 
-Object::Base* ProfessionList::DeletingDtor(unsigned flags) {
-    this->~ProfessionList();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // ProfessionList::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
 // ============================================================
 // Original: 0x14001e690. Destroys (slot 0, flags 0) then re-constructs in place.
 Object::External* ProfessionList::Reconstruct() {
-    DeletingDtor(0);
+    this->~ProfessionList();
     return ::new (static_cast<void*>(this)) ProfessionList();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void ProfessionList::Destruct() { DeletingDtor(0); }
+void ProfessionList::Destruct() { this->~ProfessionList(); }
 
 // ============================================================
 // ProfessionList::Construct (vtable +0x40)

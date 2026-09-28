@@ -42,7 +42,8 @@ public:
 
     BuildComponent();                                     // 0x140108fc0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14002f4d0
+    // 0x140108f30
+    ~BuildComponent() override;                                   // [0]  0x14002f4d0
     void          Persist(void* stream) override;                 // [3]  0x140108d80
     void          Startup() override {}                           // [4]  0x140108d60 `RET 0` (own)
     void          OnAdded() override;                             // [6]  0x140108d40
@@ -63,9 +64,6 @@ public:
     void*           field60;       // +0x60 mesh list count / capacity
     void*           field68;       // +0x68 picking list (InternalBasePtr[])
     void*           field70;       // +0x70 picking list count / capacity
-
-protected:
-    ~BuildComponent();                                    // 0x140108f30
 };
 
 static_assert(sizeof(BuildComponent) == 0x78, "BuildComponent is 0x78 (create 0x14002f2b0)");

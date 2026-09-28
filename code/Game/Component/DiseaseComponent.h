@@ -33,7 +33,8 @@ class DiseaseComponent final : public Component {
 public:
     DiseaseComponent();                                           // 0x140048db0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140004f80
+    // no own work
+    ~DiseaseComponent() override = default;                       // [0] 0x140004f80
     void Persist(void* stream) override;                          // [3] 0x140048ca0
     void Startup() override;                                      // [4] 0x140048c50
     void OnAdded() override;                                      // [6] 0x140048c00
@@ -49,9 +50,6 @@ public:
     int32_t  isPasture;     // +0x48 1 when the entity has a PastureComponent
     uint8_t  _pad4C[4];     // +0x4C
     uint64_t curedIdentity; // +0x50 ExternalPtr: what was growing at the last Cure
-
-protected:
-    ~DiseaseComponent() = default;                                // no own work
 };
 
 static_assert(sizeof(DiseaseComponent) == 0x58, "DiseaseComponent is 0x58 (create 0x140004db0)");

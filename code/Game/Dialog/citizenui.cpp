@@ -753,14 +753,6 @@ void CitizenUI::OnUpdate(const System::Time& /*time*/) {
 }
 
 
-// [0] 0x140010fd0: ~CitizenUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* CitizenUI::DeletingDtor(unsigned flags) {
-    this->~CitizenUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140010f80: MemAlloc(0xe8, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* CitizenUI::CreateNewObject() {

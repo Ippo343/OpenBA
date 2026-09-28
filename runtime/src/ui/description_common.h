@@ -121,7 +121,7 @@ inline void* MemAlloc(uint64_t bytes, int align) {
 // ---- fragment 1/2: the reader-writer the encoding factory hands back --------
 // Returned as the class it is; each caller dispatches the ReaderWriter's
 // members by name (`rw->SerializeInt(v, nullptr)`, and the teardown
-// `if (rw) rw->DeletingDtor(1)`). The encoding factory call itself stays a
+// `if (rw) rw->`delete` (slot 0, flags 1)`). The encoding factory call itself stays a
 // byte-offset read: IO::Encoding has no destructor slot (B3X_RULES X1).
 inline IO::ReaderWriter* MakeReaderWriter(Stream* stream, Serializer* ser) {
     void*  factory = stream->encodingFactory;

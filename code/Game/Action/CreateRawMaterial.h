@@ -24,7 +24,7 @@ public:
     CreateRawMaterial(uint64_t desc, float yield, uint64_t* source, uint64_t* secondary,
                       uint64_t unused6, uint32_t quantity, uint32_t cellIdx, uint8_t naturalRes,
                       uint64_t* tertiary, uint32_t placementFlags);   // 0x1400c71a0
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022350
+    ~CreateRawMaterial() override = default;                   // [0] 0x140022350
     void Persist(void* stream) override;                       // [3] 0x1400c6f30
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6b40
     bool GetTarget(void* param) override;                      // [9] 0x1400c6aa0
@@ -41,9 +41,6 @@ public:
     uint8_t   naturalResFlag;    // +0x50 natural resource flag
     uint8_t   placeNearFlag;     // +0x51 place near flag
     uint8_t   _pad52[6];         // +0x52 padding
-
-protected:
-    ~CreateRawMaterial() = default;
 };
 
 static_assert(sizeof(CreateRawMaterial) == 0x58, "CreateRawMaterial is 0x58 (create 0x1400222d0 MemAlloc)");

@@ -82,53 +82,6 @@ void  TypeChildFree(void* p)                    { TypeTreeFree(p); }
 
 #endif
 
-// ============================================================================
-// Object::Base — ENDGAME B.3.3 step 4
-// ============================================================================
-//
-// ??_GBase@Object@@UEAAPEAXI@Z   retail 0x1800065b0   (vtable slot 0)
-//
-// Transcribed from the disassembly. Retail's two arms:
-//
-//   TEST DL,0x2   -> the ARRAY arm (0x1800065c4): reads the SIGNED int32
-//                    element count at `this - 8`, destroys the elements
-//                    DOWNWARD with elemSize 8 and ~Base (the EH vector
-//                    destructor helper 0x18007ec98), frees `this - 8` on
-//                    `& 1` and returns it. `Object::Destroy` never takes it (it
-//                    passes flags 1) and nothing in retail ever new[]s a Base;
-//                    taking it on a scalar object faults at `this - 8` exactly
-//                    as retail would.
-//   else          -> 0x180006601: `LEA RAX,[0x180154788]; MOV [RCX],RAX` (the
-//                    ~Base body: restamp Base's vptr), then
-//                    `TEST DL,0x1 / CALL 0x180006a10` (free), then RAX = this.
-//
-// The vptr restamp is what a real destructor chain does for us — GCC emits the
-// store on entry to `~Base()`.
-//
-// 0x180006a10 is `MemFree` verbatim: `if (p) { Enter(lock); Free(p); Leave; }`,
-// instruction for instruction `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`
-// (0x1800c7ad0) — proved for all 88 class-scoped operator deletes in
-// runtime/src/object/class_operator_delete.cpp's banner. So the free arm goes
-// through this file's existing allocator seam rather than pinning a 89th copy
-// of the same body.
-//
-// ENDGAME B.3.9 OBJ: both arms are the retired RT_DELDTOR row 0x1800065b0's;
-// the minted `??_7Base@Object@@6B@`, that row and the `??1Base` door are gone.
-// ============================================================================
-Base* Base::DeletingDtor(unsigned flags) {
-    if (flags & 2u) {                                          // 0x1800065c4
-        uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-        const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-        for (int32_t i = count; --i >= 0;)
-            reinterpret_cast<Base*>(self + static_cast<int64_t>(i) * 8)->~Base();
-        if (flags & 1u) TypeTreeFree(self - 8);
-        return reinterpret_cast<Base*>(self - 8);
-    }
-    this->~Base();                       // 0x180006601, the vptr restamp
-    if (flags & 1u) TypeTreeFree(this);  // 0x18000660e / CALL 0x180006a10
-    return this;                         // RAX = RBX at 0x180006615
-}
-
 // ?Type@Base@Object@@UEBAIXZ   retail 0x1800c0380 — `XOR EAX,EAX; RET`.
 //
 // An unregistered type answers 0, which is the SAME value

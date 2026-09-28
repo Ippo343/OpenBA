@@ -27,7 +27,7 @@ class WorkPlaceDescription final : public Description {
 public:
     WorkPlaceDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14003a1c0
+    ~WorkPlaceDescription() override = default;                            // [0] 0x14003a1c0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14012f480
     bool              Serialize(void* stream) override;                    // [5] 0x14012f420
     Object::External* Reconstruct() override;                              // [6] 0x14003a160
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     void* _profession0;                         // +0x20 ExternalPtr<Profession>
     void* _profession1;                         // +0x28 ExternalPtr<Profession>
-
-protected:
-    ~WorkPlaceDescription() = default;
 };
 
 static_assert(sizeof(WorkPlaceDescription) == 0x30, "WorkPlaceDescription is 0x30 (create 0x14003a090 MemAlloc(0x30))");

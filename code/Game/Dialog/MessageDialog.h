@@ -32,7 +32,7 @@ public:
     MessageDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                   Object::InternalPtr<UI::DialogInstance> parent);  // 0x14006d300
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140012660
+    ~MessageDialog() override = default;                           // [0] 0x140012660
     void OnOpened() override;                                      // [4] 0x14006d140
     void OnClosed() override;                                      // [5] 0x14006d0c0 RET
     // [6] / [7]: DialogInstance's bodies (import thunks), inherited (B38 D3.1).
@@ -43,9 +43,6 @@ public:
     virtual void OnCancel();                                       // [11] 0x14006d030
     virtual void OnYes();                                          // [12] 0x14006cfb0
     virtual void OnNo();                                           // [13] 0x14006cf70
-
-protected:
-    ~MessageDialog() = default;
 
 public:
     uint64_t dataB8;                                               // +0xb8 never written

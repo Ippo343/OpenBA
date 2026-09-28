@@ -377,14 +377,6 @@ static const bool s_rpStateTableBuilt = (RPCtrl_PopulateTable(), true);
 ResourceProduceComponent::ResourceProduceComponent()
     : _controller(this), produceFlag(0), _pad49{} {}
 
-// [0] 0x140037d40: restamps + ~Internal (the compiler chain), MemFree on &1. Only a
-// half-built object reaches this slot (every leaf overrides it).
-Object::Base* ResourceProduceComponent::DeletingDtor(unsigned flags) {
-    this->~ResourceProduceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(ResourceProduceComponent, "ControllerComponent")

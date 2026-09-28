@@ -41,7 +41,8 @@ public:
 
     OrchardComponent();                                                  // 0x140051f40
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140009a70
+    // 0x140051ed0
+    ~OrchardComponent() override;                                       // [0]  0x140009a70
     void          Persist(void* stream) override;                       // [3]  0x140051de0
     void          Startup() override;                                   // [4]  0x140051dd0
     uint32_t      CommandMask(int command) override;                    // [13] 0x140051c90
@@ -59,9 +60,6 @@ public:
     void*    field50;              // +0x50 the tree-slot array
     void*    field58;              // +0x58 its count / capacity
     void*    field60;              // +0x60 (Startup clears it)
-
-protected:
-    ~OrchardComponent();                                                 // 0x140051ed0
 };
 
 static_assert(sizeof(OrchardComponent) == 0x68, "OrchardComponent is 0x68 (create 0x140009870)");

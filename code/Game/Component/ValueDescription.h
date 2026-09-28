@@ -28,7 +28,7 @@ class ValueDescription final : public Description {
 public:
     ValueDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000fbf0
+    ~ValueDescription() override = default;                                // [0] 0x14000fbf0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x14005ce10
     bool              Serialize(void* stream) override;                    // [5] 0x14005cd60
     Object::External* Reconstruct() override;                              // [6] 0x14000fb80
@@ -45,9 +45,6 @@ public:
     int32_t _baseValue;                         // +0x44
     int32_t _weight;                            // +0x48
     uint8_t _pad4c[4];                          // +0x4c never written by the ctor
-
-protected:
-    ~ValueDescription() = default;
 };
 
 static_assert(sizeof(ValueDescription) == 0x50, "ValueDescription is 0x50 (create 0x14000faa0 MemAlloc(0x50))");

@@ -23,7 +23,7 @@ public:
     PerformWork();                                                   // create 0x140022b90
     PerformWork(void* entity, float facingYaw, uint32_t animationId, int64_t time, uint8_t useTool,
                 int field44);   // 0x1400c9720
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022bd0
+    ~PerformWork() override = default;                         // [0] 0x140022bd0
     void Persist(void* stream) override;                       // [3] 0x1400c9550
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c9420
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c93c0
@@ -40,9 +40,6 @@ public:
     uint8_t   useTool;           // +0x40 bool: decrement tool durability
     uint8_t   _pad41[3];         // +0x41 padding
     int32_t   field44;           // +0x44 -1 sentinel
-
-protected:
-    ~PerformWork() = default;
 };
 
 static_assert(sizeof(PerformWork) == 0x48, "PerformWork is 0x48 (create 0x140022b90 MemAlloc)");

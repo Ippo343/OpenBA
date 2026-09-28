@@ -27,7 +27,7 @@ class CreateBridgeDescription final : public Description {
 public:
     CreateBridgeDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400328f0
+    ~CreateBridgeDescription() override = default;                         // [0] 0x1400328f0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x1401196a0
     bool              Serialize(void* stream) override;                    // [5] 0x1401195d0
     Object::External* Reconstruct() override;                              // [6] 0x1400328d0
@@ -43,9 +43,6 @@ public:
     uint32_t _u30;                              // +0x30 enum (serialized through the uint door)
     int32_t _i34;                               // +0x34
     void* _refs[5];                             // +0x38 ExternalPtr[5], inline
-
-protected:
-    ~CreateBridgeDescription() = default;
 };
 
 static_assert(sizeof(CreateBridgeDescription) == 0x60, "CreateBridgeDescription is 0x60 (create 0x140032880 MemAlloc(0x60))");

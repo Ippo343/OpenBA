@@ -123,8 +123,8 @@ constexpr uint32_t kDirtyBit  = UI::kElementFlagNeedsSizeCalc;
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0TextElement@UI@@QEAA@XZ` (0x18011eb80) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~TextElement is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~TextElement is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7TextElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ############################################################################
@@ -165,20 +165,11 @@ public:
     // ---- the twelve slots (own ones declared) ------------------------------
     // [0] 0x1800422f0 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x100`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<TextElement*>(self + static_cast<int64_t>(i) * 0x100)
-                    ->~TextElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~TextElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1TextElement@UI@@UEAA@XZ` (0x18011eda0). VIRTUAL (B3X W1)
+    // (textelement.cpp): releases the cached text at +0xf8, destroys the
+    // parameter Strings through retail's element-destroying Array dtor; the
+    // compiler chains ~Element.
+    ~TextElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x180041ef0, Type 0x180041ed0, TypeId 0x180041ee0, _TypeName 0x180041eb0
@@ -215,14 +206,7 @@ public:
     TextElement& operator=(const TextElement& src);              // 0x1800421c0  not ported
     static void* operator new(std::size_t bytes);                // 0x180041f00  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180041f70  not ported
-    static void  operator delete(void* p);                       // 0x180041f80  not ported
-
-protected:
-    // `??1TextElement@UI@@UEAA@XZ` (0x18011eda0). NON-VIRTUAL
-    // (textelement.cpp): releases the cached text at +0xf8, destroys the
-    // parameter Strings through retail's element-destroying Array dtor; the
-    // compiler chains ~Element.
-    ~TextElement();
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                       // 0x180041f80  not ported
 
 private:
 
@@ -243,7 +227,7 @@ public:
 static_assert(sizeof(TextElement) == 0x100,
               "UI::TextElement is 0x100 (MOV EDX,0x100 at 0x18004230f)");
 static_assert(alignof(TextElement) == 8, "UI::TextElement aligns to 8");
-static_assert(!std::has_virtual_destructor<TextElement>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<TextElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<TextElement>::value, "B39 D1: concrete");
 static_assert(offsetof(TextElement, _font) == sizeof(Element),
               "TextElement's own fields begin at the end of Element");

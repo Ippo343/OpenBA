@@ -38,7 +38,8 @@ public:
     // 0x14009bb00 (header banner).
     explicit MenuDialogLoopT(const System::String& filename);
 
-    Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x14001a2e0
+    // [0] 0x14001a2e0: ~MenuDialogLoopT (0x14001a310), MemFree on &1.
+    ~MenuDialogLoopT() override;   // 0x14001a310 (menudialogloopt_stubs.cpp)
     void Startup() override;                                     // [1] 0x14009b930
     void Shutdown() override;                                    // [2] 0x14009b280
     bool Update(const System::Time& time) override;              // [3] 0x14009b6e0
@@ -57,8 +58,6 @@ public:
 
     static const void* Vtable();
 
-protected:
-    ~MenuDialogLoopT();   // 0x14001a310 (menudialogloopt_stubs.cpp)
 
 public:
     System::Random _random;              // +0x168  ??0Random@System@@

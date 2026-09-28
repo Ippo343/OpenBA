@@ -227,7 +227,7 @@ bool Engine::MainLoop::Update(const System::Time& time) {
     // even though it just called through it. Reproduced: the Shutdown above is
     // a virtual call into game code that is free to have nulled it.
     if (UpdateLoop* toDelete = _currentLoop)
-        toDelete->DeletingDtor(1);                                  // slot 0, delete
+        delete toDelete;                                  // slot 0, delete
 
     UpdateLoop* next = _nextLoop;
     _nextLoop = nullptr;                                 // 0x1800dd0c8
@@ -327,7 +327,7 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     _currentLoop->Shutdown();                                            // slot 2
 
     if (UpdateLoop* toDelete = _currentLoop)
-        toDelete->DeletingDtor(1);                                       // slot 0
+        delete toDelete;                                       // slot 0
 
     // No oracle is possible here (§4); the site is registered so that its call
     // count is still visible in the diff report.

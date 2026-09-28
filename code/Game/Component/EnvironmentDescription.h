@@ -44,7 +44,7 @@ public:
 
     EnvironmentDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140019190
+    ~EnvironmentDescription() override;                                    // [0] 0x140019190
     int32_t           GetFileVersion() const override { return 7; }        // [3] 0x1400941b0
     bool              Serialize(void* stream) override;                    // [5] 0x140094040
     Object::External* Reconstruct() override;                              // [6] 0x140019170
@@ -57,9 +57,6 @@ public:
     uint32_t     _weatherCount;     // +0x30
     uint32_t     _weatherCap;       // +0x34
     WeatherEntry _months[12];       // +0x38..+0x1b8
-
-protected:
-    ~EnvironmentDescription();
 };
 
 static_assert(sizeof(EnvironmentDescription::WeatherEntry) == 0x20, "EnvironmentDescription::WeatherEntry is 0x20");

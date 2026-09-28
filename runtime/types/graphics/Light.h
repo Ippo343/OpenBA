@@ -164,7 +164,7 @@ static_assert(alignof(Light) == 8, "qword aligned (the vptr)");
 // ============================================================================
 // ENDGAME B.3 step 9 (block GFX, B39_RULES D1): CONCRETE. The real ctor below
 // is retail's ??0 body, its own slot 0 is the vector deleting dtor, ~AmbientLight
-// is protected and non-virtual. The ??0 / ??1 / slot doors, the minted
+// is public and virtual. The ??0 / ??1 / slot doors, the minted
 // `??_7AmbientLight@Graphics@@6B@` and its RT_DELDTOR row are retired
 // (tools/rt_mint_retired/gfx.txt): nothing in retail or the tree builds one
 // (no caller of ??0AmbientLight by any binding), so no route changes.
@@ -185,19 +185,9 @@ public:
 
     // [0] 0x180059080 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8` = the element size).
-    Geometry* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<AmbientLight*>(self + static_cast<int64_t>(i) * 0xd8)->~AmbientLight();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Geometry*>(self - 8);
-        }
-        this->~AmbientLight();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // 0x180058f30, the thunk onto ~Geometry: an empty body (lights_vtable.cpp);
+    // the compiler chains ~Light and ~Geometry. VIRTUAL (B3X W1).
+    ~AmbientLight() override;
     void Update(const System::Time& time) override;                      // [1] 0x1800fa7a0
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -212,11 +202,6 @@ public:
     // exported, NOT PORTED, no caller. Declared for its type evidence and so
     // no caller batch has to edit this header.
     void Set(const Math::Vector4& colour, float intensity);
-
-protected:
-    // 0x180058f30, the thunk onto ~Geometry: an empty body (lights_vtable.cpp);
-    // the compiler chains ~Light and ~Geometry. NON-VIRTUAL until the cutover.
-    ~AmbientLight();
 
 public:
     Math::Vector4 _colour;      // +0xc0  ctor 0,0,0,0
@@ -317,19 +302,10 @@ public:
 
     // [0] 0x1800642b0 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x168` = the element size).
-    Geometry* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<SpotLight*>(self + static_cast<int64_t>(i) * 0x168)->~SpotLight();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Geometry*>(self - 8);
-        }
-        this->~SpotLight();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // 0x180106270: the restamp is the compiler's; the three owned resources
+    // (lights_vtable.cpp), then ~Light (empty) and ~Geometry -- the compiler's
+    // chain, retail's tail jump. VIRTUAL (B3X W1).
+    ~SpotLight() override;
     void Update(const System::Time& time) override;                      // [1] 0x180105950
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -360,12 +336,6 @@ public:
     // `runtime/src/graphics/batchc_gfx_leaves.cpp` — NOT this block's file —
     // so its body stays where it is and its door keeps working.
     void CreateTargets();                            // 0x180106050  door in batchc_gfx_leaves.cpp
-
-protected:
-    // 0x180106270: the restamp is the compiler's; the three owned resources
-    // (lights_vtable.cpp), then ~Light (empty) and ~Geometry -- the compiler's
-    // chain, retail's tail jump. NON-VIRTUAL until the cutover.
-    ~SpotLight();
 
 public:
     ::Frustum _frustum;        // +0xc0 .. +0x123

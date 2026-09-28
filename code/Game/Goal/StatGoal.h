@@ -31,7 +31,7 @@ class StatGoal final : public Achievement::Goal {
 public:
     StatGoal();                                                    // 0x1400daa80
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140026540
+    ~StatGoal() override;                                          // [0] 0x140026540
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400daa10
     bool              Serialize(void* stream) override;            // [5] 0x1400da8b0
     Object::External* Reconstruct() override;                      // [6] 0x140026520
@@ -41,9 +41,6 @@ public:
 
     // Not retail: the two operands CheckGoalState compares (diagnostics).
     void ComputeOperands(int& statValueA, int& comparisonValue) const;
-
-protected:
-    ~StatGoal();
 
 public:
     int32_t  statTypeA;          // +0x30: stat type for the first operand (default 5)

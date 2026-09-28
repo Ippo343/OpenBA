@@ -326,7 +326,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     // ~FileInfo, release +0x18, free the encoding -- is the class's destructor
     // chain, run by a non-virtual slot 0 with flags 0 at the same position.
     CloseIfOpen(&ts->_file);                                             // 1800bbb18
-    ts->IO::TextFileStream::DeletingDtor(0);                             // 1800bbb2f..c04
+    ts->IO::TextFileStream::~TextFileStream();                             // 1800bbb2f..c04
 
     return result;                                                       // 1800bbc09
 }

@@ -26,16 +26,13 @@ class Profession final : public Object::External {
 public:
     Profession();                                                 // 0x1400a9030
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14001e6f0
+    ~Profession() override;                                       // [0] 0x14001e6f0
     int32_t GetFileVersion() const override { return 3; }         // [3]
     // [4] Compile: inherited (retail's slot is the Object::External import)
     bool Serialize(void* stream) override;                        // [5] 0x1400a8f10
     Object::External* Reconstruct() override;                     // [6] 0x14001e580
-    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
+    void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001e570
-
-protected:
-    ~Profession();
 
 public:
     void*    externalPtr1;       // +0x20: ExternalPtr (serialized via 0x14000bf40)

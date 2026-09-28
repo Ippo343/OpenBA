@@ -27,12 +27,10 @@ class MarketComponent final : public ResourceProduceComponent {
 public:
     MarketComponent();                                                   // 0x14004eb70
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140008440
+    // 0x140008440: no body
+    ~MarketComponent() override = default;                              // [0]  0x140008440
     void        Persist(void* stream) override;                         // [3]  0x14004ead0
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14004ea40
-
-protected:
-    ~MarketComponent() = default;                                        // 0x140008440: no body
 };
 
 static_assert(sizeof(MarketComponent) == 0x50, "MarketComponent is 0x50 (create 0x140008220)");

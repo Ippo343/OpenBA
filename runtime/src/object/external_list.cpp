@@ -120,7 +120,7 @@ bool ExternalList::Serialize(void* streamv) {
     RtAddr<ArraySerFn>(0x18002f170ull)(&ser, n, _resources);
 
     if (rw != nullptr) {
-        reinterpret_cast<::IO::ReaderWriter*>(rw)->DeletingDtor(1);        // slot 0 (B.3.x bridge)
+        delete reinterpret_cast<::IO::ReaderWriter*>(rw);        // slot 0 (B.3.x bridge)
     }
     return true;
 }

@@ -29,7 +29,9 @@ class AutoPickupComponent final : public Component {
 public:
     AutoPickupComponent();                                        // 0x140044ae0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140003590
+    // PORT GAP (retail 0x140044a80) — B38 D2: retail frees the +0x30 array; the
+    // tree never did (Inert_ScalarDtor). Kept as the tree's.
+    ~AutoPickupComponent() override = default;                    // [0]  0x140003590
     void     Persist(void* stream) override;                      // [3]  0x1400449d0
     void     Startup() override;                                  // [4]  0x140044990 PORT GAP
     uint32_t CommandMask(int command) override;                   // [13] 0x140044970 PORT GAP
@@ -40,11 +42,6 @@ public:
     uint8_t  _pad29[7];    // +0x29
     void*    field30;      // +0x30 int array data (freed by the retail dtor)
     void*    field38;      // +0x38 its count / capacity
-
-protected:
-    // PORT GAP (retail 0x140044a80) — B38 D2: retail frees the +0x30 array; the
-    // tree never did (Inert_ScalarDtor). Kept as the tree's.
-    ~AutoPickupComponent() = default;
 };
 
 static_assert(sizeof(AutoPickupComponent) == 0x40, "AutoPickupComponent is 0x40 (create 0x1400033c0)");

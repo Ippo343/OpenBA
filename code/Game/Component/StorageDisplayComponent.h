@@ -33,7 +33,10 @@ class StorageDisplayComponent final : public Component {
 public:
     StorageDisplayComponent();                                    // 0x140056a00
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14000c940
+    // PORT GAP (retail 0x1400569b0) — B38 D2: retail tears the +0x28 display
+    // array down (FUN_14000c9a0); the tree never did (Inert_ScalarDtor). Kept as
+    // the tree's (OnRemove already removes the meshes from the scene).
+    ~StorageDisplayComponent() override = default;                // [0]  0x14000c940
     void Persist(void* stream) override;                          // [3]  0x140056970
     void Startup() override;                                      // [4]  0x140056930 own RET
     void OnAdded() override;                                      // [6]  0x140056730
@@ -44,12 +47,6 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1).
     void*    displayData0; // +0x28 pile-display array data (torn down by the retail dtor)
     void*    displayData1; // +0x30 its count / capacity
-
-protected:
-    // PORT GAP (retail 0x1400569b0) — B38 D2: retail tears the +0x28 display
-    // array down (FUN_14000c9a0); the tree never did (Inert_ScalarDtor). Kept as
-    // the tree's (OnRemove already removes the meshes from the scene).
-    ~StorageDisplayComponent() = default;
 };
 
 static_assert(sizeof(StorageDisplayComponent) == 0x38, "StorageDisplayComponent is 0x38 (create 0x14000c770)");

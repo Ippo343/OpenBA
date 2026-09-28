@@ -272,13 +272,6 @@ ComponentEntity::~ComponentEntity() {
     _componentCount = 0;
 }
 
-// [0] 0x140021a00: ~ComponentEntity (0x1400c3550) -> ~Internal, MemFree on &1.
-Object::Base* ComponentEntity::DeletingDtor(unsigned flags) {
-    this->~ComponentEntity();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // ShutdownComponents (0x1400c3000)
 // ============================================================

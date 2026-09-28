@@ -185,7 +185,7 @@ StringSerializeFn StringSerialize() {
 
 // (B3X W0: `CallSlot0`, which read slot 0 through the object's vptr, is gone.
 // Every live ImageBuffer wears the compiler's table since ENDGAME B.3.9 VS, so
-// `DeletingDtor(0)` -- unqualified, VIRTUAL -- reaches a derived class's own
+// `~T()` (slot 0, flags 0) -- unqualified, VIRTUAL -- reaches a derived class's own
 // slot 0 (`Graphics::ReflectionImageBuffer`, `FrameCopyImageBuffer`,
 // `GeneratedImageBuffer` inherit `Destruct`/`Reconstruct`) exactly as it did.)
 
@@ -270,7 +270,7 @@ int32_t ImageBuffer::GetFileVersion() const { return 7; }
 // it. A predicate that cannot fail is not a check
 // (`reference_a_predicate_nobody_evaluates.md`).
 // ============================================================================
-void ImageBuffer::Destruct() { DeletingDtor(0u); }
+void ImageBuffer::Destruct() { this->~ImageBuffer(); }
 
 // ============================================================================
 // slot 8 — Object::External* Video::ImageBuffer::Construct()
@@ -335,7 +335,7 @@ Object::External* ImageBuffer::Construct() {
 // ORACLE: shadow post-condition. No replay, for both reasons at once.
 // ============================================================================
 Object::External* ImageBuffer::Reconstruct() {
-    DeletingDtor(0u);
+    this->~ImageBuffer();
     ::new (this) ImageBuffer();
     return this;
 }

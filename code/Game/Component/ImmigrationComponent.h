@@ -40,7 +40,8 @@ public:
 
     ImmigrationComponent();                               // 0x14004e640
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140007b70
+    // 0x14004e5d0
+    ~ImmigrationComponent() override;                             // [0]  0x140007b70
     void          Persist(void* stream) override;                 // [3]  0x14004e4b0
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
@@ -52,9 +53,6 @@ public:
     uint8_t         _pad54[4];     // +0x54
     void*           field58;       // +0x58 array (freed by the dtor)
     void*           field60;       // +0x60 array count / capacity
-
-protected:
-    ~ImmigrationComponent();                              // 0x14004e5d0
 };
 
 static_assert(sizeof(ImmigrationComponent) == 0x68, "ImmigrationComponent is 0x68 (create 0x140007a20)");

@@ -187,25 +187,19 @@ TerrainGenerator::~TerrainGenerator() {
     reinterpret_cast<System::String*>(&_field28)->~String();
 }
 
-Object::Base* TerrainGenerator::DeletingDtor(unsigned flags) {
-    this->~TerrainGenerator();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TerrainGenerator::Reconstruct (vtable +0x30, Slot6)
 // ============================================================
 // Original: 0x1400205e0. Destroys the object (slot 0, flags 0: no free) then
 // re-constructs in place.
 Object::External* TerrainGenerator::Reconstruct() {
-    DeletingDtor(0);
+    this->~TerrainGenerator();
     return ::new (static_cast<void*>(this)) TerrainGenerator();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void TerrainGenerator::Destruct() { DeletingDtor(0); }
+void TerrainGenerator::Destruct() { this->~TerrainGenerator(); }
 
 // ============================================================
 // TerrainGenerator::Serialize (vtable +0x28, Slot5)

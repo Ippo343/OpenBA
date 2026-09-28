@@ -48,13 +48,6 @@ PopulationDescription::PopulationDescription()
       _b48(false),
       _ref50(nullptr) {}
 
-// [0] 0x14000b030: ~PopulationDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* PopulationDescription::DeletingDtor(unsigned flags) {
-    this->~PopulationDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1400547e0: stream order as retail.
 bool PopulationDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -73,15 +66,15 @@ bool PopulationDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000b000: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000b000: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* PopulationDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~PopulationDescription();
     return new (static_cast<void*>(this)) PopulationDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void PopulationDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void PopulationDescription::Destruct() { this->~PopulationDescription(); }
 
 // [8] 0x14000b020: PopulationComponent's type id through the hidden return slot.
 Object::Type* PopulationDescription::GetComponentType(Object::Type* ret) const {

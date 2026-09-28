@@ -32,7 +32,7 @@ class ComponentDescription final : public Object::External {
 public:
     ComponentDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140032030
+    ~ComponentDescription() override;                                      // [0] 0x140032030
     int32_t           GetFileVersion() const override { return 2; }        // [3] 0x140118b90
     bool              Serialize(void* stream) override;                    // [5] 0x140118af0
     Object::External* Reconstruct() override;                              // [6] 0x140031fe0
@@ -45,9 +45,6 @@ public:
     void**   _subDescs;          // +0x28 array of sub-description External* (stride 8)
     int32_t  _subDescCount;      // +0x30
     int32_t  _subDescCap;        // +0x34
-
-protected:
-    ~ComponentDescription();
 };
 
 static_assert(sizeof(ComponentDescription) == 0x38, "ComponentDescription is 0x38 (create 0x140031f30 MemAlloc(0x38))");

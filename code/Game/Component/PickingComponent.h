@@ -31,7 +31,8 @@ class PickingComponent final : public Component {
 public:
     PickingComponent();                                           // 0x140128c80
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140036fa0
+    // 0x140128c40
+    ~PickingComponent() override = default;                       // [0]  0x140036fa0
     void Persist(void* stream) override;                          // [3]  0x140128bb0
     void Startup() override;                                      // [4]  0x140128c30 PORT GAP
     void OnAdded() override;                                      // [6]  0x140128b90
@@ -42,9 +43,6 @@ public:
     int32_t  pickingId;    // +0x28 Picking::Scene mesh id (ctor -1 = none)
     uint8_t  _pad2C[4];    // +0x2C
     void*    field30;      // +0x30 (ctor 0)
-
-protected:
-    ~PickingComponent() = default;                                // 0x140128c40
 };
 
 static_assert(sizeof(PickingComponent) == 0x38, "PickingComponent is 0x38 (create 0x140036da0)");

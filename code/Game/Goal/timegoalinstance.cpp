@@ -25,14 +25,6 @@
 // elapsedTime = 0.
 TimeGoalInstance::TimeGoalInstance() : elapsedTime(0) {}
 
-// [0] 0x140026800: ~TimeGoalInstance (empty) -> ~GoalInstance -> ~Internal
-// (the InternalFactory swap-remove), MemFree on &1.
-Object::Base* TimeGoalInstance::DeletingDtor(unsigned flags) {
-    this->~TimeGoalInstance();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TimeGoalInstance::Persist (vtable +0x18, 0x1400dad30)
 // ============================================================

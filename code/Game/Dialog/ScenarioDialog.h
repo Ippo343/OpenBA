@@ -32,7 +32,8 @@ public:
                    Object::InternalPtr<UI::DialogInstance> parent,
                    uint64_t parentMenu, uint8_t difficulty);        // 0x1400786b0
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140013af0
+    // 0x140013af0's body
+    ~ScenarioDialog() override;                                    // [0] 0x140013af0
     void OnOpened() override;                                      // [4] 0x140078010
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x140077be0
@@ -40,9 +41,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140077f80
-
-protected:
-    ~ScenarioDialog();                                             // 0x140013af0's body
 
 public:
     uint8_t  difficulty;       // +0xB8: 0 scenario, 1 tutorial

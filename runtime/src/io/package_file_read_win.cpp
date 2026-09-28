@@ -806,7 +806,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     }
     CallStreamClose(&cms.memoryStream);                        // 1800b603a  slot 7
     MemFree(blob);                                             // 1800b6045
-    cmsObj->IO::CompressedMemoryStream::DeletingDtor(0);       // 1800b604f  ~CompressedMemoryStream
+    cmsObj->IO::CompressedMemoryStream::~CompressedMemoryStream();       // 1800b604f  ~CompressedMemoryStream
     const bool ours = true;                                    // 1800b6059  MOV AL,1
 
     return ours;

@@ -244,12 +244,12 @@ Object::External* PixelProgram::Construct() {
 // slot 6 — ?Reconstruct@: slot 0 with flags 0 (destroy in place, no free), then
 // the ctor over the same storage.
 Object::External* PixelProgram::Reconstruct() {
-    DeletingDtor(0);
+    this->~PixelProgram();
     return ::new (this) PixelProgram();
 }
 
 // slot 7 — ?Destruct@: `XOR EDX,EDX ; JMP [RAX]` — slot 0, flags 0.
-void PixelProgram::Destruct() { DeletingDtor(0); }
+void PixelProgram::Destruct() { this->~PixelProgram(); }
 
 // ??1PixelProgram@Video@@UEAA@XZ — retail: stamp ??_7PixelProgram, PlatformDestruct, then
 // ~ShaderProgram inlined and ~External. The stamps and everything after
@@ -328,7 +328,7 @@ bool PixelProgram::Serialize(void* streamv) {
         this->Video::PixelProgram::PlatformCreate();   // retail derefs _data unguarded
 
     if (rw != nullptr) {
-        AsRw(rw)->DeletingDtor(1);
+        delete AsRw(rw);
     }
     return true;
 }

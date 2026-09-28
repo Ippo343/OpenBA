@@ -15,7 +15,7 @@
 //   [3] 0x140093390 GetFileVersion `MOV EAX,2`
 //   [4] IMPORT Object::External::Compile
 //   [5] 0x1400932d0 Serialize (MOV AL,1)
-//   [6] 0x1400190a0 Reconstruct   [7] 0x140001640 Destruct (DeletingDtor(0))
+//   [6] 0x1400190a0 Reconstruct   [7] 0x140001640 Destruct (`~T()` (slot 0, flags 0))
 //   [8] 0x140019040 Construct (placement-new of the class)
 // ============================================================================
 
@@ -30,16 +30,13 @@ class Disease final : public Object::External {
 public:
     Disease();                                                    // create 0x14008fd0's init
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140018f60
+    ~Disease() override;                                          // [0] 0x140018f60
     int32_t GetFileVersion() const override { return 2; }         // [3] 0x140093390
     // [4] Compile: inherited (retail's slot is the Object::External import)
     bool Serialize(void* stream) override;                        // [5] 0x1400932d0
     Object::External* Reconstruct() override;                     // [6] 0x1400190a0
-    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
+    void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x140019040
-
-protected:
-    ~Disease();
 
 public:
     void*   _stringTable;   // +0x20  ExternalPtr<StringTable> (weak)

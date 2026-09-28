@@ -89,19 +89,6 @@ static void ResolveRoadToolFuncs() {
 }
 
 // ============================================================
-// RoadTool::DeletingDtor (vtable +0x00) — 0x14002e8c0
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled RoadTool_Dtor restamped the Road,
-// DragTool and Tool tables read by address — the last two UNREGISTERED, so it
-// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
-// restamps the real tables, then runs Object::Internal::~Internal.
-Object::Base* RoadTool::DeletingDtor(unsigned flags) {
-    this->~RoadTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // RoadTool::Startup (vtable +0x20, Slot4) — Find description component
 // ============================================================
 // Searches the entity's component list for a component matching the

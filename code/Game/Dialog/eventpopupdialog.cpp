@@ -111,13 +111,6 @@ EventPopupDialog::EventPopupDialog(UI::UserInterface* ui, const UI::Dialog* dial
                                    int32_t index)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), eventIndex(index) {}
 
-// [0] 0x1400119b0: ~EventPopupDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* EventPopupDialog::DeletingDtor(unsigned flags) {
-    this->~EventPopupDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011920: MemAlloc(0xc0, 8), then the ctor.
 void* EventPopupDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EventPopupDialog), 8);

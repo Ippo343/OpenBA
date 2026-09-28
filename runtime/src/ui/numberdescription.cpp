@@ -88,10 +88,10 @@ Object::External* NumberDescription::Construct() {
     return ::new (this) NumberDescription();                   // 18004a600
 }
 Object::External* NumberDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 18004a4d7
+    this->~NumberDescription();                                           // 18004a4d7
     return ::new (this) NumberDescription();                   // 18004a558
 }
-void NumberDescription::Destruct() { DeletingDtor(0); }
+void NumberDescription::Destruct() { this->~NumberDescription(); }
 
 // ============================================================================
 // ?Serialize@NumberDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x180118e30
@@ -128,7 +128,7 @@ bool NumberDescription::Serialize(void* streamv) {
     rw->SerializeBool(reinterpret_cast<bool&>(_b7c), nullptr);
 
     if (rw != nullptr) {                                       // 180118ee7
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

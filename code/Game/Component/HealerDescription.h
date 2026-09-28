@@ -26,16 +26,13 @@ class HealerDescription final : public Description {
 public:
     HealerDescription() = default;
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140006600
+    ~HealerDescription() override = default;                               // [0] 0x140006600
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14004b0d0
     bool              Serialize(void* stream) override;                    // [5] 0x14004b090
     Object::External* Reconstruct() override;                              // [6] 0x1400065a0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400065f0
     virtual Object::External* Construct();                                 // [9] 0x140006550
-
-protected:
-    ~HealerDescription() = default;
 };
 
 static_assert(sizeof(HealerDescription) == 0x20, "HealerDescription is 0x20 (create 0x1400064f0 MemAlloc(0x20))");

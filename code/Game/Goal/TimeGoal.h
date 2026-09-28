@@ -32,7 +32,7 @@ class TimeGoal final : public Achievement::Goal {
 public:
     TimeGoal();                                                    // 0x1400dabb0
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140026850
+    ~TimeGoal() override = default;                                // [0] 0x140026850
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400daba0
     bool              Serialize(void* stream) override;            // [5] 0x1400dab20
     Object::External* Reconstruct() override;                      // [6] 0x1400267a0
@@ -40,9 +40,6 @@ public:
     GoalState         CheckGoalState() const override { return kNotMet; }  // [8] 0x1400dab10
     Object::Type*     GetInstanceType(Object::Type* ret) const override;   // [9] 0x1400267f0
     virtual Object::External* Construct();                         // [10] 0x140026750
-
-protected:
-    ~TimeGoal() = default;
 
 public:
     int32_t  requiredYears;        // +0x30: years to survive (default 1; x 3600 seconds)

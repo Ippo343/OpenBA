@@ -15,8 +15,8 @@
 //     [3] 0x1400d7790 GetFileVersion `MOV EAX,2`
 //     [4] Object::External::Compile (import) — inherited
 //     [5] 0x1400d76a0 Serialize
-//     [6] 0x140025e30 Reconstruct: DeletingDtor(0), then the ctor on `this`
-//     [7] 0x140001640 Destruct: DeletingDtor(0)
+//     [6] 0x140025e30 Reconstruct: this->~T(), then the ctor on `this`
+//     [7] 0x140001640 Destruct: this->~T()
 //     [8] 0x1400d7580 CheckGoalState
 //     [9] Achievement::Goal::GetInstanceType (import) — inherited
 //     [10] 0x140025de0 Construct (folded with createInPlace)
@@ -34,16 +34,13 @@ class BuildingGoal final : public Achievement::Goal {
 public:
     BuildingGoal();                                                // 0x1400d77a0
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140025e80
+    ~BuildingGoal() override;                                      // [0] 0x140025e80
     int32_t           GetFileVersion() const override { return 2; }// [3] 0x1400d7790
     bool              Serialize(void* stream) override;            // [5] 0x1400d76a0
     Object::External* Reconstruct() override;                      // [6] 0x140025e30
     void              Destruct() override;                         // [7] 0x140001640
     GoalState         CheckGoalState() const override;             // [8] 0x1400d7580
     virtual Object::External* Construct();                         // [10] 0x140025de0
-
-protected:
-    ~BuildingGoal();
 
 public:
     uint8_t  _field30;           // +0x30: requireAll (1 = every listed type, 0 = any)

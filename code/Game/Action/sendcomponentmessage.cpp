@@ -269,13 +269,6 @@ SendComponentMessage::SendComponentMessage()
       _field34(-1),
       _field38(nullptr) {}
 
-// [0] 0x1400230f0
-Object::Base* SendComponentMessage::DeletingDtor(unsigned flags) {
-    this->~SendComponentMessage();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400cb000
 // [4] 0x1400caef0
 // [9] 0x1400cae80

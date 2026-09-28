@@ -24,7 +24,9 @@ class ImmigrationUI final : public UI::DialogController {
 public:
     ImmigrationUI() = default;                           // 0x140011ee0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140011fd0
+    // 0x140011fd0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~ImmigrationUI() override = default;                          // [0] 0x140011fd0
     void OnCreated() override;   // [4] 0x14006b330
     void OnUpdateLayout() override;   // [7] 0x14006b130
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
@@ -35,11 +37,6 @@ public:
     uint64_t data38 = 0;           // +0x38
     uint64_t data40 = 0;           // +0x40
     uint64_t data48 = 0;           // +0x48
-
-protected:
-    // 0x140011fd0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~ImmigrationUI() = default;
 };
 
 static_assert(sizeof(ImmigrationUI) == 0x50, "ImmigrationUI is 0x50 (create 0x140011ee0 MemAlloc(0x50))");

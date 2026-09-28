@@ -26,16 +26,13 @@ class WildAnimalDescription final : public Description {
 public:
     WildAnimalDescription() = default;
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140039d90
+    ~WildAnimalDescription() override = default;                           // [0] 0x140039d90
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14012e480
     bool              Serialize(void* stream) override;                    // [5] 0x14012e440
     Object::External* Reconstruct() override;                              // [6] 0x140039d30
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140039d80
     virtual Object::External* Construct();                                 // [9] 0x140039ce0
-
-protected:
-    ~WildAnimalDescription() = default;
 };
 
 static_assert(sizeof(WildAnimalDescription) == 0x20, "WildAnimalDescription is 0x20 (create 0x140039c80 MemAlloc(0x20))");

@@ -31,13 +31,13 @@ class ToolSetting : public Object::Internal {
     DECLARE_EXE_TYPE(ToolSetting)
 
 public:
-    Object::Base* DeletingDtor(unsigned flags) override;   // [0] 0x14002e960
+    // no body in retail
+    ~ToolSetting() override = default;                     // [0] 0x14002e960
     // [1] TypeName 0x14002e930 and [2] Type 0x14002e920: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     // [3] Persist — Object::Internal::Persist, inherited (retail IMPORT).
 
 protected:
     ToolSetting() : Object::Internal() {}
-    ~ToolSetting() = default;                              // no body in retail
 };
 
 static_assert(sizeof(ToolSetting) == 0x10, "ToolSetting adds no bytes to Object::Internal");

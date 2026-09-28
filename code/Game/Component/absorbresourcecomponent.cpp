@@ -145,12 +145,6 @@ static const bool s_absorbResourceStateTableBuilt = (AbsorbResourceComponent_Pop
 // +0x38 zeroes. No flag OR (0x80).
 AbsorbResourceComponent::AbsorbResourceComponent() : _controller(this) {}
 
-// [0] 0x14002ebf0: the dtor 0x140105c60 inlined (restamps + ~Internal), MemFree on &1.
-Object::Base* AbsorbResourceComponent::DeletingDtor(unsigned flags) {
-    this->~AbsorbResourceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140105c60: restamp + ~Internal, no own work.
 AbsorbResourceComponent::~AbsorbResourceComponent() = default;
 

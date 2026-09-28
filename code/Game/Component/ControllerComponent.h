@@ -76,7 +76,7 @@ public:
         ~Controller() = default;   // no dtor slot in 0x14015f070
     };
 
-    Object::Base* DeletingDtor(unsigned flags) override;         // [0]  0x140032800
+    ~ControllerComponent() override = default;                   // [0]  0x140032800
     // [1] TypeName 0x1400327f0 and [2] Type 0x1400327e0: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void          Persist(void* stream) override;                // [3]  0x1401195a0
     virtual int         GetDefaultState() const = 0;             // [16] pure
@@ -86,7 +86,6 @@ protected:
     // Retail inlines this into every leaf ctor: Component ctor, then the
     // 0x140162b80 stamp — which is the compiler's.
     ControllerComponent() = default;
-    ~ControllerComponent() = default;
 };
 
 static_assert(sizeof(ControllerComponent) == 0x28,

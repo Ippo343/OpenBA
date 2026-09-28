@@ -26,7 +26,9 @@ class DebugUI final : public UI::DialogController {
 public:
     DebugUI() = default;                                 // 0x140010ec0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140010f10
+    // 0x140010f10 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~DebugUI() override = default;                                // [0] 0x140010f10
     void OnCreated() override;   // [4] 0x1400619e0
     void OnClosed() override {}   // [6] 0x1400645f0  RET 0 in retail
     void OnUpdateLayout() override;   // [7] 0x140061280
@@ -69,11 +71,6 @@ public:
     float smoothedFrameMS = 0;     // +0x124: EMA frame time accumulator
     float smoothedTotalMS = 0;     // +0x128: EMA total time accumulator
     uint8_t _pad12C[4] = {};        // +0x12C: gap to reach 0x130
-
-protected:
-    // 0x140010f10 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~DebugUI() = default;
 };
 
 static_assert(sizeof(DebugUI) == 0x130, "DebugUI is 0x130 (create 0x140010ec0 MemAlloc(0x130))");

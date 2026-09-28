@@ -28,7 +28,7 @@ class CitizenAIDescription final : public Description {
 public:
     CitizenAIDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14002fc90
+    ~CitizenAIDescription() override = default;                            // [0] 0x14002fc90
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14010fc80
     bool              Serialize(void* stream) override;                    // [5] 0x14010fc40
     Object::External* Reconstruct() override;                              // [6] 0x14002fc30
@@ -38,9 +38,6 @@ public:
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
 
-
-protected:
-    ~CitizenAIDescription() = default;
 };
 
 static_assert(sizeof(CitizenAIDescription) == 0x20, "CitizenAIDescription is 0x20 (create 0x14002fb80 MemAlloc(0x20))");

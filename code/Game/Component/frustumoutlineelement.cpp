@@ -110,13 +110,6 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
 FrustumOutlineElement::FrustumOutlineElement()
     : _lineSprite(), _width(-1), _height(-1) {}
 
-// [0] 0x140012560: restamp, ~Element, MemFree on &1.
-Object::Base* FrustumOutlineElement::DeletingDtor(unsigned flags) {
-    this->~FrustumOutlineElement();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [4] 0x14006c290
 // ---------------------------------------------------------------------------
 // UI::Element is ABSTRACT: slot 4 (+0x20 ComputeSize) is pure, and 5/6

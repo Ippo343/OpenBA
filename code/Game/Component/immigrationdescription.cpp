@@ -75,13 +75,6 @@ ImmigrationDescription::~ImmigrationDescription() {
     _refs = nullptr;
 }
 
-// [0] 0x140007b00: ~ImmigrationDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* ImmigrationDescription::DeletingDtor(unsigned flags) {
-    this->~ImmigrationDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14004e7f0: stream order as retail.
 bool ImmigrationDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -109,15 +102,15 @@ bool ImmigrationDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140007ad0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140007ad0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* ImmigrationDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ImmigrationDescription();
     return new (static_cast<void*>(this)) ImmigrationDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void ImmigrationDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void ImmigrationDescription::Destruct() { this->~ImmigrationDescription(); }
 
 // [8] 0x140007af0: ImmigrationComponent's type id through the hidden return slot.
 Object::Type* ImmigrationDescription::GetComponentType(Object::Type* ret) const {

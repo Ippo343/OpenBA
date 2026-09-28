@@ -56,13 +56,6 @@ CharacterDescription::CharacterDescription()
       _f40(0.0f),
       _f44(-10.0f) {}
 
-// [0] 0x14002fa40: ~CharacterDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CharacterDescription::DeletingDtor(unsigned flags) {
-    this->~CharacterDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140109dd0: stream order as retail.
 bool CharacterDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -79,15 +72,15 @@ bool CharacterDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14002fa10: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x14002fa10: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* CharacterDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CharacterDescription();
     return new (static_cast<void*>(this)) CharacterDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CharacterDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CharacterDescription::Destruct() { this->~CharacterDescription(); }
 
 // [8] 0x14002fa30: CharacterComponent's type id through the hidden return slot.
 Object::Type* CharacterDescription::GetComponentType(Object::Type* ret) const {

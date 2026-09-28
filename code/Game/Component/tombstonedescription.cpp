@@ -30,13 +30,6 @@ TombstoneDescription::TombstoneDescription()
       _f20(360.0f),
       _f24(24.0f) {}
 
-// [0] 0x14000d420: ~TombstoneDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* TombstoneDescription::DeletingDtor(unsigned flags) {
-    this->~TombstoneDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140057a20: stream order as retail.
 bool TombstoneDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -45,15 +38,15 @@ bool TombstoneDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000d3b0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000d3b0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* TombstoneDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~TombstoneDescription();
     return new (static_cast<void*>(this)) TombstoneDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void TombstoneDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void TombstoneDescription::Destruct() { this->~TombstoneDescription(); }
 
 // [8] 0x14000d410: TombstoneComponent's type id through the hidden return slot.
 Object::Type* TombstoneDescription::GetComponentType(Object::Type* ret) const {

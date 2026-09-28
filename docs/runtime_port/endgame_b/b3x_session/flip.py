@@ -330,11 +330,12 @@ def flip_class(c, survey=False):
         lead = ''
     new_stmt = new
     old_len = d_en - d_st
-    if '\n' not in new_stmt and s.line_of(d_st) == s.line_of(d_en - 1) and len(new_stmt) < old_len:
-        new_stmt = new_stmt + ' ' * (old_len - len(new_stmt))
     # trailing comment of the old dtor: append after the slot comment line
     d_line_end = s.line_end(s.line_of(d_en - 1))
     slot_trailing = s.text[d_en:d_line_end].strip()
+    if (slot_trailing and '\n' not in new_stmt and s.line_of(d_st) == s.line_of(d_en - 1)
+            and len(new_stmt) < old_len):
+        new_stmt = new_stmt + ' ' * (old_len - len(new_stmt))   # keep the slot comment's column
     extra_edits = []
     if trailing:
         if slot_trailing:

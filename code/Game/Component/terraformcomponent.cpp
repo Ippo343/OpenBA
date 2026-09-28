@@ -591,13 +591,6 @@ void TerraformComponent::OnEvent(int msgId) {
     TerraformComponent_FootprintPass(this);
 }
 
-// [0] 0x14000ce90: ~TerraformComponent (0x1400575b0; its array frees are a PORT GAP, see the header), MemFree on &1.
-Object::Base* TerraformComponent::DeletingDtor(unsigned flags) {
-    this->~TerraformComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x14000cc90: MemAlloc(0x48, 8), then the ctor.
 void* TerraformComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TerraformComponent), 8);

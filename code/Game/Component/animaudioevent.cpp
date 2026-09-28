@@ -35,13 +35,6 @@
 // +0x20 = 0, +0x28 = 1.0f.
 AnimAudioEvent::AnimAudioEvent() : _sound(nullptr), _chance(1.0f), _pad2c{} {}
 
-// [0] 0x140017000: restamp, ~AnimationEvent (-> ~External), MemFree on &1.
-Object::Base* AnimAudioEvent::DeletingDtor(unsigned flags) {
-    this->~AnimAudioEvent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140087ed0: Serializer(stream, 0); ExternalPtr +0x20; float +0x28;
 // ~Serializer; return 1. (The hand-built slot was a `void` function, so its AL
 // was whatever the Serializer dtor left there.)
@@ -58,13 +51,13 @@ bool AnimAudioEvent::Serialize(void* stream) {
 }
 
 // [6] 0x140016fb0: retail destroys and rebuilds in place: a virtual
-// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+// `~T()` (slot 0, flags 0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
 Object::External* AnimAudioEvent::Reconstruct() {
-    DeletingDtor(0);
+    this->~AnimAudioEvent();
     return new (static_cast<void*>(this)) AnimAudioEvent();
 }
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
-void AnimAudioEvent::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0).
+void AnimAudioEvent::Destruct() { this->~AnimAudioEvent(); }
 // [8] 0x140087e40. PORT GAP (retail: the audio trigger — roll a random float,
 // and when it is under +0x28 play +0x20 at the event transform's position).
 // The hand-built table had a `return null` stub; kept.

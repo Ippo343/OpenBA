@@ -30,16 +30,13 @@ class TutorialGoalCount final : public TutorialGoal {
 public:
     TutorialGoalCount();                                           // 0x1400dfa60
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140027820
+    ~TutorialGoalCount() override;                                 // [0] 0x140027820
     int32_t           GetFileVersion() const override { return 5; }// [3] 0x1400df9f0
     bool              Serialize(void* stream) override;            // [5] 0x1400df900
     Object::External* Reconstruct() override;                      // [6] 0x140027800
     void              Destruct() override;                         // [7] 0x140001640
     bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400df290
     virtual Object::External* Construct();                         // [9] 0x1400277f0
-
-protected:
-    ~TutorialGoalCount();
 
 public:
     uint32_t countMode;          // +0x20: count mode (0-10, selects what to count)

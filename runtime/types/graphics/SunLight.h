@@ -144,11 +144,10 @@ public:
     // retail builds actually wears (only the exe calls ??0SunLight), so the
     // arms are the SCALAR ones (B39_RULES D1: the arms of the table the object
     // wore). The DLL's vector row 0x180064620 is retired with the mint row.
-    Geometry* DeletingDtor(unsigned flags) override {
-        this->~SunLight();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // 0x180108160: restamp (the compiler's), the two image buffers and the
+    // render buffer (ReleaseFields), then ~Light (empty) and ~Geometry — the
+    // compiler's chain, retail's tail call.
+    ~SunLight() override { ReleaseFields(); }
     void Update(const System::Time& time) override;                      // [1] 0x1801067a0
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -183,12 +182,6 @@ public:
     // by-value return is correct C++; the door keeps retail's
     // `(this, ret, renderer)` order and placement-news the prvalue.
     Camera GetSunCamera(Renderer& renderer) const;   // 0x180107010
-
-protected:
-    // 0x180108160: restamp (the compiler's), the two image buffers and the
-    // render buffer (ReleaseFields), then ~Light (empty) and ~Geometry — the
-    // compiler's chain, retail's tail call.
-    ~SunLight() { ReleaseFields(); }
 
 private:
     void InitFields();      // sunlight.cpp

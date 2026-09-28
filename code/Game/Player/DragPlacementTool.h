@@ -35,7 +35,8 @@ class DragPlacementTool final : public DragTool {
 public:
     DragPlacementTool() : placementDesc(nullptr), areaDesc(nullptr) {}     // 0x1400fc530
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x14002d900
+    // 0x1400fc4e0: no body
+    ~DragPlacementTool() override = default;                               // [0]  0x14002d900
     void Startup() override;                                               // [4]  0x1400fc3e0
     void Shutdown() override {}                                            // [5]  0x1400fc3d0 RET
     void Update(void*, char) override {}                                   // [7]  0x1400fc3c0 RET
@@ -46,9 +47,6 @@ public:
 
     void* placementDesc;   // +0x38 CreatePlacedDescription* (DAT_1401c7430) — Startup
     void* areaDesc;        // +0x40 area (Map) description* (DAT_1401c7a18) — Startup
-
-protected:
-    ~DragPlacementTool() = default;                                        // 0x1400fc4e0: no body
 };
 
 namespace DragPlacementToolAddr {

@@ -193,7 +193,7 @@ inline int RwVersion(ReaderWriter* rw) {
 }
 inline void DeleteRw(ReaderWriter* rw) {
     if (rw == nullptr) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 
 // The `Serializer ser{stream,null}; rw = encoding->CreateReader/Writer(&ser,v)`

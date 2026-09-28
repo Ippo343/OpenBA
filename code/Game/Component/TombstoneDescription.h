@@ -27,7 +27,7 @@ class TombstoneDescription final : public Description {
 public:
     TombstoneDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000d420
+    ~TombstoneDescription() override = default;                            // [0] 0x14000d420
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140057a80
     bool              Serialize(void* stream) override;                    // [5] 0x140057a20
     Object::External* Reconstruct() override;                              // [6] 0x14000d3b0
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     float _f20;                                 // +0x20
     float _f24;                                 // +0x24
-
-protected:
-    ~TombstoneDescription() = default;
 };
 
 static_assert(sizeof(TombstoneDescription) == 0x28, "TombstoneDescription is 0x28 (create 0x14000d2e0 MemAlloc(0x28))");

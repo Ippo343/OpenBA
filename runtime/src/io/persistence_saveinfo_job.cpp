@@ -383,7 +383,7 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
     // the teardown itself is the same on both paths.
     if (bfs.base.file.handle != -1)
         RtIO::RtIo_FileSystem_CloseFile(fs, &bfs.base.file);            // 0x1800b6942
-    bfsObj->IO::BinaryFileStream::DeletingDtor(0);                      // 0x1800b694f..
+    bfsObj->IO::BinaryFileStream::~BinaryFileStream();                      // 0x1800b694f..
     fs->platformExistsGate = savedGate;                                 // 0x1800b69a3
 }
 

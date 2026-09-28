@@ -203,13 +203,6 @@ AutoSaveDialog::AutoSaveDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
     angle = 0.0f;   // spinner angle
 }
 
-// [0] 0x140010780: ~AutoSaveDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* AutoSaveDialog::DeletingDtor(unsigned flags) {
-    this->~AutoSaveDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400106c0: MemAlloc(0xd0, 8), then the ctor.
 void* AutoSaveDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AutoSaveDialog), 8);

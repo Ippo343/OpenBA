@@ -60,10 +60,10 @@ Object::External* ClipRegionDescription::Construct() {
 }
 // 0x180037c30: slot 0 with flag 0, then the same inlined ctor. No null test.
 Object::External* ClipRegionDescription::Reconstruct() {
-    DeletingDtor(0);                                        // 180037c47
+    this->~ClipRegionDescription();                                        // 180037c47
     return ::new (this) ClipRegionDescription();
 }
-void ClipRegionDescription::Destruct() { DeletingDtor(0); }
+void ClipRegionDescription::Destruct() { this->~ClipRegionDescription(); }
 
 // ============================================================================
 // ?Serialize@ClipRegionDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cc010
@@ -84,7 +84,7 @@ bool ClipRegionDescription::Serialize(void* streamv) {
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180038f90ull)(&_childDesc, &ser);  // 1800cc092
 
-    if (rw != nullptr) rw->DeletingDtor(1);                 // 1800cc0aa
+    if (rw != nullptr) delete rw;                 // 1800cc0aa
     return true;
 }
 

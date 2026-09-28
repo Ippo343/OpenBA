@@ -273,11 +273,11 @@ static_assert(sizeof(Dialog) == 0x88,
 // ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0Dialog@UI@@QEAA@XZ` (0x180112db0) minus its three vptr
 // stores; slot 0 is the class's own vector deleting dtor; ~Dialog is
-// protected, non-virtual and holds the retired ??1 door's body
+// public, virtual and holds the retired ??1 door's body
 // (dialog_ctor_dtor.cpp). Construct/Reconstruct and the stack temporaries
 // retail inlines (AddController, ElementDescription::CreateInstance,
 // ComboElement::Update, TabElement::AddTab) spell `::new (p) UI::Dialog()` and
-// destroy with `DeletingDtor(0)`. The factory pair is the class's own
+// destroy with `~T()` (slot 0, flags 0). The factory pair is the class's own
 // (dialog_factory.cpp); the minted `??_7Dialog@UI@@6B@` (manifest WITHHELD)
 // and its RT_DELDTOR row are retired with the ??0/??1 doors.
 // ############################################################################
@@ -325,19 +325,9 @@ public:
 
     // [0] 0x180038b20 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x88`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Dialog*>(self + static_cast<int64_t>(i) * 0x88)->~Dialog();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Dialog();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array and the +0x28
+    // String release (dialog_ctor_dtor.cpp), then the compiler chains ~External.
+    ~Dialog() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -377,14 +367,9 @@ public:
     // `::new (p) Dialog()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);                 // 0x180038450
     static void* operator new(std::size_t bytes, void* place);    // 0x1800384c0
-    static void  operator delete(void* p);                        // 0x1800384d0
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                        // 0x1800384d0
     // Retail's factory pair (B39_RULES D2): MemAlloc(0x88, 8) + the ctor, and
     // the null-tested in-place ctor. Defined and registered in dialog_factory.cpp.
-
-protected:
-    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array and the +0x28
-    // String release (dialog_ctor_dtor.cpp), then the compiler chains ~External.
-    ~Dialog();
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
     //   0x180038400  ?_TypeName@       -> "Dialog"

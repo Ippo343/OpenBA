@@ -27,7 +27,7 @@ class HerbalistDescription final : public Description {
 public:
     HerbalistDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140006cf0
+    ~HerbalistDescription() override;                                      // [0] 0x140006cf0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14004b380
     bool              Serialize(void* stream) override;                    // [5] 0x14004b2e0
     Object::External* Reconstruct() override;                              // [6] 0x140006c80
@@ -41,9 +41,6 @@ public:
     int32_t _herbCap;                           // +0x2c
     uint32_t _u30;                              // +0x30 enum (serialized through the uint door)
     uint8_t _pad34[4];                          // +0x34 never written by the ctor
-
-protected:
-    ~HerbalistDescription();
 };
 
 static_assert(sizeof(HerbalistDescription) == 0x38, "HerbalistDescription is 0x38 (create 0x140006bb0 MemAlloc(0x38))");

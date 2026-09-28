@@ -32,7 +32,8 @@ class GrowthComponent final : public Component {
 public:
     GrowthComponent();                                            // 0x1401208f0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140034c50
+    // no own work
+    ~GrowthComponent() override = default;                        // [0]  0x140034c50
     void Persist(void* stream) override;                          // [3]  0x1401207c0
     void Startup() override;                                      // [4]  0x1401206f0
     void OnAdded() override;                                      // [6]  0x140120690 (RET)
@@ -48,9 +49,6 @@ public:
     void*    field40;      // +0x40
     float    growthRate;   // +0x48 (retail ctor 1.0f)
     float    growthScale;  // +0x4C (retail ctor 1.0f)
-
-protected:
-    ~GrowthComponent() = default;                                 // no own work
 };
 
 static_assert(sizeof(GrowthComponent) == 0x50, "GrowthComponent is 0x50 (create 0x140034b10)");

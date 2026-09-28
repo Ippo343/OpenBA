@@ -39,13 +39,6 @@ HerdDescription::HerdDescription()
       _i38(0),
       _f3c(0.0f) {}
 
-// [0] 0x140034e40: ~HerdDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* HerdDescription::DeletingDtor(unsigned flags) {
-    this->~HerdDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1401221e0: stream order as retail.
 bool HerdDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -60,15 +53,15 @@ bool HerdDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140034de0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140034de0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* HerdDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~HerdDescription();
     return new (static_cast<void*>(this)) HerdDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void HerdDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void HerdDescription::Destruct() { this->~HerdDescription(); }
 
 // [8] 0x140034e30: HerdComponent's type id through the hidden return slot.
 Object::Type* HerdDescription::GetComponentType(Object::Type* ret) const {

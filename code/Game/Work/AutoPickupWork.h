@@ -36,7 +36,7 @@ class AutoPickupWork : public Work {
     DECLARE_EXE_TYPE(AutoPickupWork)
 
 public:
-    Object::Base* DeletingDtor(unsigned flags) override;   // [0] 0x1400294e0
+    ~AutoPickupWork() override = default;                  // [0] 0x1400294e0
     // [1] TypeName 0x1400294d0 and [2] Type 0x1400294c0: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void          Persist(void* stream) override;          // [3] 0x1400e3f80
     int           Cleanup() override;                      // [8] 0x1400e3f30
@@ -46,7 +46,6 @@ protected:
     // CreateWork bodies use (Work_Ctor25, then the leaf stamp over this one).
     AutoPickupWork() = default;
     explicit AutoPickupWork(void* pEntityIBP) : Work(pEntityIBP) {}
-    ~AutoPickupWork() = default;
 
 public:
     // Vtable() (DECLARE_EXE_TYPE): served at 0x140160fa0 (B38 D5)

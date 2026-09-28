@@ -110,7 +110,7 @@ namespace Graphics {
 //
 // ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2) -- the three paragraphs above
 // are HISTORY. The class is CONCRETE: a real public ctor (retail 0x1800fb5a0 /
-// the factory's inlined stores), its own vector slot 0, a protected non-virtual
+// the factory's inlined stores), its own vector slot 0, a virtual
 // ~AnimationGroup holding the retired ??1 door's body, the factory pair as the
 // class's own statics; Construct / Reconstruct placement-new the class. The
 // minted `??_7AnimationGroup@Graphics@@6B@`, its RT_DELDTOR row 0x1800167f0,
@@ -128,19 +128,10 @@ public:
 
     // [0] 0x1800167f0 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x58` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<AnimationGroup*>(self + static_cast<int64_t>(i) * 0x58)->~AnimationGroup();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~AnimationGroup();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620. VIRTUAL
+    // (B3X W1). Retail's body is in
+    // vtbatch7_animgroup_particlesystem.cpp; the compiler chains ~External.
+    ~AnimationGroup() override;
 
     // [1] 0x180016310 TypeName / [2] 0x1800162f0 Type, TypeId 0x180016300, `_TypeName` / `_ParentTypeName`
     // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
@@ -187,14 +178,8 @@ public:
     //   header and stay undefined: placement is spelled `::new`.
     static void* operator new(std::size_t bytes);
     static void* operator new(std::size_t bytes, void* place);
-    static void  operator delete(void* p);
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }
     // (CreateNewObject / CreateInPlaceObject: declared by DECLARE_TYPE above.)
-
-protected:
-    // ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620. NON-virtual (no virtual
-    // dtor until the normal-virtual cutover). Retail's body is in
-    // vtbatch7_animgroup_particlesystem.cpp; the compiler chains ~External.
-    ~AnimationGroup();
 
 public:
     // ---- the 0x38 bytes AnimationGroup adds --------------------------------

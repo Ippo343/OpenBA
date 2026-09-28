@@ -55,13 +55,6 @@ CreateFencedDescription::CreateFencedDescription()
     for (void*& r : _refs) r = nullptr;
 }
 
-// [0] 0x140004960: ~CreateFencedDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CreateFencedDescription::DeletingDtor(unsigned flags) {
-    this->~CreateFencedDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1400478f0: stream order as retail.
 bool CreateFencedDescription::Serialize(void* stream) {
     if (!fn_ExternalRefArray_Serialize || !fn_ExternalPtr_BuildSerialize) return true;   // standalone: unwired doors
@@ -77,15 +70,15 @@ bool CreateFencedDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140004930: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140004930: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* CreateFencedDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CreateFencedDescription();
     return new (static_cast<void*>(this)) CreateFencedDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CreateFencedDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CreateFencedDescription::Destruct() { this->~CreateFencedDescription(); }
 
 // [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
 // a data-only description builds no component.

@@ -135,12 +135,6 @@ HealerComponent::HealerComponent() : _controller(this) {
     OrFlagsInCtor(0x2);
 }
 
-// [0] 0x140006660: ~HealerComponent (0x14004af10), MemFree on &1.
-Object::Base* HealerComponent::DeletingDtor(unsigned flags) {
-    this->~HealerComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14004af10: restamp + ~Internal, no own work.
 HealerComponent::~HealerComponent() = default;
 

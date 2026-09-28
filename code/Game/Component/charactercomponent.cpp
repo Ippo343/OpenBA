@@ -207,15 +207,6 @@ CharacterComponent::CharacterComponent()
     OrFlagsInCtor(0x8f);
 }
 
-// [0] 0x14002faa0. PORT GAP (retail releases the +0x48 action stack via
-// 0x1400c5150 first) — the tree's Inert_ScalarDtor never did; kept
-// (CharacterComponent.h).
-Object::Base* CharacterComponent::DeletingDtor(unsigned flags) {
-    this->~CharacterComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 // [4] 0x140109a30 — sibling finds + description adoption; the tree also folds the
 // OnAdd char-index allocation in here (see CharacterComponent_BodyInit).

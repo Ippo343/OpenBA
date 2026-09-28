@@ -243,22 +243,10 @@ namespace Graphics {
 // AnimAudioEvent, whose C++ base ctor is the protected one below.
 class AnimationEvent : public Object::External {
 public:
-    // [0] 0x180011800 -- MSVC's VECTOR deleting destructor, both arms exactly as
-    // the retired RT_DELDTOR row ran them (`MOV EDX,0x20` = the element size).
-    // Every exe subclass overrides it with its own scalar slot 0.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<AnimationEvent*>(self + static_cast<int64_t>(i) * 0x20)->~AnimationEvent();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~AnimationEvent();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x180011800 -- retail's VECTOR deleting destructor (`MOV EDX,0x20` =
+    // the element size); every exe subclass has its own scalar slot 0.
+    // ??1AnimationEvent@Graphics@@UEAA@XZ  0x1800a2120. Virtual (B3X W1).
+    ~AnimationEvent() override;
 
     // [1] 0x1800116f0 TypeName / [2] 0x1800116d0 Type (the class's record,
     // retail 0x1801f9978), TypeId 0x1800116e0, `_TypeName` / `_ParentTypeName`
@@ -289,9 +277,6 @@ protected:
     // door `RtGraphics_AnimationEvent_Ctor` has no field of its own to share.
     AnimationEvent() {}
 
-    // ??1AnimationEvent@Graphics@@UEAA@XZ  0x1800a2120. NON-virtual (there is
-    // no virtual destructor anywhere — ENDGAME section B.1 decision 2).
-    ~AnimationEvent();
 };
 static_assert(sizeof(AnimationEvent) == 0x20,
               "Graphics::AnimationEvent is 0x20 bytes -- the MOV EDX,0x20 in its "

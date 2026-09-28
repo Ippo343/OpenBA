@@ -48,13 +48,6 @@ ClearAreaDescription::ClearAreaDescription()
       _flag5(false),
       _value(-1) {}
 
-// [0] 0x140031060: ~ClearAreaDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* ClearAreaDescription::DeletingDtor(unsigned flags) {
-    this->~ClearAreaDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1401180f0: stream order as retail.
 bool ClearAreaDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
@@ -73,15 +66,15 @@ bool ClearAreaDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140030fe0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140030fe0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* ClearAreaDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ClearAreaDescription();
     return new (static_cast<void*>(this)) ClearAreaDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void ClearAreaDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void ClearAreaDescription::Destruct() { this->~ClearAreaDescription(); }
 
 // [8] 0x140031050: ClearAreaComponent's type id through the hidden return slot.
 Object::Type* ClearAreaDescription::GetComponentType(Object::Type* ret) const {

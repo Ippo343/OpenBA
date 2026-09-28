@@ -887,17 +887,6 @@ void HarvestArea::Persist(void* stream) {
 }
 
 
-// ============================================================
-// HarvestArea::ScalarDtor body
-// ============================================================
-// ~HarvestArea frees the validity array and the BST; then MemFree on &1.
-// [0] 0x14002a4d0: ~HarvestArea, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* HarvestArea::DeletingDtor(unsigned flags) {
-    this->~HarvestArea();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // The HarvestArea / AutoPickupWork / Work stamps and the `~Internal` call are the
 // compiler's chain.
 HarvestArea::~HarvestArea() {

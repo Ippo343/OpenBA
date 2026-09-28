@@ -22,13 +22,6 @@
 // tutorial reference zeroed.
 FinishTutorialGoal::FinishTutorialGoal() : _field30(nullptr) {}
 
-// [0] 0x140026260: ~FinishTutorialGoal (empty) -> ~Goal -> ~External, MemFree on &1.
-Object::Base* FinishTutorialGoal::DeletingDtor(unsigned flags) {
-    this->~FinishTutorialGoal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // FinishTutorialGoal::Serialize (vtable +0x28, 0x1400d7970)
 // ============================================================
@@ -56,13 +49,13 @@ bool FinishTutorialGoal::Serialize(void* stream) {
 // ============================================================
 // FinishTutorialGoal::Reconstruct [6] 0x1400261a0 / Destruct [7] 0x140001640
 // ============================================================
-// retail 0x1400261a0: vtable[0](this, 0) (DeletingDtor(0): destroy in place),
+// retail 0x1400261a0: vtable[0](this, 0) (`~T()` (slot 0, flags 0): destroy in place),
 // then the ctor on `this`.
 Object::External* FinishTutorialGoal::Reconstruct() {
-    DeletingDtor(0);
+    this->~FinishTutorialGoal();
     return ::new (static_cast<void*>(this)) FinishTutorialGoal();
 }
-void FinishTutorialGoal::Destruct() { DeletingDtor(0); }
+void FinishTutorialGoal::Destruct() { this->~FinishTutorialGoal(); }
 
 // ============================================================
 // FinishTutorialGoal::GetInstanceType [9] 0x1400261f0

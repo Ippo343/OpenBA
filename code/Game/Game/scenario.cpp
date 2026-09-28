@@ -48,13 +48,6 @@ Scenario::~Scenario() {
     reinterpret_cast<System::String*>(&scenarioName)->~String();   // B.3.1 bridge
 }
 
-// [0] 0x14001eb40: ~Scenario -> ~Achievement -> ~External, MemFree on &1.
-Object::Base* Scenario::DeletingDtor(unsigned flags) {
-    this->~Scenario();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Scenario::GetFileVersion (vtable +0x18, 0x1400a9460)
 // ============================================================
@@ -103,12 +96,12 @@ bool Scenario::Serialize(void* stream) {
 // ============================================================
 // Scenario::Reconstruct [6] 0x14001ead0 / Destruct [7] 0x140001640
 // ============================================================
-// DeletingDtor(0) (destroy in place), then the ctor on `this`.
+// `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor on `this`.
 Object::External* Scenario::Reconstruct() {
-    DeletingDtor(0);
+    this->~Scenario();
     return ::new (static_cast<void*>(this)) Scenario();
 }
-void Scenario::Destruct() { DeletingDtor(0); }
+void Scenario::Destruct() { this->~Scenario(); }
 
 // ============================================================
 // Scenario::Construct (vtable +0x40, 0x14001ea70)

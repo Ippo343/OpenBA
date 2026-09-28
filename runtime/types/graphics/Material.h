@@ -252,7 +252,7 @@ class Scene;      // block F
 // ============================================================================
 //
 // ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2): CONCRETE. A real public
-// ctor (retail 0x1801029a0), its own vector slot 0, a protected non-virtual
+// ctor (retail 0x1801029a0), its own vector slot 0, a virtual
 // ~Material holding the retired ??1 door's body, the factory pair as the class's
 // own statics; Construct / Reconstruct placement-new the class. The minted
 // `??_7Material@Graphics@@6B@`, its RT_DELDTOR row 0x180011d20, the FACTREST
@@ -270,19 +270,11 @@ public:
 
     // [0] 0x180011d20 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x38` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Material*>(self + static_cast<int64_t>(i) * 0x38)->~Material();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Material();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1Material@Graphics@@UEAA@XZ` @ 0x180102a00. VIRTUAL (B3X W1).
+    // ENDGAME B.3.9 GFX: the retired door's body (material.cpp) -- retail's
+    // out-of-line ~Array of `_passes`; the restamp and ~External are the
+    // compiler's chain.
+    ~Material() override;
 
     // [1] 0x1800118d0 TypeName / [2] 0x1800118b0 Type, TypeId 0x1800118c0, `_TypeName` / `_ParentTypeName`
     // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
@@ -333,16 +325,9 @@ public:
     // the factory pair is the class's own (B39_RULES D2, material.cpp).
     static void* operator new(std::size_t bytes);            // 0x1800118e0
     static void* operator new(std::size_t bytes, void* place);// 0x180011950
-    static void  operator delete(void* p);                   // 0x180011960
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                   // 0x180011960
     // CreateNewObject 0x1800119c0 / CreateInPlaceObject 0x180011a70: declared
     // by DECLARE_TYPE above.
-
-protected:
-    // `??1Material@Graphics@@UEAA@XZ` @ 0x180102a00. NON-VIRTUAL (decision 2).
-    // ENDGAME B.3.9 GFX: the retired door's body (material.cpp) -- retail's
-    // out-of-line ~Array of `_passes`; the restamp and ~External are the
-    // compiler's chain.
-    ~Material();
 
 public:
     // ---- the 0x18 bytes Material adds after Object::External ---------------
@@ -392,11 +377,12 @@ public:
     // exe scalar deleting dtor 0x1400121a0 (~MaterialInstance; MemFree on
     // flags & 1). ENDGAME B.3.9 GFX: the minted table and its RT_DELDTOR row
     // 0x180002d60 are retired; the class keeps the exe's SCALAR arm (D1.2).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        this->~MaterialInstance();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1MaterialInstance@Graphics@@UEAA@XZ 0x180103a00: restamp, the three
+    // retail ~Array calls (+0x50, +0x40, +0x30), ~External. The three calls are
+    // the body (renderer.cpp); the restamp and ~External are the compiler's.
+    // ENDGAME B.3.9 GFX: the ??1 door (deleting_dtor_leaves.cpp) is retired
+    // with the RT_DELDTOR row it served.
+    ~MaterialInstance() override;
 
     // [1] 0x180002810 TypeName / [2] 0x1800027f0 Type, TypeId 0x180002800
     // (retail's static `?TypeId@MaterialInstance@Graphics@@SAIXZ`, ported here), `_TypeName` / `_ParentTypeName`
@@ -457,7 +443,7 @@ public:
     // class's own (wave24_lane_gfxmat.cpp, B39_RULES D2).
     static void* operator new(std::size_t bytes);            // 0x180002820  wave21
     static void* operator new(std::size_t bytes, void* place);// 0x180002890
-    static void  operator delete(void* p);                   // 0x1800028a0
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                   // 0x1800028a0
     // CreateNewObject 0x180002900 / CreateInPlaceObject 0x1800029d0: declared
     // by DECLARE_TYPE above.
 
@@ -475,14 +461,6 @@ public:
         _constants._data  = nullptr; _constants._size  = 0; _constants._capacity  = 0;   // +0x40
         _textures._data   = nullptr; _textures._size   = 0; _textures._capacity   = 0;   // +0x50
     }
-
-protected:
-    // ??1MaterialInstance@Graphics@@UEAA@XZ 0x180103a00: restamp, the three
-    // retail ~Array calls (+0x50, +0x40, +0x30), ~External. The three calls are
-    // the body (renderer.cpp); the restamp and ~External are the compiler's.
-    // ENDGAME B.3.9 GFX: the ??1 door (deleting_dtor_leaves.cpp) is retired
-    // with the RT_DELDTOR row it served.
-    ~MaterialInstance();
 
 public:
     // ---- the 0x40 bytes MaterialInstance adds ------------------------------

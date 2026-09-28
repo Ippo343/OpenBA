@@ -30,15 +30,12 @@ class Tutorial final : public Object::External {
 public:
     Tutorial();                                                    // 0x1400deb90
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140026f50
+    ~Tutorial() override;                                          // [0] 0x140026f50
     int32_t           GetFileVersion() const override { return 2; }// [3] 0x1400deb80
     bool              Serialize(void* stream) override;            // [5] 0x1400dead0
     Object::External* Reconstruct() override;                      // [6] 0x140026f00
     void              Destruct() override;                         // [7] 0x140001640
     virtual Object::External* Construct();                         // [8] 0x140026eb0
-
-protected:
-    ~Tutorial();
 
 public:
     void*    setup;              // +0x20: ExternalPtr (0x140002340 serializes it; StepExecute keys the dialog lookup on it)

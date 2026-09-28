@@ -352,13 +352,6 @@ ConsumeRawMaterial::~ConsumeRawMaterial() {
     _field30 = nullptr;
 }
 
-// [0] 0x140022130
-Object::Base* ConsumeRawMaterial::DeletingDtor(unsigned flags) {
-    this->~ConsumeRawMaterial();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c6120
 // [4] 0x1400c5f50
 // [8] 0x1400c5e30

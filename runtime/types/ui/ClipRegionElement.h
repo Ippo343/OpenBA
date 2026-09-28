@@ -48,8 +48,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0ClipRegionElement@UI@@QEAA@XZ` (0x1800cbe60) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~ClipRegionElement is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~ClipRegionElement is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7ClipRegionElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -81,20 +81,10 @@ public:
     // ---- the twelve slots, in measured order ------------------------------
     // [0] 0x180038370 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ClipRegionElement*>(self + static_cast<int64_t>(i) * 0xd8)
-                    ->~ClipRegionElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ClipRegionElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1ClipRegionElement@UI@@UEAA@XZ` (0x1800cbe30). EMPTY
+    // (clipregionelement.cpp): restamp, then JMP ~Element, which the compiler
+    // chains.
+    ~ClipRegionElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x180037f70, Type 0x180037f50, TypeId 0x180037f60, _TypeName 0x180037f30
@@ -123,12 +113,6 @@ public:
     ClipRegionElement& operator=(const ClipRegionElement& src);   // 0x1800382b0  not ported
 
 
-protected:
-    // `??1ClipRegionElement@UI@@UEAA@XZ` (0x1800cbe30). NON-VIRTUAL and EMPTY
-    // (clipregionelement.cpp): restamp, then JMP ~Element, which the compiler
-    // chains.
-    ~ClipRegionElement();
-
 private:
 
 public:
@@ -143,7 +127,7 @@ public:
 static_assert(sizeof(ClipRegionElement) == 0xd8,
               "UI::ClipRegionElement is 0xd8 bytes (MOV EDX,0xd8 in 0x180038370)");
 static_assert(alignof(ClipRegionElement) == 8, "UI::ClipRegionElement aligns to 8");
-static_assert(!std::has_virtual_destructor<ClipRegionElement>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<ClipRegionElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<ClipRegionElement>::value, "B39 D1: concrete");
 static_assert(offsetof(ClipRegionElement, _reqWidth) == sizeof(Element),
               "ClipRegionElement's own fields begin at the end of UI::Element");

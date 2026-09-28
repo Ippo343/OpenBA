@@ -285,13 +285,6 @@ FinishTutorialInstance::~FinishTutorialInstance() {
     }
 }
 
-// [0] 0x140026200: ~FinishTutorialInstance, MemFree on &1.
-Object::Base* FinishTutorialInstance::DeletingDtor(unsigned flags) {
-    this->~FinishTutorialInstance();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 void* FinishTutorialInstance::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FinishTutorialInstance), 8);
     if (!p) return nullptr;

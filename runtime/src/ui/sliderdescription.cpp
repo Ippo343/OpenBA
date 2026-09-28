@@ -137,11 +137,11 @@ Object::External* SliderDescription::Construct() {
 }
 // [6] 0x1800498d0 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* SliderDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~SliderDescription();
     return ::new (this) SliderDescription();
 }
 // [7] 0x180049900
-void SliderDescription::Destruct() { DeletingDtor(0); }
+void SliderDescription::Destruct() { this->~SliderDescription(); }
 
 // [5] ?Serialize@SliderDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d7890
 bool SliderDescription::Serialize(void* streamArg) {
@@ -175,7 +175,7 @@ bool SliderDescription::Serialize(void* streamArg) {
     rw->SerializeInt(_steps, nullptr);
 
     if (rw != nullptr) {                                                // 1800d79ce
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

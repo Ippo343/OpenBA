@@ -28,7 +28,7 @@ class StateMachineDescription final : public Description {
 public:
     StateMachineDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140038440
+    ~StateMachineDescription() override = default;                         // [0] 0x140038440
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14012bb40
     bool              Serialize(void* stream) override;                    // [5] 0x14012bb00
     Object::External* Reconstruct() override;                              // [6] 0x1400383e0
@@ -38,9 +38,6 @@ public:
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
 
-
-protected:
-    ~StateMachineDescription() = default;
 };
 
 static_assert(sizeof(StateMachineDescription) == 0x20, "StateMachineDescription is 0x20 (create 0x140038330 MemAlloc(0x20))");

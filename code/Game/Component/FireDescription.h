@@ -27,7 +27,7 @@ class FireDescription final : public Description {
 public:
     FireDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400056c0
+    ~FireDescription() override = default;                                 // [0] 0x1400056c0
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x140049d10
     bool              Serialize(void* stream) override;                    // [5] 0x140049c00
     Object::External* Reconstruct() override;                              // [6] 0x140005690
@@ -48,9 +48,6 @@ public:
     float _f44;                                 // +0x44
     float _f48;                                 // +0x48
     int32_t _i4c;                               // +0x4c zeroed, never serialized
-
-protected:
-    ~FireDescription() = default;
 };
 
 static_assert(sizeof(FireDescription) == 0x50, "FireDescription is 0x50 (create 0x140005640 MemAlloc(0x50))");

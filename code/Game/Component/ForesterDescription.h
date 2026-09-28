@@ -27,7 +27,7 @@ class ForesterDescription final : public Description {
 public:
     ForesterDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140034a10
+    ~ForesterDescription() override = default;                             // [0] 0x140034a10
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14011fb00
     bool              Serialize(void* stream) override;                    // [5] 0x14011fa80
     Object::External* Reconstruct() override;                              // [6] 0x1400349b0
@@ -39,9 +39,6 @@ public:
     void* _ref20;                               // +0x20 ExternalPtr (tree/sapling material)
     uint32_t _type;                             // +0x28 enum (serialized through the uint door)
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
-
-protected:
-    ~ForesterDescription() = default;
 };
 
 static_assert(sizeof(ForesterDescription) == 0x30, "ForesterDescription is 0x30 (create 0x1400348e0 MemAlloc(0x30))");

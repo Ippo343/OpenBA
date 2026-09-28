@@ -375,12 +375,6 @@ AttendanceComponent::AttendanceComponent()
     OrFlagsInCtor(0xa);
 }
 
-// [0] 0x140002860: ~AttendanceComponent (0x140044510), MemFree on &1.
-Object::Base* AttendanceComponent::DeletingDtor(unsigned flags) {
-    this->~AttendanceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140044510: the waiting queue (+0x28 data, +0x30 count/capacity) is freed and
 // zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
 // compiler's chain.

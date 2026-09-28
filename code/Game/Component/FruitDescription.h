@@ -27,7 +27,7 @@ class FruitDescription final : public Description {
 public:
     FruitDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140005ac0
+    ~FruitDescription() override = default;                                // [0] 0x140005ac0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14004a260
     bool              Serialize(void* stream) override;                    // [5] 0x14004a1e0
     Object::External* Reconstruct() override;                              // [6] 0x140005a50
@@ -41,9 +41,6 @@ public:
     float _f28;                                 // +0x28 ctor stores int 0
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
     void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
-
-protected:
-    ~FruitDescription() = default;
 };
 
 static_assert(sizeof(FruitDescription) == 0x38, "FruitDescription is 0x38 (create 0x140005980 MemAlloc(0x38))");

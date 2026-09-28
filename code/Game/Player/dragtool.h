@@ -39,7 +39,8 @@ class DragTool : public Tool {
 
 public:
     // ---- the 15 slots, in retail order (declared here: the ones DragTool fills)
-    Object::Base* DeletingDtor(unsigned flags) override;               // [0]  0x14002da20
+    // no body in retail
+    ~DragTool() override = default;                                    // [0]  0x14002da20
     // [1] TypeName 0x14002da10 and [2] Type 0x14002da00: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     char          OnKey(char active) override;                         // [6]  0x1400fc6b0
     char          OnCancel() override;                                 // [9]  0x1400fc640
@@ -63,7 +64,6 @@ public:
 protected:
     DragTool() : dragState(0), singleClick(0), _pad2A{0, 0},
                  startCell(-1), endCell(-1), lastEndCell(-1) {}
-    ~DragTool() = default;  // no body in retail
 };
 
 namespace DragToolAddr {

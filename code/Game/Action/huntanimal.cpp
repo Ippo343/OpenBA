@@ -456,13 +456,6 @@ HuntAnimal::HuntAnimal()
       _field38(0),
       _pad39{} {}
 
-// [0] 0x140022770
-Object::Base* HuntAnimal::DeletingDtor(unsigned flags) {
-    this->~HuntAnimal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c8260
 // [4] 0x1400c8250
 // [5] 0x1400c8240

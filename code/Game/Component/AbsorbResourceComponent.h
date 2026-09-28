@@ -46,16 +46,14 @@ public:
 
     AbsorbResourceComponent();                                    // 0x140105cc0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14002ebf0
+    // 0x140105c60
+    ~AbsorbResourceComponent() override;                          // [0]  0x14002ebf0
     void          Persist(void* stream) override;                 // [3]  0x140105c00
     int         GetDefaultState() const override { return 0; }    // [16] 0x140003730
     Controller* GetController() override { return &_controller; } // [17] 0x140004080
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-
-protected:
-    ~AbsorbResourceComponent();                                   // 0x140105c60
 };
 
 static_assert(sizeof(AbsorbResourceComponent) == 0x48, "AbsorbResourceComponent is 0x48 (create 0x14002ea20)");

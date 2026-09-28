@@ -30,7 +30,7 @@ class TutorialSetupGameSpeed final : public TutorialSetup {
 public:
     TutorialSetupGameSpeed();                                      // 0x1400e2e40
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140028ac0
+    ~TutorialSetupGameSpeed() override = default;                  // [0] 0x140028ac0
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400e2df0
     bool              Serialize(void* stream) override;            // [5] 0x1400e2d90
     Object::External* Reconstruct() override;                      // [6] 0x140028a70
@@ -39,9 +39,6 @@ public:
     void              Update(void* /*time*/) override {}           // [9] 0x1400e2d50 RET
     void              End() override {}                            // [10] 0x1400e2d40 RET
     virtual Object::External* Construct();                         // [11] 0x140028a20
-
-protected:
-    ~TutorialSetupGameSpeed() = default;
 
 public:
     int32_t  speed;              // +0x20: game speed to set (default 1)

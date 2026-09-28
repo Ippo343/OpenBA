@@ -28,7 +28,7 @@ class AbsorbResourceDescription final : public Description {
 public:
     AbsorbResourceDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14002eb90
+    ~AbsorbResourceDescription() override = default;                       // [0] 0x14002eb90
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140105d90
     bool              Serialize(void* stream) override;                    // [5] 0x140105d50
     Object::External* Reconstruct() override;                              // [6] 0x14002eb30
@@ -38,9 +38,6 @@ public:
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
 
-
-protected:
-    ~AbsorbResourceDescription() = default;
 };
 
 static_assert(sizeof(AbsorbResourceDescription) == 0x20, "AbsorbResourceDescription is 0x20 (create 0x14002ea80 MemAlloc(0x20))");

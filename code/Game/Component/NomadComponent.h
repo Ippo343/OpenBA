@@ -41,7 +41,8 @@ public:
 
     NomadComponent();                                     // 0x14004fdb0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140009230
+    // 0x14004fd50
+    ~NomadComponent() override;                                   // [0]  0x140009230
     void          Persist(void* stream) override;                 // [3]  0x14004fc40
     void          OnRemove() override;                            // [7]  0x14004fd20
     int         GetDefaultState() const override { return 0; }  // [16] 0x140003730
@@ -56,9 +57,6 @@ public:
     uint32_t        field50;       // +0x50
     uint8_t         _pad54[4];     // +0x54
     StateController _controller;   // +0x58 the embedded controller (D6)
-
-protected:
-    ~NomadComponent();                                    // 0x14004fd50
 };
 
 static_assert(sizeof(NomadComponent) == 0x78, "NomadComponent is 0x78 (create 0x140009020)");

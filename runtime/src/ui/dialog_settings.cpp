@@ -297,12 +297,12 @@ OpenCounts g_openCounts;
 namespace {
 
 // ENDGAME B.3.9 IO (W2, foreign site): the real class; the ??0 / ??1 doors are
-// gone. The destructor is the non-virtual slot-0 call with flags 0.
+// gone. The destructor is a qualified `T::~T()` call (retail: slot 0, flags 0).
 inline void MsCtor(void* ms) {
     ::new (ms) IO::MemoryStream();
 }
 inline void MsDtor(void* ms) {
-    static_cast<IO::MemoryStream*>(ms)->IO::MemoryStream::DeletingDtor(0);
+    static_cast<IO::MemoryStream*>(ms)->IO::MemoryStream::~MemoryStream();
 }
 inline void SerCtor(void* ser, void* ms) {
     RT_EXPORT_ONCE(RtUi::SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(ser, ms, 0);
@@ -354,11 +354,11 @@ void DialogInstance::SaveSettings() {
         _controllers._data[i]->OnSerializeSettings(&ms);   // controller slot 10 (re-read)
 
         if (rw2 != nullptr)
-            rw2->DeletingDtor(1);
+            delete rw2;
     }
 
     if (rw != nullptr)
-        rw->DeletingDtor(1);
+        delete rw;
 
     MsDtor(&ms);
 }
@@ -433,11 +433,11 @@ void DialogInstance::OnOpened() {                              // [4]
         }
 
         if (rw2 != nullptr)
-            rw2->DeletingDtor(1);
+            delete rw2;
     }
 
     if (rw != nullptr)
-        rw->DeletingDtor(1);
+        delete rw;
 
     MsDtor(&ms);
 }

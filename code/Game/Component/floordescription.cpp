@@ -33,13 +33,6 @@ FloorDescription::FloorDescription()
       _ref20(nullptr),
       _b28(false) {}
 
-// [0] 0x140034790: ~FloorDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* FloorDescription::DeletingDtor(unsigned flags) {
-    this->~FloorDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14011f680: stream order as retail.
 bool FloorDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -54,15 +47,15 @@ bool FloorDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140034720: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140034720: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* FloorDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~FloorDescription();
     return new (static_cast<void*>(this)) FloorDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void FloorDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void FloorDescription::Destruct() { this->~FloorDescription(); }
 
 // [8] 0x140034780: FloorComponent's type id through the hidden return slot.
 Object::Type* FloorDescription::GetComponentType(Object::Type* ret) const {

@@ -28,13 +28,6 @@ QuarryComponent::QuarryComponent() {
     OrFlagsInCtor(0x3);
 }
 
-// [0] 0x14000b5d0: ~QuarryComponent (0x140055270: restamp + ~Internal), MemFree on &1.
-Object::Base* QuarryComponent::DeletingDtor(unsigned flags) {
-    this->~QuarryComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x140055230 — Component::Persist (a direct call in retail) + one empty
 // Serializer scope.
 void QuarryComponent::Persist(void* stream) {

@@ -29,15 +29,13 @@ class WildAnimalComponent final : public Component {
 public:
     WildAnimalComponent();                                        // 0x14012e3c0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140039df0
+    // no own work
+    ~WildAnimalComponent() override = default;                    // [0] 0x140039df0
     void Persist(void* stream) override;                          // [3] 0x14012e300
     void OnRemove() override;                                     // [7] 0x14012e2b0
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint64_t data28;       // +0x28 herd (HerdComponent) back-ref
-
-protected:
-    ~WildAnimalComponent() = default;                             // no own work
 };
 
 static_assert(sizeof(WildAnimalComponent) == 0x30, "WildAnimalComponent is 0x30 (create 0x140039c20)");

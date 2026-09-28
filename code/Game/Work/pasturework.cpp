@@ -941,17 +941,6 @@ PastureWork::~PastureWork() {
 }
 
 
-// ============================================================
-// PastureWork::ScalarDtor (0x14002BF70)
-// Calls dtor body, then conditional free.
-// ============================================================
-// [0] 0x14002bf70: ~PastureWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* PastureWork::DeletingDtor(unsigned flags) {
-    this->~PastureWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,

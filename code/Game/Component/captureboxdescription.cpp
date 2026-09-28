@@ -38,13 +38,6 @@
 // 0x14015d4a0 stamp is the compiler's; +0x68 = 0, +0x70 = String() (null).
 CaptureBoxDescription::CaptureBoxDescription() : _spriteSheet(nullptr), _spriteName() {}
 
-// [0] 0x140014010: ~String(+0x70), ~ElementDescription (-> ~External), MemFree on &1.
-Object::Base* CaptureBoxDescription::DeletingDtor(unsigned flags) {
-    this->~CaptureBoxDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x140079210: ElementDescription::GetFileVersion() | 0x100 — the 0x100 bit
 // flags a custom serialize format on top of the base ElementDescription version.
 int32_t CaptureBoxDescription::GetFileVersion() const {
@@ -69,13 +62,13 @@ bool CaptureBoxDescription::Serialize(void* stream) {
 }
 
 // [6] 0x140013e40: retail destroys and rebuilds in place: a virtual
-// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+// `~T()` (slot 0, flags 0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
 Object::External* CaptureBoxDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CaptureBoxDescription();
     return new (static_cast<void*>(this)) CaptureBoxDescription();
 }
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
-void CaptureBoxDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0).
+void CaptureBoxDescription::Destruct() { this->~CaptureBoxDescription(); }
 
 // [8] 0x1400790a0 — CreateInstance (RETSLOT: RCX this, RDX the caller's
 // InternalPtr<Element>). Transcribed:

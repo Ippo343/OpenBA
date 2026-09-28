@@ -625,16 +625,6 @@ TendArea::~TendArea() {
 }
 
 
-// ============================================================
-// TendArea::ScalarDtor (0x14002c5d0)
-// ============================================================
-// [0] 0x14002c5d0: ~TendArea, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* TendArea::DeletingDtor(unsigned flags) {
-    this->~TendArea();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,

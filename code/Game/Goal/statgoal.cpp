@@ -58,13 +58,6 @@ StatGoal::~StatGoal() {
     reinterpret_cast<System::String*>(statAString)->~String();   // B.3.1 bridge
 }
 
-// [0] 0x140026540: ~StatGoal -> ~Goal -> ~External, MemFree on &1.
-Object::Base* StatGoal::DeletingDtor(unsigned flags) {
-    this->~StatGoal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // StatGoal::Serialize (vtable +0x28, 0x1400da8b0)
 // ============================================================
@@ -133,12 +126,12 @@ bool StatGoal::Serialize(void* stream) {
 // ============================================================
 // StatGoal::Reconstruct [6] 0x140026520 / Destruct [7] 0x140001640
 // ============================================================
-// Retail: DeletingDtor(0) (destroy in place), then the ctor on `this`.
+// Retail: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor on `this`.
 Object::External* StatGoal::Reconstruct() {
-    DeletingDtor(0);
+    this->~StatGoal();
     return ::new (static_cast<void*>(this)) StatGoal();
 }
-void StatGoal::Destruct() { DeletingDtor(0); }
+void StatGoal::Destruct() { this->~StatGoal(); }
 
 // ============================================================
 // StatGoal::CheckGoalState (vtable +0x40, 0x1400da720)

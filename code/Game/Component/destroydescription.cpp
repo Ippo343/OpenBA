@@ -60,13 +60,6 @@ DestroyDescription::DestroyDescription()
       _damagedDecal(1),
       _minDamageLevel(0) {}
 
-// [0] 0x140033d70: ~DestroyDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* DestroyDescription::DeletingDtor(unsigned flags) {
-    this->~DestroyDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14011de70: stream order as retail.
 bool DestroyDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -86,15 +79,15 @@ bool DestroyDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140033d00: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140033d00: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* DestroyDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~DestroyDescription();
     return new (static_cast<void*>(this)) DestroyDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void DestroyDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void DestroyDescription::Destruct() { this->~DestroyDescription(); }
 
 // [8] 0x140033d60: DestroyComponent's type id through the hidden return slot.
 Object::Type* DestroyDescription::GetComponentType(Object::Type* ret) const {

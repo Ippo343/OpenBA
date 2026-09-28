@@ -23,7 +23,11 @@ class BuildRequirementUI final : public UI::DialogController {
 public:
     BuildRequirementUI() = default;                      // 0x1400107f0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140010860
+    // 0x140010860 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail frees the Array/String members at +0x50 and +0x40 before
+    // ~DialogController; the tree never did (leak kept).
+    ~BuildRequirementUI() override = default;                     // [0] 0x140010860
     void Persist(void* /*stream*/) override {}   // [3] 0x14005ee80  RET 0 in retail
     void OnCreated() override;   // [4] 0x14005e7c0
 
@@ -35,13 +39,6 @@ public:
     uint64_t data48 = 0;           // +0x48: zeroed
     uint64_t data50 = 0;           // +0x50: zeroed
     uint64_t data58 = 0;           // +0x58: zeroed
-
-protected:
-    // 0x140010860 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String members at +0x50 and +0x40 before
-    // ~DialogController; the tree never did (leak kept).
-    ~BuildRequirementUI() = default;
 };
 
 static_assert(sizeof(BuildRequirementUI) == 0x60, "BuildRequirementUI is 0x60 (create 0x1400107f0 MemAlloc(0x60))");

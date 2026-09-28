@@ -70,10 +70,10 @@ Object::External* ButtonDescription::Construct() {
 // 0x180047fb0: slot 0 with flag 0 (destroy WITHOUT freeing, through the
 // object's own table), then the ctor again. No null test.
 Object::External* ButtonDescription::Reconstruct() {
-    DeletingDtor(0);                                          // 180047fbe
+    this->~ButtonDescription();                                          // 180047fbe
     return ::new (this) ButtonDescription();                  // 180047fc8 JMP
 }
-void ButtonDescription::Destruct() { DeletingDtor(0); }
+void ButtonDescription::Destruct() { this->~ButtonDescription(); }
 
 // ============================================================================
 // ?Serialize@ButtonDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1801113e0
@@ -105,7 +105,7 @@ bool ButtonDescription::Serialize(void* streamv) {
     rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word98), nullptr);
     rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word9c), nullptr);
 
-    if (rw != nullptr) rw->DeletingDtor(1);                // 1801114ee
+    if (rw != nullptr) delete rw;                // 1801114ee
     return true;
 }
 

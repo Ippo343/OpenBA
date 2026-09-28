@@ -28,15 +28,11 @@ public:
     GameLoaderLoop(Engine::UpdateLoop* nextLoop, const System::Time& delay)
         : Engine::LoaderLoop(nextLoop, delay) {}
 
-    Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x140001190
+    ~GameLoaderLoop() override;                                  // [0] 0x140001190
     // [1] retail: LoaderLoop::Startup (Loader::Load(_nextLoop)). Overridden
     // for the standalone's two loader options only — STANDALONE DIVERGENCE,
     // see loader_loop_stubs.cpp.
     void Startup() override;
-
-
-protected:
-    ~GameLoaderLoop() {}
 };
 
 static_assert(sizeof(GameLoaderLoop) == 0x48, "GameLoaderLoop adds nothing to Engine::LoaderLoop (MemAlloc(0x48) at every site)");

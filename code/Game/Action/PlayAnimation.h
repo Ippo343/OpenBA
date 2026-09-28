@@ -22,7 +22,7 @@ class PlayAnimation final : public Action {
 public:
     PlayAnimation();                                                   // create 0x1400011f0
 
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140001260
+    ~PlayAnimation() override = default;                       // [0] 0x140001260
     void Persist(void* stream) override;                       // [3] 0x140042480
     int  AbstractImpl(void* actionStack) override;             // [4] 0x140042420
     int  Execute(void* actionStack, void* time) override;      // [5] 0x140042400
@@ -34,9 +34,6 @@ public:
     uint8_t   _pad28[8];         // +0x28 gap
     void*     _field30;          // +0x30 
     void*     _field38;          // +0x38 
-
-protected:
-    ~PlayAnimation() = default;
 };
 
 static_assert(sizeof(PlayAnimation) == 0x40, "PlayAnimation is 0x40 (create 0x1400011f0 MemAlloc)");

@@ -34,13 +34,6 @@ OrchardDescription::OrchardDescription()
       _i28(2),
       _f2c(0.0f) {}
 
-// [0] 0x140009a10: ~OrchardDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* OrchardDescription::DeletingDtor(unsigned flags) {
-    this->~OrchardDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140052300: stream order as retail.
 bool OrchardDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
@@ -51,15 +44,15 @@ bool OrchardDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400099a0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x1400099a0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* OrchardDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~OrchardDescription();
     return new (static_cast<void*>(this)) OrchardDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void OrchardDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void OrchardDescription::Destruct() { this->~OrchardDescription(); }
 
 // [8] 0x140009a00: OrchardComponent's type id through the hidden return slot.
 Object::Type* OrchardDescription::GetComponentType(Object::Type* ret) const {

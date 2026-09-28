@@ -277,13 +277,6 @@ RemoveNaturalResource::RemoveNaturalResource()
       _field30(0),
       _pad31{} {}
 
-// [0] 0x140022fe0
-Object::Base* RemoveNaturalResource::DeletingDtor(unsigned flags) {
-    this->~RemoveNaturalResource();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400cac50
 // [4] 0x1400cab10
 // [8] 0x1400caaa0

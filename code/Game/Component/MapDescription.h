@@ -29,7 +29,7 @@ class MapDescription final : public Description {
 public:
     MapDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400357e0
+    ~MapDescription() override = default;                                  // [0] 0x1400357e0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140124610
     bool              Serialize(void* stream) override;                    // [5] 0x140124560
     Object::External* Reconstruct() override;                              // [6] 0x1400357b0
@@ -46,9 +46,6 @@ public:
     bool _b32;                                  // +0x32
     uint8_t _pad33[1];                          // +0x33 never written by the ctor
     System::Color _color;                       // +0x34 ARGB, opaque black
-
-protected:
-    ~MapDescription() = default;
 };
 
 static_assert(sizeof(MapDescription) == 0x38, "MapDescription is 0x38 (create 0x140035760 MemAlloc(0x38))");

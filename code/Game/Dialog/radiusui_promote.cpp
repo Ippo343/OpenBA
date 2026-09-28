@@ -58,14 +58,6 @@ RadiusUI::~RadiusUI() {
 
 
 
-// [0] 0x140013640: ~RadiusUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* RadiusUI::DeletingDtor(unsigned flags) {
-    this->~RadiusUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140013590: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* RadiusUI::CreateNewObject() {

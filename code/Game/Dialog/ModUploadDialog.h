@@ -30,10 +30,7 @@ public:
     ModUploadDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                     Object::InternalPtr<UI::DialogInstance> parent);  // inlined 0x14006d400
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140012840
-
-protected:
-    ~ModUploadDialog() = default;
+    ~ModUploadDialog() override = default;                         // [0] 0x140012840
 };
 
 static_assert(sizeof(ModUploadDialog) == 0xB8, "ModUploadDialog is 0xb8 (create 0x140012bc0)");

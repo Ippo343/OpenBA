@@ -54,14 +54,6 @@
 // the lazy GetTypeId cache are gone; the compiler emits the table.
 // ============================================================================
 
-// [0] 0x140010dd0: ~ControlUIConfig (restamp + ~DialogControllerConfig +
-// ~External, all the compiler's), MemFree on &1.
-Object::Base* ControlUIConfig::DeletingDtor(unsigned flags) {
-    this->~ControlUIConfig();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [4] not declared: retail's slot is the imported External::Compile, which
 // the class inherits.
 
@@ -87,7 +79,7 @@ Object::External* ControlUIConfig::Reconstruct() {
 
 // [7] 0x140001640, the body shared by 119 exe tables:
 // `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
-void ControlUIConfig::Destruct() { DeletingDtor(0); }
+void ControlUIConfig::Destruct() { this->~ControlUIConfig(); }
 
 // [8] 0x140010d30 — placement construction (MSVC folded it with createInPlace).
 Object::External* ControlUIConfig::Construct() { return new (this) ControlUIConfig(); }

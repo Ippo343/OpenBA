@@ -415,14 +415,6 @@ void PastureUI::OnUpdate(const System::Time& time) {
 
 
 
-// [0] 0x140020ee0: ~PastureUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* PastureUI::DeletingDtor(unsigned flags) {
-    this->~PastureUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140020e10: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* PastureUI::CreateNewObject() {

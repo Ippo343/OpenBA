@@ -356,12 +356,6 @@ CemeteryComponent::CemeteryComponent()
     OrFlagsInCtor(0x83);
 }
 
-// [0] 0x140004220: ~CemeteryComponent (0x140047680), MemFree on &1.
-Object::Base* CemeteryComponent::DeletingDtor(unsigned flags) {
-    this->~CemeteryComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140047680: the grave-plot list (+0x48 data, +0x50 count, +0x54 capacity) is
 // freed and zeroed; the member's and the bases' dtors (restamps only) and ~Internal
 // are the compiler's chain.

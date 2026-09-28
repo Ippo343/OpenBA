@@ -47,7 +47,8 @@ class PlantArea final : public Work {
 public:
     PlantArea();                                                    // 0x1400f4770
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002c4b0
+    // 0x1400f4600: frees the validity array and the cell BST
+    ~PlantArea() override;                                          // [0]  0x14002c4b0
     void  Persist(void* stream) override;                           // [3]  0x1400f4540
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400f4010
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400f3f60
@@ -65,9 +66,6 @@ public:
     int32_t  field_60;           // +0x60: field cell count
     uint8_t  _pad64[4];          // +0x64: padding
     void*    field_68;           // +0x68: ExternalPtr (crop description resource)
-
-protected:
-    ~PlantArea();                                               // 0x1400f4600: frees the validity array and the cell BST
 };
 
 static_assert(sizeof(PlantArea) == 0x70, "PlantArea is 0x70 (retail create MemAlloc)");

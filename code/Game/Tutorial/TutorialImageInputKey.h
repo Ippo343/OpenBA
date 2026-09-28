@@ -28,16 +28,13 @@ class TutorialImageInputKey final : public TutorialImage {
 public:
     TutorialImageInputKey();                                       // 0x1400e08f0
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140027fa0
+    ~TutorialImageInputKey() override = default;                   // [0] 0x140027fa0
     int32_t           GetFileVersion() const override { return 0x1001; }  // [3] 0x1400e08a0
     bool              Serialize(void* stream) override;            // [5] 0x1400e07f0
     Object::External* Reconstruct() override;                      // [6] 0x140027f50
     // [7] Destruct: TutorialImage's (the shared 0x140001640 body)
     Object::External* Construct() override;                        // [8] 0x140027f00
     void*             CreateElement(void* ret, void* dialog) override;  // [9] 0x1400e06e0
-
-protected:
-    ~TutorialImageInputKey() = default;
 
 public:
     int32_t  _inputId;           // +0x30: input key id (serialized through the uint door)

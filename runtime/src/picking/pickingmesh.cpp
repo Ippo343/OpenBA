@@ -248,11 +248,11 @@ Object::External* PickingMesh::Construct() {
 }
 // [6] 0x180071cd0: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
 Object::External* PickingMesh::Reconstruct() {
-    DeletingDtor(0);
+    this->~PickingMesh();
     return ::new (this) PickingMesh();
 }
 // [7] 0x180071db0: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void PickingMesh::Destruct() { DeletingDtor(0); }
+void PickingMesh::Destruct() { this->~PickingMesh(); }
 
 // ?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ  0x180071ba0
 // The FACTREST row this replaces (rt_factories_picking.inc, 0x180071ba0..c3f):
@@ -305,7 +305,7 @@ bool PickingMesh::Serialize(void* streamv) {
     SerializeSubMeshesBody(&ser, nodeCount, _nodes._data);
 
     if (rw != nullptr) {
-        rwc->DeletingDtor(1);
+        delete rwc;
     }
     return true;
 }

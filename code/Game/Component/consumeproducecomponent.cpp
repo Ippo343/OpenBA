@@ -123,12 +123,6 @@ ConsumeProduceComponent::ConsumeProduceComponent()
     OrFlagsInCtor(0x80);
 }
 
-// [0] 0x140032460: CALL the dtor 0x140118fd0, MemFree on &1.
-Object::Base* ConsumeProduceComponent::DeletingDtor(unsigned flags) {
-    this->~ConsumeProduceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140118fd0: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
 // (the compiler chain).
 ConsumeProduceComponent::~ConsumeProduceComponent() {

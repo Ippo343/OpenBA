@@ -345,13 +345,6 @@ ShowTool::ShowTool()
       _field28(-1),
       _pad2C{} {}
 
-// [0] 0x140001420
-Object::Base* ShowTool::DeletingDtor(unsigned flags) {
-    this->~ShowTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x140042780
 // [4] 0x140042710
 // [7] 0x140042700 — the leaf's own `RET 0` (same bytes as the base body)

@@ -42,7 +42,8 @@ public:
 
     CropFieldComponent();                                                // 0x14011afd0
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x1400330a0
+    // 0x14011af60
+    ~CropFieldComponent() override;                                     // [0]  0x1400330a0
     void          Persist(void* stream) override;                       // [3]  0x14011ae70
     void          Startup() override;                                   // [4]  0x14011ae60
     uint32_t      CommandMask(int command) override;                    // [13] 0x14011ada0
@@ -59,9 +60,6 @@ public:
     void*    field50;              // +0x50 the crop description list (Startup clears it)
     void*    field58;              // +0x58 the slot grid (stride 0x20)
     void*    field60;              // +0x60 its count (dword) / capacity
-
-protected:
-    ~CropFieldComponent();                                               // 0x14011af60
 };
 
 static_assert(sizeof(CropFieldComponent) == 0x68, "CropFieldComponent is 0x68 (create 0x140032ed0)");

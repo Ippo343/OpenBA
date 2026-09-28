@@ -263,7 +263,7 @@ void TableElement::SetChild(Object::InternalPtr<Element>* child, int32_t index) 
             // Slot 0 with flag 1 — the scalar deleting destructor, the
             // InternalPtr<T> "release and possibly delete" idiom
             // (runtime/types/object/Internal.h's kInternalVtblScalarDtor).
-            old->DeletingDtor(1);
+            delete old;
             *cellSlot = nullptr;
         }
         WalkDirty(this);
@@ -605,7 +605,7 @@ void Element::RemoveChildren() {
         Element** data = _children._data;              // re-read, see above
         Element* child = data[i];
         if (child == nullptr) continue;
-        child->DeletingDtor(1);                        // slot 0, flag 1
+        delete child;                        // slot 0, flag 1
         data[i] = nullptr;
     }
     RtArrayCellsSetSize(&_children, 0);

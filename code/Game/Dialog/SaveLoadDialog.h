@@ -31,7 +31,7 @@ public:
                    Object::InternalPtr<UI::DialogInstance> parent,
                    uint8_t mode, void* engine, void* gameWorld);    // 0x1400b8270
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x1400211b0
+    ~SaveLoadDialog() override = default;                          // [0] 0x1400211b0
     void OnOpened() override;                                      // [4] 0x1400b7d00
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x1400b6880
@@ -39,9 +39,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x1400b67e0
-
-protected:
-    ~SaveLoadDialog() = default;
 
 private:
     void InitFields(uint8_t mode, void* engine, void* gameWorld);

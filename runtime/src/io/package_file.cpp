@@ -659,9 +659,9 @@ Object::External::CompileResult PackageFile::Compile(const System::Filename& pat
 // Passing 1 would free a block the caller still holds. The constant is read off
 // `XOR EDX,EDX` at both sites, not assumed.
 // ENDGAME B.3.9 IO: the object wears the compiler's table, so the virtual
-// slot-0 call is `DeletingDtor(0)` (flags 0: destroy in place, no free).
+// slot-0 call is `~T()` (slot 0, flags 0) (flags 0: destroy in place, no free).
 void PackageFile::Destruct() {
-    DeletingDtor(0);                                      // 180025305, flags 0
+    this->~PackageFile();                                      // 180025305, flags 0
 }
 
 // "Destroy in place, then run the constructor over the same storage." The
@@ -669,7 +669,7 @@ void PackageFile::Destruct() {
 // tail-jumped constructor leaves in RAX, which `??0PackageFile@IO@@` sets to
 // `this` -- placement construction over the same storage.
 Object::External* PackageFile::Reconstruct() {
-    DeletingDtor(0);                                      // 1800252de, flags 0
+    this->~PackageFile();                                      // 1800252de, flags 0
     return ::new (this) PackageFile();                    // 1800252e8 ??0PackageFile
 }
 

@@ -15,13 +15,6 @@ ModUploadDialog::ModUploadDialog(UI::UserInterface* ui, const UI::Dialog* dialog
                                  Object::InternalPtr<UI::DialogInstance> parent)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {}
 
-// [0] 0x140012840: ~ModUploadDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* ModUploadDialog::DeletingDtor(unsigned flags) {
-    this->~ModUploadDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140012bc0: MemAlloc(0xb8, 8), then the ctor.
 void* ModUploadDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ModUploadDialog), 8);

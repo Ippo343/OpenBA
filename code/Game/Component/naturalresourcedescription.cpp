@@ -79,13 +79,6 @@ NaturalResourceDescription::NaturalResourceDescription()
     }
 }
 
-// [0] 0x140036650: ~NaturalResourceDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* NaturalResourceDescription::DeletingDtor(unsigned flags) {
-    this->~NaturalResourceDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140125e10: stream order as retail.
 bool NaturalResourceDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -120,15 +113,15 @@ bool NaturalResourceDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140036620: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x140036620: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* NaturalResourceDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~NaturalResourceDescription();
     return new (static_cast<void*>(this)) NaturalResourceDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void NaturalResourceDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void NaturalResourceDescription::Destruct() { this->~NaturalResourceDescription(); }
 
 // [8] 0x140036640: NaturalResourceComponent's type id through the hidden return slot.
 Object::Type* NaturalResourceDescription::GetComponentType(Object::Type* ret) const {

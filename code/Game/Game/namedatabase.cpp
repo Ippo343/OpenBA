@@ -128,21 +128,15 @@ NameDatabase::~NameDatabase() {
     reinterpret_cast<rtcoll::ArrayHdr*>(&_array1)->~Array();
 }
 
-Object::Base* NameDatabase::DeletingDtor(unsigned flags) {
-    this->~NameDatabase();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // NameDatabase::Reconstruct (vtable +0x30, 0x14001c730): dtor(self,0) then re-init.
 Object::External* NameDatabase::Reconstruct() {
-    DeletingDtor(0);
+    this->~NameDatabase();
     return ::new (static_cast<void*>(this)) NameDatabase();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void NameDatabase::Destruct() { DeletingDtor(0); }
+void NameDatabase::Destruct() { this->~NameDatabase(); }
 
 // [8] 0x14001c6d0 — placement-new of the class on `this`.
 Object::External* NameDatabase::Construct() {

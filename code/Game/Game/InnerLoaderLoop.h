@@ -32,17 +32,13 @@ public:
     InnerLoaderLoop(Engine::UpdateLoop* nextLoop, const System::Time& delay)
         : Engine::LoaderLoop(nextLoop, delay) {}
 
-    Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x140001150
+    ~InnerLoaderLoop() override;                                 // [0] 0x140001150
     // [1] retail: LoaderLoop::Startup (Loader::Load(_nextLoop)). Overridden
     // for the standalone's two loader options only — STANDALONE DIVERGENCE,
     // see loader_loop_stubs.cpp.
     void Startup() override;
     void Load() override;                                        // [6] 0x140001120
     const char* GetResourceFilename() override;                  // [10] 0x140001110 "Game/Global"
-
-
-protected:
-    ~InnerLoaderLoop() {}
 };
 
 static_assert(sizeof(InnerLoaderLoop) == 0x48, "InnerLoaderLoop adds nothing to Engine::LoaderLoop (GameMain MemAlloc(0x48))");

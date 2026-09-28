@@ -93,10 +93,10 @@ Object::External* ComboDescription::Construct() {
     return ::new (this) ComboDescription();                    // 180074d3c..180074d63
 }
 Object::External* ComboDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 180074cd7
+    this->~ComboDescription();                                           // 180074cd7
     return ::new (this) ComboDescription();                    // 180074ce1..180074d08
 }
-void ComboDescription::Destruct() { DeletingDtor(0); }
+void ComboDescription::Destruct() { this->~ComboDescription(); }
 
 // ============================================================================
 // ?Serialize@ComboDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1801129c0
@@ -117,7 +117,7 @@ bool ComboDescription::Serialize(void* streamv) {
     RtAddr<FieldSerFn>(0x180038f90ull)(&_itemDesc, &ser);    // 180112a2c
     RtAddr<FieldSerFn>(0x1800042a0ull)(&_stringTable, &ser); // 180112a3d
 
-    if (rw != nullptr) rw->DeletingDtor(1);                 // 180112a55
+    if (rw != nullptr) delete rw;                 // 180112a55
     return true;
 }
 

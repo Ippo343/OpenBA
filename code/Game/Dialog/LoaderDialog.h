@@ -30,14 +30,11 @@ public:
     LoaderDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                  Object::InternalPtr<UI::DialogInstance> parent);   // 0x140099070
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140020c70
+    ~LoaderDialog() override = default;                            // [0] 0x140020c70
     void OnOpened() override;                                      // [4] 0x1400b2d90
     // [5] OnClosed / [8] OnElementEvent: DialogInstance's, inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x1400b2d00
     void OnUpdate(const System::Time& time) override;              // [7] 0x1400b2d50
-
-protected:
-    ~LoaderDialog() = default;
 
 public:
     void*    loadingImage;     // +0xB8: "loadingImage" element

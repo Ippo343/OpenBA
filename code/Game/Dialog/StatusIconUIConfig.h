@@ -25,7 +25,7 @@ class StatusIconUIConfig final : public UI::DialogControllerConfig {
 public:
     StatusIconUIConfig() = default;                                // 0x140014250 (inlined)
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140014320
+    ~StatusIconUIConfig() override = default;                      // [0] 0x140014320
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x14007b450
     bool              Serialize(void* stream) override;            // [5] 0x14007b400
     Object::External* Reconstruct() override;                      // [6] 0x1400142e0
@@ -34,9 +34,6 @@ public:
 
     bool    _showOnMainPage = false;                               // +0x20
     uint8_t _pad21[7];                                             // +0x21 (never written by retail)
-
-protected:
-    ~StatusIconUIConfig() = default;
 };
 
 static_assert(sizeof(StatusIconUIConfig) == 0x28, "StatusIconUIConfig is 0x28 (create 0x140014250)");

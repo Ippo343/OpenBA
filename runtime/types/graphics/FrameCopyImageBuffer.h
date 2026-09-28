@@ -127,7 +127,7 @@ namespace Graphics {
 // 1,2,3,5,6,7,8,10,11 and inherits 4 AND 9. Copied from B35_SLOTS, per the
 // brief's "COPY from it; do not reconstruct".
 //
-// *** NOT CONSTRUCTIBLE IN B.3.5 *** and NO VIRTUAL DESTRUCTOR — the same two
+// *** NOT CONSTRUCTIBLE IN B.3.5 *** and (until B3X W1) NO VIRTUAL DESTRUCTOR — the same two
 // statements `Video::ImageBuffer` carries, for the same two reasons.
 // ============================================================
 class FrameCopyImageBuffer : public GeneratedImageBuffer {
@@ -144,11 +144,10 @@ public:
     // function does not move. ENDGAME B.3.9 GFX: the minted table and its
     // RT_DELDTOR row 0x18001f260 are retired; the class keeps the exe's SCALAR
     // arm (B39_RULES D1.2 -- the two differ only on flags & 2, never passed).
-    Object::Base*     DeletingDtor(unsigned flags) override {      // [ 0]
-        this->~FrameCopyImageBuffer();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1… 0x1800a3c80: release the two RenderBuffers and the back-buffer image
+    // (wave23_lane_gfxbody.cpp); the restamps and ~GeneratedImageBuffer /
+    // ~ImageBuffer are the compiler's chain. Virtual (B3X W1).
+    ~FrameCopyImageBuffer() override;
     // [ 1] 0x18001efb0 TypeName / [ 2] 0x18001ef90 Type, TypeId, `_TypeName` / `_ParentTypeName`
     // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
     // D6); the record is `DEFINE_TYPE`d in
@@ -185,12 +184,6 @@ public:
     FrameCopyImageBuffer();
 
 protected:
-    // ??1… 0x1800a3c80: release the two RenderBuffers and the back-buffer image
-    // (wave23_lane_gfxbody.cpp); the restamps and ~GeneratedImageBuffer /
-    // ~ImageBuffer are the compiler's chain. Non-virtual; slot 0 reaches it.
-    ~FrameCopyImageBuffer();
-
-protected:
 
     // RULE B5-15, both COPIED from B35_SLOTS section 3 into the DEFINE_TYPE:
     //   0x18001ef70  ?_TypeName@       -> "FrameCopyImageBuffer"
@@ -200,7 +193,7 @@ public:
     // TypeId and the factory pair 0x18001f0a0 / 0x18001f120: DECLARE_TYPE's.
     static void*         operator new(size_t size);             // ??2 — reached by name
     static void*         operator new(size_t size, void* storage);
-    static void          operator delete(void* p);              // ??3
+    static void          operator delete(void* p) { ::Object::detail::InternalMemFree(p); }              // ??3
     FrameCopyImageBuffer(const FrameCopyImageBuffer& other);            // ??0…AEBV01 — not ported
     FrameCopyImageBuffer& operator=(const FrameCopyImageBuffer& other); // ??4…      — not ported
 
@@ -208,7 +201,7 @@ public:
     // WHAT THE THREE OWNED POINTERS ARE FOR: the POD's banner at the top of this
     // file, which is the byte read. `_backBufferImage` is typed
     // `Video::ImageBuffer*` now, which is what lets its teardown be
-    // `_backBufferImage->DeletingDtor(1)` instead of a hand-indexed slot 0; the
+    // `delete _backBufferImage` instead of a hand-indexed slot 0; the
     // two `Video::RenderBuffer*` stay `void*` because `Video::RenderBuffer` is
     // still a POD in `Device.h` and is block D2's to convert.
     Video::ImageBuffer* _backBufferImage;  // +0x70  owned; deleted via ITS slot 0, flags 1

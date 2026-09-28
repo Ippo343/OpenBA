@@ -33,7 +33,7 @@ public:
     AchievementDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                       Object::InternalPtr<UI::DialogInstance> parent);  // 0x1400b34c0 inlined
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x1400103f0
+    ~AchievementDialog() override;                                 // [0] 0x1400103f0
     void OnOpened() override;                                      // [4] 0x14005d490
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x14005d240
@@ -41,9 +41,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14005d440
-
-protected:
-    ~AchievementDialog();
 
 public:
     uint64_t dataB8;           // +0xB8: "textComplete" element

@@ -32,7 +32,7 @@ class FinishTutorialGoal final : public Achievement::Goal {
 public:
     FinishTutorialGoal();                                          // 0x1400d79e0
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140026260
+    ~FinishTutorialGoal() override = default;                      // [0] 0x140026260
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400d79d0
     bool              Serialize(void* stream) override;            // [5] 0x1400d7970
     Object::External* Reconstruct() override;                      // [6] 0x1400261a0
@@ -40,9 +40,6 @@ public:
     GoalState         CheckGoalState() const override { return kNotMet; }  // [8] 0x1400d7960
     Object::Type*     GetInstanceType(Object::Type* ret) const override;   // [9] 0x1400261f0
     virtual Object::External* Construct();                         // [10] 0x140026150
-
-protected:
-    ~FinishTutorialGoal() = default;
 
 public:
     void*    _field30;           // +0x30: ExternalPtr<Tutorial> — the tutorial definition

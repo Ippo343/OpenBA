@@ -58,11 +58,11 @@ Object::External* Surface::Construct() {
 }
 // [6] 0x180064c70: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
 Object::External* Surface::Reconstruct() {
-    DeletingDtor(0);
+    this->~Surface();
     return ::new (this) Surface();
 }
 // [7] 0x180064d40: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void Surface::Destruct() { DeletingDtor(0); }
+void Surface::Destruct() { this->~Surface(); }
 
 // ?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ  0x180064b60
 // The FACTREST row this replaces: MemAlloc of 0x30 bytes, align 8 (the locked
@@ -104,7 +104,7 @@ bool Surface::Serialize(void* streamv) {
     rwc->SerializeUInt(_f24, nullptr);
 
     if (rw != nullptr) {
-        rwc->DeletingDtor(1);
+        delete rwc;
     }
     return true;
 }

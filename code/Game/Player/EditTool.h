@@ -39,7 +39,8 @@ class EditTool final : public Tool {
 public:
     EditTool() : entityRef(0), lastEntityRef(0) {}                         // 0x1400fd340
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x14002db00
+    // 0x1400fd300: no body
+    ~EditTool() override = default;                                        // [0]  0x14002db00
     void Startup() override {}                                             // [4]  0x1400fd2f0 RET
     void Shutdown() override;                                              // [5]  0x1400fd2e0
     char OnKey(char active) override;                                      // [6]  0x1400fd030
@@ -56,9 +57,6 @@ public:
 
     uint64_t entityRef;       // +0x28 InternalBasePtr: the open info dialog
     uint64_t lastEntityRef;   // +0x30 InternalBasePtr: the selected entity
-
-protected:
-    ~EditTool() = default;                                                 // 0x1400fd300: no body
 };
 
 namespace EditToolAddr {

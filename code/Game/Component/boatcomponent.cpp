@@ -59,12 +59,6 @@ BoatComponent::BoatComponent()
     : data28(0), data30(0), data38(0), data40(0), data48(0), _pad4C{}, data50(0), data58(0),
       _pad5C{}, data60(0), data68(0), data70(-1), _pad74{}, _controller(this) {}
 
-// [0] 0x140003970: ~BoatComponent (0x140046770), MemFree on &1.
-Object::Base* BoatComponent::DeletingDtor(unsigned flags) {
-    this->~BoatComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140046770: the route waypoint array (+0x60 data, +0x68 count/capacity) is freed
 // and zeroed; the member's and the bases' dtors (restamps only) and ~Internal are
 // the compiler's chain.

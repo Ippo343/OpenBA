@@ -27,7 +27,7 @@ class PickingDescription final : public Description {
 public:
     PickingDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140036f40
+    ~PickingDescription() override;                                        // [0] 0x140036f40
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x140128e00
     bool              Serialize(void* stream) override;                    // [5] 0x140128d00
     Object::External* Reconstruct() override;                              // [6] 0x140036ed0
@@ -42,9 +42,6 @@ public:
     void* _meshRef;                             // +0x30 ExternalPtr
     bool _enabled;                              // +0x38
     uint8_t _pad39[7];                          // +0x39 never written by the ctor
-
-protected:
-    ~PickingDescription();
 };
 
 static_assert(sizeof(PickingDescription) == 0x40, "PickingDescription is 0x40 (create 0x140036e00 MemAlloc(0x40))");

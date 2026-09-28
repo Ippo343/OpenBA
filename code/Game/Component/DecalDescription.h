@@ -27,7 +27,7 @@ class DecalDescription final : public Description {
 public:
     DecalDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400338a0
+    ~DecalDescription() override;                                          // [0] 0x1400338a0
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x14011bb00
     bool              Serialize(void* stream) override;                    // [5] 0x14011b980
     Object::External* Reconstruct() override;                              // [6] 0x140033870
@@ -48,9 +48,6 @@ public:
     int32_t _quadCap;                           // +0x44
     float _sizeB;                               // +0x48
     uint8_t _pad4c[4];                          // +0x4c never written by the ctor
-
-protected:
-    ~DecalDescription();
 };
 
 static_assert(sizeof(DecalDescription) == 0x50, "DecalDescription is 0x50 (create 0x140033820 MemAlloc(0x50))");

@@ -23,7 +23,8 @@ public:
     PickupStoredRawMaterial();                                                   // create 0x140022d60
     PickupStoredRawMaterial(uint64_t* source, uint64_t* storage, int64_t resType, int requested,
                             uint8_t flag);   // 0x1400ca520
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022dd0 (frees the +0x30 list)
+    // Retail 0x140022dd0: frees the +0x30 carrier list, then Action's dtor.
+    ~PickupStoredRawMaterial() override;                       // [0] 0x140022dd0 (frees the +0x30 list)
     void Persist(void* stream) override;                       // [3] 0x1400ca0d0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c9d40
     void CheckEntity() override;                               // [8] 0x1400c9c70
@@ -36,10 +37,6 @@ public:
     void*     _field38;          // +0x38 carrier list count (+0x38) / capacity (+0x3c)
     uint8_t   _field40;          // +0x40 flag
     uint8_t   _pad41[7];         // +0x41 padding
-
-protected:
-    // Retail 0x140022dd0: frees the +0x30 carrier list, then Action's dtor.
-    ~PickupStoredRawMaterial();
 };
 
 static_assert(sizeof(PickupStoredRawMaterial) == 0x48, "PickupStoredRawMaterial is 0x48 (create 0x140022d60 MemAlloc)");

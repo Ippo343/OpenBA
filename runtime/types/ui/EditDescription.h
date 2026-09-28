@@ -31,8 +31,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0EditDescription@UI@@QEAA@XZ` (0x1800d12c0) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~EditDescription is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~EditDescription is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7EditDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -67,20 +67,10 @@ public:
 
     // [0] 0x18003fa20 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x88`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<EditDescription*>(self + static_cast<int64_t>(i) * 0x88)
-                    ->~EditDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~EditDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1EditDescription@UI@@UEAA@XZ` (0x1800d11f0). VIRTUAL (B3X W1);
+    // editdescription.cpp holds retail's body (+0x80 then +0x70 released); the
+    // compiler chains ~ElementDescription (+0x60) and ~External.
+    ~EditDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x18003f6d0, Type 0x18003f6b0, TypeId 0x18003f6c0, _TypeName 0x18003f690
@@ -100,13 +90,7 @@ public:
     EditDescription& operator=(const EditDescription& src);      // 0x18003f920  not ported
     static void* operator new(std::size_t bytes);                // 0x18003f6e0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18003f750  not ported
-    static void  operator delete(void* p);                       // 0x18003f760  not ported
-
-protected:
-    // `??1EditDescription@UI@@UEAA@XZ` (0x1800d11f0). NON-VIRTUAL;
-    // editdescription.cpp holds retail's body (+0x80 then +0x70 released); the
-    // compiler chains ~ElementDescription (+0x60) and ~External.
-    ~EditDescription();
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                       // 0x18003f760  not ported
 
 private:
 
@@ -122,7 +106,7 @@ public:
 static_assert(sizeof(EditDescription) == 0x88,
               "UI::EditDescription is 0x88 (MOV EDX,0x88 in 0x18003fa20)");
 static_assert(alignof(EditDescription) == 8, "UI::EditDescription aligns to 8");
-static_assert(!std::has_virtual_destructor<EditDescription>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<EditDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<EditDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(EditDescription, _ptr68) == sizeof(ElementDescription), "");
 static_assert(offsetof(EditDescription, _ptr68)    == 0x68, "");

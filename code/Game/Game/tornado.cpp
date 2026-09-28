@@ -128,13 +128,6 @@ Tornado::Tornado() {
     }
 }
 
-// [0] 0x140024f00: restamp, ~Particle (import 0x1401527b8), MemFree on flags & 1.
-Object::Base* Tornado::DeletingDtor(unsigned flags) {
-    this->~Tornado();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // Retail slot 3 (0x1400d2370): call the base GetFileVersion through dispatch slot
 // 0x1401527c0, then OR in bit 0.
 //
@@ -206,12 +199,12 @@ bool Tornado::Serialize(void* stream) {
 // Retail slot 6 (0x140024ee0): slot 0 with flags 0 -- destruct without freeing --
 // then the ctor again in place.
 Object::External* Tornado::Reconstruct() {
-    DeletingDtor(0);
+    this->~Tornado();
     return ::new (static_cast<void*>(this)) Tornado();
 }
 
 // Retail slot 7 (0x140001640): slot 0 with flags 0, tail. A shared thunk in retail.
-void Tornado::Destruct() { DeletingDtor(0); }
+void Tornado::Destruct() { this->~Tornado(); }
 
 // Retail slot 8 (0x1400d21b0): alloc 0xe0/align 8, run the ParticleInstance ctor,
 // stamp vtable_TornadoInstance, zero +0xd8, return it (0 on a failed alloc).
@@ -232,13 +225,6 @@ Object::External* Tornado::Construct() {
 // Graphics::ParticleInstance() and the 0x1401601e0 stamp are the compiler's.
 TornadoInstance::TornadoInstance() {
     *reinterpret_cast<int32_t*>(&_funnelSpinDegrees) = 0;   // retail: dword 0 at +0xd8
-}
-
-// [0] 0x140024f50: ~ParticleInstance (import 0x1401527d8), MemFree on flags & 1.
-Graphics::Geometry* TornadoInstance::DeletingDtor(unsigned flags) {
-    this->~TornadoInstance();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
 }
 
 // ---------------------------------------------------------------------------

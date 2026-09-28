@@ -44,7 +44,8 @@ public:
     // four qwords. ENDGAME B.3.9 OBJ: replaces the `??0Internal` door + stamp.
     explicit ClearStorage(void* pEntityIBP);
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a100
+    // 0x1400e73b0: frees the tree and +0x48
+    ~ClearStorage() override;                                       // [0]  0x14002a100
     void  Persist(void* stream) override;                           // [3]  0x1400e7350
     int   Execute(void* citizenAI, void* time) override;  // [4]  0x1400e6c50
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400e6c30
@@ -60,9 +61,6 @@ public:
     void*    _field58;           // +0x58: BST root — tree of citizen InternalBasePtrs
     uint32_t _field60;           // +0x60: item count remaining to clear
     uint8_t  _pad64[4];         // +0x64: padding
-
-protected:
-    ~ClearStorage();                                               // 0x1400e73b0: frees the tree and +0x48
 };
 
 static_assert(sizeof(ClearStorage) == 0x68, "ClearStorage is 0x68 (retail create MemAlloc)");

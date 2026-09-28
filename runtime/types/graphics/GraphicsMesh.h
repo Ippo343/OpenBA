@@ -352,23 +352,16 @@ public:
     }
 
     // ---- the nine slots, in measured retail order --------------------------
-    // Slot 0 is `DeletingDtor(unsigned)`, NOT a virtual destructor (ENDGAME
-    // section B.1 decision 2). [0] 0x180012bd0 -- MSVC's VECTOR deleting
-    // destructor, both arms exactly as the retired RT_DELDTOR row ran them
-    // (`MOV EDX,0x98` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<GraphicsMesh*>(self + static_cast<int64_t>(i) * 0x98)->~GraphicsMesh();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~GraphicsMesh();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x180012bd0 -- retail's VECTOR deleting destructor (`MOV EDX,0x98` =
+    // the element size); here the virtual destructor (B3X W1: D1 + D0, so
+    // retail slot N >= 1 is compiler slot N + 1).
+    // `??1GraphicsMesh@Graphics@@UEAA@XZ` @ 0x1800ff270. VIRTUAL (B3X
+    // W1). ENDGAME B.3.9 GFX: the retired door's body (graphicsmesh_vtable.cpp)
+    // -- the three arrays in retail's REVERSE order through their own
+    // out-of-line `~Array`s (each zeroes its header, so the members' implicit
+    // ~Array is a no-op), `_name` with the asymmetric `str-8` idiom; the
+    // restamps and ~CompiledExternal are the compiler's chain.
+    ~GraphicsMesh() override;
 
     // [1] 0x180012390 TypeName / [2] 0x180012370 Type, TypeId 0x180012380, `_TypeName` / `_ParentTypeName`
     // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
@@ -444,7 +437,7 @@ public:
     // the factory pair is the class's own (B39_RULES D2, graphicsmesh_vtable.cpp).
     static void* operator new(std::size_t bytes);           // 0x1800123a0
     static void* operator new(std::size_t bytes, void* place);// 0x180012410
-    static void  operator delete(void* p);                  // 0x180012420
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                  // 0x180012420
     // CreateNewObject 0x180012480 / CreateInPlaceObject 0x180012500: declared
     // by DECLARE_TYPE above.
 
@@ -465,15 +458,6 @@ private:
                         void* vertices, int32_t vertexCount, int32_t d,
                         unsigned short* skinIndices, int32_t skinIndexCount,
                         void* skinVertices, int32_t skinVertexCount, int32_t e);
-
-protected:
-    // `??1GraphicsMesh@Graphics@@UEAA@XZ` @ 0x1800ff270. NON-VIRTUAL (decision
-    // 2). ENDGAME B.3.9 GFX: the retired door's body (graphicsmesh_vtable.cpp)
-    // -- the three arrays in retail's REVERSE order through their own
-    // out-of-line `~Array`s (each zeroes its header, so the members' implicit
-    // ~Array is a no-op), `_name` with the asymmetric `str-8` idiom; the
-    // restamps and ~CompiledExternal are the compiler's chain.
-    ~GraphicsMesh();
 
 public:
     // ---- the 0x78 bytes GraphicsMesh adds after Object::CompiledExternal ----

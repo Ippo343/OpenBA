@@ -45,7 +45,8 @@ public:
         : fencedDesc(nullptr), areaDesc(nullptr), fenceDesc(nullptr), rotationSetting(nullptr),
           sceneObjectId(-1), _field5C(0), _field60(0), _pad64{}, meshInstance(nullptr) {}
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x140026930
+    // 0x1400dd020: no body
+    ~FencedTool() override = default;                                      // [0]  0x140026930
     void Startup() override;                                               // [4]  0x1400dcd50
     void Shutdown() override;                                              // [5]  0x1400dccc0
     char OnKey(char active) override;                                      // [6]  0x1400dcbe0
@@ -66,9 +67,6 @@ public:
     uint32_t _field60;          // +0x60 from the size description +0x48
     uint8_t  _pad64[4];         // +0x64
     void*    meshInstance;      // +0x68 Graphics::MeshInstance* (fence preview)
-
-protected:
-    ~FencedTool() = default;                                               // 0x1400dd020: no body
 };
 
 namespace FencedToolAddr {

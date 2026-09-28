@@ -87,13 +87,6 @@ MessageDialog::MessageDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                              Object::InternalPtr<UI::DialogInstance> parent)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {}
 
-// [0] 0x140012660: ~MessageDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* MessageDialog::DeletingDtor(unsigned flags) {
-    this->~MessageDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400125d0: MemAlloc(0xc0, 8), then the default ctor.
 void* MessageDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MessageDialog), 8);

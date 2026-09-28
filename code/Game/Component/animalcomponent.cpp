@@ -480,13 +480,6 @@ AnimalComponent::AnimalComponent()
     OrFlagsInCtor(0xc9);
 }
 
-// [0] 0x14002f170: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* AnimalComponent::DeletingDtor(unsigned flags) {
-    this->~AnimalComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 void AnimalComponent::Startup() {
     EnsureHelpers();
 

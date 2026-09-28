@@ -150,7 +150,7 @@ void AchievementManager::RemoveAll() {
         Object::InternalPtr<AchievementInstance>& slot = _instances._data[i];
         AchievementInstance* inst = slot.Get();
         if (inst != nullptr) {
-            Object::Destroy(inst);
+            delete inst;
             slot = Object::InternalPtr<AchievementInstance>();
         }
     }

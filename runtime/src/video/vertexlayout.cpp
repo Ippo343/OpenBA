@@ -185,12 +185,12 @@ Object::External* VertexLayout::Construct() {
 
 // slot 6 — 0x18004de50: slot 0 with flags 0 (destroy in place), then the ctor.
 Object::External* VertexLayout::Reconstruct() {
-    DeletingDtor(0);
+    this->~VertexLayout();
     return ::new (this) VertexLayout();
 }
 
 // slot 7 — ?Destruct@VertexLayout@Video@@UEAAXXZ 0x18004de80: slot 0, flags 0.
-void VertexLayout::Destruct() { DeletingDtor(0); }
+void VertexLayout::Destruct() { this->~VertexLayout(); }
 
 // ??1VertexLayout@Video@@UEAA@XZ (0x1800f5df0)
 //
@@ -278,7 +278,7 @@ bool VertexLayout::Serialize(void* streamv) {
     if (stream->direction == 0)
         this->Video::VertexLayout::PlatformCreate();   // retail derefs _data unguarded
     if (rw != nullptr) {
-        AsRw(rw)->DeletingDtor(1);
+        delete AsRw(rw);
     }
     return true;
 }

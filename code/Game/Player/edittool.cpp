@@ -47,20 +47,6 @@ static int SelDiagOn() {
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 // ============================================================
-// EditTool::DeletingDtor (vtable +0x00) — 0x14002db00
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled EditTool_Dtor_Impl restamped the Edit
-// and Tool tables read by address — Tool's UNREGISTERED, so it stored a NULL
-// vptr before ~Internal (B38 D9 #3). The compiler's dtor chain restamps the
-// real tables, then runs Object::Internal::~Internal. Retail's dtor
-// (0x1400fd300) does no other work: the +0x28/+0x30 handles are not released.
-Object::Base* EditTool::DeletingDtor(unsigned flags) {
-    this->~EditTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // EditTool Slot10 (vtable +0x50) — "is this the entity I have selected?"
 // ============================================================
 // Calls InternalBasePtr::CheckPtr on self->lastEntityRef (+0x30), then compares

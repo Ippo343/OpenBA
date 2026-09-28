@@ -396,11 +396,11 @@ public:
     // The DLL's own vector deleting dtor 0x1800458c0 (and its RT_DELDTOR
     // row) is retired with the minted table (ENDGAME B.3.9 UI-D).
     // Inline so the key function (TypeName) and so the vtable's TU are unchanged.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        this->~DialogInstance();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1DialogInstance@UI@@UEAA@XZ` 0x180114d40. VIRTUAL (B3X W1).
+    // The compiler restamps DialogInstance's table on entry and chains
+    // ~Array (x2, no-ops on the zeroed headers) and ~Internal after the body —
+    // retail's inlined ~Internal tail.
+    ~DialogInstance() override { ReleaseFields(); }
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -484,7 +484,7 @@ public:
     static void* operator new(std::size_t bytes);                 // 0x180045410
     // Declared, defined NOWHERE: construct in place with `::new (p) X(...)`.
     static void* operator new(std::size_t bytes, void* place);    // 0x180045480
-    static void  operator delete(void* p);                        // 0x180045490
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                        // 0x180045490
     // The class's own factory (B.3.9 UI-D; no CreateInPlaceObject export).
 
     // ---- construction (ENDGAME B.3.8 block RB, RULE B8-1) --------------------
@@ -540,13 +540,6 @@ public:
     DialogInstance(UserInterface* ui, Object::InternalPtr<Element> root,
                    Object::InternalPtr<DialogInstance> parent,
                    Object::Base* dataSource, void* userData, int32_t userFlags);
-
-protected:
-    // `??1DialogInstance@UI@@UEAA@XZ` 0x180114d40. NON-VIRTUAL (decision 2).
-    // The compiler restamps DialogInstance's table on entry and chains
-    // ~Array (x2, no-ops on the zeroed headers) and ~Internal after the body —
-    // retail's inlined ~Internal tail.
-    ~DialogInstance() { ReleaseFields(); }
 
 private:
     // 0x180114870 MINUS `CALL ??0Internal` and the vptr store — dialog_create.cpp.

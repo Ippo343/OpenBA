@@ -27,7 +27,7 @@ class CropFieldDescription final : public Description {
 public:
     CropFieldDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140033040
+    ~CropFieldDescription() override = default;                            // [0] 0x140033040
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x14011b2f0
     bool              Serialize(void* stream) override;                    // [5] 0x14011b270
     Object::External* Reconstruct() override;                              // [6] 0x140032fe0
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     uint32_t _type;                             // +0x20 enum (serialized through the uint door)
     float _f24;                                 // +0x24
-
-protected:
-    ~CropFieldDescription() = default;
 };
 
 static_assert(sizeof(CropFieldDescription) == 0x28, "CropFieldDescription is 0x28 (create 0x140032f30 MemAlloc(0x28))");

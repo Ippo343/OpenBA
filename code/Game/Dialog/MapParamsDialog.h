@@ -31,16 +31,13 @@ public:
     MapParamsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                     Object::InternalPtr<UI::DialogInstance> parent);  // 0x14006bd80
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140012150
+    ~MapParamsDialog() override = default;                         // [0] 0x140012150
     void OnOpened() override;                                      // [4] 0x14006b810
     void OnClosed() override;                                      // [5] 0x14006b800 RET
     void OnUpdateLayout() override;                                // [6] 0x14006b790
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14006b5f0
-
-protected:
-    ~MapParamsDialog() = default;
 
 public:
     uint64_t dataB8;           // +0xB8: editName

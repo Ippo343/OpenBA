@@ -75,19 +75,13 @@ public:
     // ---- the nine slots, in retail order -----------------------------------
     // [0] 0x180001680 — MSVC's VECTOR deleting destructor (MOV EDX,0x58), both
     //     arms as the retired RT_DELDTOR row ran them. Scenario declares its own.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Achievement*>(self + static_cast<int64_t>(i) * 0x58)->~Achievement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Achievement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1Achievement@0@UEAA@XZ  0x18009e180. Virtual (B3X W1). the exe's Scenario
+    // chains it. Retail: re-stamp, ~Array(+0x48), release +0x40, +0x30, +0x28,
+    // then ~External. The body is EMPTY: the compiler destroys the members in
+    // REVERSE DECLARATION ORDER — `_goals`, `_spriteName`, `_description`,
+    // `_title` (the two ExternalPtrs are trivial) — which is exactly retail's
+    // order, then runs ~External().
+    ~Achievement() override;
     // [1] 0x180001040 TypeName / [2] 0x180001020 Type, the static TypeId
     // 0x180001030, `_TypeName` 0x180001000 / `_ParentTypeName` 0x180001010
     // and the factory pair 0x180001130 / 0x1800011f0 (achievement_manager.cpp):
@@ -116,7 +110,7 @@ public:
 
     static void* operator new(std::size_t bytes);             // 0x180001050 — not ported
     static void* operator new(std::size_t bytes, void* place);// 0x1800010c0 — not ported
-    static void  operator delete(void* p);                    // 0x1800010d0 — not ported
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                    // 0x1800010d0 — MemFree
     // 0x180001130 / 0x1800011f0 — retail's factory pair (B39_RULES D2):
     // MemAlloc(0x58, 8) + the ctor, and the null-tested in-place ctor
     // (achievement_manager.cpp). The class declares its own placement new:
@@ -124,15 +118,6 @@ public:
     // DECLARE_TYPE above.)
     Achievement(const Achievement& other);                    // 0x180001470 — not ported
     Achievement& operator=(const Achievement& other);         // 0x180001550 — not ported
-
-protected:
-    // ??1Achievement@0@UEAA@XZ  0x18009e180. NON-virtual; the exe's Scenario
-    // chains it. Retail: re-stamp, ~Array(+0x48), release +0x40, +0x30, +0x28,
-    // then ~External. The body is EMPTY: the compiler destroys the members in
-    // REVERSE DECLARATION ORDER — `_goals`, `_spriteName`, `_description`,
-    // `_title` (the two ExternalPtrs are trivial) — which is exactly retail's
-    // order, then runs ~External().
-    ~Achievement();
 
 public:
     Object::ExternalPtr<UI::StringTable> _stringTable;   // +0x20  GetStringTable 0x180001380
@@ -181,11 +166,11 @@ public:
     // 0x140019d90: CALL [??1AchievementInstance]; if (flags & 1) MemFree. An
     // exe-built class keeps the SCALAR arms (B39_RULES D1.2); the DLL's vector
     // row 0x180001a90 is retired (ENDGAME B.3.9 ENG).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        this->~AchievementInstance();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1AchievementInstance@Achievement@@UEAA@XZ  0x18009e400. Virtual (B3X W1).
+    // Retail: re-stamp, ~GoalList(this+0x10), tail-jump ~Internal. EMPTY body:
+    // the compiler destroys `_goalList` (a real GoalList — its ~GoalList
+    // deletes every instance) and then runs ~Internal().
+    ~AchievementInstance() override;
     // [1] 0x1800017c0 TypeName / [2] 0x1800017a0 Type, the static TypeId
     // 0x1800017b0, `_TypeName` 0x180001780 / `_ParentTypeName` 0x180001790 and
     // CreateNewObject 0x1800018b0: retail's macro (ENDGAME B.3.9 TI-REST); the
@@ -208,7 +193,7 @@ public:
 
     static void* operator new(std::size_t bytes);             // 0x1800017d0 — not ported
     static void* operator new(std::size_t bytes, void* place);// 0x180001840 — not ported
-    static void  operator delete(void* p);                    // 0x180001850 — not ported
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                    // 0x180001850 — MemFree
     // 0x1800018b0 — MemAlloc(0x28, 8) + the ctor (achievement_manager.cpp,
     // B39_RULES D2; declared by DECLARE_TYPE); the in-place half is Internal's
     // shared one.
@@ -220,13 +205,6 @@ public:
     // compiler's; then the GoalList's two zero qwords (+0x10/+0x18) and the
     // Achievement pointer (+0x20).
     AchievementInstance() : Object::Internal(), _goalList(), _achievement() {}
-
-protected:
-    // ??1AchievementInstance@Achievement@@UEAA@XZ  0x18009e400. NON-virtual.
-    // Retail: re-stamp, ~GoalList(this+0x10), tail-jump ~Internal. EMPTY body:
-    // the compiler destroys `_goalList` (a real GoalList — its ~GoalList
-    // deletes every instance) and then runs ~Internal().
-    ~AchievementInstance();
 
 public:
     GoalList                         _goalList;      // +0x10 .. +0x1f  held BY VALUE (B7-8)

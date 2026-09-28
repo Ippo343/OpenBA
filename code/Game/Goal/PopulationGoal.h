@@ -10,7 +10,7 @@
 //     [0] 0x140026000 scalar deleting dtor: stamp, ~Goal, MemFree on &1
 //     [1] TypeName  [2] Type  [3] 0x1400d78e0 GetFileVersion `MOV EAX,1`
 //     [4] External::Compile (inherited)  [5] 0x1400d7870 Serialize
-//     [6] 0x140025fb0 Reconstruct (DeletingDtor(0) + ctor; read 2026-09-26)
+//     [6] 0x140025fb0 Reconstruct (`~T()` (slot 0, flags 0) + ctor; read 2026-09-26)
 //     [7] 0x140001640 Destruct  [8] 0x1400d7820 CheckGoalState
 //     [9] Goal::GetInstanceType (inherited)  [10] 0x140025f60 Construct
 //   sizeof 0x38.
@@ -27,16 +27,13 @@ class PopulationGoal final : public Achievement::Goal {
 public:
     PopulationGoal();                                              // 0x1400d78f0
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140026000
+    ~PopulationGoal() override = default;                          // [0] 0x140026000
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400d78e0
     bool              Serialize(void* stream) override;            // [5] 0x1400d7870
     Object::External* Reconstruct() override;                      // [6] 0x140025fb0
     void              Destruct() override;                         // [7] 0x140001640
     GoalState         CheckGoalState() const override;             // [8] 0x1400d7820
     virtual Object::External* Construct();                         // [10] 0x140025f60
-
-protected:
-    ~PopulationGoal() = default;
 
 public:
     int32_t  targetPop;          // +0x30: required population (default 100)

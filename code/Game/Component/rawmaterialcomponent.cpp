@@ -441,13 +441,6 @@ void RawMaterialComponent::OnAdded() {
 // own titled commit.
 void RawMaterialComponent::Update(void*) {}
 
-// [0] 0x1400373c0: ~RawMaterialComponent (0x1401293c0: restamp + ~Internal), MemFree on &1.
-Object::Base* RawMaterialComponent::DeletingDtor(unsigned flags) {
-    this->~RawMaterialComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140037270: MemAlloc(0x40, 8), then the ctor.
 void* RawMaterialComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RawMaterialComponent), 8);

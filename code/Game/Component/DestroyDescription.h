@@ -27,7 +27,7 @@ class DestroyDescription final : public Description {
 public:
     DestroyDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140033d70
+    ~DestroyDescription() override = default;                              // [0] 0x140033d70
     int32_t           GetFileVersion() const override { return 5; }    // [3] 0x14011def0
     bool              Serialize(void* stream) override;                    // [5] 0x14011de70
     Object::External* Reconstruct() override;                              // [6] 0x140033d00
@@ -41,9 +41,6 @@ public:
     int32_t _damagedDecal;                      // +0x2c rubble DECAL state
     int32_t _minDamageLevel;                    // +0x30 retail leaves it unset; the tree zeroes it (kept)
     uint8_t _pad34[4];                          // +0x34 never written by the ctor
-
-protected:
-    ~DestroyDescription() = default;
 };
 
 static_assert(sizeof(DestroyDescription) == 0x38, "DestroyDescription is 0x38 (create 0x140033c30 MemAlloc(0x38))");

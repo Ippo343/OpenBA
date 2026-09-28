@@ -51,13 +51,6 @@ static fn_ExternalPtr_SerializeImage_t ExternalPtrSerializeImageFn() {
 // (TutorialImage()), the own stamp. +0x30 is NOT written (retail's).
 TutorialImageInputKey::TutorialImageInputKey() {}
 
-// [0] 0x140027fa0: stamp, stamp TutorialImage, ~External, MemFree on &1.
-Object::Base* TutorialImageInputKey::DeletingDtor(unsigned flags) {
-    this->~TutorialImageInputKey();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Slot5: Serialize (0x1400e07f0)
 // ============================================================
@@ -93,7 +86,7 @@ bool TutorialImageInputKey::Serialize(void* stream) {
 // Slot6: Reconstruct (0x140027f50) / Slot8: Construct (0x140027f00)
 // ============================================================
 Object::External* TutorialImageInputKey::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialImageInputKey();
     return ::new (static_cast<void*>(this)) TutorialImageInputKey();
 }
 Object::External* TutorialImageInputKey::Construct() {

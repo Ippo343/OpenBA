@@ -993,13 +993,6 @@ NewGameDialog::NewGameDialog()
       mapGeneratorList(nullptr), climateGeneratorList(nullptr),
       terrainGeneratorList(nullptr), random{}, _pad_AD8(0), worldSetup(nullptr) {}
 
-// [0] 0x140012cc0: ~NewGameDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* NewGameDialog::DeletingDtor(unsigned flags) {
-    this->~NewGameDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140012c70: MemAlloc(0xae8, 8), then the ctor.
 void* NewGameDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NewGameDialog), 8);

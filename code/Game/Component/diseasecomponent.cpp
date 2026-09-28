@@ -883,13 +883,6 @@ DiseaseComponent::DiseaseComponent()
     OrFlagsInCtor(0x8b);
 }
 
-// [0] 0x140004f80: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* DiseaseComponent::DeletingDtor(unsigned flags) {
-    this->~DiseaseComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 void DiseaseComponent::Persist(void* stream) {
     EnsureInit();
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0

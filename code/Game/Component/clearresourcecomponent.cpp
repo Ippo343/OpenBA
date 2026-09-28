@@ -48,12 +48,6 @@ static const bool s_clearResourceStateTableBuilt = (ClearResourceCtrl_PopulateTa
 // is the +0x40 back-pointer store and the +0x30 / +0x38 zeroes. No flag OR.
 ClearResourceComponent::ClearResourceComponent() : _controller(this) {}
 
-// [0] 0x140031770: ~ClearResourceComponent (0x140118640), MemFree on &1.
-Object::Base* ClearResourceComponent::DeletingDtor(unsigned flags) {
-    this->~ClearResourceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140118640: restamp + ~Internal, no own work.
 ClearResourceComponent::~ClearResourceComponent() = default;
 

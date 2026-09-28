@@ -25,7 +25,9 @@ class DestroyUI final : public UI::DialogController {
 public:
     DestroyUI() = default;                               // 0x140011130 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140011200
+    // 0x140011200 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~DestroyUI() override = default;                              // [0] 0x140011200
     void OnCreated() override;   // [4] 0x140066150
     void OnUpdateLayout() override;   // [7] 0x140065b00
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
@@ -43,11 +45,6 @@ public:
     uint64_t data60 = 0;           // +0x60
     uint64_t data68 = 0;           // +0x68
     uint64_t data70 = 0;           // +0x70
-
-protected:
-    // 0x140011200 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~DestroyUI() = default;
 };
 
 static_assert(sizeof(DestroyUI) == 0x78, "DestroyUI is 0x78 (create 0x140011130 MemAlloc(0x78))");

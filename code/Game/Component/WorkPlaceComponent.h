@@ -37,7 +37,8 @@ public:
 
     WorkPlaceComponent();                                                // 0x14012f2e0
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x14003a220
+    // 0x14012f270
+    ~WorkPlaceComponent() override;                                     // [0]  0x14003a220
     void          Persist(void* stream) override;                       // [3]  0x14012f120
     void          OnRemove() override;                                  // [7]  0x14012f090
     int         GetDefaultState() const override { return 0; }          // [16] 0x140003730
@@ -50,9 +51,6 @@ public:
     uint8_t  _pad51[7];            // +0x51
     void*    field58;              // +0x58 the worker roster (Array data)
     void*    field60;              // +0x60 its count / capacity
-
-protected:
-    ~WorkPlaceComponent();                                               // 0x14012f270
 };
 
 static_assert(sizeof(WorkPlaceComponent) == 0x68, "WorkPlaceComponent is 0x68 (create 0x14003a030)");

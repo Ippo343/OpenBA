@@ -29,7 +29,8 @@ class FruitComponent final : public Component {
 public:
     FruitComponent();                                             // 0x14004a160
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140005b20
+    // no own work
+    ~FruitComponent() override = default;                         // [0] 0x140005b20
     void Persist(void* stream) override;                          // [3] 0x14004a070
     void Startup() override;                                      // [4] 0x14004a030
     void Update(void* time) override;                             // [9] 0x140049de0
@@ -39,9 +40,6 @@ public:
     uint32_t field30;      // +0x30 float ripeness
     uint8_t  fruitFlag;    // +0x34
     uint8_t  _pad35[3];    // +0x35
-
-protected:
-    ~FruitComponent() = default;                                  // no own work
 };
 
 static_assert(sizeof(FruitComponent) == 0x38, "FruitComponent is 0x38 (create 0x140005920)");

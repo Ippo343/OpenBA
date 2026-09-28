@@ -27,7 +27,7 @@ class TradeDescription final : public Description {
 public:
     TradeDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000dc50
+    ~TradeDescription() override;                                          // [0] 0x14000dc50
     int32_t           GetFileVersion() const override { return 7; }    // [3] 0x14005ca00
     bool              Serialize(void* stream) override;                    // [5] 0x14005c7f0
     Object::External* Reconstruct() override;                              // [6] 0x14000dc20
@@ -50,9 +50,6 @@ public:
     int32_t _priceCap;                          // +0x64
     float _f68;                                 // +0x68 ~0.333
     int32_t _i6c;                               // +0x6c
-
-protected:
-    ~TradeDescription();
 };
 
 static_assert(sizeof(TradeDescription) == 0x70, "TradeDescription is 0x70 (create 0x14000dbd0 MemAlloc(0x70))");

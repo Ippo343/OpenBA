@@ -22,7 +22,7 @@ class CreateNaturalResource final : public Action {
 public:
     CreateNaturalResource();                                                   // create 0x1400221d0
     CreateNaturalResource(uint64_t desc, uint64_t* parent, uint32_t cellIndex);   // 0x1400c6a20
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022240
+    ~CreateNaturalResource() override = default;               // [0] 0x140022240
     void Persist(void* stream) override;                       // [3] 0x1400c6890
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6650
     bool GetTarget(void* param) override;                      // [9] 0x1400c6610
@@ -32,9 +32,6 @@ public:
     void*     parentEntity;      // +0x28 InternalBasePtr (parent entity)
     int32_t   cellIndex;         // +0x30 map cell index / resource slot
     uint8_t   _pad34[4];         // +0x34 padding
-
-protected:
-    ~CreateNaturalResource() = default;
 };
 
 static_assert(sizeof(CreateNaturalResource) == 0x38, "CreateNaturalResource is 0x38 (create 0x1400221d0 MemAlloc)");

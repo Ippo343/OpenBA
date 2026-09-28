@@ -45,13 +45,6 @@ ValueDescription::ValueDescription()
       _baseValue(100),
       _weight(0) {}
 
-// [0] 0x14000fbf0: ~ValueDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* ValueDescription::DeletingDtor(unsigned flags) {
-    this->~ValueDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14005cd60: stream order as retail.
 bool ValueDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -66,15 +59,15 @@ bool ValueDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000fb80: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000fb80: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* ValueDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ValueDescription();
     return new (static_cast<void*>(this)) ValueDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void ValueDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void ValueDescription::Destruct() { this->~ValueDescription(); }
 
 // [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
 // a data-only description builds no component.

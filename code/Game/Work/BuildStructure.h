@@ -47,7 +47,8 @@ public:
     BuildStructure();                                               // 0x1400e5a90
     BuildStructure(void* entityIBP, uint8_t altAnim);               // 0x1400e59c0
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x140029680
+    // 0x1400e5920: frees the tree and the array
+    ~BuildStructure() override;                                     // [0]  0x140029680
     void  Persist(void* stream) override;                           // [3]  0x1400e5850
     int   Execute(void* citizenPtr, void* context) override;  // [4]  0x1400e4fc0
     int   OnComplete(void* citizenIBP, void* unused, int slotIndex) override;  // [6]  0x1400e4f80
@@ -68,9 +69,6 @@ public:
     void*    field_60;           // +0x60: binary tree root (citizen assignment tree, nodes 0x20 bytes)
     int32_t  field_68;           // +0x68: priority counter (GetPriority returns field_68 > 0)
     uint8_t  _pad6c[4];          // +0x6C: padding
-
-protected:
-    ~BuildStructure();                                             // 0x1400e5920: frees the tree and the array
 };
 
 static_assert(sizeof(BuildStructure) == 0x70, "BuildStructure is 0x70 (retail create MemAlloc)");

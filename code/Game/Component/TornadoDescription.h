@@ -28,7 +28,7 @@ class TornadoDescription final : public Description {
 public:
     TornadoDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000d5e0
+    ~TornadoDescription() override = default;                              // [0] 0x14000d5e0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140058e30
     bool              Serialize(void* stream) override;                    // [5] 0x140058d90
     Object::External* Reconstruct() override;                              // [6] 0x14000d5b0
@@ -42,9 +42,6 @@ public:
     System::Time _time28;                       // +0x28 System::Time, zeroed
     int32_t _i30;                               // +0x30
     int32_t _i34;                               // +0x34
-
-protected:
-    ~TornadoDescription() = default;
 };
 
 static_assert(sizeof(TornadoDescription) == 0x38, "TornadoDescription is 0x38 (create 0x14000d560 MemAlloc(0x38))");

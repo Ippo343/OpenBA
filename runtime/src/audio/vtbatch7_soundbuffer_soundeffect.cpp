@@ -166,7 +166,7 @@ ReaderWriter* MakeReaderWriter(Serializer* ser, Stream* stream) {
 }
 void DestroyReaderWriter(ReaderWriter* rw) {
     if (!rw) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 // `?MemFree@MemoryAllocator@System@@` — retail tests for null OUTSIDE the call.
 void MemFreeIfSet(void* p) {
@@ -195,11 +195,11 @@ Object::External* SoundBuffer::Construct() {
 }
 // [6] 0x18000bb30: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
 Object::External* SoundBuffer::Reconstruct() {
-    DeletingDtor(0);
+    this->~SoundBuffer();
     return ::new (this) SoundBuffer();
 }
 // [7] 0x18000bc70: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void SoundBuffer::Destruct() { DeletingDtor(0); }
+void SoundBuffer::Destruct() { this->~SoundBuffer(); }
 
 // ?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ  0x18000b9a0
 // The FACTREST row this replaces: MemAlloc of 0x80 bytes, align 8 (the locked
@@ -275,11 +275,11 @@ Object::External* SoundEffect::Construct() {
 }
 // [6] 0x180050560: slot0(this, 0) VIRTUALLY, then the same stores.
 Object::External* SoundEffect::Reconstruct() {
-    DeletingDtor(0);
+    this->~SoundEffect();
     return ::new (this) SoundEffect();
 }
 // [7] 0x180050640.
-void SoundEffect::Destruct() { DeletingDtor(0); }
+void SoundEffect::Destruct() { this->~SoundEffect(); }
 
 // ?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ  0x180050430
 // MemAlloc of 0x40 bytes, align 8; retail's null branch; the inlined ctor.

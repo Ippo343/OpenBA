@@ -50,7 +50,8 @@ class Tool : public Object::Internal {
 
 public:
     // ---- the 13 slots, in retail order -------------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override;               // [0]  0x14002e9b0
+    // no body in retail (slot 0 only restamps)
+    ~Tool() override = default;                                        // [0]  0x14002e9b0
     // [1] TypeName 0x14002e950 and [2] Type 0x14002e940: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     // [3] Persist — Object::Internal::Persist, inherited (retail IMPORT).
     virtual void  Startup() = 0;                                       // [4]  pure
@@ -73,7 +74,6 @@ public:
 
 protected:
     Tool() : Object::Internal(), dialogPtr(nullptr), toolSetting(nullptr), descriptionPtr(nullptr) {}
-    ~Tool() = default;      // no body in retail (slot 0 only restamps)
 };
 
 namespace ToolAddr {

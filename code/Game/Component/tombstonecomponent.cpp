@@ -118,13 +118,6 @@ TombstoneComponent::TombstoneComponent() : field28(nullptr) {
     OrFlagsInCtor(0x88);
 }
 
-// [0] 0x14000d480: ~TombstoneComponent (0x140057960: restamp + ~Internal), MemFree on &1.
-Object::Base* TombstoneComponent::DeletingDtor(unsigned flags) {
-    this->~TombstoneComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TombstoneComponent::Persist (0x1400578E0)
 // ============================================================

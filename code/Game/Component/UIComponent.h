@@ -28,7 +28,10 @@ class UIComponent final : public Component {
 public:
     UIComponent();                                                // 0x14012de00
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140039760
+    // PORT GAP (retail 0x14012dda0) — B38 D2: retail frees the +0x28 byte array
+    // (MemFree, then +0x28 = +0x30 = 0); the tree never did (Inert_ScalarDtor).
+    // Kept as the tree's.
+    ~UIComponent() override = default;                            // [0] 0x140039760
     void Persist(void* stream) override;                          // [3] 0x14012dd00
     void Startup() override;                                      // [4] 0x14012dca0 PORT GAP
 
@@ -38,12 +41,6 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1).
     void*    uiData0;      // +0x28 byte-array pointer (ctor 0)
     void*    uiData1;      // +0x30 {int32 count; int32 cap;} (ctor 0)
-
-protected:
-    // PORT GAP (retail 0x14012dda0) — B38 D2: retail frees the +0x28 byte array
-    // (MemFree, then +0x28 = +0x30 = 0); the tree never did (Inert_ScalarDtor).
-    // Kept as the tree's.
-    ~UIComponent() = default;
 };
 
 static_assert(sizeof(UIComponent) == 0x38, "UIComponent is 0x38 (create 0x140039550)");

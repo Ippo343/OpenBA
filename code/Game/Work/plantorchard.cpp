@@ -696,16 +696,6 @@ PlantOrchard::~PlantOrchard() {
 }
 
 
-// ============================================================
-// PlantOrchard::ScalarDtor -- 0x14002c540
-// ============================================================
-// [0] 0x14002c540: ~PlantOrchard, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* PlantOrchard::DeletingDtor(unsigned flags) {
-    this->~PlantOrchard();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 
 // Ctor 0x1400f50b0 (deserialize/factory variant): `??0Internal`, the Work base fields,

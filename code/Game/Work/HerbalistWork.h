@@ -38,7 +38,8 @@ class HerbalistWork final : public AutoPickupWork {
 public:
     HerbalistWork();                                                 // (Work_GenericCtor shape)
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a640
+    // frees the +0x48 citizen BST
+    ~HerbalistWork() override;                                      // [0]  0x14002a640
     void  Persist(void* stream) override;                           // [3]  0x1400eebb0
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400ee3b0
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400ee390
@@ -54,9 +55,6 @@ public:
     uint8_t  _pad54[4];          // +0x54: padding
     uint32_t _field58;           // +0x58: zeroed
     uint8_t  _pad5C[4];          // +0x5C: padding
-
-protected:
-    ~HerbalistWork();                                               // frees the +0x48 citizen BST
 };
 
 static_assert(sizeof(HerbalistWork) == 0x60, "HerbalistWork is 0x60 (retail create MemAlloc)");

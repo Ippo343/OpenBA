@@ -92,13 +92,6 @@ ParticleDescription::~ParticleDescription() {
     _emitterCap = 0;
 }
 
-// [0] 0x14000a500: ~ParticleDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* ParticleDescription::DeletingDtor(unsigned flags) {
-    this->~ParticleDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140053460: stream order as retail.
 bool ParticleDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize3) return true;   // standalone: the door is unwired
@@ -140,15 +133,15 @@ bool ParticleDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000a490: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x14000a490: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* ParticleDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ParticleDescription();
     return new (static_cast<void*>(this)) ParticleDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void ParticleDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void ParticleDescription::Destruct() { this->~ParticleDescription(); }
 
 // [8] 0x14000a4f0: ParticleComponent's type id through the hidden return slot.
 Object::Type* ParticleDescription::GetComponentType(Object::Type* ret) const {

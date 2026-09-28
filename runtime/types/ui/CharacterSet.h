@@ -35,7 +35,7 @@
 // out-of-line `??0CharacterSet`: the body is inlined into Construct 0x1800376b0,
 // Reconstruct 0x180037650 and both factory statics — seven stores, of which the
 // last is +0x20 = 0); slot 0 is the class's own vector deleting dtor;
-// ~CharacterSet is protected, non-virtual and holds the retired ??1 door's
+// ~CharacterSet is public, virtual and holds the retired ??1 door's
 // body. The factory pair is the class's own (characterset.cpp), replacing the
 // FACTUI1 row; the minted `??_7CharacterSet@UI@@6B@` and its RT_DELDTOR row
 // are retired.
@@ -60,20 +60,9 @@ public:
 
     // [0] 0x1800378a0 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x28`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<CharacterSet*>(self + static_cast<int64_t>(i) * 0x28)
-                    ->~CharacterSet();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~CharacterSet();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1CharacterSet@UI@@UEAA@XZ` 0x1800cb840. VIRTUAL (B3X W1); holds the retired
+    // dtor door's body (the +0x20 release); the compiler chains ~External.
+    ~CharacterSet() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -96,14 +85,9 @@ public:
     // spelt `::new (p) CharacterSet()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x180037460
     static void* operator new(std::size_t bytes, void* place); // 0x1800374d0
-    static void  operator delete(void* p);                     // 0x1800374e0
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x1800374e0
     // Retail's factory pair (B39_RULES D2): MemAlloc(0x28, 8) + the ctor, and
     // the null-tested in-place ctor. Defined and registered in characterset.cpp.
-
-protected:
-    // `??1CharacterSet@UI@@UEAA@XZ` 0x1800cb840. NON-VIRTUAL; holds the retired
-    // dtor door's body (the +0x20 release); the compiler chains ~External.
-    ~CharacterSet();
 
 public:
     // ---- the 0x08 bytes CharacterSet adds (public: the doors reach them) ----

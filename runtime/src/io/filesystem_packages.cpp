@@ -683,7 +683,7 @@ void FileSystem::ClosePackages() {
             // Slot 0 of ??_7PackageFile@IO@@6B@ is 0x1800259d0 (§7); it is
             // reached through the object's own vtable pointer, faithfully, and
             // not by address. B3X W0: by name on the object's own class.
-            reinterpret_cast<::IO::PackageFile*>(again)->DeletingDtor(1u);   // B.3.x bridge
+            delete reinterpret_cast<::IO::PackageFile*>(again);   // B.3.x bridge
         }
     }
 

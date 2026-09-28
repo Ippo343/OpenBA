@@ -35,18 +35,15 @@ class TutorialUI final : public UI::DialogController {
 public:
     TutorialUI();                                                  // inlined in 0x140029400
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140029470
+    // 0x140029470 minus the free: the restamp; the compiler chains
+    // ~DialogController (and so ~Internal), which the tree's hand table skipped.
+    ~TutorialUI() override = default;                              // [0] 0x140029470
     void Persist(void* /*stream*/) override {}                     // [3] 0x1400e3aa0 RET
     void OnCreated() override;                                     // [4] 0x1400e37a0
     void OnUpdateLayout() override;                                // [7] 0x1400e3700
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [9] 0x1400e36e0
-
-protected:
-    // 0x140029470 minus the free: the restamp; the compiler chains
-    // ~DialogController (and so ~Internal), which the tree's hand table skipped.
-    ~TutorialUI() = default;
 
 private:
     void QuitTutorial();                                           // 0x1400e34e0

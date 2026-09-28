@@ -581,14 +581,6 @@ void DestroyUI::OnUpdate(const System::Time& /*time*/) {
 }
 
 
-// [0] 0x140011200: ~DestroyUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* DestroyUI::DeletingDtor(unsigned flags) {
-    this->~DestroyUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011130: MemAlloc(0x78, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* DestroyUI::CreateNewObject() {

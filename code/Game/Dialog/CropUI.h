@@ -25,7 +25,9 @@ class CropUI final : public SelectResourceUI {
 public:
     CropUI() = default;                                           // 0x1400b2c90
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140020b60
+    // PORT GAP (B38 D2): retail's teardown helper 0x1400b2c10 frees the
+    // Array/String members at +0x50 and +0x40; the tree never did (leak kept).
+    ~CropUI() override = default;                                 // [0]  0x140020b60
     void  OnCreated() override;                                   // [4]  0x1400b2b50
     void  OnUpdateLayout() override;                              // [7]  0x1400b2a50
     // [8] STANDALONE DEVIATION: retail inherits SelectResourceUI's 0x140078d30;
@@ -41,11 +43,6 @@ public:
     uint64_t data48 = 0;           // +0x48
     uint64_t data50 = 0;           // +0x50
     uint64_t data58 = 0;           // +0x58
-
-protected:
-    // PORT GAP (B38 D2): retail's teardown helper 0x1400b2c10 frees the
-    // Array/String members at +0x50 and +0x40; the tree never did (leak kept).
-    ~CropUI() = default;
 };
 
 static_assert(sizeof(CropUI) == 0x60, "CropUI is 0x60 (create 0x140020b10 MemAlloc(0x60))");

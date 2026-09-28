@@ -27,7 +27,7 @@ class UIDescription final : public Description {
 public:
     UIDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140039700
+    ~UIDescription() override;                                             // [0] 0x140039700
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x14012dfa0
     bool              Serialize(void* stream) override;                    // [5] 0x14012de80
     Object::External* Reconstruct() override;                              // [6] 0x140039680
@@ -44,9 +44,6 @@ public:
     int32_t _entryCap;                          // +0x3c
     int32_t _valHead;                           // +0x40
     uint8_t _pad44[4];                          // +0x44 never written by the ctor
-
-protected:
-    ~UIDescription();
 };
 
 static_assert(sizeof(UIDescription) == 0x48, "UIDescription is 0x48 (create 0x1400395b0 MemAlloc(0x48))");

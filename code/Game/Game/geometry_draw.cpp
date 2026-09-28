@@ -92,7 +92,7 @@ WorldGeometry::~WorldGeometry() {
     // flags 1 (retail: MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]). Bridge: the
     // field is untyped; the call is by name on the ImageBuffer.
     if (_heightImage) {
-        reinterpret_cast<Video::ImageBuffer*>(_heightImage)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+        delete reinterpret_cast<Video::ImageBuffer*>(_heightImage);   // B.3.x bridge (slot 0, free)
     }
     Object::detail::InternalMemFree(_heightBytes);          // +0x140 (not zeroed)
 
@@ -129,13 +129,6 @@ WorldGeometry::~WorldGeometry() {
     Object::detail::InternalMemFree(_arrayD8);              // +0xd8
     _arrayD8 = nullptr;
     _arrayD8Size = 0;
-}
-
-// 0x14001ecc0: the body above, then MemFree(this) on flags & 1.
-Graphics::Geometry* WorldGeometry::DeletingDtor(unsigned flags) {
-    this->~WorldGeometry();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
 }
 
 // ============================================================

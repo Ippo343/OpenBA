@@ -1660,13 +1660,6 @@ void OptionsDialog::ZeroFields() {
     }
 }
 
-// [0] 0x140012f30: ~OptionsDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* OptionsDialog::DeletingDtor(unsigned flags) {
-    this->~OptionsDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140012df0: MemAlloc(0x1c0, 8), then the ctor.
 void* OptionsDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(OptionsDialog), 8);

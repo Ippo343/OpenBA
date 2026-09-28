@@ -30,7 +30,8 @@ class RawMaterialComponent final : public Component {
 public:
     RawMaterialComponent();                                       // 0x140129400
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400373c0
+    // 0x1401293c0
+    ~RawMaterialComponent() override = default;                   // [0] 0x1400373c0
     void Persist(void* stream) override;                          // [3] 0x140129330
     void Startup() override;                                      // [4] 0x1401292c0
     void OnAdded() override;                                      // [6] 0x1401291d0
@@ -40,9 +41,6 @@ public:
     void*    field28;      // +0x28 material type (set by Startup; retail ctor leaves it)
     void*    field30;      // +0x30 (ctor 0)
     void*    field38;      // +0x38 (ctor 0)
-
-protected:
-    ~RawMaterialComponent() = default;                            // 0x1401293c0
 };
 
 static_assert(sizeof(RawMaterialComponent) == 0x40, "RawMaterialComponent is 0x40 (create 0x140037270)");

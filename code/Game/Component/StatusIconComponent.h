@@ -41,9 +41,9 @@
 class StatusIconGeometry final : public Graphics::Geometry {
 public:
     StatusIconGeometry();                                                  // inlined in 0x14012c0c0
-    ~StatusIconGeometry() = default;                                       // ~Geometry (import 0x1401525a0)
 
-    Graphics::Geometry* DeletingDtor(unsigned flags) override;             // [0] 0x14001ebb0
+    // ~Geometry (import 0x1401525a0)
+    ~StatusIconGeometry() override = default;                              // [0] 0x14001ebb0
     void Update(const System::Time& time) override;                        // [1] 0x1400aa430 RET
     void Draw(Video::Context& context, const Graphics::Camera& camera,
               Graphics::ExternalPtrHandle material, float t,
@@ -72,7 +72,8 @@ class StatusIconComponent final : public Component {
 public:
     StatusIconComponent();                                        // 0x14012c0c0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140038ac0
+    // 0x14012c070
+    ~StatusIconComponent() override = default;                    // [0]  0x140038ac0
     void Persist(void* stream) override;                          // [3]  0x14012bff0
     void Startup() override;                                      // [4]  0x14012bed0
     void OnRemove() override;                                     // [7]  0x14012beb0 TREE DIVERGENCE
@@ -83,9 +84,6 @@ public:
     StatusIconGeometry _geometry;  // +0x28 the billboard (vptr 0x14015f0c0 in retail)
     int32_t  iconId;               // +0x100 Scene object id (ctor -1 = not registered)
     uint8_t  _pad104[4];           // +0x104
-
-protected:
-    ~StatusIconComponent() = default;                             // 0x14012c070
 };
 
 static_assert(sizeof(StatusIconComponent) == 0x108, "StatusIconComponent is 0x108 (create 0x1400388c0)");

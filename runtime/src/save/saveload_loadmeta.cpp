@@ -389,7 +389,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // The scalar-DELETING destructor with flags = 1, i.e. the codec is freed.
     if (ser.readerWriter != nullptr) {
         ReaderWriter* dying = ser.readerWriter;
-        Rw(dying)->DeletingDtor(1u);
+        delete Rw(dying);
     }
 
     // ---- 0x1800c1d77 : cms.Close() -----------------------------------------
@@ -416,7 +416,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     _embeddedState._size = 0;
 
     // ---- 0x1800c1db6 : ~CompressedMemoryStream, inlined by retail ----------
-    cmsObj->IO::CompressedMemoryStream::DeletingDtor(0);   // flags 0: no free of the stack object
+    cmsObj->IO::CompressedMemoryStream::~CompressedMemoryStream();   // flags 0: no free of the stack object
 
 }
 

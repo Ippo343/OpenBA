@@ -220,7 +220,7 @@ inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
 
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;                                             // 1800b6261
-    Rw(rw)->DeletingDtor(1);                                     // slot 0, flags 1
+    delete Rw(rw);                                     // slot 0, flags 1
 }
 
 void RecInt(ReaderWriter* rw, void* v) {

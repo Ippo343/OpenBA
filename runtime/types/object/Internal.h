@@ -298,7 +298,7 @@ public:
     // ~Internal (and therefore InternalFactory's swap-remove) and frees the
     // block.
     //
-    // B3X W0: the call is `DeletingDtor(1)` BY NAME on `Object::Internal`,
+    // B3X W0: the call is `delete` (slot 0, flags 1) BY NAME on `Object::Internal`,
     // through one bridge cast from the `RtObject::Internal*` POD `_ptr` still
     // holds. The body is defined below `class Internal` (the class must be
     // complete for the member call); the declaration and signature are
@@ -430,10 +430,10 @@ static_assert(std::is_trivially_destructible<RtObject::Internal>::value,
 // takes `DECLARE_TYPE(Internal)`; `DEFINE_TYPE` lives in
 // runtime/src/object/internal_class.cpp.
 //
-// NO VIRTUAL DESTRUCTOR (B33_RULES §1.3, decision 2): GCC would spend two slots
-// and shift `Type`, `TypeName` and `Persist` by one, and every one of the ~83
-// files still stamping a MINTED table would dispatch one slot out. `~Internal()`
-// is protected and non-virtual; deletion is `Object::Destroy(p)`.
+// THE DESTRUCTOR IS VIRTUAL (the normal-virtual cutover, B3X W1): GCC spends
+// two slots on it, so `TypeName`, `Type` and `Persist` sit one compiler slot
+// after their retail slot; nothing reads the table by index (no minted table
+// is left). Deletion is `delete p`.
 //
 // THE MINTED TABLE IS GONE (ENDGAME B.3.9 OBJ): the `??_7Internal@Object@@6B@`
 // row, its RT_DELDTOR row 0x180006440 and the ??0 / ??1 doors that stamped it
@@ -507,7 +507,13 @@ public:
     Internal& operator=(const Internal& other);
 
     // ---- vtable slot 0 — 0x180006440 ------------------------------------
-    Base* DeletingDtor(unsigned flags) override;
+    // ??1Internal@Object@@UEAA@XZ          retail 0x1800bfdb0 / profile 0x18008b400
+    //     vptr = &Internal::_vftable_; _generation = 0;
+    //     InternalFactory::_singleton->RemoveObject(this);
+    //     Base::~Base(this);                    // vptr = &Base::_vftable_
+    // The two vptr stores are what a real destructor chain emits for us.
+    // Virtual (B3X W1): retail's slot 0 is the deleting destructor.
+    ~Internal() override;
 
     // ---- vtable slot 3 — 0x1800bfda0, `RET` in retail AND in the profile
     // build. It exists so a subclass has something to override, and
@@ -546,15 +552,6 @@ public:
     // are private (`_factoryIndex`, `_generation` in the profile asserts).
     int32_t  _factoryIndex;   // +0x08  own slot in InternalFactory::_objects
     uint32_t _generation;     // +0x0c  InternalFactory::_random.Rand() at birth
-
-protected:
-    // ??1Internal@Object@@UEAA@XZ          retail 0x1800bfdb0 / profile 0x18008b400
-    //     vptr = &Internal::_vftable_; _generation = 0;
-    //     InternalFactory::_singleton->RemoveObject(this);
-    //     Base::~Base(this);                    // vptr = &Base::_vftable_
-    // The two vptr stores are what a real destructor chain emits for us.
-    // NON-VIRTUAL: slot 0 is `DeletingDtor`, decision 2.
-    ~Internal();
 };
 
 static_assert(sizeof(Internal) == 0x10, "Object::Internal is 16 bytes");
@@ -566,7 +563,7 @@ static_assert(sizeof(Internal) == sizeof(RtObject::Internal),
 inline void InternalBasePtr::DeletePtr() {
     RtObject::Internal* p = _ptr;
     if (p != nullptr) {
-        reinterpret_cast<Internal*>(p)->DeletingDtor(1);   // B.3.x bridge
+        delete reinterpret_cast<Internal*>(p);   // B.3.x bridge
         _ptr = nullptr;
     }
 }

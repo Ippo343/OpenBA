@@ -101,19 +101,11 @@ public:
     // 0x50): `flags & 2` reads the SIGNED int32 count at `this - 8`, destroys
     // the elements DOWNWARD, frees `this - 8` on `flags & 1` and returns it;
     // otherwise ~PointList, free on `flags & 1`. Nothing `new[]`s a PointList.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<PointList*>(self + static_cast<int64_t>(i) * 0x50)->~PointList();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~PointList();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1PointList@Pathfinding@@UEAA@XZ` 0x18010f8e0. VIRTUAL (the normal-virtual
+    // cutover, B3X W1); pointlist.cpp holds retail's body
+    // (both arrays through 0x180071600) and the compiler releases both Strings
+    // and chains ~External, retail's order.
+    ~PointList() override;
 
     // [1] 0x180070e40 TypeName / [2] 0x180070e20 Type, the static TypeId
     // 0x180070e30, `_TypeName` / `_ParentTypeName` and the factory pair
@@ -142,19 +134,12 @@ public:
     PointList& operator=(const PointList& src);               // 0x1800712c0
     static void* operator new(std::size_t bytes);              // 0x180070e50
     static void* operator new(std::size_t bytes, void* place); // 0x180070ec0
-    static void  operator delete(void* p);                     // 0x180070ed0
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x180070ed0
     // Retail's factory pair (B39_RULES D2): `MemAlloc(0x50, 8)` + the ctor, and
     // the null-tested in-place ctor. Defined in pointlist.cpp. The class
     // declares its own placement `operator new` (0x180070ec0, not ported), so
     // every placement construction spells `::new (p) PointList()`.
     // (Declared by DECLARE_TYPE above.)
-
-protected:
-    // `??1PointList@Pathfinding@@UEAA@XZ` 0x18010f8e0. NON-VIRTUAL (no virtual
-    // dtor until the normal-virtual cutover); pointlist.cpp holds retail's body
-    // (both arrays through 0x180071600) and the compiler releases both Strings
-    // and chains ~External, retail's order.
-    ~PointList();
 
 public:
     // ---- the 0x30 bytes PointList adds (public: the doors and the exe-side

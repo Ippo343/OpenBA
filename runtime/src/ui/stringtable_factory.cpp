@@ -145,10 +145,10 @@ Object::External* StringTable::Construct() {
     return ::new (this) StringTable();                       // 180002452 MOV RAX,RCX
 }
 // [7] 0x180002460: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void StringTable::Destruct() { DeletingDtor(0); }
+void StringTable::Destruct() { this->~StringTable(); }
 // [6] 0x180002390: slot0(this, 0) — VIRTUALLY — then the inlined constructor.
 Object::External* StringTable::Reconstruct() {
-    DeletingDtor(0);                                         // 1800023a7 CALL [RAX], EDX=0
+    this->~StringTable();                                         // 1800023a7 CALL [RAX], EDX=0
     return ::new (this) StringTable();                       // 1800023ea MOV RAX,RBX
 }
 
@@ -204,12 +204,12 @@ bool StringTable::Serialize(void* streamV) {
     }
 
     if (ser.impl != nullptr) {                               // 18011d9f9
-        reinterpret_cast<IO::ReaderWriter*>(ser.impl)->DeletingDtor(1);  // 18011da06  B.3.x bridge
+        delete reinterpret_cast<IO::ReaderWriter*>(ser.impl);  // 18011da06  B.3.x bridge
     }
     return true;                                             // 18011da08
 }
 
-// ~StringTable: NON-VIRTUAL and EMPTY; `RtUiStringTable_Dtor`
+// ~StringTable: EMPTY; `RtUiStringTable_Dtor`
 // (stringtable_lifecycle.cpp) is the registered door that does retail's work.
 // ??1StringTable@UI@@UEAA@XZ   0x18011d8f0 — retail's body, moved here from
 // the retired `RtUiStringTable_Dtor` door (stringtable_lifecycle.cpp):

@@ -628,7 +628,7 @@ SpotLight::~SpotLight() {
         void* const img = *slot;
         if (img == nullptr) continue;
         // Slot 0, flags 1, by name on the image's own class (B3X W0).
-        static_cast<Video::ImageBuffer*>(img)->DeletingDtor(1u);   // B.3.x bridge
+        delete static_cast<Video::ImageBuffer*>(img);   // B.3.x bridge
     }
     void* const rb = _shadowTarget;                          // +0x158
     if (rb != nullptr) {

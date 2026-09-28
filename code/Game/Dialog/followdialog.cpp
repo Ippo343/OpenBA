@@ -408,13 +408,6 @@ FollowDialog::FollowDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
       dataB8(0), dataC0(0), dataC8(0), dataD0(0) {}
 
-// [0] 0x140011af0: ~FollowDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* FollowDialog::DeletingDtor(unsigned flags) {
-    this->~FollowDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011a20: MemAlloc(0xd8, 8), then the ctor.
 void* FollowDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FollowDialog), 8);

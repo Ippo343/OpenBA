@@ -28,7 +28,7 @@ class ToolbarDescription final : public Description {
 public:
     ToolbarDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140039500
+    ~ToolbarDescription() override;                                        // [0] 0x140039500
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x14012db60
     bool              Serialize(void* stream) override;                    // [5] 0x14012da30
     Object::External* Reconstruct() override;                              // [6] 0x1400394e0
@@ -48,9 +48,6 @@ public:
     int32_t _entryCap;                          // +0x5c
     int32_t _val0;                              // +0x60
     int32_t _val1;                              // +0x64
-
-protected:
-    ~ToolbarDescription();
 };
 
 static_assert(sizeof(ToolbarDescription) == 0x68, "ToolbarDescription is 0x68 (create 0x140039490 MemAlloc(0x68))");

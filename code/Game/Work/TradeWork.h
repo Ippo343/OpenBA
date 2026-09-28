@@ -41,7 +41,8 @@ class TradeWork final : public Work {
 public:
     TradeWork();                                                    // (Work_GenericCtor shape)
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002c660
+    // frees the +0x48 citizen BST
+    ~TradeWork() override;                                          // [0]  0x14002c660
     void  Persist(void* stream) override;                           // [3]  0x1400f6cb0
     int   Execute(void* citizenIBP, void* context) override;  // [4]  0x1400f5d40
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400f5d20
@@ -55,9 +56,6 @@ public:
     void*    bstRoot;            // +0x48: BST root for assigned trade workers
     uint32_t workerCount;        // +0x50: number of workers in BST
     uint8_t  _pad54[4];          // +0x54: padding
-
-protected:
-    ~TradeWork();                                               // frees the +0x48 citizen BST
 };
 
 static_assert(sizeof(TradeWork) == 0x58, "TradeWork is 0x58 (retail create MemAlloc)");

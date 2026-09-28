@@ -62,13 +62,6 @@ LoaderDialog::LoaderDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
       loadingImage(nullptr), rotation(0.0f) {}
 
-// [0] 0x140020c70: ~LoaderDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* LoaderDialog::DeletingDtor(unsigned flags) {
-    this->~LoaderDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140020bb0: MemAlloc(0xc8, 8), then the ctor.
 void* LoaderDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(LoaderDialog), 8);

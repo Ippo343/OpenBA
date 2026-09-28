@@ -58,22 +58,13 @@ public:
     CollisionMesh()
         : Object::External(), _name1(), _name2(), _ptsA(), _ptsB(), _faces(), _surfaces() {}
 
-    // [0] 0x1800656b0 -- MSVC's VECTOR deleting destructor, both arms exactly
-    // as the retired RT_DELDTOR row ran them (DeletingDtorCore, element size
-    // 0x70). Nothing `new[]`s a CollisionMesh.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<CollisionMesh*>(self + static_cast<int64_t>(i) * 0x70)->~CollisionMesh();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~CollisionMesh();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x1800656b0 -- MSVC's VECTOR deleting destructor (retail; element
+    // size 0x70); here the virtual destructor (B3X W1).
+    // ??1CollisionMesh@Collision2D@@UEAA@XZ 0x180065400. VIRTUAL (B3X W1);
+    // collisionmesh.cpp holds retail's body (the four ~Array CALLs by address,
+    // which free and zero each header); the compiler then releases both
+    // Strings and chains ~External, retail's order.
+    ~CollisionMesh() override;
     // [1] 0x180064f70 TypeName / [2] 0x180064f50 Type, the static TypeId
     // 0x180064f60, `_TypeName` / `_ParentTypeName` and the factory pair
     // 0x180065060 / 0x180065130 (collisionmesh.cpp): retail's macro (ENDGAME
@@ -92,13 +83,6 @@ public:
     // in collisionmesh.cpp. The class has its own placement `operator new` in
     // retail (0x180064ff0, not ported): every placement construction spells
     // `::new (p) CollisionMesh()`.
-
-protected:
-    // ??1CollisionMesh@Collision2D@@UEAA@XZ 0x180065400. NON-VIRTUAL;
-    // collisionmesh.cpp holds retail's body (the four ~Array CALLs by address,
-    // which free and zero each header); the compiler then releases both
-    // Strings and chains ~External, retail's order.
-    ~CollisionMesh();
 
 public:
     System::String              _name1;     // +0x20

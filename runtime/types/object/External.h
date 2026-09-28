@@ -583,14 +583,12 @@ static_assert(std::is_trivially_destructible<ExternalPtr<RtObject::External> >::
 // this is the override; runtime/src/object/external_list.cpp has carried the
 // same reading since VTABLE BATCH 9.
 //
-// NO VIRTUAL DESTRUCTOR ANYWHERE (decision 2). Slot 0 is
-// `virtual Base* DeletingDtor(unsigned)`; deletion is `Object::Destroy(p)`.
-// `tests/unit/object_vtable_abi_test.cpp` is the regression test, and it is
-// also what licenses these classes to coexist with the MINTED
-// `??_7External@Object@@6B@` that ~80 unconverted files still stamp: an object
-// wearing the minted table and an object wearing GCC's are interchangeable
-// slot for slot. Nothing here retires a `RT_DELDTOR` row (B33_RULES §6.1: the
-// row is what FILLS slot 0 of the minted table).
+// THE DESTRUCTORS ARE VIRTUAL (the normal-virtual cutover, B3X W1). Retail's
+// slot 0 is MSVC's deleting destructor, ONE slot; GCC spends TWO on
+// `virtual ~T()` (D1 + D0), so retail slot N >= 1 (the `[N]` comments) is
+// compiler slot N + 1. Deletion is `delete p` (D0: the chain, then
+// Object::Base's MemFree `operator delete`); nothing reads these tables by
+// index.
 // ############################################################################
 
 class ExternalFactory;
@@ -621,7 +619,9 @@ public:
     External();
 
     // ---- the eight slots, in measured order ----
-    Base*       DeletingDtor(unsigned flags) override;          // [0] 0x180006640
+    // ??1External@Object@@UEAA@XZ  retail 0x1800bc950. VIRTUAL (B3X W1); reached by
+    // the deleting destructor, and by ~ExternalList / ~CompiledExternal as a base dtor.
+    ~External() override;                                       // [0] 0x180006640
     // [1] TypeName 0x1800066c0 / [2] Type 0x1800066d0: DECLARE_TYPE.
     virtual int32_t       GetFileVersion() const = 0;           // [3] pure
     virtual CompileResult Compile(const System::Filename& path);// [4] 0x1800066e0
@@ -644,11 +644,6 @@ public:
     //   SAME type, so both arguments are `System::Filename const&`. Returns
     //   `_N` (bool) in AL — no hidden return slot.
     bool SaveText(const System::Filename& path, const System::Filename& name);
-
-protected:
-    // ??1External@Object@@UEAA@XZ  retail 0x1800bc950. NON-VIRTUAL; reached by
-    // DeletingDtor, and by ~ExternalList / ~CompiledExternal as a base dtor.
-    ~External();
 
 public:
     // ---- the 0x18 bytes External adds, spelled as RtObject::External spells
@@ -705,27 +700,9 @@ public:
     // then CompiledExternal's vptr (the compiler's). No store of its own.
     CompiledExternal() = default;
 
-    // [0] 0x18000b7e0 — MSVC's VECTOR deleting destructor (`MOV EDX,0x20` =
-    // the element size, `LEA R9,[0x1800bb980]` = ~CompiledExternal), both arms
-    // exactly as the retired RT_DELDTOR row ran them. The class's OWN slot 0
-    // (ENDGAME B.3.9 OBJ, B39_RULES D1.3): an inherited External::DeletingDtor
-    // would run ~External and skip ~CompiledExternal. INLINE so `make unit`
-    // can drive both arms.
-    Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<CompiledExternal*>(self + static_cast<int64_t>(i) * 0x20)->~CompiledExternal();
-            if (flags & 1u) TypeTreeFree(self - 8);
-            return reinterpret_cast<Base*>(self - 8);
-        }
-        this->~CompiledExternal();
-        if (flags & 1u) TypeTreeFree(this);
-        return this;
-    }
-protected:
-    ~CompiledExternal();     // 0x1800bb980
+    // [0] 0x18000b7e0 — retail's VECTOR deleting destructor (`MOV EDX,0x20` =
+    // the element size, `LEA R9,[0x1800bb980]` = ~CompiledExternal).
+    ~CompiledExternal() override;  // 0x1800bb980
 };
 static_assert(sizeof(CompiledExternal) == 0x20,
               "Object::CompiledExternal is 0x20 bytes -- the element size of its deleting dtor 0x18000b7e0");
@@ -767,28 +744,11 @@ public:
     // initialisers).
     ExternalList() : External(), _resources(nullptr), _count(0), _pad2c(0) {}
 
-    // [0] 0x180007800 — MSVC's VECTOR deleting destructor, both arms exactly
-    // as the retired RT_DELDTOR row ran them (deleting_dtor.cpp
-    // DeletingDtorCore; `MOV EDX,0x30` = the element size, `LEA R9,
-    // [0x1800076c0]` = ~ExternalList): `flags & 2` reads the SIGNED int32
-    // count at `this - 8`, destroys the elements DOWNWARD, frees `this - 8` on
-    // `flags & 1` and returns it; otherwise ~ExternalList, free on `flags & 1`.
-    // Nothing `new[]`s an ExternalList, so the array arm is the faithful
-    // unreachable it is in Object::Internal's. INLINE so `make unit` can drive
-    // both arms; the key function is GetFileVersion (external_class_doors.cpp).
-    Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ExternalList*>(self + static_cast<int64_t>(i) * 0x30)->~ExternalList();
-            if (flags & 1u) TypeTreeFree(self - 8);
-            return reinterpret_cast<Base*>(self - 8);
-        }
-        this->~ExternalList();
-        if (flags & 1u) TypeTreeFree(this);
-        return this;
-    }
+    // [0] 0x180007800 — retail's VECTOR deleting destructor (`MOV EDX,0x30` =
+    // the element size, `LEA R9,[0x1800076c0]` = ~ExternalList). The key
+    // function is GetFileVersion (external_class_doors.cpp).
+    // ??1ExternalList 0x1800076c0; the compiler chains ~External.
+    ~ExternalList() override;  // 0x1800076c0
     int32_t         GetFileVersion() const override;         // [3] 0x1800bfa10
     bool            Serialize(void* stream) override;        // [5] 0x1800bfa20
     External*       Reconstruct() override;                  // [6] 0x180007570
@@ -802,11 +762,6 @@ public:
     //   retail 0x1800bf700.  *** THE `Type` PARAMETER IS NEVER READ *** — R9 is
     //   dead in the whole body. Kept because the slot's signature demands it.
     ExternalPtr<External> Find(const System::Filename& path, uint32_t type) const;
-
-protected:
-    // ??1ExternalList 0x1800076c0. NON-VIRTUAL (no virtual dtor until the
-    // normal-virtual cutover); the compiler chains ~External.
-    ~ExternalList();        // 0x1800076c0
 
 public:
     External** _resources;  // +0x20

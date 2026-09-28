@@ -27,7 +27,7 @@ class ParticleDescription final : public Description {
 public:
     ParticleDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000a500
+    ~ParticleDescription() override;                                       // [0] 0x14000a500
     int32_t           GetFileVersion() const override { return 7; }    // [3] 0x1400535b0
     bool              Serialize(void* stream) override;                    // [5] 0x140053460
     Object::External* Reconstruct() override;                              // [6] 0x14000a490
@@ -40,9 +40,6 @@ public:
     void* _emitters;                            // +0x28 emitter array data (0x28 stride)
     int32_t _emitterCount;                      // +0x30
     int32_t _emitterCap;                        // +0x34
-
-protected:
-    ~ParticleDescription();
 };
 
 static_assert(sizeof(ParticleDescription) == 0x38, "ParticleDescription is 0x38 (create 0x14000a3c0 MemAlloc(0x38))");

@@ -37,7 +37,7 @@ public:
     GameLoadDialogLoopT(const System::String& filename, Engine::UpdateLoop* nextLoop,
                         const System::Time& delay);
 
-    Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x140001010
+    ~GameLoadDialogLoopT() override;                             // [0] 0x140001010
     void Startup() override;                                     // [1] 0x140098fa0
     void Shutdown() override;                                    // [2] 0x140098f90 `RET 0`
     bool Update(const System::Time& time) override;              // [3] 0x140098da0
@@ -48,9 +48,6 @@ public:
         Object::InternalPtr<UI::DialogInstance>* ret) override;
 
     static const void* Vtable();
-
-protected:
-    ~GameLoadDialogLoopT() {}
 
 public:
     uint32_t       _fadeColor1;   // +0x188  ctor 0xff000000

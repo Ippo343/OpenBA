@@ -30,16 +30,13 @@ class TutorialGoalDialog final : public TutorialGoal {
 public:
     TutorialGoalDialog();                                          // inlined in 0x140027440
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140027590
+    ~TutorialGoalDialog() override;                                // [0] 0x140027590
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400df080
     bool              Serialize(void* stream) override;            // [5] 0x1400defd0
     Object::External* Reconstruct() override;                      // [6] 0x140027520
     void              Destruct() override;                         // [7] 0x140001640
     bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400deee0
     virtual Object::External* Construct();                         // [9] 0x1400274b0
-
-protected:
-    ~TutorialGoalDialog();
 
 public:
     uint64_t dialogName;         // +0x20: System::String — the dialog resource to wait for

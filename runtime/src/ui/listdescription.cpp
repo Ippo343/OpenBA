@@ -140,11 +140,11 @@ Object::External* ListDescription::Construct() {
 }
 // 0x180044d20 — slot 0 (VIRTUAL) with flag 0, then the ctor.
 Object::External* ListDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ListDescription();
     return ::new (this) ListDescription();
 }
 // 0x180044d50
-void ListDescription::Destruct() { DeletingDtor(0); }
+void ListDescription::Destruct() { this->~ListDescription(); }
 
 // ?Serialize@ListDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d4810
 bool ListDescription::Serialize(void* streamv) {
@@ -171,7 +171,7 @@ bool ListDescription::Serialize(void* streamv) {
     rw->SerializeUInt(_selectColor, nullptr);
 
     if (rw != nullptr) {                                       // 1800d48d3
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

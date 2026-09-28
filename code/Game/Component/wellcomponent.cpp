@@ -392,13 +392,6 @@ WellComponent::WellComponent() : _controller(this) {
     OrFlagsInCtor(0x2);
 }
 
-// [0] 0x14000fe50: ~WellComponent (0x14005d000), MemFree on &1.
-Object::Base* WellComponent::DeletingDtor(unsigned flags) {
-    this->~WellComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // WellComponent::Shutdown (vtable slot [3], 0x14005cfa0)
 // ============================================================

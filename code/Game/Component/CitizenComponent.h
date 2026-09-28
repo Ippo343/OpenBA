@@ -44,7 +44,10 @@ class CitizenComponent final : public Component {
 public:
     CitizenComponent();                                           // 0x140114770
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140030270
+    // PORT GAP (retail 0x1401146f0) — B38 D2: retail runs ~MeshInstance(+0xb8),
+    // frees the +0x98 array and releases the +0x28 InternalBasePtr; the tree's
+    // Inert_ScalarDtor never did.
+    ~CitizenComponent() override = default;                       // [0]  0x140030270
     void Persist(void* stream) override;                          // [3]  0x140114160
     void Startup() override;                                      // [4]  0x140114050
     void OnAdded() override;                                      // [6]  0x140114000
@@ -110,12 +113,6 @@ public:
     uint64_t data278;      // +0x278 CharacterComponent
     uint64_t data280;      // +0x280
     uint64_t data288;      // +0x288 CitizenDescription
-
-protected:
-    // PORT GAP (retail 0x1401146f0) — B38 D2: retail runs ~MeshInstance(+0xb8),
-    // frees the +0x98 array and releases the +0x28 InternalBasePtr; the tree's
-    // Inert_ScalarDtor never did.
-    ~CitizenComponent() = default;
 };
 
 static_assert(sizeof(CitizenComponent) == 0x290, "CitizenComponent is 0x290 (create 0x140030110)");

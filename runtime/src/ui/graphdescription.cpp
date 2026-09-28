@@ -48,11 +48,11 @@ Object::External* GraphDescription::Construct() {
 }
 // [6] 0x180040210 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* GraphDescription::Reconstruct() {
-    DeletingDtor(0);                                                    // 18004021e slot 0
+    this->~GraphDescription();                                                    // 18004021e slot 0
     return ::new (this) GraphDescription();                            // 180040228 JMP
 }
 // [7] 0x180040240
-void GraphDescription::Destruct() { DeletingDtor(0); }
+void GraphDescription::Destruct() { this->~GraphDescription(); }
 
 // ============================================================================
 // [5] ?Serialize@GraphDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d1a30
@@ -78,7 +78,7 @@ bool GraphDescription::Serialize(void* streamArg) {
     RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 1800d1adc ExternalPtr<SpriteSheet>
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);             // 1800d1aed System::String
 
-    if (rw != nullptr) rw->DeletingDtor(1);                             // 1800d1b05
+    if (rw != nullptr) delete rw;                             // 1800d1b05
     return true;
 }
 

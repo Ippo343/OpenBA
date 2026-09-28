@@ -29,13 +29,6 @@
 // External(), the two stamps (the compiler's), speed = 1, +0x24 = 0.
 TutorialSetupGameSpeed::TutorialSetupGameSpeed() : speed(1), _field24(0), _pad25{} {}
 
-// [0] 0x140028ac0: stamp, stamp TutorialSetup, ~External, MemFree on &1.
-Object::Base* TutorialSetupGameSpeed::DeletingDtor(unsigned flags) {
-    this->~TutorialSetupGameSpeed();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialSetupGameSpeed::Begin (vtable +0x40, 0x1400e2d60)
 // ============================================================
@@ -87,10 +80,10 @@ bool TutorialSetupGameSpeed::Serialize(void* stream) {
 // TutorialSetupGameSpeed::Reconstruct [6] 0x140028a70 / Destruct [7] 0x140001640
 // ============================================================
 Object::External* TutorialSetupGameSpeed::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialSetupGameSpeed();
     return ::new (static_cast<void*>(this)) TutorialSetupGameSpeed();
 }
-void TutorialSetupGameSpeed::Destruct() { DeletingDtor(0); }
+void TutorialSetupGameSpeed::Destruct() { this->~TutorialSetupGameSpeed(); }
 
 // ============================================================
 // TutorialSetupGameSpeed::Construct (vtable +0x58, 0x140028a20)

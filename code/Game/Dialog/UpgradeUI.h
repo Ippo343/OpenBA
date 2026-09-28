@@ -25,7 +25,9 @@ class UpgradeUI final : public UI::DialogController {
 public:
     UpgradeUI() = default;                               // 0x140016b30 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140016d50
+    // 0x140016d50 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~UpgradeUI() override = default;                              // [0] 0x140016d50
     void OnCreated() override;   // [4] 0x140086d90
     void OnUpdateLayout() override {}   // [7] 0x140086d80  RET 0 in retail
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
@@ -35,11 +37,6 @@ public:
 
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint64_t data30 = 0;           // +0x30: zeroed
-
-protected:
-    // 0x140016d50 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~UpgradeUI() = default;
 };
 
 static_assert(sizeof(UpgradeUI) == 0x38, "UpgradeUI is 0x38 (create 0x140016b30 MemAlloc(0x38))");

@@ -23,7 +23,7 @@ public:
     MoveTo();                                                   // create 0x1400228c0
     MoveTo(void* entity, uint32_t pathType, int param4, float* destination, int param6, int param7,
            float speed);   // 0x1400c9170
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022900
+    ~MoveTo() override = default;                              // [0] 0x140022900
     void Persist(void* stream) override;                       // [3] 0x1400c8ec0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c8ab0
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c8570
@@ -49,9 +49,6 @@ public:
     uint8_t   _pad475[3];        // +0x475 padding
     float     speedMultiplier;   // +0x478 walk speed
     uint8_t   _pad47C[4];        // +0x47C padding
-
-protected:
-    ~MoveTo() = default;
 };
 
 static_assert(sizeof(MoveTo) == 0x480, "MoveTo is 0x480 (create 0x1400228c0 MemAlloc)");

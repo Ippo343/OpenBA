@@ -106,7 +106,7 @@ constexpr uint32_t kDirtyBit  = 0x8000000u;                       // NeedsSizeCa
 constexpr size_t kDialogSize = 0x88;
 
 // ENDGAME B.3.9 UI-D (B9-13 foreign site): the UI::Dialog temporary is a real
-// `UI::Dialog` — `::new (dlg) UI::Dialog()` / `DeletingDtor(0)` — and the two
+// `UI::Dialog` — `::new (dlg) UI::Dialog()` / `~T()` (slot 0, flags 0) — and the two
 // ??0/??1Dialog doors this file resolved are retired.
 
 // Array<InternalPtr<Element>>::SetSize(n, fill) — the kSpec_Fill8Z row
@@ -163,7 +163,7 @@ Object::InternalPtr<Element> TabElement::AddTab(Object::ExternalPtr<ElementDescr
 
     UpdateContainers();                                       // 0x1800DA28F
 
-    dialog->DeletingDtor(0);                                  // 0x1800DA295..329
+    dialog->Dialog::~Dialog();                                 // 0x1800DA295..329
     return result;
 }
 

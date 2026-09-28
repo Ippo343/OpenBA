@@ -109,10 +109,10 @@ Object::External* EditDescription::Construct() {
     return ::new (this) EditDescription();                   // 18003f879 JMP
 }
 Object::External* EditDescription::Reconstruct() {
-    DeletingDtor(0);                                         // 18003f85e
+    this->~EditDescription();                                         // 18003f85e
     return ::new (this) EditDescription();                   // 18003f868 JMP
 }
-void EditDescription::Destruct() { DeletingDtor(0); }
+void EditDescription::Destruct() { this->~EditDescription(); }
 
 // ============================================================================
 // ?Serialize@EditDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d1110
@@ -137,7 +137,7 @@ bool EditDescription::Serialize(void* streamv) {
 
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_string80, &ser);    // 1800d11ae
 
-    if (rw != nullptr) rw->DeletingDtor(1);                  // 1800d11c6
+    if (rw != nullptr) delete rw;                  // 1800d11c6
     return true;
 }
 

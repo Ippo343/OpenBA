@@ -90,21 +90,13 @@ public:
 
     // ---- the nine slots, in measured order ----
     // [0] 0x180050820 -- MSVC's VECTOR deleting destructor (`TEST DL,2`, the
-    // eh-vector dtor over ~SoundEffect 0x1800e0880, element 0x40), both arms
-    // as the retired RT_DELDTOR row ran them. Nothing `new[]`s one.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<SoundEffect*>(self + static_cast<int64_t>(i) * 0x40)->~SoundEffect();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~SoundEffect();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // eh-vector dtor over ~SoundEffect 0x1800e0880, element 0x40) (retail; here
+    // the virtual destructor, B3X W1). Nothing `new[]`s one.
+    // `??1SoundEffect@Audio@@UEAA@XZ` 0x1800e0880 -- VIRTUAL (B3X W1); The body
+    // (vtbatch7_soundbuffer_soundeffect.cpp, moved from the retired
+    // deleting_dtor_leaves.cpp door) destroys `_samples` through 0x1800516c0;
+    // the compiler chains ~External.
+    ~SoundEffect() override;
 
     // [1] 0x180050340 TypeName / [2] 0x180050320 Type, the static TypeId
     // 0x180050330, `_TypeName` 0x180050300 / `_ParentTypeName` 0x180050310 and
@@ -139,17 +131,10 @@ public:
     SoundEffect& operator=(const SoundEffect& src);            // 0x180050770
     static void* operator new(std::size_t bytes);              // 0x180050350
     static void* operator new(std::size_t bytes, void* place); // 0x1800503c0
-    static void  operator delete(void* p);                     // 0x1800503d0
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x1800503d0
     // Retail's factory pair (B39_RULES D2), defined in
     // vtbatch7_soundbuffer_soundeffect.cpp. Placement spells `::new (p)`.
     // (Declared by DECLARE_TYPE above.)
-
-protected:
-    // `??1SoundEffect@Audio@@UEAA@XZ` 0x1800e0880 -- NON-VIRTUAL. The body
-    // (vtbatch7_soundbuffer_soundeffect.cpp, moved from the retired
-    // deleting_dtor_leaves.cpp door) destroys `_samples` through 0x1800516c0;
-    // the compiler chains ~External.
-    ~SoundEffect();
 
 public:
     // ---- the 0x20 bytes SoundEffect adds ----

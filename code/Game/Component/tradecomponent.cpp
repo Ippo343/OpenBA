@@ -414,12 +414,6 @@ TradeComponent::TradeComponent()
     OrFlagsInCtor(0x3);
 }
 
-// [0] 0x14000dc80: ~TradeComponent (0x14005c340), MemFree on &1.
-Object::Base* TradeComponent::DeletingDtor(unsigned flags) {
-    this->~TradeComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14005c340: frees the +0x60 buy-order BST, +0x50, +0x40 and the +0x30 name array,
 // then the restamps and ~Internal (the compiler chain).
 //   +0x60: the root's two subtrees through 0x14000e320 (children at +0x18/+0x20;

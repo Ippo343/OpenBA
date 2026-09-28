@@ -142,7 +142,7 @@ MenuScene::~MenuScene() {
     // +0x28 with its ctor); still a virtual call, as retail's is.
     void* geom = _field28;
     if (geom) {
-        static_cast<WorldGeometry*>(geom)->DeletingDtor(1);  // flags=1 => free memory  B.3.8 bridge
+        delete static_cast<WorldGeometry*>(geom);  // flags=1 => free memory  B.3.8 bridge
     }
 
     // Cleanup tree/map at +0x1E8 and +0x1C8
@@ -174,25 +174,19 @@ MenuScene::~MenuScene() {
     reinterpret_cast<System::String*>(&_field20)->~String();
 }
 
-Object::Base* MenuScene::DeletingDtor(unsigned flags) {
-    this->~MenuScene();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // MenuScene::Reconstruct (vtable +0x30, Slot6)
 // ============================================================
 // Original: 0x14001b810. Destroys the object (slot 0, flags 0: no free) then
 // re-constructs in place.
 Object::External* MenuScene::Reconstruct() {
-    DeletingDtor(0);
+    this->~MenuScene();
     return ::new (static_cast<void*>(this)) MenuScene();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void MenuScene::Destruct() { DeletingDtor(0); }
+void MenuScene::Destruct() { this->~MenuScene(); }
 
 // ============================================================
 // MenuScene::Serialize (vtable +0x28, Slot5)

@@ -145,26 +145,19 @@ MapGenerator::~MapGenerator() {
     reinterpret_cast<System::String*>(&_field28)->~String();
 }
 
-// Original: 0x14001ae70 — the body above, External::~External, MemFree if flags & 1.
-Object::Base* MapGenerator::DeletingDtor(unsigned flags) {
-    this->~MapGenerator();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // MapGenerator::Reconstruct (vtable +0x30, Slot6) — Reset to defaults
 // ============================================================
 // Original: 0x14001ae30. Destroys the object (slot 0, flags 0: no free) then
 // re-constructs in place.
 Object::External* MapGenerator::Reconstruct() {
-    DeletingDtor(0);
+    this->~MapGenerator();
     return ::new (static_cast<void*>(this)) MapGenerator();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void MapGenerator::Destruct() { DeletingDtor(0); }
+void MapGenerator::Destruct() { this->~MapGenerator(); }
 
 // ============================================================
 // MapGenerator::Serialize (vtable +0x28, Slot5)

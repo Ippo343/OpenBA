@@ -159,16 +159,12 @@ GameLoadDialogLoopT::GameLoadDialogLoopT(const System::String& filename,
     _autoAdvance = 0;
 }
 
-Engine::UpdateLoop* GameLoadDialogLoopT::DeletingDtor(unsigned flags) {
-    printf("[SplashDLT::Destroy] self=%p flags=%u\n", (void*)this, flags);
-    // Retail 0x140001010: CALL ??1DialogLoaderLoopT@Engine@@ (import
-    // 0x140152b88), then MemFree on &1 (System::Random has no destructor). The
-    // compiler's chain: ~UserInterface, ~String, ~LoaderLoop -> ~UpdateLoop.
-    this->~GameLoadDialogLoopT();
-    if (flags & 1) {
-        fn_MemFreeStatic(this);
-    }
-    return this;
+// Retail 0x140001010 (slot 0): CALL ??1DialogLoaderLoopT@Engine@@ (import
+// 0x140152b88), then MemFree on &1 (System::Random has no destructor). The
+// compiler's chain: ~UserInterface, ~String, ~LoaderLoop -> ~UpdateLoop; the
+// free is UpdateLoop's operator delete.
+GameLoadDialogLoopT::~GameLoadDialogLoopT() {
+    printf("[SplashDLT::Destroy] self=%p\n", (void*)this);
 }
 
 void GameLoadDialogLoopT::Startup() {

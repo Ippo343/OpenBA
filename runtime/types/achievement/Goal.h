@@ -40,10 +40,9 @@
 // factory builds it); `Goal` stays abstract (slots 6-8 are `_purecall` in
 // retail) and its factory pair returns null, as retail's does.
 //
-// NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2). The destructors are
-// NON-virtual and PROTECTED: a whole object is destroyed through slot 0
-// (`Object::Destroy(p)`), never `delete p`; the exe subclasses' destructors
-// chain them.
+// THE DESTRUCTORS ARE VIRTUAL (the normal-virtual cutover, B3X W1): a whole
+// object is destroyed with `delete p` (retail's slot 0, flags 1); the exe
+// subclasses' destructors chain them.
 //
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1.
 // ============================================================================
@@ -152,19 +151,11 @@ public:
     // [0] 0x180001d70 — MSVC's VECTOR deleting destructor (MOV EDX,0x30), both
     //     arms as the retired RT_DELDTOR row ran them. The exe subclasses
     //     declare their own (their tables' slot 0 is the exe's).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Goal*>(self + static_cast<int64_t>(i) * 0x30)->~Goal();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Goal();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1Goal@Achievement@@UEAA@XZ  0x18009edb0. Virtual (banner).
+    // Retail: re-stamp Goal's vptr, release `_text`, tail-jump ~External. The
+    // body is EMPTY because the compiler emits all three: the vptr store on
+    // entry, `~String` on `_text` (a class member), then `~External()`.
+    ~Goal() override;
     // [1] 0x180001b60 TypeName / [2] 0x180001b40 Type, the static TypeId
     // 0x180001b50, `_TypeName` 0x180001b20 / `_ParentTypeName` 0x180001b30 and
     // the ABSTRACT class's factory pair 0x180001b70 / 0x180001b80 (`XOR EAX,EAX
@@ -203,11 +194,6 @@ protected:
     // (+0x20 the StringTable pointer, +0x28 the String).
     Goal() : Object::External(), _stringTable(), _text() {}
 
-    // ??1Goal@Achievement@@UEAA@XZ  0x18009edb0. NON-virtual (banner).
-    // Retail: re-stamp Goal's vptr, release `_text`, tail-jump ~External. The
-    // body is EMPTY because the compiler emits all three: the vptr store on
-    // entry, `~String` on `_text` (a class member), then `~External()`.
-    ~Goal();
 
 public:
     // ---- the 0x10 bytes Goal adds ------------------------------------------
@@ -261,19 +247,10 @@ public:
     // ---- the seven slots, in retail order ----------------------------------
     // [0] 0x1800020c0 — MSVC's VECTOR deleting destructor (MOV EDX,0x20), both
     //     arms as the retired RT_DELDTOR row ran them.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<GoalInstance*>(self + static_cast<int64_t>(i) * 0x20)->~GoalInstance();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~GoalInstance();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1GoalInstance@Achievement@@UEAA@XZ  0x18009ef40. Virtual (B3X W1).
+    // Retail: re-stamp, tail-jump ~Internal. EMPTY body — the compiler emits
+    // the stamp and the `~Internal()` (InternalFactory swap-remove) itself.
+    ~GoalInstance() override;
     // [1] 0x180001e60 TypeName / [2] 0x180001e40 Type, the static TypeId
     // 0x180001e50, `_TypeName` 0x180001e20 / `_ParentTypeName` 0x180001e30 and
     // CreateNewObject 0x180001f50: retail's macro (ENDGAME B.3.9 TI-REST); the
@@ -298,19 +275,13 @@ public:
 
     static void* operator new(std::size_t bytes);                 // 0x180001e70 — not ported
     static void* operator new(std::size_t bytes, void* place);    // 0x180001ee0 — not ported
-    static void  operator delete(void* p);                        // 0x180001ef0 — not ported
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                        // 0x180001ef0 — MemFree
     // 0x180001f50 — MemAlloc(0x20, 8) + the ctor (goal.cpp, B39_RULES D2). The
     // in-place half is the SHARED `?CreateInPlaceObject@Internal@Object@@`.
     // The class declares its own placement new: placement spells `::new (p)`.
     // (Declared by DECLARE_TYPE above.)
     GoalInstance(const GoalInstance& other);                      // 0x180001ff0 — not ported
     GoalInstance& operator=(const GoalInstance& other);           // 0x180002050 — not ported
-
-protected:
-    // ??1GoalInstance@Achievement@@UEAA@XZ  0x18009ef40. NON-virtual.
-    // Retail: re-stamp, tail-jump ~Internal. EMPTY body — the compiler emits
-    // the stamp and the `~Internal()` (InternalFactory swap-remove) itself.
-    ~GoalInstance();
 
 public:
     uint32_t                  _flags;   // +0x10  kFlagMet | kFlagFailed

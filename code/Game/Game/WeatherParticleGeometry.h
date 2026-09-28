@@ -24,7 +24,8 @@ class WeatherParticleGeometry final : public Graphics::Geometry {
 public:
     WeatherParticleGeometry();                                        // 0x1400d3f10
 
-    Graphics::Geometry* DeletingDtor(unsigned flags) override;        // [0] 0x140025060
+    // body 0x1400d3c10
+    ~WeatherParticleGeometry() override;                              // [0] 0x140025060
     void Update(const System::Time& time) override;                   // [1] 0x1400d2e60
     void Draw(Video::Context& context, const Graphics::Camera& camera,
               Graphics::ExternalPtrHandle material,
@@ -32,9 +33,6 @@ public:
     void AddDrawItems(const Graphics::Scene& scene,
                       Graphics::Renderer& renderer) const override;   // [3] 0x1400d30b0
 
-
-protected:
-    ~WeatherParticleGeometry();                                       // body 0x1400d3c10
 
 public:
     float    _intensity;          // +0xC0  0..1

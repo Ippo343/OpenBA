@@ -61,28 +61,17 @@ Weather::Weather() {
 }
 
 // ============================================================
-// Weather::DeletingDtor (vtable +0x00) — Scalar deleting destructor
-// ============================================================
-// Original: 0x140025020. Object::External::~External (the compiler's chain;
-// ~Weather has no body), then MemFree if flags & 1.
-Object::Base* Weather::DeletingDtor(unsigned flags) {
-    this->~Weather();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // Weather::Reconstruct (vtable +0x30, Slot6) — Reset to defaults
 // ============================================================
 // Original: 0x140025000. Destroys (slot 0, flags 0) then re-constructs in place.
 Object::External* Weather::Reconstruct() {
-    DeletingDtor(0);
+    this->~Weather();
     return ::new (static_cast<void*>(this)) Weather();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void Weather::Destruct() { DeletingDtor(0); }
+void Weather::Destruct() { this->~Weather(); }
 
 // [8] 0x140024ff0 — the in-place ctor (placement-new of the class on `this`).
 Object::External* Weather::Construct() {

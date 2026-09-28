@@ -27,7 +27,7 @@ class OrchardDescription final : public Description {
 public:
     OrchardDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140009a10
+    ~OrchardDescription() override = default;                              // [0] 0x140009a10
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x1400523a0
     bool              Serialize(void* stream) override;                    // [5] 0x140052300
     Object::External* Reconstruct() override;                              // [6] 0x1400099a0
@@ -40,9 +40,6 @@ public:
     int32_t _i24;                               // +0x24
     int32_t _i28;                               // +0x28
     float _f2c;                                 // +0x2c ctor stores int 0
-
-protected:
-    ~OrchardDescription() = default;
 };
 
 static_assert(sizeof(OrchardDescription) == 0x30, "OrchardDescription is 0x30 (create 0x1400098d0 MemAlloc(0x30))");

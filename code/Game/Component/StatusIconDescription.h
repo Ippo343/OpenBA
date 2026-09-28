@@ -27,7 +27,7 @@ class StatusIconDescription final : public Description {
 public:
     StatusIconDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140038a60
+    ~StatusIconDescription() override = default;                           // [0] 0x140038a60
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14012c1f0
     bool              Serialize(void* stream) override;                    // [5] 0x14012c180
     Object::External* Reconstruct() override;                              // [6] 0x1400389f0
@@ -42,9 +42,6 @@ public:
     bool _flag;                                 // +0x30
     uint8_t _pad31[3];                          // +0x31 zeroed by the ctor's 4-byte store
     uint8_t _pad34[4];                          // +0x34 never written by the ctor
-
-protected:
-    ~StatusIconDescription() = default;
 };
 
 static_assert(sizeof(StatusIconDescription) == 0x38, "StatusIconDescription is 0x38 (create 0x140038920 MemAlloc(0x38))");

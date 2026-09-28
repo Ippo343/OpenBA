@@ -43,16 +43,14 @@ public:
 
     MapGenerator();                                               // 0x1400a3030
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14001ae70
+    // body 0x14001aea0
+    ~MapGenerator() override;                                     // [0] 0x14001ae70
     int32_t GetFileVersion() const override { return 8; }         // [3] 0x1400a3020
     // [4] Compile: inherited (retail's slot is the Object::External import)
     bool Serialize(void* stream) override;                        // [5] 0x1400a2980
     Object::External* Reconstruct() override;                     // [6] 0x14001ae30
-    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
+    void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001ae20
-
-protected:
-    ~MapGenerator();                                              // body 0x14001aea0
 
 public:
     void*    _field20;           // +0x20: ExternalPtr (_stringTable)

@@ -47,13 +47,6 @@
 FrustumOutlineDescription::FrustumOutlineDescription()
     : _spriteSheet(nullptr), _spriteName(), _width(-1), _height(-1) {}
 
-// [0] 0x140012500: ~String(+0x70), ~ElementDescription (-> ~External), MemFree on &1.
-Object::Base* FrustumOutlineDescription::DeletingDtor(unsigned flags) {
-    this->~FrustumOutlineDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x14006c500: ElementDescription::GetFileVersion() | 0x100.
 int32_t FrustumOutlineDescription::GetFileVersion() const {
     return static_cast<int32_t>(
@@ -79,13 +72,13 @@ bool FrustumOutlineDescription::Serialize(void* stream) {
 }
 
 // [6] 0x140012390: retail destroys and rebuilds in place: a virtual
-// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+// `~T()` (slot 0, flags 0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
 Object::External* FrustumOutlineDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~FrustumOutlineDescription();
     return new (static_cast<void*>(this)) FrustumOutlineDescription();
 }
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
-void FrustumOutlineDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0).
+void FrustumOutlineDescription::Destruct() { this->~FrustumOutlineDescription(); }
 
 // ============================================================
 // CreateElement (vtable +0x40, exe 0x14006c340)

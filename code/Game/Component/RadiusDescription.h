@@ -27,7 +27,7 @@ class RadiusDescription final : public Description {
 public:
     RadiusDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000bb10
+    ~RadiusDescription() override = default;                               // [0] 0x14000bb10
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140055590
     bool              Serialize(void* stream) override;                    // [5] 0x140055530
     Object::External* Reconstruct() override;                              // [6] 0x14000bab0
@@ -39,9 +39,6 @@ public:
     void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
     int32_t _radius;                            // +0x28
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
-
-protected:
-    ~RadiusDescription() = default;
 };
 
 static_assert(sizeof(RadiusDescription) == 0x30, "RadiusDescription is 0x30 (create 0x14000b9e0 MemAlloc(0x30))");

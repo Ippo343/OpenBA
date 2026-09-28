@@ -915,17 +915,6 @@ HerbalistWork::~HerbalistWork() {
 }
 
 
-// ============================================================
-// HerbalistWork::ScalarDtor (0x14002A640)
-// Calls dtor body, then conditional free based on flags.
-// ============================================================
-// [0] 0x14002a640: ~HerbalistWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* HerbalistWork::DeletingDtor(unsigned flags) {
-    this->~HerbalistWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 
 // [11] 0x140029860 (shared by 13 tables): `XOR EAX,EAX; CMP [RCX+0x50],EAX; SETG AL`

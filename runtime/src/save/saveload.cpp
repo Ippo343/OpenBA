@@ -383,7 +383,7 @@ Save::SaveLoad::SaveInfo::~SaveInfo() {
         // MOV RAX,[RCX] ; MOV EDX,1 ; CALL [RAX]  -- scalar deleting dtor of the
         // row's Video::ImageBuffer (built by SetThumbnail), through its slot 0.
         // B3X W0: by name.
-        reinterpret_cast<::Video::ImageBuffer*>(owned)->DeletingDtor(1u);   // B.3.x bridge
+        delete reinterpret_cast<::Video::ImageBuffer*>(owned);   // B.3.x bridge
     }
 
     void* block = thumbPixels;

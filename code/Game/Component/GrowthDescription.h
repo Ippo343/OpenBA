@@ -27,7 +27,7 @@ class GrowthDescription final : public Description {
 public:
     GrowthDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140034bf0
+    ~GrowthDescription() override = default;                               // [0] 0x140034bf0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x140120b00
     bool              Serialize(void* stream) override;                    // [5] 0x140120980
     Object::External* Reconstruct() override;                              // [6] 0x140034bc0
@@ -58,9 +58,6 @@ public:
     float _f60;                                 // +0x60 ctor stores int 0
     bool _b64;                                  // +0x64
     uint8_t _pad65[3];                          // +0x65 never written by the ctor
-
-protected:
-    ~GrowthDescription() = default;
 };
 
 static_assert(sizeof(GrowthDescription) == 0x68, "GrowthDescription is 0x68 (create 0x140034b70 MemAlloc(0x68))");

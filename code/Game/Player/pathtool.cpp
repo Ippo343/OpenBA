@@ -78,20 +78,6 @@ static inline uint64_t GetKeyMap() {
     return (uint64_t)***(void****)g_pInputConfigSingletonExref;
 }
 
-// ============================================================
-// PathTool::DeletingDtor (vtable +0x00) — 0x140026b70
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled PathTool_Dtor restamped the Path and
-// Tool tables read by address — Tool's UNREGISTERED, so it stored a NULL vptr
-// before ~Internal (B38 D9 #3). The compiler's dtor chain restamps the real
-// tables, then runs Object::Internal::~Internal. ~PathTool (0x1400de950) is
-// NOT empty in retail — see below.
-Object::Base* PathTool::DeletingDtor(unsigned flags) {
-    this->~PathTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // 0x1400de950 — ~PathTool. After the leaf restamp (the compiler's), three
 // inlined Collection::Array<T>::~Array bodies, in this order:
 //   MemFree([+0x50]); +0x50 = +0x58 = 0     (segment list, 8-byte pairs)

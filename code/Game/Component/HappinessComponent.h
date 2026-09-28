@@ -41,7 +41,8 @@ public:
 
     HappinessComponent();                                 // 0x14004ab60
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140005db0
+    // 0x14004ab00
+    ~HappinessComponent() override;                               // [0]  0x140005db0
     void          Persist(void* stream) override;                 // [3]  0x14004aa80
     void          OnRemove() override;                            // [7]  0x14004aa20
     // PORT GAP (retail 0x14004a780, 437 B) — B38 D3.2: the tree's table left this
@@ -55,9 +56,6 @@ public:
     uint8_t         happinessFlag; // +0x28
     uint8_t         _pad29[7];     // +0x29
     StateController _controller;   // +0x30 the embedded controller (D6)
-
-protected:
-    ~HappinessComponent();                                // 0x14004ab00
 };
 
 // PORT GAP (ENDGAME B.3.9 CB): PlayAnimation_Action_Ctor4 (0x1400ba856) builds a

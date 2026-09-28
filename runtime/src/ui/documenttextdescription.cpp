@@ -69,11 +69,11 @@ Object::External* DocumentTextDescription::Construct() {
 }
 // [6] 0x18003ba80 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* DocumentTextDescription::Reconstruct() {
-    DeletingDtor(0);                                                        // 18003ba8e slot 0
+    this->~DocumentTextDescription();                                                        // 18003ba8e slot 0
     return ::new (this) DocumentTextDescription();                        // 18003ba98 JMP
 }
 // [7] 0x18003bab0
-void DocumentTextDescription::Destruct() { DeletingDtor(0); }
+void DocumentTextDescription::Destruct() { this->~DocumentTextDescription(); }
 
 // ============================================================================
 // [5] ?Serialize@DocumentTextDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800cf8a0
@@ -158,7 +158,7 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
 
     RtAddr<FieldSerFn>(0x18003dc90ull)(&_resourceList, &ser);   // 1800cfae9
 
-    if (rw != nullptr) rw->DeletingDtor(1);                 // 1800cfb00
+    if (rw != nullptr) delete rw;                 // 1800cfb00
     return true;
 }
 

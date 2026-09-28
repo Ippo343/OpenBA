@@ -26,16 +26,13 @@ class ClearResourceDescription final : public Description {
 public:
     ClearResourceDescription() = default;
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140031710
+    ~ClearResourceDescription() override = default;                        // [0] 0x140031710
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140118770
     bool              Serialize(void* stream) override;                    // [5] 0x140118730
     Object::External* Reconstruct() override;                              // [6] 0x1400316b0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140031700
     virtual Object::External* Construct();                                 // [9] 0x140031660
-
-protected:
-    ~ClearResourceDescription() = default;
 };
 
 static_assert(sizeof(ClearResourceDescription) == 0x20, "ClearResourceDescription is 0x20 (create 0x140031600 MemAlloc(0x20))");

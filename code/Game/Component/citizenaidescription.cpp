@@ -29,28 +29,21 @@
 CitizenAIDescription::CitizenAIDescription()
     : Description() {}
 
-// [0] 0x14002fc90: ~CitizenAIDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CitizenAIDescription::DeletingDtor(unsigned flags) {
-    this->~CitizenAIDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14010fc40: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
 bool CitizenAIDescription::Serialize(void* stream) {
     IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     return true;
 }
 
-// [6] 0x14002fc30: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x14002fc30: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* CitizenAIDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CitizenAIDescription();
     return new (static_cast<void*>(this)) CitizenAIDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CitizenAIDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CitizenAIDescription::Destruct() { this->~CitizenAIDescription(); }
 
 // [8] 0x14002fc80: CitizenAIComponent's type id through the hidden return slot.
 Object::Type* CitizenAIDescription::GetComponentType(Object::Type* ret) const {

@@ -345,13 +345,6 @@ void ZoneComponent::OnRemove() {
         s_fn_NodeFinalize(found + 1, &ownerRef);
 }
 
-// [0] 0x14003a870: ~ZoneComponent (0x140130380: restamp + ~Internal), MemFree on &1.
-Object::Base* ZoneComponent::DeletingDtor(unsigned flags) {
-    this->~ZoneComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x14003a6a0: MemAlloc(0x28, 8), then the ctor.
 void* ZoneComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ZoneComponent), 8);

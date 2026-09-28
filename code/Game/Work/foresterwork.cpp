@@ -932,17 +932,6 @@ ForesterWork::~ForesterWork() {
 }
 
 
-// ============================================================
-// ForesterWork::ScalarDtor (0x14002A370)
-// Calls dtor body, then conditional free.
-// ============================================================
-// [0] 0x14002a370: ~ForesterWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* ForesterWork::DeletingDtor(unsigned flags) {
-    this->~ForesterWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 // ============================================================
 // ForesterWork::Serialize (0x1400EB970)

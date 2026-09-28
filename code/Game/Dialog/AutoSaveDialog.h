@@ -32,7 +32,7 @@ public:
     AutoSaveDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                    Object::InternalPtr<UI::DialogInstance> parent); // 0x14005e230
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140010780
+    ~AutoSaveDialog() override = default;                          // [0] 0x140010780
     void OnOpened() override;                                      // [4] 0x14005e110 -> e120
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x14005dfc0
@@ -40,9 +40,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14005e0f0
-
-protected:
-    ~AutoSaveDialog() = default;
 
 public:
     uint64_t dataB8;           // +0xB8: "savingImage" element

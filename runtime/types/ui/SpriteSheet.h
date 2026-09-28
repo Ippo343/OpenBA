@@ -186,11 +186,10 @@ public:
     // scalar deleting dtor 0x1400121e0 (~SpriteSheet; MemFree on flags & 1).
     // The class keeps that SCALAR arm (B.3.9: an exe-built class); the DLL's
     // vector 0x1800037b0 and its RT_DELDTOR row are retired.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        this->~SpriteSheet();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1SpriteSheet@UI@@UEAA@XZ` 0x18011d670. VIRTUAL (B3X W1); its body is in
+    // spritesheet_new.cpp (the two String releases, then ~Array<SpriteInfo>);
+    // ~External is the chain's.
+    ~SpriteSheet() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -232,7 +231,7 @@ public:
     // spritesheet_vtable.cpp), registered by name and address.
     static void* operator new(std::size_t bytes);              // 0x180002e60  (door)
     static void* operator new(std::size_t bytes, void* place); // 0x180002ed0
-    static void  operator delete(void* p);                     // 0x180002ee0  (door)
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x180002ee0  (door)
 
     // `??0SpriteSheet@UI@@QEAA@XZ` 0x18011d600 — the REAL constructor, PUBLIC:
     // External() and the stamps are the compiler's, then the stores below;
@@ -248,12 +247,6 @@ public:
         m_field4C = 0;                        //       }
         m_field50 = 0;                        // +0x50 (BYTE)
     }
-
-protected:
-    // `??1SpriteSheet@UI@@UEAA@XZ` 0x18011d670. NON-VIRTUAL; its body is in
-    // spritesheet_new.cpp (the two String releases, then ~Array<SpriteInfo>);
-    // ~External is the chain's.
-    ~SpriteSheet();
 
 public:
     // ---- the 0x38 bytes SpriteSheet adds after Object::External ------------

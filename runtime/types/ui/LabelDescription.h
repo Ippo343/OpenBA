@@ -35,8 +35,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0LabelDescription@UI@@QEAA@XZ` (0x1800d29d0) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~LabelDescription is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~LabelDescription is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7LabelDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -72,20 +72,10 @@ public:
 
     // [0] 0x180042730 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xb8`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<LabelDescription*>(self + static_cast<int64_t>(i) * 0xb8)
-                    ->~LabelDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~LabelDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1LabelDescription@UI@@UEAA@XZ` (0x1800d2960). VIRTUAL (B3X W1)
+    // (labeldescription.cpp): releases the sprite name at +0xb0; the compiler
+    // chains ~TextDescription. +0xa8 is NOT released.
+    ~LabelDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x1800423b0, Type 0x180042390, TypeId 0x1800423a0, _TypeName 0x180042370
@@ -105,13 +95,7 @@ public:
     LabelDescription& operator=(const LabelDescription& src);    // 0x180042630  not ported
     static void* operator new(std::size_t bytes);                // 0x1800423c0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180042430  not ported
-    static void  operator delete(void* p);                       // 0x180042440  not ported
-
-protected:
-    // `??1LabelDescription@UI@@UEAA@XZ` (0x1800d2960). NON-VIRTUAL
-    // (labeldescription.cpp): releases the sprite name at +0xb0; the compiler
-    // chains ~TextDescription. +0xa8 is NOT released.
-    ~LabelDescription();
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                       // 0x180042440  not ported
 
 private:
 
@@ -129,7 +113,7 @@ public:
 static_assert(sizeof(LabelDescription) == 0xb8,
               "UI::LabelDescription is 0xb8 (MOV EDX,0xb8 in 0x180042730)");
 static_assert(alignof(LabelDescription) == 8, "UI::LabelDescription aligns to 8");
-static_assert(!std::has_virtual_destructor<LabelDescription>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<LabelDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<LabelDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(LabelDescription, _word90) == sizeof(TextDescription),
               "LabelDescription's own fields begin at the end of TextDescription");

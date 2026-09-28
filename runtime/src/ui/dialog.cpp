@@ -1193,7 +1193,7 @@ namespace {
 using GetIndexFromNameFn = int32_t (*)(const void* table, const void* str);
 
 // The retail-inlined `??0Dialog@UI@@QEAA@XZ` / `??1Dialog@UI@@UEAA@XZ` pair is
-// `::new (p) UI::Dialog()` / `DeletingDtor(0)` since ENDGAME B.3.9 UI-D (the
+// `::new (p) UI::Dialog()` / `~T()` (slot 0, flags 0) since ENDGAME B.3.9 UI-D (the
 // temporary is a real UI::Dialog wearing the class's table).
 constexpr size_t kDialogTempSize = 0x88;
 
@@ -1298,7 +1298,7 @@ void DialogInstance::ReleaseFields() {
     // --- the root Element, through its scalar deleting destructor ------------
     // Retail calls slot 0 with EDX = 1: destruct AND free.
     if (_root) {
-        static_cast<Element*>(_root)->DeletingDtor(1);
+        delete static_cast<Element*>(_root);
         _root = nullptr;
     }
 
@@ -1307,7 +1307,7 @@ void DialogInstance::ReleaseFields() {
         DialogController** data = _controllers._data;   // re-read: see above
         DialogController*  c    = data[i];
         if (c) {
-            c->DeletingDtor(1);
+            delete c;
             data[i] = nullptr;
         }
     }
@@ -2011,7 +2011,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     #undef ED_ELEM
 
     // ---- the temporary's destructor ---------------------------------------
-    tempDlg->DeletingDtor(0);         // ~Dialog: see fact (a)
+    tempDlg->UI::Dialog::~Dialog();   // ~Dialog: see fact (a)
 }
 
 }  // namespace UI

@@ -36,7 +36,7 @@ class Description : public Object::External {
     DECLARE_EXE_TYPE(Description)
 
 public:
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140031c70
+    ~Description() override = default;                            // [0] 0x140031c70
     // [1] TypeName 0x140031c60 and [2] Type 0x140031c50: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     // [3] GetFileVersion, [5] Serialize, [6] Reconstruct, [7] Destruct: pure (External's)
     virtual Object::Type* GetComponentType(Object::Type* ret) const = 0;   // [8] pure
@@ -45,7 +45,6 @@ protected:
     // Retail inlines this into each leaf ctor: `??0External@Object@@` then the
     // 0x1401629a0 stamp (the compiler's).
     Description() = default;
-    ~Description() = default;
 };
 
 static_assert(sizeof(Description) == 0x20, "Description adds no bytes to Object::External");

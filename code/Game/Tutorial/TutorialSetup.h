@@ -31,7 +31,7 @@ class TutorialSetup : public Object::External {
     DECLARE_EXE_TYPE(TutorialSetup)
 
 public:
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140028390
+    ~TutorialSetup() override = default;                           // [0] 0x140028390
     // [1] TypeName 0x140028380 and [2] Type 0x140028370: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     int32_t       GetFileVersion() const override { return 1; }    // [3] 0x1400e2040
     bool          Serialize(void* stream) override;                // [5] 0x1400e2000
@@ -44,7 +44,6 @@ protected:
     // Retail inlines this into each leaf ctor: `??0External@Object@@` then the
     // 0x140160c30 stamp (the compiler's).
     TutorialSetup() = default;
-    ~TutorialSetup() = default;
 };
 
 static_assert(sizeof(TutorialSetup) == 0x20, "TutorialSetup adds no bytes to Object::External");

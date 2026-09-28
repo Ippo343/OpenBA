@@ -34,7 +34,9 @@ class PopulationComponent final : public Component {
 public:
     PopulationComponent();                                        // 0x1400546d0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14000b0a0
+    // PORT GAP (retail 0x140054660) — B38 D2: retail frees the arrays at +0x50
+    // and +0x38; the tree never did (Inert_ScalarDtor).
+    ~PopulationComponent() override = default;                    // [0]  0x14000b0a0
     void Persist(void* stream) override;                          // [3]  0x1400544a0
     void Startup() override;                                      // [4]  0x140054220
     void OnAdded() override;                                      // [6]  0x1400541c0
@@ -54,11 +56,6 @@ public:
     void*    field58;      // +0x58 its count / capacity
     void*    field60;      // +0x60 herd-entity list
     void*    field68;      // +0x68
-
-protected:
-    // PORT GAP (retail 0x140054660) — B38 D2: retail frees the arrays at +0x50
-    // and +0x38; the tree never did (Inert_ScalarDtor).
-    ~PopulationComponent() = default;
 };
 
 static_assert(sizeof(PopulationComponent) == 0x70, "PopulationComponent is 0x70 (create 0x14000af50)");

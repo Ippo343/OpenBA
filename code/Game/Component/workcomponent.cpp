@@ -302,13 +302,6 @@ void WorkComponent::OnRemove() {
 uint32_t WorkComponent::CommandMask(int) { return 0; }
 void WorkComponent::Command(int) {}
 
-// [0] 0x140039fb0: ~WorkComponent (0x14012e7e0: restamp + ~Internal), MemFree on &1.
-Object::Base* WorkComponent::DeletingDtor(unsigned flags) {
-    this->~WorkComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140039e70: MemAlloc(0x38, 8), then the ctor.
 void* WorkComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WorkComponent), 8);

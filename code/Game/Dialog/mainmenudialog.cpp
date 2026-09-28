@@ -976,13 +976,6 @@ MainMenuDialog::MainMenuDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
       dataB8(reinterpret_cast<uint64_t>(game)), dataC0(reinterpret_cast<uint64_t>(loop)) {}
 
-// [0] 0x140020da0: ~MainMenuDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* MainMenuDialog::DeletingDtor(unsigned flags) {
-    this->~MainMenuDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140020d10: MemAlloc(0xc8, 8), then the ctor.
 void* MainMenuDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MainMenuDialog), 8);

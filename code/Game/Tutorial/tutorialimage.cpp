@@ -41,13 +41,6 @@ static fn_ExternalPtr_SerializeImage_t ExternalPtrSerializeImageFn() {
 // External(), the stamp (the compiler's), the image fields zeroed.
 TutorialImage::TutorialImage() : imageRef(nullptr), imageWidth(0), imageHeight(0) {}
 
-// [0] 0x140027a80: stamp, ~External, MemFree on &1.
-Object::Base* TutorialImage::DeletingDtor(unsigned flags) {
-    this->~TutorialImage();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialImage::Serialize (vtable +0x28, 0x1400e0330)
 // ============================================================
@@ -73,10 +66,10 @@ bool TutorialImage::Serialize(void* stream) {
 // TutorialImage::Reconstruct [6] 0x140027a30 / Destruct [7] 0x140001640
 // ============================================================
 Object::External* TutorialImage::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialImage();
     return ::new (static_cast<void*>(this)) TutorialImage();
 }
-void TutorialImage::Destruct() { DeletingDtor(0); }
+void TutorialImage::Destruct() { this->~TutorialImage(); }
 
 // ============================================================
 // TutorialImage::Construct (vtable +0x40, 0x1400279e0)

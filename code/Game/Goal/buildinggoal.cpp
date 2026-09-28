@@ -51,13 +51,6 @@ BuildingGoal::~BuildingGoal() {
     }
 }
 
-// [0] 0x140025e80: ~BuildingGoal -> ~Goal -> ~External, MemFree on &1.
-Object::Base* BuildingGoal::DeletingDtor(unsigned flags) {
-    this->~BuildingGoal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // BuildingGoal::Serialize (vtable +0x28, 0x1400d76a0)
 // ============================================================
@@ -129,13 +122,13 @@ bool BuildingGoal::Serialize(void* stream) {
 // ============================================================
 // BuildingGoal::Reconstruct [6] 0x140025e30 / Destruct [7] 0x140001640
 // ============================================================
-// retail 0x140025e30: vtable[0](this, 0) (DeletingDtor(0): destroy in place),
+// retail 0x140025e30: vtable[0](this, 0) (`~T()` (slot 0, flags 0): destroy in place),
 // then the ctor on `this`.
 Object::External* BuildingGoal::Reconstruct() {
-    DeletingDtor(0);
+    this->~BuildingGoal();
     return ::new (static_cast<void*>(this)) BuildingGoal();
 }
-void BuildingGoal::Destruct() { DeletingDtor(0); }
+void BuildingGoal::Destruct() { this->~BuildingGoal(); }
 
 // ============================================================
 // BuildingGoal::CheckGoalState (vtable +0x40, 0x1400d7580)

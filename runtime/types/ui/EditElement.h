@@ -48,8 +48,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0EditElement@UI@@QEAA@XZ` (0x1800d0f10) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~EditElement is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~EditElement is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7EditElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -128,20 +128,10 @@ public:
 
     // [0] 0x18003fed0 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xf8`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<EditElement*>(self + static_cast<int64_t>(i) * 0xf8)
-                    ->~EditElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~EditElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1EditElement@UI@@UEAA@XZ` (0x1800d0e50). VIRTUAL (B3X W1); editelement.cpp
+    // holds retail's body (drop the text-input latch if held, release the
+    // filter and the text); the compiler chains ~Element.
+    ~EditElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x18003fae0, Type 0x18003fac0, TypeId 0x18003fad0, _TypeName 0x18003faa0
@@ -175,13 +165,7 @@ public:
     EditElement& operator=(const EditElement& src);              // 0x18003fd70  not ported
     static void* operator new(std::size_t bytes);                // 0x18003faf0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18003fb60  not ported
-    static void  operator delete(void* p);                       // 0x18003fb70  not ported
-
-protected:
-    // `??1EditElement@UI@@UEAA@XZ` (0x1800d0e50). NON-VIRTUAL; editelement.cpp
-    // holds retail's body (drop the text-input latch if held, release the
-    // filter and the text); the compiler chains ~Element.
-    ~EditElement();
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                       // 0x18003fb70  not ported
 
 private:
 
@@ -204,7 +188,7 @@ public:
 static_assert(sizeof(EditElement) == 0xf8,
               "UI::EditElement is 0xf8 (MOV EDX,0xf8 in 0x18003fed0) — NOT 0xe8");
 static_assert(alignof(EditElement) == 8, "UI::EditElement aligns to 8");
-static_assert(!std::has_virtual_destructor<EditElement>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<EditElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<EditElement>::value, "B39 D1: concrete");
 static_assert(offsetof(EditElement, _font) == sizeof(Element),
               "EditElement's own fields begin at the end of Element");

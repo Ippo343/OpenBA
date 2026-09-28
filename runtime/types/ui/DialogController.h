@@ -72,19 +72,10 @@ public:
     // [0] 0x18003b800 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x30`, the element size).
     // The class's OWN (B9-4): every exe panel declares its own.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<DialogController*>(self + static_cast<int64_t>(i) * 0x30)->~DialogController();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~DialogController();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1DialogController@UI@@UEAA@XZ` 0x1800cd2f0. VIRTUAL (B3X W1).
+    // and EMPTY, which is retail's body: 0x1800cd2f0 is the restamp plus the
+    // inlined ~Internal, both emitted by the compiler chain.
+    ~DialogController() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -134,10 +125,6 @@ protected:
     // factories build their base as alloc + zero + table, EXE_SUBCLASSES.md
     // 1B), so nothing is shared: this is the port.
     DialogController() : _config(), _dialog(nullptr), _container(nullptr) {}
-    // `??1DialogController@UI@@UEAA@XZ` 0x1800cd2f0. NON-VIRTUAL (decision 2)
-    // and EMPTY, which is retail's body: 0x1800cd2f0 is the restamp plus the
-    // inlined ~Internal, both emitted by the compiler chain.
-    ~DialogController();
 
     // RULE B5-15 / B6-7, both COPIED from B36_SLOTS section 3:
     //   0x18003b690  ?_TypeName@       -> "DialogController"

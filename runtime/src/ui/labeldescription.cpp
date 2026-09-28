@@ -56,10 +56,10 @@ Object::External* LabelDescription::Construct() {
     return ::new (this) LabelDescription();                  // 180042559 JMP
 }
 Object::External* LabelDescription::Reconstruct() {
-    DeletingDtor(0);                                         // 18004253e
+    this->~LabelDescription();                                         // 18004253e
     return ::new (this) LabelDescription();                  // 180042548 JMP
 }
-void LabelDescription::Destruct() { DeletingDtor(0); }
+void LabelDescription::Destruct() { this->~LabelDescription(); }
 
 // ============================================================================
 // ?Serialize@LabelDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d2820
@@ -86,7 +86,7 @@ bool LabelDescription::Serialize(void* streamv) {
     rw->SerializeInt(_worda0, nullptr);                      // 1800d2903
     rw->SerializeInt(_worda4, nullptr);                      // 1800d291b
 
-    if (rw != nullptr) rw->DeletingDtor(1);                  // 1800d2934
+    if (rw != nullptr) delete rw;                  // 1800d2934
     return true;
 }
 

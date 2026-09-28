@@ -43,14 +43,6 @@ TutorialHighlightDialog::TutorialHighlightDialog(UI::UserInterface* ui, const UI
       elapsedTicks(0), glowGroup(nullptr), glow(nullptr), arrow(nullptr),
       rotation(rotationArg), targetElement(targetElementArg), targetEntity(targetEntityArg) {}
 
-// [0] 0x140027910: the dtor 0x1400e01a0 (restamp, ~DialogInstance — the
-// compiler's chain; the tree ran a guarded ~Internal), MemFree on &1.
-Object::Base* TutorialHighlightDialog::DeletingDtor(unsigned flags) {
-    this->~TutorialHighlightDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialHighlightDialog::OnOpened (vtable +0x20, 0x1400e0020)
 // ============================================================

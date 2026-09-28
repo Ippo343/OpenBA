@@ -27,7 +27,7 @@ class MarketDescription final : public Description {
 public:
     MarketDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400083d0
+    ~MarketDescription() override;                                         // [0] 0x1400083d0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x14004ec80
     bool              Serialize(void* stream) override;                    // [5] 0x14004ebb0
     Object::External* Reconstruct() override;                              // [6] 0x140008360
@@ -40,9 +40,6 @@ public:
     void* _ratios;                              // +0x28 array of {enum resource @+0, float ratio @+4}, stride 8
     int32_t _ratioCount;                        // +0x30
     int32_t _ratioCap;                          // +0x34
-
-protected:
-    ~MarketDescription();
 };
 
 static_assert(sizeof(MarketDescription) == 0x38, "MarketDescription is 0x38 (create 0x140008290 MemAlloc(0x38))");

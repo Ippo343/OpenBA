@@ -27,7 +27,7 @@ class AttendanceDescription final : public Description {
 public:
     AttendanceDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140002800
+    ~AttendanceDescription() override = default;                           // [0] 0x140002800
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140044700
     bool              Serialize(void* stream) override;                    // [5] 0x1400446b0
     Object::External* Reconstruct() override;                              // [6] 0x1400027a0
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     int32_t _i20;                               // +0x20
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
-
-protected:
-    ~AttendanceDescription() = default;
 };
 
 static_assert(sizeof(AttendanceDescription) == 0x28, "AttendanceDescription is 0x28 (create 0x1400026f0 MemAlloc(0x28))");

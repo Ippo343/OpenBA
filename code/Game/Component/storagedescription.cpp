@@ -68,13 +68,6 @@ StorageDescription::~StorageDescription() {
     _volumeCap = 0;
 }
 
-// [0] 0x140038cf0: ~StorageDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* StorageDescription::DeletingDtor(unsigned flags) {
-    this->~StorageDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14012c9a0: stream order as retail.
 bool StorageDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
@@ -105,15 +98,15 @@ bool StorageDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140038c80: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x140038c80: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* StorageDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~StorageDescription();
     return new (static_cast<void*>(this)) StorageDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void StorageDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void StorageDescription::Destruct() { this->~StorageDescription(); }
 
 // [8] 0x140038ce0: StorageComponent's type id through the hidden return slot.
 Object::Type* StorageDescription::GetComponentType(Object::Type* ret) const {

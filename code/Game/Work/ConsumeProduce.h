@@ -43,7 +43,8 @@ class ConsumeProduce final : public Work {
 public:
     ConsumeProduce();                                               // 0x1400e9340
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a190
+    // 0x1400e9190: frees both arrays
+    ~ConsumeProduce() override;                                     // [0]  0x14002a190
     void  Persist(void* stream) override;                           // [3]  0x1400e9020
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400e7840
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400e77c0
@@ -66,9 +67,6 @@ public:
     void*    field_68;           // +0x68: int DynArray data ptr (zeroed)
     int32_t  field_70;           // +0x70: DynArray count (zeroed)
     int32_t  field_74;           // +0x74: DynArray capacity (zeroed)
-
-protected:
-    ~ConsumeProduce();                                             // 0x1400e9190: frees both arrays
 };
 
 static_assert(sizeof(ConsumeProduce) == 0x78, "ConsumeProduce is 0x78 (retail create MemAlloc)");

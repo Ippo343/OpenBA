@@ -1767,16 +1767,6 @@ MarketWork::~MarketWork() {
 }
 
 
-// ============================================================
-// MarketWork::ScalarDtor (0x14002a910)
-// ============================================================
-// [0] 0x14002a910: ~MarketWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* MarketWork::DeletingDtor(unsigned flags) {
-    this->~MarketWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 // ============================================================
 // MarketWork::Slot11 -- returns (this->_field50 > 0)

@@ -36,7 +36,9 @@ class ParticleComponent final : public Component {
 public:
     ParticleComponent();                                          // 0x1400533d0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14000a560
+    // PORT GAP (retail 0x140053310) — B38 D2: retail destroys the geometry
+    // objects and frees both arrays; the tree never did (Inert_ScalarDtor).
+    ~ParticleComponent() override = default;                      // [0]  0x14000a560
     void Persist(void* stream) override;                          // [3]  0x140053270
     void Startup() override;                                      // [4]  0x140053230
     void OnAdded() override;                                      // [6]  0x140052f70
@@ -50,11 +52,6 @@ public:
     void*    field30;      // +0x30 its count / capacity
     void*    field38;      // +0x38 geometry entries (0x18 stride; objects destroyed by the retail dtor)
     void*    field40;      // +0x40 their count / capacity
-
-protected:
-    // PORT GAP (retail 0x140053310) — B38 D2: retail destroys the geometry
-    // objects and frees both arrays; the tree never did (Inert_ScalarDtor).
-    ~ParticleComponent() = default;
 };
 
 static_assert(sizeof(ParticleComponent) == 0x48, "ParticleComponent is 0x48 (create 0x14000a360)");

@@ -171,11 +171,9 @@ public:
     // (~SpriteCapture; MemFree on flags & 1) — the SCALAR arm is kept
     // (B39_RULES D1.2). The DLL's vector arm (0x18003ccf0, the retired
     // RT_DELDTOR row) differs only on `flags & 2`, which nothing passes.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        this->~SpriteCapture();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // 0x1800d91b0. VIRTUAL (B3X W1); the three ~Array calls (spritecapture_class.cpp),
+    // then the compiler chains ~External.
+    ~SpriteCapture() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -216,7 +214,7 @@ public:
     // Placement is spelt `::new (p) SpriteCapture()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x18003c820
     static void* operator new(std::size_t bytes, void* place); // 0x18003c890
-    static void  operator delete(void* p);                     // 0x18003c8a0
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x18003c8a0
     // Retail's factory pair (B39_RULES D2): MemAlloc(0x58, 8) + the ctor, and
     // the null-tested in-place ctor. Defined and registered in
     // spritecapture_class.cpp.
@@ -230,11 +228,6 @@ public:
         _sprites  = CaptureArray{};     // +0x40, +0x48
         _width = 0; _height = 0;        // +0x50 (one qword)
     }
-
-protected:
-    // 0x1800d91b0. NON-VIRTUAL; the three ~Array calls (spritecapture_class.cpp),
-    // then the compiler chains ~External.
-    ~SpriteCapture();
 
 public:
     // ---- the 0x38 bytes SpriteCapture adds (public: the doors reach them) --

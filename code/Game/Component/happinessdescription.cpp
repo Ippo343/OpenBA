@@ -39,13 +39,6 @@ HappinessDescription::HappinessDescription()
       _u28(0),
       _i2c(0) {}
 
-// [0] 0x140005d50: ~HappinessDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* HappinessDescription::DeletingDtor(unsigned flags) {
-    this->~HappinessDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14004acb0: stream order as retail.
 bool HappinessDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -57,15 +50,15 @@ bool HappinessDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140005ce0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140005ce0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* HappinessDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~HappinessDescription();
     return new (static_cast<void*>(this)) HappinessDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void HappinessDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void HappinessDescription::Destruct() { this->~HappinessDescription(); }
 
 // [8] 0x140005d40: HappinessComponent's type id through the hidden return slot.
 Object::Type* HappinessDescription::GetComponentType(Object::Type* ret) const {

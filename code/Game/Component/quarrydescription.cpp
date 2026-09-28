@@ -35,13 +35,6 @@ QuarryDescription::QuarryDescription()
       _minDepth(-1.5f),
       _maxDepth(-7.0f) {}
 
-// [0] 0x14000b570: ~QuarryDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* QuarryDescription::DeletingDtor(unsigned flags) {
-    this->~QuarryDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140055320: stream order as retail.
 bool QuarryDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -52,15 +45,15 @@ bool QuarryDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000b500: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000b500: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* QuarryDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~QuarryDescription();
     return new (static_cast<void*>(this)) QuarryDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void QuarryDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void QuarryDescription::Destruct() { this->~QuarryDescription(); }
 
 // [8] 0x14000b560: QuarryComponent's type id through the hidden return slot.
 Object::Type* QuarryDescription::GetComponentType(Object::Type* ret) const {

@@ -952,12 +952,6 @@ WorkPlaceComponent::WorkPlaceComponent()
     WorkPlaceComponent_RecordCensus(this);
 }
 
-// [0] 0x14003a220: ~WorkPlaceComponent (0x14012f270), MemFree on &1.
-Object::Base* WorkPlaceComponent::DeletingDtor(unsigned flags) {
-    this->~WorkPlaceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
 // (the compiler chain).
 WorkPlaceComponent::~WorkPlaceComponent() {

@@ -25,7 +25,9 @@ class WorkPlaceUI final : public UI::DialogController {
 public:
     WorkPlaceUI() = default;                             // 0x140016dc0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140016e90
+    // 0x140016e90 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~WorkPlaceUI() override = default;                            // [0] 0x140016e90
     void OnCreated() override;   // [4] 0x140087940
     void OnUpdateLayout() override;   // [7] 0x140087080
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
@@ -42,11 +44,6 @@ public:
     uint64_t data58 = 0;           // +0x58
     uint32_t data60 = 0;           // +0x60: zeroed (u32 write)
     uint8_t _pad64[4] = {};        // +0x64: gap
-
-protected:
-    // 0x140016e90 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~WorkPlaceUI() = default;
 };
 
 static_assert(sizeof(WorkPlaceUI) == 0x68, "WorkPlaceUI is 0x68 (create 0x140016dc0 MemAlloc(0x68))");

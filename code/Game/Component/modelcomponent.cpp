@@ -239,7 +239,7 @@ ModelComponent::ModelComponent()
 ModelComponent::~ModelComponent() {
     EnsureHelpers();
     // retail CALL [??1MeshInstance] on +0x28 -- a destructor call, no delete (B.3.9 GFX).
-    reinterpret_cast<Graphics::MeshInstance*>(meshInstance)->~MeshInstance();
+    reinterpret_cast<Graphics::MeshInstance*>(meshInstance)->Graphics::MeshInstance::~MeshInstance();
 }
 
 // ============================================================
@@ -500,13 +500,6 @@ void ModelComponent::Tick(void* time) {
             }
         }
     }
-}
-
-// [0] 0x140035ad0: ~ModelComponent (0x140124cd0: ~MeshInstance(+0x28) + ~Internal), MemFree on &1.
-Object::Base* ModelComponent::DeletingDtor(unsigned flags) {
-    this->~ModelComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
 }
 
 // create 0x1400358d0: MemAlloc(0x170, 8), then the ctor.

@@ -28,7 +28,9 @@ class TrackerComponent final : public Component {
 public:
     TrackerComponent();                                           // inlined in 0x14000d7a0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14000d9a0
+    // PORT GAP (retail 0x140059280) — B38 D2: retail frees both arrays; the
+    // tree never did (Inert_ScalarDtor). Kept as the tree's.
+    ~TrackerComponent() override = default;                       // [0] 0x14000d9a0
     void Persist(void* stream) override;                          // [3] 0x140059130
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
@@ -38,11 +40,6 @@ public:
     void*    field40;      // +0x40 its count / capacity
     int32_t  trackerId;    // +0x48 game-world item-count generation stamp (ctor -1)
     uint8_t  _pad4C[4];    // +0x4C
-
-protected:
-    // PORT GAP (retail 0x140059280) — B38 D2: retail frees both arrays; the
-    // tree never did (Inert_ScalarDtor). Kept as the tree's.
-    ~TrackerComponent() = default;
 };
 
 static_assert(sizeof(TrackerComponent) == 0x50, "TrackerComponent is 0x50 (create 0x14000d7a0)");

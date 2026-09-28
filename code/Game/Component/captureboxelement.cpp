@@ -30,13 +30,6 @@
 CaptureBoxElement::CaptureBoxElement()
     : _lineSprite(), _x0(0), _y0(0), _x1(0), _y1(0) {}
 
-// [0] 0x140014070: restamp, ~Element, MemFree on &1.
-Object::Base* CaptureBoxElement::DeletingDtor(unsigned flags) {
-    this->~CaptureBoxElement();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [4] 0x140078fb0 — ComputeSize: if the "size-pending" flag (bit 27 of +0x34)
 // is set, the element's size (+0x60/+0x64) is 1x1 and the flag is cleared.
 void CaptureBoxElement::ComputeSize() {

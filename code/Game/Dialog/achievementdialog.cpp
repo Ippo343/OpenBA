@@ -377,13 +377,6 @@ AchievementDialog::~AchievementDialog() {
     dataC8 = 0;
 }
 
-// [0] 0x1400103f0: ~AchievementDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* AchievementDialog::DeletingDtor(unsigned flags) {
-    this->~AchievementDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140010320: MemAlloc(0xd0, 8), then the ctor.
 void* AchievementDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AchievementDialog), 8);

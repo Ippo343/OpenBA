@@ -27,7 +27,7 @@ class InteractDescription final : public Description {
 public:
     InteractDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140035280
+    ~InteractDescription() override;                                       // [0] 0x140035280
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x1401236a0
     bool              Serialize(void* stream) override;                    // [5] 0x140123500
     Object::External* Reconstruct() override;                              // [6] 0x140035250
@@ -47,9 +47,6 @@ public:
     InteractDescription::NodeArray _useNodes;   // +0x28 0x18-stride node array {data, count, cap}
     InteractDescription::NodeArray _buildNodes; // +0x38 idem
     InteractDescription::NodeArray _createNodes;// +0x48 idem
-
-protected:
-    ~InteractDescription();
 };
 
 static_assert(sizeof(InteractDescription) == 0x58, "InteractDescription is 0x58 (create 0x140035200 MemAlloc(0x58))");

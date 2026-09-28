@@ -37,7 +37,8 @@ public:
     HarvestOrchard();                                               // (Work_GenericCtor shape)
     explicit HarvestOrchard(void** entityIBP);                      // 0x1400ee060
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]
+    // frees the slot array and the BST
+    ~HarvestOrchard() override;                                     // [0]
     void  Persist(void* stream) override;                           // [3]  0x1400edea0
     int   Execute(void* entityIBP, void* context) override;  // [4]
     int   OnComplete(void* param2, void* param3, int param4) override;  // [6]
@@ -53,9 +54,6 @@ public:
     uint8_t  _pad54[4];          // +0x54: padding
     void*    _field58;           // +0x58: zeroed
     void*    _field60;           // +0x60: zeroed
-
-protected:
-    ~HarvestOrchard();                                             // frees the slot array and the BST
 };
 
 static_assert(sizeof(HarvestOrchard) == 0x68, "HarvestOrchard is 0x68 (retail create MemAlloc)");

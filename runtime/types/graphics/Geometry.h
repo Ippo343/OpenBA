@@ -414,29 +414,22 @@ public:
     Geometry& operator=(const Geometry& src);
 
     // ---- the nine slots, in measured retail order -------------------------
-    // Slot 0 is `DeletingDtor(unsigned)`, NOT a virtual destructor
-    // (ENDGAME §B.1 decision 2). [0] 0x180015e90 -- MSVC's VECTOR deleting
-    // destructor, both arms exactly as retail (read this pass): flags & 2 ->
-    // int32 count at this-8, `eh vector destructor iterator` over 0xc0-byte
-    // elements with ~Geometry (0x1800a41c0), MemFree(this-8) on & 1, return
-    // this-8; else ~Geometry, MemFree(this) on & 1, return this. ENDGAME B.3.9
-    // GFX: the class's own body; the RT_DELDTOR row and the minted table are
-    // retired (tools/rt_mint_retired/gfx.txt). Geometry stays ABSTRACT (slots
-    // 1, 2 and 3 are `_purecall`), so only a subclass that does not override
-    // slot 0 ever reaches this body.
-    virtual Geometry* DeletingDtor(unsigned flags) {                     // [0] 0x180015e90
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Geometry*>(self + static_cast<int64_t>(i) * 0xc0)->~Geometry();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Geometry*>(self - 8);
-        }
-        this->~Geometry();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x180015e90 -- retail's MSVC VECTOR deleting destructor (0xc0-byte
+    // elements, ~Geometry, MemFree on & 1). THE DESTRUCTOR IS VIRTUAL (the
+    // normal-virtual cutover, B3X W1): GCC spends TWO slots on it (D1 + D0), so
+    // retail slot N >= 1 (the `[N]` comments below) is compiler slot N + 1;
+    // every caller reaches a slot by name. The body is
+    // `??1Geometry@Graphics@@UEAA@XZ` @ 0x1800a41c0 (scene.cpp): the compiler
+    // restamps on entry; the body detaches every child and frees `_attached`,
+    // whose implicit ~Array after it is a no-op on the zeroed header. Its ??1
+    // door is retired. Geometry stays ABSTRACT (slots 1, 2 and 3 are
+    // `_purecall`).
+    virtual ~Geometry();
+
+    // Retail's `flags & 1` arm: MemoryAllocator::MemFree for the whole tree
+    // (runtime/src/object/root_operator_delete.cpp; unit build: free).
+    static void operator delete(void* p);
+
     virtual void Update(const System::Time& time) = 0;                   // [1] _purecall
     virtual void Draw(Video::Context& context, const Camera& camera,
                       ExternalPtrHandle material,
@@ -487,11 +480,6 @@ protected:
     // (scene.cpp): the vptr store is the compiler's, the 46 field stores are
     // the body. ENDGAME B.3.9 GFX: the ??0 door is retired with the minted table.
     Geometry();
-    // `??1Geometry@Graphics@@UEAA@XZ` @ 0x1800a41c0 (scene.cpp). NON-VIRTUAL
-    // (decision 2), protected because this is a base. The compiler restamps on
-    // entry; the body detaches every child and frees `_attached`, whose implicit
-    // ~Array after it is a no-op on the zeroed header. Its ??1 door is retired.
-    ~Geometry();
 
 public:
 

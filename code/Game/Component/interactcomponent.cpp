@@ -285,13 +285,6 @@ void InteractComponent::OnAdded() {
     }
 }
 
-// [0] 0x1400352f0: ~InteractComponent (0x140123420; its array free is a PORT GAP, see the header), MemFree on &1.
-Object::Base* InteractComponent::DeletingDtor(unsigned flags) {
-    this->~InteractComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400351a0: MemAlloc(0x38, 8), then the ctor.
 void* InteractComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(InteractComponent), 8);

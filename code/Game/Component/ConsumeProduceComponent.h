@@ -30,7 +30,8 @@ class ConsumeProduceComponent final : public ResourceProduceComponent {
 public:
     ConsumeProduceComponent();                                           // 0x140119050
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140032460
+    // 0x140118fd0
+    ~ConsumeProduceComponent() override;                                // [0]  0x140032460
     void        Persist(void* stream) override;                         // [3]  0x140118e00
     void        Startup() override;                                     // [4]  0x140118ef0
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x140118d00
@@ -42,9 +43,6 @@ public:
     int32_t  consumeCapacity;   // +0x64: Array<float> capacity (the ctor's qword clear)
     int32_t  consumeState;      // +0x68
     uint8_t  _pad6C[4];         // +0x6c
-
-protected:
-    ~ConsumeProduceComponent();                                          // 0x140118fd0
 };
 
 static_assert(sizeof(ConsumeProduceComponent) == 0x70, "ConsumeProduceComponent is 0x70 (create 0x140032300)");

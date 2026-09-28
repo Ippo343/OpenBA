@@ -822,14 +822,6 @@ void EntityUI::OnUpdate(const System::Time& /*time*/) {
 }
 
 
-// [0] 0x1400112d0: ~EntityUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* EntityUI::DeletingDtor(unsigned flags) {
-    this->~EntityUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011270: MemAlloc(0x48, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* EntityUI::CreateNewObject() {

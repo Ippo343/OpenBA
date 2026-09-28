@@ -22,7 +22,7 @@ class AnimateNaturalResource final : public Action {
 public:
     AnimateNaturalResource();                                                   // create 0x140021dc0
     AnimateNaturalResource(uint64_t* entity, uint32_t animIndex, uint8_t waitForAnim);   // 0x1400c57d0
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140021e30
+    ~AnimateNaturalResource() override = default;              // [0] 0x140021e30
     void Persist(void* stream) override;                       // [3] 0x1400c5660
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5600
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c55b0
@@ -34,9 +34,6 @@ public:
     int32_t   animIndex;         // +0x28 animation index
     uint8_t   waitForAnim;       // +0x2C bool: wait for animation to complete
     uint8_t   _pad2D[3];         // +0x2D padding
-
-protected:
-    ~AnimateNaturalResource() = default;
 };
 
 static_assert(sizeof(AnimateNaturalResource) == 0x30, "AnimateNaturalResource is 0x30 (create 0x140021dc0 MemAlloc)");

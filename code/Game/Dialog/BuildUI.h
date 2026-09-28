@@ -24,7 +24,11 @@ class BuildUI final : public UI::DialogController {
 public:
     BuildUI() = default;                                 // 0x1400209e0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140020a90
+    // 0x140020a90 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail frees the Array/String member at +0x30; the tree never did
+    // (leak kept).
+    ~BuildUI() override = default;                                // [0] 0x140020a90
     void OnCreated() override;   // [4] 0x1400b1f40
     void OnUpdateLayout() override;   // [7] 0x1400b1a50
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
@@ -35,13 +39,6 @@ public:
     uint64_t data38 = 0;           // +0x38: zeroed
     uint64_t data40 = 0;           // +0x40: zeroed
     uint64_t data48 = 0;           // +0x48: zeroed
-
-protected:
-    // 0x140020a90 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String member at +0x30; the tree never did
-    // (leak kept).
-    ~BuildUI() = default;
 };
 
 static_assert(sizeof(BuildUI) == 0x50, "BuildUI is 0x50 (create 0x1400209e0 MemAlloc(0x50))");

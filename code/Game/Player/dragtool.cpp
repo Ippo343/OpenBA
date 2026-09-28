@@ -31,13 +31,6 @@
 // vptr, B38 D9 #3) is gone; the compiler's dtor chain restamps the real ones.
 // ============================================================
 
-// [0] 0x14002da20: stamp 0x140161c10, stamp 0x140161f10, `~Internal`, MemFree on &1.
-Object::Base* DragTool::DeletingDtor(unsigned flags) {
-    this->~DragTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(DragTool, "Tool")

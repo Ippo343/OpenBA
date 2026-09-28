@@ -836,16 +836,6 @@ int Pickup::GetPriority() {
 
 
 
-// ============================================================
-// Pickup::ScalarDtor (0x14002c010)
-// Calls dtor body, then conditional free based on flags.
-// ============================================================
-// [0] 0x14002c010: ~Pickup, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* Pickup::DeletingDtor(unsigned flags) {
-    this->~Pickup();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // ~Pickup is defaulted: the Pickup then Work stamps and `~Internal` are the compiler's
 // chain — all retail's 0x14002c010 does before the free. (The old body's lazy
 // Pickup_ResolveFuncs() fed only its MemFree pointer, which the free no longer uses.)

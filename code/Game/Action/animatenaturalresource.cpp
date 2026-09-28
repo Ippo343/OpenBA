@@ -182,13 +182,6 @@ AnimateNaturalResource::AnimateNaturalResource()
       waitForAnim(0),
       _pad2D{} {}
 
-// [0] 0x140021e30
-Object::Base* AnimateNaturalResource::DeletingDtor(unsigned flags) {
-    this->~AnimateNaturalResource();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c5660
 // [4] 0x1400c5600
 // [5] 0x1400c55b0

@@ -27,7 +27,7 @@ class AmbientEnvironmentDescription final : public Description {
 public:
     AmbientEnvironmentDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140002100
+    ~AmbientEnvironmentDescription() override;                             // [0] 0x140002100
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140043a70
     bool              Serialize(void* stream) override;                    // [5] 0x140043950
     Object::External* Reconstruct() override;                              // [6] 0x140002010
@@ -41,9 +41,6 @@ public:
     int32_t _entryCap;                          // +0x2c
     float _f30;                                 // +0x30
     float _f34;                                 // +0x34
-
-protected:
-    ~AmbientEnvironmentDescription();
 };
 
 static_assert(sizeof(AmbientEnvironmentDescription) == 0x38, "AmbientEnvironmentDescription is 0x38 (create 0x140001f40 MemAlloc(0x38))");

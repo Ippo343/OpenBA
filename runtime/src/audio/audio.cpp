@@ -720,7 +720,7 @@ void Scene::Serialize(void* serializer) {
     rwc->SerializeBoolArray(5, reinterpret_cast<bool*>(paused), nullptr);   // B.3.x bridge
 
     if (rw) {
-        rwc->DeletingDtor(1);
+        delete rwc;
     }
 }
 

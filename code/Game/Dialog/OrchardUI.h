@@ -24,7 +24,8 @@ class OrchardUI final : public SelectResourceUI {
 public:
     OrchardUI() = default;                                        // 0x1400756b0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x1400130e0
+    // 0x1400130e0 minus the free: restamps + ~DialogController only
+    ~OrchardUI() override = default;                              // [0]  0x1400130e0
     void  OnCreated() override;                                   // [4]  0x1400755b0
     void  OnUpdateLayout() override;                              // [7]  0x1400754b0
     // [8] STANDALONE DEVIATION: retail inherits SelectResourceUI's 0x140078d30;
@@ -41,9 +42,6 @@ public:
     // ---- fields -----------------------------------------------------------------
     uint64_t data38 = 0;           // +0x38: "yield" ProgressElement (InternalBasePtr)
     uint64_t data40 = 0;           // +0x40
-
-protected:
-    ~OrchardUI() = default;        // 0x1400130e0 minus the free: restamps + ~DialogController only
 };
 
 static_assert(sizeof(OrchardUI) == 0x48, "OrchardUI is 0x48 (create 0x140012ff0 MemAlloc(0x48))");

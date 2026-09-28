@@ -30,7 +30,8 @@ class FireComponent final : public Component {
 public:
     FireComponent();                                              // 0x140049b80
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140005720
+    // no own work
+    ~FireComponent() override = default;                          // [0]  0x140005720
     void Persist(void* stream) override;                          // [3]  0x140049a90
     void Update(void* time) override;                             // [9]  0x140048fb0
     void OnMessage(int message, void* data,
@@ -42,9 +43,6 @@ public:
     int64_t  fireTimer;         // +0x30 System::Time — burning while > 0
     int64_t  spreadTimer;       // +0x38 System::Time — next spread pass when <= 0
     int64_t  igniteAccum;       // +0x40 System::Time — idle accumulator for the roll
-
-protected:
-    ~FireComponent() = default;                                   // no own work
 };
 
 static_assert(sizeof(FireComponent) == 0x48, "FireComponent is 0x48 (create 0x1400055e0)");

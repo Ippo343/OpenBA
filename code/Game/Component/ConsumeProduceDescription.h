@@ -27,7 +27,7 @@ class ConsumeProduceDescription final : public Description {
 public:
     ConsumeProduceDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400323e0
+    ~ConsumeProduceDescription() override;                                 // [0] 0x1400323e0
     int32_t           GetFileVersion() const override { return 12; }    // [3] 0x140119200
     bool              Serialize(void* stream) override;                    // [5] 0x1401190e0
     Object::External* Reconstruct() override;                              // [6] 0x1400323b0
@@ -48,9 +48,6 @@ public:
     int32_t _i4c;                               // +0x4c
     uint32_t _u50;                              // +0x50 enum (serialized through the uint door)
     uint8_t _pad54[4];                          // +0x54 never written by the ctor
-
-protected:
-    ~ConsumeProduceDescription();
 };
 
 static_assert(sizeof(ConsumeProduceDescription) == 0x58, "ConsumeProduceDescription is 0x58 (create 0x140032360 MemAlloc(0x58))");

@@ -25,7 +25,9 @@ class PageToggleUI final : public UI::DialogController {
 public:
     PageToggleUI() = default;                            // 0x140013160 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400131c0
+    // 0x1400131c0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~PageToggleUI() override = default;                           // [0] 0x1400131c0
     void Persist(void* /*stream*/) override {}   // [3] 0x1400759a0  RET 0 in retail
     void OnCreated() override;   // [4] 0x140075850
     void OnUpdateLayout() override;   // [7] 0x140075780
@@ -37,11 +39,6 @@ public:
     uint64_t data38 = 0;           // +0x38: zeroed
     uint32_t data40 = 0;           // +0x40: zeroed (u32 write)
     uint8_t _pad44[4] = {};        // +0x44: gap
-
-protected:
-    // 0x1400131c0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~PageToggleUI() = default;
 };
 
 static_assert(sizeof(PageToggleUI) == 0x48, "PageToggleUI is 0x48 (create 0x140013160 MemAlloc(0x48))");

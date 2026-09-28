@@ -129,13 +129,6 @@ TutorialSetupRestrictPlayer::~TutorialSetupRestrictPlayer() {
     reinterpret_cast<System::String*>(&toolRefString)->~String();     // B.3.1 bridge
 }
 
-// [0] 0x140028bb0: ~TutorialSetupRestrictPlayer, MemFree on &1.
-Object::Base* TutorialSetupRestrictPlayer::DeletingDtor(unsigned flags) {
-    this->~TutorialSetupRestrictPlayer();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialSetupRestrictPlayer::Serialize (vtable +0x28, 0x1400e3090)
 // ============================================================
@@ -193,10 +186,10 @@ bool TutorialSetupRestrictPlayer::Serialize(void* stream) {
 // TutorialSetupRestrictPlayer::Reconstruct [6] 0x140028b90 / Destruct [7]
 // ============================================================
 Object::External* TutorialSetupRestrictPlayer::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialSetupRestrictPlayer();
     return ::new (static_cast<void*>(this)) TutorialSetupRestrictPlayer();
 }
-void TutorialSetupRestrictPlayer::Destruct() { DeletingDtor(0); }
+void TutorialSetupRestrictPlayer::Destruct() { this->~TutorialSetupRestrictPlayer(); }
 
 // ============================================================
 // TutorialSetupRestrictPlayer::Begin (vtable +0x40, 0x1400e2f20)

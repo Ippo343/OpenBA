@@ -27,7 +27,7 @@ class SpawnDescription final : public Description {
 public:
     SpawnDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000c2e0
+    ~SpawnDescription() override;                                          // [0] 0x14000c2e0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140056180
     bool              Serialize(void* stream) override;                    // [5] 0x1400560b0
     Object::External* Reconstruct() override;                              // [6] 0x14000c280
@@ -39,9 +39,6 @@ public:
     void* _entries;                             // +0x20 array data: 16-byte {ExternalPtr, float, float} entries
     int32_t _entryCount;                        // +0x28
     int32_t _entryCap;                          // +0x2c
-
-protected:
-    ~SpawnDescription();
 };
 
 static_assert(sizeof(SpawnDescription) == 0x30, "SpawnDescription is 0x30 (create 0x14000c1d0 MemAlloc(0x30))");

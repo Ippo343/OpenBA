@@ -283,7 +283,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
             // Retail's two table stores and the encoding free are
             // ~VisitorStream -> ~Stream; slot 0 with flags 0 runs exactly that
             // (called non-virtually, as retail's inlined copy is).
-            vs->IO::VisitorStream::DeletingDtor(0);
+            vs->IO::VisitorStream::~VisitorStream();
         } else {
             ++g_ac.hitSkipped;
         }

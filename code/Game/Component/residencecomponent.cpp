@@ -436,12 +436,6 @@ ResidenceComponent::ResidenceComponent()
     OrFlagsInCtor(0x82);
 }
 
-// [0] 0x140037610: ~ResidenceComponent (0x14012a230), MemFree on &1.
-Object::Base* ResidenceComponent::DeletingDtor(unsigned flags) {
-    this->~ResidenceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14012a230 (inlined in [0] 0x140037610): 0x1400175d0 on the resident array at
 // +0x50 — every 0x10-byte slot's inner array is freed and the slot zeroed, then the
 // slot array itself is freed and +0x50/+0x58 zeroed. The member's and the bases'

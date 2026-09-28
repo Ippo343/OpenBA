@@ -195,18 +195,6 @@ ConsumeProduce::ConsumeProduce()
     ConsumeProduce_ResolveFuncs();
 }
 
-// ============================================================
-// ScalarDtor (0x14002a190)
-// Calls BaseDtor (0x1400e9190) which frees arrays and resets vtable chain,
-// then optionally frees memory.
-// ============================================================
-// [0] 0x14002a190: ~ConsumeProduce, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* ConsumeProduce::DeletingDtor(unsigned flags) {
-    this->~ConsumeProduce();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // BaseDtor 0x1400e9190. The stamps (ConsumeProduce, then Work) and the `~Internal`
 // tail call are the compiler's.
 ConsumeProduce::~ConsumeProduce() {

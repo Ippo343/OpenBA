@@ -27,7 +27,7 @@ class PastureDescription final : public Description {
 public:
     PastureDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400368b0
+    ~PastureDescription() override = default;                              // [0] 0x1400368b0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140128280
     bool              Serialize(void* stream) override;                    // [5] 0x140128220
     Object::External* Reconstruct() override;                              // [6] 0x140036850
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     uint32_t _type;                             // +0x20 enum (serialized through the uint door)
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
-
-protected:
-    ~PastureDescription() = default;
 };
 
 static_assert(sizeof(PastureDescription) == 0x28, "PastureDescription is 0x28 (create 0x1400367a0 MemAlloc(0x28))");

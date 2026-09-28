@@ -52,12 +52,6 @@ DestroyComponent::DestroyComponent()
     : _controller(this), field48(nullptr), destroyFlags(0), _pad52{}, field54(0),
       field58(nullptr), field60(nullptr) {}
 
-// [0] 0x140033dd0: ~DestroyComponent (0x14011dc20), MemFree on &1.
-Object::Base* DestroyComponent::DeletingDtor(unsigned flags) {
-    this->~DestroyComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14011dc20: restamp + ~Internal, no own work.
 DestroyComponent::~DestroyComponent() = default;
 

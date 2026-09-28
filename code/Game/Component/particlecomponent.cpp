@@ -644,15 +644,6 @@ ParticleComponent::ParticleComponent()
     OrFlagsInCtor(0xc3);
 }
 
-// [0] 0x14000a560. PORT GAP (retail 0x140053310 destroys the geometry objects
-// and frees both arrays first) — the tree's Inert_ScalarDtor never did; kept
-// (ParticleComponent.h).
-Object::Base* ParticleComponent::DeletingDtor(unsigned flags) {
-    this->~ParticleComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x140053270. MUST resolve first: slot 3 is the FIRST call into this class
 // on a load-from-save (PersistObject creates the object and dispatches +0x18
 // before Startup or any tick has run). Until InitFuncs() has run every s_fn_*

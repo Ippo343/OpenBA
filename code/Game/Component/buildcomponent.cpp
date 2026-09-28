@@ -416,12 +416,6 @@ BuildComponent::BuildComponent()
     OrFlagsInCtor(0x83);
 }
 
-// [0] 0x14002f4d0: ~BuildComponent (0x140108f30), MemFree on &1.
-Object::Base* BuildComponent::DeletingDtor(unsigned flags) {
-    this->~BuildComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140108f30: the picking list (+0x68/+0x70) and then the mesh list (+0x58/+0x60)
 // are freed and zeroed, in retail's order; the member's and the bases' dtors
 // (restamps only) and ~Internal are the compiler's chain.

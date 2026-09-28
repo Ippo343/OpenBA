@@ -1020,13 +1020,13 @@ void Modification::RefreshList() {
         // this build, and retail CLOSES THE FILE before discarding it. The
         // ReadPackfile-failed path does NOT close: there the file never opened.
         if (!read) {
-            pkgObj->IO::PackageFile::DeletingDtor(0);           // 0x1800b4540
+            pkgObj->IO::PackageFile::~PackageFile();           // 0x1800b4540
             RtIo_Mod_Dtor_180011460(m);                          // 0x180011460
             continue;
         }
         if (*reinterpret_cast<const int32_t*>(pkg + 0x74) != 0) {
             fnCloseFile(fs, pkg + 0xC0);                         // 0x1800accc0
-            pkgObj->IO::PackageFile::DeletingDtor(0);
+            pkgObj->IO::PackageFile::~PackageFile();
             RtIo_Mod_Dtor_180011460(m);
             continue;
         }
@@ -1175,7 +1175,7 @@ void Modification::RefreshList() {
         RtColl_ArrayModSetSizeFill_180028610(arr, arr->size + 1, m);
 
         ReleaseInto(&nameRef);                                   // 0x1800b0113
-        pkgObj->IO::PackageFile::DeletingDtor(0);                // 0x1800b0172 ~PackageFile
+        pkgObj->IO::PackageFile::~PackageFile();                // 0x1800b0172 ~PackageFile
         RtIo_Mod_Dtor_180011460(m);                              // 0x1800b017c
     }
 

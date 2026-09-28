@@ -22,28 +22,21 @@
 #include <cstdint>
 #include <new>
 
-// [0] 0x140008f40: ~MineDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* MineDescription::DeletingDtor(unsigned flags) {
-    this->~MineDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14004f350: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
 bool MineDescription::Serialize(void* stream) {
     IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     return true;
 }
 
-// [6] 0x140008ee0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140008ee0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* MineDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~MineDescription();
     return new (static_cast<void*>(this)) MineDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void MineDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void MineDescription::Destruct() { this->~MineDescription(); }
 
 // [8] 0x140008f30: MineComponent's type id through the hidden return slot.
 Object::Type* MineDescription::GetComponentType(Object::Type* ret) const {

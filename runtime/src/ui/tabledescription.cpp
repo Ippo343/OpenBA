@@ -125,11 +125,11 @@ Object::External* TableDescription::Construct() {
 }
 // 0x180079050 — slot 0 (VIRTUAL) with flag 0, then the ctor.
 Object::External* TableDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~TableDescription();
     return ::new (this) TableDescription();
 }
 // 0x180079080
-void TableDescription::Destruct() { DeletingDtor(0); }
+void TableDescription::Destruct() { this->~TableDescription(); }
 
 // ============================================================================
 // ?Serialize@TableDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x18011e590
@@ -172,7 +172,7 @@ bool TableDescription::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {                                       // 18011e6b8
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

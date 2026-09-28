@@ -29,7 +29,8 @@ class AmbientEnvironmentComponent final : public Component {
 public:
     AmbientEnvironmentComponent();                                // 0x1400438d0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140002170
+    // no own work
+    ~AmbientEnvironmentComponent() override = default;            // [0] 0x140002170
     void Persist(void* stream) override;                          // [3] 0x1400437e0
     void Update(void* time) override;                             // [9] 0x140043690
 
@@ -39,9 +40,6 @@ public:
     void*    field38;      // +0x38
     uint32_t field40;      // +0x40
     uint8_t  _pad44[4];    // +0x44
-
-protected:
-    ~AmbientEnvironmentComponent() = default;                     // no own work
 };
 
 static_assert(sizeof(AmbientEnvironmentComponent) == 0x48, "AmbientEnvironmentComponent is 0x48 (create 0x140001ee0)");

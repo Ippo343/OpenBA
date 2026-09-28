@@ -40,7 +40,8 @@ class RemovalTool final : public DragTool {
 public:
     RemovalTool() : removalDesc(nullptr) {}                                // 0x140104cc0
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x14002e7f0
+    // 0x140104c70: no body
+    ~RemovalTool() override = default;                                     // [0]  0x14002e7f0
     void Startup() override;                                               // [4]  0x140104bd0
     void Shutdown() override {}                                            // [5]  0x140104bc0 RET
     void Update(void*, char) override {}                                   // [7]  0x140104bb0 RET
@@ -50,9 +51,6 @@ public:
                   int* outCostB, int* outCostA, int* outLength) override;  // [14] 0x140103ef0
 
     void* removalDesc;   // +0x38 RemovalDescription* — set by Startup
-
-protected:
-    ~RemovalTool() = default;                                              // 0x140104c70: no body
 };
 
 namespace RemovalToolAddr {

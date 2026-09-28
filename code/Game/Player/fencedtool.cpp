@@ -48,20 +48,6 @@ static void EnsureSceneFuncs() {
 }
 
 // ============================================================
-// FencedTool::DeletingDtor (vtable +0x00) — 0x140026930
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled FencedTool_Dtor restamped the Fenced,
-// DragTool and Tool tables read by address — the last two UNREGISTERED, so it
-// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
-// restamps the real tables, then runs Object::Internal::~Internal. Retail's
-// dtor frees nothing: the preview mesh is released by slot 5 (Shutdown).
-Object::Base* FencedTool::DeletingDtor(unsigned flags) {
-    this->~FencedTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // FencedTool::Shutdown2 (vtable +0x28, Slot5)
 // ============================================================
 // Removes the fence preview from the scene and destroys the mesh instance.
@@ -81,7 +67,7 @@ void FencedTool::Shutdown() {
     // Destroy mesh instance via vtable dtor if allocated
     void* mesh = meshInstance;
     if (mesh) {
-        reinterpret_cast<Graphics::MeshInstance*>(mesh)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+        delete reinterpret_cast<Graphics::MeshInstance*>(mesh);   // B.3.x bridge (slot 0, free)
     }
 }
 

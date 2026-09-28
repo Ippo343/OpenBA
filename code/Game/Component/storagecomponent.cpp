@@ -445,13 +445,6 @@ void StorageComponent::OnAdded() {
     }
 }
 
-// [0] 0x140038d60: ~StorageComponent (0x14012c870; its array free is a PORT GAP, see the header), MemFree on &1.
-Object::Base* StorageComponent::DeletingDtor(unsigned flags) {
-    this->~StorageComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140038b50: MemAlloc(0x40, 8), then the ctor.
 void* StorageComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StorageComponent), 8);

@@ -32,16 +32,13 @@ public:
                   Object::InternalPtr<UI::DialogInstance> parent,
                   uint64_t parentMenu);                             // 0x140071040
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140012cc0
+    ~NewGameDialog() override = default;                           // [0] 0x140012cc0
     void OnOpened() override;                                      // [4] 0x1400706d0
     void OnClosed() override;                                      // [5] 0x1400706c0 RET
     void OnUpdateLayout() override;                                // [6] 0x140070650
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140070110
-
-protected:
-    ~NewGameDialog() = default;
 
 public:
     void* comboTerrain;         // +0xB8: "comboTerrain" ComboElement

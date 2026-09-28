@@ -42,7 +42,8 @@ public:
           lastCenterCell(-1), radiusDisplayIdx(-1), sceneObjectIdx(-1), meshVariant(0),
           meshInstance(nullptr) {}
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x14002dc90
+    // 0x1400fe810: no body
+    ~PlacementTool() override = default;                                   // [0]  0x14002dc90
     void Startup() override;                                               // [4]  0x1400fe580
     void Shutdown() override;                                              // [5]  0x1400fe4e0
     char OnKey(char active) override;                                      // [6]  0x1400fe2a0
@@ -64,9 +65,6 @@ public:
     int32_t  sceneObjectIdx;    // +0x60 Graphics::Scene object index, -1 = none
     int32_t  meshVariant;       // +0x64 mesh variant / rotation index
     void*    meshInstance;      // +0x68 Graphics::MeshInstance* (preview)
-
-protected:
-    ~PlacementTool() = default;                                            // 0x1400fe810: no body
 };
 
 namespace PlacementToolAddr {

@@ -27,16 +27,13 @@ class MusicList final : public Object::External {
 public:
     MusicList();                                                  // factory 0x14001c260 body
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14001c360
+    ~MusicList() override;                                        // [0] 0x14001c360
     int32_t GetFileVersion() const override { return 1; }         // [3] 0x1400a3f80
     // [4] Compile: inherited (retail's slot is the import; the old table's was null)
     bool Serialize(void* stream) override;                        // [5] 0x1400a3e90
     Object::External* Reconstruct() override;                     // [6] 0x14001c310
-    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
+    void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001c2c0
-
-protected:
-    ~MusicList();
 
 public:
     // Track entries: a {data,count,cap} array of 0x18-byte entries

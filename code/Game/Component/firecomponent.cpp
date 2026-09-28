@@ -82,13 +82,6 @@ FireComponent::FireComponent()
     OrFlagsInCtor(0x08);
 }
 
-// [0] 0x140005720: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* FireComponent::DeletingDtor(unsigned flags) {
-    this->~FireComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x140049a90.
 // ============================================================
 // FireComponent::Shutdown / Serialize (vtable slot 3, 0x140049a90)

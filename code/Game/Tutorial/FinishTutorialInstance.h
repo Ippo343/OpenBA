@@ -32,15 +32,12 @@ class FinishTutorialInstance final : public Achievement::GoalInstance {
 public:
     FinishTutorialInstance();                                      // 0x1400d7c70
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140026200
+    ~FinishTutorialInstance() override;                            // [0] 0x140026200
     void Persist(void* stream) override;                           // [3] 0x1400d7bf0
     void Startup() override;                                       // [4] 0x1400d7a90
     void Update(const System::Time& time,
                 const Achievement::GoalList& list) override;       // [5] 0x1400d7a50
     Achievement::Goal::GoalState CheckGoalState() const override;  // [6] 0x1400d7bb0
-
-protected:
-    ~FinishTutorialInstance();
 
 public:
     void*    _field20;           // +0x20: InternalPtr<TutorialInstance>

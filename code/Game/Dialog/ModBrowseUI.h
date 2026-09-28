@@ -22,14 +22,11 @@ class ModBrowseUI final : public UI::DialogController {
 public:
     ModBrowseUI() = default;                             // 0x1400126d0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140012720
-    void Persist(void* /*stream*/) override {}   // [3] 0x14006d390  RET 0 in retail
-
-
-protected:
     // 0x140012720 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~ModBrowseUI() = default;
+    ~ModBrowseUI() override = default;                            // [0] 0x140012720
+    void Persist(void* /*stream*/) override {}   // [3] 0x14006d390  RET 0 in retail
+
 };
 
 static_assert(sizeof(ModBrowseUI) == 0x30, "ModBrowseUI is 0x30 (create 0x1400126d0 MemAlloc(0x30))");

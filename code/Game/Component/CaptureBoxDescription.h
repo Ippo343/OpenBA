@@ -37,7 +37,8 @@ class CaptureBoxDescription final : public UI::ElementDescription {
 public:
     CaptureBoxDescription();                                             // 0x140079230
 
-    Object::Base*     DeletingDtor(unsigned flags) override;             // [0] 0x140014010
+    // ~String(+0x70), ~ElementDescription
+    ~CaptureBoxDescription() override = default;                         // [0] 0x140014010
     int32_t           GetFileVersion() const override;                   // [3] 0x140079210
     bool              Serialize(void* stream) override;                  // [5] 0x1400791a0
     Object::External* Reconstruct() override;                            // [6] 0x140013e40
@@ -53,9 +54,6 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1).
     void*          _spriteSheet;   // +0x68 ExternalPtr<UI::SpriteSheet>
     System::String _spriteName;    // +0x70
-
-protected:
-    ~CaptureBoxDescription() = default;                                  // ~String(+0x70), ~ElementDescription
 };
 
 static_assert(sizeof(CaptureBoxDescription) == 0x78, "CaptureBoxDescription is 0x78 (create 0x140013d90)");

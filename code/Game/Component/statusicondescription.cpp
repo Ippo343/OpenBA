@@ -41,13 +41,6 @@ StatusIconDescription::StatusIconDescription()
       _flag(false),
       _pad31() {}
 
-// [0] 0x140038a60: ~StatusIconDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* StatusIconDescription::DeletingDtor(unsigned flags) {
-    this->~StatusIconDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14012c180: stream order as retail.
 bool StatusIconDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
@@ -58,15 +51,15 @@ bool StatusIconDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400389f0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x1400389f0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* StatusIconDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~StatusIconDescription();
     return new (static_cast<void*>(this)) StatusIconDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void StatusIconDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void StatusIconDescription::Destruct() { this->~StatusIconDescription(); }
 
 // [8] 0x140038a50: StatusIconComponent's type id through the hidden return slot.
 Object::Type* StatusIconDescription::GetComponentType(Object::Type* ret) const {

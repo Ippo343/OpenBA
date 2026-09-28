@@ -77,16 +77,6 @@ BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
 }
 
 // ============================================================
-// ScalarDtor (0x140029680) — slot 0
-// ============================================================
-// [0] 0x140029680: ~BuildStructure, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* BuildStructure::DeletingDtor(unsigned flags) {
-    this->~BuildStructure();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // BaseDtor (0x1400e5920)
 // ============================================================
 // The stamps (BuildStructure, then Work) and `~Internal` are the compiler's.

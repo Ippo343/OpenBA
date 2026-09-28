@@ -736,13 +736,6 @@ CitizenAIComponent::CitizenAIComponent()
     OrFlagsInCtor(0x89);
 }
 
-// [0] 0x14002fcf0: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* CitizenAIComponent::DeletingDtor(unsigned flags) {
-    this->~CitizenAIComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // Recipe step 2 (body-init), routed to slot +0x20 (StartupComponents dispatch).
 // Faithful field init from the ctor 0x14010fb70 (the inert factory zeroes the
 // body, so the ctor-set scalars must be re-applied) + the Startup find from

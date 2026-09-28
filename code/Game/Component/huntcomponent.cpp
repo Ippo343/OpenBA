@@ -168,13 +168,6 @@ HuntComponent::HuntComponent() : ResourceProduceComponent(), huntData(nullptr) {
     OrFlagsInCtor(0x8);
 }
 
-// [0] 0x140035100: restamps + ~Internal (the compiler chain), MemFree on &1.
-Object::Base* HuntComponent::DeletingDtor(unsigned flags) {
-    this->~HuntComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140034f30: MemAlloc(0x58, 8), then the ctor.
 void* HuntComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HuntComponent), 8);

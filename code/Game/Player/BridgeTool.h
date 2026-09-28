@@ -40,7 +40,8 @@ class BridgeTool final : public DragTool {
 public:
     BridgeTool() : bridgeDesc(nullptr) {}                                  // 0x1400fb890
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x14002d7f0
+    // 0x1400fb840: no body
+    ~BridgeTool() override = default;                                      // [0]  0x14002d7f0
     void Startup() override;                                               // [4]  0x1400fb7a0
     void Shutdown() override {}                                            // [5]  0x1400fb790 RET
     void Update(void*, char) override {}                                   // [7]  0x1400fb2c0 RET
@@ -50,9 +51,6 @@ public:
                   int* outCostB, int* outCostA, int* outLength) override;  // [14] 0x1400facf0
 
     void* bridgeDesc;   // +0x38 CreateBridgeDescription* — set by Startup
-
-protected:
-    ~BridgeTool() = default;                                               // 0x1400fb840: no body
 };
 
 namespace BridgeToolAddr {

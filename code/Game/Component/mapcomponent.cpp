@@ -519,12 +519,6 @@ void MapComponent::OnEvent(int msgId) {
     if (msgId != 1) return;                       // retail: CMP EDX,1 / JZ / RET
     MapComponent_ApplyOccupancy_41b0(s);
 }
-// [0] 0x140035850: ~MapComponent (0x140124490: restamp + ~Internal), MemFree on &1.
-Object::Base* MapComponent::DeletingDtor(unsigned flags) {
-    this->~MapComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140035700: MemAlloc(0x38, 8), then the ctor.
 void* MapComponent::CreateNewObject() {

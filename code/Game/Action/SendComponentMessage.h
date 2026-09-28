@@ -23,7 +23,7 @@ public:
     SendComponentMessage();                                                   // create 0x140023070
     SendComponentMessage(uint64_t* target, uint32_t* compTypeId, uint32_t message, uint64_t* second,
                          uint32_t arg);   // 0x1400cb1d0
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x1400230f0
+    ~SendComponentMessage() override = default;                // [0] 0x1400230f0
     void Persist(void* stream) override;                       // [3] 0x1400cb000
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400caef0
     bool GetTarget(void* param) override;                      // [9] 0x1400cae80
@@ -34,9 +34,6 @@ public:
     uint32_t  _field30;          // +0x30 component type id
     int32_t   _field34;          // +0x34 message id
     void*     _field38;          // +0x38 message arg (+0x38) / 0 (+0x3c)
-
-protected:
-    ~SendComponentMessage() = default;
 };
 
 static_assert(sizeof(SendComponentMessage) == 0x40, "SendComponentMessage is 0x40 (create 0x140023070 MemAlloc)");
