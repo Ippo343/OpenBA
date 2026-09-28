@@ -67,7 +67,8 @@
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "volume/Volume.h"        // RtVolume_Box_Extend
+#include "Game/exe_constants.h"   // kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
@@ -121,10 +122,10 @@ Tornado::Tornado() {
     _startColor = 0xFFFFFFFFu;
     _endColor   = 0xFFFFFFFFu;
     // Two System::Time fields seeded with g_fUVScale (= 1.0f): fade-in and fade-out.
-    if (fn_Time_Ctor_Float) {
-        float uv = g_fUVScale ? *g_fUVScale : 1.0f;
-        fn_Time_Ctor_Float(&_particleFadeIn, uv);
-        fn_Time_Ctor_Float(&_particleFadeOut, uv);
+    {
+        float uv = kRdata_14017214c;   // 0x14017214c
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&_particleFadeIn), uv);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&_particleFadeOut), uv);
     }
 }
 
@@ -290,59 +291,9 @@ struct TornadoPool {
 static_assert(offsetof(TornadoPool, items) == 0x18, "TornadoPool items");
 static_assert(offsetof(TornadoPool, spawnAccum) == 0x30, "TornadoPool spawnAccum");
 
-// Runtime leaves. Every one is resolved by mangled export name rather than through a
-// .rdata dispatch slot: the slots this body uses (0x1401513f0, 0x140151320,
-// 0x1401525e8, 0x1401527a8, 0x1401527d0, 0x1401527e0, 0x1401527e8,
-// 0x1401527f0) are NOT in standalone/address_registry.cpp, so ResolveAddr would hand
-// back a null slot.
-// ENDGAME B.3.5 closing pass: the `ParticleInstance::Update` and
-// `Geometry::SetBounds` door typedefs, struct members, resolves, readiness terms
-// and diagnostic `%p`s are GONE. Both call sites are member calls (:289, :475),
-// so the only thing left reading the two pointers was the readiness aggregate
-// and the trace that printed them -- neither is a caller.
-typedef bool   (*fn_IsDerived_t)(const void* obj, uint32_t tid);  // Object::Base::IsDerivedFrom
-typedef void   (*fn_TimeCtor_t)(void* retTime, float seconds);
-typedef void*  (*fn_BoxExtend_t)(const void* box, void* ret, const float* v3);
-
-// ENDGAME B.3.5: `baseUpdate` and `setBounds` are no longer CALLED — both sites
-// now call the members. The two fields, their resolves, the `f.ok` aggregate and
-// the UNRESOLVED fprintf below still READ the pointers as a diagnostic, so the
-// cache is not dead and is not removed here (the closing pass takes it with the
-// remaining three non-Graphics doors).
-struct TornadoInstFuncs {
-    fn_IsDerived_t    isDerived;
-    fn_TimeCtor_t     timeCtor;
-    fn_BoxExtend_t    boxExtend;
-    // (`rng`, the name door onto Graphics::Particle::_rng, is gone: ENDGAME B.3.9
-    // GFX made it the class static, read directly below.)
-    bool              ok;
-};
-
-// Resolved once, thread-safely, at namespace scope (B6-5: no function-local
-// first-call cache in a member).
-TornadoInstFuncs s_instFuncs = {};
-std::once_flag   s_instFuncsOnce;
-
-void ResolveInstFuncs() {
-    TornadoInstFuncs& f = s_instFuncs;
-    f.isDerived    = (fn_IsDerived_t)   ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
-    f.timeCtor     = (fn_TimeCtor_t)    ResolveExport("??0Time@System@@QEAA@M@Z");
-    f.boxExtend    = (fn_BoxExtend_t)   ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z");
-    f.ok = f.isDerived && f.timeCtor && f.boxExtend;
-    if (!f.ok) {
-        fprintf(stderr, "[Tornado/particle] Update UNRESOLVED leaf: isDerived=%p "
-                "timeCtor=%p extend=%p "
-                "-- the funnel will stand still\n",
-                (void*)f.isDerived, (void*)f.timeCtor,
-                (void*)f.boxExtend);
-        fflush(stderr);
-    }
-}
-
-const TornadoInstFuncs& InstFuncs() {
-    std::call_once(s_instFuncsOnce, &ResolveInstFuncs);
-    return s_instFuncs;
-}
+// Runtime leaves, called by name (B3R): Object::Base::IsDerivedFrom (the member;
+// `resource` is tested non-null first), ??0Time@System@@QEAA@M@Z -> RtSystem_Time_Ctor
+// (system/Value.h), ?Extend@Box@Volume@@ -> RtVolume_Box_Extend (volume/Volume.h).
 
 }  // namespace
 
@@ -350,8 +301,6 @@ const TornadoInstFuncs& InstFuncs() {
 // 0x140131090, already reimplemented as the CRT calls in Component/character_trig.cpp.
 // The same precedent applies here: a sub-ULP difference moves a dust particle.
 void TornadoInstance::Update(const System::Time& time) {
-    const TornadoInstFuncs& f = InstFuncs();
-    if (!f.ok) return;
 
     // Caller batch CB6: the instance's fields (ParticleInstance's +0xc0/+0xc8, the
     // class's +0xd8) and the resource's (a proved Tornado, below) are read by name.
@@ -374,7 +323,7 @@ void TornadoInstance::Update(const System::Time& time) {
     // this is a DELIBERATE deviation: bail loudly instead of faulting on a null we
     // manufactured ourselves.
     const uint32_t tornadoTid = Tornado::TypeId();
-    if (!resource || !f.isDerived(resource, tornadoTid)) {
+    if (!resource || !reinterpret_cast<const Object::Base*>(resource)->IsDerivedFrom(tornadoTid)) {   // B.3.x bridge
         if (!s_updateBailSaid.exchange(true)) {
             fprintf(stderr, "[Tornado/particle] Update bailed: resource=%p is not a Tornado "
                     "(tid=%u). Retail cannot reach this -- Tornado::Type() must "
@@ -391,7 +340,7 @@ void TornadoInstance::Update(const System::Time& time) {
 
     // ---- spawn ------------------------------------------------------------
     int64_t period = 0;
-    f.timeCtor(&period, 1.0f / res->_emissionRate);       // 1 / _emissionRate, in ticks
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&period), 1.0f / res->_emissionRate);       // 1 / _emissionRate, in ticks
 
     const uint8_t* cStart = reinterpret_cast<const uint8_t*>(&res->_startColor);   // +0x74
     const uint8_t* cEnd   = reinterpret_cast<const uint8_t*>(&res->_endColor);     // +0x78
@@ -404,7 +353,7 @@ void TornadoInstance::Update(const System::Time& time) {
         p->age = 0;
 
         int64_t life = 0;
-        f.timeCtor(&life, res->_particleLifeTime + Graphics::Particle::_rng.RandFloatTol() * res->_particleLifeTimeTol);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&life), res->_particleLifeTime + Graphics::Particle::_rng.RandFloatTol() * res->_particleLifeTimeTol);
         p->lifetime = life;
 
         p->alpha = p->prevAlpha = 0.0f;                 // retail: one 8-byte zero at +0x40
@@ -498,7 +447,9 @@ void TornadoInstance::Update(const System::Time& time) {
         {
             const float v[3] = { px, py, pz };
             float retBox[6];
-            const float* nb = reinterpret_cast<const float*>(f.boxExtend(pool->box, retBox, v));
+            const float* nb = reinterpret_cast<const float*>(RtVolume_Box_Extend(
+                reinterpret_cast<const ::Box*>(pool->box), reinterpret_cast<::Box*>(retBox),
+                reinterpret_cast<const Math::Vector3*>(v)));
             for (int k = 0; k < 6; ++k) pool->box[k] = nb[k];
         }
 

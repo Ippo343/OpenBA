@@ -310,3 +310,12 @@ The table is `b3r_session/GATE_TABLE.md` (one row per gated merge).
    functions had 4 declarations, so P0c added 280. 30 bodies have internal linkage
    (`data/P0c_declared.tsv`): the W1 block that owns the DEFINING file gives them external linkage.
    The `.rdata` "floats" include one double (0x140172168) and one 64-bit mask (0x1401722b0).
+7. **2026-09-28, G-Work — a register retail leaves UNSET.** R2 says a reader whose argument list
+   disagrees with the body's is settled from retail's call site. Retail's callers of the zone
+   refresh 0x14009c480 (0x1400eb303, 0x1400e532a / 54ea / 556c) set ONLY RCX; the body uses its 4th
+   parameter as the flood-fill seed. G-Work's `behaviour:` commits `6067e8a1` / `4b9d6b19` pass
+   `(grid, 0, 0, 0)`: deterministic, gated with no diff, but the zeros are OUR choice, not retail's
+   (`docs/known_port_issues.md` 7). From here on: when retail leaves a register unset, the site is
+   LEFT and listed, not given a value. A MISSING argument that retail does set is still a
+   `behaviour:` commit with the call-site address.
+

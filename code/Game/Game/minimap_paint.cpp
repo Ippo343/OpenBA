@@ -48,6 +48,7 @@
 #include "video/Context.h"       // also brings Video::{Device,RenderBuffer,Viewport}
 #include "video/ImageBuffer.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "options.h"
 #include "resolve.h"
@@ -57,6 +58,7 @@
 #include <cstring>
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Configuration::_singleton
 #include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"   // kRdata_14017214c
 
 // Shared with minimap_upload.cpp — creates the display GPU buffers at minimap
 // +0x08/+0x10 (ports FUN_1400a4e80) and uploads +0x18/+0x28 into them.
@@ -83,67 +85,18 @@ namespace {
 //   their call sites here converted), plus the hand-inlined ImageBuffer vtable
 //   +0x48 `Create` slot in MakeRenderTargetBuffer.
 //
-// What is STILL a door, and why:
-//   s_RenderBuffer_Ctor / s_RenderBuffer_Dtor / s_Renderer_Dtor / s_Scene_Dtor
-//   and fn_Graphics_{Camera,Renderer,Scene}_Ctor  — CTOR/DTOR doors (B4b-2,
-//       B35_RULES section 11: no Video/Graphics class has a real ctor or dtor).
-//   s_Frustum_Ortho_Ctor  — a Volume::Frustum constructor, not a member of any
-//       Video/Graphics class.
-//   (`fn_ImageBuffer_Ctor` went at ENDGAME B.3.9 EXA: `::new (p) Video::ImageBuffer()`.)
-typedef void* (*fn_RenderBuffer_Ctor_t)(void* self);
-typedef void  (*fn_RenderBuffer_Dtor_t)(void* self);
-typedef void* (*fn_Frustum_Ortho_Ctor_t)(void* self, bool ortho, const void* near_,
-                                          const void* far_, const void* s3,
-                                          const void* s4, const void* s5, const void* s6);
-typedef void  (*fn_Renderer_Dtor_t)(void* self);
-typedef void  (*fn_Scene_Dtor_t)(void* self);
-
-fn_RenderBuffer_Ctor_t         s_RenderBuffer_Ctor      = nullptr;
-fn_RenderBuffer_Dtor_t         s_RenderBuffer_Dtor      = nullptr;
-fn_Frustum_Ortho_Ctor_t        s_Frustum_Ortho_Ctor     = nullptr;
-fn_Renderer_Dtor_t             s_Renderer_Dtor          = nullptr;
-fn_Scene_Dtor_t                s_Scene_Dtor             = nullptr;
-
-bool s_resolved = false;
-bool s_ok       = false;
-
-bool ResolveFuncs() {
-    if (s_resolved) return s_ok;
-    s_resolved = true;
-
-    s_RenderBuffer_Ctor    = (fn_RenderBuffer_Ctor_t)   ResolveExport("??0RenderBuffer@Video@@QEAA@XZ");
-    s_RenderBuffer_Dtor    = (fn_RenderBuffer_Dtor_t)   ResolveExport("??1RenderBuffer@Video@@QEAA@XZ");
-    s_Frustum_Ortho_Ctor   = (fn_Frustum_Ortho_Ctor_t)  ResolveExport("??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z");
-    s_Renderer_Dtor        = (fn_Renderer_Dtor_t)       ResolveExport("??1Renderer@Graphics@@QEAA@XZ");
-    s_Scene_Dtor           = (fn_Scene_Dtor_t)          ResolveExport("??1Scene@Graphics@@QEAA@XZ");
-
-    s_ok = s_RenderBuffer_Ctor && s_RenderBuffer_Dtor &&
-           s_Frustum_Ortho_Ctor &&
-           s_Renderer_Dtor && s_Scene_Dtor &&
-           // engine_funcs primitives this port relies on:
-           fn_MemAlloc && g_pMemAllocSingleton && fn_MemFreeStatic &&
-           // B.3.5: the CopyFromTexture readiness term went with its door.
-           fn_Graphics_Camera_Ctor &&
-           fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor;
-           // B.3.5 batch K1: the Renderer::Draw readiness term went with its door;
-           // ENDGAME B.3.9 SS2: the Video::Configuration door term with its door.
-
-    if (!s_ok) {
-        printf("[MinimapPaint] primitives unresolved — terrain paint disabled\n"
-               "  RB(ctor=%p dtor=%p) Frustum=%p Rdtor=%p Sdtor=%p\n",
-               (void*)s_RenderBuffer_Ctor, (void*)s_RenderBuffer_Dtor,
-               (void*)s_Frustum_Ortho_Ctor,
-               (void*)s_Renderer_Dtor, (void*)s_Scene_Dtor);
-        fflush(stdout);
-    }
-    return s_ok;
-}
+// B3R: the last CTOR/DTOR doors are called by name — Video_RenderBuffer_Ctor /
+// _Dtor (video/Device.h), RtVolume_Frustum_Ctor_General (volume/Volume.h),
+// RtGraphics_Camera_Ctor, RtGraphics_Renderer_Ctor / _Dtor (graphics/Camera.h) and
+// RtGraphics_Scene_Ctor / _Dtor (graphics/Scene.h). Their caches, the ResolveFuncs
+// readiness gate and its "primitives unresolved" log went with them.
+// (`fn_ImageBuffer_Ctor` went at ENDGAME B.3.9 EXA: `::new (p) Video::ImageBuffer()`.)
 
 // Allocate + construct a Video::ImageBuffer (retail: the imported ctor + the
 // exe's own copy of the class's table), then Create it as a render-target
 // (color) / depth surface. Returns the buffer or null.
 void* MakeRenderTargetBuffer(int width, int usage, int format) {
-    void* img = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+    void* img = System::MemoryAllocator::MemAlloc(0x68, 8);
     if (!img) return nullptr;
     ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
     reinterpret_cast<Video::ImageBuffer*>(img)->Create(
@@ -168,7 +121,7 @@ void FreeImageBuffer(void* img) {
 extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
                                      void* worldGeom, void* sunLight) {
     if (!minimap || !context) return;
-    if (!ResolveFuncs()) return;
+    if (!System::MemoryAllocator::_singleton) return;
 
     static bool s_trace = Opt().mapTrace != nullptr;
 
@@ -183,8 +136,8 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     void* colorBuf = MakeRenderTargetBuffer(width, /*usage*/0, /*format*/5); // ARGB render target
     void* depthBuf = MakeRenderTargetBuffer(width, /*usage*/1, /*format*/7); // depth
 
-    void* renderBuffer = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
-    if (renderBuffer) s_RenderBuffer_Ctor(renderBuffer);
+    void* renderBuffer = System::MemoryAllocator::MemAlloc(0x30, 8);
+    if (renderBuffer) Video_RenderBuffer_Ctor(reinterpret_cast<Video::RenderBuffer*>(renderBuffer));
     bool rbOk = reinterpret_cast<Video::RenderBuffer*>(renderBuffer)->Create(
         reinterpret_cast<const Video::ImageBuffer*>(colorBuf),
         reinterpret_cast<const Video::ImageBuffer*>(depthBuf));   // B.3.5 bridge
@@ -197,8 +150,11 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     const float fFar    = 512.0f;    // DAT_140172240
 
     alignas(16) uint8_t frustum[256];
-    void* frustumRet = s_Frustum_Ortho_Ctor(frustum, /*ortho*/true, &fNear, &fFar,
-                                             &negHalf, &half, &half, &negHalf);
+    ::Frustum* frustumRet = RtVolume_Frustum_Ctor_General(
+        reinterpret_cast<::Frustum*>(frustum), /*ortho*/true,
+        reinterpret_cast<const Math::Scalar*>(&fNear), reinterpret_cast<const Math::Scalar*>(&fFar),
+        reinterpret_cast<const Math::Scalar*>(&negHalf), reinterpret_cast<const Math::Scalar*>(&half),
+        reinterpret_cast<const Math::Scalar*>(&half), reinterpret_cast<const Math::Scalar*>(&negHalf));
 
     // Transform3::Identity is a static that returns a Transform3 BY VALUE (48 bytes)
     // via a hidden return buffer in RCX — the engine_funcs typedef is nullary, so call
@@ -207,7 +163,8 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     Math::Transform3 identity = Math::Transform3::Identity();
 
     alignas(16) uint8_t camera[256];
-    fn_Graphics_Camera_Ctor(camera, frustumRet, &identity, /*isPerspective*/true);
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), frustumRet,
+                           &identity, /*isPerspective*/true);
 
     // Look straight down (yaw 0, pitch -90deg), positioned at world (0,0,100).
     const float yaw   = 0.0f;
@@ -239,7 +196,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     reinterpret_cast<Video::Context*>(context)->SetViewport(
         *reinterpret_cast<const Video::Viewport*>(viewport));   // B.3.5 bridge
 
-    const float clearDepth = g_fUVScale ? *g_fUVScale : 1.0f; // DAT_14017214c == 1.0
+    const float clearDepth = kRdata_14017214c;   // DAT_14017214c == 1.0
     reinterpret_cast<Video::Context*>(context)->Clear(1, 0xff000000, clearDepth, 0);   // B.3.5 bridge
 
     // Redirect rendering to the off-screen buffer (saving the current + default).
@@ -249,8 +206,8 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
 
     alignas(16) uint8_t renderer[256];
     alignas(16) uint8_t scene[256];
-    fn_Graphics_Renderer_Ctor(renderer);
-    fn_Graphics_Scene_Ctor(scene);
+    RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(renderer));
+    RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(scene));
 
     reinterpret_cast<Video::Context*>(context)->SetDefaultRenderBuffer(renderBuffer);   // B.3.5 bridge
     reinterpret_cast<Video::Context*>(context)->SetRenderBuffer(renderBuffer);          // B.3.5 bridge
@@ -316,8 +273,8 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
 
     // Free the temporary render surfaces.
     if (renderBuffer) {
-        s_RenderBuffer_Dtor(renderBuffer);
-        fn_MemFreeStatic(renderBuffer);
+        Video_RenderBuffer_Dtor(reinterpret_cast<Video::RenderBuffer*>(renderBuffer));
+        System::MemoryAllocator::MemFree(renderBuffer);
     }
     FreeImageBuffer(colorBuf);
     FreeImageBuffer(depthBuf);
@@ -327,8 +284,8 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     Minimap_CreateAndUpload(minimap);
 
     reinterpret_cast<Video::Context*>(context)->Reset();   // B.3.5 bridge
-    s_Scene_Dtor(scene);
-    s_Renderer_Dtor(renderer);
+    RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(scene));
+    RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(renderer));
 
     if (s_trace)
         printf("[MinimapPaint] painted terrain: width=%d colorBuf=%p terrainPixels=%p "

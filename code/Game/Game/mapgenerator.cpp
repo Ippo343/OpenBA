@@ -354,14 +354,11 @@ void MG_ReadRefPool(void* serializer, void* header, void* countField) {
 bool MapGenerator::Serialize(void* stream) {
     // Caller batch CB6: the fields are read by name (was `s + off` over `this`).
     alignas(8) uint8_t serializer[24];
-    if (!fn_ExternalPtr_Serialize2) {
-        return true;  // missing the ExternalPtr exe door — can't proceed
-    }
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
-    fn_ExternalPtr_Serialize2(&_field20, serializer);   // +0x20 _stringTable ref
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);   // +0x20 _stringTable ref
     reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);       // +0x28 _name
     reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);       // +0x30 _description
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&enabled), nullptr);   // B.3.4 bridge  +0x38 _exposed

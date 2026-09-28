@@ -65,6 +65,7 @@
 // provably equivalent — the classic parent-pointer in-order successor algorithm), not a logic change.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Object/factory_registration.h"
 #include "Work/Work.h"                // Work::TypeId() -- cell 0x1401c6cf8 (ENDGAME B.3.9 RF)
@@ -79,43 +80,23 @@
 #include "Component/WorkComponent.h"
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Action/exe_bodies.h"   // Pf_AvlRebalanceA_a8c0 / B_13480
+#include "Player/exe_bodies.h"   // TradeWork_impl_4b40
+#include "Work/exe_bodies.h"     // WorkBST / WorkCellBST removes, WorkBase_TreeNodeFree_*
 
 
 namespace {
 
 // ============================================================
-// Resolved sub-callees (already ported elsewhere; resolved lazily here)
+// Sub-callees, ported elsewhere and called by name (B3R):
+//   0x14001a8c0 Pf_AvlRebalanceA_a8c0 / 0x140013480 Pf_AvlRebalanceB_13480 (Action/exe_bodies.h)
+//   0x140014b40 TradeWork_impl_4b40                                     (Player/exe_bodies.h)
+//   0x14001ca60 WorkCellBST_Remove_ca60 (Layout B / C-subtree erase)    (Work/exe_bodies.h)
+//   0x14001a6e0 WorkBST_BSTRemove_a6e0  (Layout A erase)                (Work/exe_bodies.h)
+//   0x140014c30 WorkBase_TreeNodeFree_14c30 (Layout A post-order free)  (Work/exe_bodies.h)
+//   0x14000e320 WorkBase_TreeNodeFree_e320  (Layout B post-order free)  (Work/exe_bodies.h)
+//   0x140018020 Reimpl_ExternalPtr_Serialize_StringTable                (Game/exe_bodies.h)
 // ============================================================
-
-typedef void (*fn_RebalanceA_t)(int64_t* root, int64_t* node);          // 0x14001a8c0
-typedef void (*fn_RebalanceB_t)(int64_t* root, int64_t* node);          // 0x140013480
-typedef void (*fn_RebalanceC_t)(int64_t* treeDesc, int64_t* cursor);    // 0x140014b40
-typedef void (*fn_BstErase_t)(void* treeOwner, void* node);             // 0x14001ca60 / 0x14001a6e0
-typedef void (*fn_TreeFree_t)(void* root, void* node);                  // 0x140014c30 / 0x14000e320
-typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer); // 0x140018020
-
-static fn_RebalanceA_t s_rebA        = nullptr; // 0x14001a8c0
-static fn_RebalanceB_t s_rebB        = nullptr; // 0x140013480
-static fn_RebalanceC_t s_rebC        = nullptr; // 0x140014b40
-static fn_BstErase_t   s_eraseB      = nullptr; // 0x14001ca60 (Layout B / C-subtree erase)
-static fn_BstErase_t   s_eraseA      = nullptr; // 0x14001a6e0 (Layout A erase)
-static fn_TreeFree_t   s_freeA       = nullptr; // 0x140014c30 (Layout A post-order free)
-static fn_TreeFree_t   s_freeB       = nullptr; // 0x14000e320 (Layout B post-order free)
-static fn_ExternalRefSerialize_t s_externalRefSerialize = nullptr; // 0x140018020
-
-static bool s_depsInit = false;
-static void EnsureDeps() {
-    if (s_depsInit) return;
-    s_rebA   = reinterpret_cast<fn_RebalanceA_t>(ResolveAddr(Module::Exe, 0x14001a8c0));
-    s_rebB   = reinterpret_cast<fn_RebalanceB_t>(ResolveAddr(Module::Exe, 0x140013480));
-    s_rebC   = reinterpret_cast<fn_RebalanceC_t>(ResolveAddr(Module::Exe, 0x140014b40));
-    s_eraseB = reinterpret_cast<fn_BstErase_t>(ResolveAddr(Module::Exe, 0x14001ca60));
-    s_eraseA = reinterpret_cast<fn_BstErase_t>(ResolveAddr(Module::Exe, 0x14001a6e0));
-    s_freeA  = reinterpret_cast<fn_TreeFree_t>(ResolveAddr(Module::Exe, 0x140014c30));
-    s_freeB  = reinterpret_cast<fn_TreeFree_t>(ResolveAddr(Module::Exe, 0x14000e320));
-    s_externalRefSerialize = reinterpret_cast<fn_ExternalRefSerialize_t>(ResolveAddr(Module::Exe, 0x140018020));
-    s_depsInit = true;
-}
 
 // ============================================================
 // Generic in-order BST walk helpers (parent-pointer successor algorithm).
@@ -163,12 +144,11 @@ static uint8_t* BstNextA(uint8_t* node) {
 // (retail's per-slot counter increments only on genuine insert, not on found-existing).
 // ============================================================
 static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInserted) {
-    EnsureDeps();
     *outInserted = false;
     int32_t key = static_cast<int32_t>(value & 0xFFFFFFFFu);
     int32_t* root = *treeRoot;
     if (root == nullptr) {
-        int32_t* node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+        int32_t* node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
         if (node) {
             *reinterpret_cast<uint64_t*>(node) = value;
             node[2] = 0; node[3] = 0; node[4] = 0; node[5] = 0; node[6] = 0; node[7] = 0; node[8] = 0;
@@ -186,7 +166,7 @@ static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInse
             }
             int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
             if (right == nullptr) {
-                node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+                node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                 if (node) {
                     *reinterpret_cast<uint64_t*>(node) = value;
                     *reinterpret_cast<int32_t**>(node + 2) = parent;
@@ -199,7 +179,7 @@ static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInse
         } else {
             int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x10);
             if (left == nullptr) {
-                node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8));
+                node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                 if (node) {
                     *reinterpret_cast<uint64_t*>(node) = value;
                     *reinterpret_cast<int32_t**>(node + 2) = parent;
@@ -212,7 +192,7 @@ static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInse
         }
     }
     int64_t cursor = reinterpret_cast<int64_t>(parent);
-    if (s_rebA) s_rebA(reinterpret_cast<int64_t*>(treeRoot), &cursor);
+    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(treeRoot), &cursor);
     *outInserted = true;
     return node;
 }
@@ -254,8 +234,7 @@ static int32_t* LayoutB_Find(int32_t* root, int32_t key) {
 // param_1 is unused by retail beyond being forwarded (allocator context placeholder).
 // ============================================================
 extern "C" int32_t* Goals_LayoutB_DeepCopy_cfb0(uint64_t param_1, int32_t* src) {
-    EnsureDeps();
-    int32_t* dst = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+    int32_t* dst = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (dst != nullptr) {
         dst[0] = src[0];
         *reinterpret_cast<uint64_t*>(dst + 2) = *reinterpret_cast<uint64_t*>(src + 2); // payload/IBP @0x08
@@ -289,7 +268,6 @@ extern "C" int32_t* Goals_LayoutB_DeepCopy_cfb0(uint64_t param_1, int32_t* src) 
 // subtreeRoot@8, int@0x10}, parent = the new node's parent pointer.
 // ============================================================
 extern "C" uint8_t* Goals_LayoutC_CopyCtor_ceb0(uint8_t* dst, const uint8_t* src, void* parent) {
-    EnsureDeps();
     *reinterpret_cast<uint64_t*>(dst) = *reinterpret_cast<const uint64_t*>(src); // key
     *reinterpret_cast<uint64_t*>(dst + 0x08) = 0;
     *reinterpret_cast<uint32_t*>(dst + 0x10) = 0;
@@ -314,12 +292,11 @@ extern "C" uint8_t* Goals_LayoutC_CopyCtor_ceb0(uint8_t* dst, const uint8_t* src
 // existing node to *pOut. Otherwise allocates via ceb0, links, rebalances (0x140014b40).
 // ============================================================
 extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, const uint8_t* pKey) {
-    EnsureDeps();
     uint64_t key = *reinterpret_cast<const uint64_t*>(pKey);
     uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
     uint8_t* result;
     if (root == nullptr) {
-        uint8_t* buf = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+        uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
         result = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, nullptr) : nullptr;
         *reinterpret_cast<uint8_t**>(treeField) = result;
     } else {
@@ -335,7 +312,7 @@ extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, co
                 }
                 cur = *reinterpret_cast<uint8_t**>(parent + 0x28); // right
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+                    uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
                     uint8_t* node = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, parent) : nullptr;
                     *reinterpret_cast<uint8_t**>(parent + 0x28) = node;
                     result = node;
@@ -344,7 +321,7 @@ extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, co
             } else {
                 cur = *reinterpret_cast<uint8_t**>(parent + 0x20); // left
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8));
+                    uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
                     uint8_t* node = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, parent) : nullptr;
                     *reinterpret_cast<uint8_t**>(parent + 0x20) = node;
                     result = node;
@@ -354,7 +331,7 @@ extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, co
         }
     rebalance:
         int64_t cursor = reinterpret_cast<int64_t>(parent);
-        if (s_rebC) s_rebC(reinterpret_cast<int64_t*>(treeField), &cursor);
+        TradeWork_impl_4b40(reinterpret_cast<int64_t*>(treeField), &cursor);
     }
     *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(treeField) + 0x08) += 1; // count++
     *pOut = result;
@@ -367,7 +344,6 @@ extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, co
 // pointed entity (self, no extra args).
 // ============================================================
 extern "C" void Goals_SavePrepass_8270(void* selfV) {
-    EnsureDeps();
     uint8_t* selfB = reinterpret_cast<uint8_t*>(selfV);
     uint8_t* root = *reinterpret_cast<uint8_t**>(selfB + 0x30);
     for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
@@ -383,7 +359,6 @@ extern "C" void Goals_SavePrepass_8270(void* selfV) {
 // walks it in-order. IsDerivedFrom-filters payload against Work::TypeId() (nulls non-Work).
 // ============================================================
 extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serializer) {
-    EnsureDeps();
     int32_t count = static_cast<int32_t>(treeField[1]);
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
@@ -400,13 +375,13 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
             void* payload = nullptr;
             reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+            if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                 payload = nullptr;
             }
             int32_t* node = LayoutB_Find(root, key);
             if (node == nullptr) {
                 if (root == nullptr) {
-                    node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                    node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                     if (node) {
                         node[0] = key;
                         *reinterpret_cast<int32_t**>(node + 2) = reinterpret_cast<int32_t*>(payload);
@@ -420,7 +395,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
                         if (*parent <= key) {
                             int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20);
                             if (right == nullptr) {
-                                fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                 if (fresh) {
                                     fresh[0] = key;
                                     *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -434,7 +409,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
                         } else {
                             int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
                             if (left == nullptr) {
-                                fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                 if (fresh) {
                                     fresh[0] = key;
                                     *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -448,7 +423,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
                         }
                     }
                     int64_t cursor = reinterpret_cast<int64_t>(parent);
-                    if (s_rebB) s_rebB(treeField, &cursor);
+                    Pf_AvlRebalanceB_13480(treeField, &cursor);
                     node = fresh;
                 }
                 treeField[1] += 1;
@@ -460,7 +435,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
             reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* payload = *reinterpret_cast<void**>(node + 0x08);
-            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+            if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                 *reinterpret_cast<void**>(node + 0x08) = nullptr;
             }
         }
@@ -476,7 +451,6 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
 // ============================================================
 
 extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, int64_t* arrayBase, int32_t* /*outParam*/) {
-    EnsureDeps();
     bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     int64_t* slot = arrayBase;
     for (int32_t s = 0; s < count; ++s, slot += 2) {
@@ -489,14 +463,14 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                 reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
                 void* payload = nullptr;
                 reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+                if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                     payload = nullptr;
                 }
                 int32_t* root = reinterpret_cast<int32_t*>(slot[0]);
                 int32_t* existing = LayoutB_Find(root, key);
                 if (existing == nullptr) {
                     if (root == nullptr) {
-                        int32_t* node = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                        int32_t* node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                         if (node) {
                             node[0] = key;
                             *reinterpret_cast<int32_t**>(node + 2) = reinterpret_cast<int32_t*>(payload);
@@ -510,7 +484,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                             if (*parent <= key) {
                                 int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20);
                                 if (right == nullptr) {
-                                    fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                    fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                     if (fresh) {
                                         fresh[0] = key;
                                         *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -524,7 +498,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                             } else {
                                 int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
                                 if (left == nullptr) {
-                                    fresh = reinterpret_cast<int32_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8));
+                                    fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
                                     if (fresh) {
                                         fresh[0] = key;
                                         *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
@@ -538,7 +512,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                             }
                         }
                         int64_t cursor = reinterpret_cast<int64_t>(parent);
-                        if (s_rebB) s_rebB(slot, &cursor);
+                        Pf_AvlRebalanceB_13480(slot, &cursor);
                     }
                     slot[1] += 1;
                 }
@@ -549,7 +523,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                 reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
                 reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
                 void* payload = *reinterpret_cast<void**>(node + 0x08);
-                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
+                if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
                     *reinterpret_cast<void**>(node + 0x08) = nullptr;
                 }
             }
@@ -561,7 +535,6 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
 // 0x14002d5f0 — Layout-C (0x38 node) tree serializer. param_1 = {root@0, count@8}.
 // ============================================================
 extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializer) {
-    EnsureDeps();
     int32_t count = static_cast<int32_t>(treeField[1]);
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
@@ -575,7 +548,7 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
             // then inserting the record loses every Work subtree on load.
             uint8_t recordBuf[0x18];
             std::memset(recordBuf, 0, sizeof(recordBuf));
-            if (s_externalRefSerialize) s_externalRefSerialize(recordBuf, serializer);
+            Reimpl_ExternalPtr_Serialize_StringTable(recordBuf, serializer);
 
             int64_t* subtreeField = reinterpret_cast<int64_t*>(recordBuf + 8);
             Goals_SingleTree_Serialize_d340(subtreeField, serializer);
@@ -586,11 +559,9 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
             // release — retail's FUN_14000e320 free-then-MemFree pair on the same header.
             if (subtreeField[0] != 0) {
                 void* subRoot = reinterpret_cast<void*>(subtreeField[0]);
-                if (s_freeB) {
-                    s_freeB(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x18)); // left
-                    s_freeB(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x20)); // right
-                }
-                if (fn_MemFreeStatic) fn_MemFreeStatic(subRoot);
+                WorkBase_TreeNodeFree_e320(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x18)); // left
+                WorkBase_TreeNodeFree_e320(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x20)); // right
+                System::MemoryAllocator::MemFree(subRoot);
             }
         }
     } else {
@@ -613,7 +584,7 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
             return parent;
         };
         for (uint8_t* cNode = leftmostC(root); cNode; cNode = nextC(cNode)) {
-            if (s_externalRefSerialize) s_externalRefSerialize(cNode, serializer);
+            Reimpl_ExternalPtr_Serialize_StringTable(cNode, serializer);
             // Retail passes plVar5+1 — the node's OWN {root@+0x08, count@+0x10}
             // header. Copying the root into a stack pair with a zeroed count made
             // d340 write "0 entries" and then walk the real subtree anyway, so the
@@ -629,7 +600,6 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
 // 0x1400f9240 — main manager serializer.
 // ============================================================
 extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, int32_t* outParam) {
-    EnsureDeps();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
 
     alignas(8) uint8_t serializerBuf[24];
@@ -724,7 +694,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                         if (tid == WorkComponent::TypeId()) {
                             void* obj = *slot;
-                            bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, WorkComponent::TypeId());
+                            bool derived = ::Object::IsDerivedFromNullSafe(obj, WorkComponent::TypeId());
                             workComponent = derived ? obj : nullptr;
                             break;
                         }
@@ -732,7 +702,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                 }
 
                 void* ibp = nullptr;
-                if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+                new (&ibp) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(workComponent));   // B.3.3 bridge
                 if (ibp != nullptr) {
                     int32_t workId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(ibp) + 0x28);
@@ -743,8 +713,8 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 
                     if (slotNode != nullptr) {
                         int32_t* found = LayoutA_Find(localFoundRoot, workId);
-                        if (found != nullptr && s_eraseA) {
-                            s_eraseA(&localFoundRoot, found);
+                        if (found != nullptr) {
+                            WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&localFoundRoot), found);
                         }
                     }
                 }
@@ -766,8 +736,8 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                     for (int32_t s = 0; s < 14; ++s, slot += 2) {
                         int32_t* subRoot = reinterpret_cast<int32_t*>(slot[0]);
                         int32_t* match = LayoutB_Find(subRoot, deadId);
-                        if (match != nullptr && s_eraseB) {
-                            s_eraseB(slot, match);
+                        if (match != nullptr) {
+                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(slot), match);
                         }
                     }
 
@@ -777,8 +747,8 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 
                     int32_t* workCountRoot2 = *reinterpret_cast<int32_t**>(self + 0x10);
                     int32_t* wcMatch = LayoutA_Find(workCountRoot2, orderKey);
-                    if (wcMatch != nullptr && s_eraseA) {
-                        s_eraseA(&workCountRoot2, wcMatch);
+                    if (wcMatch != nullptr) {
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&workCountRoot2), wcMatch);
                         *reinterpret_cast<int32_t**>(self + 0x10) = workCountRoot2;
                     }
 
@@ -802,14 +772,14 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                     if (cNode != nullptr) {
                         int32_t* subtreeRoot = *reinterpret_cast<int32_t**>(cNode + 0x08);
                         int32_t* subMatch = LayoutB_Find(subtreeRoot, deadId);
-                        if (subMatch != nullptr && s_eraseB) {
-                            s_eraseB(cNode + 0x08, subMatch);
+                        if (subMatch != nullptr) {
+                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(cNode + 0x08), subMatch);
                         }
                     }
 
-                    if (fn_InternalBasePtr_DeletePtr) reinterpret_cast< ::Object::InternalBasePtr*>(ibpField)->DeletePtr(
+                    reinterpret_cast< ::Object::InternalBasePtr*>(ibpField)->DeletePtr(
                         );   // B.3.3 bridge
-                    if (s_eraseB) s_eraseB(self + 0x30, idTreeNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(self + 0x30), idTreeNode);
                 }
 
                 idNode = nextIdNode;
@@ -831,11 +801,9 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
         // root node itself). ---
         if (localFoundRoot != nullptr) {
             uint8_t* rootB = reinterpret_cast<uint8_t*>(localFoundRoot);
-            if (s_freeA) {
-                s_freeA(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x10)); // left
-                s_freeA(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x18)); // right
-            }
-            if (fn_MemFreeStatic) fn_MemFreeStatic(localFoundRoot);
+            WorkBase_TreeNodeFree_14c30(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x10)); // left
+            WorkBase_TreeNodeFree_14c30(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x18)); // right
+            System::MemoryAllocator::MemFree(localFoundRoot);
         }
         (void)localFoundCount;
     }
@@ -848,8 +816,4 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
 // ============================================================
 void RegisterGoalsSerialize() {
     RegisterExeAddr(0x1400f9240, reinterpret_cast<uintptr_t>(&Goals_Serialize_f9240));
-    RegisterExeAddr(0x1400f8270, reinterpret_cast<uintptr_t>(&Goals_SavePrepass_8270));
-    RegisterExeAddr(0x14002d060, reinterpret_cast<uintptr_t>(&Goals_TreeArray_Serialize_d060));
-    RegisterExeAddr(0x14002d5f0, reinterpret_cast<uintptr_t>(&Goals_WorkTree_Serialize_d5f0));
-    RegisterExeAddr(0x14002ccf0, reinterpret_cast<uintptr_t>(&Goals_LayoutC_Insert_ccf0));
 }

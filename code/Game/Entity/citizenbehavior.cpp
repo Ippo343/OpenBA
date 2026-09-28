@@ -12,7 +12,8 @@
 #include "Entity/citizenbehavior_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Game/exe_constants.h"   // kRdata_*
 #include "Game/force_work.h"   // ForceWork::Readable — CollectStats stale-entry guard
 #include <cmath>
 #include <cstdint>
@@ -27,6 +28,10 @@
 #include "Component/ResidenceComponent.h"
 #include "Component/CitizenDescription.h"
 #include "Entity/exe_bodies.h"
+#include "Action/exe_bodies.h"      // Pf_IsDstReachable_f810, Pf_EntityAnchorCell_7fb0, PathBST_Insert_25a10, PathPairs_Clear_25b30
+#include "Component/exe_bodies.h"   // CitizenEmploy_Strat_c4b0, PathGraph_ReassignWorkers, CitizenAssignCitizens, CitizenComp_AssignHousing, StorageComponent_DynArrayResize
+#include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x10 / 0x20
+#include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
@@ -34,43 +39,16 @@ extern "C" void BuilderPool_Tick();
 
 
 // ============================================================
-// Internal helper addresses (resolved lazily)
+// Internal helpers, called by name (B3R)
 // ============================================================
-
-// System::Time::Time constructor — creates Time from float seconds
-typedef void* (*fn_Time_Ctor_t)(void* out, float seconds);
-static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
-
-static bool s_resolved = false;
-
-static void EnsureResolved() {
-    if (s_resolved) return;
-
-    // System::Time::Time(Time*, float) — Runtime export.
-    //
-    // [MANGLING FIX 2026-07-25] This used to ask for "?Time@Time@System@@QEAA@M@Z",
-    // which does not exist: a constructor mangles as "??0", so the real export is
-    // "??0Time@System@@QEAA@M@Z" — the spelling every other caller in the tree
-    // already uses. The lookup always failed and fell through to an
-    // ordinal-798 fallback, which this comment used to name as
-    // "??2GroupElement@UI@@SAPEAX_K@Z". [NAME CORRECTED 2026-09-08] The shipped
-    // export directory says ordinal 798 is
-    // "??2GroupDescription@UI@@SAPEAX_KPEAX@Z" — a different CLASS and a
-    // different SIGNATURE: `SAPEAX_KPEAX` is operator new(size_t, void*), the
-    // PLACEMENT form, not the plain `SAPEAX_K`. The story below is unchanged and
-    // in fact stronger for it: placement new RETURNS its second argument and
-    // writes nothing at all, so every "construct a Time" call was an operator-new
-    // that could not possibly have written the out value. Both Time consumers in this file therefore read back 0:
-    //   * pathInterval == 0  -> the 300 s path-graph branch ran EVERY tick
-    //   * statsTimer never re-armed from 0x1401721fc (75 s) -> CollectStats ran
-    //     EVERY tick, pushing ~70 samples/tick into the unbounded town-hall graph
-    //     history. That was 3.4 ms of the 3.5 ms CitizenList tick (99.7%), and it
-    //     grew as the history arrays grew.
-    s_fn_Time_Ctor = reinterpret_cast<fn_Time_Ctor_t>(
-        ResolveExport("??0Time@System@@QEAA@M@Z"));
-
-    s_resolved = true;
-}
+//   ??0Time@System@@QEAA@M@Z  System::Time::Time(float) -> RtSystem_Time_Ctor
+//   (system/Value.h). [MANGLING FIX 2026-07-25] this file once asked for
+//   "?Time@Time@System@@QEAA@M@Z", which does not exist; the lookup fell through
+//   to an ordinal-798 fallback ("??2GroupDescription@UI@@SAPEAX_KPEAX@Z", the
+//   PLACEMENT operator new, which writes nothing), so every Time read back 0:
+//   the 300 s path-graph branch and CollectStats ran EVERY tick.
+//   .rdata 0x140172234 (300.0f, the path-graph interval) and 0x1401721fc (75.0f,
+//   the CollectStats interval): exe_constants.h.
 
 // ============================================================
 // CitizenBehavior::Ctor (found via GameUpdateLoop::Load)
@@ -80,8 +58,6 @@ static void EnsureResolved() {
 //
 // Original: TradeComponent_impl_0a30
 CitizenBehaviorRaw* CitizenBehavior_Ctor(CitizenBehaviorRaw* self) {
-    EnsureResolved();
-
     // Zero all fields
     memset(self->data, 0, 0x1C0);
 
@@ -95,9 +71,7 @@ CitizenBehaviorRaw* CitizenBehavior_Ctor(CitizenBehaviorRaw* self) {
     // fn_ProfResArray_Init allocates 21 entries (0x20 bytes each)
     // and sets default maxCount values.
     int64_t* profResPtr = reinterpret_cast<int64_t*>(self->data + 0x170);
-    if (fn_ProfResArray_Init) {
-        fn_ProfResArray_Init(profResPtr, 0x15); // 21 professions
-    }
+    ResizeStride0x20(profResPtr, 0x15); // 21 professions -- 0x1400177c0
 
     // Set default max counts for each profession
     // These are game balance constants from the constructor:
@@ -146,23 +120,19 @@ CitizenBehaviorRaw* CitizenBehavior_Ctor(CitizenBehaviorRaw* self) {
     // param_1 + 0x2a = &param_1[0x2a] = base + 0x2a*8 = base + 0x150 (statsHistory)
 
     // FUN_14000f090(base + 0x180, 2) — init notification/summary at +0x180
-    if (fn_SummaryArray_Init) {
-        fn_SummaryArray_Init(self->data + 0x180, 2);
-    }
+    StorageComponent_DynArrayResize(self->data + 0x180, 2);   // 0x14000f090
 
     // TradeComponent_impl_f760_sub_7640(base + 0x150, 0x47) — init stats tracking
-    if (fn_StatsArray_Init) {
-        fn_StatsArray_Init(self->data + 0x150, 0x47);
-    }
+    ResizeStride0x10(self->data + 0x150, 0x47);   // 0x140017640
 
     // *(uint32_t*)(param_1 + 0x35) = 0 — clear notify flags at +0x1A8
     self->notifyFlags() = 0;
 
     // Allocate PathGraph sub-object (0x28 bytes)
     PathGraph* pg = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
+    if (System::MemoryAllocator::_singleton) {
         pg = reinterpret_cast<PathGraph*>(
-            fn_MemAlloc(g_pMemAllocSingleton, 0x28, 4));
+            System::MemoryAllocator::MemAlloc(0x28, 4));
     }
     if (pg) {
         pg->m_pairs = nullptr;
@@ -195,8 +165,6 @@ CitizenBehaviorRaw* CitizenBehavior_Ctor(CitizenBehaviorRaw* self) {
 //
 // Original: Entity_impl_c2b0
 void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
-    EnsureResolved();
-
     int64_t* q = reinterpret_cast<int64_t*>(self->data);
 
     // Advance timers (Ghidra longlong* indexing)
@@ -214,18 +182,7 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
     // DAT_140172234 is the path graph interval (float seconds)
     // System::Time::Time constructs a Time value from float
     int64_t pathInterval = 0;
-    if (s_fn_Time_Ctor) {
-        // DAT_140172234 is a raw .rdata float; ResolveAddr(Module::Exe, .rdata) returns NULL
-        // in the standalone exe (only reimplemented code addresses are registered). Leaving
-        // pathInterval at 0 makes the path branch fire EVERY frame AND makes the accumulator
-        // clamp loop below non-terminating (`acc -= 0`). Fall back to the known 300s gate value.
-        float intervalSec = 300.0f;
-        // PERF: resolved once — this runs every sim tick and ResolveAddr is a hash lookup.
-        static float* intervalFloat = reinterpret_cast<float*>(
-            ResolveAddr(Module::Exe, 0x140172234));
-        if (intervalFloat) intervalSec = *intervalFloat;
-        s_fn_Time_Ctor(&pathInterval, intervalSec);
-    }
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&pathInterval), kRdata_140172234);   // 0x140172234
 
 
     if (pathInterval <= q[0x32]) {
@@ -260,14 +217,10 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
     if (q[0x33] < 1) {
         CitizenBehavior_CollectStats(self);
         // Reset timer from DAT_1401721fc (float seconds)
-        if (s_fn_Time_Ctor) {
-            static float* statsInterval = reinterpret_cast<float*>(
-                ResolveAddr(Module::Exe, 0x1401721fc));
-            if (statsInterval) {
-                int64_t newTime = 0;
-                s_fn_Time_Ctor(&newTime, *statsInterval);
-                q[0x33] = newTime;
-            }
+        {
+            int64_t newTime = 0;
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&newTime), kRdata_1401721fc);   // 0x1401721fc
+            q[0x33] = newTime;
         }
     }
 
@@ -294,8 +247,6 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
 //
 // Original: FUN_1400896a0
 void CitizenBehavior_ShuffleSchools(CitizenBehaviorRaw* self) {
-    EnsureResolved();
-
     uint32_t count = *reinterpret_cast<uint32_t*>(self->data + 0x28);
     if (count < 2) return;
 
@@ -332,8 +283,6 @@ void CitizenBehavior_ShuffleSchools(CitizenBehaviorRaw* self) {
 //
 // Original: FUN_140089470
 void CitizenBehavior_ShuffleEntities(CitizenBehaviorRaw* self, uint64_t profId) {
-    EnsureResolved();
-
     // Walk BST at +0x100
     uint64_t* node = *reinterpret_cast<uint64_t**>(self->data + 0x100);
     if (!node) return;
@@ -384,17 +333,11 @@ void CitizenBehavior_ShuffleEntities(CitizenBehaviorRaw* self, uint64_t profId) 
 // Original: CitizenComponent_impl_c4b0
 void* CitizenBehavior_FindAny(CitizenBehaviorRaw* self, void* retval,
                                void* profSlot, uint64_t profId) {
-    // This function is complex with many CheckPtr calls and component lookups.
-    // For now, delegate to the original via the already-resolved function pointer.
-    if (fn_CitizenList_FindAny) {
-        fn_CitizenList_FindAny(self, retval, profSlot, profId);
-        return retval;
-    }
-
-    // Fallback: return null InternalBasePtr
-    if (fn_InternalBasePtr_Ctor) {
-        new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    }
+    // This function is complex with many CheckPtr calls and component lookups:
+    // it delegates to the port of 0x14008c4b0.
+    CitizenEmploy_Strat_c4b0(reinterpret_cast<int64_t>(self), retval,
+                             reinterpret_cast<int64_t*>(profSlot),
+                             static_cast<int64_t>(profId));   // 0x14008c4b0
     return retval;
 }
 
@@ -438,9 +381,8 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
 
         // Compute path cost between cells
         uint32_t cost = 0;
-        if (fn_Map_CalcPathCost) {
-            cost = (uint32_t)fn_Map_CalcPathCost(mapGrid, (uint32_t)cellA, cellB, 0);
-        }
+        cost = (uint32_t)Pf_IsDstReachable_f810(mapGrid, (uint32_t)cellA,
+                                                (uint32_t)cellB, 0);   // 0x14009f810
 
         // If cost < 2 (unreachable or adjacent), fall back to Euclidean grid distance
         if (cost < 2) {
@@ -509,12 +451,10 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
             key.value = 0;
 
             void* outNode = nullptr;
-            if (fn_PathBST_Insert) {
-                fn_PathBST_Insert(
-                    reinterpret_cast<uint8_t*>(pg) + 0x18,  // &pg->m_bstRoot
-                    &outNode,
-                    &key);
-            }
+            PathBST_Insert_25a10(   // 0x140025a10
+                reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(pg) + 0x18),  // &pg->m_bstRoot
+                reinterpret_cast<uint64_t*>(&outNode),
+                reinterpret_cast<uint32_t*>(&key));
             foundNode = reinterpret_cast<uint32_t*>(outNode);
         }
 
@@ -530,17 +470,11 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
     // If all pairs processed, run post-processing
     if (pg->m_pendingIdx < 0) {
         // Worker reassignment based on computed distances
-        if (fn_PathGraph_ReassignWorkers) {
-            fn_PathGraph_ReassignWorkers(pg);
-        }
+        PathGraph_ReassignWorkers(pg);   // 0x1400d62a0
         // Citizen assignment sweep
-        if (fn_PathGraph_AssignCitizens) {
-            fn_PathGraph_AssignCitizens(pg);
-        }
+        CitizenAssignCitizens(pg);   // 0x1400d43b0
         // Clear the pairs array
-        if (fn_PathPairs_Clear) {
-            fn_PathPairs_Clear(pg);
-        }
+        PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30
     }
 
     return true;
@@ -592,9 +526,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
 
         // Get grid cell ID for the building
         int gridId = -1;
-        if (fn_Entity_GetGridId) {
-            gridId = fn_Entity_GetGridId(&entityIBP, nullptr);
-        }
+        gridId = Pf_EntityAnchorCell_7fb0(&entityIBP, nullptr);   // 0x140087fb0
 
         // Grow array if needed (same pattern as decompiled code)
         int newCount = cellCount + 1;
@@ -606,7 +538,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
                     newCap = newCount * 3;
                 }
                 int* newArr = reinterpret_cast<int*>(
-                    fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, (int64_t)newCap * 4, 4) : nullptr);
+                    System::MemoryAllocator::MemAlloc((int64_t)newCap * 4, 4));
 
                 // Copy existing + new entry
                 int copyStart = (buildingCells == newArr) ? cellCount : 0;
@@ -621,7 +553,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
                 }
 
                 if (buildingCells != newArr && buildingCells) {
-                    if (fn_MemFreeStatic) fn_MemFreeStatic(buildingCells);
+                    System::MemoryAllocator::MemFree(buildingCells);
                 }
                 buildingCells = newArr;
                 cellCapacity = newCap;
@@ -646,23 +578,19 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     void* oldBst = pg->m_bstRoot;
     if (oldBst != nullptr) {
         // Recursively free left and right subtrees
-        if (fn_PathBST_FreeRecursive) {
-            fn_PathBST_FreeRecursive(
-                reinterpret_cast<uint8_t*>(pg) + 0x18,  // &pg->m_bstRoot
-                *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(oldBst) + 0x18));
-            fn_PathBST_FreeRecursive(
-                reinterpret_cast<uint8_t*>(pg) + 0x18,
-                *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(oldBst) + 0x20));
-        }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(oldBst);
+        WorkBase_TreeNodeFree_e320(   // 0x14000e320
+            reinterpret_cast<uint8_t*>(pg) + 0x18,  // &pg->m_bstRoot
+            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(oldBst) + 0x18));
+        WorkBase_TreeNodeFree_e320(
+            reinterpret_cast<uint8_t*>(pg) + 0x18,
+            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(oldBst) + 0x20));
+        System::MemoryAllocator::MemFree(oldBst);
     }
     pg->m_bstRoot = nullptr;
     pg->m_bstCount = 0;
 
     // ---- Step 3: Clear pairs array ----
-    if (fn_PathPairs_Clear) {
-        fn_PathPairs_Clear(pg);
-    }
+    PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30
 
     // ---- Step 4: Generate pairs from profession entities x buildings ----
     // Nav data for region lookups
@@ -714,9 +642,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
 
             // Get grid cell ID for this entity
             int entityCell = -1;
-            if (fn_Entity_GetGridId) {
-                entityCell = fn_Entity_GetGridId(&entityIBP, nullptr);
-            }
+            entityCell = Pf_EntityAnchorCell_7fb0(&entityIBP, nullptr);   // 0x140087fb0
 
             // Get entity's region ID
             int entityRegion = *reinterpret_cast<int*>(
@@ -781,8 +707,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
                             newCap = newPairCount * 3;
                         }
                         *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(pg) + 0x0C) = newCap;
-                        void* newArr = fn_MemAlloc ?
-                            fn_MemAlloc(g_pMemAllocSingleton, (int64_t)newCap * 8, 4) : nullptr;
+                        void* newArr = System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 4);
                         pg->m_pairs = newArr;
                     }
 
@@ -800,7 +725,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
                     }
 
                     if (oldPairs != pg->m_pairs && oldPairs) {
-                        if (fn_MemFreeStatic) fn_MemFreeStatic(oldPairs);
+                        System::MemoryAllocator::MemFree(oldPairs);
                     }
                     ++dbgPairsAdded;
 
@@ -814,12 +739,12 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
                     }
                     bstKey.value = 0;
 
-                    if (fn_PathBST_Insert) {
+                    {
                         void* dummy = nullptr;
-                        fn_PathBST_Insert(
-                            reinterpret_cast<uint8_t*>(pg) + 0x18,
-                            &dummy,
-                            &bstKey);
+                        PathBST_Insert_25a10(   // 0x140025a10
+                            reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(pg) + 0x18),
+                            reinterpret_cast<uint64_t*>(&dummy),
+                            reinterpret_cast<uint32_t*>(&bstKey));
                     }
                 }
             }
@@ -831,8 +756,8 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
 
 
     // Free temporary building cells array
-    if (buildingCells && fn_MemFreeStatic) {
-        fn_MemFreeStatic(buildingCells);
+    if (buildingCells) {
+        System::MemoryAllocator::MemFree(buildingCells);
     }
 }
 // ============================================================
@@ -917,7 +842,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             // virtual slot 2 (+0x10): Type()
             int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type());  // B.3.8 bridge
             if (static_cast<uint32_t>(compTypeId) == targetId) {
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, targetId)) {
+                if (::Object::IsDerivedFromNullSafe(comp, targetId)) {
                     return comp;
                 }
                 break;
@@ -1015,7 +940,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 
         // Wrap in InternalBasePtr
         int64_t storageIBP = 0;
-        if (fn_InternalBasePtr_Ctor) {
+        {
             new (&storageIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
         }
@@ -1046,7 +971,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
                     if (!subComp) continue;
                     int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(subComp)->Type());  // B.3.8 bridge
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
-                        if (fn_IsDerivedFrom && fn_IsDerivedFrom(subComp, rawMatTypeId)) {
+                        if (::Object::IsDerivedFromNullSafe(subComp, rawMatTypeId)) {
                             rawMat = subComp;
                         }
                         break;
@@ -1105,7 +1030,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 
         // Wrap in InternalBasePtr
         int64_t storageIBP = 0;
-        if (fn_InternalBasePtr_Ctor) {
+        {
             new (&storageIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
         }
@@ -1131,7 +1056,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
                     if (!subComp) continue;
                     int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(subComp)->Type());  // B.3.8 bridge
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
-                        if (fn_IsDerivedFrom && fn_IsDerivedFrom(subComp, rawMatTypeId)) {
+                        if (::Object::IsDerivedFromNullSafe(subComp, rawMatTypeId)) {
                             rawMat = subComp;
                         }
                         break;
@@ -1172,8 +1097,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 //
 // Original: Entity_helper_c100
 void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTime) {
-    EnsureResolved();
-
     float notifyInterval = 120.0f; // DAT_140172210 = 120.0f seconds
     void* notifMgr = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x138);
@@ -1205,15 +1128,15 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
             int32_t threshold = maxCount / 20; // 5% threshold
             if (currentCount < threshold && threshold <= previousCount) {
                 // Fire shortage notification
-                if (fn_NotificationEvent && fn_InternalBasePtr_Ctor) {
+                {
                     uint64_t nullIBP = 0;
                     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                    fn_NotificationEvent(notifMgr, i + 0x11, 3, &nullIBP);
+                    EventLog_AddEvent(notifMgr, i + 0x11, 3, &nullIBP);   // 0x140095580
                 }
                 // Reset timer to notification cooldown (120 seconds)
-                if (s_fn_Time_Ctor) {
+                {
                     int64_t newTime = 0;
-                    s_fn_Time_Ctor(&newTime, notifyInterval);
+                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&newTime), notifyInterval);
                     *timer = newTime;
                 }
             }
@@ -1245,14 +1168,14 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
             if ((maxCapacity / 20) * 19 < current) {
                 // Notification type: 0x17 for food (entry 0), 0x18 for firewood (entry 1)
                 int notifType = 0x17 + (i != 0 ? 1 : 0);
-                if (fn_NotificationEvent && fn_InternalBasePtr_Ctor) {
+                {
                     uint64_t nullIBP = 0;
                     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                    fn_NotificationEvent(notifMgr, notifType, 3, &nullIBP);
+                    EventLog_AddEvent(notifMgr, notifType, 3, &nullIBP);   // 0x140095580
                 }
-                if (s_fn_Time_Ctor) {
+                {
                     int64_t newTime = 0;
-                    s_fn_Time_Ctor(&newTime, notifyInterval);
+                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&newTime), notifyInterval);
                     *timer = newTime;
                 }
             }
@@ -1397,10 +1320,8 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         uint64_t firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
         void* descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
         void* citizenDesc = nullptr;
-        if (fn_IsDerivedFrom) {
-            if (fn_IsDerivedFrom(descBase, CitizenDescription::TypeId())) {
-                citizenDesc = descBase;
-            }
+        if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
+            citizenDesc = descBase;
         }
 
         // Read maxHealth from CitizenDescription+0xA4
@@ -1415,10 +1336,8 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
         descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
         citizenDesc = nullptr;
-        if (fn_IsDerivedFrom) {
-            if (fn_IsDerivedFrom(descBase, CitizenDescription::TypeId())) {
-                citizenDesc = descBase;
-            }
+        if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
+            citizenDesc = descBase;
         }
 
         float maxHappiness = 0.0f;
@@ -1562,7 +1481,7 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
     if (*(void**)profSlot != nullptr) {
         void* profSlotEntity = *(void**)profSlot;
         void* localIBP = profSlotEntity;
-        targetGridId = fn_Entity_GetGridId(&localIBP, nullptr);
+        targetGridId = Pf_EntityAnchorCell_7fb0(&localIBP, nullptr);
     }
 
     // Iterate all citizens
@@ -1597,10 +1516,10 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
 
         // Get grid cell for workplace; check path distance
         void* workIBP = (void*)workplace;
-        uint32_t workGridId = fn_Entity_GetGridId(&workIBP, nullptr);
+        uint32_t workGridId = Pf_EntityAnchorCell_7fb0(&workIBP, nullptr);
         int dist = bestDist;
         if ((int)targetGridId >= 0) {
-            dist = fn_PathDistance(mapGrid, workGridId, targetGridId);
+            dist = WorkBase_CalcDistance_8830(mapGrid, workGridId, targetGridId);
             if (dist > bestDist) { i++; continue; }
         }
 
@@ -1646,7 +1565,7 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
                     if (*(int64_t*)(occupant + 0x1F0) != (int64_t)profId ||
                         (*(void**)(occupant + 0x248) != profSlotRaw)) {
                         void* housingArg = profSlotRaw;
-                        fn_CitizenComponent_AssignHousing(occupantIBP, &housingArg);
+                        CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(occupantIBP), reinterpret_cast<int64_t*>(&housingArg));
                         *(int64_t*)(occupant + 0x1F0) = (int64_t)profId;
                     }
 
@@ -1701,7 +1620,7 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
                 // Confirm with IsDerivedFrom
                 compArray = *(void***)(building + 0x30);
                 compIBP = compArray[ci];
-                if (fn_IsDerivedFrom(compIBP, ResidenceComponent::TypeId())) {
+                if (::Object::IsDerivedFromNullSafe(compIBP, ResidenceComponent::TypeId())) {
                     residenceComp = compIBP;
                 }
                 goto found_residence;
@@ -1745,7 +1664,7 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
             if (*(int64_t*)(occupant + 0x1F0) != (int64_t)profId ||
                 (*(uintptr_t*)(occupant + 0x248) != (uintptr_t)profSlotRaw)) {
                 void* housingArg = profSlotRaw;
-                fn_CitizenComponent_AssignHousing(occupantIBP, &housingArg);
+                CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(occupantIBP), reinterpret_cast<int64_t*>(&housingArg));
                 *(int64_t*)(occupant + 0x1F0) = (int64_t)profId;
             }
 
@@ -1795,7 +1714,7 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
 
     // Build a local IBP copy for Entity_GetGridId calls
     void* localIBP = profSlotEntity;
-    uint32_t targetGridId = fn_Entity_GetGridId(&localIBP, nullptr);
+    uint32_t targetGridId = Pf_EntityAnchorCell_7fb0(&localIBP, nullptr);
 
     // Iterate all citizens to find the nearest working one
     int citizenCount = self->dword_at(0xA8);  // m_allCitizensCount
@@ -1834,10 +1753,10 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
 
         // Get grid cell ID for the citizen's workplace
         void* workplaceIBP = (void*)workplace;
-        uint32_t workGridId = fn_Entity_GetGridId(&workplaceIBP, nullptr);
+        uint32_t workGridId = Pf_EntityAnchorCell_7fb0(&workplaceIBP, nullptr);
 
         // Compute path distance from workplace to target building
-        int dist = fn_PathDistance(mapGrid, workGridId, targetGridId);
+        int dist = WorkBase_CalcDistance_8830(mapGrid, workGridId, targetGridId);
         if (dist <= bestDist) {
             bestCitizen = citizenIBP;
             bestDist = dist;
@@ -1856,7 +1775,7 @@ void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval,
             (*(void**)(citizen + 0x248) != profSlotRaw)) {
             // Assign housing: pass IBP to profSlotRaw
             void* housingArg = profSlotRaw;
-            fn_CitizenComponent_AssignHousing(bestCitizen, &housingArg);
+            CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(bestCitizen), reinterpret_cast<int64_t*>(&housingArg));
             // Set profession ID on the citizen
             *(int64_t*)(citizen + 0x1F0) = (int64_t)profId;
         }
@@ -1930,7 +1849,7 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
                 // Re-read and confirm with IsDerivedFrom
                 compArray = *(void***)(school + 0x30);
                 compIBP = compArray[ci];
-                if (fn_IsDerivedFrom(compIBP, ResidenceComponent::TypeId())) {
+                if (::Object::IsDerivedFromNullSafe(compIBP, ResidenceComponent::TypeId())) {
                     residenceComp = compIBP;
                 }
                 goto found_residence_phase1;
@@ -2008,7 +1927,7 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             if (typeId == ResidenceComponent::TypeId()) {
                 compArray = *(void***)(school + 0x30);
                 compIBP = compArray[ci];
-                if (fn_IsDerivedFrom(compIBP, ResidenceComponent::TypeId())) {
+                if (::Object::IsDerivedFromNullSafe(compIBP, ResidenceComponent::TypeId())) {
                     residenceComp = compIBP;
                 }
                 goto found_residence_phase2;
@@ -2052,7 +1971,7 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             if (*(int64_t*)(occupant + 0x1F0) != (int64_t)profId ||
                 (*(uintptr_t*)(occupant + 0x248) != (uintptr_t)profSlotRaw)) {
                 void* housingArg = profSlotRaw;
-                fn_CitizenComponent_AssignHousing(occupantIBP, &housingArg);
+                CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(occupantIBP), reinterpret_cast<int64_t*>(&housingArg));
                 *(int64_t*)(occupant + 0x1F0) = (int64_t)profId;
             }
 

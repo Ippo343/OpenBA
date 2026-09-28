@@ -17,7 +17,8 @@
 #include "Tutorial/TutorialImageInputKey.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Tutorial/exe_bodies.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -39,10 +40,7 @@ namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex
 // ============================================================
 
 // TutorialImage_sub_7ad0 -- ExternalPtr serialize helper (exe 0x140027ad0)
-typedef void (*fn_ExternalPtr_SerializeImage_t)(void* externalPtrField, void* serializer);
-static fn_ExternalPtr_SerializeImage_t ExternalPtrSerializeImageFn() {
-    return reinterpret_cast<fn_ExternalPtr_SerializeImage_t>(ResolveAddr(Module::Exe, 0x140027ad0));
-}
+// called by name: TutBase_SerializeImageRef (Tutorial/exe_bodies.h)
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -64,8 +62,7 @@ bool TutorialImageInputKey::Serialize(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x28), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x2C), nullptr);   // B.3.4 bridge
 
-    if (auto serializeImage = ExternalPtrSerializeImageFn())
-        serializeImage(p + 0x20, serializerBuf);
+    TutBase_SerializeImageRef(p + 0x20, serializerBuf);
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 
@@ -131,16 +128,15 @@ void* TutorialImageInputKey::CreateElement(void* retIBP, void* dialog) {
     // 5. IsDerivedFrom check — verify it's a TextElement
     void* foundObj = *(void**)foundIBP;
     void* textElement = nullptr;
-    if (fn_IsDerivedFrom && foundObj) {
-        if (fn_IsDerivedFrom(foundObj, UI::TextElement::TypeId()))
+    if (foundObj) {
+        if (Object::IsDerivedFromNullSafe(foundObj, UI::TextElement::TypeId()))
             textElement = foundObj;
     }
 
     // 6. Wrap in InternalBasePtr
     void* textRef = nullptr;
-    if (fn_InternalBasePtr_Ctor)
-        new (&textRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
+    new (&textRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
 
     // 7. Get actual KeyMap object (triple deref from exref)
     void* keymap = nullptr;

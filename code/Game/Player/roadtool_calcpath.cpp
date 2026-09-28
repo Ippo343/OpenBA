@@ -28,7 +28,14 @@
 #include "Player/roadtool_funcs.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "resolve.h"   // LEFT: the 0x14009ce00 door (see EnsureCalcPathFuncs)
+#include "Player/exe_bodies.h"
+#include "Action/exe_bodies.h"
+#include "Component/exe_bodies.h"
+#include "Game/exe_bodies.h"
+#include "Work/buildroad_funcs.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
 #include "Component/DecalDescription.h"
 #include "Component/MapDescription.h"
@@ -39,30 +46,24 @@
 
 namespace {
 
-// ---- leaf function pointers -------------------------------------------------
+// ---- leaves, called by name ---------------------------------------------------
+//   0x1400e4b50 BuildRoad_CtorParams_Impl (Work/buildroad_funcs.h)
+//   0x1400f88a0 CitizenAI_WorkScheduler_Insert (Component/exe_bodies.h)
+//   0x14001a4f0 Pf_AvlInsertA_a4f0 (Action/exe_bodies.h)
+//   0x14009c700 RemovalCalc_helper_c700 (Player/exe_bodies.h) -- road-cell removal
+//   0x140001bb0 / 0x1400021d0 Reimpl_Array_Resize_Stride08 / _Stride04
+//               (Game/exe_bodies.h)
+// (0x1400af370 was resolved here and never called: the dead reader is gone.)
+//
+// LEFT (B3R W1): the road A* 0x14009ce00 is still read through the registry. Its
+// body, RoadTool_sub_ce00 (code/Game/Action/keystone_a_zone.cpp), is declared VOID,
+// while this reader uses the int it leaves in EAX (retail's body tail-calls
+// 0x1400a6e30, whose int return is the path length). A direct call cannot read
+// that value; the body's return type is the Action owner's to settle.
 typedef int      (*fn_RoadAStar_t)(int64_t mapGrid, uint32_t mask, uint32_t startCell,
                                    uint64_t endCell, uint64_t unused, int64_t outPath,
                                    uint8_t modifier, uint8_t dirFlag);
-typedef void*    (*fn_BuildRoadCtor_t)(void* self, uint64_t* ownerIbp, uint32_t cellIdx,
-                                       uint32_t mapDescVal, uint64_t roadDescExtra,
-                                       uint32_t roadTypeExisting, uint32_t roadState,
-                                       uint32_t terrainType);
-typedef int      (*fn_SchedInsert_t)(void* sched, void* pWorkIbp, uint32_t code,
-                                     char fromExisting, int prio);
-typedef uint64_t*(*fn_AvlInsert_t)(int64_t* root, uint64_t* ibp, uint32_t* key);
-typedef uint64_t (*fn_RoadCellRemove_t)(uint32_t* mapGrid, int cellIdx);
-typedef void     (*fn_RoadMeshRebuild_t)(int64_t decalMgr, uint32_t* mapGrid);
-typedef void     (*fn_ArrayResize8_t)(int64_t* arr, int newCount);
-typedef void     (*fn_ArrayResize4_t)(int64_t* arr, int newCount);
-
 fn_RoadAStar_t       s_fn_RoadAStar      = nullptr;
-fn_BuildRoadCtor_t   s_fn_BuildRoadCtor  = nullptr;
-fn_SchedInsert_t     s_fn_SchedInsert    = nullptr;
-fn_AvlInsert_t       s_fn_AvlInsert      = nullptr;
-fn_RoadCellRemove_t  s_fn_RoadCellRemove = nullptr;
-fn_RoadMeshRebuild_t s_fn_RoadMeshRebuild= nullptr;
-fn_ArrayResize8_t    s_fn_ArrayResize8   = nullptr;
-fn_ArrayResize4_t    s_fn_ArrayResize4   = nullptr;
 
 uint32_t s_tid_DecalDescription = 0;
 uint32_t s_tid_MapDescription   = 0;
@@ -71,13 +72,6 @@ bool     s_resolved             = false;
 void EnsureCalcPathFuncs() {
     if (s_resolved) return;
     s_fn_RoadAStar       = (fn_RoadAStar_t)      ResolveAddr(Module::Exe, 0x14009ce00);
-    s_fn_BuildRoadCtor   = (fn_BuildRoadCtor_t)  ResolveAddr(Module::Exe, 0x1400e4b50);
-    s_fn_SchedInsert     = (fn_SchedInsert_t)    ResolveAddr(Module::Exe, 0x1400f88a0);
-    s_fn_AvlInsert       = (fn_AvlInsert_t)      ResolveAddr(Module::Exe, 0x14001a4f0);
-    s_fn_RoadCellRemove  = (fn_RoadCellRemove_t) ResolveAddr(Module::Exe, 0x14009c700);
-    s_fn_RoadMeshRebuild = (fn_RoadMeshRebuild_t)ResolveAddr(Module::Exe, 0x1400af370);
-    s_fn_ArrayResize8    = (fn_ArrayResize8_t)   ResolveAddr(Module::Exe, 0x140001bb0);
-    s_fn_ArrayResize4    = (fn_ArrayResize4_t)   ResolveAddr(Module::Exe, 0x1400021d0);
 
     // DAT_1401c75b8 / DAT_1401c7a18 are raw .rdata constants -> NULL in standalone, so
     // take the names from the live factory tree. Both verified against their RegisterType
@@ -98,7 +92,7 @@ void EnsureCalcPathFuncs() {
 // the exact shape both 0x140026990 and CalcPath's inline DecalDescription loop use —
 // including the `break` on first type-id match (retail does NOT keep scanning).
 void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
-    if (!entity || !typeId || !fn_IsDerivedFrom) return nullptr;
+    if (!entity || !typeId) return nullptr;
     int    count = *(int*)(entity + 0x30);
     void** comps = *(void***)(entity + 0x28);
     if (!comps) return nullptr;
@@ -106,7 +100,7 @@ void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
         void* comp = comps[i];
         if (!comp) continue;
         if (reinterpret_cast<Object::Base*>(comp)->Type() == typeId) {  // B.3.8 bridge
-            return fn_IsDerivedFrom(comp, typeId) ? comp : nullptr;
+            return Object::IsDerivedFromNullSafe(comp, typeId) ? comp : nullptr;
         }
     }
     return nullptr;
@@ -136,8 +130,8 @@ extern "C" void RoadTool_DecalStore_acd90(int64_t mgr, int index, void* decal) {
     int oldCount = *(int*)(mgr + 0x218);
     int needed   = index + 1;
     if (oldCount < needed) {
-        if (s_fn_ArrayResize8) s_fn_ArrayResize8((int64_t*)(mgr + 0x210), needed);
-        if (s_fn_ArrayResize4) s_fn_ArrayResize4((int64_t*)(mgr + 0x220), needed);
+        Reimpl_Array_Resize_Stride08((void*)(mgr + 0x210), needed);
+        Reimpl_Array_Resize_Stride04((void*)(mgr + 0x220), needed);
         // Zero the freshly grown tail of the int array. Retail bounds this by the int
         // array's own capacity field (+0x228), NOT by `needed`.
         int intCount = *(int*)(mgr + 0x228);
@@ -182,7 +176,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
             int key = *node;
             if ((int)cellIdx < key)      node = *(int**)((uintptr_t)node + 0x10);
             else if ((int)cellIdx > key) node = *(int**)((uintptr_t)node + 0x18);
-            else { if (s_fn_RoadCellRemove) s_fn_RoadCellRemove(mapGrid, (int)cellIdx); break; }
+            else { RemovalCalc_helper_c700(mapGrid, (int)cellIdx); break; }
         }
     }
 
@@ -209,11 +203,11 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
     // Build the BuildRoad work item (0x70 bytes) and hand it to the work scheduler.
     uint64_t ownerIbp = 0;   // retail seeds a null InternalBasePtr and reuses it below
     void* work = nullptr;
-    void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
     if (mem) {
-        if (fn_InternalBasePtr_Ctor) new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        if (s_fn_BuildRoadCtor)
-            work = s_fn_BuildRoadCtor(mem, &ownerIbp, cellIdx, mapDescVal, roadDescExtra,
+        new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        work = BuildRoad_CtorParams_Impl(static_cast<BuildRoad*>(mem), &ownerIbp, cellIdx,
+                                      mapDescVal, roadDescExtra,
                                       *(uint8_t*)(cell + 0x2a),   // existing road type
                                       *(uint8_t*)(cell + 0x2b),   // existing road state
                                       *(uint8_t*)(cell + 0x29));  // terrain type
@@ -224,21 +218,21 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
     }
 
     uint64_t workIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&workIbp) ::Object::InternalBasePtr(
+    new (&workIbp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
     // Post to the work scheduler at gameWorld+0x118. code 0x2000 = the road category;
     // retail passes fromExisting='\0' and prio=-1 (the prio is dead on this path).
-    if (s_fn_SchedInsert && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         void* sched = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x118);
-        if (sched) s_fn_SchedInsert(sched, &workIbp, 0x2000, '\0', -1);
+        if (sched) CitizenAI_WorkScheduler_Insert(static_cast<int*>(sched), &workIbp, 0x2000, '\0', -1);
     }
 
     // Record the cell in the pending-road BST. Retail inserts the ORIGINAL null IBP
     // here (not the work IBP) — the tree tracks which cells have a road queued.
-    if (s_fn_AvlInsert) {
+    {
         uint32_t key = cellIdx;
-        s_fn_AvlInsert(bstRoot, &ownerIbp, &key);
+        Pf_AvlInsertA_a4f0(bstRoot, &ownerIbp, &key);
     }
 
     *(uint8_t*)(cell + 0x2a) = roadType;

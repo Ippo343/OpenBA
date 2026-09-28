@@ -11,6 +11,7 @@
 #include "Tutorial/FinishTutorialGoal.h"
 #include "Tutorial/FinishTutorialInstance.h"
 #include "engine_funcs.h"
+#include "Tutorial/exe_bodies.h"   // 0x1400262b0 TutWave_SerializeTutorialRef
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -36,9 +37,7 @@ bool FinishTutorialGoal::Serialize(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize the tutorial External* at +0x30
-    if (fn_ExternalPtr_SerializeTutorial) {
-        fn_ExternalPtr_SerializeTutorial(static_cast<void*>(&_field30), serializer);
-    }
+    TutWave_SerializeTutorialRef(static_cast<void*>(&_field30), serializer);   // 0x1400262b0
 
     // Destroy Serializer
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge

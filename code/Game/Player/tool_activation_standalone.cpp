@@ -35,7 +35,7 @@
 
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
 #include "Object/factory_registration.h"
 #include "Player/Tool.h"
 #include "Player/ToolSetting.h"
@@ -76,7 +76,7 @@ inline void* ToolKeyMap() {
 // set parent. settingIBP(+0x10) starts 0 -> SetEditMode lazily fills it via the tool's
 // GetToolSettingTypeId (+0x58) on first activation.
 void* TreeNode_Alloc(uint32_t key, uint32_t toolTypeId, void* parent) {
-    void* n = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+    void* n = System::MemoryAllocator::MemAlloc(0x38, 8);
     if (!n) return nullptr;
     uintptr_t p = (uintptr_t)n;
     *(uint32_t*)(p + 0x00) = key;
@@ -371,7 +371,8 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
 
         void* cur = *(void**)toolSlot;
         bool replaceable = (cur == nullptr) ||
-                           (fn_IsA && tidEditTool && fn_IsA(cur, tidEditTool));
+                           (tidEditTool &&
+                            reinterpret_cast<const Object::Base*>(cur)->IsA(tidEditTool));   // B.3.x bridge
         if (replaceable) {
             EntityUI_SetEditMode_Impl(entityUI, *(uint64_t*)(pc + 0x88));
             if (*(void**)toolSlot == nullptr) return -1;

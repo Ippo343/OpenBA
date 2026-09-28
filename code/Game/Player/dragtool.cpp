@@ -17,7 +17,7 @@
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/String.h"
-#include "resolve.h"
+#include "Player/exe_bodies.h"
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -38,113 +38,29 @@ DEFINE_EXE_ABSTRACT_TYPE(DragTool, "Tool")
 // [6] 0x1400fc6b0 OnKey and [9] 0x1400fc640 OnCancel: bodies below.
 
 // ============================================================
-// Resolved exe-internal function pointers (set once on first call)
+// Exe helpers, called by name (Player/exe_bodies.h):
+//   0x140101270 PlayerRay_ScreenToCell_101270 -- ray-picks the map cell under the
+//               cursor: row*gridSize + col, or -1 if off-map
+//   0x1400ff9e0 ToolUI_OpenToolDialog_ff9e0 -- closes an existing dialog, loads
+//               "Dialog/CreateBar.rsc", creates the DialogInstance with its ToolUI
+//               child, adds it to the UI manager. Args: (dialogIBP_ptr, retval_ptr,
+//               descriptionPtr)
+//   0x1400ffbf0 DragTool_PlayTickSound_ffbf0 -- the "tick" when endCell changes
+//               during a drag (a timer at +0x48 on the IBP storage stops rapid-fire)
+//   0x140005160 DragTool_FindDescription_5160 -- the description (DAT_1401c7f58)
+//               search; the found pointer lands in retval
+//   0x1400ffc60 UpdateToolUI_fc60 (operator_impl_fc60) -- cost text, status text,
+//               icon tint and screen position of the placement dialog
+//   0x1400ff980 DragTool_CloseToolDialog_ff980 -- closes the dialog if open, nulls
+//               the IBP
+//   0x1401000f0 DragTool_PlayPlaceSound_1000f0 / 0x140100140
+//   DragTool_PlayErrorSound_100140 -- the place / error sounds (sound ids at
+//               g_pKeyMapSingleton + 0x88 / + 0x90)
+// All eight are registered, so the SA no-op fallbacks that used to stand in for a
+// null resolve are gone with the resolver.
+// Import slot 0x1401513f8 (Volume::Box::Box) is NOT filled in standalone (a STUB):
+// its reader below is its null arm.
 // ============================================================
-
-// FUN_140101270: ScreenToCell — ray-picks map cell under cursor.
-// Returns cell index (row*gridSize + col) or -1 if off-map.
-// Original: 0x140101270
-typedef int (*fn_ScreenToCell_t)(uint64_t unused);
-static fn_ScreenToCell_t g_fn_ScreenToCell = nullptr;
-
-// FUN_1400ff9e0: OpenToolDialog — closes existing dialog, loads "Dialog/CreateBar.rsc",
-// creates DialogInstance with ToolUI child vtable, adds to UI manager.
-// Args: (dialogIBP_ptr, retval_ptr, descriptionPtr)
-// Original: 0x1400ff9e0
-typedef void* (*fn_OpenToolDialog_t)(void* dialogIBP, void* retval, uint64_t descriptionPtr);
-static fn_OpenToolDialog_t g_fn_OpenToolDialog = nullptr;
-
-// FUN_1400ffbf0: PlayTickSound — plays "tick" audio when endCell changes during drag.
-// Checks a timer at +0x48 on the IBP storage to avoid rapid-fire.
-// Args: (dialogIBP_ptr) — pointer to the InternalBasePtr (same as self->dialogPtr)
-// Original: 0x1400ffbf0
-typedef void (*fn_PlayTickSound_t)(uint64_t dialogVal);
-static fn_PlayTickSound_t g_fn_PlayTickSound = nullptr;
-
-// FUN_140005160: FindDescription — searches description component list for a specific
-// description type (DAT_1401c7f58). Returns found ptr in retval.
-// Args: (descPtr, retval*) -> retval*
-// Original: 0x140005160
-typedef void* (*fn_FindDescription_t)(uint64_t descPtr, void* retval);
-static fn_FindDescription_t g_fn_FindDescription = nullptr;
-
-// operator_impl_fc60: UpdateToolUI — updates the placement dialog with path info:
-// cost text, status text, icon color/tint, and screen position tracking.
-// Original: 0x1400ffc60
-typedef void (*fn_UpdateToolUI_t)(void* dialogIBP, uint32_t tileW, uint32_t tileH,
-    uint64_t costStr, char isEmpty, char isInvalid, char isSingle,
-    uint32_t extraParam, int startCell, int endCell, void* box, void* transform);
-static fn_UpdateToolUI_t g_fn_UpdateToolUI = nullptr;
-
-// BridgeTool_Draw_sub_f980: CloseToolDialog — closes dialog if open, nulls the IBP.
-// Args: (dialogIBP_ptr) — pointer to the InternalBasePtr<DialogInstance> field
-// Original: 0x1400ff980
-typedef void (*fn_CloseToolDialog_t)(void* dialogIBPPtr);
-static fn_CloseToolDialog_t g_fn_CloseToolDialog = nullptr;
-
-// FUN_1401000f0: PlayPlaceSound — plays "place success" sound effect via Audio::Scene.
-// Uses sound ID at g_pKeyMapSingleton + 0x88.
-// Original: 0x1401000f0
-typedef void (*fn_PlayPlaceSound_t)(uint64_t unused);
-static fn_PlayPlaceSound_t g_fn_PlayPlaceSound = nullptr;
-
-// FUN_140100140: PlayErrorSound — plays "placement error" sound effect via Audio::Scene.
-// Uses sound ID at g_pKeyMapSingleton + 0x90.
-// Original: 0x140100140
-typedef void (*fn_PlayErrorSound_t)(uint64_t unused);
-static fn_PlayErrorSound_t g_fn_PlayErrorSound = nullptr;
-
-// Volume::Box::Box() — default ctor
-// Dispatch table at 0x1401513f8
-typedef void* (*fn_Box_Ctor_t)(void* self);
-static fn_Box_Ctor_t g_fn_BoxCtor = nullptr;
-
-// SA no-op fallbacks for cosmetic drag helpers (sounds / dialog open+close). Their exe
-// addresses are frequently unregistered in the standalone exe — RemovalTool is the first
-// tool to actually exercise DragTool_OnKey — so a null call would fault. Pointing any null
-// one at a no-op keeps the drag lifecycle robust; the essential BuildPath / Validate
-// (CalcPath) path is unaffected.
-static void  DragNoop_Sound(uint64_t) {}
-static void  DragNoop_CloseDialog(void*) {}
-static void* DragNoop_OpenDialog(void*, void*, uint64_t) { return nullptr; }
-
-static bool g_funcsResolved = false;
-
-static void ResolveDragToolFuncs() {
-    if (g_funcsResolved) return;
-
-    g_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
-        ResolveAddr(Module::Exe, 0x140101270));
-    g_fn_OpenToolDialog = reinterpret_cast<fn_OpenToolDialog_t>(
-        ResolveAddr(Module::Exe, 0x1400ff9e0));
-    g_fn_PlayTickSound = reinterpret_cast<fn_PlayTickSound_t>(
-        ResolveAddr(Module::Exe, 0x1400ffbf0));
-    g_fn_FindDescription = reinterpret_cast<fn_FindDescription_t>(
-        ResolveAddr(Module::Exe, 0x140005160));
-    g_fn_UpdateToolUI = reinterpret_cast<fn_UpdateToolUI_t>(
-        ResolveAddr(Module::Exe, 0x1400ffc60));
-    g_fn_CloseToolDialog = reinterpret_cast<fn_CloseToolDialog_t>(
-        ResolveAddr(Module::Exe, 0x1400ff980));
-    g_fn_PlayPlaceSound = reinterpret_cast<fn_PlayPlaceSound_t>(
-        ResolveAddr(Module::Exe, 0x1401000f0));
-    g_fn_PlayErrorSound = reinterpret_cast<fn_PlayErrorSound_t>(
-        ResolveAddr(Module::Exe, 0x140100140));
-
-    // Dispatch-table resolved ctors/dtors
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401513f8));
-        if (d) g_fn_BoxCtor = reinterpret_cast<fn_Box_Ctor_t>(*d);
-    }
-
-    // Null cosmetic helpers -> no-ops so the drag lifecycle never faults on them in SA.
-    if (!g_fn_PlayTickSound)   g_fn_PlayTickSound   = &DragNoop_Sound;
-    if (!g_fn_PlayPlaceSound)  g_fn_PlayPlaceSound  = &DragNoop_Sound;
-    if (!g_fn_PlayErrorSound)  g_fn_PlayErrorSound  = &DragNoop_Sound;
-    if (!g_fn_CloseToolDialog) g_fn_CloseToolDialog = &DragNoop_CloseDialog;
-    if (!g_fn_OpenToolDialog)  g_fn_OpenToolDialog  = &DragNoop_OpenDialog;
-
-    g_funcsResolved = true;
-}
 
 // ============================================================
 // Helper: get KeyMap from external reference
@@ -189,8 +105,6 @@ static inline void* GetUserInterface() {
 //   key==0: close dialog if open, if Released(0,5): reset dragState+singleClick
 //
 char DragTool::OnKey(char key) {
-    ResolveDragToolFuncs();
-
     void* keyMap = GetKeyMap();
 
     // IMPORTANT: The original code re-reads [self+0x10] at each use site, NOT cached.
@@ -227,7 +141,7 @@ char DragTool::OnKey(char key) {
         // fn_KeyMap_Pressed at dispatch 0x140151758 — checks if button newly pressed
         bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
         if (pressed) {
-            int cell = g_fn_ScreenToCell((uint64_t)keyMap);
+            int cell = PlayerRay_ScreenToCell_101270((uintptr_t)keyMap);
             startCell = cell;
             endCell = cell;
 
@@ -238,7 +152,7 @@ char DragTool::OnKey(char key) {
                 uint64_t retval;
                 // Original: FUN_1400ff9e0(*(longlong**)(self+0x10), &retval, *(self+0x20))
                 // Passes self->dialogPtr (pointer to IBP), not &self->dialogPtr
-                g_fn_OpenToolDialog(DIALOG_IBP(), &retval,
+                ToolUI_OpenToolDialog_ff9e0(DIALOG_IBP(), &retval,
                     (uint64_t)descriptionPtr);
             }
         }
@@ -250,12 +164,12 @@ char DragTool::OnKey(char key) {
         // Original: CMP [dialogIBP], 0 — checks IBP value through the pointer
         if (*DIALOG_IBP() == 0) {
             uint64_t tempStr;
-            g_fn_OpenToolDialog(DIALOG_IBP(), &tempStr,
+            ToolUI_OpenToolDialog_ff9e0(DIALOG_IBP(), &tempStr,
                 (uint64_t)descriptionPtr);
         }
 
         // Pick current cell under cursor
-        int currentCell = g_fn_ScreenToCell((uint64_t)DIALOG_IBP());
+        int currentCell = PlayerRay_ScreenToCell_101270((uintptr_t)DIALOG_IBP());
         if (currentCell >= 0) {
             endCell = currentCell;
         }
@@ -263,7 +177,7 @@ char DragTool::OnKey(char key) {
         // If endCell changed, play tick sound and update lastEndCell
         if (lastEndCell != endCell) {
             lastEndCell = endCell;
-            g_fn_PlayTickSound((uint64_t)DIALOG_IBP());
+            DragTool_PlayTickSound_ffbf0((uintptr_t)DIALOG_IBP());
         }
 
         // ---- Virtual CalcCost (slot 14, +0x70) ----
@@ -276,13 +190,10 @@ char DragTool::OnKey(char key) {
         int segmentCount = CalcCost(startCell, endCell, pathType, tileH, tileW, &extraParam);
 
         // ---- Cost tooltip (FindDescription -> cost string -> UpdateToolUI) ----
-        // g_fn_UpdateToolUI (exe code 0x1400ffc60) may still resolve null in the standalone
-        // exe if unregistered — in that case this whole COSMETIC block is skipped (the drag
-        // + commit -> CalcPath still run and costString stays empty).
         System::String costString;
-        if (g_fn_FindDescription && g_fn_UpdateToolUI) {
+        {
             uint64_t descResult = 0;
-            g_fn_FindDescription((uint64_t)descriptionPtr, &descResult);
+            DragTool_FindDescription_5160((uintptr_t)descriptionPtr, &descResult);
 
             if (descResult != 0) {
                 // Description has a string array at +0x50 (ptr) and +0x58 (count).
@@ -305,18 +216,19 @@ char DragTool::OnKey(char key) {
                 // 0x140151328 dispatch slot)
                 Math::Transform transform;
                 uint8_t box[24];        // Volume::Box
-                if (g_fn_BoxCtor) g_fn_BoxCtor(box);
+                // PORT GAP 0x1401513f8 Volume::Box::Box: the import slot is not filled
+                // in standalone; retail calls it here.
 
                 // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
-                g_fn_UpdateToolUI(
+                UpdateToolUI_fc60(
                     DIALOG_IBP(),                          // param_1
                     tileH[0],                              // param_2
                     tileW[0],                              // param_3
-                    (uint64_t)&costString,                 // param_4: cost string
+                    &costString,                           // param_4: cost string
                     (segmentCount == 0) ? 1 : 0,           // param_5: isEmpty
                     (pathType[0] == 2) ? 1 : 0,            // param_6: isInvalid
                     (pathType[0] == 1) ? 1 : 0,            // param_7: isSingle
-                    (uint32_t)extraParam,                   // param_8
+                    extraParam,                             // param_8
                     startCell,                        // param_9
                     endCell,                          // param_10
                     box,                                    // param_11
@@ -333,15 +245,15 @@ char DragTool::OnKey(char key) {
             if (pressed) {
                 if (currentCell < 0) {
                     // Invalid target cell
-                    g_fn_PlayErrorSound(0);
+                    DragTool_PlayErrorSound_100140(0);
                 } else {
                     // Virtual CalcPath (slot 13, +0x68): validate + commit
                     bool valid = CalcPath(startCell, endCell);
 
                     if (valid) {
-                        g_fn_PlayPlaceSound(0);
+                        DragTool_PlayPlaceSound_1000f0(0);
                     } else {
-                        g_fn_PlayErrorSound(0);
+                        DragTool_PlayErrorSound_100140(0);
                     }
                 }
 
@@ -349,7 +261,7 @@ char DragTool::OnKey(char key) {
                 // Original: MOV word ptr [RDI + 0x28], 0x0
                 dragState = 0;
                 singleClick = 0;
-                g_fn_CloseToolDialog(DIALOG_IBP());
+                DragTool_CloseToolDialog_ff980(DIALOG_IBP());
             }
         } else {
             // Normal drag mode: check if mouse button was just released.
@@ -370,20 +282,20 @@ char DragTool::OnKey(char key) {
                 } else if (currentCell < 0) {
                     // Dragged to invalid cell — play error but do NOT close dialog
                     // (user can keep dragging to a valid cell)
-                    g_fn_PlayErrorSound(0);
+                    DragTool_PlayErrorSound_100140(0);
                 } else {
                     // Valid drag release — virtual CalcPath (slot 13): validate and commit
                     bool valid = CalcPath(startCell, endCell);
 
                     if (valid) {
-                        g_fn_PlayPlaceSound(0);
+                        DragTool_PlayPlaceSound_1000f0(0);
                     } else {
-                        g_fn_PlayErrorSound(0);
+                        DragTool_PlayErrorSound_100140(0);
                     }
 
                     // Close dialog and reset dragState
                     // Original: MOV byte ptr [RDI + 0x28], 0x0 (only dragState, keeps singleClick)
-                    g_fn_CloseToolDialog(DIALOG_IBP());
+                    DragTool_CloseToolDialog_ff980(DIALOG_IBP());
                     dragState = 0;
                 }
             }
@@ -404,12 +316,11 @@ char DragTool::OnKey(char key) {
 // The Tool_Ret0 stub in that slot meant a right-click mid-drag tore the tool down
 // with the cost dialog still open — the "icon left on screen" dismiss bug.
 char DragTool::OnCancel() {
-    ResolveDragToolFuncs();
     if (dragState == 0) return 0;
     dragState = 0;
     singleClick = 0;   // retail: MOV word ptr [self+0x28], 0
     uint64_t* ibp = (uint64_t*)dialogPtr;
-    if (ibp && *ibp && fn_InternalBasePtr_Ctor) {
+    if (ibp && *ibp) {
         uint64_t tempIBP = *ibp;
         reinterpret_cast<UI::UserInterface*>(GetUserInterface())->CloseDialog(  // B.3.6 bridge
             reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&tempIBP));

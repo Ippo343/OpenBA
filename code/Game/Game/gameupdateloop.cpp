@@ -40,6 +40,7 @@
 #include "Entity/entitylist_funcs.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -104,6 +105,14 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 #include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the
 #include "Game/exe_bodies.h"
+#include "Game/exe_constants.h"          // kRdata_* (B3R)
+#include "Action/exe_bodies.h"           // Pf_RegionPairCacheTick_5d10
+#include "Component/exe_bodies.h"        // CitizenComp_AssignHousing
+#include "Dialog/exe_bodies.h"           // ApplyKeyMapToUI_Impl, Toolbar_ShowGroup_Impl
+#include "Dialog/ToolbarDialog.h"        // ToolbarDialog_Ctor_Impl
+#include "Entity/citizenbehavior_funcs.h" // CitizenBehavior_Update
+#include "graphics/Animation.h"          // RtGraphics_AnimationManager_Dtor
+#include "picking/Scene.h"
                                 // `namespace Object { ... }` forward decl below
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
@@ -126,8 +135,6 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 // here historically; there is no timed-event queue. Ported + registered
 // 2026-08-30 (reg_pf_region.cpp) - see code/Game/Action/region_paircache.cpp.
 // RCX=regionPairCache (game+0x78), RDX=time
-typedef void (*fn_RegionPairCacheTick_t)(void* regionPairCache, void* time);
-static fn_RegionPairCacheTick_t fn_RegionPairCacheTick = nullptr;
 
 // Graphics::AnimationManager::Update(this, Time const&, bool rootOnly)
 // Runtime DLL export
@@ -138,34 +145,22 @@ static fn_RegionPairCacheTick_t fn_RegionPairCacheTick = nullptr;
 
 // EntityList::Update (FUN_1400c4090) — tick all entity components
 // RCX=entityList, RDX=time
-typedef void (*fn_EntityList_Update_t)(void* entityList, void* time);
-static fn_EntityList_Update_t fn_EntityList_Update = nullptr;
 
 // CitizenBehavior::Update / Map::Update (FUN_14008c2b0) — population tick
 // RCX=citizenList, RDX=time
-typedef void (*fn_CitizenList_Update_t)(void* citizenList, void* time);
-static fn_CitizenList_Update_t fn_CitizenList_Update = nullptr;
 
 // EntityList::PostUpdate (FUN_1400c43d0) — post-update cleanup pass
 // RCX=entityList
-typedef void (*fn_EntityList_PostUpdate_t)(void* entityList);
-static fn_EntityList_PostUpdate_t fn_EntityList_PostUpdate = nullptr;
 
 // AmbientSound::Update (FUN_1400a40e0) — ambient sound state update
 // RCX=ambientSoundData
-typedef void (*fn_MusicPlayer_Update_t)(void* musicPlayer);
-static fn_MusicPlayer_Update_t fn_MusicPlayer_Update = nullptr;
 
 // EntityUI::Update / PlayerToolUpdate (FUN_1401026a0)
 // RCX=entityUI, RDX=time(int64), R8=inputFlag(bool)
 // Returns int (cursor index)
-typedef int64_t (*fn_EntityUI_Update_t)(void* entityUI, int64_t time, bool inputFlag);
-static fn_EntityUI_Update_t fn_EntityUI_Update = nullptr;
 
 // PlayerController::CalcTransform (FUN_1400983f0)
 // RCX=playerController, RDX=outTransform -> returns Transform*
-typedef void* (*fn_PlayerController_CalcTransform_t)(void* self, void* outTransform);
-static fn_PlayerController_CalcTransform_t fn_PlayerController_CalcTransform = nullptr;
 
 // Graphics::Scene::Clean(this) — moved to engine_funcs.{h,cpp}; reuse the
 // project-wide extern so MenuDLT can also call it.
@@ -186,8 +181,6 @@ static fn_PlayerController_CalcTransform_t fn_PlayerController_CalcTransform = n
 // history the fallback recorded is kept at the resolver site.
 
 // Graphics::Renderer::~Renderer(this)
-typedef void (*fn_Graphics_Renderer_Dtor_t)(void* self);
-static fn_Graphics_Renderer_Dtor_t fn_Graphics_Renderer_Dtor = nullptr;
 
 // ENDGAME B.3.5: the `?SetTime@Context@Video@@QEAAXM@Z` and
 // `?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z` caches (typedefs,
@@ -222,106 +215,58 @@ static fn_Graphics_Renderer_Dtor_t fn_Graphics_Renderer_Dtor = nullptr;
 // fn_ImageBuffer_CopyToTexture — available from engine_funcs.h
 
 // FUN_140095da0 — QuickSave handler (complex, just call via pointer)
-typedef void (*fn_QuickSave_t)(void* self);
-static fn_QuickSave_t fn_QuickSave = nullptr;
 
 // Startup sub-functions
 // FUN_140099260 — SetupUIReferences(keyMapManager, UI)
-typedef void (*fn_SetupUIRefs_t)(void* keyMapMgr, void* ui);
-static fn_SetupUIRefs_t fn_SetupUIRefs = nullptr;
 
 // FUN_1400a90a0 — ProfessionList::Startup(professionList)
-typedef void (*fn_ProfessionList_Startup_t)(void* professionList);
-static fn_ProfessionList_Startup_t fn_ProfessionList_Startup = nullptr;
 
 // fn_ToolbarDialog_Ctor — available from engine_funcs.h (last param is void* toolbarData)
 
 // FUN_140068ab0 — EventNotifyDialog::Ctor(mem)
-typedef void* (*fn_EventNotifyDialog_Ctor_t)(void* mem);
-static fn_EventNotifyDialog_Ctor_t fn_EventNotifyDialog_Ctor = nullptr;
 
 // FUN_14005e230 — AutoSaveDialog::Ctor(mem, ui, dialog, parentPtr)
-typedef void* (*fn_AutoSaveDialog_Ctor_t)(void* mem, void* ui, void* dialog, void* parent);
-static fn_AutoSaveDialog_Ctor_t fn_AutoSaveDialog_Ctor = nullptr;
 
 // FUN_140101ee0 — EntityUI::Startup(entityUI)
-typedef void (*fn_EntityUI_Startup_t)(void* entityUI);
-static fn_EntityUI_Startup_t fn_EntityUI_Startup = nullptr;
 
 // Shutdown sub-functions
 // FUN_140102b60 — EntityUI::SetTool(entityUI, tool)
-typedef void (*fn_EntityUI_SetTool_t)(void* entityUI, int64_t tool);
-static fn_EntityUI_SetTool_t fn_EntityUI_SetTool = nullptr;
 
 // CitizenComponent::AssignHousing — now shared from engine_funcs.h
 
 // EntityList::Shutdown (FUN_1400c3d30)
-typedef void (*fn_EntityList_Shutdown_t)(void* entityList);
-static fn_EntityList_Shutdown_t fn_EntityList_Shutdown = nullptr;
 
 // EntityList::Dtor (FUN_1400c3e60)
-typedef void (*fn_EntityList_Dtor_t)(void* entityList);
-static fn_EntityList_Dtor_t fn_EntityList_Dtor = nullptr;
 
 // CitizenBehavior::Dtor (FUN_1400907b0)
-typedef void (*fn_CitizenList_Dtor_t)(void* citizenList, void* p2, void* p3, void* p4);
-static fn_CitizenList_Dtor_t fn_CitizenList_Dtor = nullptr;
 
 // Game::Dtor (FUN_14009ed60)
-typedef void (*fn_Game_Dtor_t)(void* game);
-static fn_Game_Dtor_t fn_Game_Dtor = nullptr;
 
 // Tutorial::Dtor (FUN_1400f8ff0)
-typedef void (*fn_Tutorial_Dtor_t)(void* tutorial);
-static fn_Tutorial_Dtor_t fn_Tutorial_Dtor = nullptr;
 
 // EntityUI::Dtor (FUN_1401024d0)
-typedef void (*fn_EntityUI_Dtor_t)(void* entityUI, void* p2, void* p3, void* p4);
-static fn_EntityUI_Dtor_t fn_EntityUI_Dtor = nullptr;
 
 // Weather::Dtor (FUN_140093eb0)
-typedef void (*fn_Weather_Dtor_t)(void* weather, void* p2, void* p3, void* p4);
-static fn_Weather_Dtor_t fn_Weather_Dtor = nullptr;
 
 // EventNotifier string cleanup (FUN_14000a8a0)
-typedef void (*fn_EventNotifier_Cleanup_t)(void* stringTable);
-static fn_EventNotifier_Cleanup_t fn_EventNotifier_Cleanup = nullptr;
 
 // CharacterGrid::Dtor (FUN_140018220) - frees the five arrays at +0x10/+0x20/
 // +0x30/+0x40/+0x50 of the 0x60-byte Morton quadtree at gameWorld+0x88.
 // NOT a music dtor: the MusicPlayer at +0x80 is a POD retail simply MemFrees.
-typedef void (*fn_CharacterGrid_Dtor_t)(void* characterGrid);
-static fn_CharacterGrid_Dtor_t fn_CharacterGrid_Dtor = nullptr;
 
 // ImageCapture::Dtor (FUN_1400a4fc0)
-typedef void (*fn_ImageCapture_Dtor_t)(void* capture, void* p2, void* p3, void* p4);
-static fn_ImageCapture_Dtor_t fn_ImageCapture_Dtor = nullptr;
 
 // Runtime destructors (resolved by mangled name or ordinal)
-typedef void (*fn_Graphics_Scene_Dtor_t)(void* scene);
-static fn_Graphics_Scene_Dtor_t fn_Graphics_Scene_Dtor = nullptr;
 
-typedef void (*fn_Audio_Scene_Dtor_t)(void* scene);
-static fn_Audio_Scene_Dtor_t fn_Audio_Scene_Dtor = nullptr;
 
-typedef void (*fn_Picking_Scene_Dtor_t)(void* scene);
-static fn_Picking_Scene_Dtor_t fn_Picking_Scene_Dtor = nullptr;
 
-typedef void (*fn_AnimationManager_Dtor_t)(void* mgr);
-static fn_AnimationManager_Dtor_t fn_AnimationManager_Dtor = nullptr;
 
 // Draw sub-functions
 // FUN_1400a5140 — ImageCapture::DrawCheck (image capture terrain update)
-typedef void (*fn_ImageCapture_DrawCheck_t)(void* capture, void* ctx, void* worldGeom, void* sunLight);
-static fn_ImageCapture_DrawCheck_t fn_ImageCapture_DrawCheck = nullptr;
 
 // FUN_140098660 — PlayerController::UpdateCamera(playerCtrl, float, float, float)
-typedef void (*fn_PlayerController_UpdateCamera_t)(void* self, float p1, float p2, float p3);
-static fn_PlayerController_UpdateCamera_t fn_PlayerController_UpdateCamera = nullptr;
 
 // FUN_1400938d0 — Weather::DrawUpdate(weather, ctx)
-typedef void (*fn_Weather_DrawUpdate_t)(void* weather, void* ctx);
-static fn_Weather_DrawUpdate_t fn_Weather_DrawUpdate = nullptr;
 
 // Native time-of-day sun/lighting driver (code/Game/Game/weather_sun.cpp).
 extern "C" void Weather_SunUpdate(void* self, void* ctx);
@@ -336,12 +281,8 @@ namespace Game {
 
 // OnScenarioComplete sub-functions
 // FUN_140095580 — EventNotifier::FireNotification(notifier, eventType, priority, entityPtr)
-typedef void (*fn_EventNotifier_Fire_t)(void* notifier, int eventType, int priority, void* entityPtr);
-static fn_EventNotifier_Fire_t fn_EventNotifier_Fire = nullptr;
 
 // FUN_140095750 — EventNotifier::FireNotificationWithName(notifier, type, priority, entityPtr, nameStr)
-typedef void (*fn_EventNotifier_FireWithName_t)(void* notifier, int eventType, int priority, void* entityPtr, void* nameStr);
-static fn_EventNotifier_FireWithName_t fn_EventNotifier_FireWithName = nullptr;
 
 // fn_UIString_Ctor — available from engine_funcs.h (retval, stringTable, stringName)
 
@@ -352,12 +293,8 @@ static fn_EventNotifier_FireWithName_t fn_EventNotifier_FireWithName = nullptr;
 // Returns a FLOAT in XMM0 (it tail-JMPs into the sqrtf at 0x140132010); this typedef
 // used to say uint32_t, which would have read garbage out of EAX. Its Time* param is
 // dead in retail — spilled at entry and never read.
-typedef float (*fn_CalcWindFactor_t)(void* time);
-static fn_CalcWindFactor_t fn_CalcWindFactor = nullptr;
 
 // System::Time::Time(this, float seconds) -> Time* (constructor from seconds)
-typedef void* (*fn_Time_Ctor_Seconds_t)(void* self, float seconds);
-static fn_Time_Ctor_Seconds_t fn_Time_Ctor_Seconds = nullptr;
 
 // Object::ExternalList::Find(this, retval, Filename const&, Object::Type) (Runtime 0x1800bf700)
 // `retval` is the HIDDEN RETURN SLOT for the ExternalPtr<External> this returns
@@ -371,8 +308,6 @@ static fn_Time_Ctor_Seconds_t fn_Time_Ctor_Seconds = nullptr;
 // The match is a linear scan and is case-SENSITIVE, unlike ExternalFactory::Find
 // over the same kind of path, which is case-insensitive. A path with no
 // `:identifier` suffix is searched as `path + ":resource"`.
-typedef void (*fn_ExternalList_Find_t)(void* self, void* retval, void* filename, void* type);
-static fn_ExternalList_Find_t fn_ExternalList_Find = nullptr;
 
 // System::Filename::Filename(this, const char*) (Runtime)
 
@@ -393,20 +328,13 @@ static fn_ExternalList_Find_t fn_ExternalList_Find = nullptr;
 // DAT_14017214c = 1.0f (UV scale / general purpose)
 // DAT_14017219c = some audio time scale factor
 // DAT_1401721dc, DAT_140172174, DAT_140172240 = camera update constants
-static float* g_fConst_1_0 = nullptr;       // 0x14017214c
-static float* g_fAudioTimeScale = nullptr;   // 0x14017219c
-static float* g_fCamParam1 = nullptr;        // 0x1401721dc
-static float* g_fCamParam2 = nullptr;        // 0x140172174
-static float* g_fCamParam3 = nullptr;        // 0x140172240
+// B3R: read as kRdata_14017214c / _14017219c / _1401721dc / _140172174 / _140172240.
 
 
-// DAT_1401c3de0 — some debug/editor singleton
-static void** g_pDebugSingleton = nullptr;
 
 // ============================================================
 // Initialization — must be called from EngineFuncsInit or similar
 // ============================================================
-static bool s_initialized = false;
 static int s_frameNum = 0;
 
 // Per-render-frame token (incremented once per GameUpdateLoop::Update). Exposed so the
@@ -418,168 +346,14 @@ extern "C" int GameUpdateLoop_CurrentFrame() { return s_frameNum; }
 // Debug trace — disabled for performance, enable when debugging
 #define TRACE(...) do { } while(0)
 
-static void EnsureInit() {
-    if (s_initialized) return;
-    s_initialized = true;
-
-    TRACE("[GameUpdateLoop] Resolving function pointers...\n");
-
-    // GameUpdateLoop::Draw reads MainLoop+0x10 (video context), +0x68 (frame time)
-    // through g_pMainLoopSingleton (= &Engine::MainLoop::_singleton). The exe's exref
-    // 0x140151440 names that same symbol; the old second global for it,
-    // g_pMainLoopSingleton, was folded into g_pMainLoopSingleton by B.3.7 close.
-    // NOTE the Engine::Engine at MainLoop+0x78 is a DIFFERENT object.
-
-    // Exe globals (indirect — .rdata dispatch table pointers into Runtime .data)
-    g_pDebugSingleton = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
-
-    // Float constants
-    g_fConst_1_0 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    g_fAudioTimeScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017219c));
-    g_fCamParam1 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721dc));
-    g_fCamParam2 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172174));
-    g_fCamParam3 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172240));
-
-    // Exe functions
-    fn_RegionPairCacheTick = reinterpret_cast<fn_RegionPairCacheTick_t>(
-        ResolveAddr(Module::Exe, 0x1400a5d10));
-    fn_EntityList_Update = reinterpret_cast<fn_EntityList_Update_t>(
-        ResolveAddr(Module::Exe, 0x1400c4090));
-    fn_CitizenList_Update = reinterpret_cast<fn_CitizenList_Update_t>(
-        ResolveAddr(Module::Exe, 0x14008c2b0));
-    fn_EntityList_PostUpdate = reinterpret_cast<fn_EntityList_PostUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400c43d0));
-    fn_MusicPlayer_Update = reinterpret_cast<fn_MusicPlayer_Update_t>(
-        ResolveAddr(Module::Exe, 0x1400a40e0));
-    fn_EntityUI_Update = reinterpret_cast<fn_EntityUI_Update_t>(
-        ResolveAddr(Module::Exe, 0x1401026a0));
-    fn_PlayerController_CalcTransform = reinterpret_cast<fn_PlayerController_CalcTransform_t>(
-        ResolveAddr(Module::Exe, 0x1400983f0));
-    fn_QuickSave = reinterpret_cast<fn_QuickSave_t>(
-        ResolveAddr(Module::Exe, 0x140095da0));
-    fn_CalcWindFactor = reinterpret_cast<fn_CalcWindFactor_t>(
-        ResolveAddr(Module::Exe, 0x1401027c0));
-
-    // Startup sub-functions
-    fn_SetupUIRefs = reinterpret_cast<fn_SetupUIRefs_t>(
-        ResolveAddr(Module::Exe, 0x140099260));
-    fn_ProfessionList_Startup = reinterpret_cast<fn_ProfessionList_Startup_t>(
-        ResolveAddr(Module::Exe, 0x1400a90a0));
-    // fn_ToolbarDialog_Ctor — resolved by EngineFuncsInit()
-    fn_EventNotifyDialog_Ctor = reinterpret_cast<fn_EventNotifyDialog_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x140068ab0));
-    fn_AutoSaveDialog_Ctor = reinterpret_cast<fn_AutoSaveDialog_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x14005e230));
-    fn_EntityUI_Startup = reinterpret_cast<fn_EntityUI_Startup_t>(
-        ResolveAddr(Module::Exe, 0x140101ee0));
-
-    // Shutdown sub-functions
-    fn_EntityUI_SetTool = reinterpret_cast<fn_EntityUI_SetTool_t>(
-        ResolveAddr(Module::Exe, 0x140102b60));
-    // fn_CitizenComponent_AssignHousing — resolved centrally in EngineFuncsInit()
-    fn_EntityList_Shutdown = reinterpret_cast<fn_EntityList_Shutdown_t>(
-        ResolveAddr(Module::Exe, 0x1400c3d30));
-    fn_EntityList_Dtor = reinterpret_cast<fn_EntityList_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x1400c3e60));
-    fn_CitizenList_Dtor = reinterpret_cast<fn_CitizenList_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x1400907b0));
-    fn_Game_Dtor = reinterpret_cast<fn_Game_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x14009ed60));
-    fn_Tutorial_Dtor = reinterpret_cast<fn_Tutorial_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x1400f8ff0));
-    fn_EntityUI_Dtor = reinterpret_cast<fn_EntityUI_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x1401024d0));
-    fn_Weather_Dtor = reinterpret_cast<fn_Weather_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x140093eb0));
-    fn_EventNotifier_Cleanup = reinterpret_cast<fn_EventNotifier_Cleanup_t>(
-        ResolveAddr(Module::Exe, 0x14000a8a0));
-    fn_CharacterGrid_Dtor = reinterpret_cast<fn_CharacterGrid_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x140018220));
-    fn_ImageCapture_Dtor = reinterpret_cast<fn_ImageCapture_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x1400a4fc0));
-
-    // Draw sub-functions
-    fn_ImageCapture_DrawCheck = reinterpret_cast<fn_ImageCapture_DrawCheck_t>(
-        ResolveAddr(Module::Exe, 0x1400a5140));
-    // Standalone: the exe FUN_1400a5140 isn't loaded, so ResolveAddr returns null and
-    // the minimap terrain would never be painted. Fall back to our clean port
-    // (code/Game/Game/minimap_paint.cpp) so the minimap renders real terrain.
-    if (!fn_ImageCapture_DrawCheck) {
-        fn_ImageCapture_DrawCheck =
-            reinterpret_cast<fn_ImageCapture_DrawCheck_t>(&Minimap_PaintTerrain);
-    }
-    fn_PlayerController_UpdateCamera = reinterpret_cast<fn_PlayerController_UpdateCamera_t>(
-        ResolveAddr(Module::Exe, 0x140098660));
-    fn_Weather_DrawUpdate = reinterpret_cast<fn_Weather_DrawUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400938d0));
-
-    // OnScenarioComplete sub-functions
-    fn_EventNotifier_Fire = reinterpret_cast<fn_EventNotifier_Fire_t>(
-        ResolveAddr(Module::Exe, 0x140095580));
-    fn_EventNotifier_FireWithName = reinterpret_cast<fn_EventNotifier_FireWithName_t>(
-        ResolveAddr(Module::Exe, 0x140095750));
-
-    // Runtime functions — resolved via ResolveExport (by mangled name)
-    // These resolve directly to Runtime-x64.dll function addresses.
-    // fn_Graphics_Scene_Clean is now resolved in engine_funcs.cpp (extern).
-    // B.3.5: the Scene::RemoveGlobalObject resolve went with its cache.
-    // [FIX-M5], kept for the record even though the binding is gone (ENDGAME B.3.5
-    // batch K1): this file used to alias `fn_Graphics_Renderer_Draw` into a local, with
-    // a ResolveExport fallback whose mangled name was WRONG (AEAVScene / Camera@Math).
-    // The correct signature is const-ref Scene + Camera@Graphics
-    // (`?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z`);
-    // the wrong name resolved NULL and Draw crashed (EXEC of 0). The call site is a
-    // member call now, so neither the alias nor a mangled name can be wrong again.
-    fn_Graphics_Renderer_Dtor = reinterpret_cast<fn_Graphics_Renderer_Dtor_t>(
-        ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
-    // B.3.5: the Context::SetTime / Context::SetCamera resolves went with their caches.
-    // fn_Vector3_Normalize — removed 2026-07-31, see the note at its former declaration.
-    // fn_ImageBuffer_CopyToTexture — resolved by EngineFuncsInit()
-    fn_Graphics_Scene_Dtor = reinterpret_cast<fn_Graphics_Scene_Dtor_t>(
-        ResolveExport("??1Scene@Graphics@@QEAA@XZ"));
-    fn_Audio_Scene_Dtor = reinterpret_cast<fn_Audio_Scene_Dtor_t>(
-        ResolveExport("??1Scene@Audio@@QEAA@XZ"));
-    fn_Picking_Scene_Dtor = reinterpret_cast<fn_Picking_Scene_Dtor_t>(
-        ResolveExport("??1Scene@Picking@@QEAA@XZ"));
-    fn_AnimationManager_Dtor = reinterpret_cast<fn_AnimationManager_Dtor_t>(
-        ResolveExport("??1AnimationManager@Graphics@@QEAA@XZ"));
-    fn_Time_Ctor_Seconds = reinterpret_cast<fn_Time_Ctor_Seconds_t>(
-        ResolveExport("??0Time@System@@QEAA@M@Z"));
-
-    fn_ExternalList_Find = reinterpret_cast<fn_ExternalList_Find_t>(
-        ResolveExport("?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z"));
-    if (!fn_ExternalList_Find) {
-        // Fallback: read from exe dispatch slot 0x140152160 (used by Startup at 0x140097c9f)
-        uintptr_t dispatchAddr = ResolveAddr(Module::Exe, 0x140152160);
-        if (dispatchAddr)
-            fn_ExternalList_Find = *reinterpret_cast<fn_ExternalList_Find_t*>(dispatchAddr);
-    }
-    // fn_Filename_Dtor — resolved by EngineFuncsInit()
-    // fn_InternalBasePtr_Ctor — resolved by EngineFuncsInit()
-
-    // Bulk null-check all ResolveExport pointers
-    #define CHECK_FN(fn) if (!(fn)) TRACE("[GameUpdateLoop] WARNING: " #fn " is NULL!\n")
-    CHECK_FN(fn_RegionPairCacheTick);
-    CHECK_FN(fn_EntityList_Update);
-    CHECK_FN(fn_CitizenList_Update);
-    CHECK_FN(fn_EntityList_PostUpdate);
-    CHECK_FN(fn_MusicPlayer_Update);
-    CHECK_FN(fn_EntityUI_Update);
-    CHECK_FN(fn_PlayerController_CalcTransform);
-    CHECK_FN(fn_QuickSave);
-    CHECK_FN(fn_CalcWindFactor);
-    CHECK_FN(fn_Time_Ctor_Seconds);
-
-    CHECK_FN(fn_ExternalList_Find);
-    CHECK_FN(fn_EventNotifier_Fire);
-    CHECK_FN(fn_EventNotifier_FireWithName);
-    #undef CHECK_FN
-
-    // Initialize EntityList clean module function pointers
-    EntityList_InitFuncs();
-
-    TRACE("[GameUpdateLoop] Function pointers resolved.\n");
-}
+// B3R: EnsureInit and every cache it filled are gone. Each callee is called by
+// name (Game/, Entity/, Action/, Dialog/ exe_bodies.h and the Runtime headers);
+// the .rdata floats are kRdata_* (Game/exe_constants.h); the unread
+// g_pDebugSingleton cell (0x1401c3de0 is g_pGameSettingsPtr's cell) went with it.
+// Three callees have no body in the tree and are PORT GAP null arms at their call
+// sites: 0x1401026a0 EntityUI::Update, 0x140101ee0 EntityUI::Startup,
+// 0x1400938d0 Weather::DrawUpdate. The 0x140152160 dispatch-slot fallback for
+// ExternalList::Find went with its cache (the member is defined).
 
 
 // ============================================================
@@ -796,7 +570,6 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
         return true;
     }
 
-    EnsureInit();
 
     s_frameNum++;
 
@@ -1022,7 +795,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 void* regionPairCache = *(void**)((uint8_t*)game + 0x78);
                 TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", regionPairCache);
                 { PhaseTimer pt(kPhPairCache);
-                if (fn_RegionPairCacheTick) fn_RegionPairCacheTick(regionPairCache, time);
+                Pf_RegionPairCacheTick_5d10(static_cast<int64_t*>(regionPairCache),
+                            reinterpret_cast<const int64_t*>(time));   // 0x1400a5d10
                 }
                 TRACE("[GameUpdateLoop::Update] RegionPairCache::Tick done\n");
 
@@ -1066,14 +840,15 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3e. Weather::ResetTime
                 TRACE("[GameUpdateLoop::Update] calling Weather_ResetTime...\n");
                 { PhaseTimer pt(kPhWeather);
-                if (fn_Weather_ResetTime) fn_Weather_ResetTime(m_weather, time); // [GUARD-M5]
+                Weather_ResetTime_Reimpl(m_weather, (void*)time);   // 0x1400944e0
                 }
                 TRACE("[GameUpdateLoop::Update] Weather_ResetTime done\n");
 
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                if (fn_CitizenList_Update) fn_CitizenList_Update(m_citizenList, time); // [GUARD-M5]
+                CitizenBehavior_Update(static_cast<CitizenBehaviorRaw*>(m_citizenList),
+                                       reinterpret_cast<int64_t*>(time));   // 0x14008c2b0
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
@@ -1133,8 +908,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // this is retail's `seconds * speedMultiplier` unchanged by default. This
             // one Time is what every TimeGoalInstance accumulates, so scaling it here
             // advances all of them at once (standalone/ach_clock.cpp).
-            fn_Time_Ctor_Seconds(scaledTime,
-                                 seconds * (float)speedMultiplier * AchClock_TimeScale());
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(scaledTime),
+                               seconds * (float)speedMultiplier * AchClock_TimeScale());
             // Achievement::AchievementManager::_singleton (retail: **import slot
             // 0x1401514f0). The null check on the manager is the M5 first-slice guard.
             if (::Achievement::AchievementManager::_singleton) {
@@ -1244,7 +1019,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // the overflow is older and unrelated to that port.
             uint8_t transform3[48]; // Transform3 scratch space (0x30 bytes)
             void* playerCtrl = m_playerController;
-            void* result = fn_PlayerController_CalcTransform(playerCtrl, transform3);
+            void* result = Reimpl_FUN_1400983f0(playerCtrl, transform3);   // 0x1400983f0
             // AsTransform3 on the result, then SetCameraToWorld
             Math::Transform3 t3 =
                 reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
@@ -1269,7 +1044,7 @@ post_simulation:
     // track by month + town mood, so while this stays null background music
     // never plays. See engine/types/GameUpdateLoop.h +0x80.
     TRACE("[GameUpdateLoop::Update] calling MusicPlayer::Update...\n");
-    if (fn_MusicPlayer_Update) fn_MusicPlayer_Update(m_musicPlayer);
+    MusicPlayer_Update(m_musicPlayer);   // 0x1400a40e0
     TRACE("[GameUpdateLoop::Update] MusicPlayer::Update done\n");
 
     // Step 8: World geometry vtable call (terrain update)
@@ -1317,7 +1092,9 @@ post_simulation:
                 if (toolCursor >= 0) cursorIndex = toolCursor;
             }
             TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
-            int64_t result = fn_EntityUI_Update ? fn_EntityUI_Update(m_entityUI, *(int64_t*)time, noInputFocus) : 1; // [GUARD-M5]
+            // PORT GAP 0x1401026a0 EntityUI::Update: not ported; retail calls it here
+            // (RCX=entityUI, RDX=time, R8B=inputFlag) and takes its cursor index.
+            int64_t result = 1;
             cursorIndex = (int)result;
             TRACE("[GameUpdateLoop::Update] EntityUI::Update done (cursorIndex=%d)\n", cursorIndex);
         }
@@ -1363,11 +1140,12 @@ post_simulation:
             speedMul = *(int32_t*)(entityUI + 0x34);
         }
 
-        if (fn_Time_Ctor_Seconds && fn_CalcWindFactor) {
+        {
             float seconds = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
             int64_t scaledTime[1];
-            fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMul * (*g_fAudioTimeScale));
-            float windFactor = fn_CalcWindFactor(scaledTime);
+            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(scaledTime),
+                               seconds * (float)speedMul * kRdata_14017219c);
+            float windFactor = CalcWindFactor_Reg(scaledTime);   // 0x1401027c0
             // Sanity-check the camera-position sub-offset (playerCtrl+0x34+0x88) once:
             // it was derived from stack arithmetic in the retail disasm, not from a
             // struct definition. CLAUDE.md documents the default camera dist as 40, so
@@ -1387,8 +1165,6 @@ post_simulation:
             reinterpret_cast<Audio::Scene*>(m_audioScene)->Update(
                 audioNow, audioScaled, *reinterpret_cast<System::Random*>(m_random),
                 *reinterpret_cast<const Vector3*>(listenerPos), windFactor);   // B.3.7 bridge
-        } else {
-            TRACE("[GameUpdateLoop::Update] SKIP Audio::Scene::Update (NULL fptr)\n");
         }
     }
     TRACE("[GameUpdateLoop::Update] Audio::Scene::Update done\n");
@@ -1456,7 +1232,7 @@ post_simulation:
         uintptr_t pc = (uintptr_t)playerCtrl;
         float dirX = *(float*)(pc + 0xa4) + *(float*)(pc + 0x98) + 0.0f;
         float dirY = *(float*)(pc + 0xa8) + *(float*)(pc + 0x9c) + 0.0f;
-        float dirZ = (*(float*)(pc + 0xac) + *(float*)(pc + 0xa0)) - (*g_fConst_1_0);
+        float dirZ = (*(float*)(pc + 0xac) + *(float*)(pc + 0xa0)) - kRdata_14017214c;
         float dir[3] = { dirX, dirY, dirZ };
         float len = sqrtf(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
         if (len > 0.0f) { dir[0] /= len; dir[1] /= len; dir[2] /= len; }
@@ -1554,7 +1330,6 @@ void GameUpdateLoop::Draw(float alpha) {
         return;
     }
 
-    EnsureInit();
     StressHarness_DrawBegin();   // [STRESS] render-frame period + Draw bracket
 
     // Tick the RenderDoc capture state machine once per rendered frame. The
@@ -1586,7 +1361,7 @@ void GameUpdateLoop::Draw(float alpha) {
     bool paused = reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame();  // B.3.6 bridge
     bool entityUIPaused = (*(char*)((uintptr_t)m_entityUI + 0x30) != 0);
     if (paused || entityUIPaused) {
-        alpha = *g_fConst_1_0; // 1.0f
+        alpha = kRdata_14017214c; // 1.0f
     }
 
     // Step 2: Set time on video context
@@ -1609,11 +1384,11 @@ void GameUpdateLoop::Draw(float alpha) {
         uint8_t* imageCapture = (uint8_t*)m_imageCapture;
         void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
-        // fn_ImageCapture_DrawCheck (exe FUN_1400a5140) is our clean port
-        // Minimap_PaintTerrain in standalone (see Startup fallback above). It fires
+        // ImageCapture::DrawCheck (exe FUN_1400a5140) is our clean port
+        // Minimap_PaintTerrain. It fires
         // once — when the minimap's terrain GPU buffer (imageCapture+0x08) is still
         // null — to render the terrain top-down into the minimap pixel arrays.
-        if (fn_ImageCapture_DrawCheck && *(int64_t*)(imageCapture + 8) == 0) {
+        if (*(int64_t*)(imageCapture + 8) == 0) {
             // Remove and re-add global objects for terrain update
             void* gameWorld = *g_pGameWorldSingleton;
             void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
@@ -1622,7 +1397,7 @@ void GameUpdateLoop::Draw(float alpha) {
             gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight));       // B.3.5 bridge
             gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
 
-            fn_ImageCapture_DrawCheck(imageCapture, videoCtx, m_worldGeometry, m_sunLight);
+            Minimap_PaintTerrain(imageCapture, videoCtx, m_worldGeometry, m_sunLight);   // 0x1400a5140
 
             gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight));       // B.3.5 bridge
             gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
@@ -1632,8 +1407,8 @@ void GameUpdateLoop::Draw(float alpha) {
 
     // Step 4: Camera update
     TRACE("[GameUpdateLoop::Draw] updating player camera...\n");
-    fn_PlayerController_UpdateCamera(m_playerController,
-                                     *g_fCamParam1, *g_fCamParam2, *g_fCamParam3);
+    Reimpl_FUN_140098660(m_playerController,
+                         kRdata_1401721dc, kRdata_140172174, kRdata_140172240);   // 0x140098660
     TRACE("[GameUpdateLoop::Draw] player camera done\n");
 
     // Step 5: Weather draw update
@@ -1641,7 +1416,8 @@ void GameUpdateLoop::Draw(float alpha) {
     {
         void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
-        if (fn_Weather_DrawUpdate) fn_Weather_DrawUpdate(m_weather, videoCtx); // [GUARD-M5]
+        // PORT GAP 0x1400938d0 Weather::DrawUpdate: not ported; retail calls it here
+        // (RCX=weather, RDX=videoCtx).
         // Native time-of-day sun/lighting. The original Weather::DrawUpdate
         // (above) no-ops in standalone (not reimplemented + Environment.rsc not
         // loaded), so drive the day cycle directly from the real base-game
@@ -1763,47 +1539,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 9: Quicksave screenshot
     if (m_quickSavePressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quicksave screenshot...\n");
-        if (fn_QuickSave) {
-            fn_QuickSave((void*)this);
-        } else {
-            // STANDALONE-ONLY DEVIATION (2026-09-04). This is NOT the "don't
-            // paper over a faithful crash with a null check" case in CLAUDE.md:
-            // retail dereferences nothing here. Retail's .rdata slot is filled by
-            // the loader, so its fn_QuickSave is non-null and the unguarded call
-            // is correct. Ours is null ONLY because 0x140095da0
-            // (GameUpdateLoop::TakeScreenshot -- NOT the "QuickSave handler" it
-            // was named, see reg_mods.cpp) is not yet registered in standalone.
-            // That is our build genuinely differing from retail, which is the
-            // documented exception. Without this, pressing quicksave (key 0x21)
-            // or quickload (0x22) is an EXEC-of-0 in the default build.
-            //
-            // The clear is not a SUBSTITUTE for retail's behaviour -- it is the
-            // half of retail we can still do exactly. Retail consumes the request
-            // and takes a picture; we consume the request and take no picture.
-            // That also makes this guard this-retiring: once 0x140095da0 is
-            // registered, fn_QuickSave runs and clears the flags itself, and this
-            // else-branch never executes again. Nothing to unwind at port time,
-            // and no window where two clear paths fight.
-            //
-            // Clearing BOTH flags is part of the deviation, not incidental:
-            // retail's TakeScreenshot is their only clearer (a 2-byte store to
-            // this+0xC0 ending its body), and nothing else in the tree writes
-            // them -- verified, the only writers are the two `= 1` in Update.
-            // Left set, this branch re-enters every frame forever, and would
-            // fire a screenshot the instant the real port lands, for a keypress
-            // made minutes earlier.
-            //
-            // STATUS 2026-09-04: 0x140095da0 IS now ported and registered
-            // (code/Game/Game/w2_takescreenshot.cpp, standalone/reg_w2_screenshot.cpp),
-            // so fn_QuickSave is non-null and this else-branch is unreachable --
-            // dead code, not a live fallback. Retained deliberately: the port has
-            // been verified by build, census and a clean load, but NOT by an
-            // actual keypress (driving KeyMap::Pressed(0x21) needs input injection
-            // the harness lacks). Delete it once a real quicksave keypress is
-            // confirmed to write a Screenshot<N>.bmp.
-            m_quickSavePressed = 0;
-            m_quickLoadPressed = 0;
-        }
+        GameUpdateLoop_TakeScreenshot((void*)this);   // 0x140095da0
         TRACE("[GameUpdateLoop::Draw] quicksave screenshot done\n");
     }
 
@@ -1878,47 +1614,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 13: Quickload screenshot (after UI draw)
     if (m_quickLoadPressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quickload screenshot...\n");
-        if (fn_QuickSave) {
-            fn_QuickSave((void*)this);
-        } else {
-            // STANDALONE-ONLY DEVIATION (2026-09-04). This is NOT the "don't
-            // paper over a faithful crash with a null check" case in CLAUDE.md:
-            // retail dereferences nothing here. Retail's .rdata slot is filled by
-            // the loader, so its fn_QuickSave is non-null and the unguarded call
-            // is correct. Ours is null ONLY because 0x140095da0
-            // (GameUpdateLoop::TakeScreenshot -- NOT the "QuickSave handler" it
-            // was named, see reg_mods.cpp) is not yet registered in standalone.
-            // That is our build genuinely differing from retail, which is the
-            // documented exception. Without this, pressing quickload (key 0x22)
-            // or quicksave (0x21) is an EXEC-of-0 in the default build.
-            //
-            // The clear is not a SUBSTITUTE for retail's behaviour -- it is the
-            // half of retail we can still do exactly. Retail consumes the request
-            // and takes a picture; we consume the request and take no picture.
-            // That also makes this guard this-retiring: once 0x140095da0 is
-            // registered, fn_QuickSave runs and clears the flags itself, and this
-            // else-branch never executes again. Nothing to unwind at port time,
-            // and no window where two clear paths fight.
-            //
-            // Clearing BOTH flags is part of the deviation, not incidental:
-            // retail's TakeScreenshot is their only clearer (a 2-byte store to
-            // this+0xC0 ending its body), and nothing else in the tree writes
-            // them -- verified, the only writers are the two `= 1` in Update.
-            // Left set, this branch re-enters every frame forever, and would
-            // fire a screenshot the instant the real port lands, for a keypress
-            // made minutes earlier.
-            //
-            // STATUS 2026-09-04: 0x140095da0 IS now ported and registered
-            // (code/Game/Game/w2_takescreenshot.cpp, standalone/reg_w2_screenshot.cpp),
-            // so fn_QuickSave is non-null and this else-branch is unreachable --
-            // dead code, not a live fallback. Retained deliberately: the port has
-            // been verified by build, census and a clean load, but NOT by an
-            // actual keypress (driving KeyMap::Pressed(0x21) needs input injection
-            // the harness lacks). Delete it once a real quicksave keypress is
-            // confirmed to write a Screenshot<N>.bmp.
-            m_quickSavePressed = 0;
-            m_quickLoadPressed = 0;
-        }
+        GameUpdateLoop_TakeScreenshot((void*)this);   // 0x140095da0
         TRACE("[GameUpdateLoop::Draw] quickload screenshot done\n");
     }
 
@@ -1965,7 +1661,6 @@ void GameUpdateLoop::Startup() {
         return;
     }
 
-    EnsureInit();
 
     TRACE("[GameUpdateLoop::Startup] ENTER (self=%p)\n", (void*)this);
 
@@ -1974,17 +1669,15 @@ void GameUpdateLoop::Startup() {
     reinterpret_cast<UI::UserInterface*>(m_userInterface)->_audioScene = m_audioScene;   // B.3.8 bridge
 
     // Setup UI references (cursors, lists, etc.)
-    // fn_SetupUIRefs (exe FUN_140099260) is not reimplemented/registered in
-    // standalone yet (M5 first slice) — guard until it lands. [GUARD-M5]
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
-    if (fn_SetupUIRefs) fn_SetupUIRefs(*g_pKeyMapSingleton, m_userInterface);
+    ApplyKeyMapToUI_Impl(*g_pKeyMapSingleton, m_userInterface);   // 0x140099260
     // Report the OUTCOME. "SetupUIRefs done" printed identically for the whole time
     // 0x140099260 was unregistered and the call was a no-op; the fields it writes are
     // the only evidence it ran. uiScale 0 == never applied (edittool.cpp:674 reads it).
     {
         uintptr_t ui = (uintptr_t)m_userInterface;
-        std::fprintf(stderr, "[Startup] SetupUIRefs: fn=%p uiScale=%.3f sndButtonDown=%p sndAlert=%p\n",
-                     (void*)fn_SetupUIRefs, ui ? *(float*)(ui + 0xDC) : -1.0f,
+        std::fprintf(stderr, "[Startup] SetupUIRefs: uiScale=%.3f sndButtonDown=%p sndAlert=%p\n",
+                     ui ? *(float*)(ui + 0xDC) : -1.0f,
                      ui ? *(void**)(ui + 0xB8) : nullptr,
                      ui ? *(void**)(ui + 0xC8) : nullptr);
         std::fflush(stderr);
@@ -2008,14 +1701,11 @@ void GameUpdateLoop::Startup() {
     // ProfessionList startup — builds the sorted profession ARRAY at profList+0x20/+0x28
     // (FUN_1400a90a0) for the profession UI panel. m_professionList (gw+0xb0) is normally
     // DEFERRED (null) in the standalone slice; it goes live under BANISHED_LIVE_PROFESSIONLIST.
-    // MUST guard the function pointer too: fn_ProfessionList_Startup (exe 0x1400a90a0) is
-    // unregistered in standalone (resolves NULL), so once m_professionList is non-null an
-    // unguarded call faulted EXEC-of-0 in GameUpdateLoop_Startup. The array is only read by
-    // the profession UI (count at +0x28); leaving it empty is safe — the per-tick housing/
-    // workplace finders key on the default profession (+0x30) / profRef2 (+0x38) from Serialize.
+    // ProfessionList_Startup_Impl is the port of 0x1400a90a0 (B3R: called by name; its
+    // readiness guard went with the door).
     TRACE("[GameUpdateLoop::Startup] calling ProfessionList::Startup...\n");
-    if (m_professionList && fn_ProfessionList_Startup)
-        fn_ProfessionList_Startup(m_professionList);
+    if (m_professionList)
+        ProfessionList_Startup_Impl(m_professionList);   // 0x1400a90a0
     TRACE("[GameUpdateLoop::Startup] ProfessionList::Startup done\n");
 
     // Game HUD dialogs (Toolbar/EventNotify/AutoSave) are DEFERRED in the M5 first
@@ -2031,22 +1721,20 @@ void GameUpdateLoop::Startup() {
         if (!s_diag) {
             s_diag = true;
             void* rl = _resourceList;
-            fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p Find=%p "
-                    "DialogTypeId=%u ToolbarCtor=%p IsDerivedFrom=%p\n",
-                    rl, (void*)fn_ExternalList_Find,
-                    UI::Dialog::TypeId(),
-                    (void*)fn_ToolbarDialog_Ctor, (void*)fn_IsDerivedFrom);
+            fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p DialogTypeId=%u\n",
+                    rl, UI::Dialog::TypeId());
             fflush(stderr);
-            if (rl && fn_ExternalList_Find) {
+            if (rl) {
                 System::Filename fnbuf("Dialog/Toolbar.rsc");
                 void* foundBase = nullptr;
                 uint32_t typeInfo = UI::Dialog::TypeId();
-                fn_ExternalList_Find(rl, &foundBase, &fnbuf, &typeInfo);
+                foundBase = reinterpret_cast<const ::Object::ExternalList*>(rl)
+                                ->Find(fnbuf, typeInfo)._ptr;
                 fprintf(stderr, "[HUD-DIAG] ExternalList::Find(\"Dialog/Toolbar.rsc\") -> foundBase=%p\n",
                         foundBase);
                 fflush(stderr);
             } else {
-                fprintf(stderr, "[HUD-DIAG] Find probe skipped (resourceList or fns null)\n");
+                fprintf(stderr, "[HUD-DIAG] Find probe skipped (resourceList null)\n");
                 fflush(stderr);
             }
         }
@@ -2085,8 +1773,9 @@ void GameUpdateLoop::Startup() {
         // the .rsc directly, robust in standalone where m_resourceList is empty).
         void* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI] (0x140097c83)
-        if (_resourceList && fn_ExternalList_Find)
-            fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
+        if (_resourceList)
+            foundBase = reinterpret_cast<const ::Object::ExternalList*>(_resourceList)
+                            ->Find(filename, typeInfo)._ptr;
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
@@ -2097,25 +1786,25 @@ void GameUpdateLoop::Startup() {
 
         void* dialogRes = nullptr;
         if (foundBase != nullptr) {
-            if (fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId())) {   // 0x140097cba
+            if (::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId())) {   // 0x140097cba
                 dialogRes = foundBase;
             }
         }
 
-        fprintf(stderr, "[HUD] Toolbar: foundBase=%p dialogRes=%p Ctor=%p UI=%p\n",
-                foundBase, dialogRes, (void*)fn_ToolbarDialog_Ctor, (void*)m_userInterface);
+        fprintf(stderr, "[HUD] Toolbar: foundBase=%p dialogRes=%p UI=%p\n",
+                foundBase, dialogRes, (void*)m_userInterface);
         fflush(stderr);
 
         // Allocate and construct ToolbarDialog (0x108 bytes). [GUARD-M5]
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0x108, 8);
         void* toolbar = nullptr;
         // Retail (0x140097cf1) constructs whenever the allocation succeeded; the
         // `dialogRes != nullptr` skip that sat here coped with a failed type-id
         // resolution, which cannot happen now (ENDGAME B.3.9 CB).
-        if (mem != nullptr && fn_ToolbarDialog_Ctor) {
+        if (mem != nullptr) {
             int64_t nullParent[1] = {0};
             new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            toolbar = fn_ToolbarDialog_Ctor(mem, m_userInterface, dialogRes, nullParent, nullptr);
+            toolbar = ToolbarDialog_Ctor_Impl(mem, m_userInterface, dialogRes, nullParent, nullptr);   // 0x1400b9910
         }
 
         // Add to UI (only if the dialog was actually constructed).
@@ -2131,9 +1820,8 @@ void GameUpdateLoop::Startup() {
                     *(int32_t*)((uintptr_t)toolbar + 0xD8), *(int32_t*)((uintptr_t)toolbar + 0xC8),
                     *(int32_t*)((uintptr_t)toolbar + 0x100));
         } else {
-            fprintf(stderr, "[HUD] Toolbar NOT constructed (mem=%p Ctor=%p) — freeing\n",
-                    mem, (void*)fn_ToolbarDialog_Ctor);
-            if (mem) fn_MemFreeStatic(mem);
+            fprintf(stderr, "[HUD] Toolbar NOT constructed (mem=%p) — freeing\n", mem);
+            if (mem) System::MemoryAllocator::MemFree(mem);
         }
         fflush(stderr);
     }
@@ -2149,8 +1837,9 @@ void GameUpdateLoop::Startup() {
         System::Filename filename("Dialog/EventNotify.rsc");
         void* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
-        if (_resourceList && fn_ExternalList_Find)
-            fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
+        if (_resourceList)
+            foundBase = reinterpret_cast<const ::Object::ExternalList*>(_resourceList)
+                            ->Find(filename, typeInfo)._ptr;
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
@@ -2159,14 +1848,14 @@ void GameUpdateLoop::Startup() {
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
-        if (foundBase != nullptr && fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId()))
+        if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
             dialogRes = foundBase;
 
         fprintf(stderr, "[HUD] EventNotify: foundBase=%p dialogRes=%p parentToolbar=%p\n",
                 foundBase, dialogRes, g_ribbonParentToolbar);
         fflush(stderr);
 
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xF0, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0xF0, 8);
         void* eventNotify = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             int64_t parentIBP[1];
@@ -2184,7 +1873,7 @@ void GameUpdateLoop::Startup() {
             fprintf(stderr, "[HUD] EventNotify ribbon CONSTRUCTED + added to UI: %p\n", eventNotify);
             fflush(stderr);
         } else if (mem) {
-            fn_MemFreeStatic(mem);
+            System::MemoryAllocator::MemFree(mem);
         }
     }
     TRACE("[GameUpdateLoop::Startup] EventNotify dialog added\n");
@@ -2203,8 +1892,9 @@ void GameUpdateLoop::Startup() {
         System::Filename filename("Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
-        if (_resourceList && fn_ExternalList_Find)
-            fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
+        if (_resourceList)
+            foundBase = reinterpret_cast<const ::Object::ExternalList*>(_resourceList)
+                            ->Find(filename, typeInfo)._ptr;
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
@@ -2213,10 +1903,10 @@ void GameUpdateLoop::Startup() {
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
-        if (foundBase != nullptr && fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId()))
+        if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
             dialogRes = foundBase;
 
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
+        void* mem = System::MemoryAllocator::MemAlloc(0xD0, 8);
         void* autoSave = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             int64_t nullParent[1] = {0};
@@ -2231,7 +1921,7 @@ void GameUpdateLoop::Startup() {
             reinterpret_cast<UI::UserInterface*>(m_userInterface)->AddDialog(  // B.3.6 bridge
                 reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
         } else if (mem) {
-            fn_MemFreeStatic(mem);
+            System::MemoryAllocator::MemFree(mem);
         }
         fprintf(stderr, "[AutoSave] dialog res=%p instance=%p (null instance = no autosave)\n",
                 dialogRes, autoSave);
@@ -2245,18 +1935,16 @@ void GameUpdateLoop::Startup() {
     reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetFullscreenFade(false, 0xFF000000, false);  // B.3.6 bridge
     TRACE("[GameUpdateLoop::Startup] fullscreen fade set\n");
 
-    // EntityUI startup — fn_EntityUI_Startup (exe FUN_140101ee0) not yet wired in
-    // standalone (M5 first slice). [GUARD-M5]
     TRACE("[GameUpdateLoop::Startup] calling EntityUI::Startup...\n");
-    if (fn_EntityUI_Startup) fn_EntityUI_Startup(m_entityUI);
-    // Standalone: fn_EntityUI_Startup (0x140101ee0) is NULL, so build the tool-mode
-    // tree ourselves (Phase 3) so a build-button click resolves the PlacementTool.
+    // PORT GAP 0x140101ee0 EntityUI::Startup: not ported; retail calls it here
+    // (RCX=entityUI). Standalone builds the tool-mode tree itself (Phase 3) so a
+    // build-button click resolves the PlacementTool.
     EntityUI_BuildToolModeTree_SA(m_entityUI);
     // ...and its second half: open every dialog registered in the EntityUI+0x50 tree.
     // That tree is how a tutorial asks for its panel (FinishTutorialInstance::Slot4 ->
     // 0x1401001f0 only RECORDS the request); nothing else opens it. Empty on a plain
     // new game, so this is a no-op there — hence no live gate.
-    if (!fn_EntityUI_Startup) EntityUI_OpenRegisteredDialogs_SA(m_entityUI);
+    EntityUI_OpenRegisteredDialogs_SA(m_entityUI);
     TRACE("[GameUpdateLoop::Startup] EntityUI::Startup done\n");
 
     TRACE("[GameUpdateLoop::Startup] EXIT\n");
@@ -2271,7 +1959,6 @@ extern "C" void RedzoneAlloc_ArmTeardownCheck();   // standalone/redzone_alloc.c
 void GameUpdateLoop::Shutdown() {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
     RedzoneAlloc_ArmTeardownCheck();   // no-op unless BANISHED_REDZONE=watch + BANISHED_TEARDOWN_HEAPCHECK=1
-    EnsureInit();
 
     TRACE("[GameUpdateLoop::Shutdown] ENTER (self=%p)\n", (void*)this);
 
@@ -2304,7 +1991,7 @@ void GameUpdateLoop::Shutdown() {
 
     // EntityUI::SetTool(nullptr)
     TRACE("[GameUpdateLoop::Shutdown] calling EntityUI::SetTool(0)...\n");
-    fn_EntityUI_SetTool(m_entityUI, 0);
+    Toolbar_ShowGroup_Impl(m_entityUI, 0);   // 0x140102b60
 
     // Disable cursor
     TRACE("[GameUpdateLoop::Shutdown] disabling cursor...\n");
@@ -2345,7 +2032,7 @@ void GameUpdateLoop::Shutdown() {
                 new (nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
                 if (citBuilding != townHall || citHousingRef != nullRef[0]) {
-                    fn_CitizenComponent_AssignHousing(citizen, nullRef);
+                    CitizenComp_AssignHousing(static_cast<CitizenComponent*>(citizen), nullRef);   // 0x140111ee0
                     *(int64_t*)(cit + 0x1f0) = townHall;
                 }
             }
@@ -2364,7 +2051,7 @@ void GameUpdateLoop::Shutdown() {
     // "teardown corrupted it", which no run so far can tell apart.
     // EntityList shutdown
     TRACE("[GameUpdateLoop::Shutdown] calling EntityList::Shutdown...\n");
-    fn_EntityList_Shutdown(m_entityList);
+    EntityList_Shutdown_c3d30(m_entityList);   // 0x1400c3d30
     TRACE("[GameUpdateLoop::Shutdown] EntityList::Shutdown done\n");
 
     // Remove global scene objects
@@ -2391,107 +2078,104 @@ void GameUpdateLoop::Shutdown() {
     // Random
     if (m_random != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing Random...\n");
-        fn_MemFreeStatic(m_random);
+        System::MemoryAllocator::MemFree(m_random);
     }
 
     // PlayerController
     if (m_playerController != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing PlayerController...\n");
-        fn_MemFreeStatic(m_playerController);
+        System::MemoryAllocator::MemFree(m_playerController);
     }
 
     // Renderer
     if (m_renderer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Renderer...\n");
-        fn_Graphics_Renderer_Dtor(m_renderer);
-        fn_MemFreeStatic(m_renderer);
+        RtGraphics_Renderer_Dtor(static_cast<RtGraphics::Renderer*>(m_renderer));
+        System::MemoryAllocator::MemFree(m_renderer);
     }
 
     // EntityList
     if (m_entityList != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityList...\n");
-        fn_EntityList_Dtor(m_entityList);
-        fn_MemFreeStatic(m_entityList);
+        EntityList_Dtor_c3e60(m_entityList);   // 0x1400c3e60
+        System::MemoryAllocator::MemFree(m_entityList);
     }
 
     // UserInterface
     if (m_userInterface != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying UserInterface...\n");
         // Call Runtime destructor
-        typedef void (*fn_UI_Dtor_t)(void* self);
-        fn_UI_Dtor_t uiDtor = reinterpret_cast<fn_UI_Dtor_t>(
-            ResolveExport("??1UserInterface@UI@@QEAA@XZ"));
-        if (uiDtor) uiDtor(m_userInterface);
-        fn_MemFreeStatic(m_userInterface);
+        RtUi_UserInterface_Dtor(static_cast<UI::UserInterface*>(m_userInterface));
+        System::MemoryAllocator::MemFree(m_userInterface);
     }
 
     // CitizenBehavior
     if (m_citizenList != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying CitizenBehavior...\n");
-        fn_CitizenList_Dtor(m_citizenList, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_citizenList);
+        CitizenList_Dtor_907b0(m_citizenList);   // 0x1400907b0
+        System::MemoryAllocator::MemFree(m_citizenList);
     }
 
     // Game
     if (m_game != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Game...\n");
-        fn_Game_Dtor(m_game);
-        fn_MemFreeStatic(m_game);
+        Game_Dtor_9ed60(reinterpret_cast<int64_t>(m_game));   // 0x14009ed60
+        System::MemoryAllocator::MemFree(m_game);
     }
 
     // Tutorial
     if (m_tutorial != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Tutorial...\n");
-        fn_Tutorial_Dtor(m_tutorial);
-        fn_MemFreeStatic(m_tutorial);
+        Tutorial_Dtor_f8ff0(m_tutorial);   // 0x1400f8ff0
+        System::MemoryAllocator::MemFree(m_tutorial);
     }
 
     // EntityUI
     if (m_entityUI != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityUI...\n");
-        fn_EntityUI_Dtor(m_entityUI, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_entityUI);
+        EntityUI_Dtor_1024d0(m_entityUI);   // 0x1401024d0
+        System::MemoryAllocator::MemFree(m_entityUI);
     }
 
     // DayCounter
     if (m_dayCounter != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing DayCounter...\n");
-        fn_MemFreeStatic(m_dayCounter);
+        System::MemoryAllocator::MemFree(m_dayCounter);
     }
 
     // Weather
     if (m_weather != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Weather...\n");
-        fn_Weather_Dtor(m_weather, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_weather);
+        Game_WeatherDtor(m_weather);   // 0x140093eb0
+        System::MemoryAllocator::MemFree(m_weather);
     }
 
     // EventNotifier
     if (m_eventNotifier != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EventNotifier...\n");
-        fn_EventNotifier_Cleanup((void*)((uintptr_t)m_eventNotifier + 0x18));
-        fn_MemFreeStatic(m_eventNotifier);
+        Game_EventNotifierCleanup((void*)((uintptr_t)m_eventNotifier + 0x18));   // 0x14000a8a0
+        System::MemoryAllocator::MemFree(m_eventNotifier);
     }
 
     // Graphics::Scene
     if (m_graphicsScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Graphics::Scene...\n");
-        fn_Graphics_Scene_Dtor(m_graphicsScene);
-        fn_MemFreeStatic(m_graphicsScene);
+        RtGraphics_Scene_Dtor(static_cast<RtGraphics::Scene*>(m_graphicsScene));
+        System::MemoryAllocator::MemFree(m_graphicsScene);
     }
 
     // Audio::Scene
     if (m_audioScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Audio::Scene...\n");
-        fn_Audio_Scene_Dtor(m_audioScene);
-        fn_MemFreeStatic(m_audioScene);
+        RtAudio_Scene_Dtor(m_audioScene);
+        System::MemoryAllocator::MemFree(m_audioScene);
     }
 
     // Picking::Scene
     if (m_pickingScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Picking::Scene...\n");
-        fn_Picking_Scene_Dtor(m_pickingScene);
-        fn_MemFreeStatic(m_pickingScene);
+        static_cast< ::Picking::Scene*>(m_pickingScene)->::Picking::Scene::~Scene();
+        System::MemoryAllocator::MemFree(m_pickingScene);
     }
 
     // WorldGeometry, SunLight, SkyMesh — via scalar deleting dtor (vtable[0] with flags=1)
@@ -2512,35 +2196,35 @@ void GameUpdateLoop::Shutdown() {
     // AnimationManager
     if (m_animationManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying AnimationManager...\n");
-        fn_AnimationManager_Dtor(m_animationManager);
-        fn_MemFreeStatic(m_animationManager);
+        RtGraphics_AnimationManager_Dtor(static_cast<RtGraphics::AnimationManager*>(m_animationManager));
+        System::MemoryAllocator::MemFree(m_animationManager);
     }
 
     // CharacterGrid (Morton quadtree at +0x88)
     if (m_characterGrid != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying CharacterGrid...\n");
-        fn_CharacterGrid_Dtor(m_characterGrid);
-        fn_MemFreeStatic(m_characterGrid);
+        Game_MusicPlayerDtor(m_characterGrid);   // 0x140018220
+        System::MemoryAllocator::MemFree(m_characterGrid);
     }
 
     // SaveLoad
     if (m_saveLoad != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SaveLoad...\n");
-        fn_SaveLoad_Dtor(m_saveLoad);
-        fn_MemFreeStatic(m_saveLoad);
+        RtSave_SaveLoad_Dtor(static_cast<Save::SaveLoad*>(m_saveLoad));
+        System::MemoryAllocator::MemFree(m_saveLoad);
     }
 
     // ImageCapture
     if (m_imageCapture != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying ImageCapture...\n");
-        fn_ImageCapture_Dtor(m_imageCapture, nullptr, nullptr, nullptr);
-        fn_MemFreeStatic(m_imageCapture);
+        Game_ImageCaptureDtor(m_imageCapture);   // 0x1400a4fc0
+        System::MemoryAllocator::MemFree(m_imageCapture);
     }
 
     // MusicPlayer (0x18-byte POD; retail frees it with no dtor)
     if (m_musicPlayer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   freeing MusicPlayer...\n");
-        fn_MemFreeStatic(m_musicPlayer);
+        System::MemoryAllocator::MemFree(m_musicPlayer);
     }
 
     TRACE("[GameUpdateLoop::Shutdown] EXIT\n");
@@ -2590,7 +2274,6 @@ extern "C" float CalcWindFactor_Reg(void* time) { return CalcWindFactor_Impl(tim
 // Sets m_scenarioCompleted flag and fires an event notification.
 
 void GameUpdateLoop::OnScenarioComplete() {
-    EnsureInit();
 
     TRACE("[GameUpdateLoop::OnScenarioComplete] ENTER (self=%p)\n", (void*)this);
 
@@ -2614,7 +2297,7 @@ void GameUpdateLoop::OnScenarioComplete() {
         // (The IDs were documented inverted here; the live string table settles it —
         // the named sibling 0x1b reads "You've failed to meet a goal in the scenario".)
         int eventType = 0x1d - (int)isMet;
-        fn_EventNotifier_Fire(m_eventNotifier, eventType, 4, nullEntity);
+        EventLog_AddEvent(m_eventNotifier, eventType, 4, nullEntity);   // 0x140095580
     } else {
         // Has parent achievement — notification with achievement title
         TRACE("[GameUpdateLoop::OnScenarioComplete] has parent achievement, firing named notification...\n");
@@ -2647,7 +2330,7 @@ void GameUpdateLoop::OnScenarioComplete() {
 
         // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)
         int eventType = 0x1b - (int)isMet;
-        fn_EventNotifier_FireWithName(m_eventNotifier, eventType, 4, nullEntity, &sysStr);
+        EventLog_AddEventWithName(m_eventNotifier, eventType, 4, nullEntity, &sysStr);   // 0x140095750
     }
 
     TRACE("[GameUpdateLoop::OnScenarioComplete] EXIT\n");
@@ -2672,7 +2355,6 @@ void GameUpdateLoop::OnScenarioComplete() {
 // (the virtual destructor's D0); nothing may touch the object after it, so the
 // old EXIT trace is gone.
 GameUpdateLoop::~GameUpdateLoop() {
-    EnsureInit();
 
     TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p)\n", (void*)this);
 

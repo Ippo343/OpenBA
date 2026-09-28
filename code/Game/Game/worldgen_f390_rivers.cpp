@@ -50,6 +50,8 @@
 // declared extern and must be wired in engine_funcs before this links.
 
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Game/exe_bodies.h"   // fn_Random_RandFloatTol
 #include "math/Math.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -87,14 +89,12 @@ static constexpr uint32_t kSignBit = 0x80000000u;// 0x1401722c0               fl
 
 // ============================================================
 // Engine helpers used by these stages. Some are already wired (fn_MemAlloc,
-// fn_MemFreeStatic, g_pMemAllocSingleton); the Vector2 + RandFloatTol shims are
+// fn_MemFreeStatic, System::MemoryAllocator::_singleton); the Vector2 + RandFloatTol shims are
 // declared extern here and must be added to engine_funcs.{h,cpp} before this TU
 // links (NEW in blueprint §3).
 // ============================================================
-extern "C" {
-// System::Random::RandFloatTol()  ?RandFloatTol@Random@System@@QEAAMXZ
-float fn_Random_RandFloatTol(void* self);
-}
+// System::Random::RandFloatTol()  ?RandFloatTol@Random@System@@QEAAMXZ:
+// fn_Random_RandFloatTol (worldgen_f390_shims.cpp), declared in Game/exe_bodies.h.
 
 // CRT libm leaves (verified: sub_1460 = powf, FUN_140132010 = sqrtf).
 static inline float wg_powf(float b, float e) { return powf(b, e); }
@@ -159,7 +159,7 @@ static void wg_VecOfVecResize(void* hdr, int newCount) {
         cap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;
         *(int*)(h + 0x0c) = cap;
-        void* nd = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * 0x10, 8);
+        void* nd = System::MemoryAllocator::MemAlloc((uint64_t)cap * 0x10, 8);
         *(void**)(h + 0x00) = nd;
     }
     uint8_t* newData = *(uint8_t**)(h + 0x00);
@@ -175,9 +175,9 @@ static void wg_VecOfVecResize(void* hdr, int newCount) {
     if (oldData && oldData != newData) {
         for (int i = 0; i < oldCount; ++i) {
             void* inner = *(void**)(oldData + (size_t)i * 0x10);
-            if (inner) fn_MemFreeStatic(inner);
+            if (inner) System::MemoryAllocator::MemFree(inner);
         }
-        fn_MemFreeStatic(oldData);
+        System::MemoryAllocator::MemFree(oldData);
     }
 }
 
@@ -352,7 +352,7 @@ extern "C" void wg_f390_rivers(void* hfp) {
 
     int* labels = nullptr;
     if (riverCount > 0) {
-        labels = (int*)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)riverCount * 4, 4);
+        labels = (int*)System::MemoryAllocator::MemAlloc((uint64_t)riverCount * 4, 4);
         for (int i = 0; i < riverCount; ++i) labels[i] = -1;
         labels[0] = 0;
     }
@@ -386,8 +386,8 @@ extern "C" void wg_f390_rivers(void* hfp) {
 
     // --- teardown (matches decomp order) ---
     wg_VecOfVecResize(buckets, 0);
-    if (*(void**)(buckets + 0x00)) fn_MemFreeStatic(*(void**)(buckets + 0x00));
-    if (labels) fn_MemFreeStatic(labels);
+    if (*(void**)(buckets + 0x00)) System::MemoryAllocator::MemFree(*(void**)(buckets + 0x00));
+    if (labels) System::MemoryAllocator::MemFree(labels);
     // (scratch: freed by its destructor at scope exit, right here in retail's order)
 }
 
@@ -453,9 +453,9 @@ extern "C" void wg_f390_stamp(void* hfp) {
     float* maskC = *(float**)(hdrC + 0x00);
     float* maskA = *(float**)(hdrA + 0x00);
     if (!maskB || !maskC || !maskA) {
-        if (maskA) fn_MemFreeStatic(maskA);
-        if (maskC) fn_MemFreeStatic(maskC);
-        if (maskB) fn_MemFreeStatic(maskB);
+        if (maskA) System::MemoryAllocator::MemFree(maskA);
+        if (maskC) System::MemoryAllocator::MemFree(maskC);
+        if (maskB) System::MemoryAllocator::MemFree(maskB);
         return;
     }
 
@@ -520,7 +520,7 @@ extern "C" void wg_f390_stamp(void* hfp) {
     }
 
     // teardown (reverse of init).
-    fn_MemFreeStatic(maskA);
-    fn_MemFreeStatic(maskC);
-    fn_MemFreeStatic(maskB);
+    System::MemoryAllocator::MemFree(maskA);
+    System::MemoryAllocator::MemFree(maskC);
+    System::MemoryAllocator::MemFree(maskB);
 }

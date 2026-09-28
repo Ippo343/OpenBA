@@ -20,7 +20,8 @@
 
 #include "Tutorial/TutorialStep.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_bodies.h"
+#include "Tutorial/exe_bodies.h"
 #include "system/String.h"
 #include "collection/Collection.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
@@ -31,29 +32,11 @@
 #include <new>
 
 // ============================================================
-// Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5: the loader thread
-// serializes tutorial resources; no first-call cache). The External ctor and
-// String::Serialize dispatch slots this file used to cache are direct calls.
+// Exe helpers, called by name: 0x14000bf40 ExternalPtr<StringTable>::Serialize
+// (Reimpl_ExternalPtr_Serialize_StringTable) and 0x140001bb0 the DynArray resize
+// (Reimpl_Array_Resize_Stride08), Game/exe_bodies.h; the three ExternalPtrArray
+// serializers (TutBase_Serialize*Array), Tutorial/exe_bodies.h.
 // ============================================================
-
-// ExternalPtr<StringTable>::Serialize (0x14000bf40)
-typedef void (*fn_ExternalPtrSerialize_StringTable_t)(void* fieldPtr, void* serializer);
-static fn_ExternalPtrSerialize_StringTable_t ExternalPtrSerializeStringTableFn() {
-    return reinterpret_cast<fn_ExternalPtrSerialize_StringTable_t>(ResolveAddr(Module::Exe, 0x14000bf40));
-}
-
-// DynArray resize helper (0x140001bb0)
-typedef void (*fn_DynArrayResize_t)(void* arrayField, int newCount);
-static fn_DynArrayResize_t DynArrayResizeFn() {
-    return reinterpret_cast<fn_DynArrayResize_t>(ResolveAddr(Module::Exe, 0x140001bb0));
-}
-
-// ExternalPtrArray<TutorialImage / TutorialSetup / TutorialGoal>::Serialize
-// (0x140028cf0 / 0x140028f40 / 0x140029190)
-typedef void (*fn_SerializePtrArray_t)(void* serializer, int count, void* arrayData, void* p4);
-static fn_SerializePtrArray_t SerializePtrArrayFn(uintptr_t exeAddr) {
-    return reinterpret_cast<fn_SerializePtrArray_t>(ResolveAddr(Module::Exe, exeAddr));
-}
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -115,34 +98,29 @@ bool TutorialStep::Serialize(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
 
     // 2. Serialize ExternalPtr<StringTable> at +0x28
-    if (auto serializeTable = ExternalPtrSerializeStringTableFn()) {
-        serializeTable(reinterpret_cast<void*>(s + 0x28), serializer);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(s + 0x28), serializer);   // 0x14000bf40
 
     // 3. / 4. Serialize the title (+0x30) and description (+0x38) Strings
     reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
     reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);   // B.3.1 bridge
 
     // 5. / 6. / 7. The three ExternalPtr arrays: count, resize on load, elements.
-    struct ArrayLeg { uintptr_t dataOff; uintptr_t countOff; uintptr_t serializeAddr; };
+    struct ArrayLeg { uintptr_t dataOff; uintptr_t countOff;
+                      void (*serialize)(void* serializer, int count, void* arrayData, void* p4); };
     const ArrayLeg legs[3] = {
-        { 0x40, 0x48, 0x140028cf0 },   // images
-        { 0x50, 0x58, 0x140028f40 },   // setups
-        { 0x60, 0x68, 0x140029190 },   // goals
+        { 0x40, 0x48, &TutBase_SerializeImageArray },   // images  0x140028cf0
+        { 0x50, 0x58, &TutBase_SerializeSetupArray },   // setups  0x140028f40
+        { 0x60, 0x68, &TutBase_SerializeGoalArray },    // goals   0x140029190
     };
     for (const ArrayLeg& leg : legs) {
         int32_t localCount = *reinterpret_cast<int32_t*>(s + leg.countOff);
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         // On load (encoding mode 0): resize the array
         if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            if (auto resize = DynArrayResizeFn()) {
-                resize(reinterpret_cast<void*>(s + leg.dataOff), localCount);
-            }
+            Reimpl_Array_Resize_Stride08(reinterpret_cast<void*>(s + leg.dataOff), localCount);   // 0x140001bb0
         }
         void* arrayData = *reinterpret_cast<void**>(s + leg.dataOff);
-        if (auto serializeArray = SerializePtrArrayFn(leg.serializeAddr)) {
-            serializeArray(serializer, localCount, arrayData, nullptr);
-        }
+        leg.serialize(serializer, localCount, arrayData, nullptr);
     }
 
     // Destroy serializer

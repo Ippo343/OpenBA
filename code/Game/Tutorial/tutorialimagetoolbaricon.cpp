@@ -21,7 +21,8 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
+#include "Tutorial/exe_bodies.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -42,16 +43,10 @@
 // ============================================================
 
 // TutorialImage_sub_7ad0 -- ExternalPtr serialize helper (exe 0x140027ad0)
-typedef void (*fn_ExternalPtr_SerializeImage_t)(void* externalPtrField, void* serializer);
-static fn_ExternalPtr_SerializeImage_t ExternalPtrSerializeImageFn() {
-    return reinterpret_cast<fn_ExternalPtr_SerializeImage_t>(ResolveAddr(Module::Exe, 0x140027ad0));
-}
+// called by name: TutBase_SerializeImageRef (Tutorial/exe_bodies.h)
 
 // FUN_140027de0 -- resolves toolbar from String at +0x30
-typedef void (*fn_ResolveToolbar_t)(void* stringField);
-static fn_ResolveToolbar_t ResolveToolbarFn() {
-    return reinterpret_cast<fn_ResolveToolbar_t>(ResolveAddr(Module::Exe, 0x140027de0));
-}
+// called by name: TutBase_ResolveToolbarRef (Tutorial/exe_bodies.h)
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -80,8 +75,7 @@ bool TutorialImageToolbarIcon::Serialize(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x28), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x2C), nullptr);   // B.3.4 bridge
 
-    if (auto serializeImage = ExternalPtrSerializeImageFn())
-        serializeImage(p + 0x20, serializerBuf);
+    TutBase_SerializeImageRef(p + 0x20, serializerBuf);
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 
@@ -101,8 +95,7 @@ bool TutorialImageToolbarIcon::Serialize(void* stream) {
     if (innerStream) {
         int streamMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf2)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (streamMode == 0) {
-            if (auto resolve = ResolveToolbarFn())
-                resolve(p + 0x30);
+            TutBase_ResolveToolbarRef(p + 0x30);
         }
     }
 
@@ -159,20 +152,18 @@ void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
     // 5. IsDerivedFrom check — verify it's an ImageElement
     void* foundObj = *(void**)foundIBP;
     void* imageElement = nullptr;
-    if (fn_IsDerivedFrom && foundObj) {
-        if (fn_IsDerivedFrom(foundObj, UI::ImageElement::TypeId()))
+    if (foundObj) {
+        if (Object::IsDerivedFromNullSafe(foundObj, UI::ImageElement::TypeId()))
             imageElement = foundObj;
     }
 
     // 6. Wrap in InternalBasePtr
     void* imageRef = nullptr;
-    if (fn_InternalBasePtr_Ctor)
-        new (&imageRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(imageElement));   // B.3.3 bridge
+    new (&imageRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(imageElement));   // B.3.3 bridge
 
     // 7. Resolve toolbar ref from String at +0x30
-    if (auto resolve = ResolveToolbarFn())
-        resolve(p + 0x30);
+    TutBase_ResolveToolbarRef(p + 0x30);
 
     // 8. Get resolved toolbar object at +0x40
     uintptr_t toolbar = *(uintptr_t*)(p + 0x40);
@@ -184,18 +175,15 @@ void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
 
         if (componentList == 0) {
             // No component list — use toolbar's direct sprite data
-            if (auto resolve = ResolveToolbarFn())
-                resolve(p + 0x30);
-            if (auto resolve = ResolveToolbarFn())
-                resolve(p + 0x30);
+            TutBase_ResolveToolbarRef(p + 0x30);
+            TutBase_ResolveToolbarRef(p + 0x30);
 
             toolbar = *(uintptr_t*)(p + 0x40); // re-read after resolve
             spriteSheet = *(uint64_t*)(toolbar + 0x28);
             spriteName = (const void*)(toolbar + 0x38);
         } else {
             // Has component list — iterate to find ToolbarDescription
-            if (auto resolve = ResolveToolbarFn())
-                resolve(p + 0x30);
+            TutBase_ResolveToolbarRef(p + 0x30);
 
             componentList = *(uintptr_t*)(toolbar + 0x58);
             int count = *(int*)(componentList + 0x30);
@@ -211,8 +199,7 @@ void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
 
                 if (typeId == ToolbarDescription::TypeId()) {
                     // IsDerivedFrom check
-                    if (fn_IsDerivedFrom &&
-                        fn_IsDerivedFrom(comp, ToolbarDescription::TypeId())) {
+                    if (Object::IsDerivedFromNullSafe(comp, ToolbarDescription::TypeId())) {
                         matchedComp = comp;
                     }
                     break;

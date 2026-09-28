@@ -34,7 +34,8 @@
 #include "video/ImageBuffer.h"   // B.3.x W0: ~WorldGeometry deletes _heightImage by name
 #include "engine_funcs.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "volume/Volume.h"        // RtVolume_Frustum_MulTransform3 / _Contains
+#include "Game/exe_constants.h"   // kRdata_*
 #include "perf_experimental.h"
 #include "Object/exe_type.h"   // DEFINE_EXE_VTABLE
 #include "object/Internal.h"   // Object::detail::InternalMemFree
@@ -61,7 +62,6 @@ constexpr float kChunkZRange =  32.0f;  // exe 0x1401721d0
 
 // One-shot log latches (namespace scope, atomic: B6-5).
 std::atomic<bool> s_collectLogged{false};
-std::atomic<bool> s_frustumWarned{false};
 std::atomic<bool> s_itemDrawLogged{false};
 }  // namespace
 
@@ -167,20 +167,8 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
         fflush(stdout);
     }
 
-    // Cascade: every Runtime primitive needed must be wired. ENDGAME B.3.5 batch K1:
-    // the five Video/Graphics terms (GetCullCamera, Geometry::GetTransform,
-    // Camera::GetFrustum, Renderer::AddDrawItem, Renderer::GetShader) left this
-    // aggregate with their call sites; the two Volume::Frustum terms stay, because
-    // `Volume::Frustum` is not a Video/Graphics class and its doors are untouched.
-    if (!fn_Frustum_MulTransform3 || !fn_Frustum_Contains) {
-        if (!s_frustumWarned.exchange(true)) {
-            printf("[Geometry::CollectDraw] Volume::Frustum primitives unwired — "
-                   "terrain will not render. Frustum=%p\n",
-                   (void*)fn_Frustum_Contains);
-            fflush(stdout);
-        }
-        return;
-    }
+    // The Volume::Frustum primitives (operator* 0x1800f9310, Contains 0x1800f8e80) are
+    // called by name: RtVolume_Frustum_MulTransform3 / RtVolume_Frustum_Contains.
 
     auto* selfBytes = reinterpret_cast<uint8_t*>(self);
 
@@ -225,13 +213,15 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
                           ->GetFrustum());   // B.3.5 bridge
     }
     // worldFrustum = cameraFrustum * cameraTransform3
-    fn_Frustum_MulTransform3(cameraFrustumBuf, worldFrustumBuf, &cameraTransform3);
+    RtVolume_Frustum_MulTransform3(reinterpret_cast<const ::Frustum*>(cameraFrustumBuf),
+                                   reinterpret_cast<::Frustum*>(worldFrustumBuf), &cameraTransform3);
     PerfX::SetWorldFrustum(worldFrustumBuf);   // [PerfX] the sim-side off-screen test uses this frame's planes
     // localFrustum = worldFrustum * geometryInverseTransform3
-    fn_Frustum_MulTransform3(worldFrustumBuf, localFrustumBuf, &selfInvTransform3);
+    RtVolume_Frustum_MulTransform3(reinterpret_cast<const ::Frustum*>(worldFrustumBuf),
+                                   reinterpret_cast<::Frustum*>(localFrustumBuf), &selfInvTransform3);
 
     // 3. Cached values from self.
-    float    uvScale     = g_fUVScale ? *g_fUVScale : 1.0f;
+    float    uvScale     = kRdata_14017214c;   // 0x14017214c
     float    fHalfGrid   = static_cast<float>(gridSize >> 1);
     uint16_t materialKey = *reinterpret_cast<uint16_t*>(selfBytes + 0x28);
     void*    matInst0    = *reinterpret_cast<void**>(selfBytes + 0xF8);
@@ -258,7 +248,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
             // Box layout passed to Frustum::Contains: {xmin,ymin,zmin, xmax,ymax,zmax}.
             float box[6] = { xmin, ymin, zMin, xmax, ymax, zMax };
 
-            uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
+            uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(localFrustumBuf), reinterpret_cast<const ::Box*>(box), 0x3F);
             if (r != 0x40) {
                 uint16_t key2 = static_cast<uint16_t>((i << 6) | j);
                 reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
@@ -326,7 +316,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
         float ymin = static_cast<float>(static_cast<int32_t>(elem[6])) - fHalfGrid;
         float box[6] = { xmin, ymin, 0.0f, xmax, ymax, 0.0f };
 
-        uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
+        uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(localFrustumBuf), reinterpret_cast<const ::Box*>(box), 0x3F);
         if (r == 0x40) continue;
 
         // key1 = 1 normally; 3 if (uint8_t)(elem + 0x5D) != 0.
@@ -355,7 +345,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
         float ymin = static_cast<float>(static_cast<int32_t>(elem[6])) - fHalfGrid;
         float box[6] = { xmin, ymin, 0.0f, xmax, ymax, 0.0f };
 
-        uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
+        uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(localFrustumBuf), reinterpret_cast<const ::Box*>(box), 0x3F);
         if (r == 0x40) continue;
 
         uint16_t key2 = static_cast<uint16_t>(idx | 0x4000);
@@ -425,7 +415,7 @@ void WorldGeometry::Draw(Video::Context& contextRef, const Graphics::Camera& /*c
     color[2] = 1.0f;
     float uvA = *reinterpret_cast<float*>(selfBytes + 0x80);
     float uvB = *reinterpret_cast<float*>(selfBytes + 0x7C);
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uvScale = kRdata_14017214c;   // 0x14017214c
     color[3] = (uvScale - param5) * uvA + param5 * uvB;
     reinterpret_cast<Video::Context*>(context)->SetColor(
         *reinterpret_cast<const Math::Vector4*>(color));   // B.3.5 bridge
