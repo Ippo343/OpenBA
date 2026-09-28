@@ -575,9 +575,6 @@ static void EnsureInit() {
     CHECK_FN(fn_EventNotifier_FireWithName);
     #undef CHECK_FN
 
-    // Initialize EntityList clean module function pointers
-    EntityList_InitFuncs();
-
     TRACE("[GameUpdateLoop] Function pointers resolved.\n");
 }
 

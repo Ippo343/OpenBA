@@ -33,7 +33,6 @@
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "resolve.h"
 #include "Dialog/EntityUI.h"             // caller batch CB6: TypeId()
 #include "Player/EditTool.h"
 #include "Component/ModelComponent.h"
@@ -53,74 +52,12 @@
 #include "Game/exe_bodies.h"   // BucketTree_Serialize_21ba0
 #include "Work/exe_bodies.h"   // WorkBST_RegisterWork_1a30, WorkBST_BSTRemove_a6e0
 
-// ============================================================
-// Resolved function pointers (exe-internal, resolved lazily)
-// ============================================================
-
-// EntityList::PreUpdate (0x1400c3bd0) — tree walk, process staging arrays
-typedef void (*fn_EntityList_PreUpdate_t)(EntityList* self);
-static fn_EntityList_PreUpdate_t s_fn_PreUpdate = nullptr;
-
-// EntityList::PostUpdate (0x1400c43d0) — post-update tree walk
-typedef void (*fn_EntityList_PostUpdate_t)(EntityList* self);
-static fn_EntityList_PostUpdate_t s_fn_PostUpdate = nullptr;
-
-// EntityList::PostUpdateStaging (0x1400c3ab0) — process post-update staging array
-typedef void (*fn_EntityList_PostUpdateStaging_t)(EntityList* self);
-static fn_EntityList_PostUpdateStaging_t s_fn_PostUpdateStaging = nullptr;
-
-// EntityList::RemoveEntity (0x1400c38e0) — remove entity from buckets + trees
-typedef void (*fn_EntityList_RemoveEntity_t)(EntityList* self, void* entityIBP);
-static fn_EntityList_RemoveEntity_t s_fn_RemoveEntity = nullptr;
-
-// EntityList::Serialize (0x1400c44a0) — save/load
-typedef void (*fn_EntityList_Serialize_t)(EntityList* self, void* stream);
-static fn_EntityList_Serialize_t s_fn_Serialize = nullptr;
-
-// EntityList::PostUpdateNodeHandler (0x1400c2c70) — per-entity post-update
-typedef void (*fn_PostUpdateNodeHandler_t)(int64_t entity);
-static fn_PostUpdateNodeHandler_t s_fn_PostUpdateNodeHandler = nullptr;
-
-static bool s_initialized = false;
-
 // Forward declaration (non-static: address registered for standalone exe resolution)
 void EntityList_PostUpdateStaging(EntityList* self);
 
 // One-frame-deferred removal drain (relocated retail step-5 tail — see
 // EntityList_Update Step 0). Defined below EntityList_Update, used at its top.
 void EntityList_DrainRemovals(EntityList* self);
-
-// ============================================================
-// EntityList_InitFuncs — resolve all function pointers
-// ============================================================
-void EntityList_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_PreUpdate = reinterpret_cast<fn_EntityList_PreUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400c3bd0));
-    s_fn_PostUpdate = reinterpret_cast<fn_EntityList_PostUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400c43d0));
-    s_fn_PostUpdateStaging = reinterpret_cast<fn_EntityList_PostUpdateStaging_t>(
-        ResolveAddr(Module::Exe, 0x1400c3ab0));
-    s_fn_RemoveEntity = reinterpret_cast<fn_EntityList_RemoveEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400c38e0));
-    s_fn_Serialize = reinterpret_cast<fn_EntityList_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400c44a0));
-    s_fn_PostUpdateNodeHandler = reinterpret_cast<fn_PostUpdateNodeHandler_t>(
-        ResolveAddr(Module::Exe, 0x1400c2c70));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[EntityList] Function pointers resolved:\n");
-    printf("  PreUpdate          = %p\n", (void*)s_fn_PreUpdate);
-    printf("  PostUpdate         = %p\n", (void*)s_fn_PostUpdate);
-    printf("  PostUpdateStaging  = %p\n", (void*)s_fn_PostUpdateStaging);
-    printf("  RemoveEntity       = %p\n", (void*)s_fn_RemoveEntity);
-    printf("  Serialize          = %p\n", (void*)s_fn_Serialize);
-    printf("  PostUpdateNodeHdlr = %p\n", (void*)s_fn_PostUpdateNodeHandler);
-#endif
-}
 
 // ============================================================
 // EntityList::TreeNodeHandler (0x1400c2de0)
