@@ -36,40 +36,15 @@
 #include <cstdlib>
 #include <cstring>
 #include "Component/exe_bodies.h"
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Action/exe_bodies.h"
+#include "Work/exe_bodies.h"
+#include "Player/exe_bodies.h"
 
-// ---- resolved exe helpers --------------------------------------------------------
-typedef void  (*WS_Rebalance_t)(void* treeField, void* pInsertedSlot);          // a8c0/3480/4b40
-typedef void  (*WS_IdMapInsert_t)(void* treeField, void* pKeyNode, uint32_t* pId); // 9a40
-typedef void  (*WS_NodeFree_t)(void* treeField, void* node);                     // e320
-typedef char  (*WS_CheckSlot_t)(uintptr_t workComp);                             // ead0
-typedef void  (*WS_StopSlot_t)(uintptr_t workComp);                              // eb50
-
-typedef void  (*WS_NodeRemove_t)(void* treeField, void* node);                   // ca60
-
-static WS_Rebalance_t   s_a8c0 = nullptr;
-static WS_Rebalance_t   s_3480 = nullptr;
-static WS_Rebalance_t   s_4b40 = nullptr;
-static WS_IdMapInsert_t s_9a40 = nullptr;
-static WS_NodeFree_t    s_e320 = nullptr;
-static WS_CheckSlot_t   s_ead0 = nullptr;
-static WS_StopSlot_t    s_eb50 = nullptr;
-static WS_NodeRemove_t  s_ca60 = nullptr;
-static bool s_ws_res = false;
-static void WS_Resolve() {
-    if (s_ws_res) return;
-    s_a8c0 = reinterpret_cast<WS_Rebalance_t>(ResolveAddr(Module::Exe, 0x14001a8c0));
-    s_3480 = reinterpret_cast<WS_Rebalance_t>(ResolveAddr(Module::Exe, 0x140013480));
-    s_4b40 = reinterpret_cast<WS_Rebalance_t>(ResolveAddr(Module::Exe, 0x140014b40));
-    s_9a40 = reinterpret_cast<WS_IdMapInsert_t>(ResolveAddr(Module::Exe, 0x140029a40));
-    s_e320 = reinterpret_cast<WS_NodeFree_t>(ResolveAddr(Module::Exe, 0x14000e320));
-    s_ead0 = reinterpret_cast<WS_CheckSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
-    s_eb50 = reinterpret_cast<WS_StopSlot_t>(ResolveAddr(Module::Exe, 0x14012eb50));
-    s_ca60 = reinterpret_cast<WS_NodeRemove_t>(ResolveAddr(Module::Exe, 0x14001ca60));
-    s_ws_res = true;
-}
+// ---- exe helpers: called by name (Action/Work/Player exe_bodies.h) ---------------
 
 static void* WS_Alloc(size_t n) {
-    return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (int)n, 8) : nullptr;
+    return System::MemoryAllocator::MemAlloc((int)n, 8);
 }
 
 // ==================================================================================
@@ -178,7 +153,7 @@ static void* WS_ccf0(uint64_t* treeField, void** pOut, uint64_t* pKey) {
             }
         }
         void* localTmp = parent;   // &local_res8 holds `parent` for the rebalance
-        if (s_4b40) s_4b40(treeField, &localTmp);
+        TradeWork_impl_4b40(reinterpret_cast<int64_t*>(treeField), reinterpret_cast<int64_t*>(&localTmp));
         *pOut = cur;
     }
     *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(treeField) + 0x08) += 1;   // count++
@@ -210,11 +185,11 @@ static void* WS_cb50(uint64_t* treeField, void** pOut, uint64_t* pKey, void** pS
     // free the temp deep-copied subtree
     if (tmp.sub) {
         uint8_t* sub = reinterpret_cast<uint8_t*>(tmp.sub);
-        if (s_e320) {
-            s_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x18));
-            s_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x20));
+        {
+            WorkBase_TreeNodeFree_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x18));
+            WorkBase_TreeNodeFree_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x20));
         }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(sub);
+        System::MemoryAllocator::MemFree(sub);
     }
     return pOut;
 }
@@ -233,7 +208,6 @@ static void* WS_cb50(uint64_t* treeField, void** pOut, uint64_t* pKey, void** pS
 // ==================================================================================
 extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32_t code,
                                               char fromExisting, int prio) {
-    WS_Resolve();
     uint8_t* schedB = reinterpret_cast<uint8_t*>(sched);
 
     // --- assign id (wraps at 0x7ffffffe) ---
@@ -319,7 +293,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
         }
         if (linked) {
             void* tmp = parent;
-            if (s_a8c0) s_a8c0(schedB + 0x10, &tmp);
+            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(schedB + 0x10), reinterpret_cast<int64_t*>(&tmp));
             sched[6] += 1;   // +0x18 primary count
         }
     }
@@ -328,7 +302,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     //     &{id, pad, workPtr} (the mapped value; ec60 later reads node+0x08 = workPtr). ---
     struct { int id; int pad; uint64_t workPtr; } mapVal;
     mapVal.id = id; mapVal.pad = 0; mapVal.workPtr = *reinterpret_cast<uint64_t*>(pWorkIBP);
-    if (s_9a40) s_9a40(schedB + 0x30, &keyNode, reinterpret_cast<uint32_t*>(&mapVal));
+    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(schedB + 0x30), &keyNode, reinterpret_cast<uint32_t*>(&mapVal));
 
     // --- 14 category sub-trees at sched+0x40 (stride 0x10), driven by `code` bits ---
     uint64_t workPtr = *reinterpret_cast<uint64_t*>(pWorkIBP);
@@ -390,7 +364,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
                 }
                 if (linked) {
                     void* tmp = parent;
-                    if (s_3480) s_3480(treeField, &tmp);
+                    Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(treeField), reinterpret_cast<int64_t*>(&tmp));
                 }
             }
             *reinterpret_cast<uint32_t*>(treeField + 0x08) += 1;   // sub-tree count++
@@ -493,7 +467,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
             }
             if (linked) {
                 void* tmp = parent;
-                if (s_3480) s_3480(innerField, &tmp);
+                Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(innerField), reinterpret_cast<int64_t*>(&tmp));
             }
         }
         *reinterpret_cast<uint32_t*>(found + 0x10) += 1;   // profession bucket count++
@@ -513,9 +487,8 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
 // flag = param_3, pWorkIBP = the work IBP.
 // ==================================================================================
 extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, char flag, void* pWorkIBP) {
-    WS_Resolve();
-    if (s_ead0 && s_ead0(workComp)) {
-        if (s_eb50) s_eb50(workComp);
+    if (WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(workComp))) {
+        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(workComp));
     }
     char prioFlag;
     if (flag == '\0' || *reinterpret_cast<int*>(workComp + 0x2c) == (int)0x80000000)
@@ -583,7 +556,6 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
 // themselves, which is why retail never touches +0x10 here.
 extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
                                               uint64_t oldKey, uint64_t newKey) {
-    WS_Resolve();
     // [STANDALONE GUARD] Retail is only ever called from a live world.
     if (!sched) return;
     uint8_t* schedB = reinterpret_cast<uint8_t*>(sched);
@@ -640,17 +612,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
     }
 
     // 4. Unfile it (ca60 frees the node and decrements bucket+0x10).
-    if (!s_ca60) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            std::fprintf(stderr, "[WorkScheduler] Rekey: 0x14001ca60 unresolved — work id %d "
-                         "stays filed under its old profession\n", key);
-            std::fflush(stderr);
-        }
-        return;
-    }
-    s_ca60(oldBucket + 0x08, item);
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(oldBucket + 0x08), item);   // 0x14001ca60
 
     // 5. The NEW profession's bucket, created if this is its first item.
     uint8_t* newBucket = nullptr;
@@ -683,7 +645,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
     pair.pad     = 0;
     pair.payload = *reinterpret_cast<uint64_t*>(idNode + 0x08);
     void* outSlot = nullptr;
-    if (s_9a40) s_9a40(newBucket + 0x08, &outSlot, reinterpret_cast<uint32_t*>(&pair));
+    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(newBucket + 0x08), &outSlot, reinterpret_cast<uint32_t*>(&pair));
 }
 
 #include "address_registry.h"

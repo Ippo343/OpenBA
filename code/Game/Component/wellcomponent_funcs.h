@@ -12,4 +12,3 @@ extern "C" char WellComponent_EnterDemolish(void* comp, void* sm);
 void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp);
 void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value);
 
-void WellComponent_InitFuncs();

@@ -18,7 +18,7 @@
 #include "Component/naturalresourcecomponent_funcs.h"
 #include "Component/ParticleComponent.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470, ActCNR_RemoveNatRes_1260f0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
@@ -27,38 +27,23 @@
 #include "Component/exe_bodies.h"
 
 // ============================================================
-// Resolved helpers
-// ============================================================
-
-// Entity_ClearPathQueue(entity, outIBP)
-typedef void (*fn_ClearPathQueue_t)(void* entity, void* outIBP);
-static fn_ClearPathQueue_t s_fn_ClearPathQueue = nullptr;
-
-// FUN_1400c3470 — entity flag update helper
-typedef void (*fn_EntityFlagUpdate_t)(void* entity);
-static fn_EntityFlagUpdate_t s_fn_EntityFlagUpdate = nullptr;
-
-// FUN_1401260f0 — reassign natural resource
-typedef void (*fn_ReassignResource_t)(void* self, void* ibp, char flag);
-static fn_ReassignResource_t s_fn_ReassignResource = nullptr;
-
-static bool s_initialized = false;
-
-// ============================================================
 // NaturalResourceComponent::OnRemove (0x140125c40)
 // ============================================================
 // Checks animation state, clears path queue, modifies flags,
 // potentially reassigns natural resource ownership.
+//
+// Nothing calls this body (the class's slot 8 is a PORT GAP, below). B3R: its three
+// doors (0x140005200, 0x1400c3470, 0x1401260f0, filled only by an init function that
+// nothing called) are the bodies by name.
 
 void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     // CheckPtr on owner IBP
 
-    // Clear path queue — get model component from entity
+    // Clear path queue — get model component from entity (0x140005200)
     uintptr_t modelIBP = 0;
-    if (s_fn_ClearPathQueue)
-        s_fn_ClearPathQueue(*(void**)(selfAddr + 0x10), &modelIBP);
+    NaturalResourceComponent_FindComponentByType(*(void**)(selfAddr + 0x10), &modelIBP);
 
     // CheckPtr on model IBP
 
@@ -73,17 +58,14 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
 
     // If flags changed in low 16 bits and entity exists, update
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(selfAddr + 0x10) != 0) {
-        if (s_fn_EntityFlagUpdate)
-            s_fn_EntityFlagUpdate(*(void**)(selfAddr + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*(void**)(selfAddr + 0x10));   // 0x1400c3470
     }
 
     // If bit 21 of flags is set, reassign resource
     if ((*(uint32_t*)(selfAddr + 0x20) >> 0x15) & 1) {
         uint8_t nullIBP[16];
-        if (fn_InternalBasePtr_Ctor)
-            new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        if (s_fn_ReassignResource)
-            s_fn_ReassignResource((void*)selfAddr, nullIBP, 0);
+        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        ActCNR_RemoveNatRes_1260f0(static_cast<int64_t>(selfAddr), nullIBP, 0);   // 0x1401260f0
     }
 }
 
@@ -118,32 +100,14 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
             // re-read the matching slot (matches original's second CheckPtr)
             void** matchSlot = reinterpret_cast<void**>(arrBase + (uintptr_t)i * 8);
             void* candidate = *matchSlot;
-            if (candidate && fn_IsDerivedFrom &&
-                fn_IsDerivedFrom(candidate, wantId)) {
+            if (candidate && ::Object::IsDerivedFromNullSafe(candidate, wantId)) {
                 found = candidate;
             }
             break;
         }
     }
 
-    if (fn_InternalBasePtr_Ctor)
-        new (outIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void NaturalResourceComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_ClearPathQueue = reinterpret_cast<fn_ClearPathQueue_t>(
-        ResolveAddr(Module::Exe, 0x140005200));  // Entity_ClearPathQueue used in decomp
-    s_fn_EntityFlagUpdate = reinterpret_cast<fn_EntityFlagUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400c3470));
-    s_fn_ReassignResource = reinterpret_cast<fn_ReassignResource_t>(
-        ResolveAddr(Module::Exe, 0x1401260f0));
-
-    s_initialized = true;
+    new (outIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
 }
 
 // ===== ENDGAME B.3.8 CIT — NaturalResourceComponent as a REAL class =====

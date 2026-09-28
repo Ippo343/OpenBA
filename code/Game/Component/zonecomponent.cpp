@@ -25,42 +25,20 @@
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <new>
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"   // ZoneComponent_sub_d360 (0x14009d360)
+#include "system/MemoryAllocator.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers
 // ============================================================
-
-// FUN_140088e20 — zone map registration
-typedef void (*fn_ZoneMapAdd_t)(void* zoneMap, void* entityPtr);
-static fn_ZoneMapAdd_t s_fn_ZoneMapAdd = nullptr;
-
-// ---- sub-helpers used by the reimplemented OnCreate / Draw / ZoneMapAdd ----
-
-// FUN_140004680 — find the map/tile component on an entity (returns InternalBasePtr*)
-typedef void* (*fn_FindMapComponent_t)(int64_t owner, void* outIBP);
-static fn_FindMapComponent_t s_fn_FindMapComponent = nullptr;
-
-// ResidenceComponent_impl_7230 (0x140017230) — red-black tree node insert/lookup.
-// Returns ptr-to-(ptr-to-node).
-typedef void** (*fn_TreeInsert_t)(void* treeRoot, void* outNode, void* key, void* scratch);
-static fn_TreeInsert_t s_fn_TreeInsert = nullptr;
-
+// FUN_140088e20 ZoneComponent_ZoneMapAdd — zone map registration (below).
+// FUN_140004680 FloorComponent_FindResData — find the map/tile component on an entity.
+// FUN_140017230 ResidenceComponent_impl_7230 — red-black tree node insert/lookup;
+//   returns ptr-to-(ptr-to-node).
 // FUN_140003110 — append an entity ref to a tree node's child list.
-
-// ZoneComponent_sub_d360 (0x14009d360) — rasterize zone tiles into the world grid.
-typedef void (*fn_ZoneRaster_t)(int* world, void* entityRef, int x, int y,
-    int w, int h, int64_t* descField28, int kind);
-static fn_ZoneRaster_t s_fn_ZoneRaster = nullptr;
-
-// FUN_140002cc0 — finalize/cleanup tree node during OnCreate.
-typedef void (*fn_NodeFinalize_t)(void* listPtr, void* entityRef);
-static fn_NodeFinalize_t s_fn_NodeFinalize = nullptr;
-
-static void** s_pGameState = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureZoneHelpers();
+// FUN_14009d360 ZoneComponent_sub_d360 — rasterize zone tiles into the world grid.
+// FUN_140002cc0 CemeteryListErase_Reimpl — finalize/cleanup tree node during OnCreate.
+// The GameWorld cell 0x1401c3dd8 is read through g_pGameWorldSingleton.
 
 
 // ============================================================
@@ -70,8 +48,6 @@ static void EnsureZoneHelpers();
 // at zoneMap+0x160 for that key; if no node matches, insert one via TreeInsert; then
 // append the entity ref to the node's child list (node+8, count = node[2]+1).
 void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
-    EnsureZoneHelpers();
-
     uintptr_t zoneMap = reinterpret_cast<uintptr_t>(zoneMapV);
     void* entityPtr = entityPtrV;
 
@@ -114,12 +90,11 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
     if (found == nullptr) {
         int64_t outNode[2] = {0, 0};
         int64_t scratch[3] = {0, 0, 0};
-        if (s_fn_TreeInsert) {
-            void** ret = s_fn_TreeInsert(reinterpret_cast<void*>(zoneMap + 0x160),
-                outNode, &key, scratch);
-            if (ret) found = reinterpret_cast<uint64_t*>(*ret);
-        }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(nullptr);
+        void** ret = static_cast<void**>(ResidenceComponent_impl_7230(
+            reinterpret_cast<int64_t*>(zoneMap + 0x160),
+            reinterpret_cast<void**>(outNode), &key, scratch));   // 0x140017230
+        if (ret) found = reinterpret_cast<uint64_t*>(*ret);
+        System::MemoryAllocator::MemFree(nullptr);
     }
 
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
@@ -139,34 +114,6 @@ void ZoneComponent_OnCreate(ZoneComponent* self) {
     self->ZoneComponent::OnRemove();
 }
 
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-static void EnsureZoneHelpers() {
-    if (s_initialized) return;
-
-    s_fn_ZoneMapAdd = reinterpret_cast<fn_ZoneMapAdd_t>(
-        ResolveAddr(Module::Exe, 0x140088e20));
-    s_pGameState = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    // Sub-helpers for the reimplemented OnCreate / Draw / ZoneMapAdd
-    s_fn_FindMapComponent = reinterpret_cast<fn_FindMapComponent_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_TreeInsert = reinterpret_cast<fn_TreeInsert_t>(
-        ResolveAddr(Module::Exe, 0x140017230));
-    s_fn_ZoneRaster = reinterpret_cast<fn_ZoneRaster_t>(
-        ResolveAddr(Module::Exe, 0x14009d360));
-    s_fn_NodeFinalize = reinterpret_cast<fn_NodeFinalize_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_initialized = true;
-}
-
-void ZoneComponent_InitFuncs() {
-    EnsureZoneHelpers();
-}
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — ZoneComponent as a REAL class (ZoneComponent.h).
@@ -207,8 +154,6 @@ ZoneComponent::ZoneComponent() {
 // registers the owning entity into the zone map at GameState+0xF0.
 
 void ZoneComponent::Persist(void* stream) {
-    EnsureZoneHelpers();
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     alignas(8) uint8_t serializer[24];
@@ -217,9 +162,9 @@ void ZoneComponent::Persist(void* stream) {
     int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         void* entityPtr = _entity;
-        if (s_pGameState && *s_pGameState && s_fn_ZoneMapAdd) {
-            void* zoneMap = *(void**)((uintptr_t)*s_pGameState + 0xF0);
-            s_fn_ZoneMapAdd(zoneMap, &entityPtr);
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            void* zoneMap = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+            ZoneComponent_ZoneMapAdd(zoneMap, &entityPtr);   // 0x140088e20
         }
     }
 
@@ -234,15 +179,12 @@ void ZoneComponent::Persist(void* stream) {
 // into the world grid, then (re)register the entity in the zone map tree.
 
 void ZoneComponent::OnAdded() {
-    EnsureZoneHelpers();
-
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
     int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
 
 
     int64_t mapIBP = 0;
-    if (s_fn_FindMapComponent)
-        s_fn_FindMapComponent(*ownerSlot, &mapIBP);
+    FloorComponent_FindResData(reinterpret_cast<void*>(*ownerSlot), &mapIBP);   // 0x140004680
     if (!mapIBP) {
         return;   // standalone-defensive: retail data guarantees the map comp
     }
@@ -263,20 +205,18 @@ void ZoneComponent::OnAdded() {
         return;
     }
 
-    if (!s_pGameState || !*s_pGameState) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
         return;
     }
-    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
+    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
 
     int64_t entityRef = *ownerSlot;
-    if (s_fn_ZoneRaster)
-        s_fn_ZoneRaster(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
-            (int)x, (int)y, (int)w, (int)h,
-            reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);
+    ZoneComponent_sub_d360(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
+        (int)x, (int)y, (unsigned int)(int)w, (int)h,
+        reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);   // 0x14009d360
 
     entityRef = *ownerSlot;
-    if (s_fn_ZoneMapAdd)
-        s_fn_ZoneMapAdd(*reinterpret_cast<void**>(world + 0xf0), &entityRef);
+    ZoneComponent_ZoneMapAdd(*reinterpret_cast<void**>(world + 0xf0), &entityRef);   // 0x140088e20
 
     // BANISHED_REGENTITY_TRACE — this call is the ONLY writer of the
     // per-description zone registry at (world+0xf0)+0x160, which is what
@@ -294,15 +234,12 @@ void ZoneComponent::OnAdded() {
 // red-black tree for the owner's entity id and finalize the matching node.
 
 void ZoneComponent::OnRemove() {
-    EnsureZoneHelpers();
-
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
     int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
 
 
     int64_t mapIBP = 0;
-    if (s_fn_FindMapComponent)
-        s_fn_FindMapComponent(*ownerSlot, &mapIBP);
+    FloorComponent_FindResData(reinterpret_cast<void*>(*ownerSlot), &mapIBP);   // 0x140004680
     if (!mapIBP) return;   // standalone-defensive: retail data guarantees the map comp
 
     int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
@@ -316,16 +253,14 @@ void ZoneComponent::OnRemove() {
     void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
     if (!desc) return;
 
-    if (!s_pGameState || !*s_pGameState) return;
-    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
 
     int64_t entityRef = 0;
-    if (fn_InternalBasePtr_Ctor)
-        new (&entityRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    if (s_fn_ZoneRaster)
-        s_fn_ZoneRaster(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
-            (int)x, (int)y, (int)w, (int)h,
-            reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);
+    new (&entityRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    ZoneComponent_sub_d360(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
+        (int)x, (int)y, (unsigned int)(int)w, (int)h,
+        reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);   // 0x14009d360
 
     // Walk the zone-map tree for the owner's entity id (key at owner_deref+0x28).
     int64_t ownerRef = *ownerSlot;
@@ -342,8 +277,8 @@ void ZoneComponent::OnRemove() {
             node = reinterpret_cast<uint64_t*>(node[5]);
         }
     }
-    if (s_fn_NodeFinalize && found)
-        s_fn_NodeFinalize(found + 1, &ownerRef);
+    if (found)
+        CemeteryListErase_Reimpl(found + 1, &ownerRef);   // 0x140002cc0
 }
 
 // create 0x14003a6a0: MemAlloc(0x28, 8), then the ctor.

@@ -43,9 +43,8 @@ StatusIconDescription::StatusIconDescription()
 
 // [5] 0x14012c180: stream order as retail.
 bool StatusIconDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
     ser.Serialize(_scale, nullptr);
     ser.Serialize(_flag, nullptr);
     return true;

@@ -20,7 +20,12 @@
 #include "Component/growthcomponent_funcs.h"
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Action/exe_bodies.h"            // ActHunt_*, ActCNR_* helpers
+#include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
+#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Game/exe_constants.h"           // kRdata_*
+#include "math/Math.h"                    // Math::Vector4, Math::Scalar
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone sibling-id fallback)
 #include <cstdint>
 #include <cstdio>
@@ -32,95 +37,30 @@
 #include "Component/exe_bodies.h"
 
 // ============================================================
-// Resolved helpers
+// Helpers, called by name (B3R)
 // ============================================================
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470 -- flag notification
+//   0x14011fba0 GrowthComponent_SpawnSubResource   0x140120470 GrowthComponent_SetResourceAmount
+//   0x140120410 GrowthComponent_GetResourceIndex   0x140126780 GrowthComponent_ResetGrowthState
+//   0x140118950 GrowthComponent_ModifyFlags        (all below)
+// DAT_1401c3dd8 (the game world) is read through g_pGameWorldSingleton, the engine_funcs
+// global bound to the same cell.
 
-// FUN_1400c3470 -- flag notification (notify entity of flag change)
-typedef void (*fn_FlagNotify_t)(void* entity);
-static fn_FlagNotify_t s_fn_FlagNotify = nullptr;
+namespace {
+// The .rdata float constants (Game/exe_constants.h) that are stored as bit patterns.
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+}  // namespace
 
-// FUN_14011fba0 -- spawn sub-resource (growth spawning)
-typedef void (*fn_SpawnSubResource_t)(void* growthComp, void* config);
-static fn_SpawnSubResource_t s_fn_SpawnSubResource = nullptr;
-
-// FUN_140120470 -- set resource amount / harvest helper
-typedef void (*fn_SetResourceAmount_t)(void* growthComp, float amount);
-static fn_SetResourceAmount_t s_fn_SetResourceAmount = nullptr;
-
-// FUN_140120410 -- get resource index
-typedef int (*fn_GetResourceIndex_t)(void* growthComp);
-static fn_GetResourceIndex_t s_fn_GetResourceIndex = nullptr;
-
-// FUN_140126780 -- reset growth state on entity
-typedef void (*fn_ResetGrowthState_t)(void* entityPtr);
-static fn_ResetGrowthState_t s_fn_ResetGrowthState = nullptr;
-
-// FUN_140118950 -- modify component flags (self, orMask, andNotMask)
-typedef void (*fn_ModifyFlags_t)(void* comp, uint32_t orMask, uint32_t andNotMask);
-static fn_ModifyFlags_t s_fn_ModifyFlags = nullptr;
-
-// Global: DAT_1401c3dd8 -- game world/simulation singleton pointer
-static void** s_pWorldSingleton = nullptr;
-
-// Float constants from .rdata
-static float* s_fOne = nullptr;            // DAT_14017214c = 1.0f
-static float* s_fSixty = nullptr;          // DAT_140172234 = 60.0f
-static float* s_fFreezeTemp = nullptr;     // DAT_1401721d0 = freeze threshold
-static float* s_fFreezeGrowth = nullptr;   // DAT_140172288 = growth rate at freeze
-// DAT_1401722b0 -- double mask for fabsf (0x7FFFFFFFFFFFFFFF)
-static uint64_t* s_dblAbsMask = nullptr;
-
-// Visual-scale smoothing constants used by slot 10 (0x14011fea0), read from .rdata so
-// they stay tied to the binary rather than being re-typed here.
-static float* s_fScaleEps      = nullptr;  // DAT_1401720b8 = 0.001f  (snap threshold)
-static float* s_fScaleOldW     = nullptr;  // DAT_140172144 = 0.99f   (previous weight)
-static float* s_fScaleNewW     = nullptr;  // DAT_1401720c0 = 0.01f   (target weight)
-static float* s_fCropSpreadDiv = nullptr;  // DAT_1401720f4 = 0.15f   (crop x/y ramp)
-
-// Math::Vector4::Vector4(const Scalar&) via .rdata dispatch slot 0x140152958 — broadcasts
-// one float into all four lanes.
-typedef void (*fn_Vec4FromScalar_t)(void* out16, const float* scalar);
-static fn_Vec4FromScalar_t s_fn_Vec4FromScalar = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    s_fn_FlagNotify = reinterpret_cast<fn_FlagNotify_t>(
-        ResolveAddr(Module::Exe, 0x1400c3470));
-    s_fn_SpawnSubResource = reinterpret_cast<fn_SpawnSubResource_t>(
-        ResolveAddr(Module::Exe, 0x14011fba0));
-    s_fn_SetResourceAmount = reinterpret_cast<fn_SetResourceAmount_t>(
-        ResolveAddr(Module::Exe, 0x140120470));
-    s_fn_GetResourceIndex = reinterpret_cast<fn_GetResourceIndex_t>(
-        ResolveAddr(Module::Exe, 0x140120410));
-    s_fn_ResetGrowthState = reinterpret_cast<fn_ResetGrowthState_t>(
-        ResolveAddr(Module::Exe, 0x140126780));
-    s_fn_ModifyFlags = reinterpret_cast<fn_ModifyFlags_t>(
-        ResolveAddr(Module::Exe, 0x140118950));
-
-    s_pWorldSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_fOne = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_fSixty = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172234));
-    s_fFreezeTemp = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721d0));
-    s_fFreezeGrowth = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172288));
-    s_dblAbsMask = reinterpret_cast<uint64_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
-
-    s_fScaleEps      = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720b8));
-    s_fScaleOldW     = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172144));
-    s_fScaleNewW     = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720c0));
-    s_fCropSpreadDiv = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720f4));
-
-    {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152958);
-        if (slot) s_fn_Vec4FromScalar = *reinterpret_cast<fn_Vec4FromScalar_t*>(slot);
-    }
-
-    s_helpersResolved = true;
-}
+// Float constants from .rdata:
+//   0x14017214c = 1.0f                     0x140172234 = 300.0f (the growth-time scale;
+//   0x1401721d0 = freeze threshold (32.0f)   the "60.0f" this file used to call it was a
+//   0x140172288 = growth rate at freeze      wrong label -- the cell has always held 300.0f)
+//   0x1401722b0 = double mask for fabsf (0x7FFFFFFFFFFFFFFF)
+// Visual-scale smoothing constants used by slot 10 (0x14011fea0):
+//   0x1401720b8 = 0.001f (snap threshold)   0x140172144 = 0.99f (previous weight)
+//   0x1401720c0 = 0.01f  (target weight)    0x1401720f4 = 0.15f (crop x/y ramp)
+// Math::Vector4::Vector4(const Scalar&) (import slot 0x140152958) broadcasts one float
+// into all four lanes.
 
 // ============================================================
 // Helper: do harvest/reset sequence
@@ -128,17 +68,12 @@ static void EnsureHelpers() {
 // Shared by both negative-growth and threshold-harvest paths.
 static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAmount) {
     // Set resource amount
-    if (s_fn_SetResourceAmount) {
-        s_fn_SetResourceAmount(comp, harvestAmount);
-    }
+    GrowthComponent_SetResourceAmount(comp, harvestAmount);   // 0x140120470
 
     // Update resource manager entry with owner position
     uint64_t ownerPos = *reinterpret_cast<uint64_t*>(
         *reinterpret_cast<uintptr_t*>(comp + 0x10) + 0x28);
-    int resIdx = 0;
-    if (s_fn_GetResourceIndex) {
-        resIdx = s_fn_GetResourceIndex(comp);
-    }
+    int resIdx = GrowthComponent_GetResourceIndex(comp);   // 0x140120410
     // grid base = *(resourceMgr+0x80) = the Map cell grid (game+0x80, built in
     // standalone by MapTileGrid_Build: dim*dim records, stride 0x30). Write the
     // owner position 8-byte handle into this tile's record at +0x10. The original
@@ -159,9 +94,7 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
     *reinterpret_cast<uint8_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x2D) = 0;
 
     // Reset growth state
-    if (s_fn_ResetGrowthState) {
-        s_fn_ResetGrowthState(*reinterpret_cast<void**>(comp + 0x28));
-    }
+    GrowthComponent_ResetGrowthState(*reinterpret_cast<void**>(comp + 0x28));   // 0x140126780
 }
 
 // ============================================================
@@ -179,103 +112,51 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
 // skipped). Faithful 1:1 ports of the original FUN_* helpers so that the guarded
 // calls in GrowthComponent_Update / DoHarvestReset actually fire.
 
-// Resolved sub-helpers used by the bodies below.
-// FUN_140004680 -- find NaturalResource entity-data component on owner (returns IBP).
-typedef void* (*fn_FindResData_t)(void* owner, void* outIBP);
-static fn_FindResData_t s_fn_FindResData = nullptr;
-// FUN_140120c30 -- spawn-site validity check (growthComp/config, x, y) -> bool(low byte)
-typedef int64_t (*fn_SpawnSiteValid_t)(void* config, int x, int y);
-static fn_SpawnSiteValid_t s_fn_SpawnSiteValid = nullptr;
-// CharacterComponent_impl_f5d0 (FUN_1400c...f5d0) -- tile placement test.
-typedef bool (*fn_TilePlace_t)(void* mapInfo, int x, int y, int kind,
-                               int d0, int d1, float f, char c0, char c1, int z);
-static fn_TilePlace_t s_fn_TilePlace = nullptr;
-// Entity_ClearPathQueue (FUN_140005200) -- IBP accessor (component fetch).
-typedef void* (*fn_EntityAccessor_t)(void* entity, void* outIBP);
-static fn_EntityAccessor_t s_fn_EntityAccessor = nullptr;
-// ComponentEntity copy-ctor (FUN_1400...) -- via engine helper if available.
-typedef void* (*fn_CompEntityCopy_t)(void* dst, void* src);
-static fn_CompEntityCopy_t s_fn_CompEntityCopy = nullptr;
-// FUN_1400052c0 / FUN_14000c460 -- IBP component accessors.
-typedef void* (*fn_IBPAccessor_t)(void* ibp, void* outIBP);
-static fn_IBPAccessor_t s_fn_IBPAccessor_52c0 = nullptr;
-static fn_IBPAccessor_t s_fn_IBPAccessor_c460 = nullptr;
-// Entity_impl_6540 (0x140126540) -- place a freshly-spawned sub-resource entity:
-// records its tile (+0x28/+0x2a), builds a yaw transform via FromYawPitchOffset and
-// writes it to the entity transform (+0x148..+0x168), then Geometry::SetTransform.
-// NOTE: the literal was previously the dropped-digit typo 0x140006540 (which lands
-// mid-HealerDescription_Factory at 0x1400064f0 — an unrelated tiny factory). The true
-// callee in GrowthComponent_helper_fba0 is Entity_impl_6540 @ 0x140126540.
-typedef void (*fn_SetTileIndex_t)(void* entity, int tileIdx);
-static fn_SetTileIndex_t s_fn_SetTileIndex = nullptr;
-// FUN_140120db0 -- set growth value (float) on entity.
-typedef void (*fn_SetGrowthVal_t)(void* entity, float v);
-static fn_SetGrowthVal_t s_fn_SetGrowthVal = nullptr;
-// FUN_140125320 / FUN_1401253d0 -- variant index helpers.
-typedef uint32_t (*fn_VariantRange_t)(int64_t a, int b);
-static fn_VariantRange_t s_fn_VariantRange = nullptr;
-typedef void (*fn_SetVariant_t)(void* a, short b, short c);
-static fn_SetVariant_t s_fn_SetVariant = nullptr;
-// FUN_1400c48a0 -- register new entity into world entity list.
-typedef void (*fn_RegisterEntity_t)(void* entityListPtr, void* ibp, int bucket);
-static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
-// FUN_140003f60 -- find sibling component of type DAT_1401c7a50 on the owner
-// entity (the GrowthComponent::Startup +0x30 accessor). Returns IBP via out-param.
-typedef void* (*fn_FindSibling_3f60_t)(uintptr_t owner, void* outIBP);
-static fn_FindSibling_3f60_t s_fn_FindSibling_3f60 = nullptr;
-// AnimateNaturalResource_helper_6440 (FUN_140126440) -- animation kick.
-typedef void (*fn_AnimateNatRes_t)(void* comp, int kind);
-static fn_AnimateNatRes_t s_fn_AnimateNatRes = nullptr;
+// Sub-helpers used by the bodies below, called by name (B3R):
+//   0x140004680 FloorComponent_FindResData -- find NaturalResource entity-data component on
+//               owner (returns IBP)
+//   0x140120c30 WorkLeaf_FootprintOwnerCheck_120c30 -- spawn-site validity check
+//               (growthComp/config, x, y) -> bool(low byte)
+//   0x140005200 NaturalResourceComponent_FindComponentByType -- IBP accessor (component fetch)
+//   0x1400c3720 ComponentEntity_CtorFromDescription -- ComponentEntity copy-ctor
+//   0x1400052c0 WorkBase_FindComponent_52c0 / 0x14000c460 ActCNR_FindComponent_c460 -- IBP
+//               component accessors
+//   0x140126540 ActCNR_SetupModelAtCell_126540 (Entity_impl_6540) -- place a freshly-spawned
+//               sub-resource entity: records its tile (+0x28/+0x2a), builds a yaw transform
+//               via FromYawPitchOffset and writes it to the entity transform
+//               (+0x148..+0x168), then Geometry::SetTransform. (The literal was once the
+//               dropped-digit typo 0x140006540, mid-HealerDescription_Factory.)
+//   0x140120db0 ActCNR_SetGrowthProgress_120db0 -- set growth value (float) on entity
+//   0x140125320 / 0x1401253d0 ActCNR_NR_GetSubVariantCount_125320 / ActCNR_NR_SetVariant_1253d0
+//   0x1400c48a0 EntityList_RegisterEntity_Impl -- register new entity into world entity list
+//   0x140003f60 ActCNR_FindComponent_3f60 -- find sibling component of type DAT_1401c7a50 on
+//               the owner entity (the GrowthComponent::Startup +0x30 accessor)
+//   0x140126440 ActCNR_SetAnimIndex_126440 (AnimateNaturalResource_helper_6440) -- anim kick
 // Random on world singleton (+0xd8); world resource manager (+0xf8); world flags (+0xd0).
-static float* s_fUVScale = nullptr;       // g_fUVScale = DAT_140172140
-static float* s_fInst248 = nullptr;       // DAT_140172248
-
-static bool s_subHelpersResolved = false;
-static void EnsureSubHelpers() {
-    if (s_subHelpersResolved) return;
-    s_fn_FindResData     = reinterpret_cast<fn_FindResData_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_SpawnSiteValid  = reinterpret_cast<fn_SpawnSiteValid_t>(ResolveAddr(Module::Exe, 0x140120c30));
-    s_fn_EntityAccessor  = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140005200));
-    s_fn_IBPAccessor_52c0= reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x1400052c0));
-    s_fn_IBPAccessor_c460= reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x14000c460));
-    s_fn_SetTileIndex    = reinterpret_cast<fn_SetTileIndex_t>(ResolveAddr(Module::Exe, 0x140126540));
-    s_fn_SetGrowthVal    = reinterpret_cast<fn_SetGrowthVal_t>(ResolveAddr(Module::Exe, 0x140120db0));
-    s_fn_VariantRange    = reinterpret_cast<fn_VariantRange_t>(ResolveAddr(Module::Exe, 0x140125320));
-    s_fn_SetVariant      = reinterpret_cast<fn_SetVariant_t>(ResolveAddr(Module::Exe, 0x1401253d0));
-    s_fn_RegisterEntity  = reinterpret_cast<fn_RegisterEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_fn_AnimateNatRes   = reinterpret_cast<fn_AnimateNatRes_t>(ResolveAddr(Module::Exe, 0x140126440));
-    s_fn_CompEntityCopy  = reinterpret_cast<fn_CompEntityCopy_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_fn_FindSibling_3f60= reinterpret_cast<fn_FindSibling_3f60_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fUVScale           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172140));
-    s_fInst248           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172248));
-    s_subHelpersResolved = true;
-}
 
 static uintptr_t WorldSingleton() {
-    return s_pWorldSingleton ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton) : 0;
+    return g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
 }
 
 // Reimpl of FUN_140118950 (GrowthComponent flag modify: comp+0x20 = (f|or)&~andNot; notify)
 void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask) {
-    EnsureHelpers();
     uint8_t* c = reinterpret_cast<uint8_t*>(comp);
     uint32_t oldF = *reinterpret_cast<uint32_t*>(c + 0x20);
     uint32_t newF = (oldF | orMask) & ~andNotMask;
     *reinterpret_cast<uint32_t*>(c + 0x20) = newF;
     if (((newF ^ oldF) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10) != nullptr) {
-        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(c + 0x10));
     }
 }
 
 // Reimpl of FUN_140120410 (GrowthComponent get tile index = y*mapW + x from NatResource data)
 int GrowthComponent_GetResourceIndex(void* comp) {
-    EnsureHelpers(); EnsureSubHelpers();
     uintptr_t world = WorldSingleton();
     if (!world) return 0;
     int* mapW = *reinterpret_cast<int**>(world + 0xF8);
     uint8_t* c = reinterpret_cast<uint8_t*>(comp);
     int64_t resIBP = 0;
-    if (s_fn_FindResData) s_fn_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
     int16_t x = *reinterpret_cast<int16_t*>(resIBP + 0x28);
     int16_t y = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
     return (int)y * (*mapW) + (int)x;
@@ -283,20 +164,18 @@ int GrowthComponent_GetResourceIndex(void* comp) {
 
 // Reimpl of FUN_140120470 (GrowthComponent set per-tile growth byte at grid +0x2c)
 void GrowthComponent_SetResourceAmount(void* comp, float amount) {
-    EnsureHelpers(); EnsureSubHelpers();
     uintptr_t world = WorldSingleton();
     if (!world) return;
     int* mapW = *reinterpret_cast<int**>(world + 0xF8);
     uint8_t* c = reinterpret_cast<uint8_t*>(comp);
     int64_t resIBP = 0;
-    if (s_fn_FindResData) s_fn_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
     uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapW) + 0x80);
     int16_t x = *reinterpret_cast<int16_t*>(resIBP + 0x28);
     int16_t y = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
     int64_t cell = (int64_t)((int)x + (int)y * (*mapW));
     // DAT_14017222c is the byte<->float scale (255.0)
-    float* pScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017222c));
-    float divisor = pScale ? *pScale : 255.0f;
+    const float divisor = RdataF(kRdata_14017222c);
     uint8_t* cellByte = reinterpret_cast<uint8_t*>(grid + 0x2c + cell * 0x30);
     float fv = (float)(*cellByte) / divisor;
     if (0.0f <= amount) fv = fv * fv * amount;
@@ -308,20 +187,18 @@ void GrowthComponent_SetResourceAmount(void* comp, float amount) {
 
 // Reimpl of FUN_140126780 (GrowthComponent reset growth: set bit 0x200000, notify, animate)
 void GrowthComponent_ResetGrowthState(void* entityPtr) {
-    EnsureHelpers(); EnsureSubHelpers();
     uint8_t* c = reinterpret_cast<uint8_t*>(entityPtr);
     uint32_t oldF = *reinterpret_cast<uint32_t*>(c + 0x20);
     uint32_t newF = oldF | 0x200000;
     *reinterpret_cast<uint32_t*>(c + 0x20) = newF;
     if (((newF ^ oldF) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10) != nullptr) {
-        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(c + 0x10));
     }
-    if (s_fn_AnimateNatRes) s_fn_AnimateNatRes(c, 2);
+    ActCNR_SetAnimIndex_126440(reinterpret_cast<int64_t>(c), 2);   // 0x140126440
 }
 
 // Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)
 void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
-    EnsureHelpers(); EnsureSubHelpers();
     uintptr_t world = WorldSingleton();
     if (!world) return;
     uint8_t* cfg = reinterpret_cast<uint8_t*>(config);
@@ -331,14 +208,14 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     if ((*reinterpret_cast<uint32_t*>(world + 0xD0) >> 10 & 1) != 0) return;
 
     float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-    float uvScale = s_fUVScale ? *s_fUVScale : 1.0f;
+    const float uvScale = RdataF(kRdata_140172140);   // 0x140172140
     int spawnChanceDenom = *reinterpret_cast<int*>(cfg + 0x48);
     if (spawnChanceDenom == 0) return;
     if (roll > uvScale / (float)spawnChanceDenom) return;
 
     uint8_t* gc = reinterpret_cast<uint8_t*>(growthComp);
     int64_t resIBP = 0;
-    if (s_fn_FindResData) s_fn_FindResData(*reinterpret_cast<void**>(gc + 0x10), &resIBP);
+    FloorComponent_FindResData(*reinterpret_cast<void**>(gc + 0x10), &resIBP);
     int16_t baseX = *reinterpret_cast<int16_t*>(resIBP + 0x28);
     int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
 
@@ -347,79 +224,62 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     int y = (int)baseY + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
     if (!(x >= 0 && y >= 0 && x < *mapW && y < *mapW)) return;
 
-    float inst248 = s_fInst248 ? *s_fInst248 : 0.0f;
-    float inst140 = s_fUVScale ? *s_fUVScale : 0.0f;
-    bool placed = s_fn_TilePlace
-        ? s_fn_TilePlace(mapW, x, y, 4, (int)inst140, (int)inst248, 0.0f, '\0', '\0', 0)
-        : false;
+    // PORT GAP 0x14009f5d0 CharacterComponent_impl_f5d0: not ported here; retail calls it
+    // here, (mapW, x, y, 4, (int)[0x140172140], (int)[0x140172248], 0.0f, 0, 0, 0), as the
+    // tile placement test. This file's pointer to it was never filled (no resolve), so
+    // the tree has always taken the not-placed arm: the sub-resource is not spawned.
+    // (Its port PlayerPath_CharComp_f5d0 exists; wiring it is a behaviour change.)
+    const bool placed = false;
     if (!placed) return;
 
-    if (!s_fn_SpawnSiteValid) return;
-    int64_t valid = s_fn_SpawnSiteValid(config, x, y);
+    int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
+        reinterpret_cast<intptr_t>(config), x, y);   // 0x140120c30
     if ((char)valid == '\0') return;
 
     int mapWv = *mapW;
     int64_t parentIBP = 0;
-    if (s_fn_EntityAccessor) s_fn_EntityAccessor(*reinterpret_cast<void**>(gc + 0x10), &parentIBP);
+    NaturalResourceComponent_FindComponentByType(*reinterpret_cast<void**>(gc + 0x10), &parentIBP);   // 0x140005200
     int16_t variantSeed = *reinterpret_cast<int16_t*>(*reinterpret_cast<uintptr_t*>(&parentIBP) + 0x164);
 
     // Allocate + copy-construct the new ComponentEntity from this entity's description.
-    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
-                    ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+    void* mem = (System::MemoryAllocator::_singleton)
+                    ? System::MemoryAllocator::MemAlloc(0x48, 8) : nullptr;
     void* newEnt = nullptr;
     if (mem) {
         void* srcDesc = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28);
-        if (s_fn_CompEntityCopy) newEnt = s_fn_CompEntityCopy(mem, srcDesc);
-        else newEnt = mem;
+        newEnt = ComponentEntity_CtorFromDescription(
+            reinterpret_cast<ComponentEntity*>(mem), srcDesc);   // 0x1400c3720, B.3.x bridge
     }
     int64_t newIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&newIBP) ::Object::InternalBasePtr(
+    new (&newIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(newEnt));   // B.3.3 bridge
 
     int64_t acc1 = 0;
-    if (s_fn_IBPAccessor_52c0) s_fn_IBPAccessor_52c0(reinterpret_cast<void*>(newIBP), &acc1);
-    if (s_fn_SetTileIndex) s_fn_SetTileIndex(*reinterpret_cast<void**>(&acc1), mapWv * y + x);
+    WorkBase_FindComponent_52c0(static_cast<uintptr_t>(newIBP), &acc1);   // 0x1400052c0
+    ActCNR_SetupModelAtCell_126540(acc1, mapWv * y + x);                  // 0x140126540
 
     int64_t acc2 = 0;
-    if (s_fn_IBPAccessor_c460) s_fn_IBPAccessor_c460(reinterpret_cast<void*>(newIBP), &acc2);
-    if (s_fn_SetGrowthVal) s_fn_SetGrowthVal(*reinterpret_cast<void**>(&acc2), 0.0f);
+    ActCNR_FindComponent_c460(static_cast<uintptr_t>(newIBP), &acc2);   // 0x14000c460
+    ActCNR_SetGrowthProgress_120db0(acc2, 0.0f);                        // 0x140120db0
 
     int64_t acc3 = 0;
-    if (s_fn_EntityAccessor) s_fn_EntityAccessor(reinterpret_cast<void*>(newIBP), &acc3);
+    NaturalResourceComponent_FindComponentByType(reinterpret_cast<void*>(newIBP), &acc3);   // 0x140005200
     int64_t variantTarget = *reinterpret_cast<int64_t*>(&acc3);
 
     int64_t acc4 = 0;
-    if (s_fn_EntityAccessor) s_fn_EntityAccessor(reinterpret_cast<void*>(newIBP), &acc4);
+    NaturalResourceComponent_FindComponentByType(reinterpret_cast<void*>(newIBP), &acc4);   // 0x140005200
     void* variantWrite = *reinterpret_cast<void**>(&acc4);
 
-    uint32_t range = s_fn_VariantRange ? s_fn_VariantRange(variantTarget, (int)variantSeed) : 0;
+    uint32_t range = ActCNR_NR_GetSubVariantCount_125320(variantTarget, (int)variantSeed);   // 0x140125320
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
     uint32_t roll2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
-    if (s_fn_SetVariant) s_fn_SetVariant(variantWrite, variantSeed, (short)roll2);
+    ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(variantWrite),   // 0x1401253d0
+                                static_cast<uint16_t>(variantSeed), (short)roll2);
 
     int64_t regArg = newIBP;
-    if (s_fn_RegisterEntity) {
-        s_fn_RegisterEntity(*reinterpret_cast<void**>(world + 0xE8), &regArg,
-            *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28 + 0x20));
-    }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void GrowthComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[GrowthComponent] Funcs resolved: FlagNotify=%p "
-           "SpawnSub=%p SetResAmt=%p GetResIdx=%p\n",
-           (void*)s_fn_FlagNotify,
-           (void*)s_fn_SpawnSubResource, (void*)s_fn_SetResourceAmount,
-           (void*)s_fn_GetResourceIndex);
-    printf("[GrowthComponent]   WorldSingleton=%p -> %p\n",
-           (void*)s_pWorldSingleton,
-           s_pWorldSingleton ? *s_pWorldSingleton : nullptr);
-#endif
+    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(world + 0xE8), &regArg,   // 0x1400c48a0
+        *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28 + 0x20));
 }
 
 // ===== ENDGAME B.3.8 CIT — GrowthComponent as a REAL class (GrowthComponent.h) =====
@@ -460,8 +320,6 @@ GrowthComponent::GrowthComponent()
 //   growthScale@+0x4c = config+0x20 <= 0 ? -1.0 (never harvest)
 //                       : RandFloatTol(rng) * config+0x24 + config+0x20.
 void GrowthComponent::Startup() {
-    EnsureHelpers();
-    EnsureSubHelpers();
     uint8_t* comp = reinterpret_cast<uint8_t*>(this);
 
     void* owner = *reinterpret_cast<void**>(comp + 0x10);
@@ -469,7 +327,7 @@ void GrowthComponent::Startup() {
 
     // resource@+0x28 — sibling natural-resource component.
     int64_t resIBP = 0;
-    if (s_fn_IBPAccessor_52c0) s_fn_IBPAccessor_52c0(owner, &resIBP);
+    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(owner), &resIBP);   // 0x1400052c0
     *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(resIBP);
 
     // +0x30 — sibling ModelComponent (type DAT_1401c7a50), used by FUN_140120db0 to
@@ -481,9 +339,8 @@ void GrowthComponent::Startup() {
     // SELF-CONTAINED ModelComponent scan via GetTypeIdByName. Scoped here so it cannot
     // change the shared produce/animation callers of 3f60 (verified paths).
     int64_t res30IBP = 0;
-    if (s_fn_FindSibling_3f60)
-        s_fn_FindSibling_3f60(reinterpret_cast<uintptr_t>(owner), &res30IBP);
-    if (res30IBP == 0 && fn_InternalBasePtr_Ctor) {
+    ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(owner), &res30IBP);   // 0x140003f60
+    if (res30IBP == 0) {
         const uint32_t s_tidModel = ModelComponent::TypeId();   // B.3.8: was a lazy by-name cache (B6-5)
         if (s_tidModel) {
             int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
@@ -531,7 +388,6 @@ void GrowthComponent::OnRemove() {}
 // bucket tick 0x1400c42af).
 void GrowthComponent::Update(void* time) {
     int64_t* deltaTime = static_cast<int64_t*>(time);
-    EnsureHelpers();
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(this);
 
@@ -567,15 +423,15 @@ void GrowthComponent::Update(void* time) {
             return;
     }
 
-    float fOne = *s_fOne;       // 1.0f
-    float fSixty = *s_fSixty;  // 60.0f
+    const float fOne = kRdata_14017214c;             // 1.0f
+    const float fGrowthTimeScale = kRdata_140172234; // 300.0f (this read was labelled "60.0f")
 
     // config = comp->field38 (component config/description pointer)
     uintptr_t config = *reinterpret_cast<uintptr_t*>(comp + 0x38);
 
     // Base growth rate: 1.0 / (config+0x28 * 60.0)
     float configGrowthTime = *reinterpret_cast<float*>(config + 0x28);
-    float growthRate = fOne / (configGrowthTime * fSixty);
+    float growthRate = fOne / (configGrowthTime * fGrowthTimeScale);
 
     // Get current growth value from resource component at +0x28
     uintptr_t resourceComp = *reinterpret_cast<uintptr_t*>(comp + 0x28);
@@ -586,7 +442,7 @@ void GrowthComponent::Update(void* time) {
     if (*reinterpret_cast<char*>(config + 0x2C) != '\0') {
         // Get current temperature from world singleton
         // world->weather(+0x130)->temp(+0x18)
-        uintptr_t world = reinterpret_cast<uintptr_t>(*s_pWorldSingleton);
+        uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
         uintptr_t weatherPtr = *reinterpret_cast<uintptr_t*>(world + 0x130);
         float currentTemp = *reinterpret_cast<float*>(weatherPtr + 0x18);
 
@@ -598,15 +454,15 @@ void GrowthComponent::Update(void* time) {
         double diff = static_cast<double>(currentTemp - optimalTemp);
         uint64_t rawBits;
         __builtin_memcpy(&rawBits, &diff, sizeof(rawBits));
-        rawBits &= *s_dblAbsMask;
+        rawBits &= kRdata_1401722b0;
         __builtin_memcpy(&diff, &rawBits, sizeof(diff));
         tempModifier = static_cast<float>(diff) / tempRange;
 
         if (tempModifier < 0.0f || fOne < tempModifier) {
             // Out of range: check freeze
             tempModifier = 0.0f;
-            if (currentTemp <= *s_fFreezeTemp) {
-                tempModifier = *s_fFreezeGrowth;
+            if (currentTemp <= RdataF(kRdata_1401721d0)) {
+                tempModifier = RdataF(kRdata_140172288);
             }
         } else {
             // Parabolic falloff: 1 - dist^2
@@ -615,7 +471,7 @@ void GrowthComponent::Update(void* time) {
     }
 
     // Get resource manager from world
-    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pWorldSingleton);
+    uintptr_t world = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     uintptr_t resourceMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
 
     // Compute time delta in seconds
@@ -639,9 +495,7 @@ void GrowthComponent::Update(void* time) {
         // Notify entity if flags changed
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
             *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
-            if (s_fn_FlagNotify) {
-                s_fn_FlagNotify(*reinterpret_cast<void**>(comp + 0x10));
-            }
+            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(comp + 0x10));
         }
 
         // Sub-resource spawning check
@@ -653,19 +507,17 @@ void GrowthComponent::Update(void* time) {
 
                 float spawnTimerSec = reinterpret_cast<const System::Time*>(reinterpret_cast<int64_t*>(comp + 0x40))->AsSeconds();   // B.3.4b bridge
                 float spawnInterval = static_cast<float>(
-                    *reinterpret_cast<int32_t*>(config + 0x50)) * fSixty;
+                    *reinterpret_cast<int32_t*>(config + 0x50)) * fGrowthTimeScale;
 
                 if (spawnInterval < spawnTimerSec) {
                     do {
-                        if (s_fn_SpawnSubResource) {
-                            s_fn_SpawnSubResource(comp, reinterpret_cast<void*>(config));
-                        }
+                        GrowthComponent_SpawnSubResource(comp, reinterpret_cast<void*>(config));   // 0x14011fba0
                         spawnTimerSec -= spawnInterval;
                     } while (spawnInterval < spawnTimerSec);
 
                     // Reset spawn timer to remainder
                     int64_t remainderTime;
-                    fn_Time_Ctor_Float(&remainderTime, spawnTimerSec);
+                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&remainderTime), spawnTimerSec);
                     *reinterpret_cast<int64_t*>(comp + 0x40) = remainderTime;
                 }
             }
@@ -678,7 +530,7 @@ void GrowthComponent::Update(void* time) {
             if ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) == 0) {
                 // Check world flag (bit 10 of world+0xD0)
                 if ((*reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uintptr_t>(*s_pWorldSingleton) + 0xD0) >> 10 & 1) == 0) {
+                    reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xD0) >> 10 & 1) == 0) {
                     // Clamp growth to 1.0
                     float harvestAmount = (newGrowth <= fOne) ? newGrowth : fOne;
 
@@ -687,9 +539,7 @@ void GrowthComponent::Update(void* time) {
                     DoHarvestReset(comp, resourceMgr, harvestAmount * configResourceScale);
 
                     // Clear flags bits 3,4 via ModifyFlags(this, 0, 0x18)
-                    if (s_fn_ModifyFlags) {
-                        s_fn_ModifyFlags(comp, 0, 0x18);
-                    }
+                    GrowthComponent_ModifyFlags(comp, 0, 0x18);   // 0x140118950
                 }
             }
         }
@@ -706,9 +556,7 @@ void GrowthComponent::Update(void* time) {
         // Notify entity if flags changed
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
             *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
-            if (s_fn_FlagNotify) {
-                s_fn_FlagNotify(*reinterpret_cast<void**>(comp + 0x10));
-            }
+            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(comp + 0x10));
         }
     }
 }
@@ -739,7 +587,6 @@ void GrowthComponent::Update(void* time) {
 //   The flag-4 clear only happens once the scale has CONVERGED, which is what keeps the
 //   component in the post-update list across the whole ramp.
 void GrowthComponent::PostUpdate() {
-    EnsureHelpers();
     uintptr_t c = reinterpret_cast<uintptr_t>(this);
 
     // Retail derefs +0x28/+0x38/+0x30 unguarded — they are populated by
@@ -750,11 +597,11 @@ void GrowthComponent::PostUpdate() {
                         *reinterpret_cast<uintptr_t*>(c + 0x30) == 0);
     if (gated) return;
 
-    const float kOne          = s_fOne ? *s_fOne : 1.0f;
-    const float kEpsilon      = s_fScaleEps ? *s_fScaleEps : 0.001f;
-    const float kSmoothOld    = s_fScaleOldW ? *s_fScaleOldW : 0.99f;
-    const float kSmoothNew    = s_fScaleNewW ? *s_fScaleNewW : 0.01f;
-    const float kCropSpreadDiv = s_fCropSpreadDiv ? *s_fCropSpreadDiv : 0.15f;
+    const float kOne          = kRdata_14017214c;          // 0x14017214c
+    const float kEpsilon      = RdataF(kRdata_1401720b8);  // 0x1401720b8
+    const float kSmoothOld    = kRdata_140172144;          // 0x140172144
+    const float kSmoothNew    = RdataF(kRdata_1401720c0);  // 0x1401720c0
+    const float kCropSpreadDiv = RdataF(kRdata_1401720f4); // 0x1401720f4
 
     uintptr_t resource = *reinterpret_cast<uintptr_t*>(c + 0x28);
     float target = *reinterpret_cast<float*>(resource + 0x28);   // growth 0..n
@@ -789,9 +636,10 @@ void GrowthComponent::PostUpdate() {
     } else {
         // Uniform form: Math::Vector4(const Scalar&) broadcasts the scale into 4 lanes.
         float scalar = scale;
-        uint8_t vec4[16];
-        if (s_fn_Vec4FromScalar) {
-            s_fn_Vec4FromScalar(vec4, &scalar);
+        alignas(16) uint8_t vec4[16];
+        ::new (static_cast<void*>(vec4)) Math::Vector4(
+            *reinterpret_cast<const Math::Scalar*>(&scalar));   // slot 0x140152958, B.3.x bridge
+        {
             const uint32_t* v = reinterpret_cast<const uint32_t*>(vec4);
             *reinterpret_cast<uint32_t*>(model + 0x134) = v[0];
             *reinterpret_cast<uint32_t*>(model + 0x138) = v[1];
@@ -807,7 +655,7 @@ void GrowthComponent::PostUpdate() {
     *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 &&
         *reinterpret_cast<uintptr_t*>(c + 0x10) != 0) {
-        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(c + 0x10));
     }
 }
 

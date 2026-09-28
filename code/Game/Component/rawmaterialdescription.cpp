@@ -60,10 +60,9 @@ RawMaterialDescription::RawMaterialDescription()
 
 // [5] 0x140129520: stream order as retail.
 bool RawMaterialDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    fn_ExternalPtr_BuildSerialize(&_spriteSheet, &ser);
-    fn_ExternalPtr_BuildSerialize(&_stringTable, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);
     _name.Serialize(&ser);
     _nameSmall.Serialize(&ser);
     ser.Serialize(_lowCreateCount, nullptr);

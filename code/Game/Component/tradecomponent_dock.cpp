@@ -70,71 +70,49 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "system/MemoryAllocator.h"
+#include "Action/exe_bodies.h"   // Pf_AvlRotateB_e450/e580, ActRm_StorageAdd_d000, ActRm_GetResourceCategory_88f90
+#include "Dialog/exe_bodies.h"   // TradeUI_GetBuyEntries_59670, TradeUI_GetResourcePrice_a520, TradeDescription_ExtendMerchantStay
+#include "Player/exe_bodies.h"   // PlayerPath_FindComponent_3ea0
+#include "Work/exe_bodies.h"     // WorkBase_FindComponent_6270, WorkBase_TreeNodeFree_e320
 
 // Layer 1 leaf, used by the manifest generator to pick the merchant's price tier.
 extern "C" int TradeComponent_PickMerchantTier(void* self);   // 0x14005b4f0
 
 namespace {
 
-// ── Resolved leaves, bound by ADDRESS ─────────────────────────────────────────────
-// Every one of these is already ported and registered elsewhere in the tree. Binding
-// by address rather than through the C++ names keeps this file immune to the naming
-// question — two of these carry names that are wrong (see the notes below) and one
-// retail function in this codebase has already been ported twice under two names.
-typedef void (*fn_GetBuyEntries_t)(void* tradeComp, void* outArray);   // 0x140059670
-typedef int  (*fn_ResourcePrice_t)(void* tradeComp, int64_t entity);   // 0x14005a520
-typedef void (*fn_ExtendStay_t)(void* tradeComp);                      // 0x14005a490
-typedef void*(*fn_FindStorage_t)(int64_t entity, void* outIBP);        // 0x140006270
-typedef void*(*fn_FindStateMachine_t)(int64_t entity, void* outIBP);   // 0x140003ea0
-typedef int  (*fn_QueryCount_t)(void* storageComp);                    // 0x14012cf10
-typedef void (*fn_StorageAdd_t)(void* storageComp, int64_t entity, int qty);  // 0x14012d000
-typedef int  (*fn_ResourceCategory_t)(void* ignored, int64_t entity);  // 0x140088f90
-typedef void (*fn_RegisterRawMat_t)(void* townMgr, int64_t entity);    // 0x140091e60
-typedef int64_t (*fn_AvlRotate_t)(int64_t* root, int64_t node);        // 0x14000e450 / e580
-typedef void (*fn_TreeFree_t)(void* rootHolder, void* node);           // 0x14000e320
+// ── Leaves, called by the body each retail address is registered to ───────────────
+// Two of these carry names that are wrong for this use (see the notes at the calls):
+//   0x140059670 TradeUI_GetBuyEntries_59670        0x14005a520 TradeUI_GetResourcePrice_a520
+//                                                     (NOT a count: a520 returns a PRICE)
+//   0x14005a490 TradeDescription_ExtendMerchantStay 0x140006270 WorkBase_FindComponent_6270
+//   0x140003ea0 PlayerPath_FindComponent_3ea0       0x14012cf10 CitizenComp_StorageComponent_QueryCount
+//   0x14012d000 ActRm_StorageAdd_d000               0x140088f90 ActRm_GetResourceCategory_88f90
+//   0x140091e60 RawMaterialComponent_RegisterRawMaterial (NOT "Game_DestroyEntity")
+//   0x14000e450 Pf_AvlRotateB_e450 (rotate-left, used when right-heavy)
+//   0x14000e580 Pf_AvlRotateB_e580 (rotate-right, used when left-heavy)
+//   0x14000e320 WorkBase_TreeNodeFree_e320
 
-fn_GetBuyEntries_t    s_GetBuyEntries    = nullptr;
-fn_ResourcePrice_t    s_ResourcePrice    = nullptr;   // NOT a count: a520 returns a PRICE
-fn_ExtendStay_t       s_ExtendStay       = nullptr;
-fn_FindStorage_t      s_FindStorage      = nullptr;
-fn_FindStateMachine_t s_FindStateMachine = nullptr;
-fn_QueryCount_t       s_QueryCount       = nullptr;
-fn_StorageAdd_t       s_StorageAdd       = nullptr;
-fn_ResourceCategory_t s_ResourceCategory = nullptr;
-fn_RegisterRawMat_t   s_RegisterRawMat   = nullptr;   // 91e60 is NOT "Game_DestroyEntity"
-fn_AvlRotate_t        s_RotateLeft       = nullptr;   // e450 — used when right-heavy
-fn_AvlRotate_t        s_RotateRight      = nullptr;   // e580 — used when left-heavy
-fn_TreeFree_t         s_TreeFree         = nullptr;
-bool                  s_resolved         = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_GetBuyEntries    = reinterpret_cast<fn_GetBuyEntries_t>(ResolveAddr(Module::Exe, 0x140059670));
-    s_ResourcePrice    = reinterpret_cast<fn_ResourcePrice_t>(ResolveAddr(Module::Exe, 0x14005a520));
-    s_ExtendStay       = reinterpret_cast<fn_ExtendStay_t>(ResolveAddr(Module::Exe, 0x14005a490));
-    s_FindStorage      = reinterpret_cast<fn_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
-    s_FindStateMachine = reinterpret_cast<fn_FindStateMachine_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_QueryCount       = reinterpret_cast<fn_QueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    s_StorageAdd       = reinterpret_cast<fn_StorageAdd_t>(ResolveAddr(Module::Exe, 0x14012d000));
-    s_ResourceCategory = reinterpret_cast<fn_ResourceCategory_t>(ResolveAddr(Module::Exe, 0x140088f90));
-    s_RegisterRawMat   = reinterpret_cast<fn_RegisterRawMat_t>(ResolveAddr(Module::Exe, 0x140091e60));
-    s_RotateLeft       = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x14000e450));
-    s_RotateRight      = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x14000e580));
-    s_TreeFree         = reinterpret_cast<fn_TreeFree_t>(ResolveAddr(Module::Exe, 0x14000e320));
-
-    // Report the OUTCOME of every dependency. One null here turns the docked state into
-    // a state that runs, mutates nothing, and looks exactly like a merchant that simply
-    // had nothing to sell.
+// The first entry into the docked state prints its dependencies once, as it always has.
+void ReportDepsOnce() {
+    static bool s_reported = false;
+    if (s_reported) return;
+    s_reported = true;
     std::fprintf(stderr,
         "[TradeDock] deps: buyEntries=%p price=%p extendStay=%p findStorage=%p findSM=%p "
         "queryCount=%p storageAdd=%p category=%p regRawMat=%p rotL=%p rotR=%p treeFree=%p\n",
-        reinterpret_cast<void*>(s_GetBuyEntries), reinterpret_cast<void*>(s_ResourcePrice),
-        reinterpret_cast<void*>(s_ExtendStay), reinterpret_cast<void*>(s_FindStorage),
-        reinterpret_cast<void*>(s_FindStateMachine), reinterpret_cast<void*>(s_QueryCount),
-        reinterpret_cast<void*>(s_StorageAdd), reinterpret_cast<void*>(s_ResourceCategory),
-        reinterpret_cast<void*>(s_RegisterRawMat), reinterpret_cast<void*>(s_RotateLeft),
-        reinterpret_cast<void*>(s_RotateRight), reinterpret_cast<void*>(s_TreeFree));
+        reinterpret_cast<void*>(&TradeUI_GetBuyEntries_59670),
+        reinterpret_cast<void*>(&TradeUI_GetResourcePrice_a520),
+        reinterpret_cast<void*>(&TradeDescription_ExtendMerchantStay),
+        reinterpret_cast<void*>(&WorkBase_FindComponent_6270),
+        reinterpret_cast<void*>(&PlayerPath_FindComponent_3ea0),
+        reinterpret_cast<void*>(&CitizenComp_StorageComponent_QueryCount),
+        reinterpret_cast<void*>(&ActRm_StorageAdd_d000),
+        reinterpret_cast<void*>(&ActRm_GetResourceCategory_88f90),
+        reinterpret_cast<void*>(&RawMaterialComponent_RegisterRawMaterial),
+        reinterpret_cast<void*>(&Pf_AvlRotateB_e450),
+        reinterpret_cast<void*>(&Pf_AvlRotateB_e580),
+        reinterpret_cast<void*>(&WorkBase_TreeNodeFree_e320));
     std::fflush(stderr);
 }
 
@@ -142,8 +120,7 @@ void Resolve() {
 // The TradeDescription off component+0x18, cast exactly as retail does it.
 void* TradeDesc(uintptr_t comp) {
     void* raw = *reinterpret_cast<void**>(comp + 0x18);
-    if (!fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(raw, TradeDescription::TypeId()) ? raw : nullptr;
+    return Object::IsDerivedFromNullSafe(raw, TradeDescription::TypeId()) ? raw : nullptr;
 }
 
 uintptr_t TownMgr() {
@@ -166,7 +143,7 @@ void* FindChildByTypeId(uintptr_t owner, uint32_t typeId) {
         void* obj = objs[i];
         if (!obj) continue;
         if (reinterpret_cast<Object::Base*>(obj)->Type() != typeId) continue;   // B.3.8 bridge (slot 2)
-        return (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, typeId)) ? obj : nullptr;
+        return (Object::IsDerivedFromNullSafe(obj, typeId)) ? obj : nullptr;
     }
     return nullptr;
 }
@@ -199,16 +176,16 @@ void AvlRebalance(int64_t* root, int64_t from) {
 
         const int64_t right = NLink(c, 0x20);
         if (static_cast<int16_t>(rh - lh) > 1 && right) {
-            if (NS16(static_cast<uintptr_t>(right), 0x28) < 0 && s_RotateRight)
-                s_RotateRight(root, right);
-            if (s_RotateLeft) s_RotateLeft(root, cur);
+            if (NS16(static_cast<uintptr_t>(right), 0x28) < 0)
+                Pf_AvlRotateB_e580(root, right);
+            Pf_AvlRotateB_e450(root, cur);
         }
         // Re-read the balance: the rotation above may have rewritten it. Retail does.
         const int64_t left = NLink(c, 0x18);
         if (NS16(c, 0x28) < -1 && left) {
-            if (NS16(static_cast<uintptr_t>(left), 0x28) > 0 && s_RotateLeft)
-                s_RotateLeft(root, left);
-            if (s_RotateRight) s_RotateRight(root, cur);
+            if (NS16(static_cast<uintptr_t>(left), 0x28) > 0)
+                Pf_AvlRotateB_e450(root, left);
+            Pf_AvlRotateB_e580(root, cur);
         }
         cur = up;
     }
@@ -235,7 +212,7 @@ bool AvlInsert(int64_t* root, uint64_t key) {
     }
 
     uintptr_t node = reinterpret_cast<uintptr_t>(
-        fn_MemAllocStatic ? fn_MemAllocStatic(0x30, 8) : nullptr);
+        System::MemoryAllocator::MemAlloc(0x30, 8));
     if (node) {
         *reinterpret_cast<uint64_t*>(node) = key;
         // Retail stores an 8-byte stack qword here whose upper half is uninitialised;
@@ -290,7 +267,7 @@ void PtrArrayPush(PtrArray& a, void* value) {
     if (a.cap < newN) {
         a.cap = (oldN != 0) ? newN * 3 : newN;
         a.base = reinterpret_cast<int64_t>(
-            fn_MemAllocStatic ? fn_MemAllocStatic(static_cast<uint64_t>(a.cap) * 8, 8) : nullptr);
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(a.cap) * 8, 8));
     }
     const int32_t start = (oldBuf == reinterpret_cast<void*>(a.base)) ? oldN : 0;
     for (int32_t i = start; i < newN; ++i) {
@@ -298,7 +275,7 @@ void PtrArrayPush(PtrArray& a, void* value) {
         if (!dst) continue;
         *dst = (i < oldN) ? reinterpret_cast<void**>(oldBuf)[i] : value;
     }
-    if (oldBuf != reinterpret_cast<void*>(a.base) && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+    if (oldBuf != reinterpret_cast<void*>(a.base)) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // The candidate index array in 0x140059ad0 — same header, int32 elements.
@@ -312,7 +289,7 @@ void IntArrayPush(IntArray& a, int32_t value) {
     if (a.cap < newN) {
         a.cap = (oldN != 0) ? newN * 3 : newN;
         a.base = reinterpret_cast<int64_t>(
-            fn_MemAllocStatic ? fn_MemAllocStatic(static_cast<uint64_t>(a.cap) * 4, 4) : nullptr);
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(a.cap) * 4, 4));
     }
     const int32_t start = (oldBuf == reinterpret_cast<void*>(a.base)) ? oldN : 0;
     for (int32_t i = start; i < newN; ++i) {
@@ -320,7 +297,7 @@ void IntArrayPush(IntArray& a, int32_t value) {
         if (!dst) continue;
         *dst = (i < oldN) ? reinterpret_cast<int32_t*>(oldBuf)[i] : value;
     }
-    if (oldBuf != reinterpret_cast<void*>(a.base) && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+    if (oldBuf != reinterpret_cast<void*>(a.base)) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 }  // namespace
@@ -349,11 +326,11 @@ void IntArrayPush(IntArray& a, int32_t value) {
 // Per-good figures come from the good's ValueDescription:
 //   +0x40 base price  +0x44 stock numerator (divided by tier[+0x10])  +0x48 stock floor
 extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     // Drop the previous manifest. +0x58 is cleared as one qword: count AND capacity.
-    if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(comp + 0x50));
+    System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(comp + 0x50));
     *reinterpret_cast<uint64_t*>(comp + 0x50) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<int32_t*>(comp + 0x2c) = -1;
@@ -385,14 +362,14 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
     bool fromOrder = false;
     if (*reinterpret_cast<int32_t*>(rec + 0x08) == 0 ||
         *reinterpret_cast<int32_t*>(rec + 0x18) < 1) {
-        if (s_GetBuyEntries) s_GetBuyEntries(selfV, &goods);
+        TradeUI_GetBuyEntries_59670(selfV, &goods);
     } else {
         fromOrder = true;
         const int32_t n = *reinterpret_cast<int32_t*>(rec + 0x18);
         goods.count = n;
         goods.cap   = n;
         goods.base  = reinterpret_cast<int64_t>(
-            fn_MemAllocStatic ? fn_MemAllocStatic(static_cast<uint64_t>(n) * 8, 8) : nullptr);
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(n) * 8, 8));
         void** src = *reinterpret_cast<void***>(rec + 0x10);
         for (int32_t i = 0; i < n && goods.base; ++i)
             reinterpret_cast<void**>(goods.base)[i] = src[i];
@@ -400,7 +377,7 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
 
     // Consume the order unless it is the persistent kind.
     if (*reinterpret_cast<int32_t*>(rec + 0x08) != 2) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(rec + 0x10));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(rec + 0x10));
         *reinterpret_cast<uint64_t*>(rec + 0x10) = 0;
         *reinterpret_cast<uint64_t*>(rec + 0x18) = 0;    // count and capacity together
         *reinterpret_cast<int32_t*>(rec + 0x08) = 0;
@@ -427,8 +404,8 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
                              "The ExternalFactory walk over ComponentDescription "
                              "matched nothing.\n");
         std::fflush(stderr);
-        if (fn_MemFreeStatic) { fn_MemFreeStatic(reinterpret_cast<void*>(values.base));
-                                fn_MemFreeStatic(reinterpret_cast<void*>(goods.base)); }
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(values.base));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(goods.base));
         return;
     }
 
@@ -491,10 +468,8 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
         *reinterpret_cast<int32_t*>(comp + 0x58) = newN;
         if (*reinterpret_cast<int32_t*>(comp + 0x5c) < newN) {
             *reinterpret_cast<int32_t*>(comp + 0x5c) = (oldN != 0) ? newN * 3 : newN;
-            *reinterpret_cast<void**>(comp + 0x50) = fn_MemAllocStatic
-                ? fn_MemAllocStatic(
-                      static_cast<uint64_t>(*reinterpret_cast<int32_t*>(comp + 0x5c)) << 4, 8)
-                : nullptr;
+            *reinterpret_cast<void**>(comp + 0x50) = System::MemoryAllocator::MemAlloc(
+                      static_cast<uint64_t>(*reinterpret_cast<int32_t*>(comp + 0x5c)) << 4, 8);
         }
         const int start = (oldBuf == *reinterpret_cast<void**>(comp + 0x50)) ? oldN : 0;
         for (int i = start; i < newN; ++i) {
@@ -508,13 +483,13 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
             dst[0] = src[0];
             dst[1] = src[1];
         }
-        if (oldBuf != *reinterpret_cast<void**>(comp + 0x50) && fn_MemFreeStatic)
-            fn_MemFreeStatic(oldBuf);
+        if (oldBuf != *reinterpret_cast<void**>(comp + 0x50))
+            System::MemoryAllocator::MemFree(oldBuf);
     }
 
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(values.base));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(values.base));
     values.base = 0; values.count = 0; values.cap = 0;
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(goods.base));
+    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(goods.base));
 
     // OUTCOME, not intent: the line count is the only thing that says the merchant has
     // anything to sell. "The manifest was generated" and "the manifest has goods in it"
@@ -548,13 +523,13 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
 // array, and adding the purchases first would make the post pay for its new goods with
 // its new goods.
 extern "C" void TradeComponent_AutoTrade(void* selfV) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
-    if (s_ExtendStay) s_ExtendStay(selfV);
+    TradeDescription_ExtendMerchantStay(selfV);
 
     uint64_t storageIBP[2] = {0, 0};
-    if (s_FindStorage) s_FindStorage(*reinterpret_cast<int64_t*>(comp + 0x10), storageIBP);
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(comp + 0x10), storageIBP);
 
     const uintptr_t townMgr = TownMgr();
 
@@ -562,7 +537,7 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
     int     treeCount = 0;     // retail keeps it; nothing reads it back
 
     const uintptr_t storage = static_cast<uintptr_t>(storageIBP[0]);
-    int volume = s_QueryCount ? s_QueryCount(reinterpret_cast<void*>(storage)) : 0;
+    int volume = CitizenComp_StorageComponent_QueryCount(static_cast<int64_t>(storage));
     const int volumeCap = *reinterpret_cast<int32_t*>(storage + 0x38);
 
     const uint32_t tidRawMat = RawMaterialDescription::TypeId();   // cell 0x1401c7cb8 (D5)
@@ -594,8 +569,7 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
                                     static_cast<uintptr_t>(j) * 0x10;
                 const int have = *reinterpret_cast<int32_t*>(e + 0x08) -
                                  *reinterpret_cast<int32_t*>(e + 0x0c);
-                const int unit = s_ResourcePrice
-                    ? s_ResourcePrice(selfV, *reinterpret_cast<int64_t*>(e)) : 0;
+                const int unit = TradeUI_GetResourcePrice_a520(selfV, *reinterpret_cast<void**>(e));
                 sellValue += unit * have;
             }
         }
@@ -661,7 +635,8 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
                 const uintptr_t e = static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(storage + 0x28)) +
                                     static_cast<uintptr_t>(idx) * 0x10;
                 const int64_t resource = *reinterpret_cast<int64_t*>(e);
-                const int unit = s_ResourcePrice ? s_ResourcePrice(selfV, resource) : 0;
+                const int unit = TradeUI_GetResourcePrice_a520(
+                    selfV, reinterpret_cast<void*>(resource));
                 const int avail = *reinterpret_cast<int32_t*>(e + 0x08) -
                                   *reinterpret_cast<int32_t*>(e + 0x0c);
                 if (avail == 0) continue;
@@ -676,9 +651,9 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
                     // Retail passes the unit price where every other caller of 0x140088f90
                     // passes a StorageComponent. The function ignores its first parameter,
                     // so this is harmless — passed through rather than "corrected".
-                    const int cat = s_ResourceCategory
-                        ? s_ResourceCategory(reinterpret_cast<void*>(static_cast<uintptr_t>(unit)),
-                                             resource) : -1;
+                    const int cat = ActRm_GetResourceCategory_88f90(
+                        reinterpret_cast<void*>(static_cast<uintptr_t>(unit)),
+                        static_cast<uintptr_t>(resource));
                     if (cat >= 0) {
                         const uintptr_t catArray = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);
                         *reinterpret_cast<int32_t*>(catArray + static_cast<uintptr_t>(cat) * 0x20
@@ -722,7 +697,7 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
             }
         }
 
-        if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(candidates.base));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(candidates.base));
     }
 
     // ── DELIVER the purchases ─────────────────────────────────────────────────────
@@ -731,19 +706,18 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
         const uintptr_t node = static_cast<uintptr_t>(n);
         const int64_t entity = *reinterpret_cast<int64_t*>(node);
         const int units = *reinterpret_cast<int32_t*>(node + 8);
-        if (s_RegisterRawMat) s_RegisterRawMat(reinterpret_cast<void*>(townMgr), entity);
-        if (s_StorageAdd) s_StorageAdd(reinterpret_cast<void*>(storage), entity, units);
+        RawMaterialComponent_RegisterRawMaterial(reinterpret_cast<void*>(townMgr),
+                                                 reinterpret_cast<void*>(entity));
+        ActRm_StorageAdd_d000(storage, entity, units);
         delivered += units;
         ++deliveredLines;
     }
 
     if (treeRoot) {
         const uintptr_t root = static_cast<uintptr_t>(treeRoot);
-        if (s_TreeFree) {
-            s_TreeFree(&treeRoot, reinterpret_cast<void*>(NLink(root, 0x18)));
-            s_TreeFree(&treeRoot, reinterpret_cast<void*>(NLink(root, 0x20)));
-        }
-        if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(root));
+        WorkBase_TreeNodeFree_e320(&treeRoot, reinterpret_cast<void*>(NLink(root, 0x18)));
+        WorkBase_TreeNodeFree_e320(&treeRoot, reinterpret_cast<void*>(NLink(root, 0x20)));
+        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(root));
     }
     treeRoot = 0;
     treeCount = 0;
@@ -762,16 +736,16 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
 //
 // Retail's tail is `MOV AL,1; RET`.
 extern "C" char TradeCtrl_State13_Enter(void* selfV, void* /*sm*/) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     TradeComponent_BuildMerchantManifest(selfV);
 
     // The Time ctor writes EIGHT bytes through its return slot — see
     // reference_time_ctor_8byte_clobber.
-    if (fn_Time_Ctor_Float) {
+    {
         int64_t stay = 0;
-        void* out = fn_Time_Ctor_Float(&stay, 900.0f);
+        void* out = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&stay), 900.0f);
         *reinterpret_cast<int64_t*>(comp + 0x78) = *reinterpret_cast<int64_t*>(out);
     }
 
@@ -793,14 +767,13 @@ extern "C" char TradeCtrl_State13_Enter(void* selfV, void* /*sm*/) {
 // `in_R9` phantom) -> +0x18 trans38. So c650's `dd70(0x13, a800, a6d0, _, a780)`
 // means enter=a800, update=a6d0, per-frame=a780.
 extern "C" char TradeCtrl_State13_Update(void* selfV, void* /*sm*/) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     if (*reinterpret_cast<int32_t*>(comp + 0x28) == 2) TradeComponent_AutoTrade(selfV);
 
     uint64_t smIBP[2] = {0, 0};
-    void* found = s_FindStateMachine
-        ? s_FindStateMachine(*reinterpret_cast<int64_t*>(comp + 0x80), smIBP) : nullptr;
+    void* found = PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(comp + 0x80), smIBP);
 
     // 0x140003ea0 returns its OUT-PARAM, so `found` is non-null; the component is the
     // value inside it. Retail derefs the chain below unguarded because a merchant boat
@@ -824,10 +797,10 @@ extern "C" char TradeCtrl_State13_Update(void* selfV, void* /*sm*/) {
     }
 
     uint64_t clearIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) new (clearIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (clearIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(comp + 0x80) = clearIBP[0];
 
-    if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(comp + 0x50));
+    System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(comp + 0x50));
     *reinterpret_cast<uint64_t*>(comp + 0x50) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<int32_t*>(comp + 0x2c) = -1;

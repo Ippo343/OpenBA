@@ -25,8 +25,6 @@ void TornadoComponent_Serialize(TornadoComponent* self);
 // geometry transform + audio emitters.
 void TornadoComponent_OnRemove(TornadoComponent* self, void* time);
 
-void TornadoComponent_InitFuncs();
-
 // ---- ported leaves, exposed for the address-registry wave -------------------
 extern "C" {
 // 0x140058980 — recursive midpoint displacement over path[lo..hi]. Genuinely

@@ -15,4 +15,3 @@
 void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime);
 
 // Init: resolve all internal function pointers (called once at startup)
-void RawMaterialComponent_InitFuncs();

@@ -60,8 +60,7 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0
 // component inert nothing ever entered state 2, so the healer array at townMgr+0x70
 // stayed empty for the life of the save and the sick had nowhere to be sent.
 extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
-    if (!fn_InternalBasePtr_Ctor ||
-        !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
 
     uint8_t ibp[24] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
@@ -164,9 +163,7 @@ void HealerComponent::Persist(void* stream) {
 // InternalBasePtr and erase it from *(GameWorld+0xF0)+0x70.
 void HealerComponent::OnRemove() {
     uint8_t basePtr[24] = {};
-    if (fn_InternalBasePtr_Ctor) {
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    }
+    new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);

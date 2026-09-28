@@ -41,6 +41,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "system/String.h"
 #include "system/Value.h"
 #include <cstdint>
@@ -52,19 +53,15 @@ void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
     *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+    void* buf = (count > 0)
+                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
                 : nullptr;
     *(void**)h = buf;
     return buf;
 }
 
 void InitTime(void* field, float seconds) {
-    if (fn_Time_Ctor_Float) {
-        fn_Time_Ctor_Float(field, seconds);
-    } else {
-        *(uint64_t*)field = 0;
-    }
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(field), seconds);
 }
 }  // namespace
 
@@ -85,7 +82,7 @@ ParticleDescription::~ParticleDescription() {
     int count = _emitterCount;
     if (e) {
         for (int i = 0; i < count; ++i) reinterpret_cast<System::String*>(e + i * 0x28 + 0x08)->~String();  // B.3.1 bridge
-        if (fn_MemFreeStatic) fn_MemFreeStatic(e);
+        System::MemoryAllocator::MemFree(e);
     }
     _emitters = nullptr;
     _emitterCount = 0;
@@ -94,7 +91,6 @@ ParticleDescription::~ParticleDescription() {
 
 // [5] 0x140053460: stream order as retail.
 bool ParticleDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize3) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_emitterCount, nullptr);   // emitterCount
     int count = _emitterCount;
@@ -119,7 +115,7 @@ bool ParticleDescription::Serialize(void* stream) {
     }
     
     for (int i = 0; i < count; ++i, e += 0x28) {
-        fn_ExternalPtr_Serialize3(e + 0x00, &ser);                                 // ref (elem+0)
+        Reimpl_ExternalPtr_Serialize_Typed_7140(e + 0x00, &ser);                                 // ref (elem+0)
         reinterpret_cast<System::String*>(e + 0x08)->Serialize(&ser);             // B.3.1 bridge: String (elem+8)
         ser.Serialize(*reinterpret_cast<bool*>(e + 0x10), nullptr);
         ser.Serialize(*reinterpret_cast<bool*>(e + 0x11), nullptr);
@@ -129,7 +125,7 @@ bool ParticleDescription::Serialize(void* stream) {
         reinterpret_cast<System::Time*>(e + 0x18)->Serialize(ser);                // t0 (elem+0x18) SECOND  // B.3.4b bridge
     }
     
-    fn_ExternalPtr_Serialize3(&_materialRef, &ser);   // materialRef (+0x20)
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_materialRef, &ser);   // materialRef (+0x20)
     return true;
 }
 

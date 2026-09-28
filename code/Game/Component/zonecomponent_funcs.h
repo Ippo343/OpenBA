@@ -9,5 +9,3 @@ void ZoneComponent_Draw(ZoneComponent* self);
 
 // OnCreate (vtable slot [7], 0x140130080): Zone creation + tree walk.
 void ZoneComponent_OnCreate(ZoneComponent* self);
-
-void ZoneComponent_InitFuncs();

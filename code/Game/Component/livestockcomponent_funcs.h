@@ -13,5 +13,3 @@
 
 
 
-// Init: resolve all internal function pointers (called once at startup)
-void LivestockComponent_InitFuncs();

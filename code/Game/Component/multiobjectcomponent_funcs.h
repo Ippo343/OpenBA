@@ -6,5 +6,3 @@
 
 // OnCreate (vtable slot [7], 0x1401257C0): Mark child entities for removal.
 void MultiObjectComponent_OnCreate(MultiObjectComponent* self);
-
-void MultiObjectComponent_InitFuncs();

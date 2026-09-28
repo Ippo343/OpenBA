@@ -81,6 +81,11 @@
 
 #include "Work/tradework_funcs.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/MemoryAllocator.h"
+#include "system/Value.h"               // RtSystem_Time_Ctor (import slot 0x140152b00)
+#include "Component/exe_bodies.h"       // 0x140002e10 / 0x14012ead0 / 0x14012ec60 / 0x140002cc0
+#include "Work/exe_bodies.h"            // WorkBase_FindComponent_3050
+#include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
 
 // Layer 2 lives in boatcomponent_route.cpp (retail 0x14000eb20 / 0x1400456e0).
 extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP);
@@ -95,55 +100,34 @@ using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
 
 namespace {
 
-// ── Resolved leaves ──────────────────────────────────────────────────────────────
-// Bound by ADDRESS, not through named wrappers: 0x140002e10 and 0x140003050 both
-// carry misleading names in our tree (see the note in orchardcomponent_states.cpp),
-// and binding by address keeps these ports immune to the naming question.
-typedef void*    (*fn_Find_t)(int64_t entity, void* outIBP);
-typedef char     (*fn_HasWorkSlot_t)(int64_t sched);
-typedef uint64_t (*fn_PostWork_t)(int64_t sched, int code, char flag, void* workIBP);
-typedef void*    (*fn_TimeCtor_t)(void* outTime, float seconds);
-typedef void*    (*fn_EntityCopyCtor_t)(void* mem, void* templateEntity);
-typedef void     (*fn_EntityListAdd_t)(void* entityList, void* entityIBP, int category);
-typedef void     (*fn_StateMachineTick_t)(void* sm, void* time, char a, char b);
-typedef void     (*fn_ListErase_t)(void* listBase, void* valuePtr);
+// ── Leaves, by retail address ────────────────────────────────────────────────────
+// 0x140002e10 and 0x140003050 both carry misleading names in our tree (see the note in
+// orchardcomponent_states.cpp); the address is what picks the body:
+//   0x140002e10 AttendanceComponent_GetJobHostComponent (the WorkPlaceComponent finder)
+//   0x140003050 WorkBase_FindComponent_3050 (the scheduler finder)
+//   0x14012ead0 WorkComponent_CheckWorkSlot     0x14012ec60 CitizenAI_WorkScheduler_Post
+//   import slot 0x140152b00 RtSystem_Time_Ctor
+// Layer 2 (merchant spawn / teardown) leaves:
+//   0x1400c3720 ComponentEntity_CtorFromDescription  0x1400c48a0 EntityList_RegisterEntity_Impl
+//   0x1400a9660 StateMachine_TickReimpl              0x140002cc0 CemeteryListErase_Reimpl
 
-fn_Find_t         s_FindWorkPlace = nullptr;   // 0x140002e10
-fn_Find_t         s_FindSched     = nullptr;   // 0x140003050
-fn_HasWorkSlot_t  s_HasWorkSlot   = nullptr;   // 0x14012ead0
-fn_PostWork_t     s_PostWork      = nullptr;   // 0x14012ec60
-fn_TimeCtor_t     s_TimeCtor      = nullptr;   // dispatch slot [0x140152b00]
-// Layer 2 (merchant spawn / teardown) leaves.
-fn_EntityCopyCtor_t   s_EntityCopyCtor   = nullptr;   // 0x1400c3720
-fn_EntityListAdd_t    s_EntityListAdd    = nullptr;   // 0x1400c48a0
-fn_StateMachineTick_t s_StateMachineTick = nullptr;   // 0x1400a9660
-fn_ListErase_t        s_ListErase        = nullptr;   // 0x140002cc0
-bool              s_resolved      = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_FindWorkPlace = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140002e10));
-    s_FindSched     = reinterpret_cast<fn_Find_t>(ResolveAddr(Module::Exe, 0x140003050));
-    s_HasWorkSlot   = reinterpret_cast<fn_HasWorkSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
-    s_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_EntityCopyCtor   = reinterpret_cast<fn_EntityCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_EntityListAdd    = reinterpret_cast<fn_EntityListAdd_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_StateMachineTick = reinterpret_cast<fn_StateMachineTick_t>(ResolveAddr(Module::Exe, 0x1400a9660));
-    s_ListErase        = reinterpret_cast<fn_ListErase_t>(ResolveAddr(Module::Exe, 0x140002cc0));
-    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00))
-        s_TimeCtor = *reinterpret_cast<fn_TimeCtor_t*>(slot);
-
-    // Report the OUTCOME of every dependency. A single null here turns the whole
-    // state machine into a machine that runs and does nothing — believable and wrong.
+// The first call into the machine prints its dependencies once, as it always has.
+void ReportDepsOnce() {
+    static bool s_reported = false;
+    if (s_reported) return;
+    s_reported = true;
     std::fprintf(stderr,
         "[TradeCtrl] deps: findWP=%p findSched=%p hasWork=%p post=%p "
         "timeCtor=%p entityCopy=%p entityAdd=%p smTick=%p erase=%p\n",
-        reinterpret_cast<void*>(s_FindWorkPlace), reinterpret_cast<void*>(s_FindSched),
-        reinterpret_cast<void*>(s_HasWorkSlot),
-        reinterpret_cast<void*>(s_PostWork),      reinterpret_cast<void*>(s_TimeCtor),
-        reinterpret_cast<void*>(s_EntityCopyCtor), reinterpret_cast<void*>(s_EntityListAdd),
-        reinterpret_cast<void*>(s_StateMachineTick), reinterpret_cast<void*>(s_ListErase));
+        reinterpret_cast<void*>(&AttendanceComponent_GetJobHostComponent),
+        reinterpret_cast<void*>(&WorkBase_FindComponent_3050),
+        reinterpret_cast<void*>(&WorkComponent_CheckWorkSlot),
+        reinterpret_cast<void*>(&CitizenAI_WorkScheduler_Post),
+        reinterpret_cast<void*>(&RtSystem_Time_Ctor),
+        reinterpret_cast<void*>(&ComponentEntity_CtorFromDescription),
+        reinterpret_cast<void*>(&EntityList_RegisterEntity_Impl),
+        reinterpret_cast<void*>(&::StateMachine_TickReimpl),
+        reinterpret_cast<void*>(&CemeteryListErase_Reimpl));
     std::fflush(stderr);
 }
 
@@ -153,8 +137,7 @@ void Resolve() {
 // than restore it. If this ever faults, the description on +0x18 is the bug.
 void* TradeDesc(uintptr_t comp) {
     void* raw = *reinterpret_cast<void**>(comp + 0x18);
-    if (!fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(raw, TradeDescription::TypeId()) ? raw : nullptr;
+    return Object::IsDerivedFromNullSafe(raw, TradeDescription::TypeId()) ? raw : nullptr;
 }
 
 
@@ -208,7 +191,7 @@ extern "C" int TradeComponent_PickMerchantTier(void* selfV) {
 // The tier record is 0x14 bytes: +0x00 population threshold, +0x04 base delay,
 // +0x08 tolerance. DAT_140172234 is the literal 300.0f (0x43960000).
 extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
     uint8_t* desc = static_cast<uint8_t*>(TradeDesc(comp));
 
@@ -218,14 +201,14 @@ extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
 
     void* rng = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
-    const float tol = fn_Random_RandFloatTol ? fn_Random_RandFloatTol(rng) : 0.0f;
+    const float tol = fn_Random_RandFloatTol(rng);
     float seconds = (tol * *reinterpret_cast<float*>(rec + 8) +
                            *reinterpret_cast<float*>(rec + 4)) * 300.0f;
 
 
-    if (!s_TimeCtor) return;
     uint64_t t[4] = {0, 0, 0, 0};
-    uint64_t* out = reinterpret_cast<uint64_t*>(s_TimeCtor(t, seconds));
+    uint64_t* out = reinterpret_cast<uint64_t*>(
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(t), seconds));
     *reinterpret_cast<int64_t*>(comp + 0x78) = static_cast<int64_t>(*out);
 
     // OUTCOME: the armed countdown read back off the component, not the seconds we
@@ -277,20 +260,20 @@ extern "C" void* TradeWork_CtorFromEntity(void* mem, void* entityIBP) {
 //
 // Returns 0 in AL — retail's tail is `CALL 0x14005b450; XOR AL,AL; RET`.
 extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-    if (!s_FindWorkPlace || !s_FindSched || !s_HasWorkSlot) return 0;
 
     int64_t wpc[2] = {0, 0};
-    s_FindWorkPlace(*reinterpret_cast<int64_t*>(comp + 0x10), wpc);
+    AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(comp + 0x10), wpc);
 
     int64_t schedBuf[2] = {0, 0};
     // The finder RETURNS its out-param; use the returned pointer, never the local.
     // See reference_outparam_finder_recycled_ibp.
     int64_t* sched = static_cast<int64_t*>(
-        s_FindSched(*reinterpret_cast<int64_t*>(comp + 0x10), schedBuf));
+        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(comp + 0x10), schedBuf));
 
-    if (s_HasWorkSlot(*sched)) {          // already holds work — nothing to post
+    // The door read AL off 0x14012ead0; the body returns bool — the same byte.
+    if (WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(*sched))) {          // already holds work — nothing to post
         TradeCtrlReport(comp, false, nullptr, true);
         TradeComponent_ArmMerchantTimer(selfV);
         return 0;
@@ -298,27 +281,26 @@ extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
 
     if (*reinterpret_cast<char*>(wpc[0] + 0x50) != 0) {   // workplace accepting
         void* work = nullptr;
-        if (fn_MemAllocStatic) {
-            void* mem = fn_MemAllocStatic(0x58, 8);
-            if (mem) {
-                int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
-                work = TradeWork_CtorFromEntity(mem, &entityIBP);
-            }
+        void* mem = System::MemoryAllocator::MemAlloc(0x58, 8);
+        if (mem) {
+            int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
+            work = TradeWork_CtorFromEntity(mem, &entityIBP);
         }
         uint64_t workIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
+        new (workIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
         int64_t schedBuf2[2] = {0, 0};
         int64_t* sched2 = static_cast<int64_t*>(
-            s_FindSched(*reinterpret_cast<int64_t*>(comp + 0x10), schedBuf2));
-        if (s_PostWork) s_PostWork(*sched2, 1, '\0', workIBP);
+            WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(comp + 0x10), schedBuf2));
+        CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(*sched2), 1, '\0', workIBP);
 
         // OUTCOME, not intent: report whether a TradeWork was really constructed and
         // whether the scheduler is holding one AFTER the post. "accepting was set" and
         // "a work object exists" are different claims, and only the readback proves the
         // second. See reference_diagnostics_must_report_outcomes.
-        TradeCtrlReport(comp, true, work, s_HasWorkSlot(*sched2) != 0);
+        TradeCtrlReport(comp, true, work,
+                        WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(*sched2)));
     } else {
         TradeCtrlReport(comp, false, nullptr, false);
     }
@@ -376,7 +358,7 @@ extern "C" char TradeCtrl_State13_Tick(void* selfV, void* sm, void* deltaTime) {
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
 
 extern "C" char TradeCtrl_Event09_MerchantDocked(void* selfV, void* sm) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton
@@ -404,7 +386,7 @@ extern "C" char TradeCtrl_Event09_MerchantDocked(void* selfV, void* sm) {
 extern "C" char TradeCtrl_Event0B_MerchantLost(void* selfV, void* sm) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
     uint64_t nullIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(comp + 0x80) = nullIBP[0];
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
@@ -455,7 +437,7 @@ extern "C" char TradeCtrl_Event0A_Dismissed(void* selfV, void* smV) {
 // branch returns the delta-time with the low byte masked off, and the fired branch masks
 // the transition result the same way. So: 0, on every path.
 extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
     const int64_t dt = deltaTime ? *reinterpret_cast<int64_t*>(deltaTime) : 0;
     *reinterpret_cast<int64_t*>(comp + 0x78) -= dt;
@@ -465,13 +447,14 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
 
     // Clone the merchant entity from the description's template (desc+0x30).
     void* boat = nullptr;
-    void* mem = fn_MemAllocStatic ? fn_MemAllocStatic(0x48, 8) : nullptr;
-    if (mem && s_EntityCopyCtor)
-        boat = s_EntityCopyCtor(mem, *reinterpret_cast<void**>(
-                                         reinterpret_cast<uintptr_t>(desc) + 0x30));
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    if (mem)
+        boat = ComponentEntity_CtorFromDescription(
+            reinterpret_cast<ComponentEntity*>(mem),
+            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x30));
 
     uint64_t boatIBP[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) new (boatIBP) ::Object::InternalBasePtr(
+    new (boatIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(boat));   // B.3.3 bridge
     *reinterpret_cast<uint64_t*>(comp + 0x80) = boatIBP[0];
 
@@ -503,11 +486,12 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
     // Publish the entity. The category is the template's own (template+0x20).
     int64_t regIBP = *reinterpret_cast<int64_t*>(comp + 0x80);
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
-    if (gw && s_EntityListAdd && desc) {
+    if (gw && desc) {
         void* tmpl = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x30);
-        s_EntityListAdd(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
-                        &regIBP,
-                        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
+        EntityList_RegisterEntity_Impl(
+            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
+            &regIBP,
+            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
     }
 
     // OUTCOME, not intent: the route point count is the only thing that says the boat can
@@ -516,10 +500,13 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
     // Retail ticks the machine once first when it has no current state yet
     // (`if (*(char*)(sm+9) < 0)` at 14005ab6a), then requests 0x12.
     uint8_t* sm = reinterpret_cast<uint8_t*>(smV);
-    if (sm && static_cast<int8_t>(sm[9]) < 0 && s_StateMachineTick) {
+    if (sm && static_cast<int8_t>(sm[9]) < 0) {
         uint8_t zeroTime[8] = {};
-        if (s_TimeCtor) s_TimeCtor(zeroTime, 0.0f);
-        s_StateMachineTick(smV, zeroTime, 0, 0);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
+        // The door typed `time` as a pointer and passed &zeroTime; the body takes the
+        // 8-byte Time by value, as retail passes it. With param4 = 0 the body never
+        // reads `time`, so passing the value is the same call.
+        ::StateMachine_TickReimpl(smV, *reinterpret_cast<int64_t*>(zeroTime), 0, 0);
     }
     ::ControllerLive::RequestStateTransition(smV, 0x12);
     return 0;
@@ -537,13 +524,13 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
 // BoatComponent's route head, which occupies the same offsets on a different object. The
 // two are easy to confuse when reading b160 and 56e0 side by side.
 extern "C" char TradeCtrl_Teardown(void* selfV) {
-    Resolve();
+    ReportDepsOnce();
     const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
 
     int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
-    if (gw && s_ListErase) {
-        s_ListErase(reinterpret_cast<void*>(
+    if (gw) {
+        CemeteryListErase_Reimpl(reinterpret_cast<void*>(
                         *reinterpret_cast<uintptr_t*>(
                             reinterpret_cast<uintptr_t>(gw) + 0xf0) + 0x30),
                     &entityIBP);
@@ -551,20 +538,20 @@ extern "C" char TradeCtrl_Teardown(void* selfV) {
 
     if (*reinterpret_cast<int64_t*>(comp + 0x80) != 0) {
         int64_t nullDest = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nullDest) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullDest) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint64_t boatCompIBP[2] = {0, 0};
         void* boatComp = BoatRoute_FindBoatComponent(*reinterpret_cast<int64_t*>(comp + 0x80),
                                                      boatCompIBP);
         const int64_t boatCompPtr = *reinterpret_cast<int64_t*>(boatComp);
         if (boatCompPtr) BoatComponent_SetDestination(boatCompPtr, &nullDest);
 
-        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(comp + 0x50));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(comp + 0x50));
         *reinterpret_cast<uint64_t*>(comp + 0x50) = 0;
         *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
         *reinterpret_cast<int32_t*>(comp + 0x2c) = -1;      // no merchant docked
 
         uint64_t clearIBP[2] = {0, 0};
-        if (fn_InternalBasePtr_Ctor) new (clearIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (clearIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uint64_t*>(comp + 0x80) = clearIBP[0];
     }
     return 1;

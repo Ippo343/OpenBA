@@ -68,7 +68,14 @@
 #include "Component/ImmigrationDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Action/exe_bodies.h"            // Pf_*, ActCNR_NR_SetVariant_1253d0
+#include "Component/exe_bodies.h"         // CitizenComp_DeferredInit_117080
+#include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos, fn_Random_RandFloatTol
+#include "Entity/exe_bodies.h"            // fn_FindComponent_Character / _Citizen
+#include "Player/exe_bodies.h"            // PlayerPath_FindComponent_3ea0, ToolTile_SetTransformFromYaw_3870
+#include "Work/exe_bodies.h"              // WorkBase_FindComponent_2ed0
+#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
@@ -90,44 +97,17 @@ constexpr float kMonthsPerYear   = 12.0f;    // DAT_1401721b8
 constexpr float kHalfCell        = 0.5f;     // DAT_140172114
 constexpr float kYawRange        = 180.0f;   // DAT_140172220
 
-// ---------------------------------------------------------------- resolved helpers
-typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retIBP);
-typedef void* (*fn_ResolvePos_t)(void* comp, float* out3, int kind, int idx, float* p5);
-typedef int   (*fn_ChildSum_t)(int64_t comp, int kind);
-typedef void* (*fn_CopyCtor_t)(void* mem, void* desc);
-typedef void  (*fn_RegisterEntity_t)(void* entityList, void* entityIBP, int category);
+// ---------------------------------------------------------------- helpers, by name (B3R)
+//   0x140003ea0 PlayerPath_FindComponent_3ea0 (the StateMachineComponent)
+//   0x140122e20 Pf_EntityResolvePos_2e20 (Entity_impl_2e20)   0x140123070 Pf_RecursiveChildSum_123070
+//   0x1400c3720 ComponentEntity_CtorFromDescription (ComponentEntity_CopyCtor)
+//   0x1400c48a0 EntityList_RegisterEntity_Impl                 0x14009c480 Pf_ZoneRefresh_9c480
+//   0x140003870 ToolTile_SetTransformFromYaw_3870              0x1401253d0 ActCNR_NR_SetVariant_1253d0
+//   0x140117080 CitizenComp_DeferredInit_117080
+//   0x140002ed0 WorkBase_FindComponent_2ed0 (the InteractComponent; the engine_funcs global
+//               that bound it was misnamed fn_Entity_FindComponent_Position)
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-typedef void  (*fn_ZoneRefresh_t)(int* grid, void* p2, void* p3, int p4);
-typedef void  (*fn_SetTransformYaw_t)(uintptr_t model, const void* pos, float yaw);
-typedef void  (*fn_SetVariant_t)(int64_t* model, uint16_t variant, int16_t sub);
-typedef void  (*fn_DeferredInit_t)(int64_t citizen, void* pos, uint32_t gender, char isElder,
-                                   float age, char forceEmploy, int64_t* parentIBP, int64_t key);
-
-fn_FindComp_t        s_FindSM        = nullptr;  // 0x140003ea0  StateMachineComponent
-fn_ResolvePos_t      s_ResolvePos    = nullptr;  // 0x140122e20  Entity_impl_2e20
-fn_ChildSum_t        s_ChildSum      = nullptr;  // 0x140123070
-fn_CopyCtor_t        s_CopyCtor      = nullptr;  // 0x1400c3720  ComponentEntity_CopyCtor
-fn_RegisterEntity_t  s_RegisterEnt   = nullptr;  // 0x1400c48a0  EntityList_RegisterEntity
-fn_ZoneRefresh_t     s_ZoneRefresh   = nullptr;  // 0x14009c480
-fn_SetTransformYaw_t s_SetYaw        = nullptr;  // 0x140003870
-fn_SetVariant_t      s_SetVariant    = nullptr;  // 0x1401253d0
-fn_DeferredInit_t    s_DeferredInit  = nullptr;  // 0x140117080
-bool s_resolved = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_FindSM       = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
-    s_ResolvePos   = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_ChildSum     = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
-    s_CopyCtor     = reinterpret_cast<fn_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
-    s_RegisterEnt  = reinterpret_cast<fn_RegisterEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
-    s_ZoneRefresh  = reinterpret_cast<fn_ZoneRefresh_t>(ResolveAddr(Module::Exe, 0x14009c480));
-    s_SetYaw       = reinterpret_cast<fn_SetTransformYaw_t>(ResolveAddr(Module::Exe, 0x140003870));
-    s_SetVariant   = reinterpret_cast<fn_SetVariant_t>(ResolveAddr(Module::Exe, 0x1401253d0));
-    s_DeferredInit = reinterpret_cast<fn_DeferredInit_t>(ResolveAddr(Module::Exe, 0x140117080));
-    s_resolved = true;
-}
 
 // Type ids by name, resolved lazily from the live factory tree (the exe .rdata
 // globals are not all registered in standalone; see the ImmigrationUI stub note).
@@ -148,14 +128,14 @@ inline void*    Rng(uint8_t* gw)     { return *reinterpret_cast<void**>(gw + 0xd
 inline int*     Grid(uint8_t* gw)    { return *reinterpret_cast<int**>(gw + 0xf8); }
 inline uintptr_t Tiles(int* grid)    { return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80); }
 
-inline void MakeIBP(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) new (dst) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(obj)); else *reinterpret_cast<void**>(dst) = obj; }   // B.3.3 bridge
+inline void MakeIBP(void* dst, void* obj) { new (dst) ::Object::InternalBasePtr(
+    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
 // desc = comp+0x18 if IsDerivedFrom(ImmigrationDescription) else null — retail
 // dereferences the null; a town hall without its description is a broken template.
 uint8_t* ImmDesc(uintptr_t comp) {
     void* d = *reinterpret_cast<void**>(comp + 0x18);
-    if (d && fn_IsDerivedFrom && fn_IsDerivedFrom(d, TidImmDesc())) return reinterpret_cast<uint8_t*>(d);
+    if (d && ::Object::IsDerivedFromNullSafe(d, TidImmDesc())) return reinterpret_cast<uint8_t*>(d);
     static bool warned = false;
     if (!warned) { warned = true; std::fprintf(stderr, "[ImmCtrl] comp=%p has no ImmigrationDescription (desc=%p tid=%08x)\n", (void*)comp, d, TidImmDesc()); std::fflush(stderr); }
     return nullptr;
@@ -184,7 +164,7 @@ void* FindComponentByTid(void* entity, uint32_t tid) {
         uint32_t got = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
         if (got != tid) continue;
         c = *slot;
-        return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+        return (::Object::IsDerivedFromNullSafe(c, tid)) ? c : nullptr;
     }
     return nullptr;
 }
@@ -192,9 +172,9 @@ void* FindComponentByTid(void* entity, uint32_t tid) {
 // Post an event to an entity's StateMachineComponent through its node vtable slot 2,
 // the exact call shape retail uses: node->PostEvent(node, &sm, curIdx, eventId).
 void PostEventToEntity(void* entity, int eventId) {
-    if (!entity || !s_FindSM) return;
+    if (!entity) return;
     uint64_t smcIBP = 0;
-    s_FindSM(reinterpret_cast<uintptr_t>(entity), &smcIBP);
+    PlayerPath_FindComponent_3ea0(reinterpret_cast<uintptr_t>(entity), &smcIBP);   // 0x140003ea0
     uintptr_t smc = static_cast<uintptr_t>(smcIBP);
     if (!smc) return;
     void* node = *reinterpret_cast<void**>(smc + 0x48);
@@ -213,7 +193,6 @@ void PostEventToEntity(void* entity, int eventId) {
 // built instance (townMgr+0x160 BST: key@+0, count@+0x10, left@+0x20, right@+0x28).
 // ============================================================
 extern "C" bool Immigration_CanAccept(void* compV) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
@@ -244,7 +223,6 @@ extern "C" bool Immigration_CanAccept(void* compV) {
 // (tile+0x26) as the town hall's cell, or on a zone-less bridge/road class (0x1e0).
 // ============================================================
 extern "C" int Immigration_FindSpawnCell(void* compV, int x, int y, int hallCell) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
@@ -262,7 +240,7 @@ extern "C" int Immigration_FindSpawnCell(void* compV, int x, int y, int hallCell
         uintptr_t tiles = Tiles(grid);
         uint32_t fc = 1u << (*reinterpret_cast<uint8_t*>(tiles + static_cast<uintptr_t>(c) * 0x30 + 0x29) & 0x1f);
         if ((fc & 0xe07u) == 0) continue;
-        if (s_ZoneRefresh) s_ZoneRefresh(grid, nullptr, nullptr, hallCell);
+        Pf_ZoneRefresh_9c480(grid, nullptr, nullptr, hallCell);   // 0x14009c480
         tiles = Tiles(grid);
         uintptr_t tc = tiles + static_cast<uintptr_t>(c) * 0x30;
         uintptr_t th = tiles + static_cast<uintptr_t>(hallCell) * 0x30;
@@ -287,12 +265,11 @@ extern "C" int Immigration_FindSpawnCell(void* compV, int x, int y, int hallCell
 // point with a random yaw, pick the mesh variant and material for the gender.
 // ============================================================
 extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, const float* meetPos) {
-    Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(nomadV);
     uint8_t* gw = GW();
     if (!gw) return;
     void* nd = *reinterpret_cast<void**>(nomad + 0x18);
-    uint8_t* ndesc = (nd && fn_IsDerivedFrom && fn_IsDerivedFrom(nd, TidNomadDesc())) ? reinterpret_cast<uint8_t*>(nd) : nullptr;
+    uint8_t* ndesc = (nd && ::Object::IsDerivedFromNullSafe(nd, TidNomadDesc())) ? reinterpret_cast<uint8_t*>(nd) : nullptr;
     *reinterpret_cast<uint64_t*>(nomad + 0x28) = *reinterpret_cast<uint64_t*>(ownerIBP);
     float* sp = reinterpret_cast<float*>(nomad + 0x30);
     sp[0] = spawnPos[0]; sp[1] = spawnPos[1]; sp[2] = spawnPos[2];
@@ -307,9 +284,9 @@ extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, 
     uintptr_t model = static_cast<uintptr_t>(modelIBP);
     if (!model) return;
     float yaw = fn_Random_RandFloatTol(rng) * kYawRange;
-    if (s_SetYaw) s_SetYaw(model, reinterpret_cast<void*>(nomad + 0x30), yaw);
-    if (s_SetVariant) s_SetVariant(reinterpret_cast<int64_t*>(model),
-                                   static_cast<uint16_t>(*reinterpret_cast<uint32_t*>(nomad + 0x50)), 0);
+    ToolTile_SetTransformFromYaw_3870(model, reinterpret_cast<void*>(nomad + 0x30), yaw);   // 0x140003870
+    ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(model),   // 0x1401253d0
+                                static_cast<uint16_t>(*reinterpret_cast<uint32_t*>(nomad + 0x50)), 0);
     if (ndesc) {
         void* mat = *reinterpret_cast<void**>(ndesc + ((*reinterpret_cast<uint32_t*>(nomad + 0x50) == 0) ? 0x28 : 0x30));
         reinterpret_cast<Graphics::MeshInstance*>(model + 0x28)
@@ -325,18 +302,17 @@ extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, 
 // register each into the world.
 // ============================================================
 extern "C" void Immigration_Spawn(void* compV) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
-    if (!gw || !desc || !s_ResolvePos || !s_CopyCtor || !fn_MapGetTerrainPos) return;
+    if (!gw || !desc) return;
     void* rng = Rng(gw);
     int* grid = Grid(gw);
     const int W = *grid;
     const int edge = *reinterpret_cast<int*>(desc + 0x5c);
 
     uint64_t posIBP = 0;
-    fn_Entity_FindComponent_Position(reinterpret_cast<uintptr_t>(*reinterpret_cast<void**>(comp + 0x10)), &posIBP);
+    WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(*reinterpret_cast<void**>(comp + 0x10)), &posIBP);   // 0x140002ed0
 
     int x = 0, y = 0, hallCell = 0, cell = -1;
     for (int t = 0; t < 10; ++t) {
@@ -349,7 +325,7 @@ extern "C" void Immigration_Spawn(void* compV) {
             y = (r == 2) ? edge : (W - edge) - 1;
         }
         float hp[3] = {0, 0, 0};
-        s_ResolvePos(reinterpret_cast<void*>(posIBP), hp, 0, 0, nullptr);
+        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), hp, 0, 0, nullptr);
         int cx = static_cast<int>(hp[0] + static_cast<float>(W >> 1));
         int cy = static_cast<int>(hp[1] + static_cast<float>(W >> 1));
         if (cx < 0) cx = 0;
@@ -400,37 +376,38 @@ extern "C" void Immigration_Spawn(void* compV) {
         // A random "use point" on the town hall for this nomad to stand at.
         uintptr_t pc = static_cast<uintptr_t>(posIBP);
         void* idesc = *reinterpret_cast<void**>(pc + 0x18);
-        uint8_t* id = (idesc && fn_IsDerivedFrom && fn_IsDerivedFrom(idesc, TidInteractDesc())) ? reinterpret_cast<uint8_t*>(idesc) : nullptr;
+        uint8_t* id = (idesc && ::Object::IsDerivedFromNullSafe(idesc, TidInteractDesc())) ? reinterpret_cast<uint8_t*>(idesc) : nullptr;
         uint32_t nPts = id ? *reinterpret_cast<uint32_t*>(id + 0x50) : 0;
         int nChildren = *reinterpret_cast<int*>(pc + 0x30);
         for (int ci = 0; ci < nChildren; ++ci) {
             int64_t* child = reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(pc + 0x28) + static_cast<uintptr_t>(ci) * 8);
-            if (s_ChildSum) nPts += static_cast<uint32_t>(s_ChildSum(*child, 2));
+            nPts += static_cast<uint32_t>(Pf_RecursiveChildSum_123070(*child, 2));   // 0x140123070
         }
         uint32_t ptIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(nPts));   // B.3.4b bridge
         float meet[3] = {0, 0, 0};
-        s_ResolvePos(reinterpret_cast<void*>(posIBP), meet, 2, static_cast<int>(ptIdx), nullptr);
+        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), meet, 2, static_cast<int>(ptIdx), nullptr);
 
         // Clone the nomad template.
-        void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-        void* ent = mem ? s_CopyCtor(mem, *reinterpret_cast<void**>(desc + 0x20)) : nullptr;
+        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+        void* ent = mem ? ComponentEntity_CtorFromDescription(   // 0x1400c3720
+                          reinterpret_cast<ComponentEntity*>(mem), *reinterpret_cast<void**>(desc + 0x20)) : nullptr;
         uint64_t entIBP = 0; MakeIBP(&entIBP, ent);
 
         // World position of the spawn cell, snapped to the terrain.
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         float spawn[3] = {0, 0, 0};
-        fn_MapGetTerrainPos(grid, spawn, cellPos, '\0', nullptr);
+        Reimpl_MapGetTerrainPos(grid, spawn, cellPos, '\0', nullptr);
 
         // Bind its NomadComponent to this hall and drop it into the world.
         void* nomad = FindComponentByTid(reinterpret_cast<void*>(entIBP), TidNomadComp());
         uint64_t nomadIBP = 0; MakeIBP(&nomadIBP, nomad);
         if (nomadIBP) Nomad_Init(reinterpret_cast<void*>(nomadIBP), reinterpret_cast<void*>(comp + 0x10), spawn, meet);
         uintptr_t e = static_cast<uintptr_t>(entIBP);
-        if (e && s_RegisterEnt) {
+        if (e) {
             int category = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(e + 0x28) + 0x20);
             uint64_t regIBP = entIBP;
-            s_RegisterEnt(*reinterpret_cast<void**>(gw + 0xe8), &regIBP, category);
+            EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(gw + 0xe8), &regIBP, category);
         }
         // Append to the group array (+0x58/+0x60/+0x64) — retail inlines this
         // DynArray8 push; the registered resize does the same growth policy.
@@ -447,7 +424,6 @@ extern "C" void Immigration_Spawn(void* compV) {
 // Dismiss — port of 0x14004d300: event 1 (LEAVE) to every nomad, drop the group.
 // ============================================================
 extern "C" void Immigration_Dismiss(void* compV) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     int n = *reinterpret_cast<int*>(comp + 0x60);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(comp + 0x58);
@@ -455,7 +431,7 @@ extern "C" void Immigration_Dismiss(void* compV) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(arr + static_cast<uintptr_t>(i) * 8);
         PostEventToEntity(reinterpret_cast<void*>(*slot), 1);
     }
-    if (arr && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(arr));
+    if (arr) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(arr));
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
@@ -467,24 +443,24 @@ extern "C" void Immigration_Dismiss(void* compV) {
 // gender, family link). Returns the new CitizenComponent (out IBP).
 // ============================================================
 extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t* parentIBP, int gender, char isChild) {
-    Resolve();
     uintptr_t nomad = reinterpret_cast<uintptr_t>(nomadV);
     uint8_t* gw = GW();
     *outIBP = 0;
-    if (!gw || !s_CopyCtor || !s_DeferredInit) return nullptr;
+    if (!gw) return nullptr;
     void* nd = *reinterpret_cast<void**>(nomad + 0x18);
-    uint8_t* ndesc = (nd && fn_IsDerivedFrom && fn_IsDerivedFrom(nd, TidNomadDesc())) ? reinterpret_cast<uint8_t*>(nd) : nullptr;
+    uint8_t* ndesc = (nd && ::Object::IsDerivedFromNullSafe(nd, TidNomadDesc())) ? reinterpret_cast<uint8_t*>(nd) : nullptr;
     if (!ndesc) return nullptr;
     void* rng = Rng(gw);
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-    void* ent = mem ? s_CopyCtor(mem, *reinterpret_cast<void**>(ndesc + 0x20)) : nullptr;
+    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    void* ent = mem ? ComponentEntity_CtorFromDescription(   // 0x1400c3720
+                          reinterpret_cast<ComponentEntity*>(mem), *reinterpret_cast<void**>(ndesc + 0x20)) : nullptr;
     uint64_t entIBP = 0; MakeIBP(&entIBP, ent);
     fn_FindComponent_Citizen(reinterpret_cast<void*>(entIBP), outIBP);
     uintptr_t cit = static_cast<uintptr_t>(*outIBP);
     if (!cit) return nullptr;
     void* cd = *reinterpret_cast<void**>(cit + 0x18);
-    uint8_t* cdesc = (cd && fn_IsDerivedFrom && fn_IsDerivedFrom(cd, TidCitDesc())) ? reinterpret_cast<uint8_t*>(cd) : nullptr;
+    uint8_t* cdesc = (cd && ::Object::IsDerivedFromNullSafe(cd, TidCitDesc())) ? reinterpret_cast<uint8_t*>(cd) : nullptr;
 
     // Spawn the citizen where the nomad stands (its model transform translation).
     uint64_t modelIBP = 0;
@@ -503,12 +479,12 @@ extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t
     char flag = (r == 0 || isChild != 0) ? 0 : 1;
     int64_t key = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(gw + 0xb0) + 0x30);
     int64_t parent = static_cast<int64_t>(*parentIBP);
-    s_DeferredInit(static_cast<int64_t>(*outIBP), pos, static_cast<uint32_t>(gender), isChild, age, flag, &parent, key);
+    CitizenComp_DeferredInit_117080(static_cast<int64_t>(*outIBP), pos, static_cast<uint32_t>(gender), isChild, age, flag, &parent, key);
 
     uint64_t regIBP = entIBP;
-    if (s_RegisterEnt) {
+    {
         int category = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(ndesc + 0x20) + 0x20);
-        s_RegisterEnt(*reinterpret_cast<void**>(gw + 0xe8), &regIBP, category);
+        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(gw + 0xe8), &regIBP, category);
     }
     return reinterpret_cast<void*>(*outIBP);
 }
@@ -522,7 +498,6 @@ extern "C" void* Nomad_ConvertToCitizen(void* nomadV, uint64_t* outIBP, uint64_t
 // (DESTROY). Finally frees the group array.
 // ============================================================
 extern "C" void Immigration_Accept(void* compV) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
@@ -532,7 +507,7 @@ extern "C" void Immigration_Accept(void* compV) {
     float chance = *reinterpret_cast<float*>(desc + 0x60);
     if (*reinterpret_cast<float*>(tm + 0x1a8) < chance) *reinterpret_cast<float*>(tm + 0x1a8) = chance;
     int64_t dur = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&dur, static_cast<float>(*reinterpret_cast<int*>(desc + 0x64)) * kSecondsPerMonth);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&dur), static_cast<float>(*reinterpret_cast<int*>(desc + 0x64)) * kSecondsPerMonth);
     if (*reinterpret_cast<int64_t*>(tm + 0x1a0) < dur) *reinterpret_cast<int64_t*>(tm + 0x1a0) = dur;
 
     const int n = *reinterpret_cast<int*>(comp + 0x60);
@@ -572,7 +547,7 @@ extern "C" void Immigration_Accept(void* compV) {
         genderC = (genderD == 0) ? 1 : 0;
         i += 4;
     }
-    if (arr && fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(arr));
+    if (arr) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(arr));
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
@@ -586,19 +561,16 @@ namespace {
 
 // state 2 IDLE — enter 0x14004d290 (returns 0), tick 0x14004d220 (returns 1)
 extern "C" char Imm_State2_Enter(void* data, void* sm) {
-    Resolve();
     if (Immigration_CanAccept(data)) ::ControllerLive::RequestStateTransition(sm, 0xf);
     return 0;
 }
 extern "C" char Imm_State2_Tick(void* data, void* sm, void* /*time*/) {
-    Resolve();
     if (Immigration_CanAccept(data)) ::ControllerLive::RequestStateTransition(sm, 0xf);
     return 1;
 }
 
 // state 0xf WAITING — enter 0x14004d1a0: timer = (base + rand*range) months
 extern "C" char Imm_StateF_Enter(void* data, void* /*sm*/) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
@@ -607,13 +579,12 @@ extern "C" char Imm_StateF_Enter(void* data, void* /*sm*/) {
     float months = r * *reinterpret_cast<float*>(desc + 0x4c) + *reinterpret_cast<float*>(desc + 0x48);
     float secs = months * kSecondsPerMonth;
     int64_t t = 0;
-    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), secs);
     *reinterpret_cast<int64_t*>(comp + 0x48) = t;
     return 0;
 }
 // tick 0x14004d0d0: countdown; in season -> 0x10 if CanAccept else 2
 extern "C" char Imm_StateF_Tick(void* data, void* sm, void* time) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
@@ -632,11 +603,10 @@ extern "C" char Imm_StateF_Tick(void* data, void* sm, void* time) {
 
 // state 0x10 ARRIVING — enter 0x14004d090: reset the group and spawn it
 extern "C" char Imm_State10_Enter(void* data, void* /*sm*/) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
     void* old = *reinterpret_cast<void**>(comp + 0x58);
-    if (old && fn_MemFreeStatic) fn_MemFreeStatic(old);
+    if (old) System::MemoryAllocator::MemFree(old);
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
     Immigration_Spawn(data);
@@ -644,13 +614,11 @@ extern "C" char Imm_State10_Enter(void* data, void* /*sm*/) {
 }
 // tick 0x14004d070: spawn again if the group is empty
 extern "C" char Imm_State10_Tick(void* data, void* /*sm*/, void* /*time*/) {
-    Resolve();
     if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(data) + 0x60) == 0) Immigration_Spawn(data);
     return 1;
 }
 // event 6 0x14004cff0: a nomad reached the hall
 extern "C" char Imm_State10_Event6_Arrived(void* data, void* sm) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     uint32_t arrived = ++*reinterpret_cast<uint32_t*>(comp + 0x50);
     if (arrived == *reinterpret_cast<uint32_t*>(comp + 0x60)) ::ControllerLive::RequestStateTransition(sm, 0x11);
@@ -658,13 +626,11 @@ extern "C" char Imm_State10_Event6_Arrived(void* data, void* sm) {
 }
 // transition 0x10/0x11 -> 3 handler 0x14004cd00: dismiss on the way out
 extern "C" void Imm_Trans3_Dismiss(void* data) {
-    Resolve();
     Immigration_Dismiss(data);
 }
 
 // state 0x11 WAITING FOR AN ANSWER — enter 0x14004ceb0: the event-log line
 extern "C" char Imm_State11_Enter(void* data, void* /*sm*/) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     uint8_t* gw = GW();
     if (gw) {
@@ -676,7 +642,6 @@ extern "C" char Imm_State11_Enter(void* data, void* /*sm*/) {
 }
 // tick 0x14004ce00: past the leave month -> dismiss -> 2
 extern "C" char Imm_State11_Tick(void* data, void* sm, void* /*time*/) {
-    Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
@@ -689,14 +654,12 @@ extern "C" char Imm_State11_Tick(void* data, void* sm, void* /*time*/) {
 }
 // event 7 0x14004cd90: ALLOW
 extern "C" char Imm_Event7_Allow(void* data, void* sm) {
-    Resolve();
     Immigration_Accept(data);
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
 }
 // event 8 0x14004cd20: DENY
 extern "C" char Imm_Event8_Deny(void* data, void* sm) {
-    Resolve();
     Immigration_Dismiss(data);
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;

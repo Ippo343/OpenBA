@@ -13,7 +13,8 @@
 #include "Component/LivestockDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
+#include "Game/exe_constants.h"     // kRdata_140172234
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -21,41 +22,11 @@
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
 
 // ============================================================
-// Resolved helpers
-// ============================================================
-
-// Time multiplier constant: 300.0f at 0x140172234 (.rdata)
-static float* s_pTimeMultiplier = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_pTimeMultiplier = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x140172234));
-
-    s_initialized = true;
-}
-
-// ============================================================
 // LivestockComponent::Update (vtable slot [9], 0x140123b50)
 // ============================================================
 // Reproduction timer: accumulates delta time, fires birth event
 // when threshold exceeded (configInterval * 300.0f seconds -> ticks).
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void LivestockComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[LivestockComponent] Funcs resolved: ConfigTypeId=%u TimeMultiplier=%p(%f)\n",
-           LivestockDescription::TypeId(),
-           (void*)s_pTimeMultiplier,
-           s_pTimeMultiplier ? *s_pTimeMultiplier : 0.0f);
-#endif
-}
+// The multiplier is the .rdata constant 300.0f at 0x140172234 (kRdata_140172234).
 
 // ============================================================
 // LivestockComponent::OnAdd (vtable slot [6], 0x140123c70)
@@ -99,9 +70,8 @@ void LivestockComponent::OnAdded() {
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     if (!gs) return;
     uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+    new (&ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    else ibp = reinterpret_cast<uint64_t>(this);
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(gs + 0x80))
         .SetSizeFill(*reinterpret_cast<int*>(gs + 0x88) + 1, &ibp);
@@ -109,17 +79,14 @@ void LivestockComponent::OnAdded() {
                  (void*)this, *reinterpret_cast<int*>(gs + 0x88));
     std::fflush(stderr);
 }
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0x140002cc0
-
 void LivestockComponent::OnRemove() {
     // 0x140002cc0 is CemeteryListErase_Reimpl (cemeterycomponent.cpp): called
     // directly, no first-call cache (B.3.8, B6-5).
     const auto s_erase = &CemeteryListErase_Reimpl;
 
     uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+    new (&ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    else ibp = reinterpret_cast<uint64_t>(this);
 
     if (data28 == 0) {
         if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
@@ -135,21 +102,15 @@ void LivestockComponent::OnRemove() {
 // bucket tick 0x1400c42af); the ported body takes the Time by value.
 void LivestockComponent::Update(void* time) {
     const int64_t deltaTime = time ? *static_cast<int64_t*>(time) : 0;
-    EnsureHelpers();
 
     // Early out: no herd component pointer
     if (data28 == 0) {
         return;
     }
 
-    // Verify fn_IsDerivedFrom and globals are available
-    if (!fn_IsDerivedFrom || !s_pTimeMultiplier) {
-        return;
-    }
-
     // Get the related component from _unk18 and check its type
     void* relatedComponent = _description;
-    bool isDerived = fn_IsDerivedFrom(relatedComponent, LivestockDescription::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(relatedComponent, LivestockDescription::TypeId());
 
     void* configComponent = isDerived ? relatedComponent : nullptr;
 
@@ -171,7 +132,7 @@ void LivestockComponent::Update(void* time) {
     //   Time(float seconds) = (int64_t)((double)seconds / _secondsPerTick)
     float intervalSeconds = *reinterpret_cast<float*>(
         reinterpret_cast<uintptr_t>(configComponent) + 0x2C);
-    float thresholdSeconds = intervalSeconds * (*s_pTimeMultiplier);
+    float thresholdSeconds = intervalSeconds * kRdata_140172234;
     int64_t thresholdTicks = static_cast<int64_t>(
         static_cast<double>(thresholdSeconds) / ::System::Timer::_secondsPerTick);
 

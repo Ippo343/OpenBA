@@ -17,4 +17,3 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling);   // 0
 void TerraformComponent_FootprintPass(TerraformComponent* self);            // 0x140057120
 extern "C" void TerraformComponent_Slot12(void* self, int msgId);           // 0x140057310
 
-void TerraformComponent_InitFuncs();

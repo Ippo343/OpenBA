@@ -22,6 +22,3 @@
 //   7-8. Education/age transitions
 // Parameters: self, pDeltaTime (pointer to int64 time value)
 void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime);
-
-// Init: resolve all internal function pointers (called once at startup)
-void CitizenAIComponent_InitFuncs();

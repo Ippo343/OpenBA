@@ -29,6 +29,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
 
@@ -38,8 +39,8 @@ void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
     *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
-                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+    void* buf = (count > 0)
+                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
                 : nullptr;
     *(void**)h = buf;
     return buf;
@@ -62,7 +63,7 @@ StorageDescription::StorageDescription()
 // dtor (slot 0 0x140038cf0 minus the stamps): frees the volume array.
 // The compiler then chains ~Description -> ~External.
 StorageDescription::~StorageDescription() {
-    if (fn_MemFreeStatic && _volumes) fn_MemFreeStatic(_volumes);
+    if (_volumes) System::MemoryAllocator::MemFree(_volumes);
     _volumes = nullptr;
     _volumeCount = 0;
     _volumeCap = 0;
@@ -70,7 +71,6 @@ StorageDescription::~StorageDescription() {
 
 // [5] 0x14012c9a0: stream order as retail.
 bool StorageDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_rawMaterialFlags, nullptr);   // rawMaterialFlags (enum, uint door)
     ser.Serialize(_flagA, nullptr);
@@ -93,7 +93,7 @@ bool StorageDescription::Serialize(void* stream) {
     }
     for (int i = 0; i < count; ++i, e += 0x10) {
         ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // int field, elem+8
-        fn_ExternalPtr_Serialize2(e, &ser);                        // External* ref (elem+0)
+        Reimpl_ExternalPtr_Serialize_StringTable(e, &ser);                        // External* ref (elem+0)
     }
     return true;
 }
