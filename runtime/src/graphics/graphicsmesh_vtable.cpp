@@ -230,31 +230,32 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser, int version) {
     return rw;
 }
 
+// B3X W0: the ReaderWriter members, by name on the real class (the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
+IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    using DtorFn = void (*)(ReaderWriter*, int);
-    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+    AsRw(rw)->DeletingDtor(1);
 }
 
 void EmitInt(ReaderWriter* rw, int32_t* p) {
-    using Fn = void (*)(ReaderWriter*, int32_t*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, p, nullptr);
+    AsRw(rw)->SerializeInt(*p, nullptr);
 }
 void EmitFloat(ReaderWriter* rw, float* p) {
-    using Fn = void (*)(ReaderWriter*, float*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarFloat / 8])(rw, p, nullptr);
+    AsRw(rw)->SerializeFloat(*p, nullptr);
 }
 void EmitFloatArray(ReaderWriter* rw, int n, float* p) {
-    using Fn = void (*)(ReaderWriter*, int, float*, const char*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kArrayFloat / 8])(rw, n, p, nullptr);
+    AsRw(rw)->SerializeFloatArray(n, p, nullptr);
 }
 int32_t CodecVersion(ReaderWriter* rw) {
-    using Fn = int32_t (*)(ReaderWriter*);
-    return reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kGetVersion / 8])(rw);
+    return AsRw(rw)->GetVersion();
 }
 void CodecSkip(ReaderWriter* rw) {
-    using Fn = void (*)(ReaderWriter*);
-    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kSkip / 8])(rw);
+    AsRw(rw)->Skip();
 }
 
 // An Array<T> header, as the elements of the +0x70 array-of-arrays are shaped:

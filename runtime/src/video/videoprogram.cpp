@@ -92,6 +92,13 @@ Fn RtAddr(uintptr_t ghidra) {
     return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
 }
 
+// B3X W0: the ReaderWriter members, by name on the real class (the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
+inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
+
 }  // namespace
 
 // ============================================================================
@@ -208,8 +215,7 @@ bool VideoProgram::Serialize(void* streamv) {
         this->Video::VideoProgram::PlatformCreate();   // retail derefs _data unguarded
     }
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        AsRw(rw)->DeletingDtor(1);
     }
     return true;
 }

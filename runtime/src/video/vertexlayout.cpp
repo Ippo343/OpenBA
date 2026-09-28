@@ -112,8 +112,12 @@ constexpr size_t kDeviceDataCreateVertexLayoutData = 0x70;   // DeviceData vtabl
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
-using ScalarFn = void (*)(ReaderWriter*, void*, const char*);
-using ArrayFn  = void (*)(ReaderWriter*, int, void*, const char*);
+// B3X W0: the ReaderWriter members, by name on the real class (the
+// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
+// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
+inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
 
 }  // namespace
 
@@ -147,11 +151,11 @@ extern "C" void RtVideo_VertexLayout_SerializeElements(Serializer* ser, int coun
         // to the by-hand release the ported `Array<Element>::~Array` already
         // performs (0x18004fa30); the eight bytes are a System::String.
         reinterpret_cast<System::String&>(e->name).Serialize(ser);
-        reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &e->stream,     nullptr);
-        reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &e->offset,     nullptr);
-        reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &e->usage,      nullptr);
-        reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &e->usageIndex, nullptr);
-        reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &e->format,     nullptr);
+        AsRw(rw)->SerializeInt(e->stream, nullptr);
+        AsRw(rw)->SerializeInt(e->offset, nullptr);
+        AsRw(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->usage), nullptr);
+        AsRw(rw)->SerializeInt(e->usageIndex, nullptr);
+        AsRw(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->format), nullptr);
     }
 }
 
@@ -259,23 +263,22 @@ bool VertexLayout::Serialize(void* streamv) {
 
     using SetSizeFn = void (*)(void*, int);
     int32_t n = _elements._size;
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
+    AsRw(rw)->SerializeInt(n, nullptr);
     if (ser.stream->direction == 0) RtAddr<SetSizeFn>(0x180056240ull)(&_elements, n);
     // Retail CALLs 0x1800563c0; this IS that function, in this file.
     RtVideo_VertexLayout_SerializeElements(&ser, n, _elements._data);
 
     // PlatformSerialize (0x1800f5ff0), inlined by retail and inlined here.
     int32_t m = _signature._size;
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &m, nullptr);
+    AsRw(rw)->SerializeInt(m, nullptr);
     if (ser.stream->direction == 0) RtAddr<SetSizeFn>(0x180029630ull)(&_signature, m);
-    reinterpret_cast<ArrayFn>(rw->vtable[rt::io::rw_vtbl::kArrayUChar / 8])(
-        rw, m, _signature._data, nullptr);
+    AsRw(rw)->SerializeUCharArray(
+        m, reinterpret_cast<unsigned char*>(_signature._data), nullptr);
 
     if (stream->direction == 0)
         this->Video::VertexLayout::PlatformCreate();   // retail derefs _data unguarded
     if (rw != nullptr) {
-        using DeleteFn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+        AsRw(rw)->DeletingDtor(1);
     }
     return true;
 }

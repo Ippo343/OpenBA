@@ -454,7 +454,7 @@ void RtSceneGridReindex(Scene* self, int32_t id) {
 // built wears the DLL's own `??_7Geometry@Graphics@@6B@`, so a virtual call on it
 // still lands in the DLL for a base Geometry and in the subclass for a subclass —
 // which is retail's dispatch and is the whole of the vtable-ownership note in this
-// file's banner. The enum `RtGraphics::kVSlot*` stays in Geometry.h; block E's
+// file's banner. The enum `RtGraphics::kVSlot*` is deleted (B3X W0); block E's
 // unit test (`tests/unit/graphics_geometry_abi_test.cpp` PART B) is what pins
 // that GCC's table and a minted `void*[]` are interchangeable slot for slot.
 // ============================================================================

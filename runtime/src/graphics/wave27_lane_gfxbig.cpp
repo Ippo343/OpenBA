@@ -115,6 +115,7 @@
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 close: Timer::_secondsPerTick
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
+#include "../../types/graphics/Light.h"   // B3X W0: Light::DrawShadowMap / DrawLight by name
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Context.h"
 #include "../collection/array_internal.h"
@@ -438,14 +439,11 @@ using BeginDrawGroupFn = int32_t (*)(Renderer*, const void* renderBuffer,
 // ENDGAME B.3.5 caller batch: `AddCulledFn` is gone with its door — the member
 // call in `Renderer::Draw` needs no typedef.
 
-// slot 3 of a scene drawable: AddDrawItems(const Scene&, Renderer&)
-using AddDrawItemsFn = void (*)(void* self, const void* scene, Renderer*);
+// (B3X W0: slot 3 of a scene drawable -- `Geometry::AddDrawItems` -- and slots
+// 9 / 10 of a Renderer drawable -- `Light::DrawShadowMap` / `DrawLight` -- are
+// by-name calls on the real classes now; their typedefs are gone.)
 // slot 4 of Context::_contextData: Clear(flags, colour, depth, stencil)
 using ClearFn = void (*)(void* self, int32_t flags, uint32_t colour, float depth, int32_t stencil);
-// slot 9 / slot 10 of a Renderer drawable
-using PrepareFn = void (*)(void* self, void* context, Renderer*, int32_t, int32_t);
-using EmitFn    = void (*)(void* self, void* context, Renderer*, int32_t drawGroup,
-                           int32_t drawableValue, int32_t pass, int32_t entryField);
 
 inline void** VTable(void* obj) { return *reinterpret_cast<void***>(obj); }
 
@@ -1261,7 +1259,8 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
                     // door: lane GFXMESH owns ??_7MeshInstance@ and this call
                     // reaches whatever is in the live table. Nothing here
                     // registers, stamps or reads that slot as an identity token.
-                    reinterpret_cast<rtgfxbig::AddDrawItemsFn>(rtgfxbig::VTable(obj)[3])(obj, scene, r);
+                    // By name since B3X W0.
+                    static_cast<const Geometry*>(obj)->AddDrawItems(sceneRef, *this);  // B.3.x bridge
                 }
                 node = *reinterpret_cast<void**>(static_cast<uint8_t*>(node) + 0x10);
             }
@@ -1323,8 +1322,8 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
         for (int32_t j = 0; j < e->drawableIds._size; ++j) {
             const int32_t id = e->drawableIds._data[j];
             RtGraphics::RendererDrawable& d = r->drawables._data[id];
-            reinterpret_cast<rtgfxbig::PrepareFn>(rtgfxbig::VTable(d.object)[9])(
-                d.object, ctx, r, d.value, 1);
+            static_cast<const Light*>(d.object)->DrawShadowMap(   // B.3.x bridge
+                context, *this, d.value, 1);
         }
 
         // Rebind the render target only on a change.
@@ -1377,8 +1376,8 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
             for (int32_t j = 0; j < e->drawableIds._size; ++j) {
                 const int32_t id = e->drawableIds._data[j];
                 RtGraphics::RendererDrawable& d = r->drawables._data[id];
-                reinterpret_cast<rtgfxbig::EmitFn>(rtgfxbig::VTable(d.object)[10])(
-                    d.object, ctx, r, e->drawGroupIndex, d.value, k, e->field_ec);
+                static_cast<const Light*>(d.object)->DrawLight(   // B.3.x bridge
+                    context, *this, e->drawGroupIndex, d.value, k, e->field_ec);
             }
         }
     }

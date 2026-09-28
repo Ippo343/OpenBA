@@ -64,6 +64,7 @@
 #include "../../types/graphics/Scene.h"     // Graphics::Scene
 #include "../../types/video/Context.h"      // Video::Context
 #include "../../types/video/Device.h"       // Video::RenderBuffer
+#include "../../types/video/ImageBuffer.h"  // Video::ImageBuffer (B3X W0: slot 0 by name)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -626,8 +627,8 @@ SpotLight::~SpotLight() {
     for (void* const* slot : owned) {
         void* const img = *slot;
         if (img == nullptr) continue;
-        void** const vt = *reinterpret_cast<void***>(img);
-        reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(img, 1u);
+        // Slot 0, flags 1, by name on the image's own class (B3X W0).
+        static_cast<Video::ImageBuffer*>(img)->DeletingDtor(1u);   // B.3.x bridge
     }
     void* const rb = _shadowTarget;                          // +0x158
     if (rb != nullptr) {
