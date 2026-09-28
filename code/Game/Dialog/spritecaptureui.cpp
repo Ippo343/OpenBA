@@ -196,8 +196,8 @@ check_pressed:
             if (editText)
                 concatStr1 = sourceDirStr + *reinterpret_cast<System::String*>(editText);  // B.3.1 bridge
 
-            // ".rsc" string literal lives at 0x14015d424 in the exe .rdata
-            const char* rscLiteral = (const char*)0x14015d424;
+            // ".rsc" — retail's literal at 0x14015d424 in the exe .rdata
+            const char* rscLiteral = ".rsc";
             System::String concatStr2 = concatStr1 + rscLiteral;
 
             System::Filename pathFilename(concatStr2);
