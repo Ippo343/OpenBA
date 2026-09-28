@@ -80,6 +80,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Action/Action.h"  // B.3.x W0: Action slots 8/9 by name
+#include "Component/exe_bodies.h"
 
 // ============================================================
 // Tracing

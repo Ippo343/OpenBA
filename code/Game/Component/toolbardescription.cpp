@@ -47,6 +47,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <new>
+#include "Component/exe_bodies.h"
 
 // FUN_140028860 — System::String dynamic-array resize.
 // Header layout: +0x00 String* buffer, +0x08 int count, +0x0c int capacity; each

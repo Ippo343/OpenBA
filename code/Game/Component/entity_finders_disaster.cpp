@@ -68,6 +68,7 @@
 #include "Component/FireComponent.h"      // ENDGAME B.3.9 C1: 0x1401c41e0 cell class
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7158 cell class
 #include "Component/AmbientEmitterComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3e60 cell class
+#include "Component/exe_bodies.h"
 
 namespace {
 

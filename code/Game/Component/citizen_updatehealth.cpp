@@ -54,6 +54,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 #include <new>
+#include "Component/exe_bodies.h"
 
 namespace {
 

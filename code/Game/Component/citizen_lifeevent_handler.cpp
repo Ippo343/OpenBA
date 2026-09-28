@@ -51,6 +51,7 @@
 #include "Component/InteractComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7900 cell class
 #include "Component/TombstoneComponent.h"    // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
 #include "Component/CemeteryDescription.h"   // ENDGAME B.3.9 C1: 0x1401c40c8 cell class
+#include "Component/exe_bodies.h"
 
 // ---------------------------------------------------------------- resolved deps
 typedef void*    (*fn_FindCompPos_2ed0_t)(uintptr_t comp, void* outIBP);            // 0x140002ed0

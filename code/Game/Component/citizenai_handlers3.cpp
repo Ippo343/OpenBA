@@ -60,6 +60,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Component/exe_bodies.h"
 
 namespace {
 

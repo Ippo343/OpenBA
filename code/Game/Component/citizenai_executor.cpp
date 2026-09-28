@@ -61,6 +61,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include "Action/Action.h"     // B.3.x W0: the executor's Action slots by name
+#include "Component/exe_bodies.h"
 
 namespace {
 

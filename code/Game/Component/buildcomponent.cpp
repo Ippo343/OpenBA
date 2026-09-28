@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "Component/exe_bodies.h"
 
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
