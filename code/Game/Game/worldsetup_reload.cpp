@@ -61,10 +61,10 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     // which stamp the compiler tables and chain the Runtime base ctors
     // directly, so the by-address table globals and the base-ctor doors this
     // readiness test named are no longer read here.
-    if (!System::MemoryAllocator::_singleton || !fn_Time_Ctor_Float) {
+    if (!System::MemoryAllocator::_singleton) {
         printf("[WorldSetup::LoadFromSave] loop-chain allocator unresolved - aborting "
-                    "(alloc=%p time=%p)\n",
-                    (void*)fn_MemAlloc, (void*)fn_Time_Ctor_Float);
+                    "(alloc=%p)\n",
+                    (void*)System::MemoryAllocator::_singleton);
         return;
     }
 
@@ -92,7 +92,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     void* dlLoop = System::MemoryAllocator::MemAlloc(0xb60, 4);
     if (dlLoop) {
         uint64_t delayTime[1];
-        fn_Time_Ctor_Float((void*)delayTime, 1.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(delayTime), 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // FUN_140099130, inline in engine_funcs.h
@@ -109,7 +109,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
     if (outerLoop) {
         uint64_t zeroTime[1];
-        fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
         // ENDGAME B.3.8 LOOP: the real class (its ctor = the LoaderLoop door's
         // body + the compiler's 0x1401588d0 stamp).
         pOuterLoop = ::new (outerLoop) GameLoaderLoop(

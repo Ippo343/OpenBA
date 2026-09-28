@@ -42,7 +42,8 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
-#include "resolve.h"
+#include "utility/PerlinNoise.h"   // RtUtility_PerlinNoise_Ctor / _Generate
+#include "Game/exe_bodies.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -54,11 +55,11 @@
 // ============================================================
 // Reused helpers from sibling reimpl TUs (already registered/defined)
 // ============================================================
-extern "C" void Reimpl_Array_Resize_Stride02(void* hdr, int n);        // sub_c890  (int16 heightmap @wg+0xd8)
-extern "C" void Reimpl_Array_Resize_Stride04(void* hdr, int n);        // sub_3a00  (float heightmap @hf+0x08)
-extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* hdr, int n);   // sub_f0a0  (detail-group-C @wg+0x1e0)
-extern "C" void Reimpl_TradeWork_sub_c780(void* self);                 // height-texture upload (+0x148)
-extern "C" void Reimpl_TradeWork_sub_c1e0(void* self);                 // base grid mesh (VB+0x100/IB+0x120)
+// Game/exe_bodies.h: Reimpl_Array_Resize_Stride02 (sub_c890, int16 heightmap @wg+0xd8),
+// Reimpl_Array_Resize_Stride04 (sub_3a00, float heightmap @hf+0x08),
+// Reimpl_Array_Resize_ArrayOfArrays (sub_f0a0, detail-group-C @wg+0x1e0),
+// Reimpl_TradeWork_sub_c780 (height-texture upload +0x148), Reimpl_TradeWork_sub_c1e0
+// (base grid mesh VB+0x100/IB+0x120).
 extern "C" void WorldGen_BuildWaterMesh(void* self);                   // flat water overlay mesh (VB+0x160/IB+0x180)
 extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf);  // b260 contour water mesh (water_contour_mesh.cpp)
 
@@ -174,22 +175,9 @@ static constexpr float kBaseScale  = 8.0f;   // 0x1401721a8  (pn1+1)*8
 static constexpr float kHScale     = 48.0f;  // 0x1401721e4  (pn2+0.25)*48
 static constexpr float kQuantize   = 256.0f; // 0x140172230  float->int16 fixed-point scale
 
-// ============================================================
-// Late-bound Runtime resolve: seeded Random ctor.
-// (??0Random@System@@QEAA@I@Z — same one gameupdateloop_load.cpp resolves.)
-// ============================================================
-typedef void* (*fn_Random_Seeded_Ctor_t)(void* self, uint32_t seed);
-static fn_Random_Seeded_Ctor_t s_fn_Random_Seeded_Ctor = nullptr;
-static bool s_wgResolved = false;
-static void wg_EnsureInit() {
-    if (s_wgResolved) return;
-    s_wgResolved = true;
-    s_fn_Random_Seeded_Ctor = (fn_Random_Seeded_Ctor_t)ResolveExport("??0Random@System@@QEAA@I@Z");
-    fprintf(stderr, "[worldgen] resolves: RandSeed=%p PerlinCtor=%p PerlinGen=%p\n",
-            (void*)s_fn_Random_Seeded_Ctor, (void*)fn_PerlinNoise_Ctor,
-            (void*)fn_PerlinNoise_Generate);
-    fflush(stderr);
-}
+// Runtime bodies called by name: the seeded Random ctor ??0Random@System@@QEAA@I@Z ->
+// RtSystem_Random_CtorSeed (system/Value.h); Utility::PerlinNoise ctor / Generate ->
+// RtUtility_PerlinNoise_Ctor / _Generate (utility/PerlinNoise.h).
 
 // Toggle: full f390 feature pipeline vs first-light (e5d0 only).
 // The feature stages are what carve the buildable lowland out of the e5d0 dome:
@@ -237,24 +225,15 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
     float* heightmap = *(float**)(p + HF_HEIGHTMAP);
     if (!heightmap) return;
 
-    if (!fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate) {
-        // Without noise we can't generate — leave a flat (zero) heightmap.
-        fprintf(stderr, "[worldgen] e5d0: noise unresolved (PerlinCtor=%p Gen=%p) "
-                "— flat heightmap\n", (void*)fn_PerlinNoise_Ctor,
-                (void*)fn_PerlinNoise_Generate);
-        fflush(stderr);
-        return;
-    }
-
     void* rng = p + HF_RANDOM;
     int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     uint8_t pn1[0x100] = {};
-    fn_PerlinNoise_Ctor(pn1, kHalf, kOctaves, s2, s1);          // persist 0.5
+    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(pn1), kHalf, kOctaves, s2, s1);          // persist 0.5
     int s3 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     int s4 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     uint8_t pn2[0x100] = {};
-    fn_PerlinNoise_Ctor(pn2, kQuarter, kOctaves, s4, s3);       // persist 0.25
+    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(pn2), kQuarter, kOctaves, s4, s3);       // persist 0.25
 
     int half = dim >> 1;
     float distBias = (float)dim * kQuarter + kFalloffBias;      // dim*0.25 + 16
@@ -267,9 +246,9 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
             float curve = powf(kFalloffBase, distBias - dist);  // 1.1 ^ ((dim*0.25+16) - dist)
             float w     = kOne / (curve + kOne);
 
-            float pn1s = fn_PerlinNoise_Generate(pn1, (float)col * kQuarter, (float)row * kQuarter);
+            float pn1s = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(pn1), (float)col * kQuarter, (float)row * kQuarter);
             float base = (pn1s + kOne) * kBaseScale;             // (pn1+1)*8
-            float pn2s = fn_PerlinNoise_Generate(pn2, (float)col * kPn2Coord, (float)row * kPn2Coord);
+            float pn2s = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(pn2), (float)col * kPn2Coord, (float)row * kPn2Coord);
             float h    = (pn2s + kQuarter) * kHScale + pn1s;     // (pn2+0.25)*48 + pn1
             if (h < kClampFloor) h = kClampFloor;
 
@@ -393,11 +372,9 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
     int dim = *(int32_t*)((uint8_t*)hf + HF_GRIDSIZE);
     const float* hm = *(const float**)((uint8_t*)hf + HF_HEIGHTMAP);
     void* rng = (uint8_t*)hf + HF_RANDOM;
-    if (dim <= 0 || !hm || !System::MemoryAllocator::_singleton ||
-        !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate) {
-        fprintf(stderr, "[worldgen] cf440: deps unresolved (hm=%p PerlinCtor=%p Gen=%p) "
-                "— falling back to flat splat\n", (void*)hm,
-                (void*)fn_PerlinNoise_Ctor, (void*)fn_PerlinNoise_Generate);
+    if (dim <= 0 || !hm || !System::MemoryAllocator::_singleton) {
+        fprintf(stderr, "[worldgen] cf440: deps unresolved (hm=%p) "
+                "— falling back to flat splat\n", (void*)hm);
         fflush(stderr);
         return wg_BlendTexture_cf440_stub(hf);
     }
@@ -420,7 +397,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
     int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     uint8_t pn[0x100] = {};
-    fn_PerlinNoise_Ctor(pn, kCoord, kCfOctaves, s2, s1);
+    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(pn), kCoord, kCfOctaves, s2, s1);
 
     // Per-cell scratch: dim*dim * {x,y,h,nx,ny,nz} (6 floats / 0x18 bytes).
     float* scratch = (float*)System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 0x18, 4);
@@ -449,7 +426,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
             // R: rock scatter.
             uint32_t rock;
             if (height >= kRockHMin) {
-                float pnv = fn_PerlinNoise_Generate(pn, (float)col * kCoord,
+                float pnv = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(pn), (float)col * kCoord,
                                                     (float)row * kCoord);
                 pnv = pnv * kRRemap + kRRemap;                  // (pn+1)*0.5 -> [0,1]
                 rock = (uint32_t)(long long)(pnv * pnv * k255);
@@ -762,7 +739,6 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
 //   seed      = map seed
 // ============================================================
 extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed) {
-    wg_EnsureInit();
     if (!wg || !gen) {
         fprintf(stderr, "[worldgen] BuildTerrain: null wg=%p gen=%p — skipping\n", wg, gen);
         fflush(stderr);
@@ -810,7 +786,7 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     }
     memset(hfMem, 0, HF_TOTAL);
     uint8_t* hf = (uint8_t*)hfMem;
-    if (s_fn_Random_Seeded_Ctor) s_fn_Random_Seeded_Ctor(hf + HF_RANDOM, seed);
+    RtSystem_Random_CtorSeed(reinterpret_cast<System::Random*>(hf + HF_RANDOM), seed);
     *(void**)(hf + HF_TERRAINGEN) = gen;
     *(int32_t**)(hf + HF_SIZEROW) = sizeRow;
 

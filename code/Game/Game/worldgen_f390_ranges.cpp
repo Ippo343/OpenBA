@@ -108,47 +108,32 @@ static constexpr uint32_t kSignMask = 0x80000000u;
 static constexpr float kOne = 1.0f;
 
 // ============================================================
-// Late-bound Runtime resolves not yet in engine_funcs.h.
-//   Vector2::Normalize(this)       ?Normalize@Vector2@Math@@QEAAAEAV12@XZ (slot 0x1401526b0)
+// Vector2::Normalize(this)  (in-place use of the by-value member; slot 0x1401526b0)
 // ============================================================
-typedef float* (*fn_Vec2_Normalize_t)(float* self);   // normalizes in place, returns self
-
-static fn_Vec2_Normalize_t      s_fn_Vec2Norm     = nullptr;
-static bool s_rangesResolved = false;
-
 // The ResolveExport below looked up "?Normalize@Vector2@Math@@QEAAAEAV12@XZ"
 // (an in-place, non-const overload) which does NOT exist in Runtime-x64.dll's
 // export table (verified with pefile 2026-09-06) — the DLL has no in-place
 // Vector2::Normalize at all, only a by-value one returning through a hidden
 // RDX slot (see runtime/types/math/Math.h's ABI note):
 //   ?Normalize@Vector2@Math@@QEBA?AV12@XZ   retail 0x18006c600
-// This adapter resolves the real export and copies its result back into
-// `self` so the in-place call sites below (vec2_normalize2) don't change.
+// This adapter calls the real member and copies its result back into `self` so
+// the in-place call sites below (vec2_normalize2) don't change (B3R: called by
+// name; the pointer cache and its init went).
 static float* vec2_normalize_real(float* self) {
     Math::Vector2 out = reinterpret_cast<const Math::Vector2*>(self)->Normalize();
     *reinterpret_cast<Math::Vector2*>(self) = out;
     return self;
 }
 
-static void rg_EnsureInit() {
-    if (s_rangesResolved) return;
-    s_rangesResolved = true;
-    s_fn_Vec2Norm     = &vec2_normalize_real;
-    fprintf(stderr, "[worldgen] ranges resolves: Vec2Norm=%p\n",
-            (void*)s_fn_Vec2Norm);
-    fflush(stderr);
-}
 
 // float negate matching the exe's `(uint)x ^ 0x80000000`.
 static inline float fneg(float x) {
     uint32_t u; __builtin_memcpy(&u, &x, 4); u ^= kSignMask;
     float r; __builtin_memcpy(&r, &u, 4); return r;
 }
-// Vector2::Normalize in place (engine fn if resolved; else a faithful fallback).
+// Vector2::Normalize in place.
 static inline void vec2_normalize2(float* v) {
-    if (s_fn_Vec2Norm) { s_fn_Vec2Norm(v); return; }
-    float len = sqrtf(v[0]*v[0] + v[1]*v[1]);
-    if (len > 0.0f) { v[0] /= len; v[1] /= len; }
+    vec2_normalize_real(v);
 }
 static inline float rftol(void* rng) {
     return reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
@@ -588,7 +573,6 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
 //   strength 2.0, SUBTRACTED). Carve radius = the "radius" fields above.
 // ============================================================
 extern "C" void wg_f390_ranges(void* hf) {
-    rg_EnsureInit();
     void* rng = (uint8_t*)hf + HF_RANDOM;
 
     int32_t* sizeRow = *(int32_t**)((uint8_t*)hf + HF_SIZEROW);
@@ -670,7 +654,6 @@ extern "C" void wg_f390_ranges(void* hf) {
 //   mask) — secondary channels/valleys branching off the main paths.
 // ============================================================
 extern "C" void wg_f390_paths(void* hf) {
-    rg_EnsureInit();
     int32_t* p = (int32_t*)hf;
 
     int32_t* sizeRow = *(int32_t**)((uint8_t*)hf + HF_SIZEROW);

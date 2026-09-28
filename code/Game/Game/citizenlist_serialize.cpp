@@ -127,11 +127,17 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "Game/exe_bodies.h"
+#include "Player/exe_bodies.h"              // TradeWork_impl_4b40
+#include "Component/exe_bodies.h"           // CitizenAI_Reg_helper_e360, StorageComponent_DynArrayResize
+#include "Component/wellcomponent_funcs.h"  // WellComp_AddCellEntry_88a80
 
-// ============================================================
-// Externs for already-ported/registered sibling functions
-// ============================================================
-extern "C" void TradeWork_impl_4b40(int64_t* root, int64_t* nodeVarAddr);          // 0x140014b40 (tool_base_highlight.cpp)
+// Already-ported sibling functions, called by name through their declaring headers:
+//   0x140014b40 TradeWork_impl_4b40 (Player/exe_bodies.h), 0x14000e360
+//   CitizenAI_Reg_helper_e360 (Component/exe_bodies.h), 0x140018020 / 0x140002340
+//   Reimpl_ExternalPtr_Serialize_StringTable and 0x1400049c0
+//   Reimpl_ExternalPtrArray_Serialize (Game/exe_bodies.h), 0x14000f090
+//   StorageComponent_DynArrayResize (Component/exe_bodies.h), 0x140088a80
+//   WellComp_AddCellEntry_88a80 (Component/wellcomponent_funcs.h).
 
 namespace {
 
@@ -142,23 +148,9 @@ inline bool SerializerLoading(void* serializer) {
     return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
-// ------------------------------------------------------------
-// Lazily-resolved leaf pointers not already in engine_funcs.h
-// ------------------------------------------------------------
+// The tree serializer's key resolver (TREE #1: 0x140018020, TREE #2: 0x140002340 --
+// one body, Reimpl_ExternalPtr_Serialize_StringTable).
 typedef void (*fn_KeyResolve_t)(void* field, void* serializer);
-fn_KeyResolve_t s_fn_StringTableKeyResolve = nullptr;   // 0x140018020 (TREE #1 key)
-typedef void (*fn_TreeRetraceE360_t)(int64_t* root, int64_t* nodeVarAddr);
-fn_TreeRetraceE360_t s_fn_TreeRetrace_e360 = nullptr;    // 0x14000e360 (DEAD-PATH tree)
-
-bool s_resolved = false;
-void EnsureResolved() {
-    if (s_resolved) return;
-    s_fn_StringTableKeyResolve = reinterpret_cast<fn_KeyResolve_t>(
-        ResolveAddr(Module::Exe, 0x140018020));
-    s_fn_TreeRetrace_e360 = reinterpret_cast<fn_TreeRetraceE360_t>(
-        ResolveAddr(Module::Exe, 0x14000e360));
-    s_resolved = true;
-}
 
 // ------------------------------------------------------------
 // Registry census — the TownManager's 16 IBP registries in one line.
@@ -571,8 +563,7 @@ void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
             }
             if (!dup) {
                 *reinterpret_cast<int32_t*>(hdr + 8) = *reinterpret_cast<int32_t*>(hdr + 8) + 1;
-                if (s_fn_TreeRetrace_e360)
-                    s_fn_TreeRetrace_e360(reinterpret_cast<int64_t*>(hdr), reinterpret_cast<int64_t*>(&insertedNode));
+                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(hdr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360
             }
         }
     } else {
@@ -592,7 +583,6 @@ void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
 // ============================================================
 extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3*/, int* /*outParam*/) {
     if (!self || !stream) return;
-    EnsureResolved();
     uint8_t* base = static_cast<uint8_t*>(self);
 
     alignas(8) uint8_t serBuf[0x18];
@@ -610,7 +600,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     SerializeIBPArray(base + 0xa0, ser, CitizenComponent::TypeId());
 
     // Unconditional TREE #1 (residence/path-graph style, string-table key).
-    SerializeCompRefTree(base + 0x100, ser, s_fn_StringTableKeyResolve);
+    SerializeCompRefTree(base + 0x100, ser, &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140018020
 
     SerializeIBPArray(base + 0x90, ser, PastureComponent::TypeId());
     SerializeIBPArray(base + 0x40, ser, CemeteryComponent::TypeId());
@@ -636,12 +626,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
             GameColl::ArrayAt<GameColl::Ptr8>(base, 0x110).SetSize(count);
-        // Reimpl_ExternalPtrArray_Serialize is registered at 0x1400049c0; its
-        // signature (serializer,count,arrayBase,deadInit) differs from the
-        // single-field fn_ExternalPtr_BuildSerialize typedef, so resolve locally.
-        typedef void (*fn_ExtArr_t)(void*, int, long long, void*);
-        static fn_ExtArr_t s_extArr = reinterpret_cast<fn_ExtArr_t>(ResolveAddr(Module::Exe, 0x1400049c0));
-        if (s_extArr) s_extArr(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x110)), nullptr);
+        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x110)), nullptr);   // 0x1400049c0
     }
     {
         int32_t count = *reinterpret_cast<int32_t*>(base + 0x128);
@@ -650,9 +635,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
             GameColl::ArrayAt<GameColl::Ptr8>(base, 0x120).SetSize(count);
-        typedef void (*fn_ExtArr_t)(void*, int, long long, void*);
-        static fn_ExtArr_t s_extArr = reinterpret_cast<fn_ExtArr_t>(ResolveAddr(Module::Exe, 0x1400049c0));
-        if (s_extArr) s_extArr(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x120)), nullptr);
+        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x120)), nullptr);   // 0x1400049c0
     }
 
     reinterpret_cast<System::Time*>(base + 0x190)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
@@ -726,10 +709,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         int32_t sumCount = *reinterpret_cast<int32_t*>(base + 0x188);
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(sumCount, nullptr);   // B.3.4 bridge
         if (loading) {
-            // FUN_14000f090 — already registered (StorageComponent_DynArrayResize et al).
-            typedef void (*fn_Resize10_t)(void*, int);
-            static fn_Resize10_t s_resize10 = reinterpret_cast<fn_Resize10_t>(ResolveAddr(Module::Exe, 0x14000f090));
-            if (s_resize10) s_resize10(base + 0x180, sumCount);
+            StorageComponent_DynArrayResize(base + 0x180, sumCount);   // FUN_14000f090
         }
         if (sumCount > 0) {
             uint8_t* entry = *reinterpret_cast<uint8_t**>(base + 0x180) + 8;
@@ -764,9 +744,6 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
 // grid cell into the map via FUN_140088a80 (already ported+registered as
 // WellComp_AddCellEntry_88a80 — reused here as-is, same address/signature).
 // ============================================================
-typedef void (*fn_AddCellEntry_t)(void* self, int cellX, int cellY, int idOrSlot);
-static fn_AddCellEntry_t s_fn_AddCellEntry = nullptr;
-
 // DWORD_1401c79e0 — the component type-id validated inside PostLoad's inner
 // scan (the "position"-like component providing cell coords at +0x28/+0x2a).
 // Table 1: 0x1401c79e0 is MapComponent's cell.
@@ -776,10 +753,6 @@ static uint32_t DWORD_1401c79e0_TypeId() {
 
 extern "C" void CitizenList_PostLoad_8f580(void* self) {
     if (!self) return;
-    EnsureResolved();
-    if (!s_fn_AddCellEntry) {
-        s_fn_AddCellEntry = reinterpret_cast<fn_AddCellEntry_t>(ResolveAddr(Module::Exe, 0x140088a80));
-    }
     uint8_t* base = static_cast<uint8_t*>(self);
 
     if (*reinterpret_cast<int32_t*>(base + 0x148) >= 1) return;   // already populated
@@ -799,7 +772,7 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
 
     int idx = 0;
     int32_t residenceCount = *reinterpret_cast<int32_t*>(base + 0x138);
-    if (residenceCount > 0 && s_fn_AddCellEntry) {
+    if (residenceCount > 0) {
         // +0x130 is the STRIDE-8 int-pair array (ResizeStride08Pair in Serialize
         // above); retail walks it with `lVar11 += 8` and reads only the low int
         // of each pair (0x14008f5c8). Indexing it as int32[] read every second
@@ -819,13 +792,13 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
                         side * side);
                 std::fflush(stderr);
             }
-            s_fn_AddCellEntry(base, cell % mapWidth, cell / mapWidth, idx);
+            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(base), cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80
         }
     }
 
     idx = 0;
     int32_t entCount = *reinterpret_cast<int32_t*>(base + 0xe8);
-    if (entCount > 0 && s_fn_AddCellEntry) {
+    if (entCount > 0) {
         int64_t* entArr = *reinterpret_cast<int64_t**>(base + 0xe0);
         int slot = -1;
         for (; idx < entCount; ++idx, --slot) {
@@ -854,7 +827,7 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
             uint64_t chosenVal = *reinterpret_cast<uint64_t*>(chosenIBP);
             int16_t cx = chosenVal ? *reinterpret_cast<int16_t*>(chosenVal + 0x28) : 0;
             int16_t cy = chosenVal ? *reinterpret_cast<int16_t*>(chosenVal + 0x2a) : 0;
-            s_fn_AddCellEntry(base, cx, cy, slot);
+            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(base), cx, cy, slot);   // 0x140088a80
         }
     }
 }
