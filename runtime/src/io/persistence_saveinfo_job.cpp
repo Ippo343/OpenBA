@@ -116,6 +116,7 @@
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2
 #include "../system/pod_bridge.h"
+#include "../../types/system/Crc.h"
 
 using RtIo::BinaryFileStream;
 using RtIo::Persistence;
@@ -131,9 +132,6 @@ extern "C" bool RtIo_FileSystem_ReadFile(RtIO::FileSystem* self, RtIO::FileInfo*
 namespace RtIO {
     void RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
 }
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -172,7 +170,6 @@ static_assert(offsetof(BlockDescArray, size) == 0x08, "Array::_size @ +0x08");
 // reinterpret_cast bridge at the use site rather than a re-typed member of
 // `Persistence` (shared with persistence_startup.cpp / closure_batch2b_win.cpp
 // / engine/singleton_ctors.cpp, outside this batch).
-typedef uint32_t (*CrcComputeFn)(const void*, int, uint32_t);       // 0x1800c5490
 
 RtIO::FileSystem* Fs() {
     return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
@@ -315,18 +312,10 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
                         badFile = true;                       // 0x1800b67f1
                     } else if (static_cast<uint16_t>(p->fileHeader) == 2) {
                         // ---- 7. recompute the checksum --------------------
-                        // By-name door onto ?Compute@CRC@System@@SAIPEBXHI@Z
-                        // (ordinal 1752, retail 0x1800c5490). Ported in
-                        // runtime/src/system/crc.cpp, so the registry
-                        // answers this resolve with our body; it was an open
-                        // door for the length of one afternoon.
-                        uint32_t crc;
-                        {
-                            static void* cache = nullptr;
-                            crc = reinterpret_cast<CrcComputeFn>(RtResolveCached(
-                                "?Compute@CRC@System@@SAIPEBXHI@Z", &cache))(
+                        // ?Compute@CRC@System@@SAIPEBXHI@Z (ordinal 1752,
+                        // retail 0x1800c5490): System::CRC::Compute, by name.
+                        uint32_t crc = ::System::CRC::Compute(
                                     descs->data, n * 0xC, 0xFFFFFFFFu);   // 0x1800b6811
-                        }
 
                         // The 0x8000-byte stack buffer at [RBP-0x80]; the
                         // frame is `_chkstk(0x8088)`, so this size is retail's.
@@ -385,13 +374,4 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
         RtIO::RtIo_FileSystem_CloseFile(fs, &bfs.base.file);            // 0x1800b6942
     bfsObj->IO::BinaryFileStream::~BinaryFileStream();                      // 0x1800b694f..
     fs->platformExistsGate = savedGate;                                 // 0x1800b69a3
-}
-
-// ============================================================================
-// Registration — ADDRESS ONLY (unexported; measured, not assumed).
-// The address is a LITERAL so tools/runtime_census.py sees the door.
-// ============================================================================
-int RtIoPersistenceSaveInfoRegister() {
-    RegisterRuntimeAddr(0x1800b65b0, (void*)&RtIo_PersistenceWorker_GetSaveInfo);
-    return 1;
 }

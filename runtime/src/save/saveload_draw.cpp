@@ -193,6 +193,7 @@
 #include <new>          // ENDGAME B.3.9: placement new (FrameCopyImageBuffer, MaterialInstance, ...)
 
 #include "saveload_internal.h"
+#include "../../funcs/runtime_funcs.h"   // B3R RT-IO: the three ??2 bodies by name
 #include "../../types/math/Math.h"
 #include "../../types/volume/Volume.h"
 #include "../../types/video/Context.h"
@@ -328,11 +329,10 @@ void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding
 //    to each so the lookup is reproducible.
 // ============================================================================
 
-using OpNewFn      = void* (*)(uint64_t);
-using VoidThisFn   = void  (*)(void*);
-// ENDGAME B.3.1 step 2: the String::Set door typedef is gone with its one call
-// site — it is `diffuse.Set("diffuse")` now.
-using CameraCtorFn = void  (*)(void*, const Frustum*, const Transform3*, bool);  // return ignored, see above
+// B3R RT-IO: the three `??2` operator-new doors and the Camera ctor door are
+// called by name (runtime/funcs/runtime_funcs.h, runtime/types/graphics/Camera.h);
+// their typedefs are gone. ENDGAME B.3.1 step 2: the String::Set door is
+// `diffuse.Set("diffuse")`.
 
 // The two Video singletons Draw reads. Both are DATA exports whose slot holds
 // the pointer, so the slot is dereferenced, unlike the vtable symbols below.
@@ -428,7 +428,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // port spells its signature — on the DLL-present path AND at cutover.
     ImageBuffer* frameCopy = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z")(0x88);
+        void* p = RtGraphics_FrameCopyImageBuffer_OperatorNew(0x88);   // ??2FrameCopyImageBuffer@Graphics@@
         if (p != nullptr) {
             // ENDGAME B.3.9 GFX (B9-13): the real class's ctor, not the ??0 door.
             ::new (p) Graphics::FrameCopyImageBuffer();
@@ -471,7 +471,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // ---- the offscreen colour target --------------------------------------
     ImageBuffer* target = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(0x68);
+        void* p = Video::ImageBuffer::operator new(0x68);   // ??2ImageBuffer@Video@@ 0x18001e910
         if (p != nullptr) {
             // Same rule as above: `p`, never the constructor's return.
             ::new (p) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
@@ -491,7 +491,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // the allocation-succeeded arm and `renderBuffer` stays null otherwise.
     void* renderBuffer = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(0x30);
+        void* p = Video::RenderBuffer::operator new(0x30);  // ??2RenderBuffer@Video@@ 0x18001f2e0
         if (p != nullptr) {
             reinterpret_cast<uint64_t*>(p)[0] = 0;
             reinterpret_cast<uint64_t*>(p)[1] = 0;
@@ -538,7 +538,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // shape.
     void* mat = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2MaterialInstance@Graphics@@SAPEAX_K@Z")(0x60);
+        void* p = RtGraphics_MaterialInstance_OperatorNew(0x60);       // ??2MaterialInstance@Graphics@@
         if (p != nullptr) {
             // ENDGAME B.3.9 GFX (B9-13): those stores ARE the real ctor inlined
             // (External()'s stamps and zeroes, the MaterialInstance stamp, the
@@ -581,7 +581,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // ---- the one-sprite sheet ---------------------------------------------
     SpriteSheet* sheet = nullptr;
     {
-        void* p = RT_EXPORT_ONCE(OpNewFn, "??2SpriteSheet@UI@@SAPEAX_K@Z")(0x58);
+        void* p = RtUi_SpriteSheet_OperatorNew(0x58);                  // ??2SpriteSheet@UI@@
         // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0SpriteSheet inlined is
         // the class's real constructor; the minted-table stamp is retired.
         if (p != nullptr) sheet = ::new (p) SpriteSheet();
@@ -677,9 +677,8 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // copies the frustum and the transform in and calls SetFrustum, which fills
     // the projection at +0x94.
     RtGraphics::Camera camera;
-    RT_EXPORT_ONCE(CameraCtorFn,
-        "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z")(
-            &camera, &frustum, &cameraToWorld, false);
+    // ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
+    RtGraphics_Camera_Ctor(&camera, &frustum, &cameraToWorld, false);
 
     // The view matrix is the camera's Transform3 widened to 4x4 with the
     // fourth column {0,0,0,1}; the projection is copied out whole.
@@ -819,7 +818,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     if (renderBuffer != nullptr) {
         reinterpret_cast<Video::RenderBuffer*>(renderBuffer)
             ->PlatformDestruct();                            // B.3.5 bridge
-        RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(renderBuffer);
+        Video::RenderBuffer::operator delete(renderBuffer); // ??3RenderBuffer@Video@@ 0x18001f360
     }
 
     // The handshake with UpdateSave state 1: a BYTE store, clearing the request.
@@ -833,39 +832,4 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // `_layout._entries` (+0x58), `_deferred` (+0x40), `_draws` (+0x10), each
     // `if (data) free; zero` — so `sc` is simply destroyed at the closing brace
     // below, through the Collection allocator door its arrays were grown with.
-}
-
-// ============================================================================
-// 5. The export.
-// ============================================================================
-void RtSave_SaveLoad_Draw(SaveLoad* self, Context* ctx, void* material) {
-    self->Save::SaveLoad::Draw(*ctx, Object::ExternalPtr<Graphics::Material>(
-                                         static_cast<Graphics::Material*>(material)));
-}
-
-// ============================================================================
-// 7. Registration — BOTH doors, for the reason saveload.cpp's own block states:
-//    a name door alone is one typo away from resolving NULL in silence, and an
-//    address door alone is invisible to anything that resolves by name.
-//    `code/Game/Game/gameupdateloop.cpp:645` reaches this export BY NAME, so
-//    the name door is the live one; the address door is the belt.
-//
-//    NO OTHER ADDRESS IS REGISTERED HERE. Every callee is an exported name and
-//    the four unexported internals are transcribed above, so this port does not
-//    grow the `called` column with by-address doors
-//    (reference_porting_can_grow_the_cutover_surface.md).
-// ============================================================================
-int RtSaveLoadDrawRegister() {
-    int n = 0;
-    // ON ONE LINE, DELIBERATELY. tools/runtime_census.py matches
-    // `RegisterRuntimeExport\s*\(\s*(?=")` and its "non-literal first argument"
-    // guard matches `(?!")[A-Za-z_]` -- a call split so that the open paren and
-    // the literal are on DIFFERENT lines satisfies neither, so a line-oriented
-    // scan would count this port as unregistered AND not flag it. That is the
-    // same silent-blind-spot family as
-    // reference_census_cannot_see_nonliteral_registrations.md, reached by
-    // formatting rather than by a named constant.
-    RegisterRuntimeExport("?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z", (void*)&RtSave_SaveLoad_Draw); ++n;
-    RegisterRuntimeAddr(0x1800c2eb0, (void*)&RtSave_SaveLoad_Draw);
-    return n;
 }

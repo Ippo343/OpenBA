@@ -74,6 +74,7 @@
 #include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
+#include "../../types/collection/Collection.h"   // rtsetclear::Clear
 
 using RtSystem::String;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
@@ -81,51 +82,13 @@ using RtIo::Persistence;
 using RtIo::SaveGameInfo;
 using RtIo::SaveBlock;
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// B3R RT-IO: the three unexported DLL internals this file reached by address
+// are called by name: RtIo_PersistenceWorker_EnqueueDelete (0x1800b7390,
+// command 2), RtIo_PersistenceWorker_EnqueueLoad (0x1800b7460, command 1) --
+// both persistence_worker_win.cpp -- and rtsetclear::Clear (0x18000f7d0, the
+// settings-map dtor; ENDGAME B.3.2's reason for not using `Collection::Set<T>`
+// still holds: `SettingsMapNode`'s two fields are the old POD String).
 
-namespace {
-
-// ---- unexported DLL internals, by address ----------------------------------
-// File-local typedefs for calls OUT through the resolve door (not entry-point
-// signatures), so they now name the class occupying the same eight bytes.
-using EnqueueDeleteFn = void (*)(void* worker, const System::String* filename);
-using EnqueueLoadFn   = void (*)(void* worker, const System::String* filename,
-                                 int blockCount, const SaveBlock* blocks);
-using MapClearFn      = void (*)(void* self);
-
-EnqueueDeleteFn EnqueueDelete() {   // 0x1800b7390 — command 2
-    static auto fn = reinterpret_cast<EnqueueDeleteFn>(
-        ResolveAddr(Module::Runtime, 0x1800b7390));
-    return fn;
-}
-EnqueueLoadFn EnqueueLoad() {       // 0x1800b7460 — command 1
-    static auto fn = reinterpret_cast<EnqueueLoadFn>(
-        ResolveAddr(Module::Runtime, 0x1800b7460));
-    return fn;
-}
-// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`,
-// deliberately, for the same reason persistence_registry_win.cpp's MapClear
-// is not (see that file's note): 0x18000f7d0 IS `Set<SettingsMapNode>::Clear()`
-// and `Persistence` IS that Set's {root,count,pad} header, but `Clear()`'s
-// `n->element.~T()` needs `SettingsMapNode`'s two fields to be the real
-// `System::String` class to release their refcounts; they are still the old
-// `RtSystem::String` POD, shared with files outside this batch
-// (persistence_startup.cpp / closure_batch2b_win.cpp / engine/singleton_ctors.cpp).
-MapClearFn MapClear() {             // 0x18000f7d0 — the settings-map dtor
-    static auto fn = reinterpret_cast<MapClearFn>(
-        ResolveAddr(Module::Runtime, 0x18000f7d0));
-    return fn;
-}
-
-}  // namespace
-
-// ---- exported dependencies, by NAME ----------------------------------------
-// Both are already ported (String::Format by Wave 2 lane String,
-// Filename::AdjustDelimiters per WAVE19_INTEGRATOR_CORRECTIONS.md C2), so the
-// port-registry-aware door is the right one: the raw DLL door here would walk
-// past our own ports into the DLL (rt_port.h's ??DQuaternion note).
-using RtPersistFormatFn           = void* (*)(void* ret, const char* fmt, ...);
 
 // Retail's own format string, read out of .rdata at 0x180155840.
 const char kRtPersistSaveFilenameFormat[] = "%sSave\\%s.sav";
@@ -136,15 +99,8 @@ const char kRtPersistSaveFilenameFormat[] = "%sSave\\%s.sav";
 // The whole body is four instructions:
 //   testb $1,0x18(rcx) ; je L ; xor eax,eax ; ret ; L: mov 0x88(rcx),eax ; ret
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 6: the six bodies in this file move onto the
-// real `IO::Persistence`, at the bottom of this file. Each door keeps its name,
-// its signature and both registration lines, and delegates. No qualified `IO::`
-// call is needed: `IO::Persistence` has no vtable of its own -- the vptr at
-// +0x10 is the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-int RtIo_Persistence_GetSaveCount(const void* self) {
-    return reinterpret_cast<const IO::Persistence*>(self)->GetSaveCount();
-}
+// ENDGAME B.3.4 PACKAGE+FS commit 6: the bodies in this file are members of the
+// real `IO::Persistence`, at the bottom of this file.
 
 // ============================================================================
 // SaveGameInfo IO::Persistence::GetSaveInfo(int index) const retail 0x1800b7bd0
@@ -160,10 +116,6 @@ int RtIo_Persistence_GetSaveCount(const void* self) {
 // unconditionally on the non-refused branch. Do not add one — this project's
 // rule is that an unguarded deref is load-bearing (CLAUDE.md).
 // ============================================================================
-void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
-    return reinterpret_cast<const IO::Persistence*>(self)->GetSaveInfo(
-        static_cast<SaveGameInfo*>(retval), index);
-}
 
 // ============================================================================
 // System::Filename IO::Persistence::GetSaveFilename(const String&) const
@@ -172,34 +124,15 @@ void* RtIo_Persistence_GetSaveInfo(const void* self, void* retval, int index) {
 // (reference_aeaa_means_private_not_unexported.md). Also returns BY VALUE:
 // (this=RCX, hiddenSlot=RDX, const String& name=R8).
 // ============================================================================
-// The return is BY VALUE, so `retval` IS retail's hidden return slot; the
-// member's by-value result is CONSTRUCTED into it -- still exactly the one
-// `Filename(const String&)` (0x18000c780) the body always ran.
-void* RtIo_Persistence_GetSaveFilename(const void* self, void* retval, const void* nameRef) {
-    new (static_cast<System::Filename*>(retval)) System::Filename(
-        reinterpret_cast<const IO::Persistence*>(self)->GetSaveFilename(
-            *static_cast<const String*>(nameRef)));
-    return retval;
-}
 
 // ============================================================================
 // bool IO::Persistence::BeginDelete(const String& name)      retail 0x1800b7ab0
 // ============================================================================
-bool RtIo_Persistence_BeginDelete(void* self, const void* nameRef) {
-    return reinterpret_cast<IO::Persistence*>(self)->BeginDelete(
-        *static_cast<const String*>(nameRef));
-}
 
 // ============================================================================
 // bool IO::Persistence::BeginLoad(const String& name, int blockCount,
 //                                 const SaveBlock* blocks)   retail 0x1800b7970
 // ============================================================================
-bool RtIo_Persistence_BeginLoad(void* self, const void* nameRef,
-                                int blockCount, const void* blocks) {
-    return reinterpret_cast<IO::Persistence*>(self)->BeginLoad(
-        *static_cast<const String*>(nameRef), blockCount,
-        static_cast<const SaveBlock*>(blocks));
-}
 
 // ============================================================================
 // IO::Persistence::~Persistence()                            retail 0x1800b7fb0
@@ -232,8 +165,7 @@ void RtIo_Persistence_dtor(void* self) {
 // Defined in `namespace IO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2). The file-local
 // helpers live in this translation unit's GLOBAL anonymous namespace, so they
-// are reached as `::EnqueueDelete` / `::EnqueueLoad` / `::WorkerDtor` /
-// `::MapClear` -- spelled with the `::` on purpose, so a future reader cannot
+// are spelled with the `::` on purpose, so a future reader cannot
 // mistake them for members. Every POD is spelled `RtIo::` or `RtSystem::` and
 // every real class `System::` (B34_RULES section 7.2); note this file's POD
 // namespace is `RtIo`, LOWERCASE o.
@@ -279,13 +211,9 @@ RtIo::SaveGameInfo* Persistence::GetSaveInfo(RtIo::SaveGameInfo* ret, int index)
 System::Filename Persistence::GetSaveFilename(const RtSystem::String& nameRef) const {
     const RtSystem::String* const name = &nameRef;
 
-    // Format is reached by NAME through the port-registry-aware door (already
-    // ported -- see the file banner), so it still fills a raw hidden-return-
-    // slot. The value lands in a POD and is then stolen into the class.
-    RtSystem::String tmpPod{nullptr};
-    RT_EXPORT_ONCE(::RtPersistFormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
-        &tmpPod, ::kRtPersistSaveFilenameFormat, _savePath.data, name->data);
-    System::String tmp(std::move(::Sys(tmpPod)));
+    // ?Format@String@System@@SA?AV12@PEBDZZ (retail 0x1800c9730), by name.
+    System::String tmp = System::String::Format(
+        ::kRtPersistSaveFilenameFormat, _savePath.data, name->data);
 
     // The manual "zero, AddRef-adopt tmp's buffer, then AdjustDelimiters" IS
     // `Filename(const String&)` (retail 0x18000c780) -- see B31_RULES
@@ -310,7 +238,8 @@ bool Persistence::BeginDelete(const RtSystem::String& nameRef) {
     // eight bytes (Filename IS a String, layout-identically), which is what
     // retail hands the enqueue helper.
     System::Filename fn(GetSaveFilename(*name));
-    ::EnqueueDelete()(&_workerVtable, &fn.AsString());
+    RtIo_PersistenceWorker_EnqueueDelete(&_workerVtable,             // 0x1800b7390
+        reinterpret_cast<const RtSystem::String*>(&fn.AsString()));      // B.3.x bridge
     // ~fn is retail's release.
     return true;
 }
@@ -323,7 +252,9 @@ bool Persistence::BeginLoad(const RtSystem::String& nameRef, int blockCount,
 
     // Same shape as BeginDelete above.
     System::Filename fn(GetSaveFilename(*name));
-    ::EnqueueLoad()(&_workerVtable, &fn.AsString(), blockCount, blocks);
+    RtIo_PersistenceWorker_EnqueueLoad(&_workerVtable,               // 0x1800b7460
+        reinterpret_cast<const RtSystem::String*>(&fn.AsString()),       // B.3.x bridge
+        blockCount, blocks);
     // ~fn is retail's release.
     return true;
 }
@@ -338,29 +269,15 @@ Persistence::~Persistence() {
     // ENDGAME B.3.9 IO (W2): the embedded worker's destructor (0x1800b7740),
     // called directly where retail calls it -- the class's own, not a door.
     reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();
-    ::MapClear()(this);
+    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(this));        // 0x18000f7d0  B.3.x bridge
 }
 
 }  // namespace IO
 
 // ---------------------------------------------------------------------------
-int RtIoPersistenceSavesWinRegister();   // persistence_saves_win.cpp
-
 int RtIoPersistenceSavesRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?GetSaveCount@Persistence@IO@@QEBAHXZ",
-                          (void*)&RtIo_Persistence_GetSaveCount); ++n;
-    RegisterRuntimeExport("?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z",
-                          (void*)&RtIo_Persistence_GetSaveInfo); ++n;
-    RegisterRuntimeExport(
-        "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z",
-        (void*)&RtIo_Persistence_GetSaveFilename); ++n;
-    RegisterRuntimeExport("?BeginDelete@Persistence@IO@@QEAA_NAEBVString@System@@@Z",
-                          (void*)&RtIo_Persistence_BeginDelete); ++n;
-    RegisterRuntimeExport(
-        "?BeginLoad@Persistence@IO@@QEAA_NAEBVString@System@@HPEBUSaveBlock@12@@Z",
-        (void*)&RtIo_Persistence_BeginLoad); ++n;
     RegisterRuntimeExport("??1Persistence@IO@@QEAA@XZ",
                           (void*)&RtIo_Persistence_dtor); ++n;
 
@@ -368,16 +285,9 @@ int RtIoPersistenceSavesRegister() {
     // silently on the DLL, and ResolveAddr(Module::Runtime, ...) is
     // registry-first, so the two registrations are not redundant
     // (reference_resolveaddr_consults_port_registry_first.md).
-    RegisterRuntimeAddr(0x1800b7c60, (void*)&RtIo_Persistence_GetSaveCount);
-    RegisterRuntimeAddr(0x1800b7bd0, (void*)&RtIo_Persistence_GetSaveInfo);
-    RegisterRuntimeAddr(0x1800b7c80, (void*)&RtIo_Persistence_GetSaveFilename);
-    RegisterRuntimeAddr(0x1800b7ab0, (void*)&RtIo_Persistence_BeginDelete);
-    RegisterRuntimeAddr(0x1800b7970, (void*)&RtIo_Persistence_BeginLoad);
     RegisterRuntimeAddr(0x1800b7fb0, (void*)&RtIo_Persistence_dtor);
 
-    n += RtIoPersistenceSavesWinRegister();
-
-    printf("[RtPort] IO::Persistence saves: %d/7 exports registered "
-           "(6 here + 1 in the _win twin), each by name AND address\n", n);
+    printf("[RtPort] IO::Persistence saves: %d export registered "
+           "(~Persistence), by name AND address\n", n);
     return n;
 }

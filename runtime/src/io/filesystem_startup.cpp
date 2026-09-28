@@ -64,20 +64,7 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
 
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// (that header drags in <windows.h>, and PLAN §4.1 requires runtime/src/ to stay
-// platform-neutral). Must stay byte-identical to resolve.h's, and at FILE scope.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 using RtIO::FileSystem;
-
-namespace {
-
-typedef void  (*VoidThisFn)(void*);
-typedef void* (*MapFindFn)(void* map, const System::String* wanted);
-
-}  // namespace
 
 // ============================================================================
 // ?Startup@FileSystem@IO@@QEAA_NXZ                          retail 0x1800abc50
@@ -102,20 +89,17 @@ extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
 // `IO::FileSystem::Startup` — the member body
 // ============================================================================
 // Defined in `namespace IO` because a member of `IO::X` must appear in a
-// namespace ENCLOSING the class (B34_BRIEFS section A.2). The two file-local
-// helpers it needs live in this translation unit's GLOBAL anonymous namespace,
-// so they are reached as `::ConfigurationSingletonSlot` / `::VoidThisFn` /
-// `::MapFindFn` — spelled with the `::` on purpose, so a future reader cannot
-// mistake them for members.
+// namespace ENCLOSING the class (B34_BRIEFS section A.2).
 //
-// NOTHING ELSE CHANGED. Same callees in the same order, same two RT_EXPORT_ONCE
-// doors, the same unguarded Configuration dereference, the same single `return
-// true`. `self->field` became `_field`; that is the whole of the diff.
+// Same callees in the same order, the same unguarded Configuration
+// dereference, the same single `return true`. B3R RT-IO: SetupDirectories and
+// LoadPackages are member calls and the map find is RtSystem_ConfigMap_Find by
+// name (they were two RT_EXPORT_ONCE doors and a by-address resolve).
 namespace IO {
 
 bool FileSystem::Startup() {
 
-    RT_EXPORT_ONCE(::VoidThisFn, "?SetupDirectories@FileSystem@IO@@QEAAXXZ")(this);
+    SetupDirectories();
 
     _existsInPackfileGate = 1;
 
@@ -133,18 +117,15 @@ bool FileSystem::Startup() {
     // the existence guard the door version needed is gone, so the deref below is
     // retail's true unguarded one.
     //
-    // The find itself (0x18002ace0) has NO export name in either build, so it
-    // goes by address. `ResolveAddr(Module::Runtime, ...)` consults the port
-    // registry FIRST (reference_resolveaddr_consults_port_registry_first.md),
-    // and runtime/src/system/configuration.cpp registers that address, so this
-    // reaches OUR port both today and at cutover.
+    // The find itself (0x18002ace0) has NO export name in either build; it is
+    // `RtSystem_ConfigMap_Find` (runtime/src/system/configuration.cpp).
     void* map = reinterpret_cast<uint8_t*>(::System::Configuration::_singleton) + 0x10;
-    bool found = reinterpret_cast<::MapFindFn>(
-                ResolveAddr(Module::Runtime, 0x18002ace0))(map, &tmp) != nullptr;
+    bool found = RtSystem_ConfigMap_Find(
+                map, reinterpret_cast<const RtSystem::String*>(&tmp)) != nullptr;   // B.3.x bridge
 
     if (found) _platformExistsGate = 0;
 
-    RT_EXPORT_ONCE(::VoidThisFn, "?LoadPackages@FileSystem@IO@@QEAAXXZ")(this);
+    LoadPackages();
 
 
     return true;

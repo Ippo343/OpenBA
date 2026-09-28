@@ -18,10 +18,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/save/SaveLoad.h"
-#include "saveload_internal.h"   // RtSaveDetail::AtomicAddr (RULE B6-5)
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/video/Context.h"   // Rt_GuardedObjectFree (0x180006a10)
 
 // `Array<Save::MetaDataEntry>::operator=` — retail 0x180033f30, the tail CALL at
 // 0x180033048. Ported in this same commit
@@ -49,14 +46,12 @@ void MetaEntryArrayAssign(void* dst, const void* src) {
     rtcoll::RtColl_ArrayAssign_180033f30(dst, src);
 }
 
-// The unexported `operator delete` COMDAT copy 0x180006a10 — the one
-// runtime/src/video/context_lifecycle.cpp:702 already registers. Same body as
-// ?MemFree@MemoryAllocator@System@@ and null-guarded inside.
-// RULE B6-5: a namespace-scope atomic slot, not a function-local first-call cache.
-std::atomic<void*> g_guardedFreeSlot{nullptr};
+// The unexported `operator delete` COMDAT copy 0x180006a10 --
+// Rt_GuardedObjectFree (runtime/src/video/context_lifecycle.cpp), called by
+// name (B3R RT-IO). Same body as ?MemFree@MemoryAllocator@System@@ and
+// null-guarded inside.
 void GuardedFree(void* p) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(RtSaveDetail::AtomicAddr(g_guardedFreeSlot, Module::Runtime, 0x180006a10))(p);
+    Rt_GuardedObjectFree(p);
 }
 
 // `System::String`'s adopt-a-reference idiom, inlined by retail at both sites:
@@ -158,6 +153,5 @@ extern "C" void* RtSave_SavedState_Delete(void* self) {
 int RtClosure2bSaveRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x180032f70, (void*)&RtSave_MetaData_CopyCtor); ++n;
-    RegisterRuntimeAddr(0x180032320, (void*)&RtSave_SavedState_Delete); ++n;
     return n;
 }

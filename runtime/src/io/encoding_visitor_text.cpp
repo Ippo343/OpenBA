@@ -49,23 +49,20 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/system/MemoryAllocator.h"
 #include <new>
 
 namespace RtIo {
 
 namespace {
 
-using MemAllocFn = void* (*)(uint64_t, int);
-
 // The shared body of 0x1800baf00 and 0x1800bae40 (byte-identical):
 // MemAlloc(0x28,4), then (ENDGAME B.3.9 IO) the real `IO::Visitor` ctor in
 // place -- the ReaderWriter base stores (1800baeb3..c1) and the version dword
 // (1800baecf). A failed allocation returns null unconstructed.
 IO::ReaderWriter* MakeVisitor(IO::Serializer& ser, int32_t version) {
-    void* p = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(IO::Visitor), 4);
+    void* p = ::System::MemoryAllocator::MemAlloc(sizeof(IO::Visitor), 4);
     if (p == nullptr) return nullptr;                      // XOR EAX,EAX path
     return ::new (p) IO::Visitor(ser, version);
 }
@@ -112,4 +109,3 @@ ReaderWriter* TextEncoding::CreateWriter(Serializer& ser, int version) {
 }
 
 }  // namespace IO
-

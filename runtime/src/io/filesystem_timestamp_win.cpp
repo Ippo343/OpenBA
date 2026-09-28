@@ -80,11 +80,13 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/system/WideString.h"
 #include "../system/string.h"
 
 namespace RtIO {
@@ -93,33 +95,15 @@ using RtSystem::String;
 using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
 
-namespace {
-typedef void* (*WideStringCtorFn)(void*, const String*);
-}  // namespace
-
 // ============================================================================
 // ?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@AEBVFilename@4@@Z
 //                                                          retail 0x1800ae270
 //
 //   (this, hidden return slot, path) — see the banner.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
-// `IO::FileSystem::GetFileTimeStamp`, below. The door keeps its name, its
-// (self, hidden return slot, path) signature and both registration lines, and
-// delegates. No qualified `IO::` call is needed: `IO::FileSystem` has no vtable
-// at all (runtime/types/io/FileSystem.h), so B34_BRIEFS section A.1's re-entry
-// hazard cannot arise.
-//
-// THE HIDDEN RETURN SLOT STAYS ON THE DOOR. The member returns the qword by
-// value (`System::DateTime` does not exist in this tree — FileSystem.h's
-// declaration comment says why one is not invented), and the door writes it
-// into RDX's slot and returns the slot in RAX, exactly as 0x1800ae334 does.
-uint64_t* RtIo_FileSystem_GetFileTimeStamp(const void* self,
-                                           uint64_t* ret,
-                                           const Filename* path) {
-    *ret = reinterpret_cast<const IO::FileSystem*>(self)->GetFileTimeStamp(*path);
-    return ret;
-}
+// The body is the member `IO::FileSystem::GetFileTimeStamp`, below. It returns
+// the qword by value (`System::DateTime` does not exist in this tree —
+// FileSystem.h's declaration comment says why one is not invented).
 
 }  // namespace RtIO
 
@@ -128,8 +112,7 @@ uint64_t* RtIo_FileSystem_GetFileTimeStamp(const void* self,
 // ============================================================================
 // Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2); it reaches this
-// translation unit's `RtIO`-scoped names — including the anonymous-namespace
-// typedef — as `RtIO::X`.
+// translation unit's `RtIO`-scoped names as `RtIO::X`.
 //
 // NOTHING ELSE CHANGED: same three Win32 calls in the same order, the same
 // release-the-WideString-before-testing-the-handle order, the same unsigned
@@ -140,11 +123,11 @@ namespace IO {
 uint64_t FileSystem::GetFileTimeStamp(const RtSystem::Filename& pathRef) const {
     const RtSystem::Filename* const path = &pathRef;
 
-    // WideString ws(*path) — lane FS's port, reached through the name door so
-    // a promotion of the row is followed.
+    // WideString ws(*path) -- ??0WideString@System@@QEAA@AEBVString@1@@Z,
+    // constructed into the POD slot and released by hand below, as before.
     struct { void* data; } ws = { nullptr };                     // 0x1800ae28f
-    RT_EXPORT_ONCE(RtIO::WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
-        &ws, reinterpret_cast<const RtSystem::String*>(path));   // 0x1800ae294
+    ::new (static_cast<void*>(&ws)) System::WideString(           // B.3.x bridge
+        *reinterpret_cast<const System::String*>(path));         // 0x1800ae294
 
     const HANDLE h = ::CreateFileW(static_cast<LPCWSTR>(ws.data),
                                    0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
@@ -167,17 +150,3 @@ uint64_t FileSystem::GetFileTimeStamp(const RtSystem::Filename& pathRef) const {
 }
 
 }  // namespace IO
-
-// ============================================================================
-// Registration — BOTH DOORS. `QEBA` is public and the name is ordinal 2607 in
-// the retail export directory, verified with pefile before this was written.
-// The name is spelled as a LITERAL so tools/runtime_census.py can see it.
-// ============================================================================
-int RtIoFileSystemTimeStampRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@"
-                          "AEBVFilename@4@@Z",
-                          (void*)&RtIO::RtIo_FileSystem_GetFileTimeStamp); ++n;
-    RegisterRuntimeAddr(0x1800ae270, (void*)&RtIO::RtIo_FileSystem_GetFileTimeStamp);
-    return n;
-}

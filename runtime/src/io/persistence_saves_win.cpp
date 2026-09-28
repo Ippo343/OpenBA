@@ -35,14 +35,8 @@ using RtSystem::String;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 using RtIo::Persistence;
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-// The port's own GetSaveFilename, from the sibling file. Called directly and
-// not through the registry: retail's 0x1800b789f is a direct rel32 CALL to
-// 0x1800b7c80, so a direct call is the faithful spelling, and it also means
-// this row cannot silently end up half on the DLL.
-void* RtIo_Persistence_GetSaveFilename(const void* self, void* retval, const void* nameRef);
+// GetSaveFilename (persistence_saves.cpp) is called directly as the member:
+// retail's 0x1800b789f is a direct rel32 CALL to 0x1800b7c80.
 
 extern "C" __declspec(dllimport) int __stdcall ResetEvent(void* handle);
 extern "C" __declspec(dllimport) int __stdcall SetEvent(void* handle);
@@ -84,16 +78,7 @@ void ClearBlockPtrs(Persistence* p) {
 // see. Faithful transcription costs nothing; reasoning about the race costs
 // a wave.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 6: the body is now
-// `IO::Persistence::BeginGetSaveGameInfo`, below. The door keeps its name, its
-// signature and both registration lines, and delegates. No qualified `IO::`
-// call is needed: `IO::Persistence` has no vtable of its own -- the vptr at
-// +0x10 is the EMBEDDED worker's -- so B34_BRIEFS section A.1's re-entry hazard
-// cannot arise.
-bool RtIo_Persistence_BeginGetSaveGameInfo(void* self, const void* nameRef, int count) {
-    return reinterpret_cast<IO::Persistence*>(self)->BeginGetSaveGameInfo(
-        *static_cast<const String*>(nameRef), count);
-}
+// The body is the member `IO::Persistence::BeginGetSaveGameInfo`, below.
 
 // ============================================================================
 // `IO::Persistence::BeginGetSaveGameInfo` -- the member body
@@ -156,10 +141,3 @@ bool Persistence::BeginGetSaveGameInfo(const RtSystem::String& nameRef, int coun
 }  // namespace IO
 
 // ---------------------------------------------------------------------------
-int RtIoPersistenceSavesWinRegister() {
-    RegisterRuntimeExport(
-        "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z",
-        (void*)&RtIo_Persistence_BeginGetSaveGameInfo);
-    RegisterRuntimeAddr(0x1800b7870, (void*)&RtIo_Persistence_BeginGetSaveGameInfo);
-    return 1;
-}

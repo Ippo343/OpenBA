@@ -24,9 +24,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 
 namespace RtIo {
 
@@ -34,24 +33,11 @@ extern "C" int RtIo_CompressedStream_GetAvailableWindow(CompressedStream*);
 
 namespace {
 
-// The static `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50).
-// Retail INLINES its three steps here — Enter(cs), Alloc(_singleton, size,
-// align), Leave(cs) — but 0x1800c7a50 IS exactly those three steps, and it is
-// lane E's port, so this resolves to our allocator rather than the DLL's.
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
-}
-
-// Lane Q's Array<Window>::SetSize and Array<Header>::SetSize, both registered by
-// this rung. Reached by address: neither has an exported name.
-void ArraySetSize(uintptr_t addr, void* arr, int n) {
-    using Fn = void (*)(void*, int);
-    Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, addr));
-    fn(arr, n);
-}
+// B3R RT-IO: the two by-address helpers that stood here are direct calls:
+// ?MemAlloc@MemoryAllocator@System@@ 0x1800c7a50 -> System::MemoryAllocator::
+// MemAlloc (retail INLINES its three steps -- Enter, Allocate, Leave -- and the
+// static member IS those three steps), and Array<Window>::SetSize 0x180024c10 /
+// Array<Header>::SetSize 0x180024d70 -> rtcoll::RtColl_ArraySetSize_*.
 
 // The source's Stream virtuals are called through the OBJECT's vtable exactly
 // as retail does -- by name on `IO::Stream` (B3X W0). Not shortcut to our
@@ -86,10 +72,10 @@ inline ::IO::Stream* AsStream(Stream* s) {
 // CONSTRUCTOR and this is a different function.
 extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int32_t n) {
 
-    ArraySetSize(0x180024c10, &self->windowData, n);      // 1800aa04e
+    rtcoll::RtColl_ArraySetSize_180024c10(&self->windowData, n);  // 1800aa04e
 
     for (int32_t i = 0; i < n; ++i) {                     // 1800aa056/aa0c6
-        void* const buf = MemAlloc(kCompressedStreamWindowSize, 4);   // 1800aa08f
+        void* const buf = ::System::MemoryAllocator::MemAlloc(kCompressedStreamWindowSize, 4);   // 1800aa08f
         uint8_t* windows = static_cast<uint8_t*>(self->windowData);   // 1800aa0a0
         *reinterpret_cast<void**>(windows + i * 0x18 + 0x10) = buf;   // 1800aa0a4
         windows = static_cast<uint8_t*>(self->windowData);            // 1800aa0a9
@@ -146,7 +132,7 @@ extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
         return false;
     }
 
-    ArraySetSize(0x180024d70, &self->headerData, blockCount);   // 1800aa5d8
+    rtcoll::RtColl_ArraySetSize_180024d70(&self->headerData, blockCount);   // 1800aa5d8
 
     AsStream(src)->Read(self->headerSize * 8, self->headerData);   // 1800aa5ed slot 3
 
@@ -172,15 +158,6 @@ int RtIoCompressedStreamOpenRegister() {
     using namespace RtIo;
     int n = 0;
 
-    RegisterRuntimeExport(// NOT `AEAAXH@Z`. I wrote the PRIVATE spelling first, from the
-    // assumption that a helper like this would be private; the export
-    // table says PUBLIC (`QEAA`). A name the DLL does not contain resolves
-    // NULL silently and forever behind the ResolveAddr fallback
-    // (reference_resolveexport_phantom_names), so this was checked before
-    // the line was believed, not after.
-                          "?SetWindowCount@CompressedStream@IO@@QEAAXH@Z",
-                          (void*)&RtIo_CompressedStream_SetWindowCount); ++n;
-    RegisterRuntimeAddr(0x1800aa020, (void*)&RtIo_CompressedStream_SetWindowCount);
 
     RegisterRuntimeExport("?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z",
                           (void*)&RtIo_CompressedStream_Open); ++n;

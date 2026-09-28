@@ -136,6 +136,8 @@
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Modification.h"
+#include "../../types/system/Compression.h"
+#include <new>
 
 using RtSave::ModInfo;
 using RtSave::SaveLoad;
@@ -322,9 +324,6 @@ void ModInfoArraySetSize(ModInfoArray* a, int32_t newSize) {
 // table before it was written down — a name the DLL does not contain resolves
 // NULL in silence, reference_resolveexport_phantom_names.md). There is not one
 // address door in this file.
-using CtorFn        = void* (*)(void* self);
-using SetWindowsFn  = void  (*)(void* self, int count);
-using CommitFn      = void  (*)(void* self);
 // ENDGAME B.3.1 step 2: the String::Serialize and String::Set door typedefs
 // are gone with their call sites — both are class members now.
 
@@ -380,10 +379,10 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // failed; transcribed, including the failure arm.
     void* compression = MemAlloc(8, 4);
     cs.base.compression = (compression != nullptr)
-        ? RT_EXPORT_ONCE(CtorFn, "??0Compression@System@@QEAA@XZ")(compression)
+        ? static_cast<void*>(::new (compression) System::Compression())   // ??0Compression 0x1800c41a0
         : nullptr;
 
-    RT_EXPORT_ONCE(SetWindowsFn, "?SetWindowCount@CompressedStream@IO@@QEAAXH@Z")(&cs.base, 2);
+    RtIo::RtIo_CompressedStream_SetWindowCount(&cs.base, 2);   // 0x1800aa020
 
     // ---- inlined ??0Serializer@IO@@(stream, 3) ----------------------------
     // The stream's own Encoding decides which ReaderWriter gets built; the
@@ -439,8 +438,6 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
 
     // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
     // with its one call site — it is `work.Set(...)` below.
-    auto getDataDir = RT_EXPORT_ONCE(RtSaveDetail::GetDataDirectoryFn,
-        "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ");
 
     int64_t byteOffset = 0;
     for (int32_t i = 0; i < mods->count; ++i, byteOffset += 0x80) {
@@ -467,12 +464,9 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // destructors fire there — work then dataDir, retail's own order, the
         // reverse of the declarations — and not at the end of the iteration.
         {
-            System::Filename dataDir;
-            getDataDir(RtSaveDetail::FileSystemSingleton(),
-                       // TRANSITIONAL CAST, the class->POD direction: the
-                       // door's typedef is the C entry point's ABI shape and
-                       // IO::FileSystem is not converted yet.
-                       reinterpret_cast<String*>(&dataDir));
+            System::Filename dataDir(                            // 0x180007bd0
+                static_cast<const ::IO::FileSystem*>(RtSaveDetail::FileSystemSingleton())
+                    ->GetDataDirectory());
 
             // GetLength (0x1800063c0) IS the null-guarded stored-length read.
             const int32_t dirLen = dataDir.GetLength();
@@ -537,8 +531,8 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // ---- inlined ?Close@CompressedMemoryStream, then the handoff ----------
     // `_headers._size > 0` is "has anything been written yet"; the direction
     // test keeps a read-mode stream from committing.
-    auto commit = RT_EXPORT_ONCE(CommitFn, "?Commit@CompressedStream@IO@@QEAAXXZ");
-    if (cs.base.headerSize > 0 && cs.base.base.direction == 1) commit(&cs.base);
+    if (cs.base.headerSize > 0 && cs.base.base.direction == 1)
+        RtIo::RtIo_CompressedStream_Commit(&cs.base);           // 0x1800a9ee0
     reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream)->Close();   // slot 7 +0x38 (B.3.x bridge)
 
     // THE ONE SIDE EFFECT THAT LEAVES THIS FUNCTION: the finished record is
@@ -564,74 +558,4 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // See the banner. This is the callee's half of a contract whose caller half
     // is already written down in saveload_update.cpp's UpdateSave.
     ReleaseStringSlot(const_cast<const char**>(&name->_data));
-}
-
-// ============================================================================
-// THE ORACLE — two sinks, and THEIRS actually runs
-// ============================================================================
-//
-// Armed by the old DLL-era switch. Ours writes into the caller's real
-// SaveLoad (so the live save is produced by the port, not by the DLL); the
-// shipped DLL writes into a scratch SaveLoad-shaped block; the two resulting
-// Save::SavedState records are compared.
-//
-// WHY THIS IS SOUND. The function is a pure read of (pixels, width, height,
-// name, nameMode) and of two singletons that it does not mutate, so running it
-// twice produces the same record twice. It is NOT a self-check
-// (reference_shadow_marker_is_not_an_oracle.md): the second run is
-// the raw export door'd out of the DLL and never sees our verdict, our buffer, or
-// our SaveLoad.
-//
-// THE COMPARED REGION IS BOUNDED to what both sides actually write — `_size`
-// and the `_size` bytes at `_data`. `_id` is deliberately NOT compared: nothing
-// in this call path writes it (?SetId and the 1-arg ctor are its only writers),
-// so comparing it would be comparing a byte neither side wrote, which fails
-// 100% of calls and reads like a catastrophic defect
-// (reference_oracle_must_not_compare_unwritten_bytes.md).
-//
-// TWO SCREENS, SCORED SEPARATELY (reference_union_control_hides_a_blind_screen.md):
-//   SIZE  — do the two records have the same length?
-//   BYTES — are the bytes identical?
-// A control scored on the union of the two could not tell "both work" from "one
-// is blind", so each is counted and reported on its own line.
-//
-// THE BY-VALUE STRING IS THE TRAP HERE. Each call DESTROYS its String argument,
-// so handing the same one to both would double-release the save name. The
-// oracle takes two fresh references and consumes the caller's own, leaving the
-// net refcount exactly as a single normal call would.
-
-namespace {
-
-} // namespace
-
-extern "C" void RtSave_SaveLoad_SaveMetaData(SaveLoad* self, void* pixels,
-                                             int width, int height,
-                                             String* name, int nameMode) {
-    self->Save::SaveLoad::SaveMetaData(pixels, width, height, RtSystem::Sys(name), nameMode);
-}
-
-// ============================================================================
-// Registration — BOTH doors.
-// ============================================================================
-// The mangled name is a STRING LITERAL because tools/runtime_census.py only
-// sees literals (reference_census_cannot_see_nonliteral_registrations.md), and
-// it was checked byte for byte against the shipped export table: a phantom name
-// resolves NULL in silence.
-//
-// The address door is NOT redundant with it. UpdateSave reaches this function
-// by name, but the DLL's own internal callers and any exe dispatch slot reach
-// it by address, and a by-address door with nothing registered behind it is a
-// call through null at cutover.
-//
-// GREPPED FIRST: neither "?SaveMetaData@SaveLoad@Save@@" nor 0x1800c1490 is
-// registered anywhere else in runtime/, code/, engine/ or standalone/ — a
-// duplicate RegisterRuntimeAddr is last-binding-wins and would silently make
-// one of the two bodies dead code
-// (reference_grep_for_the_port_before_writing_it.md).
-int RtSaveSaveMetaDataRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z",
-                          (void*)&RtSave_SaveLoad_SaveMetaData); ++n;
-    RegisterRuntimeAddr(0x1800c1490, (void*)&RtSave_SaveLoad_SaveMetaData);
-    return n;
 }

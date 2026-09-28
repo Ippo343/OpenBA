@@ -66,15 +66,11 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/io/Stream.h"            // the four RtIo_TextCodec_* bodies
 
-// The address seam, and `?ReadFile@FileSystem@IO@@` — both at GLOBAL scope,
-// above the namespace, because that is where their definitions live.
-// rt_port.h deliberately does not pull in standalone/resolve.h (its banner
-// explains: <windows.h> leaks `Rectangle` and the Win16 `near`/`far` into the
-// whole runtime tree), so every runtime/src file that needs the address door
-// re-declares this pair itself. Wave 28 lane SLOTS.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// `?ReadFile@FileSystem@IO@@` -- at GLOBAL scope, above the namespace, because
+// that is where its definition lives.
 extern "C" bool RtIo_FileSystem_ReadFile(RtIO::FileSystem*, RtIO::FileInfo*,
                                          int32_t, void*);
 
@@ -455,35 +451,10 @@ uint64_t g_tfsAtt = 0;
 // UNVERIFIED: neither body has been observed executing.
 // ============================================================================
 
-// ---- the four unexported codec doors ---------------------------------------
-using FnDetectFormat = int32_t (*)(const void* src, int32_t len);
-using FnDecodeOne    = int32_t (*)(int32_t fmtEcx, const void* src, const void* end,
-                                   int32_t* cp, int32_t fmtArg5);
-using FnEncodeOne    = int32_t (*)(int32_t cp, void* dst, int32_t fmt);
-using FnConvertText  = int32_t (*)(int32_t srcFmt, uint8_t forceDetect, const void* src,
-                                   int32_t srcLen, int32_t dstFmt, int32_t scratch,
-                                   uint8_t flagByte, void* dst, int32_t dstLen);
-
-inline FnDetectFormat TfsDetectFormat() {
-    static FnDetectFormat f = reinterpret_cast<FnDetectFormat>(
-        ResolveAddr(Module::Runtime, 0x1800c9d60));
-    return f;
-}
-inline FnDecodeOne TfsDecodeOne() {
-    static FnDecodeOne f = reinterpret_cast<FnDecodeOne>(
-        ResolveAddr(Module::Runtime, 0x1800c9fc0));
-    return f;
-}
-inline FnEncodeOne TfsEncodeOne() {
-    static FnEncodeOne f = reinterpret_cast<FnEncodeOne>(
-        ResolveAddr(Module::Runtime, 0x1800c9b60));
-    return f;
-}
-inline FnConvertText TfsConvertText() {
-    static FnConvertText f = reinterpret_cast<FnConvertText>(
-        ResolveAddr(Module::Runtime, 0x1800ca260));
-    return f;
-}
+// ---- the four unexported codec bodies --------------------------------------
+// 0x1800c9d60 / 0x1800c9fc0 / 0x1800c9b60 / 0x1800ca260 are
+// RtIo_TextCodec_DetectFormat / DecodeOne / EncodeOne / ConvertText
+// (text_codec.cpp), called by name (B3R RT-IO; they were address doors).
 
 // The shared BOM-skip ladder. Retail inlines it three times (twice in `Open`,
 // once in `Write`) as `test / sub 2 / dec / dec / dec`, so every value outside
@@ -498,11 +469,8 @@ inline int32_t TfsBomSkip(int32_t detected) {
 }
 
 // `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` 0x1800c7a50 and
-// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — both EXPORTED, so
-// both reached BY NAME (`AEAA`/`SAXPEAX` are not evidence of anything being
-// unexported; this DLL exports its private members).
-using FnMemAlloc = void* (*)(size_t, int32_t);
-using FnMemFree  = void  (*)(void*);
+// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0: called by name,
+// System::MemoryAllocator::MemAlloc / MemFree (B3R RT-IO).
 
 // ============================================================================
 // IO::TextFileStream::Write(int, void const*)            retail 0x1800ba9f0
@@ -902,7 +870,7 @@ bool TextFileStream::Write(int len, const void* buf) {
     const uint8_t* p           = begin;
 
     if (srcFormat == 6) {                                       // 1800baa74
-        srcFormat = RtIO::TfsDetectFormat()(buf, len);          // 1800baa7e
+        srcFormat = RtIo_TextCodec_DetectFormat(buf, len);          // 1800baa7e
         p = begin + RtIO::TfsBomSkip(srcFormat);                // 1800baaac
     }
 
@@ -912,7 +880,7 @@ bool TextFileStream::Write(int len, const void* buf) {
         int32_t cp = -1;                                        // 1800baac0
         int32_t consumed;
         if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800baacb
-            consumed = RtIO::TfsDecodeOne()(srcFormat, p, end, &cp, srcFormat);  // 1800baae4
+            consumed = RtIo_TextCodec_DecodeOne(srcFormat, p, end, &cp, srcFormat);  // 1800baae4
         } else {
             cp = -1; consumed = 1;                              // 1800baaf2
         }
@@ -920,24 +888,22 @@ bool TextFileStream::Write(int len, const void* buf) {
         if (cp >= 0) {                                          // 1800baaff
             int32_t n = 0;
             if (static_cast<uint32_t>(dstFormat) <= 5u)         // 1800bab03
-                n = RtIO::TfsEncodeOne()(cp, &cp, dstFormat);   // 1800bab14
+                n = RtIo_TextCodec_EncodeOne(cp, &cp, dstFormat);   // 1800bab14
             outBytes += n;                                      // 1800bab1d
         }
     }
 
     // Pass 2 — CONVERT into a fresh block, write it, free it.
-    void* dst = RT_EXPORT_ONCE(RtIO::FnMemAlloc,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+    void* dst = ::System::MemoryAllocator::MemAlloc(
             static_cast<size_t>(outBytes), 4);                  // 1800bab2d
-    RtIO::TfsConvertText()(_requestedFormat, 0, buf, len,       // 1800bab5d
+    RtIo_TextCodec_ConvertText(_requestedFormat, 0, buf, len,       // 1800bab5d
                            _activeEncoding, 0, 0, dst, outBytes);
 
     DWORD written = 0;                                          // 1800bab74
     ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),                // 1800bab62
                 dst, static_cast<DWORD>(outBytes), &written, nullptr);    // 1800bab80
     _file.cursor += static_cast<int32_t>(written);              // 1800bab8d
-    RT_EXPORT_ONCE(RtIO::FnMemFree,
-        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(dst);     // 1800bab94
+    ::System::MemoryAllocator::MemFree(dst);                    // 1800bab94
 
     const bool ok = (static_cast<int32_t>(written) == outBytes);  // 1800bab9e
     return ok;
@@ -968,8 +934,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
 
     const int32_t fileSize = _file.size;                        // 1800ba67f  +0x28
     uint8_t* const raw = static_cast<uint8_t*>(
-        RT_EXPORT_ONCE(RtIO::FnMemAlloc,
-            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+        ::System::MemoryAllocator::MemAlloc(
                 static_cast<size_t>(fileSize), 4));             // 1800ba690
     _file.cursor = 0;                                           // 1800ba699  +0x2c
 
@@ -985,7 +950,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
     const uint8_t* const rawEnd = raw + fileSize;               // 1800ba6f0
 
     // ---- pass 1: MEASURE ---------------------------------------------------
-    int32_t srcFormat = RtIO::TfsDetectFormat()(raw, fileSize); // 1800ba6f4
+    int32_t srcFormat = RtIo_TextCodec_DetectFormat(raw, fileSize); // 1800ba6f4
     const uint8_t* p  = raw + RtIO::TfsBomSkip(srcFormat);      // 1800ba721
 
     int32_t outBytes = 0;
@@ -993,7 +958,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
         int32_t cp = -1;                                        // 1800ba730
         int32_t consumed;
         if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba73b
-            consumed = RtIO::TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba754
+            consumed = RtIo_TextCodec_DecodeOne(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba754
         } else {
             cp = -1; consumed = 1;                              // 1800ba762
         }
@@ -1001,7 +966,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
         if (cp >= 0) {                                          // 1800ba76f
             int32_t n = 0;
             if (static_cast<uint32_t>(format) <= 5u)            // 1800ba773
-                n = RtIO::TfsEncodeOne()(cp, &cp, format);      // 1800ba784
+                n = RtIo_TextCodec_EncodeOne(cp, &cp, format);      // 1800ba784
             outBytes += n;                                      // 1800ba78d
         }
     }
@@ -1009,15 +974,14 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
     // ---- install the buffer ------------------------------------------------
     _bufSize = outBytes;                                        // 1800ba7a4  +0x78
     uint8_t* const buffer = static_cast<uint8_t*>(
-        RT_EXPORT_ONCE(RtIO::FnMemAlloc,
-            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+        ::System::MemoryAllocator::MemAlloc(
                 static_cast<size_t>(outBytes), 4));             // 1800ba7a7
     _buffer = buffer;                                           // 1800ba7b1  +0x70
     const int32_t bufSize = _bufSize;                           // 1800ba7b5
 
     // ---- pass 2: CONVERT ---------------------------------------------------
     // DetectFormat is re-run on the same bytes — retail's, not a duplication.
-    srcFormat = RtIO::TfsDetectFormat()(raw, fileSize);         // 1800ba7c4
+    srcFormat = RtIo_TextCodec_DetectFormat(raw, fileSize);         // 1800ba7c4
     p = raw + RtIO::TfsBomSkip(srcFormat);                      // 1800ba7e4
 
     uint8_t* out   = buffer;                                    // 1800ba7ec
@@ -1026,7 +990,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
         int32_t cp = -1;                                        // 1800ba800
         int32_t consumed;
         if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba80b
-            consumed = RtIO::TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba827
+            consumed = RtIo_TextCodec_DecodeOne(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba827
         } else {
             cp = -1; consumed = 1;                              // 1800ba83c
         }
@@ -1038,7 +1002,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
         uint8_t scratch[4] = { 0, 0, 0, 0 };
         int32_t n = 0;
         if (static_cast<uint32_t>(format) <= 5u)                // 1800ba84d
-            n = RtIO::TfsEncodeOne()(cp, scratch, format);      // 1800ba85b
+            n = RtIo_TextCodec_EncodeOne(cp, scratch, format);      // 1800ba85b
         written += n;                                           // 1800ba864
         if (written > bufSize) continue;                        // 1800ba866  JG
         if (buffer == nullptr) continue;                        // 1800ba86a
@@ -1048,8 +1012,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
         }
     }
 
-    RT_EXPORT_ONCE(RtIO::FnMemFree,
-        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(raw);     // 1800ba89e
+    ::System::MemoryAllocator::MemFree(raw);                    // 1800ba89e
     _activeEncoding = format;                                   // 1800ba8cc  +0x6c
     return true;                                                // 1800ba8d0
 }
@@ -1098,44 +1061,3 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
 // (reference_a_green_readiness_screen_is_not_a_route.md). **Wave 28 lane SLOTS
 // did NOT promote this row and establishes nothing about its stamper.**
 // ============================================================================
-
-// ============================================================================
-// Registration — BY NAME *AND* BY ADDRESS for every row, because
-// `ResolveExport` falls through silently to the shipped body for an unported
-// symbol and `ResolveAddr(Module::Runtime, ..)` is registry-first: a caller that
-// arrives by ADDRESS is invisible to a name-only registration and dies at
-// cutover (reference_count_the_doors_not_the_calls.md).
-// ============================================================================
-int RtIoTextFileStreamSlotsRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    // ENDGAME B.3.9 IO: the seven vtable-slot doors (Read, SetCurrentPos,
-    // GetCurrentPos, GetSize, Create, Write, Open) had the minted TextFileStream
-    // table as their only caller and were deleted with it -- the class is built
-    // by its real constructor and its slots reach the members directly.
-    //
-    // The three NON-VTABLE accessors stay (WAVE 29 LANE IOLANE). Each mangled
-    // name was taken from the SHIPPED EXPORT DIRECTORY with pefile:
-    //   ?GetObjectVersion@TextFileStream@IO@@QEBAHXZ                 0x1800ba250
-    //   ?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ  0x1800ba260
-    //   ?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ  0x1800ba270
-    // Each name is spelled on ONE line: tools/runtime_census.py cannot see a
-    // mangled name split across a string-literal concatenation.
-    RegisterRuntimeExport("?GetObjectVersion@TextFileStream@IO@@QEBAHXZ",
-                          (void*)&RtIo_TextFileStream_GetObjectVersion); ++n;
-    RegisterRuntimeAddr(0x1800ba250, (void*)&RtIo_TextFileStream_GetObjectVersion);
-
-    RegisterRuntimeExport("?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ",
-                          (void*)&RtIo_TextFileStream_GetObjectType); ++n;
-    RegisterRuntimeAddr(0x1800ba260, (void*)&RtIo_TextFileStream_GetObjectType);
-
-    RegisterRuntimeExport("?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ",
-                          (void*)&RtIo_TextFileStream_GetObjectName); ++n;
-    RegisterRuntimeAddr(0x1800ba270, (void*)&RtIo_TextFileStream_GetObjectName);
-
-    printf("[RtPort]   IO::TextFileStream (waves 20 SAVETEXT, 21 ENC, "
-           "28 SLOTS, 29 IOLANE): %d exports registered here -- the NON-VTABLE "
-           "accessors GetObjectName/Type/Version\n", n);
-    return n;
-}

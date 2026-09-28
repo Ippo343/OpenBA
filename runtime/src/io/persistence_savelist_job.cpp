@@ -118,15 +118,11 @@
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 #include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_SaveGameInfo, AsArray
+#include "../../types/system/MemoryAllocator.h"
 
 using RtIo::Persistence;
 using RtIo::SaveGameInfo;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
-
-// Declared locally rather than including standalone/resolve.h, which drags in
-// <windows.h>. Byte-identical to persistence_worker_win.cpp's copy.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -143,22 +139,12 @@ struct FilenameArray {
 static_assert(offsetof(FilenameArray, size)     == 0x08, "Array::_size @ +0x08");
 static_assert(offsetof(FilenameArray, capacity) == 0x0c, "Array::_capacity @ +0x0c");
 
-// These are file-local typedefs for calls OUT through the resolve door (not
-// entry-point signatures), so they now name the classes occupying the same
-// eight bytes. The resolve mechanism itself (RtResolveCached / ResolveAddr) is
-// untouched — this file's whole design is standing on its own against named
-// doors, and that stays exactly as it was.
-typedef void      (*StringSetFn)(System::String*, const char*);                 // 0x1800c95d0
-typedef System::Filename* (*GetSaveDirectoryFn)(const void*, System::Filename*);// 0x1800acfd0
-typedef System::String*   (*ConcatCStrFn)(System::String*, const System::String*,
-                                          const char*);                          // 0x1800c92d0
-typedef void      (*FindFilesFn)(const void*, const System::String*, const System::String*,
-                                 bool, void*);                          // 0x1800ad7a0
-typedef System::Filename* (*GetPathFilenameFn)(const System::Filename*,
-                                               System::Filename*, bool); // 0x1800c6740
-typedef uint64_t* (*GetFileTimeStampFn)(const void*, uint64_t*, const System::Filename*);
-                                                                        // 0x1800ae270
-typedef void      (*MemFreeFn)(void*);                                  // 0x1800c7ad0
+// B3R RT-IO: the eight callees this body reached through RtResolveCached are
+// called by name: String::Set (0x1800c95d0), FileSystem::GetSaveDirectory
+// (0x1800acfd0), operator+(String, const char*) (0x1800c92d0),
+// FileSystem::FindFiles (0x1800ad7a0), Filename::GetPathFilename (0x1800c6740),
+// FileSystem::GetFileTimeStamp (0x1800ae270), MemoryAllocator::MemFree
+// (0x1800c7ad0).
 
 // `IO::FileSystem::_singleton` — an exported DATA symbol, so the NAME door is
 // the right door and the `0x1801fc6a8` in the listing needs no address door.
@@ -167,9 +153,7 @@ void* FileSystemSingleton() {
 }
 
 void MemFree(void* p) {   // the null test is INSIDE 0x1800c7ad0
-    static void* cache = nullptr;
-    reinterpret_cast<MemFreeFn>(RtResolveCached(
-        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z", &cache))(p);
+    ::System::MemoryAllocator::MemFree(p);
 }
 
 // 0x180155850 and 0x180155858 — see the banner for why the neighbouring
@@ -208,37 +192,19 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
     // saveDir, then pattern — reverse of declaration).
     {
         System::String pattern;                                     // [RBP+0x48]
-        {
-            static void* setCache = nullptr;
-            reinterpret_cast<StringSetFn>(RtResolveCached(
-                "?Set@String@System@@QEAAXPEBD@Z", &setCache))(&pattern, kSavePattern);
-        }
+        pattern.Set(kSavePattern);                                  // 0x1800c95d0
 
-        System::Filename saveDir;                                   // [RBP+0x58]
-        {
-            static void* gsdCache = nullptr;
-            reinterpret_cast<GetSaveDirectoryFn>(RtResolveCached(
-                "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ",
-                &gsdCache))(fs, &saveDir);                          // 0x1800b62e5
-        }
+        System::Filename saveDir(                                   // [RBP+0x58]
+            static_cast<const ::IO::FileSystem*>(fs)->GetSaveDirectory());   // 0x1800b62e5
 
-        System::String dir;                                         // [RBP+0x50]
-        {
-            static void* catCache = nullptr;
-            // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z, 0x1800c92d0. AsString()
-            // is the conversion retail performs by pointer cast (Filename.h).
-            reinterpret_cast<ConcatCStrFn>(RtResolveCached(
-                "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z", &catCache))(
-                    &dir, &saveDir.AsString(), kSaveSubDir);
-        }
+        // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z, 0x1800c92d0. AsString()
+        // is the conversion retail performs by pointer cast (Filename.h).
+        System::String dir(saveDir.AsString() + kSaveSubDir);       // [RBP+0x50]
 
-        {
-            static void* ffCache = nullptr;
-            reinterpret_cast<FindFilesFn>(RtResolveCached(
-                "?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@"
-                "VFilename@System@@@Collection@@@Z", &ffCache))(
-                    fs, &dir, &pattern, false, &found);              // 0x1800b6315
-        }
+        static_cast<const ::IO::FileSystem*>(fs)->FindFiles(         // 0x1800b6315  B.3.x bridge
+            *reinterpret_cast<const RtSystem::String*>(&dir),
+            *reinterpret_cast<const RtSystem::String*>(&pattern),
+            false, reinterpret_cast<RtIO::FilenameArray*>(&found));
 
         // ~dir, ~saveDir, ~pattern are retail's release sequence at
         // 0x1800b631b/0x1800b6343/0x1800b636c, now the three destructors
@@ -260,14 +226,8 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
             // stack cell for it (`LEA RDX,[RBP+0x48]`). Filled directly: the
             // callee treats the pointer as raw memory, the same as any other
             // hidden-return-slot target.
-            System::Filename baseName;
-            System::Filename* got;
-            {
-                static void* gpfCache = nullptr;
-                got = reinterpret_cast<GetPathFilenameFn>(RtResolveCached(
-                    "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z", &gpfCache))(
-                        &found.data[i], &baseName, true);           // 0x1800b63c5
-            }
+            System::Filename baseName(found.data[i].GetPathFilename(true));   // 0x1800b63c5
+            System::Filename* const got = &baseName;
             // UNGUARDED deref of the returned pointer, as retail writes it.
             // `String(const String&)` (retail 0x180006cb0) is exactly "adopt
             // the buffer, AddRef if non-null" -- what the C body wrote out by
@@ -279,14 +239,8 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
         }
 
         // THE FULL FOUND PATH, not the base name — see the banner.
-        {
-            static void* tsCache = nullptr;
-            uint64_t stamp = 0;
-            uint64_t* r = reinterpret_cast<GetFileTimeStampFn>(RtResolveCached(
-                "?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@"
-                "AEBVFilename@4@@Z", &tsCache))(fs, &stamp, &found.data[i]);
-            entry.sortKey = *r;                                 // 0x1800b644a
-        }
+        entry.sortKey = static_cast<const ::IO::FileSystem*>(fs)->GetFileTimeStamp(   // 0x1800b644a
+            *reinterpret_cast<const RtSystem::Filename*>(&found.data[i]));
 
         // retail 0x18002ae20 — Array<SaveGameInfo>::SetSize(n, &fill), the
         // append idiom. Hand-derived row (kSpec_SaveGameInfo), bridged the
@@ -310,21 +264,4 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
     for (int64_t i = 0; i < static_cast<int64_t>(found.size); ++i)
         found.data[i].~Filename();                              // 0x1800b64e4
     if (found.data) MemFree(found.data);                        // 0x1800b6541
-}
-
-// ============================================================================
-// Registration — ADDRESS ONLY.
-//
-// Unexported: `persistence_worker_win.cpp` measured this against the retail
-// export directory with pefile when it opened the door ("the nearest preceding
-// export to every one of them is `?Serialize@PackageFile@IO@@` several hundred
-// bytes back"), so there is no mangled name to register under and "unexported"
-// is a measurement rather than a reading of an `AEAA`
-// (reference_aeaa_is_private_not_unexported.md).
-//
-// The address is a LITERAL so tools/runtime_census.py can see the door.
-// ============================================================================
-int RtIoPersistenceSaveListRegister() {
-    RegisterRuntimeAddr(0x1800b6290, (void*)&RtIo_PersistenceWorker_GetSaveList);
-    return 1;
 }

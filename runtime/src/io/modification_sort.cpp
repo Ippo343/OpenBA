@@ -118,14 +118,4 @@ extern "C" void RtIo_Modification_SortMods(void* data, int32_t count, void*) {
                       });
 }
 
-int RtIoModificationSortRegister() {
-    // Address-only rows: neither has an export name in either build.
-    RegisterRuntimeAddr(0x180028760, (void*)&RtIo_Modification_SortMods);
-    RegisterRuntimeAddr(0x180028fc0, (void*)&RtIo_Modification_SortModsSmall);
-    printf("[RtPort]   IO::Modification sort (BATCH 8b): 2 addresses\n");
-    return 2;
-}
-
 }  // namespace RtIO
-
-int RtIoModificationSortRegisterC() { return RtIO::RtIoModificationSortRegister(); }

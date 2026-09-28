@@ -34,6 +34,7 @@
 #include "../../types/io/Persistence.h"   // SaveBlock — SetupLoadFn's return
 #include "../../types/io/FileSystem.h"    // ENDGAME B.3.9 SS1: FileSystem::_singleton
 #include "../../types/io/Modification.h"  // ENDGAME B.3.9 SS1: Modification::_singleton
+#include "../../types/system/MemoryAllocator.h"
 #include "../system/string.h"
 #include "../system/timer.h"
 
@@ -73,25 +74,13 @@ using SaveLoadVoidFn     = void     (*)(SaveLoad* self);
 // clearest: `LEA RDX,[RSP+0x28]` (slot) then `MOV RCX,RAX` (self).
 using SetupLoadFn        = RtIo::SaveBlock* (*)(SavedState* self, RtIo::SaveBlock* ret);
 
-// MemAlloc/MemFree go through the PORT registry, not the raw door: they are
-// not oracles here, they are the allocation this lane performs, and a raw-door
-// call is a call through NULL the moment the DLL is absent (WAVE 9 LANE V2).
+// The allocation this lane performs: the allocator's own statics
+// (B3R R9 -- the per-file wrapper calls System::MemoryAllocator directly).
 inline void* MemAlloc(uint64_t size, int align) {
-    return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
+    return ::System::MemoryAllocator::MemAlloc(size, align);
 }
 inline void MemFree(void* p) {
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
-
-// ---- DLL data symbols -------------------------------------------------------
-// Every mangling below was verified present in the shipped export table with
-// pefile before it was written down. Note Modification's `2PEAV12@EA` (a PUBLIC
-// static member) against the others' `0PEAV12@EA` (private): spelling either
-// one the other way produces a name the DLL does not contain, which resolves to
-// NULL in silence (reference_resolveexport_phantom_names.md).
-template <typename T>
-inline T* RtDataExport(const char* mangled) {
-    return reinterpret_cast<T*>(ResolveExport(mangled));
+    ::System::MemoryAllocator::MemFree(p);
 }
 
 // WAVE 15 LANE ORDER. These four were `static T** p = RtDataExport<T*>(...)`,
@@ -178,37 +167,6 @@ inline void RetainInto(const char** slot, const char* src) {
 inline void AdoptReturned(const char** slot, System::String&& s) {
     *slot = s._data;
     s._data = nullptr;
-}
-
-// ---- RULE B6-5 / B7-7: namespace-scope atomic resolve slots ------------------
-// A member of these classes can run on the LOADER thread (the ctor, via
-// GameUpdateLoop's slot-6 Load) and on the main thread. A function-local
-// `static Fn fn = Resolve…()` or a `static Fn fn; if (!fn) fn = …` first-call
-// cache is exactly what B6-5 forbids in a member body. These are
-// `element_common.h`'s `AtomicExport`/`AtomicAddr` shape after the B36_RULES
-// 14.4 fix: cache only what `RtResolveCached` itself would cache (a pre-init hit
-// is not frozen), and a by-address hit only once it is non-null.
-inline void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (scratch != nullptr) slot.store(scratch, std::memory_order_release);
-    }
-    return p;
-}
-// A template on the module enum so this header need not include
-// standalone/resolve.h (and <windows.h>): each file already declares
-// `enum class Module` / `ResolveAddr` itself, and the call below is found by
-// argument-dependent lookup when the caller passes `Module::Runtime`.
-template <class ModuleT>
-inline void* AtomicAddr(std::atomic<void*>& slot, ModuleT module, uintptr_t ghidra) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(module, ghidra));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
 }
 
 // ---- the two unexported Array destructors saveload.cpp transcribes ----------
