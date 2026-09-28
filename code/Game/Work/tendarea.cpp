@@ -17,8 +17,12 @@
 #include "Work/TendArea.h"
 #include "Work/tendarea_funcs.h"
 #include "engine_funcs.h"
+#include "system/MemoryAllocator.h"
 #include "math/Math.h"
-#include "resolve.h"
+#include "Work/exe_bodies.h"
+#include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Component/exe_bodies.h"   // B3R: bodies called by name
+#include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
@@ -28,85 +32,29 @@
 #include "Component/OrchardComponent.h"     // ENDGAME B.3.9 D5: OrchardComponent::TypeId()
 
 // ============================================================
-// Local function pointers (resolved once by TendArea_ResolveFuncs)
+// Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
-
-// All typedefs prefixed with TAW_ to avoid conflicts
-
-// Work::Serialize
-typedef void  (*TAW_Work_Serialize_t)(void* self, void* stream);
-// BST serialization (simple BST at 0x1400296b0)
-typedef void  (*TAW_BST_Serialize_t)(void* bstRoot, void* serializer);
-// BST find-and-remove by key (CitizenAI_impl_5520 at 0x140025520)
-typedef void  (*TAW_BSTFindRemove_t)(void* bstRoot, void* keyIBP);
-// BST node remove (CitizenAI_impl_a6e0 at 0x14001a6e0)
-typedef void  (*TAW_BSTRemove_t)(void* bstRoot, void* node);
-// Cancel all work items
-typedef void  (*TAW_CancelAllWork_t)(void* citizenAISub);
-// FUN_1400f7100 -- validate work entity
-typedef bool  (*TAW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
-// MemAlloc/MemFree
-typedef void* (*TAW_MemAlloc_t)(int64_t size, int align);
-typedef void  (*TAW_MemFree_t)(void* ptr);
-typedef void  (*TAW_MemFreeStatic_t)(void* ptr);
-// Tree node cleanup (recursive free, simple BST at 0x140014c30)
-typedef void  (*TAW_TreeNodeCleanup_t)(void* bstRoot, void* node);
-// FindSubEntity
-typedef void* (*TAW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
-// CalcMaxWorkers
-typedef int   (*TAW_CalcMaxWorkers_t)(uintptr_t matDesc);
-// FindComponent helpers
-typedef void* (*TAW_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
-typedef void* (*TAW_FindComp_AreaCrop_t)(uintptr_t entity, void* outIBP);
-typedef void* (*TAW_FindComp_AreaOrchard_t)(uintptr_t entity, void* outIBP);
-// Random
-// Map functions
-typedef int   (*TAW_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
-typedef bool  (*TAW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
-// GetTerrainPos
-typedef float*(*TAW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
-                                     char param4, uint32_t* outNormal);
-// PerformWork (FUN_1400bb0a0 -- the complex work ctor with target/position)
-typedef void  (*TAW_PerformWork_Ctor_t)(void* citizenIBP, int priority, void* workEntityIBP,
-                                        int unused, float* targetPos, float* srcPos,
-                                        uint32_t typeId, int flag, uint32_t cellIdx);
-// CitizenAI RegisterWork
-typedef void  (*TAW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
-// CitizenAI LongTermPlan
-typedef void  (*TAW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
-// FindComponent Storage
-typedef void* (*TAW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
-// StorageComponent_QueryCount
-typedef int   (*TAW_StorageQueryCount_t)(void* storageComp);
-
-static TAW_BST_Serialize_t           s_fn_BST_Serialize = nullptr;
-static TAW_BSTFindRemove_t           s_fn_BSTFindRemove = nullptr;
-static TAW_BSTRemove_t               s_fn_BSTRemove = nullptr;
-static TAW_CancelAllWork_t           s_fn_CancelAllWork = nullptr;
-static TAW_ValidateEntity_t          s_fn_ValidateEntity = nullptr;
-static TAW_MemAlloc_t                s_fn_MemAlloc = nullptr;
-static TAW_MemFree_t                 s_fn_MemFree = nullptr;
-static TAW_MemFreeStatic_t           s_fn_MemFreeStatic = nullptr;
-static TAW_TreeNodeCleanup_t         s_fn_TreeNodeCleanup = nullptr;
-static TAW_FindSubEntity_t           s_fn_FindSubEntity = nullptr;
-static TAW_CalcMaxWorkers_t          s_fn_CalcMaxWorkers = nullptr;
-static TAW_FindComp_MatDesc_t        s_fn_FindComp_MatDesc = nullptr;
-static TAW_FindComp_AreaCrop_t       s_fn_FindComp_AreaCrop = nullptr;
-static TAW_FindComp_AreaOrchard_t    s_fn_FindComp_AreaOrchard = nullptr;
-static TAW_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr;
-static TAW_Map_CanPathTo_t           s_fn_Map_CanPathTo = nullptr;
-static TAW_GetTerrainPos_t           s_fn_GetTerrainPos = nullptr;
-static TAW_PerformWork_Ctor_t        s_fn_PerformWork_Ctor = nullptr;
-static TAW_CitizenAI_RegisterWork_t  s_fn_CitizenAI_RegisterWork = nullptr;
-static TAW_CitizenAI_LongTermPlan_t  s_fn_CitizenAI_LongTermPlan = nullptr;
-static TAW_FindComp_Storage_t        s_fn_FindComp_Storage = nullptr;
-static TAW_StorageQueryCount_t       s_fn_StorageQueryCount = nullptr;
-
-// Type ID constants
-
-// Float constants
-static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
-
+//   0x1400296b0  WorkBST_BST_Serialize_296b0
+//   0x140025520  WorkBST_BSTFindRemove_25520
+//   0x14001a6e0  WorkBST_BSTRemove_a6e0
+//   0x1400c5400  WorkBase_TaskListCleanup_c5400
+//   0x1400f7100  WorkBase_ValidateTask_f7100
+//   0x140014c30  WorkBase_TreeNodeFree_14c30
+//   0x140002e10  AttendanceComponent_GetJobHostComponent
+//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x140003050  WorkBase_FindComponent_3050
+//   0x140005380  WorkAcc_FindComponent_5380
+//   0x140005440  WorkAcc_FindComponent_5440
+//   0x14009ccf0  WorkGrid_FindCell_9ccf0
+//   0x1400a00f0  WorkBase_ValidateCell_a00f0
+//   0x14009f3e0  Reimpl_MapGetTerrainPos
+//   0x1400bb0a0  WorkAct_GrazingWorkCtor_bb0a0
+//   0x140021a30  WorkBST_RegisterWork_1a30
+//   0x140115e60  CitizenAI_State_LongTermPlan
+//   0x140006270  WorkBase_FindComponent_6270
+//   0x14012cf10  CitizenComp_StorageComponent_QueryCount
+//   0x140172114  kRdata_140172114 (.rdata)
+//
 // Vtable pointers for dtor chain
 //
 // The Work BASE vtable is 0x140161a80, byte-verified in retail: TendArea_Ctor
@@ -115,127 +63,10 @@ static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
 
-static bool s_tend_funcs_resolved = false;
-
-// ============================================================
-// Resolution -- called once during hook installation
-// ============================================================
+// B3R: resolves nothing. Kept only because cropfieldcomponent_states.cpp (another
+// block's file) still calls it; delete it with that call.
 bool TendArea_ResolveFuncs() {
-    if (s_tend_funcs_resolved) return true;
-
-    // Direct exe function addresses
-    s_fn_BST_Serialize = reinterpret_cast<TAW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400296b0));
-    s_fn_BSTFindRemove = reinterpret_cast<TAW_BSTFindRemove_t>(
-        ResolveAddr(Module::Exe, 0x140025520));
-    s_fn_BSTRemove = reinterpret_cast<TAW_BSTRemove_t>(
-        ResolveAddr(Module::Exe, 0x14001a6e0));
-    s_fn_CancelAllWork = reinterpret_cast<TAW_CancelAllWork_t>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_ValidateEntity = reinterpret_cast<TAW_ValidateEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-    s_fn_TreeNodeCleanup = reinterpret_cast<TAW_TreeNodeCleanup_t>(
-        ResolveAddr(Module::Exe, 0x140014c30));
-    s_fn_FindSubEntity = reinterpret_cast<TAW_FindSubEntity_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_CalcMaxWorkers = reinterpret_cast<TAW_CalcMaxWorkers_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
-    s_fn_FindComp_MatDesc = reinterpret_cast<TAW_FindComp_MatDesc_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    s_fn_FindComp_AreaCrop = reinterpret_cast<TAW_FindComp_AreaCrop_t>(
-        ResolveAddr(Module::Exe, 0x140005380));
-    s_fn_FindComp_AreaOrchard = reinterpret_cast<TAW_FindComp_AreaOrchard_t>(
-        ResolveAddr(Module::Exe, 0x140005440));
-    s_fn_Map_FindNearestPassable = reinterpret_cast<TAW_Map_FindNearestPassable_t>(
-        ResolveAddr(Module::Exe, 0x14009ccf0));
-    s_fn_Map_CanPathTo = reinterpret_cast<TAW_Map_CanPathTo_t>(
-        ResolveAddr(Module::Exe, 0x1400a00f0));
-    s_fn_GetTerrainPos = reinterpret_cast<TAW_GetTerrainPos_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_PerformWork_Ctor = reinterpret_cast<TAW_PerformWork_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x1400bb0a0));
-    s_fn_CitizenAI_RegisterWork = reinterpret_cast<TAW_CitizenAI_RegisterWork_t>(
-        ResolveAddr(Module::Exe, 0x140021a30));
-    s_fn_CitizenAI_LongTermPlan = reinterpret_cast<TAW_CitizenAI_LongTermPlan_t>(
-        ResolveAddr(Module::Exe, 0x140115e60));
-    s_fn_FindComp_Storage = reinterpret_cast<TAW_FindComp_Storage_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-    s_fn_StorageQueryCount = reinterpret_cast<TAW_StorageQueryCount_t>(
-        ResolveAddr(Module::Exe, 0x14012cf10));
-
-    // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
-    // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
-    // (see placementtool.cpp:78). Since that slot is registered, the pointer was
-    // non-null and WRONG, so the first array grow called GetTransform(size, align) and
-    // took an ACCESS_VIOLATION. Diagnosed in tradework.cpp, where a TradeWork actually
-    // reached its grow path; the same wrong pair was copied into five work classes.
-    s_fn_MemAlloc = reinterpret_cast<TAW_MemAlloc_t>(fn_MemAllocStatic);
-    s_fn_MemFree  = reinterpret_cast<TAW_MemFree_t>(fn_MemFreeStatic);
-
-    // fn_MemFreeStatic from engine_funcs
-    s_fn_MemFreeStatic = reinterpret_cast<TAW_MemFreeStatic_t>(fn_MemFreeStatic);
-
-    // Float constants
-    s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-
-    // Vtable pointers for dtor
-
-    // Verify critical pointers
-    bool ok = s_fn_BST_Serialize &&
-              s_fn_BSTFindRemove && s_fn_BSTRemove && s_fn_CancelAllWork &&
-              s_fn_ValidateEntity && s_fn_MemAlloc &&
-              // s_fn_MemFree is deliberately NOT required. It comes from the IAT dispatch
-              // slot 0x140151468, which is registered nowhere in our tree, so it is always
-              // null — and this file never calls it (the real frees go through
-              // s_fn_MemFreeStatic, which comes from engine_funcs and is non-null). Its
-              // four sibling Work files resolve the same dead pointer and correctly leave it
-              // out of their conjunction; only this one gated on it, which made
-              // TendArea_ResolveFuncs() report FAILED on every call and never latch
-              // s_tend_funcs_resolved — so it re-ran the whole resolve on every TendArea
-              // construction, and a genuinely useful readiness signal read FAILED
-              // permanently, ready to mask a real missing pointer later.
-              // Still resolved and still reported below, so a future call site is visible.
-              s_fn_TreeNodeCleanup && s_fn_FindSubEntity &&
-              s_fn_CalcMaxWorkers && s_fn_FindComp_MatDesc &&
-              s_fn_FindComp_AreaCrop && s_fn_FindComp_AreaOrchard &&
-              s_fn_Map_FindNearestPassable &&
-              s_fn_Map_CanPathTo && s_fn_GetTerrainPos &&
-              s_fn_PerformWork_Ctor && s_fn_CitizenAI_RegisterWork &&
-              s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
-              s_fn_StorageQueryCount &&
-              fn_IsDerivedFrom &&
-              g_pGameWorldSingleton && s_fHalfCellOffset;
-
-    s_tend_funcs_resolved = ok;
-
-#ifdef _DEBUG
-    printf("[TendArea] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
-    if (!ok) {
-        if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
-        if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
-        if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
-        if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
-        if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
-        if (!s_fn_MemAlloc) printf("  MISSING: MemAlloc\n");
-        if (!s_fn_MemFree) printf("  MISSING: MemFree\n");
-        if (!s_fn_TreeNodeCleanup) printf("  MISSING: TreeNodeCleanup\n");
-        if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_fn_CalcMaxWorkers) printf("  MISSING: CalcMaxWorkers\n");
-        if (!s_fn_FindComp_MatDesc) printf("  MISSING: FindComp_MatDesc\n");
-        if (!s_fn_FindComp_AreaCrop) printf("  MISSING: FindComp_AreaCrop\n");
-        if (!s_fn_FindComp_AreaOrchard) printf("  MISSING: FindComp_AreaOrchard\n");
-        if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
-        if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
-        if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_PerformWork_Ctor) printf("  MISSING: PerformWork_Ctor\n");
-        if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");
-        if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
-        if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
-        if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
-    }
-#endif
-
-    return ok;
+    return true;
 }
 
 
@@ -258,12 +89,12 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
 
     // Step 1: Check max workers
     uintptr_t matDescIBP = 0;
-    s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
+    WorkBase_FindComponent_3050(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
 
     int64_t currentWorkers = (int64_t)selfQ[10]; // self->workerCount at +0x50
 
     if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
         *(int*)(matDescIBP + 0x30) = maxWorkers;
     }
 
@@ -302,7 +133,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
 
     if (tendMode == 0) {
         // Crop mode: find CropAreaComponent
-        s_fn_FindComp_AreaCrop(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
+        WorkAcc_FindComponent_5380(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
 
         uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x60);
         randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(areaSize));   // B.3.4b bridge
@@ -312,7 +143,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
         typeId = CropFieldComponent::TypeId();  // DAT_1401c7510
     } else {
         // Orchard mode: find OrchardAreaComponent
-        s_fn_FindComp_AreaOrchard(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
+        WorkAcc_FindComponent_5440(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
 
         uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x58);
         randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(areaSize));   // B.3.4b bridge
@@ -323,37 +154,37 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
     }
 
     // Step 5: Find nearest passable cell and check pathability
-    int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, targetCell, citizenGridCell, 0xe1f);
+    int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, targetCell, citizenGridCell, 0xe1f);
     if (nearestCell < 0 || (int)randIdx < 0) {
         return 0;  // No passable cell found
     }
 
-    bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
+    bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the door read AL
     if (!canPath) {
         return 0;  // Can't path to cell
     }
 
     // Step 6: Calculate terrain positions
-    float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
+    float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
     Math::Vector3 targetPos(
         (float)(targetCell % *mapGrid) - halfOffset,
         (float)(targetCell / *mapGrid) - halfOffset,
         0.0f);
     float targetTerrain[3];
-    s_fn_GetTerrainPos(mapGrid, targetTerrain, &targetPos.x, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, targetTerrain, &targetPos.x, '\0', nullptr);
 
     Math::Vector3 citizenPos(
         (float)(nearestCell % *mapGrid) - halfOffset,
         (float)(nearestCell / *mapGrid) - halfOffset,
         0.0f);
     float citizenTerrain[3];
-    s_fn_GetTerrainPos(mapGrid, citizenTerrain, &citizenPos.x, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, citizenTerrain, &citizenPos.x, '\0', nullptr);
 
     // Step 7: Create PerformWork action
     uintptr_t workEntityRef = *(uintptr_t*)(selfAddr + 0x10);
     uintptr_t entityBuf[2] = { *(uintptr_t*)citizenIBP, 0 };
 
-    s_fn_PerformWork_Ctor(
+    WorkAct_GrazingWorkCtor_bb0a0(
         entityBuf,                  // citizenIBP
         (int)selfQ[4],             // priority
         (void*)&workEntityRef,      // work entity
@@ -381,7 +212,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
         *(uint32_t*)(citEnt + 0x88) |= 0x20000;
     }
 
-    s_fn_CitizenAI_RegisterWork((void*)(selfAddr + 0x48), workEntIBP, citizenIBP);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), workEntIBP, citizenIBP);
     return 2;
 }
 
@@ -390,7 +221,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
 // TendArea::Slot6 -- BSTFindRemove + return false (0x1400f5470)
 // ============================================================
 int TendArea::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
     return false;
 }
 
@@ -399,7 +230,7 @@ int TendArea::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // TendArea::Slot7 -- BSTFindRemove thunk (0x1400f5460)
 // ============================================================
 int TendArea::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
     return 0;
 }
 
@@ -424,7 +255,7 @@ int TendArea::Cleanup() {
         // Cancel the work item
         uintptr_t citizenEntity = *(uintptr_t*)leftmost;
 
-        s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
     return 0;
 }
@@ -460,7 +291,7 @@ int TendArea::Validate() {
         uintptr_t entityIBP = *(uintptr_t*)node;
 
         // Validate this entity
-        bool stillValid = s_fn_ValidateEntity(selfAddr, nullptr, (void*)&entityIBP, nullptr);
+        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, (void*)&entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed
@@ -473,7 +304,7 @@ int TendArea::Validate() {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    newArr = (uintptr_t*)s_fn_MemAlloc((int64_t)newCap * 8, 8);
+                    newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
                 }
 
                 // Copy existing entries if buffer changed
@@ -491,7 +322,7 @@ int TendArea::Validate() {
                     newArr[i] = val;
                 }
                 if (removeArr != newArr) {
-                    fn_MemFreeStatic(removeArr);
+                    System::MemoryAllocator::MemFree(removeArr);
                 }
                 removeArr = newArr;
                 removeCount = newCount;
@@ -528,7 +359,7 @@ int TendArea::Validate() {
                     searchNode = *(void**)((uintptr_t)searchNode + 0x10);
                 } else {
                     if (removeArr[i] <= *(uintptr_t*)searchNode) {
-                        s_fn_BSTRemove(bstRootPtr, searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRootPtr), searchNode);
                         break;
                     }
                     searchNode = *(void**)((uintptr_t)searchNode + 0x18);
@@ -537,7 +368,7 @@ int TendArea::Validate() {
         }
     }
 
-    fn_MemFreeStatic(removeArr);
+    System::MemoryAllocator::MemFree(removeArr);
     return removeCount == 0;
 }
 
@@ -552,7 +383,10 @@ void* TendArea::GetTarget(void* outPtr) {
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
     uintptr_t subIBP[2] = {0};
-    void* result = s_fn_FindSubEntity(entityRef, subIBP);
+    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
+    // so the returned pointer is the out buffer itself.
+    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
+    void* result = subIBP;
 
 
     uintptr_t resolvedEntity = *(uintptr_t*)result;
@@ -590,7 +424,7 @@ void TendArea::Persist(void* stream) {
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize BST at +0x48
-    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializerBuf);
 
     // Serialize int at +0x58 (tendMode)
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&tendMode), nullptr);   // B.3.4 bridge
@@ -611,11 +445,9 @@ TendArea::~TendArea() {
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
         // Clean up left subtree (simple BST: +0x10=left, +0x18=right)
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
-        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(bstRoot);
-        }
+        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
+        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        System::MemoryAllocator::MemFree(bstRoot);
     }
 
     // Zero out BST root and count
@@ -628,10 +460,8 @@ TendArea::~TendArea() {
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
-// the leaf fields zeroed. The stamps are the compiler's. TendArea_ResolveFuncs wires
-// the file's helper pointers (the old factory did the same).
+// the leaf fields zeroed. The stamps are the compiler's.
 TendArea::TendArea() : Work(), bstRoot(nullptr), workerCount(0), _pad54{}, tendMode(0) {
-    TendArea_ResolveFuncs();
 }
 
 // ============================================================
