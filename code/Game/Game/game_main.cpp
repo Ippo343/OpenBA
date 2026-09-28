@@ -106,44 +106,14 @@ extern "C" void BootState_MarkQuitting();
 //   0x1800dd640 = Engine::MainLoop::~MainLoop(this)          dtor
 //   0x1800dd3c0 = Engine::MainLoop::Run(this, UpdateLoop*)
 //
-// ENDGAME B.3.7: Engine::Startup and MainLoop::Run are called as members; only
-// the ctor/dtor doors (B37_RULES 2.4) are still resolved here. The never-called
-// Engine::Shutdown probe went with them.
-
-typedef void     (*fn_Engine_Ctor_t)(void* self, void* hInstance);
-typedef void     (*fn_Engine_Dtor_t)(void* self);
+// ENDGAME B.3.7: Engine::Startup and MainLoop::Run are called as members. B3R:
+// the ctor/dtor doors (B37_RULES 2.4) are called by name -- RtEngine_Engine_Ctor /
+// _Dtor (engine/Engine.h), RtEngine_MainLoop_Ctor / _Dtor (engine/MainLoop.h); their
+// caches, EnsureResolved, the "[GameMain] Engine ctor/dtor = %p" and "MainLoop
+// ctor/dtor = %p" lines and the "not resolved" FATAL arm went with them.
 // GameSettings <-> IO::Persistence bridge (code/Game/Game/game_settings_persist.cpp).
 extern "C" void GameSettings_Load(int32_t* settings);   // 0x140098b60
 extern "C" void GameSettings_Save(int32_t* settings);   // 0x140098970
-
-// Engine::MainLoop::MainLoop(this, Engine*)
-typedef void* (*fn_MainLoop_Ctor_t)(void* self, void* engine);
-// Engine::MainLoop::~MainLoop(this)
-typedef void  (*fn_MainLoop_Dtor_t)(void* self);
-
-static fn_Engine_Ctor_t      s_fn_Engine_Ctor      = nullptr;
-static fn_Engine_Dtor_t      s_fn_Engine_Dtor      = nullptr;
-static fn_MainLoop_Ctor_t    s_fn_MainLoop_Ctor    = nullptr;
-static fn_MainLoop_Dtor_t    s_fn_MainLoop_Dtor    = nullptr;
-
-static void EnsureResolved() {
-    if (s_fn_Engine_Ctor) return;
-
-    s_fn_Engine_Ctor = reinterpret_cast<fn_Engine_Ctor_t>(
-        ResolveExport("??0Engine@0@QEAA@PEAX@Z"));
-    s_fn_Engine_Dtor = reinterpret_cast<fn_Engine_Dtor_t>(
-        ResolveExport("??1Engine@0@QEAA@XZ"));
-
-    // Engine::MainLoop ctor / dtor — Ghidra-confirmed addresses.
-    s_fn_MainLoop_Ctor = reinterpret_cast<fn_MainLoop_Ctor_t>(
-        ResolveAddr(Module::Runtime, 0x1800dd6b0));
-    s_fn_MainLoop_Dtor = reinterpret_cast<fn_MainLoop_Dtor_t>(
-        ResolveAddr(Module::Runtime, 0x1800dd640));
-
-    // Note: MemAlloc/MemFree come from engine_funcs.h (fn_MemAlloc takes the
-    // MemoryAllocator singleton as first arg; fn_MemFreeStatic is the static
-    // one-arg form).
-}
 
 // ============================================================
 // Partial reimpl of Engine::Engine::Shutdown (Runtime 0x1800db4f0).
@@ -162,11 +132,6 @@ static void EnsureResolved() {
 // the leaks should shrink to nothing and we can call the stock function.
 // ============================================================
 namespace {
-
-template<typename Fn>
-static Fn ResolveFn(const char* mangled) {
-    return reinterpret_cast<Fn>(ResolveExport(mangled));
-}
 
 static void ShutdownEngineStaged(void* engineP) {
     using std::uintptr_t;
@@ -368,23 +333,11 @@ struct alignas(16) EngineStorage {
 };
 
 int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
-    EnsureResolved();
-
-    printf("[GameMain] Engine ctor          = %p\n", (void*)s_fn_Engine_Ctor);
-    printf("[GameMain] Engine dtor          = %p\n", (void*)s_fn_Engine_Dtor);
-
-
-    if (!s_fn_Engine_Ctor || !s_fn_Engine_Dtor) {
-        fprintf(stderr, "[GameMain] FATAL: Engine ctor/dtor not resolved\n");
-        return 1;
-    }
-
-
     EngineStorage engine;
     std::memset(&engine, 0, sizeof(engine));
 
     printf("[GameMain] Constructing Engine (storage=%p)...\n", (void*)&engine);
-    s_fn_Engine_Ctor(&engine, hInstance);
+    RtEngine_Engine_Ctor(reinterpret_cast<::Engine::Engine*>(&engine), hInstance);
     printf("[GameMain] Engine constructed.\n");
 
     StallDebug::Mark("Init() -> RunGameMain entry + Engine ctor");
@@ -470,12 +423,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
         // Stage 3: allocate + construct + destroy a MainLoop. (No Run yet —
         // that needs an UpdateLoop chain.)
-        printf("[GameMain] MainLoop ctor      = %p\n", (void*)s_fn_MainLoop_Ctor);
-        printf("[GameMain] MainLoop dtor      = %p\n", (void*)s_fn_MainLoop_Dtor);
-        printf("[GameMain] MemAlloc/Free      = %p / %p\n",
-               (void*)fn_MemAlloc, (void*)fn_MemFreeStatic);
-
-        if (s_fn_MainLoop_Ctor && s_fn_MainLoop_Dtor && fn_MemAlloc && fn_MemFreeStatic) {
+        {
             // The MemoryAllocator singleton was NULL when EngineFuncsInit cached
             // g_pMemAllocSingleton (Engine ctor hadn't run yet). Read the class
             // static fresh now.
@@ -489,17 +437,18 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
             StallDebug::Mark("RunStartupSelfTests + video probes");
 
             // MainLoop is 0xa0 bytes, 8-byte aligned (matches original GameMain).
-            void* ml = fn_MemAlloc(memAllocSingleton, 0xa0, 8);
+            void* ml = System::MemoryAllocator::MemAlloc(0xa0, 8);
             printf("[GameMain] MainLoop alloc = %p\n", ml);
             if (ml) {
-                s_fn_MainLoop_Ctor(ml, &engine);
+                RtEngine_MainLoop_Ctor(static_cast<::Engine::MainLoop*>(ml),
+                                       reinterpret_cast<::Engine::Engine*>(&engine));
                 printf("[GameMain] MainLoop constructed.\n");
 
                 // Stage 5a: allocate the Game/KeyMap container (0xe0 bytes, 4-byte
                 // aligned) and run its ctor. Original GameMain follows this with
                 // Game_Register on a settings struct; we skip Game_Register for now
                 // and just zero-init settings to the same hardcoded defaults.
-                void* gameObj = fn_MemAlloc(memAllocSingleton, 0xe0, 4);
+                void* gameObj = System::MemoryAllocator::MemAlloc(0xe0, 4);
                 printf("[GameMain] Game alloc      = %p\n", gameObj);
                 if (gameObj) {
                     Game_Ctor(gameObj);
@@ -546,7 +495,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.
                 int32_t* settings = reinterpret_cast<int32_t*>(
-                    fn_MemAlloc(memAllocSingleton, 0x34, 4));
+                    System::MemoryAllocator::MemAlloc(0x34, 4));
                 printf("[GameMain] Settings alloc  = %p\n", (void*)settings);
                 if (settings) {
                     settings[0] = 100;          // UIScale
@@ -591,9 +540,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 //     zero _autoAdvance at +0x40
                 // ENDGAME B.3.8 LOOP: the five loops are real classes
                 // (code/Game/Game/*.h); each is built with its real ctor.
-                if (fn_Time_Ctor_Float) {
-
-                    void* menuMem = fn_MemAlloc(memAllocSingleton, 0xc00, 8);
+                {
+                    void* menuMem = System::MemoryAllocator::MemAlloc(0xc00, 8);
                     printf("[GameMain] MenuDLT alloc = %p (vtable=%p)\n",
                            menuMem, MenuDialogLoopT::Vtable());
 
@@ -614,13 +562,13 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         auto buildSplashDLT = [&](const char* filename, float delaySec,
                                                   Engine::UpdateLoop* next, const char* tag)
                             -> GameLoadDialogLoopT* {
-                            void* mem = fn_MemAlloc(memAllocSingleton, 0xb60, 4);
+                            void* mem = System::MemoryAllocator::MemAlloc(0xb60, 4);
                             printf("[GameMain] %s alloc = %p (vtable=%p)\n",
                                    tag, mem, GameLoadDialogLoopT::Vtable());
                             if (!mem) return nullptr;
 
                             uint64_t delayTime = 0;
-                            fn_Time_Ctor_Float(&delayTime, delaySec);
+                            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), delaySec);
 
                             System::String fileStr(filename);
 
@@ -705,12 +653,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         auto buildLoaderLoop = [&](Engine::UpdateLoop* next, bool inner,
                                                    const char* tag) -> Engine::UpdateLoop* {
                             if (!next) return nullptr;
-                            void* mem = fn_MemAlloc(memAllocSingleton, 0x48, 4);
+                            void* mem = System::MemoryAllocator::MemAlloc(0x48, 4);
                             printf("[GameMain] %s alloc = %p\n", tag, mem);
                             if (!mem) return nullptr;
 
                             uint64_t zeroDelay = 0;
-                            fn_Time_Ctor_Float(&zeroDelay, 0.0f);
+                            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroDelay), 0.0f);
                             const System::Time& delay =
                                 *reinterpret_cast<const System::Time*>(&zeroDelay);
                             Engine::LoaderLoop* ll = inner
@@ -753,9 +701,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                                    "(top loop destroyed by Run)\n");
                         }
                     }
-                } else {
-                    printf("[GameMain] WARN: missing deps for splash chain — "
-                           "Time=%p\n", (void*)fn_Time_Ctor_Float);
                 }
 
                 if (settings) {
@@ -768,17 +713,17 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     // the process.
                     GameSettings_Save(settings);
                     if (g_pGameSettingsPtr) *g_pGameSettingsPtr = nullptr;
-                    fn_MemFreeStatic(settings);
+                    System::MemoryAllocator::MemFree(settings);
                     printf("[GameMain] Settings freed.\n");
                 }
                 if (gameObj) {
                     if (g_pKeyMapSingleton) *g_pKeyMapSingleton = nullptr;
-                    fn_MemFreeStatic(gameObj);
+                    System::MemoryAllocator::MemFree(gameObj);
                     printf("[GameMain] Game freed.\n");
                 }
 
-                s_fn_MainLoop_Dtor(ml);
-                fn_MemFreeStatic(ml);
+                RtEngine_MainLoop_Dtor(static_cast<::Engine::MainLoop*>(ml));
+                System::MemoryAllocator::MemFree(ml);
                 printf("[GameMain] MainLoop destroyed + freed.\n");
             }
         }
@@ -794,7 +739,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     }
 
     printf("[GameMain] Destroying Engine...\n"); fflush(stdout);
-    s_fn_Engine_Dtor(&engine);
+    RtEngine_Engine_Dtor(reinterpret_cast<::Engine::Engine*>(&engine));
     printf("[GameMain] Engine destroyed.\n"); fflush(stdout);
 
     return ok != 0 ? 0 : 3;
