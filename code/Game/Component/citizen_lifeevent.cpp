@@ -19,7 +19,8 @@
 // address registry): CitizenComponent_Update @140112f9e, HandleLifeEvent
 // @140116fdb, helper_17a0 @14011181e, helper_1b90 @140111e73, OnRemove @140113f94.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"

@@ -19,7 +19,8 @@
 //
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Player/exe_bodies.h"                 // B3R: PlayerPath_FindComponent_3ea0
 #include "Component/controller_state_table.h"   // B3R: StateMachine_TickReimpl
 #include "system/Value.h"                      // B3R: RtSystem_Time_Ctor

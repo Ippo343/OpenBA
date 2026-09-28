@@ -12,7 +12,9 @@
 
 #include "Component/ambientemittercomponent_funcs.h"
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "resolve.h"

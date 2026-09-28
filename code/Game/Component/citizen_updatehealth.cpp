@@ -37,7 +37,9 @@
 // reg_component_fruit), 0x140172234=300.0f (secs/month, reg_citizen_needsupdate),
 // 0x14017214c=1.0f, DAT_140172174=2.0f, DAT_140172280=-1.0f (inlined bit-exact).
 
-#include "engine_funcs.h"
+#include <windows.h>
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/WorkPlaceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenComponent.h"   // B.3.8 CB1a (TypeId)

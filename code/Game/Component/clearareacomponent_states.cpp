@@ -37,7 +37,8 @@
 //
 // Faithful offset-by-offset port.
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/Component.h"   // B.3.x W0: Component::OnEvent by name
 #include "Work/Work.h"   // B.3.8 CB1a (Vtable)

@@ -28,7 +28,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "ConsumeRawMaterial.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActRm_* helpers
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable

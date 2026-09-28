@@ -35,7 +35,8 @@
 
 #include "Component/ResidenceDescription.h"
 #include "Component/RawMaterialDescription.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

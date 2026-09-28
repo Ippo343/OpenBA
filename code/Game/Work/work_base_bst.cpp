@@ -17,7 +17,7 @@
 //   +0x22  int16   height       (leaf = 0; node = max(childHeight)+1 encoded as child.height+1)
 // Tree root struct: root[0] = root node ptr, root[+0x8] = node count (int).
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "resolve.h"
 #include "io/Serializer.h"     // ENDGAME B.3.4 caller batch C

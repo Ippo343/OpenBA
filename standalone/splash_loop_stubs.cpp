@@ -26,7 +26,7 @@
 
 #include "address_registry.h"
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
 #include "common.h"
 #include "engine_loader_gate.h"
 #include "chunked_scene_loader.h"

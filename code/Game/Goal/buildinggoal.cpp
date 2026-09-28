@@ -25,7 +25,10 @@
 #include "Goal/goal_exe_helpers.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // Game_DestroyStringArray18

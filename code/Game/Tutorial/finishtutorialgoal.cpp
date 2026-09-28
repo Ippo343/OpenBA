@@ -10,7 +10,8 @@
 
 #include "Tutorial/FinishTutorialGoal.h"
 #include "Tutorial/FinishTutorialInstance.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "Tutorial/exe_bodies.h"   // 0x1400262b0 TutWave_SerializeTutorialRef
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"

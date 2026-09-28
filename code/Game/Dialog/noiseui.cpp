@@ -23,7 +23,9 @@
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "video/ImageBuffer.h"
 #include "graphics/Material.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

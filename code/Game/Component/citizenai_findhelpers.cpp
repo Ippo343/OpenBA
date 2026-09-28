@@ -58,7 +58,8 @@
 //
 
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/StorageLocationDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/StorageLocationComponent.h"   // B.3.8 CB1a (TypeId)

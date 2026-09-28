@@ -34,7 +34,8 @@
 // TradeWork_impl_4b40 (0x140014b40, already registered in standalone).
 
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 #include "Object/factory_registration.h"
 #include "Player/Tool.h"

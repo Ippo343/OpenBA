@@ -32,7 +32,8 @@
 // Opt-in with the town hall side: BANISHED_LIVE_IMMIGRATION. Faithful port of
 // 0x14004f420 .. 0x14004fb60 and 0x1400c49d0.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/CharacterComponent.h"

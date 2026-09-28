@@ -33,7 +33,6 @@
 // (BANISHED_FOOD_PLACE_FRAME, default 900).
 
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"

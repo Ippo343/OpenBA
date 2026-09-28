@@ -17,7 +17,9 @@
 // Decompiled from Application-x64.exe.
 
 #include "Game/Weather.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B

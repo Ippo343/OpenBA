@@ -16,7 +16,6 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "Object/exe_type.h"               // DEFINE_EXE_VTABLE
 #include "object/Internal.h"               // Object::detail::InternalMemFree
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"   // B3R: WorkAcc_FindComponent_22520
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

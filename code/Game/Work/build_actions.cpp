@@ -34,7 +34,8 @@
 //
 // fn_SetupBuildActions corresponds to the exe helper at c0690.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"   // B3R: the action ctor bodies called by name

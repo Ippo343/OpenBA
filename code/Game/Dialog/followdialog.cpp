@@ -19,7 +19,11 @@
 #include "input/Input.h"   // ENDGAME B.3.7 callers (K3)
 #include "Dialog/FollowDialog.h"
 #include "Dialog/ui_dialogs.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include <cstdint>

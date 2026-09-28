@@ -22,7 +22,7 @@
 // (read_memory, verified 2026-05-31). Slope is the vertical component of the
 // surface normal (fn_MapGetTerrainPos's outTri[2]); see mapquery.cpp.
 
-#include "engine_funcs.h"
+#include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "perf_terrain.h"
 #include "resolve.h"

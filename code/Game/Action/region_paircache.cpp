@@ -22,7 +22,6 @@
 // q[1] is seeded via System::Time::Time(&tmp, DAT_140172210) with DAT_140172210 = 120.0f
 // (see the builder below).
 
-#include "engine_funcs.h"
 #include "Work/exe_bodies.h"          // WorkCellBST_Remove_ca60
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/Value.h"             // RtSystem_Time_Ctor

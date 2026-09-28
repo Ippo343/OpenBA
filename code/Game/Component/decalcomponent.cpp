@@ -16,7 +16,8 @@
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/DecalDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"

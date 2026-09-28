@@ -14,7 +14,7 @@
 // whose correct fix is deleting the resolve, not filling it in.
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "Game/exe_bodies.h"
 #include "Entity/entitylist_funcs.h"      // EntityList_Update
 #include <cstdint>
 

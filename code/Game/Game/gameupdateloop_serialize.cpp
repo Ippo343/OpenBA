@@ -46,7 +46,9 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestoreOut, the named fields
 #include "Entity/ComponentEntity.h"   // caller batch CB6: TypeId()
 #include "Component/Component.h"      // caller batch CB6: slot 11
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "options.h"
 #include "resolve.h"

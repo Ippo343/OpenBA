@@ -23,7 +23,12 @@
 #include "Component/ModelComponent.h"
 #include "Component/MultiObjectComponent.h"
 #include "scene_watch.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"

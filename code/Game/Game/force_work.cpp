@@ -5,7 +5,9 @@
 
 
 #include "force_work.h"
-#include "engine_funcs.h"
+#include <cstdint>
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Component/MapComponent.h"   // caller batch CB6: TypeId()

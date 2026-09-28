@@ -19,7 +19,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Tutorial/TutorialStep.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Tutorial/exe_bodies.h"
 #include "system/String.h"

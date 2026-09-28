@@ -11,7 +11,7 @@
 //
 // Also here: the declarations and inline bodies of this module that lived in
 // engine/funcs/engine_funcs.h, moved verbatim with their comments (that
-// header includes this one, so none of its includers changes).
+// header is gone since B3R W2-EZ: its includers include this one directly).
 //
 // Declared in another header already (not redeclared here):
 //   Game::RegisterDefaultInputBindings     0x1400992f0  (code/Game/Game/inputbindings.h)
@@ -22,7 +22,13 @@
 //   ResizeStride0x20                       0x1400177c0  (citizenlist_serialize.cpp:350, anonymous namespace)
 
 #include <cstdint>
-#include "engine_funcs.h"   // the globals the moved inline bodies still read
+// The inline bodies' own needs (they reached these through engine/funcs/engine_funcs.h
+// until B3R W2-EZ deleted it):
+#include "options.h"            // Opt() (GetLoadingSoundString)
+#include "system/String.h"      // System::String::Format
+#include "system/Value.h"       // System::Random
+#include "ui/UserInterface.h"   // UI::UserInterface::SetCursor / SetFullscreenFade
+#include "object/External.h"    // Object::ExternalPtr<UI::Cursor>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 

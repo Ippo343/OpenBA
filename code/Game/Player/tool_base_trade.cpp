@@ -29,7 +29,7 @@
 //
 // Port is 1:1 with the decompile — do not "improve".
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"

@@ -37,7 +37,10 @@
 #include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/Component.h"          // B.3.x W0: Component slots by name
-#include "engine_funcs.h"
+#include <new>
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "resolve.h"

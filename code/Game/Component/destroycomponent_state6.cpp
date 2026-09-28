@@ -67,7 +67,10 @@
 #include "Component/DestroyDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/DecalComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Component/coll_bridge.h"

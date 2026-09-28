@@ -21,7 +21,6 @@
 // Pair it with BANISHED_LIVE_CITIZEN_ONREMOVE=1 and BANISHED_ONREMOVE_TRACE=1 to see
 // each teardown, and with BANISHED_OBJAUDIT=1 to watch the object tally.
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Component/exe_bodies.h"

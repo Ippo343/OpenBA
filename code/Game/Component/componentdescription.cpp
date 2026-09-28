@@ -21,7 +21,7 @@
 // + serialize_struct60b_serialize.cpp (the proven External-array FindOrLoad body).
 
 #include "Component/ComponentDescription.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

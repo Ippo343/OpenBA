@@ -21,7 +21,10 @@
 
 #include "Game/MenuScene.h"
 #include "Game/WorldGeometry.h"   // caller batch CB6: +0x28's class
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"

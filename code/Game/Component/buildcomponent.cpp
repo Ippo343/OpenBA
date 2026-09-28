@@ -22,7 +22,7 @@
 #include "Component/coll_bridge.h"
 #include "Component/ModelComponent.h"
 #include "Component/PickingComponent.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A

@@ -10,7 +10,6 @@
 // No-op unless the env var is set AND BANISHED_LIVE_PASTURE is live (the
 // address only resolves when reg_pasture_live.cpp registered it).
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Component/PastureComponent.h"

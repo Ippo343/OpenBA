@@ -17,7 +17,8 @@
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 caller batch I2
 #include "Component/naturalresourcecomponent_funcs.h"
 #include "Component/ParticleComponent.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470, ActCNR_RemoveNatRes_1260f0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>

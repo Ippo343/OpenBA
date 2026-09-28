@@ -25,7 +25,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/fruitcomponent_funcs.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

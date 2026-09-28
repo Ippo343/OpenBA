@@ -47,7 +47,7 @@
 #include "graphics/Scene.h"
 #include "video/Context.h"       // also brings Video::{Device,RenderBuffer,Viewport}
 #include "video/ImageBuffer.h"
-#include "engine_funcs.h"
+#include <new>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "options.h"

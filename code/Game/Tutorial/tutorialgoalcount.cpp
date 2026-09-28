@@ -13,7 +13,9 @@
 
 #include "Tutorial/TutorialGoalCount.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/External.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Tutorial/exe_bodies.h"
 #include "Goal/goal_exe_helpers.h"

@@ -17,7 +17,9 @@
 #include "video/ImageBuffer.h"
 #include "graphics/Material.h"
 #include "options.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "system/String.h"

@@ -60,7 +60,8 @@
 // AmbientEmitterComponent::OnAdded (0x140042e10) is ported so +0x38 is real.
 // The finder itself is kept below, correct and ready, so that port is one line away.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>

@@ -46,7 +46,6 @@
 //   region-pair cache (a5b30) = param_1 as undefined8*: [0]=seqId, [2]=ringHead/cap ints,
 //     [3]=ring buffer base (stride 0x18), [5]=pair BST root.
 
-#include "engine_funcs.h"
 #include "Work/exe_bodies.h"          // WorkCellBST_Remove_ca60, WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "hw_watch.h"

@@ -56,7 +56,8 @@
 // ImageBuffer.h pulls no Volume.h, so include order against <windows.h> is free.
 #include "video/ImageBuffer.h"
 #include "video/Device.h"       // ENDGAME B.3.5 batch K1 — Video::Device::{Lock,Unlock}
-#include "engine_funcs.h"
+#include <new>
+#include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>

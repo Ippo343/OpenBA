@@ -65,7 +65,8 @@
 #include "Component/ClearAreaDescription.h"
 #include "Component/OrchardDescription.h"
 #include "Component/OrchardComponent.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/exe_bodies.h"   // the Component leaves named below

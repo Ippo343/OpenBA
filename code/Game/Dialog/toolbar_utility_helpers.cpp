@@ -18,7 +18,7 @@
 // standalone/reg_toolbar_utility.cpp.
 
 #include "Player/exe_bodies.h"   // B3R: TradeWork_impl_4b40
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"

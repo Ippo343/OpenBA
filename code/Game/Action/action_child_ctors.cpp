@@ -30,7 +30,7 @@
 #include "Action/CreateNaturalResource.h"
 #include "Action/RemoveNaturalResource.h"
 #include "Action/ShowTool.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "Game/exe_bodies.h"        // Reimpl_MapGetTerrainPos

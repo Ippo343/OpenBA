@@ -33,7 +33,7 @@
 // hides `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "graphics/SunLight.h"
 #include "video/Context.h"
-#include "engine_funcs.h"
+#include "graphics/Camera.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "math/Math.h"

@@ -68,7 +68,7 @@
 //
 // Trace: BANISHED_STORAGE_TRACE=1 prints [StorageSeed] lines.
 
-#include "engine_funcs.h"
+#include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"      // ActHunt_DynArraySetCount_3110, ActRm_StorageAdd_d000, ActRm_GetResourceCategory_88f90
 #include "Component/exe_bodies.h"   // StorageComponent_DynArrayResize

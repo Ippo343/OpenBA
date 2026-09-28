@@ -29,7 +29,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "HuntAnimal.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActHunt_*, Pf_* helpers
 #include "Work/exe_bodies.h"     // WorkGrid_FindCell_9ccf0, WorkBase_ValidateCell_a00f0

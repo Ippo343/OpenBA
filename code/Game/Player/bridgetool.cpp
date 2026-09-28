@@ -19,7 +19,7 @@
 #include "Player/BridgeTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/CreateBridgeDescription.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
 #include "Player/exe_bodies.h"
 #include "object/TypeInfo.h"
 #include <cstdint>

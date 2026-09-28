@@ -38,7 +38,7 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "video/Context.h"
 #include "graphics/Material.h"   // ENDGAME B.3.5 batch K1 — same include-order reason
-#include "engine_funcs.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/Filename.h"

@@ -79,7 +79,8 @@
 #include "Weather.h"                   // caller batch CB6: the descriptor's fields
 #include <atomic>
 #include "video/Context.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/External.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "volume/Volume.h"   // RtVolume_Frustum_MulTransform3 / _Contains
 #include <new>

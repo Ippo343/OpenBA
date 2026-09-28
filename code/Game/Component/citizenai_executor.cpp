@@ -48,7 +48,10 @@
 #include "graphics/Mesh.h"
 #include "Component/PickingDescription.h"   // B.3.8 CB1a (TypeId)
 #include <new>
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "perf_terrain.h"

@@ -39,7 +39,9 @@
 #include "address_registry.h"       // RegisterExeAddr
 #include "Entity/entitylist_funcs.h"
 #include "Object/internal_factory_audit.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree

@@ -11,7 +11,8 @@
 
 #include "Goal/TimeGoal.h"
 #include "Goal/TimeGoalInstance.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>

@@ -17,7 +17,8 @@
 // bodies, called by name (B3R; the table is below).
 //
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3

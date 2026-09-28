@@ -17,7 +17,7 @@
 
 #include "Game/ProfessionList.h"
 #include "Game/Profession.h"   // caller batch CB6: Profession::TypeId(), its fields
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include "collection/Collection.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the

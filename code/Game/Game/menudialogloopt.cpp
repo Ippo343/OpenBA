@@ -36,7 +36,6 @@
 #include "options.h"
 #include <new>                            // B.3.9 GFX: placement new
 #include "MenuScene.h"
-#include "engine_funcs.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"

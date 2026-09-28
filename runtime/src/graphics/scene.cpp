@@ -1570,12 +1570,12 @@ int RtGraphicsSceneRegister() {
 
     // B3R W2-RT: the five address rows (0x180015800, 0x180102730, 0x1801026c0,
     // 0x180102670, 0x180102600) and the ??1Scene name row had no reader and
-    // went. The four names below stay while engine_funcs.cpp /
-    // address_registry.cpp read them.
+    // went. The three names below stay while address_registry.cpp reads them
+    // (B3R W2-EZ: ??0Scene@Graphics@@QEAA@XZ went, its one reader was
+    // EngineFuncsInit).
     RegisterRuntimeExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ", (void*)&RtGraphics_Geometry_GetTransform); ++count;
 
     // ---- Graphics::Scene ----
-    RegisterRuntimeExport("??0Scene@Graphics@@QEAA@XZ", (void*)&RtGraphics_Scene_Ctor); ++count;
 
     RegisterRuntimeExport("?AddObject@Scene@Graphics@@QEAAIPEAVGeometry@2@@Z", (void*)&RtGraphics_Scene_AddObject); ++count;
 

@@ -22,7 +22,8 @@
 #include "Component/ControllerComponent.h"
 #include "Component/DestroyComponent.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (state-2 workplace hand-off)
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>

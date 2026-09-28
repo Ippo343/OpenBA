@@ -1165,7 +1165,6 @@ const char* PlatformSeamMissing() {
 // Defined below, after RtSystemAllocatorRegister, next to the export list it
 // owns; both arming paths call it.
 int RegisterAllocatorExports(void* allocateEntry);
-int RegisterAllocatorAddresses(void* allocateEntry);
 }
 
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
@@ -1233,10 +1232,10 @@ int RtSystemAllocatorRegister() {
             return 0;
         }
         const int n = RegisterAllocatorExports(composedAlloc);
-        const int nAddr = RegisterAllocatorAddresses(composedAlloc);
-        printf("[RtAlloc] cutover: %d allocator ADDRESSES registered for by-address "
-               "callers (rtcoll::MemAlloc and friends). See RegisterAllocatorAddresses.\n",
-               nAddr);
+        // B3R W2-EZ: RegisterAllocatorAddresses() and its "[RtAlloc] cutover: N
+        // allocator ADDRESSES registered" line went: its last row, 0x1800c6e60
+        // (?Allocate@, the composed entry), had one reader, EngineFuncsInit's
+        // fn_MemAlloc, deleted with engine/funcs/.
         printf("[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- %d exports registered, "
                "no detour installed because there are no DLL-internal callers to redirect. "
                "?Allocate@/?Free@ point at the COMPOSED entry points, which take the "
@@ -1260,8 +1259,10 @@ int RegisterAllocatorExports(void* allocateEntry) {
                           reinterpret_cast<void*>(&MemoryAllocator::MemFree));
     // B3R RT-Core: the six Platform* rows, the member thunks' rows and
     // ?Startup@/?Shutdown@ had no reader and are gone. B3R W2-RT: so is
-    // ?Allocate@ (its composed entry keeps its ADDRESS row, 0x1800c6e60, which
-    // engine_funcs.cpp reads).
+    // ?Allocate@. B3R W2-EZ: so is its ADDRESS row 0x1800c6e60 (its one reader,
+    // engine_funcs.cpp, is deleted); the composed entry is no longer registered
+    // anywhere -- BANISHED_REDZONE's shim reaches the same composed body by name
+    // (RtAllocInstrument_MemAlloc, standalone/alloc_cutover_arm.cpp).
     (void)allocateEntry;
     return 2;
 }
@@ -1394,15 +1395,10 @@ void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
     MemoryAllocator::MemFree(p);
 }
 }  // namespace rtalloc
-namespace {
 
-int RegisterAllocatorAddresses(void* allocateEntry) {
-    // B3R W2-RT: 0x1800c7a50 / 0x1800c7ad0 (the two statics) had no reader
-    // left -- every reader calls MemoryAllocator::MemAlloc / MemFree by name --
-    // and went. 0x1800c6e60 stays while engine_funcs.cpp's fn_MemAlloc reads it.
-    RegisterRuntimeAddr(0x1800c6e60, allocateEntry);
-    // 0x180009c30 is not registered at all any more (B3R RT-Core): every
-    // reader calls rtalloc::FreeLockedIgnoringSelf by name.
-    return 1;
-}
-}  // namespace
+// RegisterAllocatorAddresses() is gone. B3R W2-RT: 0x1800c7a50 / 0x1800c7ad0
+// (the two statics) had no reader left -- every reader calls
+// MemoryAllocator::MemAlloc / MemFree by name -- and went. B3R W2-EZ: its last
+// row, 0x1800c6e60, went with its one reader (engine_funcs.cpp's fn_MemAlloc).
+// 0x180009c30 is not registered at all any more (B3R RT-Core): every reader
+// calls rtalloc::FreeLockedIgnoringSelf by name.

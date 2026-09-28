@@ -34,7 +34,8 @@
 // address back (B38_RULES D5).
 
 #include "Component/EnvironmentDescription.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "io/Serializer.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"

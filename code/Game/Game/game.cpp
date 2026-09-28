@@ -13,7 +13,10 @@
 // two 16-byte UI::Sprite values.
 
 #include "game.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/External.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/StorageComponent.h"   // ENDGAME B.3.9 TR

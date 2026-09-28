@@ -47,7 +47,8 @@
 // resolve our own copies rather than share their statics, per house convention.
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/coll_bridge.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A

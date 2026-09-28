@@ -12,7 +12,8 @@
 #include "Component/livestockcomponent_funcs.h"
 #include "Component/LivestockDescription.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/exe_bodies.h"   // CemeteryListErase_Reimpl (0x140002cc0)
 #include "Game/exe_constants.h"     // kRdata_140172234

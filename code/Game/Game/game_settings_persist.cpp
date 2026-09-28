@@ -26,7 +26,7 @@
 //   byte 0x0C StatusIconEnable   byte 0x14 EdgeScroll   byte 0x18 AutoPause
 //   byte 0x15 ShowCelcius        byte 0x16 ShowWeather  byte 0x17 AutoSlow
 
-#include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include "io/Persistence.h"   // ENDGAME B.3.4a closing: Persistence::Get/Set members
 #include <cstdint>

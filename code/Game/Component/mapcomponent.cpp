@@ -15,7 +15,8 @@
 #include "Component/mapcomponent_funcs.h"
 #include "Component/MapDescription.h"
 #include "options.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A

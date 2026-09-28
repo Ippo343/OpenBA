@@ -22,7 +22,7 @@
 #include "Tutorial/TutorialSetupRestrictPlayer.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/Filename.h"
 #include "system/String.h"

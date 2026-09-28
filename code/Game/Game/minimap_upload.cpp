@@ -38,7 +38,7 @@
 // `struct Rectangle`) is kept so a later include change cannot break it silently.
 #include "video/ImageBuffer.h"
 #include "video/Device.h"
-#include "engine_funcs.h"
+#include <new>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "options.h"
 #include "resolve.h"

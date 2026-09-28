@@ -30,7 +30,6 @@
 //
 // All magic constants are taken verbatim from the exe .rdata (addresses noted).
 
-#include "engine_funcs.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields

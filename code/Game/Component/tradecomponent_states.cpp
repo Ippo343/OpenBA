@@ -71,7 +71,9 @@
 
 #include "Component/controller_state_table.h"
 #include "Component/TradeComponent.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "resolve.h"

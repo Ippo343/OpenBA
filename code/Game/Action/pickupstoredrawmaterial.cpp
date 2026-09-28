@@ -29,7 +29,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "PickupStoredRawMaterial.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
+#include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"   // ActRm_* helpers
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

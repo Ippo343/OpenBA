@@ -52,7 +52,9 @@
 //   0x140002ed0 Entity_FindComponent_Position (reg_work_base.cpp WorkBase_FindComponent_2ed0)
 //
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // B3R: the Pf_* helpers called by name
 #include "Game/exe_constants.h"  // B3R: kRdata_140172114

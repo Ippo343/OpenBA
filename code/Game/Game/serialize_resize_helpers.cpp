@@ -32,7 +32,6 @@
 // it separately — no exe address surface in code/Game/ references it
 // directly.
 
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>

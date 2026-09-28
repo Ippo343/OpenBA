@@ -65,7 +65,11 @@
 // does nothing" symptom, and is the gate working as designed, not a defect.
 
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include <new>
+#include "system/Value.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"      // B3R: ActRm_StorageSubtract_d150, _StorageAdd_d000, _GetResourceCategory_88f90
 #include "Component/exe_bodies.h"   // B3R: TradeComponent_SpawnPurchasedLivestock

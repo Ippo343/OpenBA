@@ -27,7 +27,9 @@
 // drops it entirely.
 
 #include "Game/WorldGeometry.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/GraphicsMesh.h"   // ENDGAME B.3.9 TR: GraphicsMesh::TypeId()
 #include "graphics/Particle.h"       // ENDGAME B.3.9 TR: Particle::TypeId()

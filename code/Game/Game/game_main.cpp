@@ -21,7 +21,8 @@
 // fill in.
 
 #include "game_main.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include "system/Value.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
 #include "system/String.h"

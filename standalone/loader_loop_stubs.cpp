@@ -31,7 +31,6 @@
 
 #include "address_registry.h"
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "stall_debug.h"
 #include "options.h"
 #include "system/Thread.h"   // ENDGAME B.3.4b System callers: System::Thread

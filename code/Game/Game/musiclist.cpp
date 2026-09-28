@@ -39,7 +39,9 @@
 // B6-5) and the C entry points.
 
 #include "Game/MusicList.h"
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include "collection/Collection.h"

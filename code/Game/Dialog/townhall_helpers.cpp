@@ -22,7 +22,11 @@
 // name-compare in the sort comparators is System::String::operator< over the UIString
 // localized name; see the per-function notes below).
 
-#include "engine_funcs.h"
+#include <new>
+#include "ui/UserInterface.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "system/String.h"

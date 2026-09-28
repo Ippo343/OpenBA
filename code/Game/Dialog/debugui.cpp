@@ -24,7 +24,12 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "graphics/Scene.h"
 #include "Dialog/ui_panels.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
+#include "Entity/exe_bodies.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/String.h"

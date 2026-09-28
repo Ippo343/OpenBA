@@ -25,7 +25,7 @@
 #include "Work/PlantOrchard.h"
 #include "plantorchard_funcs.h"
 #include <new>
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"   // B3R: OrchardComponent_ValidateRefs
 #include "Component/coll_bridge.h"
 #include <cstdint>

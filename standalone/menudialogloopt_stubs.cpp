@@ -28,7 +28,9 @@
 
 #include "address_registry.h"
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "system/String.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/Internal.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "renderdoc_integration.h"
 #include "stall_debug.h"

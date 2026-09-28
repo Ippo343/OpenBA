@@ -49,7 +49,8 @@
 #include "Component/ModelComponent.h"
 #include "Component/MultiObjectComponent.h"
 #include "Component/PickingComponent.h"
-#include "engine_funcs.h"
+#include <new>
+#include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/MemoryAllocator.h"

@@ -15,7 +15,7 @@
 
 #include "Work/Pickup.h"
 #include "Work/pickup_funcs.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Work/exe_bodies.h"

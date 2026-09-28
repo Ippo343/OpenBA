@@ -32,7 +32,6 @@
 // Verified instruction-by-instruction from disassemble_function (this path is DORMANT on
 // the autostart A/B test, so it is ported from disasm, not the muddled decompile).
 
-#include "engine_funcs.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)

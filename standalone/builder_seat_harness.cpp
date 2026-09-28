@@ -30,7 +30,6 @@
 // pressing is ours.
 
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>

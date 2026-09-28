@@ -21,7 +21,7 @@
 //
 // Decompiled from Application-x64.exe; ABI/control-flow verified instruction-level.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/Filename.h"
 #include "system/String.h"

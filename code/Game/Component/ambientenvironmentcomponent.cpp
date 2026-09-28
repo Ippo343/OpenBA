@@ -44,7 +44,12 @@
 #include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
 #include "perf_experimental.h"
 #include <unordered_map>
-#include "engine_funcs.h"
+#include <new>
+#include "math/Math.h"
+#include "system/Value.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
+#include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"

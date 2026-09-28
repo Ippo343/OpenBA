@@ -40,7 +40,7 @@
 //     DWORD_1401c7f58 = "ToolbarDescription" component, ImageElement typeinfo)
 //     read as 0 in standalone — filled lazily via ResolveAddr-then-GetTypeIdByName.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "system/String.h"

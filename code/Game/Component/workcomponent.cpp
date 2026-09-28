@@ -10,7 +10,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/workcomponent_funcs.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/WorkDescription.h"   // ENDGAME B.3.9 TR
 #include "resolve.h"

@@ -65,7 +65,9 @@
 #include "graphics/ParticleInstance.h"
 #include "Game/Tornado.h"
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
-#include "engine_funcs.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
+#include "graphics/Camera.h"
 #include "math/Math.h"
 #include "volume/Volume.h"        // RtVolume_Box_Extend
 #include "Game/exe_constants.h"   // kRdata_*

@@ -36,7 +36,7 @@
 #include "Component/controller_state_table.h"
 #include "Component/ResourceProduceComponent.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
 #include "resolve.h"
 #include "io/Serializer.h"
 #include <cstdint>

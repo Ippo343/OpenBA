@@ -10,7 +10,8 @@
 
 #include "Component/consumeproducecomponent_funcs.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection

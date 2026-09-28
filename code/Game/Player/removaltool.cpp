@@ -14,7 +14,6 @@
 #include "Player/RemovalTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/CreateRemovalDescription.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "collection/Collection.h"
 #include <cstdint>

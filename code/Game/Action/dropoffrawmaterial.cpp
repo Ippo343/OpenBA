@@ -29,7 +29,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "DropOffRawMaterial.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
+#include "Entity/exe_bodies.h"
 #include "Action/exe_bodies.h"        // Pf_DropOffExec_7620, Pf_SpillAllStorage_7570
 #include "Game/exe_bodies.h"          // Reimpl_ExternalPtr_Serialize_StringTable
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree

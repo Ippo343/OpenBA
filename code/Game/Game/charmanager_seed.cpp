@@ -26,7 +26,6 @@
 // Gated behind BANISHED_LIVE_CHARACTER_MOVETICK (the env that enables the move-tick tail).
 // Default builds stay byte-unchanged.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields

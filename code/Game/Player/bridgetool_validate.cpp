@@ -29,7 +29,6 @@
 //   +0x34 neighborRadius
 
 #include "BridgeTool.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "address_registry.h"
 #include <cstdint>

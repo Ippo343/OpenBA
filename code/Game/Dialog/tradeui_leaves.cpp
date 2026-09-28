@@ -46,7 +46,6 @@
 // already exists in the tree as Reimpl_Array_Resize_* in serialize_resize_helpers.cpp.
 // These three are the clear-only specialisations retail emitted separately.
 #include "Component/exe_bodies.h"   // B3R: CitizenAI_Reg_helper_e360
-#include "engine_funcs.h"
 #include "system/String.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>

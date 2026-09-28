@@ -19,7 +19,8 @@
 #include "ui/Sprite.h"           // ENDGAME B.3.6 UI callers (K4)
 #include "ui/SpriteContext.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "resolve.h"

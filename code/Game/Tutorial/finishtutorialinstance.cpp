@@ -19,7 +19,7 @@
 #include "Tutorial/FinishTutorialGoal.h"
 #include "Tutorial/TutorialInstance.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Tutorial/exe_bodies.h"   // 0x1401001f0 / 0x1400e1db0
 #include <cstdint>

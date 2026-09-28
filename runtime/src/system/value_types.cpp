@@ -627,21 +627,12 @@ System::String System::Configuration::CurrentVersion() {
 int RtSystemValueRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("??0Random@System@@QEAA@XZ", (void*)&RtSystem_Random_Ctor); ++n;
-    // WAVE 28 LANE MISC: the body has existed since Wave 2; this line is the port.
+    // B3R W2-EZ: ??0Random@System@@QEAA@XZ, ?AsString@DateTime@System@@...,
+    // ?CurrentBuildId@ / ?CurrentVersion@ / ?GetVersionString@Configuration@System@@...
+    // went: their one reader was EngineFuncsInit (deleted).
 
     RegisterRuntimeExport("??0Time@System@@QEAA@M@Z", (void*)&RtSystem_Time_Ctor); ++n;
     RegisterRuntimeExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Time_Serialize); ++n;
-
-    RegisterRuntimeExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ", (void*)&RtSystem_DateTime_AsString); ++n;
-    // WAVE 22 LANE SYSBODY -- the two AsString has been forwarding to since
-    // Wave 9. Name only: grep over runtime/, engine/, code/ and standalone/
-    // finds 0x1800c56a0 / 0x1800c55b0 in exactly one place each, a comment in
-    // this file, so there is no by-address consumer to satisfy.
-
-    RegisterRuntimeExport("?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ", (void*)&RtSystem_Configuration_CurrentBuildId); ++n;
-    RegisterRuntimeExport("?CurrentVersion@Configuration@System@@SA?AVString@2@XZ", (void*)&RtSystem_Configuration_CurrentVersion); ++n;
-    RegisterRuntimeExport("?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z", (void*)&RtSystem_Configuration_GetVersionString); ++n;
 
     return n;
 }

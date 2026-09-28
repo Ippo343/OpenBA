@@ -32,7 +32,7 @@
 #include "Action/MoveTo.h"
 #include "Action/PerformWork.h"
 #include "Action/SendComponentMessage.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers

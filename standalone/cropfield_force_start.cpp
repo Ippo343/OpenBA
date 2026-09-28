@@ -19,7 +19,6 @@
 // Test-only, opt-in, default off.
 
 #include "resolve.h"
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
 #include "Component/CropFieldComponent.h"

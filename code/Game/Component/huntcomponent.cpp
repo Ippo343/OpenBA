@@ -10,7 +10,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/huntcomponent_funcs.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent
 #include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050
 #include "Tutorial/exe_bodies.h"    // WorkComponent_CalcMaxWorkers

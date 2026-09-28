@@ -27,7 +27,7 @@
 //   delivered(material) = slot.total - slot.reserved for the matching slot type
 //
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include <cstdint>

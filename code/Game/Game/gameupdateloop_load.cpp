@@ -33,7 +33,7 @@
 #include "graphics/Material.h"   // Graphics::Material::TypeId() (ENDGAME B.3.9 TR)
 #include "GameUpdateLoop.h"
 #include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
-#include "engine_funcs.h"
+#include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"

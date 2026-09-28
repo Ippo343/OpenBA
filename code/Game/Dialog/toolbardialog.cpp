@@ -46,7 +46,11 @@
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
-#include "engine_funcs.h"
+#include "math/Math.h"
+#include "system/Value.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "Entity/exe_bodies.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/EditTool.h"   // ENDGAME B.3.9 TR
 #include "Player/Tool.h"       // B.3.x W0: Tool::OnCancel by name

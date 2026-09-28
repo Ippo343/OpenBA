@@ -49,7 +49,8 @@
 // GATED: reached only through BANISHED_LIVE_TRADE_CTRL (the state-2 merchant spawn) and
 // the controller's shared teardown. Nothing else in the build calls it.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "math/Math.h"

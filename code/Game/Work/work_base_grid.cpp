@@ -9,7 +9,6 @@
 // kept under notes/wave2_drafts/work_base_grid.cpp.draft). Each function here was verified
 // against the Ghidra decompile.
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "Work/Work.h"   // B.3.x W0: the work tree payload by name

@@ -1911,10 +1911,8 @@ int RtGraphicsMeshRegister() {
                           (void*)&RtGraphics_MeshInstance_UpdateHierarchy); ++count;
 
     // ---- Graphics::EdgeMesh ----
-    RegisterRuntimeExport("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z",
-                          (void*)&RtGraphics_EdgeMesh_TriangleVertex_Ctor); ++count;
-    RegisterRuntimeExport("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z",
-                          (void*)&RtGraphics_EdgeMesh_EdgeVertex_Ctor); ++count;
+    // B3R W2-EZ: the TriangleVertex / EdgeVertex ctor rows went: their one
+    // reader was EngineFuncsInit (deleted).
 
     // ---- Graphics::EdgeMeshInstance ----
     // ENDGAME B.3.9 GFX (W2): the EdgeMesh ??0 door and the EdgeMeshInstance

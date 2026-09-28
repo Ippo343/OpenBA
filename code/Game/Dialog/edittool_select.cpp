@@ -38,7 +38,7 @@
 //   DWORD_1401c7f90 = UIDescription
 //   DAT_1401c7fc8   = UIComponent  (writer: UIComponent_RegisterType, used by db60)
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"   // B3R: HighlightClear_Impl, HighlightSelect_Impl
 #include "Component/UIComponent.h"     // ENDGAME B.3.9 CB: 0x1401c7fc8 cell class

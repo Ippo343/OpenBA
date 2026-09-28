@@ -49,7 +49,7 @@
 //   "if an offset is unverified, say so".
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"     // ::Object::GetTypeIdByName
 #include "Component/orchardcomponent_funcs.h" // extern OrchardComponent_GetGrowth (do not modify that file)

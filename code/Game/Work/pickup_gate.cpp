@@ -22,7 +22,7 @@
 //
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Action/exe_bodies.h"      // B3R: 0x14012cd80
 #include "object/Internal.h"
 #include <new>

@@ -8,7 +8,7 @@
 //
 // Each body is a literal port of the decompiled exe helper — no "improvements".
 
-#include "engine_funcs.h"
+#include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "Game/exe_bodies.h"

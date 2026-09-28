@@ -30,7 +30,9 @@
 // the world and the demo buildings exist. Test-only, opt-in, default off.
 
 #include "resolve.h"
-#include "engine_funcs.h"
+#include <windows.h>
+#include <new>
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"

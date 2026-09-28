@@ -65,7 +65,7 @@
 //   d) A garbage jitter radius (NaN / negative / absurd) is clamped to 0, same guard
 //      SetCitizenSpawnTransform already applied. The field is read raw from the .rsc.
 
-#include "engine_funcs.h"
+#include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields

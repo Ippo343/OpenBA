@@ -22,7 +22,6 @@
 // Registered at exe 0x1400019a0 so every caller (AmbientEnvironmentDescription /
 // AmbientEmitterComponent / AnimAudioEvent / MenuScene serialize) resolves it.
 
-#include "engine_funcs.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"

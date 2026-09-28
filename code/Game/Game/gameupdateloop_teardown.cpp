@@ -35,7 +35,6 @@
 // row destroys each inner header (ascending, as retail's loop does) and then
 // frees the outer block. Trees ({root,count} pairs, 4-byte count store),
 // node chains and IBP payloads are NOT arrays and are untouched.
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"           // RegisterExeAddr
 #include "Action/exe_bodies.h"          // ActHunt_MarkEntityRemoval_c2ea0

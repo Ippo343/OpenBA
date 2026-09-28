@@ -10,7 +10,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "SendComponentMessage.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "object/Type.h"   // RtObject::RtObject_Type_Serialize
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Game/force_work.h"   // ForceWork::Readable — stale action-target guard

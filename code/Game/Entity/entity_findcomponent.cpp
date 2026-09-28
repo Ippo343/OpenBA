@@ -2,14 +2,14 @@
 // Entity::FindComponent<X> -- the exe's per-class monomorphisations of the component
 // finder (each FUN_ below compares a component's Type() against X's type-id cell, then
 // confirms with IsDerivedFrom). The shared walk is Entity_FindComponentByExeTypeId
-// (engine/funcs/engine_funcs.cpp).
+// (below; it moved here from engine/funcs/engine_funcs.cpp at B3R W2-EZ).
 //
 // ENDGAME B.3.9 TR: these were inline bodies in engine_funcs.h reading the
 // TypeId_*_FC cell pointers. They read X::TypeId() of the class AT THE CELL now
 // (INVENTORY_C Table 1; several finder NAMES are historical misnomers, kept because the
 // callers use them), which needs the class headers -- so the bodies moved here and
 // engine_funcs.h keeps only the declarations.
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include "Component/MapComponent.h"
 #include "Component/StateMachineComponent.h"
@@ -34,6 +34,58 @@
 #include "Component/FireComponent.h"
 #include "Component/StorageLocationComponent.h"
 #include "Entity/exe_bodies.h"
+#include "object/Internal.h"   // ::Object::InternalBasePtr (Entity_FindComponentByExeTypeId)
+#include <new>
+
+// Entity_FindComponentByExeTypeId -- searches entity component array for a component
+// matching the given type ID. Stores found component (or null) via InternalBasePtr.
+//
+// Entity layout (from decompilation of all FindComponent variants):
+//   entity+0x30 = component pointer array (void**)
+//   entity+0x38 = component count (int32)
+//
+// Each component's Object::Base::Type() (retail slot 2, +0x10) returns its type ID.
+// IsDerivedFrom confirms the match before storing.
+//
+// Decompiled from FUN_140004680 (fn_FindComponent_Build) and confirmed identical
+// across all 20+ FindComponent_X variants.
+//
+// B3R W2-EZ: moved here from engine/funcs/engine_funcs.cpp. Its `fn_IsDerivedFrom`
+// read (the null-safe trampoline EngineFuncsInit installed) is
+// Object::IsDerivedFromNullSafe, the same trampoline by name (B3R_RULES §3).
+void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr) {
+    // Zero out retval (InternalBasePtr = nullptr)
+    *(void**)retval = nullptr;
+    if (!entity || !typeIdPtr) return;
+
+    uint32_t targetTypeId = *typeIdPtr;
+
+    // Component array at entity+0x30 (ptr), count at entity+0x38
+    void** compArray = *(void***)((uintptr_t)entity + 0x30);
+    int    compCount = *(int*)   ((uintptr_t)entity + 0x38);
+
+    void* found = nullptr;
+    for (int i = 0; i < compCount; i++) {
+        void* comp = compArray[i];
+        if (!comp) continue;
+
+        // Object::Base::Type() (retail slot 2, +0x10) returns the component's type ID
+        int compTypeId = static_cast<int>(
+            static_cast<const ::Object::Base*>(comp)->Type());   // B.3.x bridge
+
+        if ((uint32_t)compTypeId == targetTypeId) {
+            // Confirm with IsDerivedFrom
+            if (::Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
+                found = comp;
+            }
+            break;
+        }
+    }
+
+    // Store result via InternalBasePtr::InternalBasePtr(retval, found)
+    new (retval) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+}
 
 namespace {
 inline void FindByTypeId(void* entity, void* retval, uint32_t typeId) {

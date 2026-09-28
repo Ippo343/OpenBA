@@ -27,7 +27,7 @@
 // `g_pf_vtable` and its no-op OnCompleted stub (the same RET body).
 
 #include "Game/PathfinderThread.h"
-#include "engine_funcs.h"
+#include <windows.h>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"   // Pf_WorkerApplyCmd_a6430, Pf_EnqueueCmd1_a6a30, Pf_ArrayResize18_d830
 #include <cstdint>

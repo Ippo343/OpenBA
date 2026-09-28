@@ -28,8 +28,6 @@ BANISHED_DIR = C:/GOG Games/Banished
 # Auto-discover clean game logic files (mirrors original source tree)
 GAME_SRC_SRCS = $(wildcard code/Game/*/*.cpp)
 
-ENGINE_FUNC_SRCS = engine/funcs/engine_funcs.cpp
-
 # Runtime-x64.dll reimplementation sources
 RUNTIME_FUNC_SRCS = $(wildcard runtime/funcs/*.cpp)
 RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
@@ -77,13 +75,12 @@ SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
 # cannot see a missing import library at all -- this failed only at link.
 SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
-SA_INCLUDES = -I. -Iengine/types -Iengine/funcs -Icode/Game \
+SA_INCLUDES = -I. -Iengine/types -Icode/Game \
               -Iruntime/types -Iruntime/funcs \
               -Idx11/types -Idx11/funcs -Istandalone
 
 # Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry
 SA_SRCS = $(GAME_SRC_SRCS) \
-          $(ENGINE_FUNC_SRCS) \
           $(RUNTIME_FUNC_SRCS) \
           $(RUNTIME_SRC_SRCS) \
           $(DX11_FUNC_SRCS) \
@@ -259,9 +256,6 @@ $(SA_OBJ_DIR)/code__Game__Tutorial__%.o: code/Game/Tutorial/%.cpp | $(SA_OBJ_DIR
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
 $(SA_OBJ_DIR)/code__Game__Work__%.o: code/Game/Work/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/engine__funcs__%.o: engine/funcs/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
 $(SA_OBJ_DIR)/runtime__funcs__%.o: runtime/funcs/%.cpp | $(SA_OBJ_DIR)

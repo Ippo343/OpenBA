@@ -440,7 +440,9 @@ int RtObjectInternalRegister() {
     // other as a fallback (see the same note in runtime/src/system/string.cpp).
     // B3R W2-RT: the four address rows (0x1800062c0, 0x1800062a0,
     // 0x1800062b0, 0x1800c0150) had no reader and went; the names stay while
-    // engine_funcs.cpp / address_registry.cpp / reg_unreg_lane1.cpp read them.
+    // address_registry.cpp / reg_unreg_lane1.cpp read them. (B3R W2-EZ:
+    // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ went, its one reader was
+    // EngineFuncsInit.)
     RegisterRuntimeExport("??0InternalBasePtr@Object@@QEAA@XZ",
                           (void*)&RtObject_InternalBasePtr_Ctor); ++n;
 
@@ -449,9 +451,6 @@ int RtObjectInternalRegister() {
 
     RegisterRuntimeExport("?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z",
                           (void*)&RtObject_InternalBasePtr_Copy); ++n;
-
-    RegisterRuntimeExport("?DeletePtr@InternalBasePtr@Object@@QEAAXXZ",
-                          (void*)&RtObject_InternalBasePtr_DeletePtr); ++n;
 
     // B.3.4 STREAMS (6/6) — the symbol's FIRST registration. BY NAME *AND* BY
     // ADDRESS, because `ResolveExport` falls through silently for an unported

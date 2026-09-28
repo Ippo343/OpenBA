@@ -16,7 +16,8 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
 #include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "dialog_exe_helpers.h"
-#include "engine_funcs.h"
+#include "system/Value.h"
+#include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"

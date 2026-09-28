@@ -27,7 +27,8 @@
 // HappinessComponent::IsActive ANDs against the tavern's wantMask 0x20000 -- so this dump
 // also says, directly, which recipe can ever satisfy the happiness goods arm.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/TypeInfo.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>

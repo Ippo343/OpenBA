@@ -22,7 +22,6 @@
 //   0x140018dd0  quadtree/box-walker init (zeroes ~0xFF*0x24 stack records)
 //   0x140053ca0  pasture/migration target picker (collect+random-pick cells)    [loop]
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree

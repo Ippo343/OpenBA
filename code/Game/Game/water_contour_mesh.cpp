@@ -87,7 +87,6 @@
 // <wingdi.h> declares a global `Rectangle` FUNCTION that hides
 // `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "video/Buffers.h"
-#include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "resolve.h"
 #include <cstdint>

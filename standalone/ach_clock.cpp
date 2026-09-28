@@ -36,7 +36,6 @@
 //   BANISHED_ACH_YEAR_BOOST=<n>   add n to the year counter every frame
 //   BANISHED_ACH_YEAR_MAX=<n>     stop boosting at n years (default 250)
 
-#include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>

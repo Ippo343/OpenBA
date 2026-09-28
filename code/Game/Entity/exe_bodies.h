@@ -11,7 +11,7 @@
 //
 // Also here: the declarations and inline bodies of this module that lived in
 // engine/funcs/engine_funcs.h, moved verbatim with their comments (that
-// header includes this one, so none of its includers changes).
+// header is gone since B3R W2-EZ: its includers include this one directly).
 //
 // Declared in another header already (not redeclared here):
 //   CitizenBehavior_Update                 0x14008c2b0  (code/Game/Entity/citizenbehavior_funcs.h)
@@ -29,6 +29,13 @@
 #include "object/TypeInfo.h"   // ::Object::Base (FindComponentByTypeId)
 
 // ---- entity_findcomponent.cpp
+// Entity::FindComponent — generic implementation (moved from engine/funcs/engine_funcs.h
+// and engine_funcs.cpp, B3R W2-EZ). Searches entity component array at +0x30 (ptr) /
+// +0x38 (count). Calls vtable[2] (+0x10) on each component to get type ID, confirms
+// with IsDerivedFrom. Stores result via InternalBasePtr::InternalBasePtr(retval, found).
+// REIMPLEMENTED: decompiled from all FindComponent_X variants (identical algorithm).
+void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr);
+
 // FindComponent inline wrappers — call Entity_FindComponentByExeTypeId with correct type ID.
 // Original exe functions (FUN_140XXXXXX) are no longer needed.
 

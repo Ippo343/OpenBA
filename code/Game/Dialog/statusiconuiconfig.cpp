@@ -38,7 +38,9 @@
 // that stub registration is removed to avoid a duplicate REGISTER_TYPE. Same
 // structure as code/Game/Dialog/upgradeuiconfig.cpp.
 
-#include "engine_funcs.h"
+#include "ui/UserInterface.h"
+#include "object/External.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>

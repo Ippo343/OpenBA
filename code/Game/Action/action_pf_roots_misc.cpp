@@ -16,7 +16,8 @@
 //   0x140122340  HerdComponent::StartMigration (calls 053ca0 target picker, 003110
 //                queue-push, 0c2ea0 mark-removal; see loop-exit note below)
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos

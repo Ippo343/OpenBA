@@ -49,7 +49,7 @@
 // saves will simply not get their region/pathfinder cache rebuilt by this
 // call until 0x14009e8c0 is ported (other callers may still build it).
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include "resolve.h"

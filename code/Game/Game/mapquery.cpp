@@ -30,7 +30,7 @@
 // Verified against Runtime/exe decompiles + worldgen.cpp WG_* offsets (2026-05-31);
 // picking-refine branch disassembly-verified at 0x14009f4c6..0x14009f582 (2026-08-29).
 
-#include "engine_funcs.h"
+#include "math/Math.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"

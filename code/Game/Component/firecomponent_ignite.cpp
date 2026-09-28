@@ -40,7 +40,9 @@
 #include "Component/firecomponent_funcs.h"
 #include "Object/factory_registration.h"
 #include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
-#include "engine_funcs.h"
+#include <new>
+#include "math/Math.h"
+#include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"

@@ -37,7 +37,9 @@
 // mis-templated lodge both stay crash-free.
 
 
-#include "engine_funcs.h"
+#include <windows.h>
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "resolve.h"

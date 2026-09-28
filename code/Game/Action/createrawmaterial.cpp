@@ -21,7 +21,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "CreateRawMaterial.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"            // Pf_FindPlacementCell_bd40, ActRm_* helpers
 #include "Work/exe_bodies.h"              // WorkAcc_FindComponent_22520, WorkBase_FindComponent_3050

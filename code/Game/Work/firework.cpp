@@ -23,7 +23,8 @@
 
 #include "Work/FireWork.h"
 #include "Work/firework_funcs.h"
-#include "engine_funcs.h"
+#include "object/Internal.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"   // B3R: the Work bodies called by name

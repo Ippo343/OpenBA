@@ -13,7 +13,8 @@
 //
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Action/exe_bodies.h"   // B3R: Pf_FloodFillRegion_9c170
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

@@ -13,7 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/LocationWork.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Work/exe_bodies.h"
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Game/exe_constants.h"     // B3R: kRdata_14017214c

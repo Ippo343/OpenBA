@@ -60,7 +60,7 @@
 // from the real ctor, and because an unterminated ring walk is an in-world freeze
 // rather than a crash.
 
-#include "engine_funcs.h"
+#include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include <cstdint>

@@ -29,7 +29,7 @@
 #include "Work/GatherRawMaterials.h"
 #include "Work/gatherrawmaterials_funcs.h"
 #include <new>
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Dialog/dialog_exe_helpers.h"   // B3R: Dialog_FindComponent_d6c0
 #include "Component/coll_bridge.h"
 #include <cstdint>

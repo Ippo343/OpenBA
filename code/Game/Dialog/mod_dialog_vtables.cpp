@@ -63,7 +63,10 @@
 #include "Dialog/ModDetailsDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include <new>
+#include "runtime/types/ui/DialogInstance.h"
+#include "graphics/Camera.h"
+#include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "ui/Dialog.h"   // UI::Dialog::TypeId() (ENDGAME B.3.9 TR)
 #include "Dialog/MainMenuDialog.h"   // B3R: MainMenuDialog_ReturnToMenu

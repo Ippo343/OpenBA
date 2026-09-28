@@ -9,7 +9,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "CreateNaturalResource.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"            // ActCNR_* helpers
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0

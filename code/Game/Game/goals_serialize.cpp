@@ -64,7 +64,7 @@
 // BstLeftmost*/BstNext* helpers below; this is a structural cleanup only (the two forms are
 // provably equivalent — the classic parent-pointer in-order successor algorithm), not a logic change.
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields

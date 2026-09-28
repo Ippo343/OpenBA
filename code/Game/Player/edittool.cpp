@@ -21,7 +21,7 @@
 #include "Dialog/EntityUI.h"
 #include "Dialog/EntityUI.h"
 #include "Dialog/ToolUI.h"
-#include "engine_funcs.h"
+#include "math/Math.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "volume/Volume.h"
 #include "Player/exe_bodies.h"

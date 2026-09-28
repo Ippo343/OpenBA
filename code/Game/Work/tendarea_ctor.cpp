@@ -23,7 +23,7 @@
 
 #include "Work/TendArea.h"
 #include <new>
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>

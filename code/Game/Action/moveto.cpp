@@ -28,7 +28,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "MoveTo.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include "Action/exe_bodies.h"   // ActMv_*, Pf_SpatialProximityQuery_92260

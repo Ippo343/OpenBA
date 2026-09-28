@@ -9,7 +9,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "PlayAnimation.h"
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "Action/exe_bodies.h"   // ActMv_* helpers
 #include "Game/exe_constants.h"  // kRdata_14017214c
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

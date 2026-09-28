@@ -35,7 +35,7 @@
 //                  reg_player_trade.cpp), static MemAlloc, InternalBasePtr CheckPtr
 //   0x14002c830 -> static MemAlloc (leaf)
 
-#include "engine_funcs.h"
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Game/exe_bodies.h"        // B3R: 0x140002340
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C

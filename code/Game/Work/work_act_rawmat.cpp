@@ -19,7 +19,8 @@
 //
 // Do NOT "improve" — every offset/constant cites its disasm address.
 
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name
 #include "Game/exe_constants.h"     // B3R: kRdata_*

@@ -11,7 +11,8 @@
 
 #include "Entity/citizenbehavior_funcs.h"
 #include "Component/coll_bridge.h"
-#include "engine_funcs.h"
+#include <new>
+#include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_constants.h"   // kRdata_*
