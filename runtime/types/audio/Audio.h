@@ -365,4 +365,6 @@ using Configuration   = Audio::Configuration;
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
 // ---- audio/audio.cpp (??0Scene@Audio@@QEAA@XZ)
 void* RtAudio_Scene_Ctor(void* selfPtr);
+// ---- audio/audio.cpp (??1Scene@Audio@@QEAA@XZ)
+void RtAudio_Scene_Dtor(void* selfPtr);
 // ==== end B3R G-Game ====
