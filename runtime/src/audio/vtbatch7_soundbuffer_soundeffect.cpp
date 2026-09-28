@@ -180,13 +180,6 @@ void MemFreeIfSet(void* p) {
     rtcoll::MemFree(p);
 }
 
-const uint8_t* SoundBufferTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* SoundEffectTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A");
-}
-
 }  // namespace
 
 // ############################################################################
@@ -194,16 +187,9 @@ const uint8_t* SoundEffectTypeInfo() {
 // ############################################################################
 namespace Audio {
 
-// 0x18000b8a0: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
-uint32_t SoundBuffer::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, SoundBufferTypeInfo(), sizeof v); return v;
-}
-// [2] 0x18000b890: the same load.
-uint32_t SoundBuffer::Type() const { return TypeId(); }
-// [1] 0x18000b8b0: the same node at +8.
-const char* SoundBuffer::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, SoundBufferTypeInfo() + 8, sizeof v); return v;
-}
+// TypeId 0x18000b8a0 / [2] 0x18000b890 / [1] 0x18000b8b0: DECLARE_TYPE's
+// loads over the class's own record (audio_type_records.cpp; ENDGAME B.3.9
+// TI-REST).
 // [3] 0x1800e0470: `MOV EAX,0xa ; RET`.
 int32_t SoundBuffer::GetFileVersion() const { return 0xa; }
 
@@ -290,15 +276,8 @@ bool SoundBuffer::Serialize(void* streamv) {
 // Audio::SoundEffect's member bodies
 // ############################################################################
 
-// 0x180050330: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
-uint32_t SoundEffect::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, SoundEffectTypeInfo(), sizeof v); return v;
-}
-// [2] 0x180050320 / [1] 0x180050340.
-uint32_t SoundEffect::Type() const { return TypeId(); }
-const char* SoundEffect::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, SoundEffectTypeInfo() + 8, sizeof v); return v;
-}
+// TypeId 0x180050330 / [2] 0x180050320 / [1] 0x180050340: DECLARE_TYPE's
+// loads over the class's own record (audio_type_records.cpp).
 // [3] 0x1800e0990: `MOV EAX,3 ; RET`.
 int32_t SoundEffect::GetFileVersion() const { return 3; }
 
@@ -576,9 +555,9 @@ int RtAudioBatch7SoundBufferSoundEffectRegister() {
     RegisterRuntimeAddr  (0x1800e05c0ull, (void*)&RtAudio_SoundBuffer_PlatformSerialize);
 
     // ---- the factory pairs (B39_RULES D2): the classes' OWN statics, both
-    // doors, replacing the FACTREST rows. The minted `?_typeInfo@` records'
-    // factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos runs
-    // after every *PortInit).
+    // doors, replacing the FACTREST rows. The classes' own `DEFINE_TYPE`
+    // records (audio_type_records.cpp) carry them as factoryFn /
+    // inPlaceFactoryFn.
     RegisterRuntimeExport("?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ",
                           (void*)&Audio::SoundBuffer::CreateNewObject); ++n;
     RegisterRuntimeAddr  (0x18000b9a0ull, (void*)&Audio::SoundBuffer::CreateNewObject);

@@ -122,33 +122,11 @@ static_assert(kTypeInfoNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
 static_assert(sizeof(uint32_t) == 4,      "typeId is a DWORD (MOV EAX, not RAX)");
 static_assert(sizeof(const char*) == 8,   "name is a QWORD (MOV RAX)");
 
-const uint8_t* AnimationEventTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* MaterialInstanceTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* ParticleTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A");
-}
 
 typedef uint32_t    (*U32ThisFn)(const void*);
 typedef const char* (*CStrThisFn)(const void*);
 typedef int32_t     (*I32ThisFn)(const void*);
 
-uint32_t ReadTypeId(const uint8_t* node) {
-    uint32_t v = 0;
-    std::memcpy(&v, node + kTypeInfoTypeIdOffset, sizeof v);
-    return v;
-}
-const char* ReadTypeName(const uint8_t* node) {
-    const char* v = nullptr;
-    std::memcpy(&v, node + kTypeInfoNameOffset, sizeof v);
-    return v;
-}
 
 }  // namespace
 
@@ -226,19 +204,19 @@ namespace Graphics {
 // [1] ?TypeName@ 0x1800116f0  `MOV RAX,[?_typeInfo@AnimationEvent@ + 8]; RET`
 //     `BaseTypeInfo::name` is CONTENT-only, never compared by pointer
 //     (reference_basetypeinfo_name_is_content_only.md).
-uint32_t    AnimationEvent::Type() const     { return ReadTypeId(AnimationEventTypeInfo()); }
-const char* AnimationEvent::TypeName() const { return ReadTypeName(AnimationEventTypeInfo()); }
+// ENDGAME B.3.9 TI-REST: Type / TypeName are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 // ?TypeId@AnimationEvent@Graphics@@SAIXZ 0x1800116e0 -- the static twin of slot
 // 2, the same read (ENDGAME B.3.9 GFX, D6 step 1: over the minted record until
 // the W3 fold). The two slot doors are retired with the minted vtable; their
 // only reader was that table.
-uint32_t    AnimationEvent::TypeId()         { return ReadTypeId(AnimationEventTypeInfo()); }
+// (DECLARE_TYPE's TypeId.)
 
 // ---- ??_7MaterialInstance@Graphics@@6B@  slots 2, 1 and 3 ------------------
 // [2] ?Type@     0x1800027f0
 // [1] ?TypeName@ 0x180002810
-uint32_t    MaterialInstance::Type() const     { return ReadTypeId(MaterialInstanceTypeInfo()); }
-const char* MaterialInstance::TypeName() const { return ReadTypeName(MaterialInstanceTypeInfo()); }
+// ENDGAME B.3.9 TI-REST: Type / TypeName (and the static TypeId 0x180002800) are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 
 // [3] ?GetFileVersion@ 0x180103a60 -- `MOV EAX,4 ; RET`. A LITERAL, not a read:
 // the on-disk serialised format version of a Graphics::MaterialInstance.
@@ -250,11 +228,11 @@ int32_t MaterialInstance::GetFileVersion() const { return 4; }
 // ---- ??_7Particle@Graphics@@6B@  slots 2, 1 and 3 --------------------------
 // [2] ?Type@     0x18001ff10
 // [1] ?TypeName@ 0x18001ff30
-uint32_t    Particle::Type() const     { return ReadTypeId(ParticleTypeInfo()); }
-const char* Particle::TypeName() const { return ReadTypeName(ParticleTypeInfo()); }
+// ENDGAME B.3.9 TI-REST: Type / TypeName are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 // ?TypeId@Particle@Graphics@@SAIXZ 0x18001ff20 -- the static twin of slot 2
 // (ENDGAME B.3.9 GFX, D6 step 1: over the minted record until the W3 fold).
-uint32_t    Particle::TypeId()         { return ReadTypeId(ParticleTypeInfo()); }
+// (DECLARE_TYPE's TypeId.)
 
 // [3] ?GetFileVersion@ 0x180104080 -- `MOV EAX,0x1000 ; RET`, 4096, and it is NOT
 // the same constant as MaterialInstance's 4. The two were decoded separately and

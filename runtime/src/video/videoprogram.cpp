@@ -77,9 +77,6 @@ using rt::io::Stream;
 using rt::io::ReaderWriter;
 using Video::VideoProgram;
 
-const uint8_t* VideoProgramTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A");
-}
 // `?_singleton@Device@Video@@` is the ADDRESS of the Device* static; +0x100 of
 // the Device is its DeviceData* (runtime/types/video/Device.h, dx11/src).
 void* ActiveDeviceDataPtr() {
@@ -103,17 +100,8 @@ Fn RtAddr(uintptr_t ghidra) {
 // ============================================================================
 namespace Video {
 
-// slot 1 — the `_typeInfo` record's +0x08 (`BaseTypeInfo::name`, CONTENT-only).
-const char* VideoProgram::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, VideoProgramTypeInfo() + 8, sizeof v); return v;
-}
-// 0x18004ec40 — the static accessor: the record's +0x00, 0xFFFFFFFF until
-// Factory::Startup (B39_RULES D6 step 1).
-uint32_t VideoProgram::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, VideoProgramTypeInfo(), sizeof v); return v;
-}
-// slot 2 — 0x18004ec30, the same load.
-uint32_t VideoProgram::Type() const { return TypeId(); }
+// slot 1, TypeId 0x18004ec40, slot 2 0x18004ec30: DECLARE_TYPE's over the
+// class's own record (video_type_records.cpp; ENDGAME B.3.9 TI-REST).
 // slot 3 — 0x1800f46a0 is `MOV EAX,1 ; RET`.
 int32_t VideoProgram::GetFileVersion() const { return 1; }
 

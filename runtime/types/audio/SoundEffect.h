@@ -106,8 +106,13 @@ public:
         return this;
     }
 
-    const char*   TypeName() const override;                   // [1] 0x180050340
-    uint32_t      Type() const override;                       // [2] 0x180050320
+    // [1] 0x180050340 TypeName / [2] 0x180050320 Type, the static TypeId
+    // 0x180050330, `_TypeName` 0x180050300 / `_ParentTypeName` 0x180050310 and
+    // the factory pair 0x180050430 / 0x1800504f0: retail's macro (ENDGAME B.3.9
+    // TI-REST, B39_RULES D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/audio/audio_type_records.cpp.
+    DECLARE_TYPE(SoundEffect)
+public:
     int32_t       GetFileVersion() const override;             // [3] 0x1800e0990
     CompileResult Compile(const System::Filename& path) override; // [4] 0x1800e09a0
     bool          Serialize(void* stream) override;            // [5] 0x1800e0aa0
@@ -137,15 +142,7 @@ public:
     static void  operator delete(void* p);                     // 0x1800503d0
     // Retail's factory pair (B39_RULES D2), defined in
     // vtbatch7_soundbuffer_soundeffect.cpp. Placement spells `::new (p)`.
-    static Object::Base* CreateNewObject();                    // 0x180050430
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x1800504f0
-    // 0x180050330 -- `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@SoundEffect@Audio@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
-
-private:
-    static const char* _TypeName();                            // 0x180050300 "SoundEffect"
-    static const char* _ParentTypeName();                      // 0x180050310 "Object::External"
+    // (Declared by DECLARE_TYPE above.)
 
 protected:
     // `??1SoundEffect@Audio@@UEAA@XZ` 0x1800e0880 -- NON-VIRTUAL. The body

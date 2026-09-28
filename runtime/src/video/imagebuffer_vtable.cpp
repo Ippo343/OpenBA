@@ -138,16 +138,8 @@ namespace {
 // 0x1801fa550 is not a second symbol: `tools/pe_exports.py` resolves it to
 // `?_typeInfo@ImageBuffer@Video@@…` **+8**, i.e. `BaseTypeInfo::name`.
 //
-// Reached through RT_DATA_SLOT (port-registry-aware) and NOT by address, for
-// the same reason `mainloop_video.cpp:303` gives: this row is MINTED, and at
-// cutover the mint owns the bytes. By address we would read the DLL's copy
-// while the rest of the tree reads the minted one — the split-brain shape.
-// Spelled as a literal at the call site so `tools/runtime_census.py` can see
-// the dependency (RE_MACRO_DOOR).
-const uint8_t* TypeInfoImageBuffer() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A");
-}
+// ENDGAME B.3.9 TI-REST: that static is the class's own `DEFINE_TYPE` record
+// (video_type_records.cpp); slots 1 and 2 and TypeId() are DECLARE_TYPE's.
 
 // `??0ImageBuffer@Video@@QEAA@XZ` — retail 0x1800f2580, PORTED by Wave 6 lane C
 // (`buffers.cpp`, registered by BOTH name and address). `buffers.cpp` belongs to
@@ -226,14 +218,7 @@ namespace Video {
 // ORACLE: full. Pure read of a static; ours and theirs are both called and
 // compared on every call under the diff-oracle flag.
 // ============================================================================
-uint32_t ImageBuffer::Type() const {
-    // retail never touches RCX.
-    return *reinterpret_cast<const uint32_t*>(TypeInfoImageBuffer());
-}
-
-uint32_t ImageBuffer::TypeId() {
-    return *reinterpret_cast<const uint32_t*>(TypeInfoImageBuffer());
-}
+// (DECLARE_TYPE's `Type()` / `TypeId()`; retail never touches RCX.)
 
 // ============================================================================
 // slot 1 — const char* Video::ImageBuffer::TypeName() const
@@ -255,14 +240,8 @@ uint32_t ImageBuffer::TypeId() {
 // nothing, on every call, and would drown the one that would mean something —
 // a name whose TEXT differs.
 // ============================================================================
-const char* ImageBuffer::TypeName() const {
-    return *reinterpret_cast<const char* const*>(TypeInfoImageBuffer() + 8);
-}
-
-// RULE B5-15: the two literals, COPIED from B35_SLOTS section 3 (read byte-wise
-// at 0x18001e8c0 / 0x18001e8d0), not stringised from the C++ base name.
-const char* ImageBuffer::_TypeName()       { return "ImageBuffer"; }
-const char* ImageBuffer::_ParentTypeName() { return "Object::CompiledExternal"; }
+// (DECLARE_TYPE's `TypeName()`. The two literals, COPIED from B35_SLOTS section
+// 3 (0x18001e8c0 / 0x18001e8d0), are DEFINE_TYPE's in video_type_records.cpp.)
 
 // ============================================================================
 // slot 3 — int Video::ImageBuffer::GetFileVersion() const

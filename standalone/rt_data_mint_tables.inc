@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 4 vtables, 35 BaseTypeInfo, 10 storage symbols.
-// Retired (ENDGAME B.3 step 9): 255 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 4 vtables, 6 BaseTypeInfo, 10 storage symbols.
+// Retired (ENDGAME B.3 step 9): 284 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -89,7 +89,7 @@ static RtMintVtable kMintVtables[] = {
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from
 // the DLL; `next` is deliberately NOT copied (it reads 0x0 on disk and is
 // built by running constructors) and is rebuilt from OUR init order.
-static RtObject::BaseTypeInfo kTypeInfoStorage[35];
+static RtObject::BaseTypeInfo kTypeInfoStorage[6];
 RT_MINT_TI_TRAP(0,0)
 RT_MINT_TI_TRAP(0,1)
 RT_MINT_TI_TRAP(1,0)
@@ -102,205 +102,31 @@ RT_MINT_TI_TRAP(4,0)
 RT_MINT_TI_TRAP(4,1)
 RT_MINT_TI_TRAP(5,0)
 RT_MINT_TI_TRAP(5,1)
-RT_MINT_TI_TRAP(6,0)
-RT_MINT_TI_TRAP(6,1)
-RT_MINT_TI_TRAP(7,0)
-RT_MINT_TI_TRAP(7,1)
-RT_MINT_TI_TRAP(8,0)
-RT_MINT_TI_TRAP(8,1)
-RT_MINT_TI_TRAP(9,0)
-RT_MINT_TI_TRAP(9,1)
-RT_MINT_TI_TRAP(10,0)
-RT_MINT_TI_TRAP(10,1)
-RT_MINT_TI_TRAP(11,0)
-RT_MINT_TI_TRAP(11,1)
-RT_MINT_TI_TRAP(12,0)
-RT_MINT_TI_TRAP(12,1)
-RT_MINT_TI_TRAP(13,0)
-RT_MINT_TI_TRAP(13,1)
-RT_MINT_TI_TRAP(14,0)
-RT_MINT_TI_TRAP(14,1)
-RT_MINT_TI_TRAP(15,0)
-RT_MINT_TI_TRAP(15,1)
-RT_MINT_TI_TRAP(16,0)
-RT_MINT_TI_TRAP(16,1)
-RT_MINT_TI_TRAP(17,0)
-RT_MINT_TI_TRAP(17,1)
-RT_MINT_TI_TRAP(18,0)
-RT_MINT_TI_TRAP(18,1)
-RT_MINT_TI_TRAP(19,0)
-RT_MINT_TI_TRAP(19,1)
-RT_MINT_TI_TRAP(20,0)
-RT_MINT_TI_TRAP(20,1)
-RT_MINT_TI_TRAP(21,0)
-RT_MINT_TI_TRAP(21,1)
-RT_MINT_TI_TRAP(22,0)
-RT_MINT_TI_TRAP(22,1)
-RT_MINT_TI_TRAP(23,0)
-RT_MINT_TI_TRAP(23,1)
-RT_MINT_TI_TRAP(24,0)
-RT_MINT_TI_TRAP(24,1)
-RT_MINT_TI_TRAP(25,0)
-RT_MINT_TI_TRAP(25,1)
-RT_MINT_TI_TRAP(26,0)
-RT_MINT_TI_TRAP(26,1)
-RT_MINT_TI_TRAP(27,0)
-RT_MINT_TI_TRAP(27,1)
-RT_MINT_TI_TRAP(28,0)
-RT_MINT_TI_TRAP(28,1)
-RT_MINT_TI_TRAP(29,0)
-RT_MINT_TI_TRAP(29,1)
-RT_MINT_TI_TRAP(30,0)
-RT_MINT_TI_TRAP(30,1)
-RT_MINT_TI_TRAP(31,0)
-RT_MINT_TI_TRAP(31,1)
-RT_MINT_TI_TRAP(32,0)
-RT_MINT_TI_TRAP(32,1)
-RT_MINT_TI_TRAP(33,0)
-RT_MINT_TI_TRAP(33,1)
-RT_MINT_TI_TRAP(34,0)
-RT_MINT_TI_TRAP(34,1)
 static RtMintTypeInfo kMintTypeInfos[] = {
-    { "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A", 0x1801f9898ull, &kTypeInfoStorage[0],
-      "Achievement", "Object::External", nullptr,
-      "?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ", 0x180001130ull, &RtMintTiTrapStub_0_0,
-      "?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z", 0x1800011f0ull, &RtMintTiTrapStub_0_1 },
-    { "?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A", 0x1801f98d0ull, &kTypeInfoStorage[1],
-      "AchievementInstance", "Object::Internal", nullptr,
-      "?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ", 0x1800018b0ull, &RtMintTiTrapStub_1_0,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_1_1 },
-    { "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9978ull, &kTypeInfoStorage[2],
-      "AnimationEvent", "Object::External", nullptr,
-      "?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ", 0x180011700ull, &RtMintTiTrapStub_2_0,
-      "?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011710ull, &RtMintTiTrapStub_2_1 },
-    { "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa6d0ull, &kTypeInfoStorage[3],
-      "AnimationGroup", "Object::External", nullptr,
-      "?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ", 0x180016400ull, &RtMintTiTrapStub_3_0,
-      "?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800164d0ull, &RtMintTiTrapStub_3_1 },
-    { "?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A", 0x1801f9c50ull, &kTypeInfoStorage[4],
+    { "?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A", 0x1801f9c50ull, &kTypeInfoStorage[0],
       "Base", nullptr, nullptr,
-      nullptr, 0x0ull, &RtMintTiTrapStub_4_0,
-      nullptr, 0x0ull, &RtMintTiTrapStub_4_1 },
-    { "?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A", 0x1801fa7e8ull, &kTypeInfoStorage[5],
-      "CollisionMesh", "Object::External", nullptr,
-      "?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ", 0x180065060ull, &RtMintTiTrapStub_5_0,
-      "?CreateInPlaceObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@PEAX@Z", 0x180065130ull, &RtMintTiTrapStub_5_1 },
-    { "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", 0x1801f9b00ull, &kTypeInfoStorage[6],
+      nullptr, 0x0ull, &RtMintTiTrapStub_0_0,
+      nullptr, 0x0ull, &RtMintTiTrapStub_0_1 },
+    { "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", 0x1801f9b00ull, &kTypeInfoStorage[1],
       "CompiledExternal", "External", nullptr,
-      "?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ", 0x18000b6c0ull, &RtMintTiTrapStub_6_0,
-      "?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z", 0x18000b6d0ull, &RtMintTiTrapStub_6_1 },
-    { "?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f99b0ull, &kTypeInfoStorage[7],
-      "EdgeMesh", "Object::External", nullptr,
-      "?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012d80ull, &RtMintTiTrapStub_7_0,
-      "?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012e00ull, &RtMintTiTrapStub_7_1 },
-    { "?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9ba8ull, &kTypeInfoStorage[8],
+      "?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ", 0x18000b6c0ull, &RtMintTiTrapStub_1_0,
+      "?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z", 0x18000b6d0ull, &RtMintTiTrapStub_1_1 },
+    { "?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9ba8ull, &kTypeInfoStorage[2],
       "ExtensionCompiler", "Base", nullptr,
-      "?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c260ull, &RtMintTiTrapStub_8_0,
-      "?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c270ull, &RtMintTiTrapStub_8_1 },
-    { "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A", 0x1801f9b38ull, &kTypeInfoStorage[9],
+      "?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c260ull, &RtMintTiTrapStub_2_0,
+      "?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c270ull, &RtMintTiTrapStub_2_1 },
+    { "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A", 0x1801f9b38ull, &kTypeInfoStorage[3],
       "External", "Base", nullptr,
-      "?CreateNewObject@External@Object@@SAPEAVBase@2@XZ", 0x18002c980ull, &RtMintTiTrapStub_9_0,
-      "?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c990ull, &RtMintTiTrapStub_9_1 },
-    { "?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9b70ull, &kTypeInfoStorage[10],
+      "?CreateNewObject@External@Object@@SAPEAVBase@2@XZ", 0x18002c980ull, &RtMintTiTrapStub_3_0,
+      "?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c990ull, &RtMintTiTrapStub_3_1 },
+    { "?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A", 0x1801f9b70ull, &kTypeInfoStorage[4],
       "ExternalCompiler", "Base", nullptr,
-      "?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c0e0ull, &RtMintTiTrapStub_10_0,
-      "?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c0f0ull, &RtMintTiTrapStub_10_1 },
-    { "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A", 0x1801f9be0ull, &kTypeInfoStorage[11],
+      "?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c0e0ull, &RtMintTiTrapStub_4_0,
+      "?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c0f0ull, &RtMintTiTrapStub_4_1 },
+    { "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A", 0x1801f9be0ull, &kTypeInfoStorage[5],
       "ExternalList", "Object::External", nullptr,
-      "?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ", 0x180007460ull, &RtMintTiTrapStub_11_0,
-      "?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z", 0x180007510ull, &RtMintTiTrapStub_11_1 },
-    { "?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f99e8ull, &kTypeInfoStorage[12],
-      "FrameCopyImageBuffer", "GeneratedImageBuffer", nullptr,
-      "?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001f0a0ull, &RtMintTiTrapStub_12_0,
-      "?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001f120ull, &RtMintTiTrapStub_12_1 },
-    { "?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9a20ull, &kTypeInfoStorage[13],
-      "GeneratedImageBuffer", "Video::ImageBuffer", nullptr,
-      "?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001edf0ull, &RtMintTiTrapStub_13_0,
-      "?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ee00ull, &RtMintTiTrapStub_13_1 },
-    { "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A", 0x1801f9908ull, &kTypeInfoStorage[14],
-      "Goal", "Object::External", nullptr,
-      "?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ", 0x180001b70ull, &RtMintTiTrapStub_14_0,
-      "?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z", 0x180001b80ull, &RtMintTiTrapStub_14_1 },
-    { "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A", 0x1801f9940ull, &kTypeInfoStorage[15],
-      "GoalInstance", "Object::Internal", nullptr,
-      "?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ", 0x180001f50ull, &RtMintTiTrapStub_15_0,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, &RtMintTiTrapStub_15_1 },
-    { "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa708ull, &kTypeInfoStorage[16],
-      "GraphicsMesh", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012480ull, &RtMintTiTrapStub_16_0,
-      "?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012500ull, &RtMintTiTrapStub_16_1 },
-    { "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa548ull, &kTypeInfoStorage[17],
-      "ImageBuffer", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@ImageBuffer@Video@@SAPEAVBase@Object@@XZ", 0x18001e9f0ull, &RtMintTiTrapStub_17_0,
-      "?CreateInPlaceObject@ImageBuffer@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18001ea70ull, &RtMintTiTrapStub_17_1 },
-    { "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa740ull, &kTypeInfoStorage[18],
-      "Material", "Object::External", nullptr,
-      "?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ", 0x1800119c0ull, &RtMintTiTrapStub_18_0,
-      "?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011a70ull, &RtMintTiTrapStub_18_1 },
-    { "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa778ull, &kTypeInfoStorage[19],
-      "MaterialInstance", "Object::External", nullptr,
-      "?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ", 0x180002900ull, &RtMintTiTrapStub_19_0,
-      "?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800029d0ull, &RtMintTiTrapStub_19_1 },
-    { "?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A", 0x1801f9ac8ull, &kTypeInfoStorage[20],
-      "PackageFile", "Object::External", nullptr,
-      "?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ", 0x180025240ull, &RtMintTiTrapStub_20_0,
-      "?CreateInPlaceObject@PackageFile@IO@@SAPEAVBase@Object@@PEAX@Z", 0x1800252c0ull, &RtMintTiTrapStub_20_1 },
-    { "?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801fa7b0ull, &kTypeInfoStorage[21],
-      "Particle", "Object::External", nullptr,
-      "?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ", 0x18001ff40ull, &RtMintTiTrapStub_21_0,
-      "?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ff50ull, &RtMintTiTrapStub_21_1 },
-    { "?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9a58ull, &kTypeInfoStorage[22],
-      "ParticleSystem", "Particle", nullptr,
-      "?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ", 0x1800204d0ull, &RtMintTiTrapStub_22_0,
-      "?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180020550ull, &RtMintTiTrapStub_22_1 },
-    { "?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A", 0x1801faf20ull, &kTypeInfoStorage[23],
-      "PickingMesh", "Object::External", nullptr,
-      "?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ", 0x180071ba0ull, &RtMintTiTrapStub_23_0,
-      "?CreateInPlaceObject@PickingMesh@Picking@@SAPEAVBase@Object@@PEAX@Z", 0x180071c60ull, &RtMintTiTrapStub_23_1 },
-    { "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa580ull, &kTypeInfoStorage[24],
-      "PixelProgram", "ShaderProgram", nullptr,
-      "?CreateNewObject@PixelProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e9d0ull, &RtMintTiTrapStub_24_0,
-      "?CreateInPlaceObject@PixelProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004ea50ull, &RtMintTiTrapStub_24_1 },
-    { "?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A", 0x1801fa858ull, &kTypeInfoStorage[25],
-      "PointList", "Object::External", nullptr,
-      "?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ", 0x180070f30ull, &RtMintTiTrapStub_25_0,
-      "?CreateInPlaceObject@PointList@Pathfinding@@SAPEAVBase@Object@@PEAX@Z", 0x180070ff0ull, &RtMintTiTrapStub_25_1 },
-    { "?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0x1801f9a90ull, &kTypeInfoStorage[26],
-      "ReflectionImageBuffer", "GeneratedImageBuffer", nullptr,
-      "?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x1800222c0ull, &RtMintTiTrapStub_26_0,
-      "?CreateInPlaceObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180022370ull, &RtMintTiTrapStub_26_1 },
-    { "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa5f0ull, &kTypeInfoStorage[27],
-      "RenderState", "Object::External", nullptr,
-      "?CreateNewObject@RenderState@Video@@SAPEAVBase@Object@@XZ", 0x18004b660ull, &RtMintTiTrapStub_27_0,
-      "?CreateInPlaceObject@RenderState@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004b6e0ull, &RtMintTiTrapStub_27_1 },
-    { "?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa628ull, &kTypeInfoStorage[28],
-      "ShaderProgram", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@ShaderProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e0d0ull, &RtMintTiTrapStub_28_0,
-      "?CreateInPlaceObject@ShaderProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004e0e0ull, &RtMintTiTrapStub_28_1 },
-    { "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A", 0x1801fa4d8ull, &kTypeInfoStorage[29],
-      "SoundBuffer", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ", 0x18000b9a0ull, &RtMintTiTrapStub_29_0,
-      "?CreateInPlaceObject@SoundBuffer@Audio@@SAPEAVBase@Object@@PEAX@Z", 0x18000ba90ull, &RtMintTiTrapStub_29_1 },
-    { "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A", 0x1801fa510ull, &kTypeInfoStorage[30],
-      "SoundEffect", "Object::External", nullptr,
-      "?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ", 0x180050430ull, &RtMintTiTrapStub_30_0,
-      "?CreateInPlaceObject@SoundEffect@Audio@@SAPEAVBase@Object@@PEAX@Z", 0x1800504f0ull, &RtMintTiTrapStub_30_1 },
-    { "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A", 0x1801fa820ull, &kTypeInfoStorage[31],
-      "Surface", "Object::External", nullptr,
-      "?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ", 0x180064b60ull, &RtMintTiTrapStub_31_0,
-      "?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z", 0x180064c10ull, &RtMintTiTrapStub_31_1 },
-    { "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa660ull, &kTypeInfoStorage[32],
-      "VertexLayout", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ", 0x18004ddc0ull, &RtMintTiTrapStub_32_0,
-      "?CreateInPlaceObject@VertexLayout@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004de40ull, &RtMintTiTrapStub_32_1 },
-    { "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa698ull, &kTypeInfoStorage[33],
-      "VertexProgram", "ShaderProgram", nullptr,
-      "?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e650ull, &RtMintTiTrapStub_33_0,
-      "?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004e6d0ull, &RtMintTiTrapStub_33_1 },
-    { "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa5b8ull, &kTypeInfoStorage[34],
-      "VideoProgram", "Object::External", nullptr,
-      "?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004ed40ull, &RtMintTiTrapStub_34_0,
-      "?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004edc0ull, &RtMintTiTrapStub_34_1 },
+      "?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ", 0x180007460ull, &RtMintTiTrapStub_5_0,
+      "?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z", 0x180007510ull, &RtMintTiTrapStub_5_1 },
 };
 
 // ---- Plain storage: the singleton pointers plus the ten other exported

@@ -147,8 +147,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;                  // [1] 0x18004ec50
-    uint32_t          Type() const override;                      // [2] 0x18004ec30
+    // [1] 0x18004ec50 TypeName / [2] 0x18004ec30 Type, TypeId 0x18004ec40, `_TypeName` / `_ParentTypeName` and the factory pair:
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
+    DECLARE_TYPE(VideoProgram)
+public:
     int32_t           GetFileVersion() const override;            // [3] 0x1800f46a0 — `MOV EAX,1`
     bool              Serialize(void* stream) override;           // [5] 0x1800f46b0
     Object::External* Reconstruct() override;                     // [6] 0x18004edd0
@@ -219,14 +222,9 @@ public:
     void PlatformDestruct();     // 0x1800f47f0
     void PlatformCreate();       // 0x1800f4810
 
-    // 0x18004ec40 -- `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@VideoProgram@Video@@` record (B39_RULES D6 step 1).
-    static uint32_t      TypeId();
-    // Retail's factory pair (B39_RULES D2), defined in videoprogram.cpp. The class
-    // declares its own placement `operator new` (not ported): placement spells
-    // `::new (p)`.
-    static Object::Base* CreateNewObject();                        // 0x18004ed40
-    static Object::Base* CreateInPlaceObject(void* storage);       // 0x18004edc0
+    // Retail's factory pair 0x18004ed40 / 0x18004edc0 (B39_RULES D2; declared
+    // by DECLARE_TYPE), defined in videoprogram.cpp. The class declares its own
+    // placement `operator new` (not ported): placement spells `::new (p)`.
     static void*         operator new(size_t size);                // 0x18004ec60 — not ported
     static void*         operator new(size_t size, void* storage); // 0x18004ecd0 — not ported
     static void          operator delete(void* p);                 // 0x18004ece0 — class_operator_delete.cpp
@@ -238,8 +236,8 @@ public:
     VideoProgram(const VideoProgram& other);                       // 0x18004ee60 — not ported
     VideoProgram& operator=(const VideoProgram& other);            // 0x18004ef00 — not ported
 
-    static const char* _TypeName();        // 0x18004ec10 -> "VideoProgram"     — not ported
-    static const char* _ParentTypeName();  // 0x18004ec20 -> "Object::External" — not ported
+    // `_TypeName` 0x18004ec10 -> "VideoProgram", `_ParentTypeName` 0x18004ec20
+    // -> "Object::External": DECLARE_TYPE / DEFINE_TYPE's.
 
 protected:
     // ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650). NON-VIRTUAL (no virtual dtor

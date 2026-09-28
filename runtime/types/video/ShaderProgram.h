@@ -168,8 +168,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*   TypeName() const override;                  // [1] 0x18004e0c0
-    uint32_t      Type() const override;                      // [2] 0x18004e0a0
+    // [1] 0x18004e0c0 TypeName / [2] 0x18004e0a0 Type, TypeId 0x18004e0b0, `_TypeName` / `_ParentTypeName` and the factory pair:
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
+    DECLARE_TYPE(ShaderProgram)
+public:
     bool          Serialize(void* stream) override;           // [5] 0x1800f5110
 
     // ---- the exported non-virtual members ------------------------------
@@ -203,13 +206,10 @@ public:
     // 0x1800f52b0 — PUBLIC (`QEAA`), and called by both subclasses' Serialize.
     void PlatformSerialize(void* serializer);
 
-    static uint32_t TypeId();                                     // 0x18004e0b0
-
-    // `?CreateNewObject@` / `?CreateInPlaceObject@` exist for every external;
-    // ShaderProgram's are the ABSTRACT class's: `XOR EAX,EAX ; RET` both
-    // (B39_RULES D2 -- the class's own statics, shaderprogram.cpp).
-    static Object::Base* CreateNewObject();                       // 0x18004e0d0
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004e0e0
+    // `?CreateNewObject@` / `?CreateInPlaceObject@` exist for every external
+    // (declared by DECLARE_TYPE); ShaderProgram's are the ABSTRACT class's:
+    // `XOR EAX,EAX ; RET` both, 0x18004e0d0 / 0x18004e0e0 (B39_RULES D2 -- the
+    // class's own statics, shaderprogram.cpp).
 
     // ??0ShaderProgram@Video@@QEAA@AEBV01@@Z (0x18004e200) and
     // ??4ShaderProgram@Video@@QEAAAEAV01@AEBV01@@Z (0x18004e290) are REAL,
@@ -222,8 +222,8 @@ public:
     ShaderProgram& operator=(const ShaderProgram& other);         // 0x18004e290 — not ported
 
 
-    static const char* _TypeName();        // 0x18004e080 -> "ShaderProgram"   (retail: CA, private)
-    static const char* _ParentTypeName();  // 0x18004e090 -> "Object::CompiledExternal"
+    // `_TypeName` 0x18004e080 -> "ShaderProgram", `_ParentTypeName` 0x18004e090
+    // -> "Object::CompiledExternal": DECLARE_TYPE's (private, as retail's `CA`).
 
 protected:
     // ??0ShaderProgram@Video@@QEAA@XZ 0x1800f5030 -- the REAL constructor,
@@ -301,8 +301,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;                  // [1] 0x18004e560
-    uint32_t          Type() const override;                      // [2] 0x18004e540
+    // [1] 0x18004e560 TypeName / [2] 0x18004e540 Type, TypeId 0x18004e550, `_TypeName` / `_ParentTypeName` and the factory pair:
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
+    DECLARE_TYPE(VertexProgram)
+public:
     int32_t           GetFileVersion() const override;            // [3] 0x1800f6230 — `MOV EAX,5`
     bool              Serialize(void* stream) override;           // [5] 0x1800f6240
     Object::External* Reconstruct() override;                     // [6] 0x18004e6e0
@@ -317,11 +320,9 @@ public:
     // ?Bind@VertexProgram@Video@@QEBAXAEAVContext@2@H@Z  0x1800f6660
     void Bind(void* context, int32_t permutation) const;
 
-    static uint32_t      TypeId();                                // 0x18004e550
-    // Retail's factory pair (B39_RULES D2), the class's own statics. The class
-    // declares its own placement `operator new` (not ported): `::new (p)`.
-    static Object::Base* CreateNewObject();                       // 0x18004e650
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004e6d0
+    // Retail's factory pair 0x18004e650 / 0x18004e6d0 (B39_RULES D2; declared
+    // by DECLARE_TYPE), the class's own statics. The class declares its own
+    // placement `operator new` (not ported): `::new (p)`.
     static void*         operator new(size_t size);               // 0x18004e570 — not ported
     static void*         operator new(size_t size, void* storage);// 0x18004e5e0 — not ported
     static void          operator delete(void* p);                // 0x18004e5f0 — class_operator_delete.cpp
@@ -337,8 +338,8 @@ public:
     void PlatformDestruct();     // 0x1800f6620
     bool PlatformCreate();       // 0x1800f6640 — returns the companion's slot 1
 
-    static const char* _TypeName();        // 0x18004e520 -> "VertexProgram"
-    static const char* _ParentTypeName();  // 0x18004e530 -> "ShaderProgram"
+    // `_TypeName` 0x18004e520 -> "VertexProgram", `_ParentTypeName` 0x18004e530
+    // -> "ShaderProgram": DECLARE_TYPE's.
     static const char* _FileExtension();   // 0x18004e510 -> "srsl"
 
 protected:
@@ -388,8 +389,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;                  // [1] 0x18004e8e0
-    uint32_t          Type() const override;                      // [2] 0x18004e8c0
+    // [1] 0x18004e8e0 TypeName / [2] 0x18004e8c0 Type, TypeId 0x18004e8d0, `_TypeName` / `_ParentTypeName` and the factory pair:
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
+    DECLARE_TYPE(PixelProgram)
+public:
     int32_t           GetFileVersion() const override;            // [3] 0x1800f3a80 — `MOV EAX,5`
     bool              Serialize(void* stream) override;           // [5] 0x1800f3a90
     Object::External* Reconstruct() override;                     // [6] 0x18004ea60
@@ -401,11 +405,9 @@ public:
     // ?Bind@PixelProgram@Video@@QEBAXAEAVContext@2@H@Z  0x1800f3ed0
     void Bind(void* context, int32_t permutation) const;
 
-    static uint32_t      TypeId();                                // 0x18004e8d0
-    // Retail's factory pair (B39_RULES D2), the class's own statics. The class
-    // declares its own placement `operator new` (not ported): `::new (p)`.
-    static Object::Base* CreateNewObject();                       // 0x18004e9d0
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004ea50
+    // Retail's factory pair 0x18004e9d0 / 0x18004ea50 (B39_RULES D2; declared
+    // by DECLARE_TYPE), the class's own statics. The class declares its own
+    // placement `operator new` (not ported): `::new (p)`.
     static void*         operator new(size_t size);               // 0x18004e8f0 — not ported
     static void*         operator new(size_t size, void* storage);// 0x18004e960 — not ported
     static void          operator delete(void* p);                // 0x18004e970 — class_operator_delete.cpp
@@ -417,8 +419,8 @@ public:
     void PlatformDestruct();     // 0x1800f3e90
     bool PlatformCreate();       // 0x1800f3eb0
 
-    static const char* _TypeName();        // 0x18004e8a0 -> "PixelProgram"
-    static const char* _ParentTypeName();  // 0x18004e8b0 -> "ShaderProgram"
+    // `_TypeName` 0x18004e8a0 -> "PixelProgram", `_ParentTypeName` 0x18004e8b0
+    // -> "ShaderProgram": DECLARE_TYPE's.
     static const char* _FileExtension();   // 0x18004e890 -> "srsl"
 
 protected:

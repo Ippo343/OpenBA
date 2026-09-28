@@ -31,6 +31,7 @@
 // the per-primitive serialize calls aren't all wired yet, so we soft-fail).
 
 #include "engine_funcs.h"
+#include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
@@ -370,21 +371,12 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
-    // Resolve typeId from the MaterialInstance BaseTypeInfo* slot. Null/zero
-    // means the type isn't yet registered — skip IsDerivedFrom validation.
-    uint32_t typeId = 0;
-    bool typeIdResolved = false;
-    if (g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance) {
-        typeId = **g_ppTypeInfo_MaterialInstance;
-        typeIdResolved = (typeId != 0);
-    }
-    // Lazy resolution: in standalone the .rdata BaseTypeInfo* slot stays null,
-    // so ask Object::Factory directly (it sees Runtime-DLL-self-registered
-    // Graphics::MaterialInstance).
-    if (!typeIdResolved) {
-        typeId = ::Object::ResolveTypeIdByNameLazy("MaterialInstance");
-        typeIdResolved = (typeId != 0);
-    }
+    // MaterialInstance's type id (retail: the BaseTypeInfo* in import slot
+    // 0x140151350; ENDGAME B.3.9 TI-REST: the class accessor -- the slot and
+    // the by-name fallback are gone). Zero means not yet registered — skip
+    // IsDerivedFrom validation.
+    uint32_t typeId = Graphics::MaterialInstance::TypeId();
+    bool typeIdResolved = (typeId != 0);
     if (!typeIdResolved) {
         static bool s_typeWarned = false;
         if (!s_typeWarned) {

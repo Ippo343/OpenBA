@@ -169,74 +169,21 @@
 // ENDGAME B.3.7 block B3: the eleven bodies are MEMBERS of the four real
 // classes now; each registered door is a one-line QUALIFIED delegation.
 
-namespace {
-
-// BaseTypeInfo's first two fields, and the ONLY two any body here touches:
-//     +0x00  uint32_t     typeId
-//     +0x08  const char*  name
-// Read with memcpy so no alignment or aliasing assumption is made about
-// storage that may be ours or the mint's.
-constexpr size_t kTypeInfoTypeIdOffset = 0x00;
-constexpr size_t kTypeInfoNameOffset   = 0x08;
-
-const uint8_t* AchievementTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* AchievementInstanceTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* GoalTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* GoalInstanceTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
-}
-
-uint32_t ReadTypeId(const uint8_t* node) {
-    uint32_t v = 0;
-    std::memcpy(&v, node + kTypeInfoTypeIdOffset, sizeof v);
-    return v;
-}
-const char* ReadTypeName(const uint8_t* node) {
-    const char* v = nullptr;
-    std::memcpy(&v, node + kTypeInfoNameOffset, sizeof v);
-    return v;
-}
-
-}  // namespace
-
 namespace Achievement {
 
-// ---- ??_7Achievement@0@6B@  slots 1 and 2 ----------------------------------
-uint32_t    Achievement::TypeId()         { return ReadTypeId(AchievementTypeInfo()); }    // 0x180001030
-const char* Achievement::TypeName() const { return ReadTypeName(AchievementTypeInfo()); }  // 0x180001040
-uint32_t    Achievement::Type() const     { return TypeId(); }                             // 0x180001020
+// ---- slots 1 and 2 of all four classes, and the static TypeId -------------
+// ENDGAME B.3.9 TI-REST (B39_RULES D6): the eight node readers above
+// (Type / TypeName / TypeId of Achievement, AchievementInstance, Goal,
+// GoalInstance) are DECLARE_TYPE's bodies over each class's own record
+// (achievement_type_records.cpp); the four RT_DATA_SLOT readers of the minted
+// records are gone with the rows.
 
-// ---- ??_7AchievementInstance@Achievement@@6B@  slots 1 and 2 ---------------
-uint32_t    AchievementInstance::TypeId()         { return ReadTypeId(AchievementInstanceTypeInfo()); }    // 0x1800017b0
-const char* AchievementInstance::TypeName() const { return ReadTypeName(AchievementInstanceTypeInfo()); }  // 0x1800017c0
-uint32_t    AchievementInstance::Type() const     { return TypeId(); }                                     // 0x1800017a0
-
-// ---- ??_7Goal@Achievement@@6B@  slots 1, 2 and 3 ---------------------------
-// (ENDGAME B.3.9 ENG: TypeId() is retail's static accessor 0x180001b50, the
-// same load; the minted record stays until the D6 fold.)
-uint32_t    Goal::TypeId()         { return ReadTypeId(GoalTypeInfo()); }     // 0x180001b50
-const char* Goal::TypeName() const { return ReadTypeName(GoalTypeInfo()); }   // 0x180001b60
-uint32_t    Goal::Type() const     { return TypeId(); }                       // 0x180001b40
-
+// ---- ??_7Goal@Achievement@@6B@  slot 3 -------------------------------------
 // `MOV EAX,0x10000 ; RET`. A literal: the on-disk format version of a Goal,
 // 65536 — NOT derived from anything in our tree.
 int32_t Goal::GetFileVersion() const { return 0x10000; }                      // 0x18009ee10
 
-// ---- ??_7GoalInstance@Achievement@@6B@  slots 1, 2, 4 and 6 ----------------
-uint32_t    GoalInstance::TypeId()         { return ReadTypeId(GoalInstanceTypeInfo()); }    // 0x180001e50
-const char* GoalInstance::TypeName() const { return ReadTypeName(GoalInstanceTypeInfo()); }  // 0x180001e60
-uint32_t    GoalInstance::Type() const     { return TypeId(); }                              // 0x180001e40
-
+// ---- ??_7GoalInstance@Achievement@@6B@  slots 4 and 6 ----------------------
 // `RET`. One byte; the exe subclasses override it.
 void GoalInstance::Startup() {}                                               // 0x18009f000
 

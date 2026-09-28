@@ -260,27 +260,21 @@ public:
         return this;
     }
 
-    // [1] 0x1800116f0 / [2] 0x1800116d0 — both read `?_typeInfo@AnimationEvent@
-    // Graphics@@0VBaseTypeInfo@Object@@A` (0x1801f9978). The bodies live in
-    // `runtime/src/graphics/graphics_typeinfo_accessors.cpp`, which is NOT this
-    // block's file set, so these two members FORWARD to those registered doors
-    // rather than the doors forwarding here.
-    const char* TypeName() const override;
-    uint32_t    Type() const override;
+    // [1] 0x1800116f0 TypeName / [2] 0x1800116d0 Type (the class's record,
+    // retail 0x1801f9978), TypeId 0x1800116e0, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(AnimationEvent)
+public:
 
     // [8] +0x40 — `_purecall` in retail. RULE B5-16: introduced, so `virtual`.
     virtual Object::External* Construct() = 0;
 
-    // ?TypeId@AnimationEvent@Graphics@@SAIXZ  0x1800116e0 -- ENDGAME B.3.9 GFX
-    // (D6 step 1): reads the minted `?_typeInfo@AnimationEvent@` record until
-    // the W3 fold (graphics_typeinfo_accessors.cpp).
-    static uint32_t TypeId();
-
     // ?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ 0x180011700
     // ?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x180011710
-    // Retail's abstract factory pair: both `XOR EAX,EAX ; RET` (animation.cpp).
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* place);
+    // Retail's abstract factory pair: both `XOR EAX,EAX ; RET` (animation.cpp);
+    // declared by DECLARE_TYPE above.
 
     // ??0AnimationEvent@Graphics@@QEAA@AEBV01@@Z  0x180011720  — NOT PORTED
     // ??4AnimationEvent@Graphics@@QEAAAEAV01@AEBV01@@Z 0x180011790 — NOT PORTED

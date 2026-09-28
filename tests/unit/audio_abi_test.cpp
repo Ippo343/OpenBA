@@ -97,8 +97,6 @@ struct BareExternalProbe final : Object::External {
 // The out-of-line members, AS MARKERS.
 // ===========================================================================
 namespace Audio {
-const char* SoundBuffer::TypeName() const { Note(this, 1); return "SoundBuffer"; }
-uint32_t SoundBuffer::Type() const { Note(this, 2); return 0x5b0fu; }
 int32_t SoundBuffer::GetFileVersion() const { Note(this, 3); return 0xa; }
 bool SoundBuffer::Serialize(void*) { Note(this, 5); return true; }
 Object::External* SoundBuffer::Reconstruct() { Note(this, 6); return this; }
@@ -106,8 +104,6 @@ void SoundBuffer::Destruct() { Note(this, 7); }
 Object::External* SoundBuffer::Construct() { Note(this, 8); return this; }
 SoundBuffer::~SoundBuffer() { NoteDtor(this); }
 
-const char* SoundEffect::TypeName() const { Note(this, 1); return "SoundEffect"; }
-uint32_t SoundEffect::Type() const { Note(this, 2); return 0x5e0fu; }
 int32_t SoundEffect::GetFileVersion() const { Note(this, 3); return 3; }
 Object::External::CompileResult SoundEffect::Compile(const System::Filename&) { Note(this, 4); return 1; }
 bool SoundEffect::Serialize(void*) { Note(this, 5); return true; }
@@ -145,11 +141,13 @@ using PtrFn     = void* (*)(void*);
 using VoidFn    = void (*)(void*);
 
 // Raw-call the eight slots every Audio resource owns (4 checked separately).
-void CheckOwnSlotsExceptCompile(void* raw) {
+// Slots 1 and 2 are DECLARE_TYPE's inline bodies over the class's own record
+// (ENDGAME B.3.9 TI-REST), checked against that record.
+void CheckOwnSlotsExceptCompile(void* raw, const ::Object::BaseTypeInfo& record) {
     Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
-    Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);          CHECK_EQ(g_lastMark, kTypeName / 8);
-    Reset(); SlotAt<TypeFn>(raw, kType)(raw);              CHECK_EQ(g_lastMark, kType / 8);
+    CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record.name);
+    CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record.typeId);
     Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
     Reset(); SlotAt<SerFn>(raw, kSerialize)(raw, nullptr); CHECK_EQ(g_lastMark, kSerialize / 8);
     Reset(); SlotAt<PtrFn>(raw, kReconstruct)(raw);        CHECK_EQ(g_lastMark, kReconstruct / 8);
@@ -286,7 +284,7 @@ UNIT_TEST(audio_scene_and_configuration_layout) {
 UNIT_TEST(audio_soundbuffer_slot_order_and_inherited_compile) {
     SoundBufferProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckOwnSlotsExceptCompile(raw);
+    CheckOwnSlotsExceptCompile(raw, Audio::SoundBuffer::GetTypeInfo());
     // Slot 4 is NOT SoundBuffer's: it is Object::External's Compile, the same
     // pointer a bare External leaf carries, and it answers retail's 1.
     BareExternalProbe bare;
@@ -297,7 +295,7 @@ UNIT_TEST(audio_soundbuffer_slot_order_and_inherited_compile) {
 UNIT_TEST(audio_soundeffect_slot_order_and_own_compile) {
     SoundEffectProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckOwnSlotsExceptCompile(raw);
+    CheckOwnSlotsExceptCompile(raw, Audio::SoundEffect::GetTypeInfo());
     Reset();
     CHECK_EQ(SlotAt<CompileFn>(raw, kCompile)(raw, nullptr), 1u);
     CHECK_EQ(g_lastMark, kCompile / 8);

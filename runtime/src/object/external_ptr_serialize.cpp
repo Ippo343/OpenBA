@@ -171,6 +171,20 @@
 #include "../../types/ui/Font.h"   // ENDGAME B.3.9 TI-UI: UI::Font::GetTypeInfo()
 #include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.9 TI-UI: UI::SpriteSheet::GetTypeInfo()
 #include "../../types/ui/StringTable.h"   // ENDGAME B.3.9 TI-UI: UI::StringTable::GetTypeInfo()
+#include "../../types/audio/SoundBuffer.h"     // ENDGAME B.3.9 TI-REST: the thunks' records
+#include "../../types/audio/SoundEffect.h"
+#include "../../types/collision2d/Surface.h"
+#include "../../types/achievement/AchievementManager.h"
+#include "../../types/achievement/Goal.h"
+#include "../../types/video/ImageBuffer.h"
+#include "../../types/video/ShaderProgram.h"
+#include "../../types/video/VertexLayout.h"
+#include "../../types/video/RenderState.h"
+#include "../../types/video/VideoProgram.h"
+#include "../../types/graphics/Animation.h"
+#include "../../types/graphics/AnimationGroup.h"
+#include "../../types/graphics/GraphicsMesh.h"
+#include "../../types/graphics/Material.h"
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -483,8 +497,7 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Dialog, UI::Dialog)
 // 0x1800042a0 — ElementDescription+0x58, and Achievement::Goal+0x20
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_StringTable, UI::StringTable)
 // 0x180005dc0 — Achievement::GoalInstance+0x18. The oracle route; see the banner.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Goal,
-             "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Goal, Achievement::Goal)
 // 0x180004590 — Achievement::Achievement+0x38 (WAVE 26 LANE INT33). The FIFTH,
 // and it is registered for the same reason the fourth was: it is on an ORACLE
 // route that already exists. See the registration block below.
@@ -492,48 +505,37 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SpriteSheet, UI::SpriteSheet)
 // 0x180014520 — the SIXTH (WAVE 29 LANE WALL). `SpriteSheet+0x30`, and also
 // the four material slots of `Graphics::EdgeMeshInstance` and
 // `Graphics::Particle`. See the registration block below for why it moves now.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_MaterialInstance,
-             "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_MaterialInstance, Graphics::MaterialInstance)
 
 // ---- 2026-09-12: the rest of the family that the cutover closure reaches ----
 // (docs/runtime_port/closure/WORKLIST.md). Same 748-byte body, one typeInfo
 // each; the pairing of address to T is the RIP-relative `_typeInfo` operand
 // each body loads, read out of Ghidra, not guessed from the caller.
 // 0x18005d0f0 — Video::ImageBuffer
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ImageBuffer,
-             "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_ImageBuffer, Video::ImageBuffer)
 // 0x180061100 — Graphics::Material (cutover attempt 33's wall, from MaterialInstance::Serialize+0x83)
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Material,
-             "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Material, Graphics::Material)
 // 0x180014230 — Graphics::GraphicsMesh
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_GraphicsMesh,
-             "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_GraphicsMesh, Graphics::GraphicsMesh)
 // 0x1800756d0 — UI::DialogControllerConfig
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_DialogControllerConfig, UI::DialogControllerConfig)
 // 0x180051790 — Audio::SoundEffect
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundEffect,
-             "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundEffect, Audio::SoundEffect)
 // 0x18005b840 — Graphics::AnimationGroup
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationGroup,
-             "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_AnimationGroup, Graphics::AnimationGroup)
 // 0x180006d10 — Achievement::Achievement. The export spells the class with a
 // back-reference (`@Achievement@1@`), which is why a grep for
 // `Achievement@Achievement@@` finds nothing; the name below is verified against
 // the export directory and is the same key the mint uses.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Achievement,
-             "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Achievement, Achievement::Achievement)
 // The four Video::VideoProgram fields (runtime/src/video/videoprogram.cpp):
 // 0x180055090 VertexLayout, 0x1800542a0 VertexProgram, 0x180055380 PixelProgram,
 // 0x180055670 RenderState. Reached only through VideoProgram's Serialize slot,
 // so invisible to the static closure until that class was ported.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_VertexLayout,
-             "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A")
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_VertexProgram,
-             "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A")
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_PixelProgram,
-             "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A")
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_RenderState,
-             "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_VertexLayout, Video::VertexLayout)
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_VertexProgram, Video::VertexProgram)
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_PixelProgram, Video::PixelProgram)
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_RenderState, Video::RenderState)
 // 0x18003f1e0 — UI::Font, `UI::TextDescription` +0x68 (vtable batch 2). The
 // pairing is this body's own `MOV EDX,dword ptr [0x1801fab68]` at 0x18003f473
 // (the type id handed to Object::Base::IsDerivedFrom), and 0x1801fab68 is
@@ -547,8 +549,7 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Font, UI::Font)
 // (runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp), the same
 // 748-byte shared template as every other row here; typeInfo confirmed against
 // the retail export table (pefile) at 0x1801f9978, not assumed.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
-             "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_AnimationEvent, Graphics::AnimationEvent)
 
 // ---- BATCH B (2026-09-12): the last three single-pointer instantiations -----
 //
@@ -572,8 +573,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
 // 0x180076e90 — ExternalPtr<UI::CharacterSet>
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_CharacterSet, UI::CharacterSet)
 // 0x180052a50 — ExternalPtr<Audio::SoundBuffer>
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundBuffer,
-             "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundBuffer, Audio::SoundBuffer)
 // 0x18003dc90 — ExternalPtr<Object::ExternalList>. The export spells the
 // enclosing namespace with a back-reference (`@2@`), exactly as
 // `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` does.
@@ -630,17 +630,14 @@ extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
                    "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A")
 // 0x180005220 — Achievement::Goal
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Goal,
-                   "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Goal, Achievement::Goal)
 // 0x1800493d0 — UI::ElementDescription
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_ElementDescription, UI::ElementDescription)
 // 0x18005d4a0 — Graphics::MaterialInstance
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_MaterialInstance,
-                   "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_MaterialInstance, Graphics::MaterialInstance)
 // 0x1800605e0 -- Video::VideoProgram (Material::_programs; not in the static
 // closure because Material::Serialize is reached only through a vtable slot)
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_VideoProgram,
-                   "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_VideoProgram, Video::VideoProgram)
 
 // ---- BATCH B (2026-09-12): the last three array instantiations -------------
 //
@@ -660,8 +657,7 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_VideoProgram,
 // documenttextdescription.cpp:171 and :177, spritecapture_class.cpp:216.
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Font, UI::Font)
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_SpriteSheet, UI::SpriteSheet)
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Surface,
-                   "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Surface, Collision2D::Surface)
 
 #undef EXTPTR_ARRAY_THUNK
 #undef EXTPTR_ARRAY_THUNK_OF

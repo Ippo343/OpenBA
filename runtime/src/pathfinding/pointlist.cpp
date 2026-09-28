@@ -81,10 +81,6 @@ using rt::io::Serializer;
 using rt::io::Stream;
 using Point = Pathfinding::PointList::Point;
 
-const uint8_t* PointListTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A");
-}
-
 // ENDGAME B.3.9 ENG: `InlineCtorStores` (Base / External / PointList vptr
 // stamps from the MINT plus the six zero qwords) and the file's `CallSlot0`
 // are gone. The stores are the real constructor now (PointList.h), the stamps
@@ -178,16 +174,9 @@ void PointArrayDtor(Collection::Array<Point>* a) {
 // ############################################################################
 namespace Pathfinding {
 
-// 0x180070e30: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
-uint32_t PointList::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, PointListTypeInfo(), sizeof v); return v;
-}
-// [2] 0x180070e20: the same load.
-uint32_t PointList::Type() const { return TypeId(); }
-// [1] 0x180070e40: the same node at +8.
-const char* PointList::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, PointListTypeInfo() + 8, sizeof v); return v;
-}
+// TypeId 0x180070e30 / [2] 0x180070e20 / [1] 0x180070e40: DECLARE_TYPE's
+// loads over the class's own record (pathfinding_type_records.cpp; ENDGAME
+// B.3.9 TI-REST).
 // [3] 0x18010f880: `MOV EAX,5 ; RET`.
 int32_t PointList::GetFileVersion() const { return 5; }
 // [4] 0x18010f6d0: returns 1 (the same CompileResult value External's returns).
@@ -319,10 +308,9 @@ extern "C" void* RtPathfinding_PointArray_Dtor(void* a) {
 int RtPathfindingPointListRegister() {
     int n = 0;
     // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The minted `?_typeInfo@PointList`
-    // record's factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos
-    // runs after every *PortInit), so `Object::Factory` now builds a real
-    // PointList.
+    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
+    // (pathfinding_type_records.cpp) carries both, so `Object::Factory` builds
+    // a real PointList.
     RegisterRuntimeExport("?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ",
                           (void*)&Pathfinding::PointList::CreateNewObject); ++n;
     RegisterRuntimeAddr  (0x180070f30ull, (void*)&Pathfinding::PointList::CreateNewObject);

@@ -71,3 +71,9 @@ RUN: new game, tutorial, Load Game, Mods, the front-end routes and the tool rout
 | b39-VS (VID W2 + SYS W3: Video::ImageBuffer and System::Thread rows retired) | a99bb175 | ok | 0 | 906 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/103/30 | 4 | in-game save COMPLETE, crash log 0; forced device-lost in game: round trip COMPLETE, crash log 0 | 0 |
 | b39-SS1 (storage sweep, Runtime side: Timer x5, Video::Device / Configuration, the Object / IO / Input / Engine singletons — no reader under runtime/ goes through a storage door) | 8a9400dc | ok | 0 | 906 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/103/30 | 4 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; forced device-lost in game: round trip COMPLETE, crash log 0 | 0 |
 | b39-SS2 (storage sweep, exe side: 20 storage rows retired; 20 engine_funcs singleton globals, 9 import-slot rows deleted) | b3b3b45c | ok | 0 | 906 | 5683/0 · 5773/12 · 4758 | 5/5 | 4/103/10 | 4 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0; in-game save COMPLETE; forced device-lost in game COMPLETE, crash log 0 | 0 |
+| b39-TR (type-id residue: 99 type-id globals, 97 g_tid_ storage globals, 31 fill functions, 157 registry rows, 17 registrars deleted; 1 behaviour commit: ExternalPtr<Toolbar>::Serialize) | 8bbea516 | ok | 0 | 906 | 5683/0 · 5773/12 · 4758 | 5/5 | 4/103/10 | 4 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0 | 0 |
+
+Typetable after TR: 428 lines (md5 b983f144) = the 433-line table minus 5 `ResolveTypeIdByNameLazy` lines whose
+readers are `X::TypeId()` now (the gate's lazy-lookup rule: equal). Baseline and `TYPETABLE_414.txt` refreshed to
+it so later comparisons are strict. `NOT IMPLEMENTED` hits on the new-game route: 23 → 11 (rows of deleted
+readers; none new).

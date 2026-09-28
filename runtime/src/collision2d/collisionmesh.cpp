@@ -78,6 +78,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
 #include "../../types/collision2d/CollisionMesh.h"
+#include "../../types/collision2d/Surface.h"   // the _surfaces field's type record
 #include "../system/string.h"
 
 namespace {
@@ -97,13 +98,6 @@ using Vec2    = CollisionMesh::Vec2;
 using Triple3 = CollisionMesh::Triple3;
 using Quad4   = CollisionMesh::Quad4;
 using Face    = CollisionMesh::Face;
-
-const uint8_t* CollisionMeshTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A");
-}
-const void* SurfaceTypeInfo() {
-    return RT_DATA_SLOT(const void*, "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A");
-}
 
 // ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
 //
@@ -245,16 +239,9 @@ void SerializeFacesBody(Serializer* ser, int32_t count, Face* base) {
 
 namespace Collision2D {
 
-// 0x180064f60: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
-uint32_t CollisionMesh::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, CollisionMeshTypeInfo(), sizeof v); return v;
-}
-// [2] 0x180064f50: the same load.
-uint32_t CollisionMesh::Type() const { return TypeId(); }
-// [1] 0x180064f70: the name pointer at +8 of the same record.
-const char* CollisionMesh::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, CollisionMeshTypeInfo() + 8, sizeof v); return v;
-}
+// TypeId 0x180064f60 / [2] 0x180064f50 / [1] 0x180064f70: DECLARE_TYPE's
+// loads over the class's own record (collision2d_type_records.cpp; ENDGAME
+// B.3.9 TI-REST).
 // [3] 0x180108cc0: `MOV EAX,3 ; RET`.
 int32_t CollisionMesh::GetFileVersion() const { return 3; }
 // [4] 0x180108cb0: returns 1.
@@ -357,7 +344,7 @@ bool CollisionMesh::Serialize(void* streamv) {
     int32_t nS = self->_surfaces._size;
     scalarInt(rw, &nS, nullptr);
     if (reading) PtsBSetSize(&self->_surfaces, nS);
-    const void* surfaceTypeInfo = SurfaceTypeInfo();
+    const void* surfaceTypeInfo = &Collision2D::Surface::GetTypeInfo();   // retail: [0x1801fa820]
     for (int32_t i = 0; i < nS; ++i) {
         RtObject_ExternalPtr_Serialize(
             reinterpret_cast<RtObject::External**>(&self->_surfaces._data[i]), &ser, surfaceTypeInfo);
@@ -385,9 +372,8 @@ extern "C" void RtCollision2D_CollisionMesh_SerializeQuads(void* ser, int32_t co
 int RtCollision2DCollisionMeshRegister() {
     int n = 0;
     // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The minted `?_typeInfo@CollisionMesh`
-    // record's factoryFn / inPlaceFactoryFn resolve these by name
-    // (MintTypeInfos runs after every *PortInit).
+    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
+    // (collision2d_type_records.cpp) carries them.
     RegisterRuntimeExport("?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ",
                           (void*)&Collision2D::CollisionMesh::CreateNewObject); ++n;
     RegisterRuntimeAddr  (0x180065060ull, (void*)&Collision2D::CollisionMesh::CreateNewObject);

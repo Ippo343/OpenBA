@@ -87,10 +87,6 @@ using SubMesh  = Picking::PickingMesh::SubMesh;
 using Triangle = Picking::PickingMesh::Triangle;
 using UV16     = Picking::PickingMesh::UV16;
 
-const uint8_t* PickingMeshTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A");
-}
-
 // ENDGAME B.3.9 PILOT: `InlineCtorStores` (Base / External / PickingMesh vptr
 // stamps from the MINT plus the zero stores) and the file's `CallSlot0` are
 // gone. The stores are the real constructor now (PickingMesh.h), the stamps
@@ -236,16 +232,9 @@ void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
 // ############################################################################
 namespace Picking {
 
-// [2] 0x180071a90: `MOV EAX,[_typeInfo] ; RET`.
-// 0x180071aa0: the static accessor, the same load (B39_RULES D6 step 1).
-uint32_t PickingMesh::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, PickingMeshTypeInfo(), sizeof v); return v;
-}
-uint32_t PickingMesh::Type() const { return TypeId(); }
-// [1] 0x180071ab0: the same node at +8.
-const char* PickingMesh::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, PickingMeshTypeInfo() + 8, sizeof v); return v;
-}
+// [1] 0x180071ab0 / [2] 0x180071a90 / TypeId 0x180071aa0: DECLARE_TYPE's
+// `MOV RAX,[_typeInfo+8]` / `MOV EAX,[_typeInfo]` over the class's own record
+// (picking_type_records.cpp; ENDGAME B.3.9 TI-REST).
 // [3] 0x180122940: `MOV EAX,9 ; RET`.
 int32_t PickingMesh::GetFileVersion() const { return 9; }
 // [4] 0x180122950: returns 1.
@@ -364,10 +353,10 @@ extern "C" void RtPicking_PickingMesh_SerializeSubMeshes(void* ser, int32_t coun
 int RtPickingPickingMeshRegister() {
     int n = 0;
     // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The minted `?_typeInfo@PickingMesh`
-    // record's factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos
-    // runs after every *PortInit), so `Object::Factory` -- External::Load's
-    // create-by-type-id -- now builds a real PickingMesh.
+    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
+    // (picking_type_records.cpp) carries both as its factoryFn /
+    // inPlaceFactoryFn, so `Object::Factory` -- External::Load's
+    // create-by-type-id -- builds a real PickingMesh.
     RegisterRuntimeExport("?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ",
                           (void*)&Picking::PickingMesh::CreateNewObject); ++n;
     RegisterRuntimeAddr  (0x180071ba0ull, (void*)&Picking::PickingMesh::CreateNewObject);

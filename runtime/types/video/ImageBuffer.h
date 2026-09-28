@@ -276,8 +276,11 @@ public:
         if (flags & 1) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;              // [1] 0x18001e900
-    uint32_t          Type() const override;                  // [2] 0x18001e8e0
+    // [1] 0x18001e900 TypeName / [2] 0x18001e8e0 Type, TypeId 0x18001e8f0, `_TypeName` / `_ParentTypeName` and the factory pair:
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
+    DECLARE_TYPE(ImageBuffer)
+public:
     int32_t           GetFileVersion() const override;        // [3] 0x1800f26e0 — `MOV EAX,7`
     bool              Serialize(void* stream) override;       // [5] 0x1800f26f0
     Object::External* Reconstruct() override;                 // [6] 0x18001ea80
@@ -410,10 +413,8 @@ public:
                                                         //   (was 0x18001ec50; the
                                                         //   export table says ec30)
 
-    // The static reflection companions retail emits.
-    static uint32_t      TypeId();                              // 0x18001e8f0
-    static Object::Base* CreateNewObject();                     // 0x18001e9f0 — buffers.cpp
-    static Object::Base* CreateInPlaceObject(void* storage);    // 0x18001ea70 — buffers.cpp
+    // The static reflection companions retail emits are DECLARE_TYPE's (the
+    // factory pair 0x18001e9f0 / 0x18001ea70 is in buffers.cpp).
     // ??2ImageBuffer@Video@@SAPEAX_K@Z 0x18001e910 — the body moved onto this
     // member by block VC; the door is `runtime/src/video/context_ctor.cpp`'s
     // `RtVideo_ImageBuffer_OperatorNew`, which keeps its name and both rows.
@@ -473,12 +474,10 @@ protected:
     bool PlatformCreate(LevelArray* levels);   // 0x1800f3110 (was 0x1800f2c90) — not ported
     void PlatformSerialize(IO::Serializer& serializer);   // 0x1800f3130
 
-    // RULE B5-15: both literals are COPIED from B35_SLOTS section 3, read
-    // byte-wise out of the retail image, NOT stringised from the C++ base name.
+    // RULE B5-15: both literals are COPIED from B35_SLOTS section 3 into the
+    // DEFINE_TYPE (video_type_records.cpp):
     //   0x18001e8c0  ?_TypeName@ImageBuffer@Video@@       -> "ImageBuffer"
     //   0x18001e8d0  ?_ParentTypeName@ImageBuffer@Video@@ -> "Object::CompiledExternal"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     // ---- the 0x48 bytes ImageBuffer adds ---------------------------------

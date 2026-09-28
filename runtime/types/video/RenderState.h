@@ -236,8 +236,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;              // [1] 0x18004b570
-    uint32_t          Type() const override;                  // [2] 0x18004b550
+    // [1] 0x18004b570 TypeName / [2] 0x18004b550 Type, TypeId 0x18004b560, `_TypeName` / `_ParentTypeName` and the factory pair:
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
+    DECLARE_TYPE(RenderState)
+public:
     int32_t           GetFileVersion() const override;        // [3] 0x1800f4c80 — `MOV EAX,3`
     bool              Serialize(void* stream) override;       // [5] 0x1800f4c90
     Object::External* Reconstruct() override;                 // [6] 0x18004b6f0
@@ -266,12 +269,10 @@ public:
     RenderState(const RenderState& other);              // 0x18004b640 — not ported
     RenderState& operator=(const RenderState& other);   // 0x18004b750 — not ported
 
-    // The static reflection companions retail emits. The factory pair is the
-    // class's own (B39_RULES D2), defined in renderstate.cpp; the class declares
-    // its own placement `operator new` (not ported), so placement spells `::new`.
-    static uint32_t      TypeId();                              // 0x18004b560
-    static Object::Base* CreateNewObject();                     // 0x18004b660
-    static Object::Base* CreateInPlaceObject(void* storage);    // 0x18004b6e0
+    // The static reflection companions retail emits are DECLARE_TYPE's. The
+    // factory pair 0x18004b660 / 0x18004b6e0 is the class's own (B39_RULES D2),
+    // defined in renderstate.cpp; the class declares its own placement
+    // `operator new` (not ported), so placement spells `::new`.
     static void*         operator new(size_t size);             // ??2 — not ported
     static void*         operator new(size_t size, void* storage);
     static void          operator delete(void* p);              // ??3 — not ported
@@ -292,14 +293,10 @@ protected:
     void PlatformCreate();      // ?PlatformCreate@    0x1800f4ea0
     void PlatformDestruct();    // ?PlatformDestruct@  0x1800f4e80
 
-    // RULE B5-15: both literals are COPIED from B35_SLOTS section 3, read
-    // byte-wise out of the retail image, NOT stringised from the C++ base name.
+    // RULE B5-15: both literals are COPIED from B35_SLOTS section 3 into the
+    // DEFINE_TYPE (video_type_records.cpp):
     //   0x18004b530  ?_TypeName@RenderState@Video@@        -> "RenderState"
     //   0x18004b540  ?_ParentTypeName@RenderState@Video@@  -> "Object::External"
-    // Here the two happen to agree with a `#Parent` stringisation; on
-    // `Graphics::ParticleSystem` they do not, which is why the rule exists.
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     // ---- the 0x60 bytes RenderState adds ---------------------------------

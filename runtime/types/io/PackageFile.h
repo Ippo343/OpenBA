@@ -101,15 +101,13 @@
 // `tests/unit/`, and `final` would make that impossible.
 //
 // ----------------------------------------------------------------------------
-// THE `?_typeInfo@` ROW STAYS MINTED
+// THE TYPE RECORD
 // ----------------------------------------------------------------------------
-// `IO::PackageFile` is the only IO class with a `?_typeInfo@` mint row
-// (0x1801f9ac8, `rt_data_mint_tables.inc`), and the row is LIVE, not orphaned —
-// it is the only reflected `Object::External` subclass in the namespace. It
-// takes `DECLARE_TYPE`/`DEFINE_TYPE` eventually; it does **not** take them in
-// this step, for the same reason B.3.3's closing pass left the five `Object`
-// `?_typeInfo@` rows minted (B34_RULES §1.4). `Type()`, `TypeId()` and
-// `TypeName()` keep reading that record through `RT_DATA_SLOT`.
+// `IO::PackageFile` is the only reflected `Object::External` subclass in the
+// namespace (retail record 0x1801f9ac8). It was a MINTED row until ENDGAME
+// B.3.9 TI-REST; now the class takes `DECLARE_TYPE` and
+// runtime/src/io/io_type_records.cpp `DEFINE_TYPE`s it, and `Type()`,
+// `TypeId()` and `TypeName()` read the class's own record.
 //
 // ----------------------------------------------------------------------------
 // THE FIVE `RtSystem::String` MEMBERS STAY PODs
@@ -196,8 +194,13 @@ public:
         return this;
     }
 
-    const char*   TypeName() const override;                    // [1] 0x180025150
-    uint32_t      Type() const override;                        // [2] 0x180025130
+    // [1] 0x180025150 TypeName / [2] 0x180025130 Type, the static TypeId
+    // 0x180025140, `_TypeName` / `_ParentTypeName` and the factory pair
+    // 0x180025240 / 0x1800252c0 (package_file.cpp): retail's macro (ENDGAME
+    // B.3.9 TI-REST, B39_RULES D6). The record is `DEFINE_TYPE`d in
+    // runtime/src/io/io_type_records.cpp.
+    DECLARE_TYPE(PackageFile)
+public:
     int32_t       GetFileVersion() const override;              // [3] 0x1800b6080
     // [4] 0x1800b6090 — PackageFile's OWN override, NOT External's inherited
     // 0x1800066e0. `MOV EAX,0x1 ; RET`: a package is never "compiled", so the
@@ -286,16 +289,10 @@ public:
     // GetFileCount and a guard here would skip work rather than restore it.
     System::Filename GetFileName(int index) const;
 
-    // The static companion retail's reflection block emits, reading the same
-    // minted `?_typeInfo@PackageFile@IO@@` record `Type()` reads (through a
-    // namespace-scope atomic slot, ENDGAME B.3.9 W1; DEFINE_TYPE is W3).
-    static uint32_t TypeId();         // 0x180025140
-
-    // Retail's factory pair (B39_RULES D2), replacing the FACTREST replay row:
-    // MemAlloc(0xf0, 8) + the ctor, and the null-tested in-place ctor.
-    // Defined and registered (name + VA) in package_file.cpp.
-    static Object::Base* CreateNewObject();                  // 0x180025240
-    static Object::Base* CreateInPlaceObject(void* place);   // 0x1800252c0
+    // Retail's factory pair (B39_RULES D2), declared by DECLARE_TYPE above,
+    // replacing the FACTREST replay row: MemAlloc(0xf0, 8) + the ctor, and the
+    // null-tested in-place ctor. Defined and registered (name + VA) in
+    // package_file.cpp.
 
     // ---- the 0xd0 bytes PackageFile adds, from +0x20 ----------------------
     // PUBLIC, like `Object::External`'s and `IO::Serializer`'s, because the

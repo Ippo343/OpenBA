@@ -1,0 +1,50 @@
+# ENDGAME B.3 step 9 -- the rows block TI-REST retired (B39_RULES.md D3, D6 W3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# Every row here is a `?_typeInfo@` record whose class now carries DECLARE_TYPE /
+# DEFINE_TYPE (runtime/src/<ns>/<ns>_type_records.cpp); every reader reads X::TypeId() /
+# GetTypeInfo() / the inline Type() / TypeName().
+
+# -- Picking --
+?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Picking::PickingMesh, "Object::External", nullptr); the RT_DATA_SLOT accessor in pickingmesh.cpp deleted
+
+# -- Pathfinding --
+?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Pathfinding::PointList, "Object::External", nullptr); the RT_DATA_SLOT accessor in pointlist.cpp deleted
+
+# -- IO --
+?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(IO::PackageFile, "Object::External", nullptr); the atomic-slot ResolveExport accessor in package_file.cpp deleted
+
+# -- Audio --
+?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Audio::SoundBuffer, "Object::CompiledExternal", nullptr); RT_DATA_SLOT accessor (vtbatch7_soundbuffer_soundeffect.cpp) and the by-name EXTPTR_THUNK read (external_ptr_serialize.cpp) converted
+?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Audio::SoundEffect, "Object::External", nullptr); RT_DATA_SLOT accessor and the by-name EXTPTR_THUNK read converted
+
+# -- Collision2D --
+?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Collision2D::CollisionMesh, "Object::External", nullptr); RT_DATA_SLOT accessor in collisionmesh.cpp deleted
+?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Collision2D::Surface, "Object::External", nullptr); RT_DATA_SLOT accessors (surface.cpp, collisionmesh.cpp _surfaces serialize) and the EXTPTR_ARRAY_THUNK read converted
+
+# -- Achievement --
+?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::Achievement, "Object::External", nullptr); RT_DATA_SLOT accessor (achievement_typeinfo_accessors.cpp) and the EXTPTR_THUNK read converted
+?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::AchievementInstance, "Object::Internal", nullptr); RT_DATA_SLOT accessor and the INTPTR_ARRAY_THUNK read converted
+?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::Goal, "Object::External", nullptr); RT_DATA_SLOT accessor and the two EXTPTR thunk reads converted
+?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Achievement::GoalInstance, "Object::Internal", nullptr); RT_DATA_SLOT accessors (accessors, goal_list.cpp) and the INTPTR_ARRAY_THUNK read converted
+
+# -- Video --
+?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::ImageBuffer, "Object::CompiledExternal", nullptr); readers converted: imagebuffer_vtable.cpp accessor, mainloop_video.cpp TypeIdImageBuffer, EXTPTR_THUNK
+?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::ShaderProgram, "Object::CompiledExternal", nullptr); shaderprogram.cpp accessor converted
+?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::VertexProgram, "ShaderProgram", nullptr); vertexprogram.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::PixelProgram, "ShaderProgram", nullptr); pixelprogram.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::VertexLayout, "Object::CompiledExternal", nullptr); vertexlayout.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::RenderState, "Object::External", nullptr); renderstate.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Video::VideoProgram, "Object::External", nullptr); videoprogram.cpp accessor, mainloop_video.cpp, EXTPTR_ARRAY_THUNK converted
+
+# -- Graphics --
+?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::AnimationEvent, "Object::External", nullptr); graphics_typeinfo_accessors.cpp accessor and the EXTPTR_THUNK read converted
+?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::AnimationGroup, "Object::External", nullptr); vtbatch7 accessor and the EXTPTR_THUNK read converted
+?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::EdgeMesh, "Object::External", nullptr); edgemesh_vtable.cpp accessor and mainloop_video.cpp TypeIdEdgeMesh converted
+?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::GraphicsMesh, "Object::CompiledExternal", nullptr); graphicsmesh_vtable.cpp accessor, mainloop_video.cpp, EXTPTR_THUNK converted
+?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::Material, "Object::External", nullptr); material.cpp accessor and the EXTPTR_THUNK read converted
+?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::MaterialInstance, "Object::External", nullptr); accessors, both EXTPTR thunks, exe import slot 0x140151350 row + g_ppTypeInfo_MaterialInstance and its four code/Game readers converted
+?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::Particle, "Object::External", nullptr); graphics_typeinfo_accessors.cpp accessor converted
+?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::ParticleSystem, "Particle", nullptr); vtbatch7 accessor, wave27 / wave28 ResolveExport reads converted
+?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::GeneratedImageBuffer, "Video::ImageBuffer", nullptr); imagebuffer_derived.cpp accessor and wave9_lane_gfx.cpp ResolveExport read converted
+?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::FrameCopyImageBuffer, "GeneratedImageBuffer", nullptr); imagebuffer_derived.cpp accessor and mainloop_video.cpp converted
+?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Graphics::ReflectionImageBuffer, "GeneratedImageBuffer", nullptr); imagebuffer_derived.cpp accessor and mainloop_video.cpp converted

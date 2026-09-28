@@ -81,11 +81,10 @@ void CheckBothArms() {
 
 // ---------------------------------------------------------------------------
 // Marker bodies for the out-of-line members (videoprogram.cpp in the exe).
+// TypeName / Type / TypeId are DECLARE_TYPE's inline bodies (ENDGAME B.3.9
+// TI-REST; runtime/src/video/video_type_records.cpp is linked).
 // ---------------------------------------------------------------------------
 namespace Video {
-const char*       VideoProgram::TypeName() const { return "VideoProgram"; }
-uint32_t          VideoProgram::Type() const { return 0x7071u; }
-uint32_t          VideoProgram::TypeId() { return 0x7071u; }
 int32_t           VideoProgram::GetFileVersion() const { return 1; }
 bool              VideoProgram::Serialize(void*) { return true; }
 Object::External* VideoProgram::Reconstruct() { return this; }
@@ -95,9 +94,6 @@ VideoProgram::~VideoProgram() { NoteDtor(this); }
 void              VideoProgram::PlatformConstruct() { _data = kMarkerData; }
 void              VideoProgram::PlatformDestruct() {}
 
-const char*       VertexLayout::TypeName() const { return "VertexLayout"; }
-uint32_t          VertexLayout::Type() const { return 0x7072u; }
-uint32_t          VertexLayout::TypeId() { return 0x7072u; }
 int32_t           VertexLayout::GetFileVersion() const { return 3; }
 bool              VertexLayout::Serialize(void*) { return true; }
 Object::External* VertexLayout::Reconstruct() { return this; }
@@ -107,9 +103,6 @@ VertexLayout::~VertexLayout() { NoteDtor(this); }
 void              VertexLayout::PlatformConstruct() { _data = kMarkerData; }
 void              VertexLayout::PlatformDestruct() {}
 
-const char*       RenderState::TypeName() const { return "RenderState"; }
-uint32_t          RenderState::Type() const { return 0x7073u; }
-uint32_t          RenderState::TypeId() { return 0x7073u; }
 int32_t           RenderState::GetFileVersion() const { return 3; }
 bool              RenderState::Serialize(void*) { return true; }
 Object::External* RenderState::Reconstruct() { return this; }
@@ -119,13 +112,10 @@ RenderState::~RenderState() { NoteDtor(this); }
 void              RenderState::PlatformConstruct() { _data = static_cast<RenderStateData*>(kMarkerData); }
 void              RenderState::PlatformDestruct() {}
 
-const char*       ShaderProgram::TypeName() const { return "ShaderProgram"; }
-uint32_t          ShaderProgram::Type() const { return 0x7074u; }
-uint32_t          ShaderProgram::TypeId() { return 0x7074u; }
 bool              ShaderProgram::Serialize(void*) { return true; }
 ShaderProgram::~ShaderProgram() { ++g_shaderBaseDtorCount; }
 
-#define B39_VID_SHADER_MARKERS(C, ID)                                                  const char*       C::TypeName() const { return #C; }                               uint32_t          C::Type() const { return ID; }                                   uint32_t          C::TypeId() { return ID; }                                       int32_t           C::GetFileVersion() const { return 5; }                          bool              C::Serialize(void*) { return true; }                             Object::External* C::Reconstruct() { return this; }                                void              C::Destruct() {}                                                 Object::External* C::Construct() { return this; }                                 C::~C() { NoteDtor(this); }                                                        void              C::PlatformConstruct() { _data = kMarkerData; }                  void              C::PlatformDestruct() {}
+#define B39_VID_SHADER_MARKERS(C, ID)                                                  int32_t           C::GetFileVersion() const { return 5; }                          bool              C::Serialize(void*) { return true; }                             Object::External* C::Reconstruct() { return this; }                                void              C::Destruct() {}                                                 Object::External* C::Construct() { return this; }                                 C::~C() { NoteDtor(this); }                                                        void              C::PlatformConstruct() { _data = kMarkerData; }                  void              C::PlatformDestruct() {}
 B39_VID_SHADER_MARKERS(VertexProgram, 0x7075u)
 B39_VID_SHADER_MARKERS(PixelProgram,  0x7076u)
 #undef B39_VID_SHADER_MARKERS

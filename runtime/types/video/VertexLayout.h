@@ -180,8 +180,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;              // [1] 0x18004dcd0
-    uint32_t          Type() const override;                  // [2] 0x18004dcb0
+    // [1] 0x18004dcd0 TypeName / [2] 0x18004dcb0 Type, TypeId 0x18004dcc0, `_TypeName` / `_ParentTypeName` and the factory pair:
+    // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
+    // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
+    DECLARE_TYPE(VertexLayout)
+public:
     int32_t           GetFileVersion() const override;        // [3] 0x1800f5e60 — `MOV EAX,3`
     bool              Serialize(void* stream) override;       // [5] 0x1800f5e70
     Object::External* Reconstruct() override;                 // [6] 0x18004de50
@@ -219,13 +222,9 @@ public:
     VertexLayout& operator=(const VertexLayout& other);           // 0x18004df30 — not ported
 
     // The static reflection companions retail emits. TypeId (0x18004dcc0) is
-    // `MOV EAX,[_typeInfo]` over the (still minted) record (B39_RULES D6 step
-    // 1); the factory pair is the class's own (D2), defined in vertexlayout.cpp.
-    // The class declares its own placement `operator new` (not ported):
-    // placement spells `::new (p)`.
-    static uint32_t     TypeId();                                 // 0x18004dcc0
-    static Object::Base* CreateNewObject();                       // 0x18004ddc0
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004de40
+    // The factory pair 0x18004ddc0 / 0x18004de40 (declared by DECLARE_TYPE) is
+    // the class's own (D2), defined in vertexlayout.cpp. The class declares its
+    // own placement `operator new` (not ported): placement spells `::new (p)`.
     static void*        operator new(size_t size);                // 0x18004dce0 — not ported
     static void*        operator new(size_t size, void* storage); // 0x18004dd50 — not ported
     static void         operator delete(void* p);                 // 0x18004dd60 — class_operator_delete.cpp
@@ -244,8 +243,8 @@ public:
     // this address (it has no registration of its own, here or anywhere).
     void PlatformSerialize(void* serializer);
 
-    static const char* _TypeName();              // 0x18004dc90 -> "VertexLayout" — not ported
-    static const char* _ParentTypeName();        // 0x18004dca0 -> "Object::CompiledExternal" — not ported
+    // `_TypeName` 0x18004dc90 -> "VertexLayout", `_ParentTypeName` 0x18004dca0
+    // -> "Object::CompiledExternal": DECLARE_TYPE / DEFINE_TYPE's.
 
 protected:
     // ??1VertexLayout@Video@@UEAA@XZ (0x1800f5df0). NON-VIRTUAL (no virtual dtor
