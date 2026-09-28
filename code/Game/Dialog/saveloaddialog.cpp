@@ -60,6 +60,7 @@
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "resolve.h"
 #include "ui/Dialogs.h"
@@ -357,7 +358,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             } else {
                 // Corrupt save: show "Corrupt" text from string table
                 System::String corruptKey("Corrupt");
-                uintptr_t keyMapObj = (uintptr_t)*g_pKeyMapSingleton;
+                uintptr_t keyMapObj = (uintptr_t)g_gameContainer;
                 uint8_t uiStr[16] = {};
                 ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(keyMapObj + 0xD8))), corruptKey);  // B.3.6 bridge
                 System::String sysStr;
@@ -467,7 +468,7 @@ void SaveLoadDialog::OnOpened() {
     *(uint8_t*)(s + 0xBB) = 1;
 
     // --- Copy sprite from DAT_1401c3de8 + 0xB8 and set on SaveLoad singleton ---
-    uintptr_t keyMapObj = (uintptr_t)*g_pKeyMapSingleton;
+    uintptr_t keyMapObj = (uintptr_t)g_gameContainer;
     uint8_t spriteCopy[16];
     *(uint32_t*)(spriteCopy + 0)  = *(uint32_t*)(keyMapObj + 0xB8);
     *(uint32_t*)(spriteCopy + 4)  = *(uint32_t*)(keyMapObj + 0xBC);

@@ -230,8 +230,8 @@ extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
 // DAT_1401c3dd8, the game world: GameUpdateLoop::_singleton
 // (code/Game/Game/GameUpdateLoop.h; B3R STORAGE).
 
-// Input::KeyMap singleton — used by HotKeyToolTipUI
-extern void** g_pKeyMapSingleton;     // DAT_1401c3de8 (container/manager object, NOT the KeyMap)
+// DAT_1401c3de8, the Game container (NOT the KeyMap): g_gameContainer
+// (code/Game/Game/game.h; B3R STORAGE).
 // Exe import slot 0x140151738 = ?_singleton@Configuration@Input@@0PEAV12@EA
 // (B37_RULES 6.3 defect 3: this global was named g_pInputConfigSingletonExref until the
 // B.3.7 close). Triple deref yields the Input::KeyMap*:

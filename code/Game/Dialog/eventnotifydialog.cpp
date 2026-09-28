@@ -28,6 +28,7 @@
 #include "Dialog/EventPopupDialog.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
@@ -556,7 +557,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
             uint8_t zeroTime[8];
             RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
             void* audioScene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x78);
-            uint64_t soundEffect = *(uint64_t*)(*(uintptr_t*)g_pKeyMapSingleton + 0x98);
+            uint64_t soundEffect = *(uint64_t*)(((uintptr_t)g_gameContainer) + 0x98);
             reinterpret_cast<Audio::Scene*>(audioScene)->PlayEffect(
                 reinterpret_cast<Audio::SoundEffect*>(soundEffect), static_cast<Audio::Scene::SoundType>(1),
                 *reinterpret_cast<const System::Time*>(zeroTime));   // B.3.7 bridge

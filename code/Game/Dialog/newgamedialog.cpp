@@ -27,6 +27,7 @@
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "system/String.h"
 #include "system/Filename.h"
@@ -405,7 +406,7 @@ void NewGameDialog::OnOpened() {
     this->comboDisaster  = ::FindElement(this, "comboDisaster");
 
     // --- Cache ExternalList pointers from keymap singleton ---
-    void* keyMapData = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    void* keyMapData = (g_gameContainer);
     if (keyMapData) {
         this->mapGeneratorList     = *(void**)((uintptr_t)keyMapData + 0x18);
         this->climateGeneratorList = *(void**)((uintptr_t)keyMapData + 0x10);

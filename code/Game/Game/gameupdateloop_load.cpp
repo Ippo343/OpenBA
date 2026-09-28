@@ -34,6 +34,7 @@
 #include "GameUpdateLoop.h"
 #include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -1547,9 +1548,9 @@ void GameUpdateLoop::Load() {
     m_scenarioInstance = nullptr;
     if (achievementId >= 0) {
         const uint32_t achTypeId = Achievement::Achievement::TypeId();
-        if (!System::MemoryAllocator::_singleton || !g_pKeyMapSingleton) {
+        if (!System::MemoryAllocator::_singleton || !g_gameContainer) {
             fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved (reslist=%p)\n",
-                    (void*)g_pKeyMapSingleton);
+                    (void*)g_gameContainer);
             fflush(stderr);
         } else {
             void* instance = nullptr;
@@ -1576,7 +1577,7 @@ void GameUpdateLoop::Load() {
             // scenario = resourceList->data[achievementId]
             //   MOV RAX,[0x1401c3de8] / MOV RCX,[RAX+8] / MOV RAX,[RCX+0x20] / [RAX+idx*8]
             void* scenario  = nullptr;
-            void* container = *g_pKeyMapSingleton;
+            void* container = g_gameContainer;
             void* resList   = container ? *(void**)((uintptr_t)container + 0x08) : nullptr;
             void** data     = resList ? *(void***)((uintptr_t)resList + 0x20) : nullptr;
             if (data) scenario = data[achievementId];

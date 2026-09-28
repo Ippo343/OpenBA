@@ -25,6 +25,7 @@
 #include "Dialog/dialog_exe_helpers.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/String.h"
 #include "system/Filename.h"
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
@@ -92,7 +93,7 @@ void ScenarioDialog::OnOpened() {
     // --- Get scenario list from singleton at *g_pKeyMapSingleton + 8 ---
     // The global at 0x1401c3de8 points to a management struct:
     //   +0x00 = KeyMap, +0x08 = ExternalList (scenario list)
-    void* mgmtObj = *g_pKeyMapSingleton;
+    void* mgmtObj = g_gameContainer;
     void* scenarioList = *(void**)((uintptr_t)mgmtObj + 8);
 
     // --- Find "tableScenario" element ---

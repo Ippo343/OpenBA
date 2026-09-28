@@ -17,3 +17,12 @@ extern "C" {
 void* Game_Ctor(void* self);
 
 } // extern "C"
+
+// The exe cell 0x1401c3de8 (B3R STORAGE): the live 0xe0-byte Game container
+// (scenario list +0x08, cursors +0x38, UI sounds +0x80..+0x98, sprites
+// +0xa8/+0xb8, key-name StringTable +0xd0). Game_Ctor (0x140001050, the cell's
+// only retail writer at 0x1400010f1) publishes it. Not a class in the tree, so a
+// namespace-scope pointer; was the file-static g_storage_KeyMapSingleton of
+// standalone/address_registry.cpp, read through g_pKeyMapSingleton ("container
+// / manager object, NOT the KeyMap"). Defined in game.cpp.
+extern void* g_gameContainer;

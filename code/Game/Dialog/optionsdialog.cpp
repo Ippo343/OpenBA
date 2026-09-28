@@ -32,6 +32,7 @@
 // is kept here too so a later include change cannot break it silently.
 #include "video/Device.h"       // Video::Device, Video::Configuration
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
@@ -141,8 +142,8 @@ static inline void SetCheckState(void* elem, uint8_t val) {
 // Helper: get KeyMap container via single deref from 0x1401c3de8
 // Used for name table (+0xC8), string table (+0xD0), and fn_ApplyKeyMapToUI
 static inline void* GetKeyMapContainer() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return nullptr;
-    return *g_pKeyMapSingleton;
+    if (g_gameContainer == nullptr) return nullptr;
+    return g_gameContainer;
 }
 
 // ============================================================

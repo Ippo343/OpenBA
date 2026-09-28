@@ -11,6 +11,7 @@
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "save/SaveLoad.h"             // RtSave_SaveLoad_Dtor
 #include "system/MemoryAllocator.h"
@@ -147,7 +148,7 @@ void TutorialUI::QuitTutorial() {
     // FUN_140097fb0: SetCursor(null), SetFullscreenFade(black), store next loop at eng+0xC8.
     {
         void* ui = *(void**)(eng + 0x98);
-        uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+        uint64_t nullCursor = *(uint64_t*)((uintptr_t)(g_gameContainer) + 0x38);
         reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(
             Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(nullCursor)));  // B.3.6 bridge
         reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge

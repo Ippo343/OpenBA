@@ -22,6 +22,7 @@
 
 #include "game_main.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
@@ -460,7 +461,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     Game_Ctor(gameObj);
                     StallDebug::Mark("MainLoop ctor + Game ctor");
                     printf("[GameMain] Game_Ctor done; KeyMap singleton -> %p\n",
-                           g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+                           g_gameContainer);
                 }
 
                 // Wire the live Input::KeyMap into our fake exref chain so
@@ -721,7 +722,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     printf("[GameMain] Settings freed.\n");
                 }
                 if (gameObj) {
-                    if (g_pKeyMapSingleton) *g_pKeyMapSingleton = nullptr;
+                    g_gameContainer = nullptr;
                     System::MemoryAllocator::MemFree(gameObj);
                     printf("[GameMain] Game freed.\n");
                 }

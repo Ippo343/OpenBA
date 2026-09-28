@@ -1143,11 +1143,11 @@ static void RegisterDispatchSlots() {
 // the vtable contents (pointing to our reimplemented virtual functions).
 // Type IDs are simple uint32_t globals used by FindComponent.
 
-// Singleton-pointer storage in .data/.bss. The original exe has 8-byte slots
-// for global object pointers (e.g. KeyMap, GameWorld, GameSettings) that get
-// written during Game_Ctor / engine boot. We reserve our own static storage
-// here and register its address; engine_funcs.cpp dereferences these slots.
-static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
+// Singleton-pointer cells in .data/.bss. The original exe has 8-byte cells for
+// the Game container, the game world and the settings block. B3R STORAGE: each
+// is a named object owned by the code that writes it (g_gameContainer in
+// Game/game.h, GameUpdateLoop::_singleton, g_gameSettings in Game/exe_bodies.h);
+// the rows below register those objects' addresses until wave 2.
 
 // (The hand-built `Video::ImageBuffer` table registered at 0x14015c8c0 — slots
 // 1-8 returning null — went at ENDGAME B.3.9 EXA: the exe table is the class's
@@ -1155,7 +1155,7 @@ static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
 
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
-    RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
+    RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_gameContainer));   // B3R STORAGE
     RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&GameUpdateLoop::_singleton));   // B3R STORAGE
     RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_gameSettings));   // B3R STORAGE
 

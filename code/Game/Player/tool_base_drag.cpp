@@ -11,6 +11,7 @@
 // exe helper; do not "improve" behavior. Ghidra-verified against the disassembly.
 
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"
 #include "system/Value.h"
@@ -115,7 +116,7 @@ void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
         void* scene = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
         uint64_t soundId = *reinterpret_cast<uint64_t*>(
-            reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x80);
+            reinterpret_cast<uintptr_t>(g_gameContainer) + 0x80);
         reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
             reinterpret_cast<Audio::SoundEffect*>(soundId), static_cast<Audio::Scene::SoundType>(1),
             *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.7 bridge
@@ -147,7 +148,7 @@ void DragTool_PlayPlaceSound_1000f0(uint64_t /*unused*/) {
     void* scene = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
-        reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x88);
+        reinterpret_cast<uintptr_t>(g_gameContainer) + 0x88);
     reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
         reinterpret_cast<Audio::SoundEffect*>(soundId), static_cast<Audio::Scene::SoundType>(1),
         *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.7 bridge
@@ -169,7 +170,7 @@ void DragTool_PlayErrorSound_100140(uint64_t /*unused*/) {
     void* scene = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
-        reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x90);
+        reinterpret_cast<uintptr_t>(g_gameContainer) + 0x90);
     reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
         reinterpret_cast<Audio::SoundEffect*>(soundId), static_cast<Audio::Scene::SoundType>(1),
         *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.7 bridge

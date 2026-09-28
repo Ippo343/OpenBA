@@ -40,6 +40,7 @@
 #include "Entity/entitylist_funcs.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
@@ -1110,7 +1111,7 @@ post_simulation:
     // Step 11: Set cursor
     TRACE("[GameUpdateLoop::Update] setting cursor (index=%d)...\n", cursorIndex);
     {
-        void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
+        void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x28 + (int64_t)cursorIndex * 8);
             reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetCursor(  // B.3.6 bridge
@@ -1671,7 +1672,7 @@ void GameUpdateLoop::Startup() {
 
     // Setup UI references (cursors, lists, etc.)
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
-    ApplyKeyMapToUI_Impl(*g_pKeyMapSingleton, m_userInterface);   // 0x140099260
+    ApplyKeyMapToUI_Impl(g_gameContainer, m_userInterface);   // 0x140099260
     // Report the OUTCOME. "SetupUIRefs done" printed identically for the whole time
     // 0x140099260 was unregistered and the call was a no-op; the fields it writes are
     // the only evidence it ran. uiScale 0 == never applied (edittool.cpp:674 reads it).
@@ -1687,7 +1688,7 @@ void GameUpdateLoop::Startup() {
     // Set default cursor
     TRACE("[GameUpdateLoop::Startup] setting default cursor...\n");
     {
-        void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
+        void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x30);
             reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetCursor(  // B.3.6 bridge

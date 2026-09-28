@@ -25,6 +25,7 @@
 // already used by optionsdialog.cpp in standalone.
 
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Dialog/HotKeyToolTipUI.h"
 #include "Object/factory_registration.h"
 #include "system/String.h"
@@ -61,8 +62,8 @@ static void* GetActualKeyMap() {
 // The Game container object (holds the keyNames StringTable at +0xD0). Single
 // deref of g_pKeyMapSingleton (the slot holds the container pointer).
 static void* GetKeyMapContainer() {
-    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return nullptr;
-    return *g_pKeyMapSingleton;
+    if (g_gameContainer == nullptr) return nullptr;
+    return g_gameContainer;
 }
 
 // Port of FUN_140099c20: build a UI::String for the (device,key) pair by

@@ -29,6 +29,7 @@
 #include "Dialog/GoalDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/ScenarioDialog.h"      // B3R: ScenarioDialog_Ctor
 #include "system/Configuration.h"      // B3R: System::Configuration, RtSystem_Configuration_CurrentBuildId
@@ -277,7 +278,7 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
     } else {
         // Game active: set cursor, fade, store at +0xC8
         void* ui = *(void**)(gameWorld + 0x98);
-        uint64_t cursorVal = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+        uint64_t cursorVal = *(uint64_t*)((uintptr_t)(g_gameContainer) + 0x38);
         reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));  // B.3.6 bridge
         reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
         *(void**)(gameWorld + 0xC8) = outerLoop;

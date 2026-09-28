@@ -67,7 +67,6 @@ fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath = nullptr;
 // ============================================================
 // Game Singletons (Phase A3)
 // ============================================================
-void** g_pKeyMapSingleton = nullptr;
 void** g_pInputConfigSingletonExref = nullptr;
 
 // ============================================================
@@ -662,8 +661,6 @@ bool EngineFuncsInit() {
     // ================================================================
     // Phase A3: Game Singletons
     // ================================================================
-    g_pKeyMapSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3de8));
     g_pInputConfigSingletonExref = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140151738));
 
@@ -1200,8 +1197,6 @@ bool EngineFuncsInit() {
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
     printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
     printf("[EngineFuncs] Phase A3 — Singletons:\n");
-    printf("  KeyMap (container)        = %p -> %p\n", (void*)g_pKeyMapSingleton,
-           g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
     printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pInputConfigSingletonExref,
            g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp

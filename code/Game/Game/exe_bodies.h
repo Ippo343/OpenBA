@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include "engine_funcs.h"   // the globals the moved inline bodies still read
+#include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 // ---- citizen_names.cpp
@@ -201,7 +202,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState, void
 inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
     void* ui = *(void**)(enginePtr + 0x98);
     // Set cursor to default (cursor ptr from KeyMap singleton+0x38)
-    uint64_t cursorVal = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+    uint64_t cursorVal = *(uint64_t*)((uintptr_t)(g_gameContainer) + 0x38);
     reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
         ::Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
     // Fade to black (fadeIn=true, color=0xFF000000=opaque black, reverse=false)
