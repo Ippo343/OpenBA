@@ -190,7 +190,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     Element* up = reinterpret_cast<const Object::Base*>(upRaw)->IsDerivedFrom(kButtonTypeId)
                   ? upRaw : nullptr;
     {
-        const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
+        const int32_t v = System::String::ToInteger(
             static_cast<const char*>(PTR(edit, kNeText)));
         up->Enable(v < I32(edit, kNeMax));                          // slot 8
     }
@@ -200,7 +200,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     Element* down = reinterpret_cast<const Object::Base*>(downRaw)->IsDerivedFrom(kButtonTypeId)
                     ? downRaw : nullptr;
     {
-        const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
+        const int32_t v = System::String::ToInteger(
             static_cast<const char*>(PTR(edit, kNeText)));
         down->Enable(I32(edit, kNeMin) < v);                        // slot 8
     }
@@ -215,7 +215,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     }
     if (step == 0) return;
 
-    const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
+    const int32_t v = System::String::ToInteger(
         static_cast<const char*>(PTR(edit, kNeText)));
     // ?SetValue@NumberEditElement@UI@@ (0x1800d4bb0).
     static_cast<NumberEditElement*>(edit)->SetValue(step + v);

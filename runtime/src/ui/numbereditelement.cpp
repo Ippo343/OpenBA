@@ -34,7 +34,6 @@ using namespace rtuielem;
 
 namespace {
 
-using ToIntegerFn = int32_t (*)(const char* s);
 
 void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
@@ -81,7 +80,7 @@ NumberEditElement::~NumberEditElement() {}
 // FinalizeText.
 // ---------------------------------------------------------------------------
 void NumberEditElement::FinalizeText() {
-    const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(_text);
+    const int32_t v = System::String::ToInteger(_text);
 
     int32_t clamped = _min;
     if (_min <= v) {

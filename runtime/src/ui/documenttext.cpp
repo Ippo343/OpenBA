@@ -102,16 +102,10 @@
 
 #include <atomic>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace O = UI::DocumentTextElementOffsets;
 using UI::DocumentItem;
 
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // ---- field accessors -------------------------------------------------------
 inline uint8_t* B(void* p, int off) { return reinterpret_cast<uint8_t*>(p) + off; }
@@ -188,8 +182,7 @@ char** SubString(char* const* self, char** ret, int start, int endInclusive) {
 }
 // ?ToInteger@String@System@@SAHPEBD@Z — 0x18003f620, a static taking the raw
 // char*, not the String.
-using ToIntegerFn = int32_t (*)(const char*);
-int32_t ToInteger(const char* s) { return RtAddr<ToIntegerFn>(0x18003f620ull)(s); }
+int32_t ToInteger(const char* s) { return System::String::ToInteger(s); }
 
 // Called by name below: Filename::AdjustDelimiters (0x1800c6970, private, in
 // place), External::GetPath (0x180006250) and Filename::GetPathFilename

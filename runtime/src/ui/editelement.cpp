@@ -39,6 +39,7 @@
 // constructor 0x1800d0f10 (EditElement.h since B.3.9).
 // ============================================================================
 #include <atomic>
+#include <cstring>
 
 #include "element_common.h"
 #include "../../types/ui/EditElement.h"
@@ -89,7 +90,6 @@ double SecondsPerTick() {
     return ::System::Timer::_secondsPerTick;
 }
 
-using MemcpyFn        = void* (*)(void* dst, const void* src, uint64_t n);
 
 void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
@@ -450,7 +450,7 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         }
         ++srcLen;
         const int copy = (cap < srcLen) ? cap : srcLen;
-        RtAddr<MemcpyFn>(0x18008a290ull)(one, buf, static_cast<uint64_t>(copy));
+        std::memmove(one, buf, static_cast<size_t>(copy));           // 0x18008a290 is memmove
         if (srcLen > cap) static_cast<char*>(one)[idx] = 0;
 
         void* ins = nullptr;
