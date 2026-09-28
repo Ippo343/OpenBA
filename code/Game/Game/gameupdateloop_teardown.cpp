@@ -18,12 +18,12 @@
 // drain. The container-free leaves are shared with other subsystems, so they are
 // registered at their own retail addresses too rather than kept file-local.
 //
-// Already ported+registered elsewhere, reused through the registry:
-//   0x1400c2ea0  MarkEntityRemoval          (action_base_hunt.cpp)
-//   0x1400c38e0  EntityList::RemoveEntity   (entitylist.cpp)
-//   0x14000e320  tree-node free, kids +0x18/+0x20   (work_base_reimpl.cpp)
-//   0x140014c30  tree-node free, kids +0x10/+0x18   (work_base_reimpl.cpp)
-//   0x140014b00  tree-node free, kids +0x20/+0x28   (tool_base_highlight.cpp)
+// Already ported elsewhere, called by name (B3R):
+//   0x1400c2ea0  ActHunt_MarkEntityRemoval_c2ea0   (Action/exe_bodies.h)
+//   0x1400c38e0  EntityList_RemoveEntity           (Entity/entitylist_funcs.h)
+//   0x14000e320  WorkBase_TreeNodeFree_e320, kids +0x18/+0x20   (Work/exe_bodies.h)
+//   0x140014c30  WorkBase_TreeNodeFree_14c30, kids +0x10/+0x18  (Work/exe_bodies.h)
+//   0x140014b00  TradeWork_helper_14b00, kids +0x20/+0x28       (Player/exe_bodies.h)
 
 // ENDGAME B.3.2 step 2 (COLL-GAME sweep): every `MemFree(data); data = 0; one
 // qword over size+capacity = 0` triple below was a hand-inlined
@@ -37,7 +37,11 @@
 // node chains and IBP payloads are NOT arrays and are untouched.
 #include "engine_funcs.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
+#include "resolve.h"           // RegisterExeAddr
+#include "Action/exe_bodies.h"          // ActHunt_MarkEntityRemoval_c2ea0
+#include "Entity/entitylist_funcs.h"     // EntityList_RemoveEntity
+#include "Player/exe_bodies.h"          // TradeWork_helper_14b00
+#include "Work/exe_bodies.h"            // WorkBase_TreeNodeFree_e320 / _14c30
 #include "address_registry.h"
 #include "options.h"         // Opt().teardownHeapCheck
 #include "redzone_alloc.h"   // RedzoneAlloc_FindCorruptBlockNative
@@ -51,32 +55,6 @@
 #include "Game/exe_bodies.h"
 
 namespace {
-
-typedef void (*fn_NodeFree_t)(void* hdr, void* node);
-typedef void (*fn_Obj_t)(void* obj);
-typedef void (*fn_ObjIbp_t)(void* obj, void* ibp);
-
-fn_NodeFree_t s_freeKids_18_20 = nullptr;  // 0x14000e320
-fn_NodeFree_t s_freeKids_10_18 = nullptr;  // 0x140014c30
-fn_NodeFree_t s_freeKids_20_28 = nullptr;  // 0x140014b00
-fn_Obj_t      s_markRemoval    = nullptr;  // 0x1400c2ea0
-fn_ObjIbp_t   s_removeEntity   = nullptr;  // 0x1400c38e0
-bool          s_resolved       = false;
-
-void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_freeKids_18_20 = reinterpret_cast<fn_NodeFree_t>(ResolveAddr(Module::Exe, 0x14000e320));
-    s_freeKids_10_18 = reinterpret_cast<fn_NodeFree_t>(ResolveAddr(Module::Exe, 0x140014c30));
-    s_freeKids_20_28 = reinterpret_cast<fn_NodeFree_t>(ResolveAddr(Module::Exe, 0x140014b00));
-    s_markRemoval    = reinterpret_cast<fn_Obj_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    s_removeEntity   = reinterpret_cast<fn_ObjIbp_t>(ResolveAddr(Module::Exe, 0x1400c38e0));
-    fprintf(stderr, "[GUL::Teardown] resolved: e320=%p 14c30=%p 14b00=%p "
-            "markRemoval=%p removeEntity=%p\n",
-            (void*)s_freeKids_18_20, (void*)s_freeKids_10_18, (void*)s_freeKids_20_28,
-            (void*)s_markRemoval, (void*)s_removeEntity);
-    fflush(stderr);
-}
 
 inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }
 inline void*&    P(void* base, int off)   { return *reinterpret_cast<void**>(B(base) + off); }
@@ -103,7 +81,6 @@ void VectorDtorIter(void* first, int size, int count, Dtor dtor) {
 // 0x140001740 — {ptr,count} array clear (element dtor of the 5-bucket array)
 // ============================================================
 extern "C" void Array8_Clear_1740(void* hdrV) {
-    EnsureResolved();
     Arr(hdrV, 0x00).~Array();   // retail: MemFree; data = 0; count + capacity in one 8-byte store
 }
 
@@ -122,7 +99,6 @@ extern "C" void TreeNodeFree_174e0(void* hdrV, void* nodeV) {
 // 0x1400173d0 — clear a {root,count} tree of TreeNodeFree_174e0 nodes
 // ============================================================
 extern "C" void Tree_Clear_173d0(void* hdrV) {
-    EnsureResolved();
     void* root = P(hdrV, 0x00);
     if (root) {
         TreeNodeFree_174e0(hdrV, P(root, 0x20));
@@ -138,7 +114,6 @@ extern "C" void Tree_Clear_173d0(void* hdrV) {
 // 0x1400175d0 — array of {ptr,count} sub-arrays: free each, then the array
 // ============================================================
 extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
-    EnsureResolved();
     // Array<ArrayHdr>::~Array — the trait-derived row's destroy is ~ArrayHdr on
     // each of `count` 0x10-byte elements in ascending order (retail's loop),
     // then ArrayDtorImpl on the outer header.
@@ -149,12 +124,11 @@ extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
 // 0x1400171b0 — {array@+0x00, tree@+0x18} pair clear
 // ============================================================
 extern "C" void ArrayPlusTree_Clear_171b0(void* selfV) {
-    EnsureResolved();
     void* treeHdr = B(selfV) + 0x18;
     void* root = P(treeHdr, 0x00);
-    if (root && s_freeKids_18_20) {
-        s_freeKids_18_20(treeHdr, P(root, 0x18));
-        s_freeKids_18_20(treeHdr, P(root, 0x20));
+    if (root) {
+        WorkBase_TreeNodeFree_e320(treeHdr, P(root, 0x18));
+        WorkBase_TreeNodeFree_e320(treeHdr, P(root, 0x20));
         MemFree(root);
     }
     P(treeHdr, 0x00) = nullptr;
@@ -166,11 +140,10 @@ extern "C" void ArrayPlusTree_Clear_171b0(void* selfV) {
 // 0x14000dcb0 — {root,count} tree clear, children +0x18/+0x20
 // ============================================================
 extern "C" void Tree_Clear_dcb0(void* hdrV) {
-    EnsureResolved();
     void* root = P(hdrV, 0x00);
-    if (root && s_freeKids_18_20) {
-        s_freeKids_18_20(hdrV, P(root, 0x18));
-        s_freeKids_18_20(hdrV, P(root, 0x20));
+    if (root) {
+        WorkBase_TreeNodeFree_e320(hdrV, P(root, 0x18));
+        WorkBase_TreeNodeFree_e320(hdrV, P(root, 0x20));
         MemFree(root);
     }
     P(hdrV, 0x00) = nullptr;
@@ -181,12 +154,11 @@ extern "C" void Tree_Clear_dcb0(void* hdrV) {
 // 0x14002cf30 — node-owned sub-tree clear (sub-header at node+0x08)
 // ============================================================
 extern "C" void NodeSubTree_Clear_2cf30(void* nodeV) {
-    EnsureResolved();
     void* subHdr = B(nodeV) + 0x08;
     void* root = P(subHdr, 0x00);
-    if (root && s_freeKids_18_20) {
-        s_freeKids_18_20(subHdr, P(root, 0x18));
-        s_freeKids_18_20(subHdr, P(root, 0x20));
+    if (root) {
+        WorkBase_TreeNodeFree_e320(subHdr, P(root, 0x18));
+        WorkBase_TreeNodeFree_e320(subHdr, P(root, 0x20));
         MemFree(root);
     }
     P(subHdr, 0x00) = nullptr;
@@ -221,7 +193,6 @@ extern "C" void TreeNodeFree_2df90(void* hdrV, void* nodeV) {
 // 0x14002de90 — clear a {root,count} tree of IBP-payload nodes
 // ============================================================
 extern "C" void IbpTree_Clear_2de90(void* hdrV) {
-    EnsureResolved();
     void* root = P(hdrV, 0x00);
     if (root) {
         TreeNodeFree_2df90(hdrV, P(root, 0x20));
@@ -242,7 +213,6 @@ extern "C" void IbpTree_Clear_2de90(void* hdrV) {
 // drains the pending-removal array, then removes whatever is left in the master
 // array until it is empty. The flag is cleared again on the way out.
 extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
-    EnsureResolved();
     uint8_t* self = B(selfV);
 
     *(self + 0xE0) = 1;
@@ -269,7 +239,7 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
         void* slot = B(P(self, 0x08)) + (size_t)i * 8;
         void* entity = P(slot, 0x00);
         if ((*reinterpret_cast<uint32_t*>(B(entity) + 0x40) >> 10 & 1) == 0) {
-            if (s_markRemoval) s_markRemoval(P(slot, 0x00));
+            ActHunt_MarkEntityRemoval_c2ea0(P(slot, 0x00));   // 0x1400c2ea0
         }
         if (bracket && !bracketFired) {
             if (void* bad = RedzoneAlloc_FindCorruptBlockNative()) {
@@ -292,16 +262,15 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
     // Drain the pending-removal array (+0xD0 data / +0xD8 count).
     for (int32_t i = 0; i < I32(self, 0xD8); ++i) {
         void* ibp = *reinterpret_cast<void**>(B(P(self, 0xD0)) + (size_t)i * 8);
-        if (s_removeEntity) s_removeEntity(selfV, &ibp);
+        EntityList_RemoveEntity(static_cast<EntityList*>(selfV), &ibp);   // 0x1400c38e0
     }
     PtrArr(self, 0xD0).~Array();
 
     // Whatever is still in the master array goes now. RemoveEntity shrinks the
     // array, so retail re-reads the count every pass and always takes slot 0.
     while (I32(self, 0x10) > 0) {
-        if (!s_removeEntity) break;   // no body: bail rather than spin forever
         void* ibp = *reinterpret_cast<void**>(P(self, 0x08));
-        s_removeEntity(selfV, &ibp);
+        EntityList_RemoveEntity(static_cast<EntityList*>(selfV), &ibp);   // 0x1400c38e0
     }
 
     *(self + 0xE0) = 0;
@@ -311,7 +280,6 @@ extern "C" void EntityList_Shutdown_c3d30(void* selfV) {
 // 0x1400c3e60 — EntityList::~EntityList
 // ============================================================
 extern "C" void EntityList_Dtor_c3e60(void* selfV) {
-    EnsureResolved();
     uint8_t* self = B(selfV);
 
     EntityList_Shutdown_c3d30(selfV);
@@ -324,9 +292,9 @@ extern "C" void EntityList_Dtor_c3e60(void* selfV) {
     for (int off : {0x78, 0x68}) {
         void* hdr = self + off;
         void* root = P(hdr, 0x00);
-        if (root && s_freeKids_10_18) {
-            s_freeKids_10_18(hdr, P(root, 0x10));
-            s_freeKids_10_18(hdr, P(root, 0x18));
+        if (root) {
+            WorkBase_TreeNodeFree_14c30(hdr, P(root, 0x10));
+            WorkBase_TreeNodeFree_14c30(hdr, P(root, 0x18));
             MemFree(root);
         }
         P(hdr, 0x00) = nullptr;
@@ -346,7 +314,6 @@ extern "C" void EntityList_Dtor_c3e60(void* selfV) {
 // structured members: a tree-owning object at [0x37], trees at [0x2c] / [0x20],
 // and two array-of-arrays at [0x2a] / [0x28]. Retail frees strictly back to front.
 extern "C" void CitizenList_Dtor_907b0(void* selfV) {
-    EnsureResolved();
     void** self = reinterpret_cast<void**>(selfV);
 
     if (self[0x37]) {
@@ -377,7 +344,6 @@ extern "C" void CitizenList_Dtor_907b0(void* selfV) {
 // 0x1401024d0 — EntityUI::~EntityUI
 // ============================================================
 extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
-    EnsureResolved();
     uint8_t* self = B(selfV);
 
     // Active tool (+0x28): Tool slot 5 Shutdown (0x140102505: RCX only), then
@@ -395,9 +361,9 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
     for (int off : {0x60, 0x50}) {
         void* hdr = self + off;
         void* root = P(hdr, 0x00);
-        if (root && s_freeKids_20_28) {
-            s_freeKids_20_28(hdr, P(root, 0x20));
-            s_freeKids_20_28(hdr, P(root, 0x28));
+        if (root) {
+            TradeWork_helper_14b00(reinterpret_cast<int64_t>(hdr), P(root, 0x20));
+            TradeWork_helper_14b00(reinterpret_cast<int64_t>(hdr), P(root, 0x28));
             MemFree(root);
         }
         P(hdr, 0x00) = nullptr;
@@ -412,7 +378,6 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV) {
 // 0x1400f8ff0 — Tutorial::~Tutorial
 // ============================================================
 extern "C" void Tutorial_Dtor_f8ff0(void* selfV) {
-    EnsureResolved();
     uint8_t* self = B(selfV);
 
     // In-order walk of the goal tree at +0x30 (parent +0x10, left +0x18,
@@ -460,9 +425,9 @@ extern "C" void Tutorial_Dtor_f8ff0(void* selfV) {
     {
         void* hdr = self + 0x20;
         void* root = P(hdr, 0x00);
-        if (root && s_freeKids_18_20) {
-            s_freeKids_18_20(hdr, P(root, 0x18));
-            s_freeKids_18_20(hdr, P(root, 0x20));
+        if (root) {
+            WorkBase_TreeNodeFree_e320(hdr, P(root, 0x18));
+            WorkBase_TreeNodeFree_e320(hdr, P(root, 0x20));
             MemFree(root);
         }
         P(hdr, 0x00) = nullptr;
@@ -473,9 +438,9 @@ extern "C" void Tutorial_Dtor_f8ff0(void* selfV) {
     {
         void* hdr = self + 0x10;
         void* root = P(hdr, 0x00);
-        if (root && s_freeKids_10_18) {
-            s_freeKids_10_18(hdr, P(root, 0x10));
-            s_freeKids_10_18(hdr, P(root, 0x18));
+        if (root) {
+            WorkBase_TreeNodeFree_14c30(hdr, P(root, 0x10));
+            WorkBase_TreeNodeFree_14c30(hdr, P(root, 0x18));
             MemFree(root);
         }
         I32(hdr, 0x08) = 0;
