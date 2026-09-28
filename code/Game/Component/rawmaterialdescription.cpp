@@ -118,5 +118,4 @@ void* RawMaterialDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RawMaterialDescription());
 }
 
-DEFINE_EXE_VTABLE(RawMaterialDescription, "_ZTV22RawMaterialDescription")
 DEFINE_EXE_TYPE(RawMaterialDescription, "Description")

@@ -159,6 +159,5 @@ void* Toolbar::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) Toolbar());
 }
 
-DEFINE_EXE_VTABLE(Toolbar, "_ZTV7Toolbar")
 
 DEFINE_EXE_TYPE(Toolbar, "Object::External")

@@ -98,5 +98,4 @@ void* SelectDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) SelectDescription());
 }
 
-DEFINE_EXE_VTABLE(SelectDescription, "_ZTV17SelectDescription")
 DEFINE_EXE_TYPE(SelectDescription, "Description")

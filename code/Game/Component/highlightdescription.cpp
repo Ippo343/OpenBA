@@ -151,5 +151,4 @@ void* HighlightDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HighlightDescription());
 }
 
-DEFINE_EXE_VTABLE(HighlightDescription, "_ZTV20HighlightDescription")
 DEFINE_EXE_TYPE(HighlightDescription, "Description")

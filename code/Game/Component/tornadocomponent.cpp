@@ -1069,5 +1069,4 @@ void* TornadoComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TornadoComponent());
 }
 
-DEFINE_EXE_VTABLE(TornadoComponent, "_ZTV16TornadoComponent")
 DEFINE_EXE_TYPE(TornadoComponent, "Component")

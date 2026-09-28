@@ -697,5 +697,4 @@ void* StorageDisplayComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StorageDisplayComponent());
 }
 
-DEFINE_EXE_VTABLE(StorageDisplayComponent, "_ZTV23StorageDisplayComponent")
 DEFINE_EXE_TYPE(StorageDisplayComponent, "Component")

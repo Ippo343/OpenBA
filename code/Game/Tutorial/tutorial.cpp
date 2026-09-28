@@ -144,5 +144,4 @@ void* Tutorial::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) Tutorial());
 }
 
-DEFINE_EXE_VTABLE(Tutorial, "_ZTV8Tutorial")
 DEFINE_EXE_TYPE(Tutorial, "Object::External")

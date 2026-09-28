@@ -444,5 +444,4 @@ void* PathTool::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PathTool());
 }
 
-DEFINE_EXE_VTABLE(PathTool, "_ZTV8PathTool")
 DEFINE_EXE_TYPE(PathTool, "Tool")

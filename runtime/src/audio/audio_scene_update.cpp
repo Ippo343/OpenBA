@@ -455,7 +455,7 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
         } else {
             volumes[1] = volumes[2] = volumes[3] = volumes[4] = 0.0f;
             std::fprintf(stderr, "[RtPort] Audio::Scene::Update: "
-                                 "?_singleton@Configuration@Audio@@ is NULL -- every "
+                                 "Audio::Configuration::_singleton is NULL -- every "
                                  "channel will be mixed at volume 0\n");
         }
     }

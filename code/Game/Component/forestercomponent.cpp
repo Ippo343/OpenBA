@@ -146,5 +146,4 @@ void       ForesterComponent::Persist(void* stream) {
 }
 uintptr_t* ForesterComponent::CreateWork(uintptr_t* out) { return ForesterComponent_CreateWork(this, out); } // [18] 0x14011f780
 
-DEFINE_EXE_VTABLE(ForesterComponent, "_ZTV17ForesterComponent")
 DEFINE_EXE_TYPE(ForesterComponent, "ResourceProduceComponent")

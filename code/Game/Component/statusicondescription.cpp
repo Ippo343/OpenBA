@@ -91,5 +91,4 @@ void* StatusIconDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StatusIconDescription());
 }
 
-DEFINE_EXE_VTABLE(StatusIconDescription, "_ZTV21StatusIconDescription")
 DEFINE_EXE_TYPE(StatusIconDescription, "Description")

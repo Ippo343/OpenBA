@@ -75,5 +75,4 @@ void* CitizenAIDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CitizenAIDescription());
 }
 
-DEFINE_EXE_VTABLE(CitizenAIDescription, "_ZTV20CitizenAIDescription")
 DEFINE_EXE_TYPE(CitizenAIDescription, "Description")

@@ -119,5 +119,4 @@ void* SpawnDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) SpawnDescription());
 }
 
-DEFINE_EXE_VTABLE(SpawnDescription, "_ZTV16SpawnDescription")
 DEFINE_EXE_TYPE(SpawnDescription, "Description")

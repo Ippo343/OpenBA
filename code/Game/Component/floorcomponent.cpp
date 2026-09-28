@@ -492,5 +492,4 @@ void* FloorComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FloorComponent());
 }
 
-DEFINE_EXE_VTABLE(FloorComponent, "_ZTV14FloorComponent")
 DEFINE_EXE_TYPE(FloorComponent, "Component")

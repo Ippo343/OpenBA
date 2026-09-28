@@ -231,5 +231,4 @@ void* TradeDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TradeDescription());
 }
 
-DEFINE_EXE_VTABLE(TradeDescription, "_ZTV16TradeDescription")
 DEFINE_EXE_TYPE(TradeDescription, "Description")

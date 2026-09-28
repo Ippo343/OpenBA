@@ -232,5 +232,4 @@ void* BridgeTool::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BridgeTool());
 }
 
-DEFINE_EXE_VTABLE(BridgeTool, "_ZTV10BridgeTool")
 DEFINE_EXE_TYPE(BridgeTool, "DragTool")

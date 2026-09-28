@@ -1040,7 +1040,6 @@ void* PlacementTool::CreateInPlaceObject(void* storage) {
 // reflected create, by its old name.
 extern "C" void* PlacementTool_Factory_SA(void) { return PlacementTool::CreateNewObject(); }
 
-DEFINE_EXE_VTABLE(PlacementTool, "_ZTV13PlacementTool")
 DEFINE_EXE_TYPE(PlacementTool, "Tool")
 
 // ============================================================

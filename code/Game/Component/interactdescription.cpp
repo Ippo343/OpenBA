@@ -181,5 +181,4 @@ void* InteractDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) InteractDescription());
 }
 
-DEFINE_EXE_VTABLE(InteractDescription, "_ZTV19InteractDescription")
 DEFINE_EXE_TYPE(InteractDescription, "Description")

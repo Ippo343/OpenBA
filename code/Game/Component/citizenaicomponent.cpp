@@ -882,5 +882,4 @@ void* CitizenAIComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CitizenAIComponent());
 }
 
-DEFINE_EXE_VTABLE(CitizenAIComponent, "_ZTV18CitizenAIComponent")
 DEFINE_EXE_TYPE(CitizenAIComponent, "Component")

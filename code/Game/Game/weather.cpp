@@ -186,6 +186,5 @@ void* Weather::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) Weather());
 }
 
-DEFINE_EXE_VTABLE(Weather, "_ZTV7Weather")
 
 DEFINE_EXE_TYPE(Weather, "Object::External")

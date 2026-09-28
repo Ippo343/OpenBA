@@ -108,5 +108,4 @@ void* CreateBridgeDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreateBridgeDescription());
 }
 
-DEFINE_EXE_VTABLE(CreateBridgeDescription, "_ZTV23CreateBridgeDescription")
 DEFINE_EXE_TYPE(CreateBridgeDescription, "Description")

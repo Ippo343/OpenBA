@@ -481,6 +481,5 @@ void* HuntAnimal::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HuntAnimal());
 }
 
-DEFINE_EXE_VTABLE(HuntAnimal, "_ZTV10HuntAnimal")
 
 DEFINE_EXE_TYPE(HuntAnimal, "Action")

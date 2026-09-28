@@ -94,5 +94,4 @@ void* HerdDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HerdDescription());
 }
 
-DEFINE_EXE_VTABLE(HerdDescription, "_ZTV15HerdDescription")
 DEFINE_EXE_TYPE(HerdDescription, "Description")

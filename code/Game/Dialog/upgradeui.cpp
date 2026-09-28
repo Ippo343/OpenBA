@@ -277,5 +277,4 @@ void* UpgradeUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) UpgradeUI());
 }
 
-DEFINE_EXE_VTABLE(UpgradeUI, "_ZTV9UpgradeUI")
 DEFINE_EXE_TYPE(UpgradeUI, "UI::DialogController")

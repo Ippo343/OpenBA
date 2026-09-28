@@ -638,9 +638,6 @@ extern fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor;
 typedef void (*fn_Toolbar_ShowGroup_t)(void* gameSubsys, int64_t groupId);
 extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
 
-// ToolUI child dialog vtable (PTR_FUN_14015f5a0 in exe .rdata) — used by Toolbar_Utility
-extern uintptr_t g_ToolUI_ChildDialog_Vtable;
-
 // Toolbar item sort function (FUN_140021790) — sorts toolbar items by priority
 typedef void (*fn_ToolbarSort_t)(void* array, int count);
 

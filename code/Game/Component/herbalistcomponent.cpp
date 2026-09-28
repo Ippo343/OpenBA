@@ -81,5 +81,4 @@ void       HerbalistComponent::Persist(void* stream) {
 }
 uintptr_t* HerbalistComponent::CreateWork(uintptr_t* out) { return HerbalistComponent_CreateWork(this, out); } // [18] 0x14004b160
 
-DEFINE_EXE_VTABLE(HerbalistComponent, "_ZTV18HerbalistComponent")
 DEFINE_EXE_TYPE(HerbalistComponent, "ResourceProduceComponent")

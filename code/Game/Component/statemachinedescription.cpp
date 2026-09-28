@@ -75,5 +75,4 @@ void* StateMachineDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StateMachineDescription());
 }
 
-DEFINE_EXE_VTABLE(StateMachineDescription, "_ZTV23StateMachineDescription")
 DEFINE_EXE_TYPE(StateMachineDescription, "Description")

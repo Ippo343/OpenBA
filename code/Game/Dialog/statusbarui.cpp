@@ -835,6 +835,5 @@ void* StatusBarUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StatusBarUI());
 }
 
-DEFINE_EXE_VTABLE(StatusBarUI, "_ZTV11StatusBarUI")
 DEFINE_EXE_TYPE(StatusBarUI, "UI::DialogController")
 

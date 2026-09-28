@@ -40,7 +40,6 @@ public:
     void Load() override;                                        // [6] 0x140001120
     const char* GetResourceFilename() override;                  // [10] 0x140001110 "Game/Global"
 
-    static const void* Vtable();
 
 protected:
     ~InnerLoaderLoop() {}

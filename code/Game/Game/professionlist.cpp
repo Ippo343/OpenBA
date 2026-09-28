@@ -212,7 +212,6 @@ void* ProfessionList::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) ProfessionList());
 }
 
-DEFINE_EXE_VTABLE(ProfessionList, "_ZTV14ProfessionList")
 
 extern "C" void RegisterProfessionListVtable() {
     // ProfessionList::Startup (array populate + sort) — GameUpdateLoop::Startup

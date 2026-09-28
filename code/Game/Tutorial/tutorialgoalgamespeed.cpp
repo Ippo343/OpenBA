@@ -100,5 +100,4 @@ void* TutorialGoalGameSpeed::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialGoalGameSpeed());
 }
 
-DEFINE_EXE_VTABLE(TutorialGoalGameSpeed, "_ZTV21TutorialGoalGameSpeed")
 DEFINE_EXE_TYPE(TutorialGoalGameSpeed, "TutorialGoal")

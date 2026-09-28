@@ -3121,5 +3121,4 @@ void* CitizenComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CitizenComponent());
 }
 
-DEFINE_EXE_VTABLE(CitizenComponent, "_ZTV16CitizenComponent")
 DEFINE_EXE_TYPE(CitizenComponent, "Component")

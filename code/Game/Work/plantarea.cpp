@@ -904,7 +904,6 @@ void* PlantArea::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PlantArea());
 }
 
-DEFINE_EXE_VTABLE(PlantArea, "_ZTV9PlantArea")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

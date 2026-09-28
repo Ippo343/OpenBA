@@ -34,7 +34,6 @@ public:
     // see loader_loop_stubs.cpp.
     void Startup() override;
 
-    static const void* Vtable();
 
 protected:
     ~GameLoaderLoop() {}

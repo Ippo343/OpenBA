@@ -39,21 +39,11 @@
 // and `ToolUI_InitChildDialogVtable`, which copied slots 1..9 out of the minted
 // Runtime table at registration time.
 //
-// The other stampers of 0x14015f5a0 (edittool_select.cpp, toolbardialog.cpp)
-// still overwrite the vptr of a door-built DialogInstance with the engine_funcs
-// global `g_ToolUI_ChildDialog_Vtable`; RegisterPlayerToolUIBatch points that
-// global at the compiler table below, the same bytes the real ctor stamps (B8-5).
-// 0x14015f5a0 itself stays UNregistered (reg_player_toolui.cpp: registering it
-// makes the menu's BuildId child dispatch a real OnOpened).
-
-// The address point of the compiler's UI::DialogInstance vtable group (Itanium
-// `{offset-to-top, typeinfo, slot0, ...}`; the vptr points at slot 0). Spelled
-// by hand, checked by the linker (exe_type.h DEFINE_EXE_VTABLE's reasoning).
-extern const void* const g_UIDialogInstance_VtableGroup[] __asm__("_ZTVN2UI14DialogInstanceE");
-
-extern "C" uintptr_t ToolUI_ChildDialogVtable() {
-    return reinterpret_cast<uintptr_t>(&g_UIDialogInstance_VtableGroup[2]);
-}
+// ENDGAME B.3.9 close: the engine_funcs global `g_ToolUI_ChildDialog_Vtable` and
+// ToolUI_ChildDialogVtable(), which pointed it at the compiler table by a
+// hand-spelt `_ZTVN2UI14DialogInstanceE` symbol, are deleted: no stamper reads
+// the global any more. 0x14015f5a0 stays UNregistered (reg_player_toolui.cpp:
+// registering it makes the menu's BuildId child dispatch a real OnOpened).
 
 // ============================================================
 // OpenToolDialog (FUN_1400ff9e0)

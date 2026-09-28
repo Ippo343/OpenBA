@@ -33,4 +33,3 @@ void Action::Exit(void*) {}                         // 0x1400c4ba0 RET 0
 void Action::CheckEntity() {}                       // 0x1400c4a30 RET 0
 bool Action::GetTarget(void*) { return false; }     // 0x1400c4a40 XOR AL,AL
 
-DEFINE_EXE_VTABLE(Action, "_ZTV6Action")

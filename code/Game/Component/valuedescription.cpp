@@ -101,5 +101,4 @@ void* ValueDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ValueDescription());
 }
 
-DEFINE_EXE_VTABLE(ValueDescription, "_ZTV16ValueDescription")
 DEFINE_EXE_TYPE(ValueDescription, "Description")

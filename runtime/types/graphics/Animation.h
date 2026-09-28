@@ -504,7 +504,7 @@ static_assert(offsetof(Animation, _duration)      == 0x58, "Animation::_duration
 static_assert(offsetof(Animation, _keys)          == 0x60, "Animation::_keys @ +0x60");
 static_assert(!std::is_polymorphic<Animation>::value,
               "Graphics::Animation must never acquire a vtable: retail exports no "
-              "??_7Animation@Graphics@@6B@ and both its ctor and dtor are QEAA");
+              "vtable for Graphics::Animation and both its ctor and dtor are QEAA");
 static_assert(std::is_standard_layout<Animation>::value,
               "the ported doors reach these fields through a reinterpret_cast");
 

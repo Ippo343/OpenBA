@@ -689,7 +689,6 @@ void* FireWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FireWork());
 }
 
-DEFINE_EXE_VTABLE(FireWork, "_ZTV8FireWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

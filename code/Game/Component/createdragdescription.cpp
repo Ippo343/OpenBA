@@ -110,5 +110,4 @@ void* CreateDragDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreateDragDescription());
 }
 
-DEFINE_EXE_VTABLE(CreateDragDescription, "_ZTV21CreateDragDescription")
 DEFINE_EXE_TYPE(CreateDragDescription, "Description")

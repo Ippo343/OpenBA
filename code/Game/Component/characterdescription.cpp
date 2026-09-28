@@ -112,5 +112,4 @@ void* CharacterDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CharacterDescription());
 }
 
-DEFINE_EXE_VTABLE(CharacterDescription, "_ZTV20CharacterDescription")
 DEFINE_EXE_TYPE(CharacterDescription, "Description")

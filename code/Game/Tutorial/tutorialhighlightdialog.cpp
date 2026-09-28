@@ -437,6 +437,5 @@ void* TutorialHighlightDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialHighlightDialog());
 }
 
-DEFINE_EXE_VTABLE(TutorialHighlightDialog, "_ZTV23TutorialHighlightDialog")
 // DEFINE_EXE_TYPE(TutorialHighlightDialog, "UI::DialogInstance") stays where
 // its REGISTER_TYPE was — tutorial_dialog_vtables.cpp (B38_RULES B8-7).

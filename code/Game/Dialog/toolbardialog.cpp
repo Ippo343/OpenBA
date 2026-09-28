@@ -1902,7 +1902,6 @@ void* ToolbarDialog::CreateInPlaceObject(void* storage) {
 
 // The reflection record stays at the TU position of the UI_DIALOG_STUB row it
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
-DEFINE_EXE_VTABLE(ToolbarDialog, "_ZTV13ToolbarDialog")
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {

@@ -322,7 +322,6 @@ void* WorkComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) WorkComponent());
 }
 
-DEFINE_EXE_VTABLE(WorkComponent, "_ZTV13WorkComponent")
 DEFINE_EXE_TYPE(WorkComponent, "Component")
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.

@@ -664,7 +664,6 @@ void* TendArea::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TendArea());
 }
 
-DEFINE_EXE_VTABLE(TendArea, "_ZTV8TendArea")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

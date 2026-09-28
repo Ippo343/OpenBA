@@ -136,7 +136,6 @@ fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount = nullptr;
 // fn_EventNotifyDialog_ArrayRemove — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
 fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
-uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
 fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
 // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
@@ -777,13 +776,9 @@ bool EngineFuncsInit() {
     // fn_Toolbar_ShowGroup — must call original (15+ direct callers share state)
     fn_Toolbar_ShowGroup = reinterpret_cast<fn_Toolbar_ShowGroup_t>(
         ResolveAddr(Module::Exe, 0x140102b60));
-    // 0x14015f5a0 is the shared ToolUI child-dialog vtable. In standalone it is
-    // DELIBERATELY left unregistered (registering it poisons the menu's BuildId
-    // child — see reg_player_toolui.cpp), so ResolveAddr returns 0 here; only
-    // overwrite when non-null so we KEEP the standalone replacement vtable that
-    // RegisterPlayerToolUIBatch (AddressRegistryInit, runs earlier) installed.
-    if (uintptr_t toolUIChildVt = ResolveAddr(Module::Exe, 0x14015f5a0))
-        g_ToolUI_ChildDialog_Vtable = toolUIChildVt;
+    // (g_ToolUI_ChildDialog_Vtable -- the by-address read of the exe's ToolUI
+    // child-dialog vtable 0x14015f5a0 -- is deleted, ENDGAME B.3.9 close: it had
+    // writers and no reader; every tool dialog is a real UI::DialogInstance.)
     // Toolbar item sort function
     // RadioElement::FindCheckBoxes. NO FALLBACK (Wave 9 lane F deleted it, and
     // the record of why has to survive the deletion): FindCheckBoxes is an

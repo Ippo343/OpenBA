@@ -125,5 +125,4 @@ void BoatComponent::Persist(void* stream) {
     }
 }
 
-DEFINE_EXE_VTABLE(BoatComponent, "_ZTV13BoatComponent")
 DEFINE_EXE_TYPE(BoatComponent, "ControllerComponent")

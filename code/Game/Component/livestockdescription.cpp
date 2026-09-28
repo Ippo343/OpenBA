@@ -87,5 +87,4 @@ void* LivestockDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) LivestockDescription());
 }
 
-DEFINE_EXE_VTABLE(LivestockDescription, "_ZTV20LivestockDescription")
 DEFINE_EXE_TYPE(LivestockDescription, "Description")

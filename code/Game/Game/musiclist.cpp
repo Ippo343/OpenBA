@@ -284,6 +284,5 @@ void* MusicList::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) MusicList());
 }
 
-DEFINE_EXE_VTABLE(MusicList, "_ZTV9MusicList")
 
 DEFINE_EXE_TYPE(MusicList, "Object::External")

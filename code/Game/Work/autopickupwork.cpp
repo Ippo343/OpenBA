@@ -63,7 +63,6 @@ int AutoPickupWork::Cleanup() {
     return 0;
 }
 
-DEFINE_EXE_VTABLE(AutoPickupWork, "_ZTV14AutoPickupWork")
 
 // No RegisterExeAddr(0x140160fa0): its only by-address readers were the leaves' dtors
 // re-stamping it on the way down the chain, and every AutoPickupWork leaf is a real

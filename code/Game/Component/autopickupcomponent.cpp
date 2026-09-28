@@ -142,5 +142,4 @@ void* AutoPickupComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AutoPickupComponent());
 }
 
-DEFINE_EXE_VTABLE(AutoPickupComponent, "_ZTV19AutoPickupComponent")
 DEFINE_EXE_TYPE(AutoPickupComponent, "Component")

@@ -93,5 +93,4 @@ void* TimeGoal::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TimeGoal());
 }
 
-DEFINE_EXE_VTABLE(TimeGoal, "_ZTV8TimeGoal")
 DEFINE_EXE_TYPE(TimeGoal, "Achievement::Goal")

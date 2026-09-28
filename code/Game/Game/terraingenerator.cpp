@@ -273,7 +273,6 @@ void* TerrainGenerator::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) TerrainGenerator());
 }
 
-DEFINE_EXE_VTABLE(TerrainGenerator, "_ZTV16TerrainGenerator")
 
 // Register the two terrain-data-array helpers to the faithful reimpls above
 // (FUN_1400206b0 resize / FUN_140020870 serialize), so the ResolveAddr call

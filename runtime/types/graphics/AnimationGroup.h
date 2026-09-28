@@ -217,8 +217,8 @@ public:
     Collection::Array<uint8_t> _blendTimes;  // +0x48  Array<float>, the fade table
 };
 static_assert(sizeof(AnimationGroup) == 0x58,
-              "Graphics::AnimationGroup is 0x58 bytes -- RT_DELDTOR(0x1800167f0, "
-              "0x1800fb620, 0x058) and the MOV EDX,0x58 it was read from");
+              "Graphics::AnimationGroup is 0x58 bytes -- the deleting dtor 0x1800167f0's "
+              "element size and the MOV EDX,0x58 it was read from");
 static_assert(alignof(AnimationGroup) == 8, "Graphics::AnimationGroup aligns to 8");
 static_assert(offsetof(AnimationGroup, _clips)       == 0x20, "AnimationGroup::_clips @ +0x20");
 static_assert(offsetof(AnimationGroup, _defaultBlend)== 0x30, "AnimationGroup::_defaultBlend @ +0x30");

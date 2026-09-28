@@ -903,7 +903,6 @@ void* TradeWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TradeWork());
 }
 
-DEFINE_EXE_VTABLE(TradeWork, "_ZTV9TradeWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

@@ -787,6 +787,5 @@ void* MoveTo::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MoveTo());
 }
 
-DEFINE_EXE_VTABLE(MoveTo, "_ZTV6MoveTo")
 
 DEFINE_EXE_TYPE(MoveTo, "Action")

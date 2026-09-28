@@ -1042,7 +1042,6 @@ void* FishingWork::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FishingWork());
 }
 
-DEFINE_EXE_VTABLE(FishingWork, "_ZTV11FishingWork")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

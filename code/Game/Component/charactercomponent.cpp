@@ -378,5 +378,4 @@ void* CharacterComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CharacterComponent());
 }
 
-DEFINE_EXE_VTABLE(CharacterComponent, "_ZTV18CharacterComponent")
 DEFINE_EXE_TYPE(CharacterComponent, "Component")

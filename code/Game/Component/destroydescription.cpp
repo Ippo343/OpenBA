@@ -119,5 +119,4 @@ void* DestroyDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DestroyDescription());
 }
 
-DEFINE_EXE_VTABLE(DestroyDescription, "_ZTV18DestroyDescription")
 DEFINE_EXE_TYPE(DestroyDescription, "Description")

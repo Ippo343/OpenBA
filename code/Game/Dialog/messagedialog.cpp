@@ -122,7 +122,6 @@ void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                       static_cast<const UI::Dialog*>(extRes), parent);
 }
 
-DEFINE_EXE_VTABLE(MessageDialog, "_ZTV13MessageDialog")
 
 // B38 D5: the table row 0x14015c480 is gone - its readers (saveloaddialog.cpp's
 // two stamps) build through the real ctor since the CB2 caller batch, and

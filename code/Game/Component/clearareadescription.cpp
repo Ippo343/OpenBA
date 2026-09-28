@@ -106,5 +106,4 @@ void* ClearAreaDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ClearAreaDescription());
 }
 
-DEFINE_EXE_VTABLE(ClearAreaDescription, "_ZTV20ClearAreaDescription")
 DEFINE_EXE_TYPE(ClearAreaDescription, "Description")

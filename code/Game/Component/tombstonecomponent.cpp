@@ -249,5 +249,4 @@ void* TombstoneComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TombstoneComponent());
 }
 
-DEFINE_EXE_VTABLE(TombstoneComponent, "_ZTV18TombstoneComponent")
 DEFINE_EXE_TYPE(TombstoneComponent, "Component")

@@ -47,5 +47,4 @@ void* UIComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) UIComponent());
 }
 
-DEFINE_EXE_VTABLE(UIComponent, "_ZTV11UIComponent")
 DEFINE_EXE_TYPE(UIComponent, "Component")

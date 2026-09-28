@@ -88,5 +88,4 @@ void* TerraformDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TerraformDescription());
 }
 
-DEFINE_EXE_VTABLE(TerraformDescription, "_ZTV20TerraformDescription")
 DEFINE_EXE_TYPE(TerraformDescription, "Description")

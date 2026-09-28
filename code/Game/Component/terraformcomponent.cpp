@@ -611,5 +611,4 @@ void* TerraformComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TerraformComponent());
 }
 
-DEFINE_EXE_VTABLE(TerraformComponent, "_ZTV18TerraformComponent")
 DEFINE_EXE_TYPE(TerraformComponent, "Component")

@@ -1199,7 +1199,6 @@ void* ClearArea::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ClearArea());
 }
 
-DEFINE_EXE_VTABLE(ClearArea, "_ZTV9ClearArea")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

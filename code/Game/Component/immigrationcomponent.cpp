@@ -135,5 +135,4 @@ void ImmigrationComponent::Persist(void* stream) {
     reinterpret_cast<System::Time*>(&field48)->Serialize(ser);   // B.3.8 bridge (field48 is a Time)
 }
 
-DEFINE_EXE_VTABLE(ImmigrationComponent, "_ZTV20ImmigrationComponent")
 DEFINE_EXE_TYPE(ImmigrationComponent, "ControllerComponent")

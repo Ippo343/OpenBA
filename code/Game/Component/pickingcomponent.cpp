@@ -329,5 +329,4 @@ void* PickingComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PickingComponent());
 }
 
-DEFINE_EXE_VTABLE(PickingComponent, "_ZTV16PickingComponent")
 DEFINE_EXE_TYPE(PickingComponent, "Component")

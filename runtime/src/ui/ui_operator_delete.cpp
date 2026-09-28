@@ -52,7 +52,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
-#include "../object/deleting_dtor_internal.h"   // rtcoll::MemFree, declared once
+#include "../../types/collection/Collection.h"   // rtcoll::MemFree
 
 // ---------------------------------------------------------------------------
 // The one body.

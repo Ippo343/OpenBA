@@ -323,5 +323,4 @@ void* OrchardUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) OrchardUI());
 }
 
-DEFINE_EXE_VTABLE(OrchardUI, "_ZTV9OrchardUI")
 DEFINE_EXE_TYPE(OrchardUI, "SelectResourceUI")

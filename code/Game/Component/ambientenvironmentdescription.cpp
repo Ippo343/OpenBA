@@ -208,5 +208,4 @@ void* AmbientEnvironmentDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AmbientEnvironmentDescription());
 }
 
-DEFINE_EXE_VTABLE(AmbientEnvironmentDescription, "_ZTV29AmbientEnvironmentDescription")
 DEFINE_EXE_TYPE(AmbientEnvironmentDescription, "Description")

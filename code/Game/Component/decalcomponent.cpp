@@ -508,5 +508,4 @@ void* DecalComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DecalComponent());
 }
 
-DEFINE_EXE_VTABLE(DecalComponent, "_ZTV14DecalComponent")
 DEFINE_EXE_TYPE(DecalComponent, "Component")

@@ -954,7 +954,6 @@ void* HarvestArea::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HarvestArea());
 }
 
-DEFINE_EXE_VTABLE(HarvestArea, "_ZTV11HarvestArea")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

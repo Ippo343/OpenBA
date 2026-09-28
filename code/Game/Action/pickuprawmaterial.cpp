@@ -263,6 +263,5 @@ void* PickupRawMaterial::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PickupRawMaterial());
 }
 
-DEFINE_EXE_VTABLE(PickupRawMaterial, "_ZTV17PickupRawMaterial")
 
 DEFINE_EXE_TYPE(PickupRawMaterial, "Action")

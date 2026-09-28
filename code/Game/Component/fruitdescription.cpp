@@ -89,5 +89,4 @@ void* FruitDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FruitDescription());
 }
 
-DEFINE_EXE_VTABLE(FruitDescription, "_ZTV16FruitDescription")
 DEFINE_EXE_TYPE(FruitDescription, "Description")

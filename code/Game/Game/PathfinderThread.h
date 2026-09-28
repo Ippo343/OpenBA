@@ -27,7 +27,6 @@ public:
     void Run() override;                                  // [0] 0x1400a6360  WORKER THREAD
     // [1] OnCompleted: inherited (System::Thread's RET)
 
-    static const void* Vtable();
 
     // Retail's ctor 0x1400a67f0 (inlined in CreateNaturalResource_impl_sub_e8c0):
     // `??0Thread@System@@QEAA@I@Z` with 0x10000, then the 0x14015ef18 stamp (the

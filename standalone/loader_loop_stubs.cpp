@@ -203,5 +203,3 @@ void GameLoaderLoop::Startup() {
 // is registered any more: InnerLoaderLoop's 0x140158870 row went at the B.3.8
 // close, GameLoaderLoop's 0x1401588d0 at B.3.9 EXA (every builder constructs
 // the real class).
-DEFINE_EXE_VTABLE(InnerLoaderLoop, "_ZTV15InnerLoaderLoop")
-DEFINE_EXE_VTABLE(GameLoaderLoop, "_ZTV14GameLoaderLoop")

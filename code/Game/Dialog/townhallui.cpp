@@ -2414,6 +2414,5 @@ void* TownHallUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TownHallUI());
 }
 
-DEFINE_EXE_VTABLE(TownHallUI, "_ZTV10TownHallUI")
 DEFINE_EXE_TYPE(TownHallUI, "UI::DialogController")
 

@@ -229,5 +229,4 @@ void* TutorialImageHotKey::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialImageHotKey());
 }
 
-DEFINE_EXE_VTABLE(TutorialImageHotKey, "_ZTV19TutorialImageHotKey")
 DEFINE_EXE_TYPE(TutorialImageHotKey, "TutorialImage")

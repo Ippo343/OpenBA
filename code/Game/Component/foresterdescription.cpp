@@ -82,5 +82,4 @@ void* ForesterDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ForesterDescription());
 }
 
-DEFINE_EXE_VTABLE(ForesterDescription, "_ZTV19ForesterDescription")
 DEFINE_EXE_TYPE(ForesterDescription, "Description")

@@ -75,5 +75,4 @@ void* AttendanceDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AttendanceDescription());
 }
 
-DEFINE_EXE_VTABLE(AttendanceDescription, "_ZTV21AttendanceDescription")
 DEFINE_EXE_TYPE(AttendanceDescription, "Description")

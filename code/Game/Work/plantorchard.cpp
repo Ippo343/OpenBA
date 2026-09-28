@@ -743,7 +743,6 @@ void* PlantOrchard::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PlantOrchard());
 }
 
-DEFINE_EXE_VTABLE(PlantOrchard, "_ZTV12PlantOrchard")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

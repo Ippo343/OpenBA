@@ -128,9 +128,6 @@ namespace {
 
 // ---- the doors, all by NAME ------------------------------------------------
 using CreatePathFn       = bool  (*)(void* fileSystem, const void* filename);
-using StreamCtorFn       = void* (*)(void* self);
-using StreamCreateFn     = bool  (*)(void* self, const void* filename);
-using StreamDtorFn       = void  (*)(void* self);
 using CloseFileFn        = void  (*)(void* fileSystem, void* fileInfo);
 
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.

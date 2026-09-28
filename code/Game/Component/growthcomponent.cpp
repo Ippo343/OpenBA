@@ -834,5 +834,4 @@ void* GrowthComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) GrowthComponent());
 }
 
-DEFINE_EXE_VTABLE(GrowthComponent, "_ZTV15GrowthComponent")
 DEFINE_EXE_TYPE(GrowthComponent, "Component")

@@ -80,5 +80,4 @@ void* RadiusUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) RadiusUI());
 }
 
-DEFINE_EXE_VTABLE(RadiusUI, "_ZTV8RadiusUI")
 DEFINE_EXE_TYPE(RadiusUI, "UI::DialogController")

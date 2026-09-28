@@ -99,6 +99,5 @@ void* StatusIconUIConfig::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StatusIconUIConfig());
 }
 
-DEFINE_EXE_VTABLE(StatusIconUIConfig, "_ZTV18StatusIconUIConfig")
 
 DEFINE_EXE_TYPE(StatusIconUIConfig, "UI::DialogControllerConfig")

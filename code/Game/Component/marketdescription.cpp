@@ -116,5 +116,4 @@ void* MarketDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MarketDescription());
 }
 
-DEFINE_EXE_VTABLE(MarketDescription, "_ZTV17MarketDescription")
 DEFINE_EXE_TYPE(MarketDescription, "Description")

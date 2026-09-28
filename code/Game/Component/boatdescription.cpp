@@ -67,5 +67,4 @@ void* BoatDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BoatDescription());
 }
 
-DEFINE_EXE_VTABLE(BoatDescription, "_ZTV15BoatDescription")
 DEFINE_EXE_TYPE(BoatDescription, "Description")

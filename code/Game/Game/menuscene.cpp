@@ -580,6 +580,5 @@ void* MenuScene::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) MenuScene());
 }
 
-DEFINE_EXE_VTABLE(MenuScene, "_ZTV9MenuScene")
 
 DEFINE_EXE_TYPE(MenuScene, "Object::External")

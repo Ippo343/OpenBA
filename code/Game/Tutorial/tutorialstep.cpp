@@ -169,5 +169,4 @@ void* TutorialStep::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialStep());
 }
 
-DEFINE_EXE_VTABLE(TutorialStep, "_ZTV12TutorialStep")
 DEFINE_EXE_TYPE(TutorialStep, "Object::External")

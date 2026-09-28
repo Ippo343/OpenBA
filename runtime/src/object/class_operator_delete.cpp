@@ -27,7 +27,7 @@
 // So these 28 are the same single body as the UI sixty: `if (!p) return;
 // Enter(lock); Free(p); Leave(lock);` — instruction for instruction
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0). This file reuses
-// rtcoll::MemFree (declared once in deleting_dtor_internal.h, defined in
+// rtcoll::MemFree (declared in types/collection/Collection.h, defined in
 // runtime/src/collection/array.cpp) rather than duplicating the body, for the
 // same reason the UI file gives: one place to repoint when the allocator port
 // goes default-on.
@@ -48,7 +48,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
-#include "deleting_dtor_internal.h"   // rtcoll::MemFree, declared once
+#include "../../types/collection/Collection.h"   // rtcoll::MemFree
 
 extern "C" void RtClass_OperatorDelete(void* p) {
     rtcoll::MemFree(p);                     // if (p) { Enter; Free; Leave; }

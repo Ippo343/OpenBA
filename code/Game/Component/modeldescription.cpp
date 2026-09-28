@@ -161,5 +161,4 @@ void* ModelDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ModelDescription());
 }
 
-DEFINE_EXE_VTABLE(ModelDescription, "_ZTV16ModelDescription")
 DEFINE_EXE_TYPE(ModelDescription, "Description")

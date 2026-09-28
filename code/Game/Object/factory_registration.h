@@ -81,13 +81,14 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
 // standalone.
 bool IsDerivedFromOrTrust(void* obj, uint32_t typeId);
 
-// Type-derivation test by ancestor NAME over the Factory tree
-// (Factory::IsDerivedFrom's parent links, which Startup's second pass built):
-// true when the type `typeId` is `ancestorName` or derives from it. false for
-// 0 / 0xFFFFFFFF, for an id the tree does not hold and for an ancestor name
-// the tree does not hold (where Factory::IsDerivedFrom itself would fault) —
-// e.g. the StateMachineComponent controller scan replicating retail
-// 0x14012b6a0's IsDerivedFrom(comp, ControllerComponent).
-bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName);
+// Type-derivation test over the Factory tree (Factory::IsDerivedFrom's parent
+// links, which Startup's second pass built): true when the type `typeId` is
+// `ancestorId` or derives from it. false for 0 / 0xFFFFFFFF and for an id the
+// tree does not hold (where Factory::IsDerivedFrom itself would fault) — e.g.
+// the StateMachineComponent controller scan replicating retail 0x14012b6a0's
+// IsDerivedFrom(comp, ControllerComponent). ENDGAME B.3.9 close: was
+// IsTypeDerivedFromByName(typeId, "ControllerComponent"); its one caller passes
+// ControllerComponent::TypeId() now (the same ~CRC32 id the name lookup found).
+bool IsTypeDerivedFrom(uint32_t typeId, uint32_t ancestorId);
 
 }  // namespace Object

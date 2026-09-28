@@ -188,5 +188,4 @@ void* BuildDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BuildDescription());
 }
 
-DEFINE_EXE_VTABLE(BuildDescription, "_ZTV16BuildDescription")
 DEFINE_EXE_TYPE(BuildDescription, "Description")

@@ -103,6 +103,5 @@ void* ResourceLimitUIConfig::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ResourceLimitUIConfig());
 }
 
-DEFINE_EXE_VTABLE(ResourceLimitUIConfig, "_ZTV21ResourceLimitUIConfig")
 
 DEFINE_EXE_TYPE(ResourceLimitUIConfig, "UI::DialogControllerConfig")

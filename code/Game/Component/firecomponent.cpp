@@ -190,5 +190,4 @@ void* FireComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FireComponent());
 }
 
-DEFINE_EXE_VTABLE(FireComponent, "_ZTV13FireComponent")
 DEFINE_EXE_TYPE(FireComponent, "Component")

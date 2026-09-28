@@ -66,5 +66,4 @@ void* ClearResourceDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ClearResourceDescription());
 }
 
-DEFINE_EXE_VTABLE(ClearResourceDescription, "_ZTV24ClearResourceDescription")
 DEFINE_EXE_TYPE(ClearResourceDescription, "Description")

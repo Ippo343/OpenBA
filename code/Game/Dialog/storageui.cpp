@@ -668,6 +668,5 @@ void* StorageUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StorageUI());
 }
 
-DEFINE_EXE_VTABLE(StorageUI, "_ZTV9StorageUI")
 DEFINE_EXE_TYPE(StorageUI, "UI::DialogController")
 

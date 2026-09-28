@@ -117,5 +117,4 @@ void* TutorialInstance::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialInstance());
 }
 
-DEFINE_EXE_VTABLE(TutorialInstance, "_ZTV16TutorialInstance")
 DEFINE_EXE_TYPE(TutorialInstance, "Object::Internal")

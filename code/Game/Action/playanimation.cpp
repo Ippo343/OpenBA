@@ -235,6 +235,5 @@ void* PlayAnimation::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PlayAnimation());
 }
 
-DEFINE_EXE_VTABLE(PlayAnimation, "_ZTV13PlayAnimation")
 
 DEFINE_EXE_TYPE(PlayAnimation, "Action")

@@ -206,5 +206,4 @@ void StorageLocationComponent::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
 }
 
-DEFINE_EXE_VTABLE(StorageLocationComponent, "_ZTV24StorageLocationComponent")
 DEFINE_EXE_TYPE(StorageLocationComponent, "ControllerComponent")

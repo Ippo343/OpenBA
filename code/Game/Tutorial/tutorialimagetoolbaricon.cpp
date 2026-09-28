@@ -264,5 +264,4 @@ void* TutorialImageToolbarIcon::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialImageToolbarIcon());
 }
 
-DEFINE_EXE_VTABLE(TutorialImageToolbarIcon, "_ZTV24TutorialImageToolbarIcon")
 DEFINE_EXE_TYPE(TutorialImageToolbarIcon, "TutorialImage")

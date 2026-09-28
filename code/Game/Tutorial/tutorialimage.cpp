@@ -111,5 +111,4 @@ void* TutorialImage::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) TutorialImage());
 }
 
-DEFINE_EXE_VTABLE(TutorialImage, "_ZTV13TutorialImage")
 DEFINE_EXE_TYPE(TutorialImage, "Object::External")

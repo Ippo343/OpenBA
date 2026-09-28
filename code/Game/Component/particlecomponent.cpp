@@ -978,7 +978,6 @@ void* ParticleComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ParticleComponent());
 }
 
-DEFINE_EXE_VTABLE(ParticleComponent, "_ZTV17ParticleComponent")
 DEFINE_EXE_TYPE(ParticleComponent, "Component")
 
 // Register the helper closure at its exe addresses so the shared bodies above

@@ -99,5 +99,4 @@ void* ResidenceDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ResidenceDescription());
 }
 
-DEFINE_EXE_VTABLE(ResidenceDescription, "_ZTV20ResidenceDescription")
 DEFINE_EXE_TYPE(ResidenceDescription, "Description")

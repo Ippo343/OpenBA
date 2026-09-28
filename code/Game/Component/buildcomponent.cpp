@@ -602,5 +602,4 @@ void BuildComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, u
     if (message == 0) buildState += 1;
 }
 
-DEFINE_EXE_VTABLE(BuildComponent, "_ZTV14BuildComponent")
 DEFINE_EXE_TYPE(BuildComponent, "ControllerComponent")

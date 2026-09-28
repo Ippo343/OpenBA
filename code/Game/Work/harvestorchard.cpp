@@ -867,7 +867,6 @@ void* HarvestOrchard::CreateInPlaceObject(void* storage) {
     return r;
 }
 
-DEFINE_EXE_VTABLE(HarvestOrchard, "_ZTV14HarvestOrchard")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

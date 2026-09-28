@@ -74,5 +74,4 @@ void* AbsorbResourceDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AbsorbResourceDescription());
 }
 
-DEFINE_EXE_VTABLE(AbsorbResourceDescription, "_ZTV25AbsorbResourceDescription")
 DEFINE_EXE_TYPE(AbsorbResourceDescription, "Description")

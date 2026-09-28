@@ -110,7 +110,6 @@ void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                               static_cast<const UI::Dialog*>(extRes), parent);
 }
 
-DEFINE_EXE_VTABLE(OptionInputBindDialog, "_ZTV21OptionInputBindDialog")
 
 // Called from RegisterCodeFunctions in standalone/address_registry.cpp. The
 // vtable row (0x14015ce40) is gone: nothing in the tree reads that address back

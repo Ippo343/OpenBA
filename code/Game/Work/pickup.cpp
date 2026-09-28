@@ -884,7 +884,6 @@ void* Pickup::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) Pickup());
 }
 
-DEFINE_EXE_VTABLE(Pickup, "_ZTV6Pickup")
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"

@@ -468,6 +468,5 @@ void* MapGenerator::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) MapGenerator());
 }
 
-DEFINE_EXE_VTABLE(MapGenerator, "_ZTV12MapGenerator")
 
 DEFINE_EXE_TYPE(MapGenerator, "Object::External")

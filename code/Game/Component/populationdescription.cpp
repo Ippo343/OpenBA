@@ -107,5 +107,4 @@ void* PopulationDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PopulationDescription());
 }
 
-DEFINE_EXE_VTABLE(PopulationDescription, "_ZTV21PopulationDescription")
 DEFINE_EXE_TYPE(PopulationDescription, "Description")

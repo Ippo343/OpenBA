@@ -103,5 +103,4 @@ void* WorkDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) WorkDescription());
 }
 
-DEFINE_EXE_VTABLE(WorkDescription, "_ZTV15WorkDescription")
 DEFINE_EXE_TYPE(WorkDescription, "Description")

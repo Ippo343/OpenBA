@@ -1137,5 +1137,4 @@ void WorkPlaceComponent::OnRemove() {
     }
 }
 
-DEFINE_EXE_VTABLE(WorkPlaceComponent, "_ZTV18WorkPlaceComponent")
 DEFINE_EXE_TYPE(WorkPlaceComponent, "ControllerComponent")

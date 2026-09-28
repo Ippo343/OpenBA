@@ -48,5 +48,4 @@ int  Work::Slot5(void*, void*) { return 0; }
 // [12] 0x140006b10 `RET 0` (shared by 25 tables).
 void Work::Slot12() {}
 
-DEFINE_EXE_VTABLE(Work, "_ZTV4Work")
 

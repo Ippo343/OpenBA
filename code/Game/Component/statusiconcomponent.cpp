@@ -788,5 +788,4 @@ void* StatusIconComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StatusIconComponent());
 }
 
-DEFINE_EXE_VTABLE(StatusIconComponent, "_ZTV19StatusIconComponent")
 DEFINE_EXE_TYPE(StatusIconComponent, "Component")

@@ -222,5 +222,4 @@ void* CropUI::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CropUI());
 }
 
-DEFINE_EXE_VTABLE(CropUI, "_ZTV6CropUI")
 DEFINE_EXE_TYPE(CropUI, "SelectResourceUI")

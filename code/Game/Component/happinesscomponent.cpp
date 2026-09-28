@@ -538,5 +538,4 @@ void HappinessComponent::OnRemove() {
 // inert stub, kept; porting retail's body is its own titled commit.
 void HappinessComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {}
 
-DEFINE_EXE_VTABLE(HappinessComponent, "_ZTV18HappinessComponent")
 DEFINE_EXE_TYPE(HappinessComponent, "ControllerComponent")

@@ -46,12 +46,14 @@
 //   DEFINE_EXE_VTABLE(Class, "_ZTV<len><Class>")
 //       `Class::Vtable()`: the address of the COMPILER's vtable (its address
 //       point, i.e. the value a constructed object's vptr holds), without
-//       constructing an object. B38 D5: a converted class whose retail vtable
-//       address is still read back by another file keeps
-//       `RegisterExeAddr(kVtable, (uintptr_t)Class::Vtable())`, so every
-//       unconverted by-address reader stamps the compiler table. The symbol is
-//       spelled by hand and the LINKER checks it: a misspelling is an
-//       undefined reference, not a silent wrong pointer.
+//       constructing an object. The symbol is spelled by hand and the LINKER
+//       checks it: a misspelling is an undefined reference, not a silent wrong
+//       pointer. (B38 D5 wrote one per exe class so a `RegisterExeAddr(kVtable,
+//       Class::Vtable())` row could serve by-address readers; ENDGAME B.3.9
+//       deleted the last such row, and the close deleted the 303 lines whose
+//       `Vtable()` nobody read. Four remain, each with a reader: GameUpdateLoop,
+//       MenuDialogLoopT, GameLoadDialogLoopT -- vptr compares / hand-offs in
+//       the loop builders -- and StatGoal, RunFactorySelfTest's vptr check.)
 //
 // `X::TypeId()` returns `_typeInfo.typeId`: the ctor's 0xFFFFFFFF sentinel
 // until `Factory::Startup` writes the CRC (B33_RULES §2.5 — not

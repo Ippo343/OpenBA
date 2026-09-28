@@ -208,6 +208,5 @@ void* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AnimateNaturalResource());
 }
 
-DEFINE_EXE_VTABLE(AnimateNaturalResource, "_ZTV22AnimateNaturalResource")
 
 DEFINE_EXE_TYPE(AnimateNaturalResource, "Action")

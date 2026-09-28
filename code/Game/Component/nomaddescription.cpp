@@ -86,5 +86,4 @@ void* NomadDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) NomadDescription());
 }
 
-DEFINE_EXE_VTABLE(NomadDescription, "_ZTV16NomadDescription")
 DEFINE_EXE_TYPE(NomadDescription, "Description")

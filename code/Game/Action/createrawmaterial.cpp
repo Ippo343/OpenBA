@@ -545,6 +545,5 @@ void* CreateRawMaterial::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CreateRawMaterial());
 }
 
-DEFINE_EXE_VTABLE(CreateRawMaterial, "_ZTV17CreateRawMaterial")
 
 DEFINE_EXE_TYPE(CreateRawMaterial, "Action")

@@ -127,5 +127,4 @@ void* AnimalDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AnimalDescription());
 }
 
-DEFINE_EXE_VTABLE(AnimalDescription, "_ZTV17AnimalDescription")
 DEFINE_EXE_TYPE(AnimalDescription, "Description")

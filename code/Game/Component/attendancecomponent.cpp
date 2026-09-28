@@ -529,5 +529,4 @@ void AttendanceComponent::Command(int /*command*/) {
         AttendanceComponent_ProcessQueue(this);
 }
 
-DEFINE_EXE_VTABLE(AttendanceComponent, "_ZTV19AttendanceComponent")
 DEFINE_EXE_TYPE(AttendanceComponent, "ControllerComponent")

@@ -149,6 +149,5 @@ void* Profession::CreateInPlaceObject(void* memory) {
     return static_cast<Object::Base*>(::new (memory) Profession());
 }
 
-DEFINE_EXE_VTABLE(Profession, "_ZTV10Profession")
 
 DEFINE_EXE_TYPE(Profession, "Object::External")

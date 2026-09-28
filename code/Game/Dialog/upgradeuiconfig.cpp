@@ -94,6 +94,5 @@ void* UpgradeUIConfig::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) UpgradeUIConfig());
 }
 
-DEFINE_EXE_VTABLE(UpgradeUIConfig, "_ZTV15UpgradeUIConfig")
 
 DEFINE_EXE_TYPE(UpgradeUIConfig, "UI::DialogControllerConfig")

@@ -69,5 +69,4 @@ void* MineDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MineDescription());
 }
 
-DEFINE_EXE_VTABLE(MineDescription, "_ZTV15MineDescription")
 DEFINE_EXE_TYPE(MineDescription, "Description")

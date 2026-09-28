@@ -68,5 +68,4 @@ void* WellDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) WellDescription());
 }
 
-DEFINE_EXE_VTABLE(WellDescription, "_ZTV15WellDescription")
 DEFINE_EXE_TYPE(WellDescription, "Description")

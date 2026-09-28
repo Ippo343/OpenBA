@@ -154,5 +154,4 @@ void* EnvironmentDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) EnvironmentDescription());
 }
 
-DEFINE_EXE_VTABLE(EnvironmentDescription, "_ZTV22EnvironmentDescription")
 DEFINE_EXE_TYPE(EnvironmentDescription, "Object::External")

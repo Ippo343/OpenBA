@@ -371,6 +371,5 @@ void* ShowTool::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ShowTool());
 }
 
-DEFINE_EXE_VTABLE(ShowTool, "_ZTV8ShowTool")
 
 DEFINE_EXE_TYPE(ShowTool, "Action")

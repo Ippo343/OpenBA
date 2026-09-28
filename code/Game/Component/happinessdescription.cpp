@@ -91,5 +91,4 @@ void* HappinessDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HappinessDescription());
 }
 
-DEFINE_EXE_VTABLE(HappinessDescription, "_ZTV20HappinessDescription")
 DEFINE_EXE_TYPE(HappinessDescription, "Description")
