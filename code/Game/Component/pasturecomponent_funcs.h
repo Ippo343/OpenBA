@@ -18,4 +18,3 @@
 void PastureComponent_Shutdown(PastureComponent* self, void* stream);
 
 // Init: resolve all internal function pointers (called once at startup)
-void PastureComponent_InitFuncs();

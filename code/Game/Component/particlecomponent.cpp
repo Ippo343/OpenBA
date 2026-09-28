@@ -43,44 +43,10 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
-// ============================================================
-// Resolved helpers
-// ============================================================
+#include "Action/exe_bodies.h"      // ActHunt_NotifyEntityChanged_c3470, ActCNR_FindComponent_3f60
+#include "Component/exe_bodies.h"   // FloorComponent_FindResData
 
-// FUN_14000a590 — resize bool array
-
-// IsDerivedFrom
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// ParticleComponent_sub_2480 — particle setup helper
-typedef void (*fn_ParticleSetup_t)(void* self);
-static fn_ParticleSetup_t s_fn_ParticleSetup = nullptr;
-
-// ParticleComponent_helper_2a50 — update emitter position
-typedef void (*fn_UpdateEmitterPos_t)(void* self, int index);
-static fn_UpdateEmitterPos_t s_fn_UpdateEmitterPos = nullptr;
-
-// ParticleComponent_helper_2990 — emitter tick
-typedef void (*fn_EmitterTick_t)(void* self, int index);
-static fn_EmitterTick_t s_fn_EmitterTick = nullptr;
-
-// Graphics::Scene::RemoveObject
-
-// FUN_1400c3470 — entity flag update
-typedef void (*fn_EntityFlagUpdate_t)(void* entity);
-static fn_EntityFlagUpdate_t s_fn_EntityFlagUpdate = nullptr;
-
-// FUN_140053660 — emitter startup
-typedef void (*fn_EmitterStartup_t)(void* self, int index);
-static fn_EmitterStartup_t s_fn_EmitterStartup = nullptr;
-
-// The original OnRemove is too complex for clean reimpl — use direct call
-
-static float* s_pUVScale = nullptr;  // g_fUVScale (constant 1.0)
 static float PC_UVScale();  // defined with the helper ports below
-
-static bool s_initialized = false;
 
 // Entity re-bucket — FAITHFUL retail behavior, now the SOLE per-frame tick driver.
 // Retail's StartEmitter/StopEmitter set the component's draw flag (self+0x20 bit 0x4)
@@ -153,13 +119,6 @@ static_assert(sizeof(PCGeoEntry) == 0x18, "PCGeoEntry stride");
 //   +0x11 b1 autoStart, +0x12 b2 eventToggled, +0x13 b3 noModelTransform,
 //   +0x18 Time t0 prewarm, +0x20 Time t1 fadeDuration
 
-// --- extra resolved deps for the ports ---
-// FindComponent helpers (exe): 0x140003f60 = ModelComponent, 0x140004680 = MapComponent.
-// (entity, retbuf IBP) — retbuf[0] receives the component pointer (or 0).
-typedef void* (*fn_PCFindComponent_t)(uintptr_t entity, void* retIBP);
-static fn_PCFindComponent_t s_fn_FindComp_Model = nullptr;
-static fn_PCFindComponent_t s_fn_FindComp_Map = nullptr;
-
 
 // g_fUVScale is the retail .rdata constant 1.0f. In SA the ResolveAddr for
 // 0x140172234 lands inside an unrelated registered data blob (observed value
@@ -174,10 +133,18 @@ static uintptr_t PC_Entity(void* self) {
     return *(uintptr_t*)ibp;
 }
 
-static void* PC_FindComp(fn_PCFindComponent_t fn, uintptr_t entity) {
-    if (!fn || !entity) return nullptr;
+// FindComponent helpers (exe): 0x140003f60 = ModelComponent, 0x140004680 = MapComponent.
+// (entity, retbuf IBP) — retbuf[0] receives the component pointer (or 0).
+static void* PC_FindModel(uintptr_t entity) {
+    if (!entity) return nullptr;
     uintptr_t buf[2] = {0, 0};
-    fn(entity, buf);
+    ActCNR_FindComponent_3f60(entity, buf);   // 0x140003f60
+    return (void*)buf[0];
+}
+static void* PC_FindMap(uintptr_t entity) {
+    if (!entity) return nullptr;
+    uintptr_t buf[2] = {0, 0};
+    FloorComponent_FindResData((void*)entity, buf);   // 0x140004680
     return (void*)buf[0];
 }
 
@@ -228,15 +195,15 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
     if (!ge->geo) return;   // resource failed to load — leave emitter inert
 
     uintptr_t entity = PC_Entity(self);
-    void* model = PC_FindComp(s_fn_FindComp_Model, entity);
-    void* mapc  = PC_FindComp(s_fn_FindComp_Map, entity);
+    void* model = PC_FindModel(entity);
+    void* mapc  = PC_FindMap(entity);
 
     // Transform = quat(x,y,z,w) at +0x00, pos(x,y,z) at +0x10 — 7 floats.
     float tf[7] = {0, 0, 0, PC_UVScale(), 0, 0, 0};   // identity
     if (model && elem[0x13] == 0) {
         // Building/entity model transform (+0x148)
         memcpy(tf, (uint8_t*)model + 0x148, 7 * sizeof(float));
-    } else if (mapc && g_pGameWorldSingleton && *g_pGameWorldSingleton && fn_MapGetTerrainPos) {
+    } else if (mapc && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         // Centre cell of the entity's map footprint → terrain-height world pos
         void* mapDims = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
         int W = mapDims ? *(int*)mapDims : 0;
@@ -247,7 +214,7 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
             float half = (float)(W >> 1) - 0.5f;
             float in[3]  = {(float)(idx % W) - half, (float)(idx / W) - half, 0.0f};
             float out[3] = {0, 0, 0};
-            fn_MapGetTerrainPos(mapDims, out, in, '\0', nullptr);
+            Reimpl_MapGetTerrainPos(mapDims, out, in, '\0', nullptr);
             tf[4] = out[0]; tf[5] = out[1]; tf[6] = out[2];
         }
     }
@@ -356,7 +323,7 @@ extern "C" void ParticleComponent_StopEmitter(ParticleComponent* self, int index
     uint32_t newFlags = oldFlags & ~0x4u;
     *(uint32_t*)(s + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
-        if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*(void**)(s + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));
     }
 }
 
@@ -393,7 +360,7 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
         uint32_t newFlags = oldFlags | 0x4u;
         *(uint32_t*)(s + 0x20) = newFlags;
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
-            if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*(void**)(s + 0x10));
+            ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));
         }
     }
     uint8_t* flagArr = *(uint8_t**)(s + 0x28);
@@ -479,40 +446,6 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
 }
 
 
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void ParticleComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_ParticleSetup = reinterpret_cast<fn_ParticleSetup_t>(
-        ResolveAddr(Module::Exe, 0x140052480));
-    s_fn_UpdateEmitterPos = reinterpret_cast<fn_UpdateEmitterPos_t>(
-        ResolveAddr(Module::Exe, 0x140052a50));
-    s_fn_EmitterTick = reinterpret_cast<fn_EmitterTick_t>(
-        ResolveAddr(Module::Exe, 0x140052990));
-    s_fn_EntityFlagUpdate = reinterpret_cast<fn_EntityFlagUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400c3470));
-    s_fn_EmitterStartup = reinterpret_cast<fn_EmitterStartup_t>(
-        ResolveAddr(Module::Exe, 0x140053660));
-
-    s_pUVScale = reinterpret_cast<float*>(
-        ResolveAddr(Module::Exe, 0x140172234));  // g_fUVScale
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // --- deps for the full helper-closure ports ---
-    s_fn_FindComp_Model = reinterpret_cast<fn_PCFindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140003f60));   // FindComponent(ModelComponent)
-    s_fn_FindComp_Map = reinterpret_cast<fn_PCFindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140004680));   // FindComponent(MapComponent)
-
-
-    s_initialized = true;
-}
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // Building particle effects (chimney smoke etc). Gated on BANISHED_LIVE_PARTICLE
@@ -644,17 +577,13 @@ ParticleComponent::ParticleComponent()
     OrFlagsInCtor(0xc3);
 }
 
-// [3] 0x140053270. MUST resolve first: slot 3 is the FIRST call into this class
-// on a load-from-save (PersistObject creates the object and dispatches +0x18
-// before Startup or any tick has run). Until InitFuncs() has run every s_fn_*
-// is null and the body null-guards EVERY stream call — it would consume ZERO
-// bytes of a record the save leg wrote (a stream desync). Retail 0x140053270
-// reads an emitter count and then that many bools.
+// [3] 0x140053270. Slot 3 is the FIRST call into this class on a load-from-save
+// (PersistObject creates the object and dispatches +0x18 before Startup or any
+// tick has run). Retail 0x140053270 reads an emitter count and then that many bools.
 // ============================================================
 // ParticleComponent::Persist (0x140053270)
 // ============================================================
 void ParticleComponent::Persist(void* stream) {
-    ParticleComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
@@ -682,11 +611,9 @@ void ParticleComponent::Persist(void* stream) {
 // ParticleComponent::Startup (0x140053230) — actually setup/init
 // ============================================================
 void ParticleComponent::Startup() {
-    ParticleComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
-    if (s_fn_ParticleSetup)
-        s_fn_ParticleSetup((void*)selfAddr);
+    ParticleComponent_Setup(this);
 
     // Zero all emitter flags
     int count = *(int*)(selfAddr + 0x30);
@@ -703,7 +630,6 @@ void ParticleComponent::Startup() {
 // ParticleComponent::OnAdded (0x140052f70)
 // ============================================================
 void ParticleComponent::OnAdded() {
-    ParticleComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     void* desc = GetParticleDesc(this);
@@ -744,8 +670,7 @@ void ParticleComponent::OnAdded() {
             *(uint64_t*)(geoObj + 0x7C) = 0;
         }
 
-        if (s_fn_UpdateEmitterPos)
-            s_fn_UpdateEmitterPos((void*)selfAddr, i);
+        ParticleComponent_StartEmitter(this, i);   // 0x140052a50
     }
 }
 
@@ -754,7 +679,6 @@ void ParticleComponent::OnAdded() {
 // ParticleComponent::OnRemove (0x140052e80)
 // ============================================================
 void ParticleComponent::OnRemove() {
-    ParticleComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     int totalCount = *(int*)(selfAddr + 0x40);
@@ -797,8 +721,7 @@ void ParticleComponent::OnRemove() {
             *(uint32_t*)(selfAddr + 0x20) = newFlags;
 
             if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(selfAddr + 0x10) != 0) {
-                if (s_fn_EntityFlagUpdate)
-                    s_fn_EntityFlagUpdate(*(void**)(selfAddr + 0x10));
+                ActHunt_NotifyEntityChanged_c3470(*(void**)(selfAddr + 0x10));
             }
         }
     }
@@ -826,7 +749,7 @@ void ParticleComponent::Tick(void* time) {
         // Node/attach-point follow: recompute transform every frame
         if (ge->nodeIdx >= 0 && ge->geo) {
             uintptr_t entity = PC_Entity(this);
-            void* model = PC_FindComp(s_fn_FindComp_Model, entity);
+            void* model = PC_FindModel(entity);
             void* desc = GetParticleDesc(this);
             if (desc && model) {
                 float tf[7] = {0, 0, 0, 1, 0, 0, 0};
@@ -898,13 +821,11 @@ void ParticleComponent::Tick(void* time) {
 // ParticleComponent::Slot11 (0x1400531b0)
 // ============================================================
 void ParticleComponent::Slot11() {
-    ParticleComponent_InitFuncs();
     uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     void* desc = GetParticleDesc(this);
 
-    if (s_fn_ParticleSetup)
-        s_fn_ParticleSetup((void*)selfAddr);
+    ParticleComponent_Setup(this);
 
     if (!desc) return;
 
@@ -915,8 +836,7 @@ void ParticleComponent::Slot11() {
 
     for (int i = 0; i < emitterCount; i++) {
         if (flagArray[i] != 0) {
-            if (s_fn_EmitterStartup)
-                s_fn_EmitterStartup((void*)selfAddr, i);
+            ParticleComponent_StartEmitterFade(this, i);   // 0x140053660
         }
     }
 }
@@ -927,7 +847,6 @@ void ParticleComponent::Slot11() {
 // event 2 = start with fade-in, event 3 = begin fade-out (b2 emitters only)
 // ============================================================
 void ParticleComponent::OnEvent(int eventCode) {
-    ParticleComponent_InitFuncs();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     void* desc = GetParticleDesc(this);
     if (!desc) return;

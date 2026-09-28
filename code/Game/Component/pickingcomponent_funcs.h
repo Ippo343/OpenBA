@@ -4,8 +4,6 @@
 #include "PickingComponent.h"
 #include <cstdint>
 
-void PickingComponent_InitFuncs();
-
 // OnAdded (0x140128f50) port: register this component's picking mesh into Picking::Scene
 // (Startup +0x30=owner, then AddMesh). Drives mesh-precise picking for static start-town
 // buildings, whose real OnAdded/Startup lifecycle never fires in standalone. Idempotent

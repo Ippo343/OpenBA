@@ -23,114 +23,19 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"   // ActHunt_FindComponent_5500, ActMv_FindComponentFamily_12d0,
+                                 // ActHunt_NotifyEntityChanged_c3470, the Pf_* map helpers
+#include "Work/exe_bodies.h"     // WorkBase_FindComponent_2ed0
 
-// ============================================================
-// Resolved helpers
-// ============================================================
+// The exe helpers this file calls, by retail address:
+//   0x140004680 FloorComponent_FindResData      FindComponent (map-grid component), (owner, outIBP)
+//   0x140005500 ActHunt_FindComponent_5500      FindComponent (animal/model variant), (owner, outIBP)
+//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470  entity flag-change notification
+//   0x1400012d0 ActMv_FindComponentFamily_12d0  Entity_FindComponent_Family, (entity, outIBP)
+//   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable  serialize the InternalBasePtr at +0x28
+//   0x140152a98 ?IsDerivedFrom@Base@Object@@    import slot
+//   0x140152b00 ??0Time@System@@QEAA@M@Z        import slot (RtSystem_Time_Ctor)
 
-// fn_IsDerivedFrom — dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// FUN_140002340 — serialize InternalBasePtr array
-typedef void (*fn_SerializeIBPArray_t)(void* arrayPtr, void* serializer);
-static fn_SerializeIBPArray_t s_fn_SerializeIBPArray = nullptr;
-
-// FUN_140128570 — compute pasture capacity
-typedef uint64_t (*fn_ComputePastureCapacity_t)(uintptr_t self);
-static fn_ComputePastureCapacity_t s_fn_ComputePastureCapacity = nullptr;
-
-// FUN_140002cc0 — DynArray8_EraseByValue(arrayField, valueIBP). NOT an "add".
-typedef void (*fn_EraseByValue_t)(void* listPtr, void* entityRef);
-static fn_EraseByValue_t s_fn_EraseByValue = nullptr;
-
-// FUN_140003110 — DynArray8_ResizeFill(arrayField, newCount, valueIBP); called with
-// count+1 it appends. NOT an "insert at position". ENDGAME B.3.2 step 2: resolved
-// but never actually called in this file (only ever printed for debug) — no call
-// site to convert.
-
-// PastureComponent_helper_5ed0 — process entity ref for pasture
-typedef void (*fn_PastureHelper5ed0_t)(void* entityRef);
-static fn_PastureHelper5ed0_t s_fn_PastureHelper5ed0 = nullptr;
-
-// FUN_1401240a0 — reassign entity refs for pasture
-typedef void (*fn_ReassignEntityRef_t)(uintptr_t entityPtr);
-static fn_ReassignEntityRef_t s_fn_ReassignEntityRef = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_fn_SerializeIBPArray = reinterpret_cast<fn_SerializeIBPArray_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    s_fn_ComputePastureCapacity = reinterpret_cast<fn_ComputePastureCapacity_t>(
-        ResolveAddr(Module::Exe, 0x140128570));
-
-    s_fn_EraseByValue = reinterpret_cast<fn_EraseByValue_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_fn_PastureHelper5ed0 = reinterpret_cast<fn_PastureHelper5ed0_t>(
-        ResolveAddr(Module::Exe, 0x140105ed0));
-
-    s_fn_ReassignEntityRef = reinterpret_cast<fn_ReassignEntityRef_t>(
-        ResolveAddr(Module::Exe, 0x1401240a0));
-
-    s_initialized = true;
-}
-
-// ============================================================
-// Reimplemented exe helpers (callee bodies for the guarded call sites)
-// ============================================================
-
-// FUN_140004680 — FindComponent (map-grid component) on the pasture owner.
-//   RCX=owner, RDX=outIBP -> returns outIBP. Used to read the footprint rect.
-typedef void* (*fn_FindMapComp_t)(int64_t owner, void* outIBP);
-static fn_FindMapComp_t s_fn_FindMapComp = nullptr;
-
-// FUN_140005500 — FindComponent (animal/model component variant), RCX=owner, RDX=outIBP.
-typedef void* (*fn_FindAnimalComp_t)(int64_t owner, void* outIBP);
-static fn_FindAnimalComp_t s_fn_FindAnimalComp = nullptr;
-
-// FUN_1400c3470 — entity flag-change notification.
-typedef void (*fn_FlagNotify_t)(void* entity);
-static fn_FlagNotify_t s_fn_FlagNotify = nullptr;
-
-// Entity_FindComponent_Family @0x1400012d0 — RCX=entity, RDX=outIBP.
-typedef void* (*fn_FindCompFamily_t)(int64_t entity, void* outIBP);
-static fn_FindCompFamily_t s_fn_FindCompFamily = nullptr;
-
-// AnimalComponent_SetBounds @0x140105e20 — clamps/records the animal's tile bounds.
-typedef void (*fn_AnimalSetBounds_t)(void* self, short* a, short* b, short* c, short* d, int e);
-static fn_AnimalSetBounds_t s_fn_AnimalSetBounds = nullptr;
-
-// System::Time::Time(float) dispatch slot 0x140152b00 — RCX=outTime, XMM1=seconds.
-typedef void* (*fn_Time_CtorF_t)(void* out, float seconds);
-static fn_Time_CtorF_t s_fn_Time_CtorF = nullptr;
-
-static bool s_pastureExtraInit = false;
-static void EnsurePastureExtras() {
-    if (s_pastureExtraInit) return;
-    s_fn_FindMapComp = reinterpret_cast<fn_FindMapComp_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_FindAnimalComp = reinterpret_cast<fn_FindAnimalComp_t>(
-        ResolveAddr(Module::Exe, 0x140005500));
-    s_fn_FlagNotify = reinterpret_cast<fn_FlagNotify_t>(
-        ResolveAddr(Module::Exe, 0x1400c3470));
-    s_fn_FindCompFamily = reinterpret_cast<fn_FindCompFamily_t>(
-        ResolveAddr(Module::Exe, 0x1400012d0));
-    s_fn_AnimalSetBounds = reinterpret_cast<fn_AnimalSetBounds_t>(
-        ResolveAddr(Module::Exe, 0x140105e20));
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) s_fn_Time_CtorF = *reinterpret_cast<fn_Time_CtorF_t*>(slot);
-    s_pastureExtraInit = true;
-}
 
 // Reimpl of AnimalComponent_SetBounds (0x140105e20): record the animal's footprint
 // tile-rect (origin-half .. clamped to the map). self+0x28 = packed cell index, map
@@ -159,12 +64,10 @@ void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY,
 // finds the animal-template sub-component (type 0x1401c6fd0) to read its per-animal
 // area cost at +0x24, and returns (w*h)/cost. Returns 0 if no animal ref bound.
 uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
-    EnsureHelpers();
-    EnsurePastureExtras();
     if (*(int64_t*)(self + 0x28) == 0) return 0;
 
     uint8_t outIBP[8] = {0};
-    if (s_fn_FindMapComp) s_fn_FindMapComp(*(int64_t*)(self + 0x10), outIBP);
+    FloorComponent_FindResData(*(void**)(self + 0x10), outIBP);   // 0x140004680
 
     int64_t animalRef = *(int64_t*)(self + 0x28);
     void* mapComp = *(void**)outIBP;
@@ -181,7 +84,7 @@ uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (t == AnimalDescription::TypeId()) {
             void* cand = *(void**)(list + (int64_t)idx * 8);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, AnimalDescription::TypeId())) found = cand;
+            if (Object::IsDerivedFromNullSafe(cand, AnimalDescription::TypeId())) found = cand;
             break;
         }
         idx++;
@@ -198,19 +101,17 @@ uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
 // grid, records the tile index at +0x28, records the animal-template bounds, and
 // kicks an immediate Update (vtable +0x48 with t=0).
 void PastureComponent_Helper5ed0(void* entityRef) {
-    EnsureHelpers();
-    EnsurePastureExtras();
     uint8_t* p = reinterpret_cast<uint8_t*>(entityRef);
 
     uint32_t oldFlags = *(uint32_t*)(p + 0x20);
     uint32_t newFlags = oldFlags | 0x400000;
     *(uint32_t*)(p + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*)(p + 0x10) != 0) {
-        if (s_fn_FlagNotify) s_fn_FlagNotify(*(void**)(p + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*(void**)(p + 0x10));   // 0x1400c3470
     }
 
     uint8_t famIBP[8] = {0};
-    if (s_fn_FindCompFamily) s_fn_FindCompFamily(*(int64_t*)(p + 0x10), famIBP);
+    ActMv_FindComponentFamily_12d0(*(uintptr_t*)(p + 0x10), famIBP);   // 0x1400012d0
     uintptr_t fam = *(uintptr_t*)famIBP;
     uintptr_t model = *(uintptr_t*)(fam + 0x68);
 
@@ -225,16 +126,14 @@ void PastureComponent_Helper5ed0(void* entityRef) {
 
     void* tmpl = *(void**)(p + 0x18);
     *(int*)(p + 0x28) = mapW * y + x;
-    void* animalTmpl = (s_fn_IsDerivedFrom_dispatch &&
-                        s_fn_IsDerivedFrom_dispatch(tmpl, AnimalDescription::TypeId())) ? tmpl : nullptr;
-    if (s_fn_AnimalSetBounds) {
-        s_fn_AnimalSetBounds(p, (short*)(p + 0x38), (short*)(p + 0x3a),
-                             (short*)(p + 0x3c), (short*)(p + 0x3e),
-                             *(int*)((uintptr_t)animalTmpl + 0x20));
-    }
+    void* animalTmpl = reinterpret_cast<const Object::Base*>(tmpl)
+                           ->IsDerivedFrom(AnimalDescription::TypeId()) ? tmpl : nullptr;   // B.3.x bridge
+    PastureComponent_AnimalSetBounds(p, (short*)(p + 0x38), (short*)(p + 0x3a),
+                                     (short*)(p + 0x3c), (short*)(p + 0x3e),
+                                     *(int*)((uintptr_t)animalTmpl + 0x20));   // 0x140105e20
 
     uint8_t t[8] = {0};
-    if (s_fn_Time_CtorF) s_fn_Time_CtorF(t, 0.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(t), 0.0f);
     // Immediate Update tick (vtable slot +0x48).
     reinterpret_cast<Component*>(p)->Update(t);   // B.3.8 bridge (slot 9, +0x48)
 }
@@ -244,13 +143,11 @@ void PastureComponent_Helper5ed0(void* entityRef) {
 // reads its origin/size rect, then on the animal's own model component clears the
 // in-pasture flag bit (0x400000), notifies, and copies the new rect into +0x38..+0x3e.
 void PastureComponent_ReassignEntityRef(uintptr_t entityPtr) {
-    EnsureHelpers();
-    EnsurePastureExtras();
     if (*(int64_t*)(entityPtr + 0x28) == 0) return;
 
     int64_t link = *(int64_t*)(*(int64_t*)(entityPtr + 0x28) + 0x10);
     uint8_t mapIBP[8] = {0};
-    if (s_fn_FindMapComp) s_fn_FindMapComp(link, mapIBP);
+    FloorComponent_FindResData((void*)link, mapIBP);   // 0x140004680
     uintptr_t mapComp = *(uintptr_t*)mapIBP;
     uint16_t r0 = *(uint16_t*)(mapComp + 0x28);
     uint16_t r1 = *(uint16_t*)(mapComp + 0x2a);
@@ -258,14 +155,14 @@ void PastureComponent_ReassignEntityRef(uintptr_t entityPtr) {
     uint16_t r3 = *(uint16_t*)(mapComp + 0x2e);
 
     uint8_t modelIBP[8] = {0};
-    if (s_fn_FindAnimalComp) s_fn_FindAnimalComp(*(int64_t*)(entityPtr + 0x10), modelIBP);
+    ActHunt_FindComponent_5500(*(uintptr_t*)(entityPtr + 0x10), modelIBP);   // 0x140005500
     uintptr_t model = *(uintptr_t*)modelIBP;
 
     uint32_t oldFlags = *(uint32_t*)(model + 0x20);
     uint32_t newFlags = oldFlags & 0xffbfffff;
     *(uint32_t*)(model + 0x20) = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*)(model + 0x10) != 0) {
-        if (s_fn_FlagNotify) s_fn_FlagNotify(*(void**)(model + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*(void**)(model + 0x10));   // 0x1400c3470
     }
     *(uint16_t*)(model + 0x38) = r0;
     *(uint16_t*)(model + 0x3a) = r1;
@@ -298,20 +195,6 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
 
 extern "C" void Pasture_ReleaseAllAnimals(void* pasture);
 
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void PastureComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[PastureComponent] Funcs resolved: ComputeCapacity=%p "
-           "AddToList=%p PastureHelper=%p ReassignEntityRef=%p\n",
-           (void*)s_fn_ComputePastureCapacity,
-           (void*)s_fn_EraseByValue,
-           (void*)s_fn_PastureHelper5ed0, (void*)s_fn_ReassignEntityRef);
-#endif
-}
 
 // ===== ENDGAME B.3.8 MI-B — PastureComponent's own slot bodies =====
 // Slots 13/14/15 live in pasturecomponent_states.cpp (registered by address from
@@ -375,8 +258,6 @@ void* PastureComponent::CreateInPlaceObject(void* storage) {
 //   - Int fields at +0x40 and +0x44
 
 void PastureComponent::Persist(void* stream) {
-    EnsureHelpers();
-
     // Base Component serialization
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
@@ -390,9 +271,7 @@ void PastureComponent::Persist(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr array at +0x28
-    if (s_fn_SerializeIBPArray) {
-        s_fn_SerializeIBPArray((void*)&field28, serializer);
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable((void*)&field28, serializer);   // 0x140002340
 
     // Serialize entity count from +0x38
     int entityCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x38);
@@ -417,8 +296,9 @@ void PastureComponent::Persist(void* stream) {
         for (int64_t i = 0; i < count; i++) {
             reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* obj = *(void**)ptr;
-            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(obj, LivestockComponent::TypeId());
+            if (obj != nullptr) {
+                bool valid = reinterpret_cast<const Object::Base*>(obj)
+                                 ->IsDerivedFrom(LivestockComponent::TypeId());   // B.3.x bridge
                 if (!valid) {
                     *(uint64_t*)ptr = 0;
                 }
@@ -441,15 +321,10 @@ void PastureComponent::Startup() { field28 = nullptr; }
 // Compute pasture capacity via FUN_140128570, store at +0x40.
 
 void PastureComponent::OnAdded() {
-    EnsureHelpers();
-
-    if (s_fn_ComputePastureCapacity) {
-        uint64_t capacity = s_fn_ComputePastureCapacity(reinterpret_cast<uintptr_t>(this));
-        *(int*)(reinterpret_cast<uintptr_t>(this) + 0x40) = (int)capacity;
-    }
+    uint64_t capacity = PastureComponent_ComputeCapacity(reinterpret_cast<uintptr_t>(this));   // 0x140128570
+    *(int*)(reinterpret_cast<uintptr_t>(this) + 0x40) = (int)capacity;
 }
 void PastureComponent::OnRemove() {
-    EnsureHelpers();
     Pasture_ReleaseAllAnimals(this);
 }
 // ── slot 12 — retail 0x140127540 — claim the pasture's gate cells ─────────────────
@@ -466,35 +341,17 @@ void PastureComponent::OnRemove() {
 // This is the pasture's gate/entrance claim — the cells a herder walks through. With
 // the slot stubbed the terrain there was never converted, which is the same class of
 // omission as the MapComponent occupancy gap already recorded for this wave.
-// The slot-12 helpers (were function-local statics of the body; B6-5).
-static void (*s_findPos)(int64_t, void*)            = nullptr;  // 0x140002ed0
-static int  (*s_childCount)(int64_t, int)           = nullptr;  // 0x140123070
-static void (*s_spotPos)(int64_t, float*, int, int, float*) = nullptr; // 0x140122e20
-static void (*s_mapNotifyA)(int64_t, int, int)      = nullptr;  // 0x1400a8c90
-static void (*s_mapNotifyB)(void*, int, int, uint64_t) = nullptr; // 0x1400a6fe0
-static bool s_slot12Resolved = false;
-static void PastureSlot12_Resolve() {
-    if (s_slot12Resolved) return;
-    s_findPos    = reinterpret_cast<void(*)(int64_t, void*)>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_childCount = reinterpret_cast<int(*)(int64_t, int)>(ResolveAddr(Module::Exe, 0x140123070));
-    s_spotPos    = reinterpret_cast<void(*)(int64_t, float*, int, int, float*)>(
-        ResolveAddr(Module::Exe, 0x140122e20));
-    s_mapNotifyA = reinterpret_cast<void(*)(int64_t, int, int)>(ResolveAddr(Module::Exe, 0x1400a8c90));
-    s_mapNotifyB = reinterpret_cast<void(*)(void*, int, int, uint64_t)>(
-        ResolveAddr(Module::Exe, 0x1400a6fe0));
-    s_slot12Resolved = true;
-}
+// The slot-12 helpers: 0x140002ed0 WorkBase_FindComponent_2ed0, 0x140123070
+// Pf_RecursiveChildSum_123070, 0x140122e20 Pf_EntityResolvePos_2e20, 0x1400a8c90
+// Pf_FineCellDirty_a8c90, 0x1400a6fe0 Pf_EnqueueCmd2_a6fe0.
 
 void PastureComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
-    PastureSlot12_Resolve();
-    if (!s_findPos || !s_childCount || !s_spotPos) return;
-
     int64_t posIbp = 0;
-    s_findPos(*reinterpret_cast<int64_t*>(self + 0x10), &posIbp);
+    WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(self + 0x10), &posIbp);
     if (!posIbp) return;
 
     int* map = *reinterpret_cast<int**>(
@@ -505,9 +362,9 @@ void PastureComponent::OnEvent(int msgId) {
         reinterpret_cast<uintptr_t>(map) + 0x80);
     if (!grid || width <= 0) return;
 
-    for (uint32_t i = 0; (int)i < s_childCount(posIbp, 2); ++i) {
+    for (uint32_t i = 0; (int)i < Pf_RecursiveChildSum_123070(posIbp, 2); ++i) {
         float p[3] = {0, 0, 0};
-        s_spotPos(posIbp, p, 2, (int)i, nullptr);
+        Pf_EntityResolvePos_2e20((void*)posIbp, p, 2, (int)i, nullptr);
         int x = (int)(p[0] + (float)(width >> 1));
         int y = (int)(p[1] + (float)(width >> 1));
         if (x < 0) x = 0; if (x >= width) x = width - 1;
@@ -515,7 +372,7 @@ void PastureComponent::OnEvent(int msgId) {
         const int cell = width * y + x;
 
         uintptr_t nullIbp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         uint8_t* terrain = reinterpret_cast<uint8_t*>(grid + 0x29 + (uintptr_t)cell * 0x30);
         const uint8_t was = *terrain;
@@ -523,12 +380,13 @@ void PastureComponent::OnEvent(int msgId) {
         uint8_t* flag = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(map) + 0xa2);
         *flag = static_cast<uint8_t>(*flag | (wasRough ? 1 : 0));
         *terrain = 2;
-        if (wasRough && s_mapNotifyA)
-            s_mapNotifyA(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(map) + 0x70),
-                         cell % width, cell / width);
-        if (s_mapNotifyB)
-            s_mapNotifyB(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(map) + 0x68),
-                         cell, 2, i);
+        if (wasRough)
+            Pf_FineCellDirty_a8c90(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(map) + 0x70),
+                                   cell % width, cell / width);
+        // The door typed args 3/4 as (int, uint64_t); the body declares them void*: the
+        // same register values, cast at the call.
+        Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(map) + 0x68),
+                             (uint32_t)cell, (void*)(uintptr_t)2, (void*)(uintptr_t)i);
         *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30) = nullIbp;
     }
 }

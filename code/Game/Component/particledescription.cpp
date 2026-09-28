@@ -60,11 +60,7 @@ void* AllocArray(void* header, int count, int stride) {
 }
 
 void InitTime(void* field, float seconds) {
-    if (fn_Time_Ctor_Float) {
-        fn_Time_Ctor_Float(field, seconds);
-    } else {
-        *(uint64_t*)field = 0;
-    }
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(field), seconds);
 }
 }  // namespace
 
@@ -94,7 +90,6 @@ ParticleDescription::~ParticleDescription() {
 
 // [5] 0x140053460: stream order as retail.
 bool ParticleDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize3) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_emitterCount, nullptr);   // emitterCount
     int count = _emitterCount;
@@ -119,7 +114,7 @@ bool ParticleDescription::Serialize(void* stream) {
     }
     
     for (int i = 0; i < count; ++i, e += 0x28) {
-        fn_ExternalPtr_Serialize3(e + 0x00, &ser);                                 // ref (elem+0)
+        Reimpl_ExternalPtr_Serialize_Typed_7140(e + 0x00, &ser);                                 // ref (elem+0)
         reinterpret_cast<System::String*>(e + 0x08)->Serialize(&ser);             // B.3.1 bridge: String (elem+8)
         ser.Serialize(*reinterpret_cast<bool*>(e + 0x10), nullptr);
         ser.Serialize(*reinterpret_cast<bool*>(e + 0x11), nullptr);
@@ -129,7 +124,7 @@ bool ParticleDescription::Serialize(void* stream) {
         reinterpret_cast<System::Time*>(e + 0x18)->Serialize(ser);                // t0 (elem+0x18) SECOND  // B.3.4b bridge
     }
     
-    fn_ExternalPtr_Serialize3(&_materialRef, &ser);   // materialRef (+0x20)
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_materialRef, &ser);   // materialRef (+0x20)
     return true;
 }
 

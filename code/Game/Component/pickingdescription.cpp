@@ -80,7 +80,6 @@ PickingDescription::~PickingDescription() {
 
 // [5] 0x140128d00: stream order as retail.
 bool PickingDescription::Serialize(void* stream) {
-    if (!fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_groupCount, nullptr);   // groupCount
     int count = _groupCount;
@@ -104,9 +103,9 @@ bool PickingDescription::Serialize(void* stream) {
             uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(e, refCount, 8));
             for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
         }
-        fn_Array_Serialize_External_GraphicsMesh(&ser, refCount, *(void**)e);
+        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, *(void**)e);
     }
-    fn_ExternalPtr_Serialize3(&_meshRef, &ser);
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_meshRef, &ser);
     ser.Serialize(_enabled, nullptr);
     return true;
 }
