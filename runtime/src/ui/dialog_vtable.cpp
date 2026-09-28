@@ -216,21 +216,8 @@ namespace RtUiDlgV {
 
 namespace {
 
-// ---- the exported DATA these bodies read -----------------------------------
-// `?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A` is spelled `0V…A`, the
-// PRIVATE static form — and this DLL exports its private members, so a name
-// door is the correct door and no address door is needed
-// (reference_aeaa_is_private_not_unexported.md).
-const uint8_t* DialogTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A");
-}
-
-// `Object::BaseTypeInfo` (runtime/types/object/TypeInfo.h): +0x00 typeId
-// (uint32), +0x08 `const char* name`. Spelled as constants for the reason
-// dialog_controller_base.cpp spells them.
-constexpr int kBaseTypeInfoTypeId = 0x00;
-constexpr int kBaseTypeInfoName   = 0x08;
+// (ENDGAME B.3.9 TI-UI: slots 1/2 and TypeId -- 0x180038440 / 0x180038420 /
+// 0x180038430 -- are DECLARE_TYPE's, over the class's own record.)
 
 }  // namespace
 }  // namespace RtUiDlgV
@@ -460,22 +447,6 @@ const char* const kSerializeMangled =
 // ############################################################################
 namespace UI {
 
-uint32_t Dialog::Type() const { return TypeId(); }             // [2] 0x180038420
-
-uint32_t Dialog::TypeId() {                                    // static 0x180038430
-    uint32_t ours = 0;
-    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
-                sizeof ours);
-    return ours;
-}
-
-const char* Dialog::TypeName() const {                         // [1] 0x180038440
-    const char* ours = nullptr;
-    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoName,
-                sizeof ours);
-    return ours;
-}
-
 int32_t Dialog::GetFileVersion() const { return 6; }           // [3] 0x1801130b0
 
 void Dialog::Destruct() {                                      // [7] 0x1800387f0
@@ -583,3 +554,12 @@ int RtUiDialogVtableRegister() {
     RegisterRuntimeAddr(0x180038430, (void*)&RtUiDialog_TypeId);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::Dialog's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@Dialog@UI@@ (0x1801faa88): name "Dialog", parent
+// "Object::External" (retail ?_ParentTypeName@Dialog@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::Dialog, "Object::External", nullptr)

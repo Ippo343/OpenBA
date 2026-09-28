@@ -74,8 +74,13 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;                  // [1] 0x180064f70
-    uint32_t          Type() const override;                      // [2] 0x180064f50
+    // [1] 0x180064f70 TypeName / [2] 0x180064f50 Type, the static TypeId
+    // 0x180064f60, `_TypeName` / `_ParentTypeName` and the factory pair
+    // 0x180065060 / 0x180065130 (collisionmesh.cpp): retail's macro (ENDGAME
+    // B.3.9 TI-REST, B39_RULES D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/collision2d/collision2d_type_records.cpp.
+    DECLARE_TYPE(CollisionMesh)
+public:
     int32_t           GetFileVersion() const override;            // [3] 0x180108cc0
     CompileResult     Compile(const System::Filename& path) override; // [4] 0x180108cb0
     bool              Serialize(void* stream) override;           // [5] 0x180108cd0
@@ -83,15 +88,10 @@ public:
     void              Destruct() override;                        // [7] 0x1800652c0
     virtual Object::External* Construct();                        // [8] 0x180065240
 
-    // 0x180064f60 -- `MOV EAX,[_typeInfo]`: the id of the (still minted)
-    // `?_typeInfo@CollisionMesh@Collision2D@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
-
-    // Retail's factory pair (B39_RULES D2), defined in collisionmesh.cpp. The
-    // class has its own placement `operator new` in retail (0x180064ff0, not
-    // ported): every placement construction spells `::new (p) CollisionMesh()`.
-    static Object::Base* CreateNewObject();                       // 0x180065060
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180065130
+    // Retail's factory pair (B39_RULES D2; declared by DECLARE_TYPE), defined
+    // in collisionmesh.cpp. The class has its own placement `operator new` in
+    // retail (0x180064ff0, not ported): every placement construction spells
+    // `::new (p) CollisionMesh()`.
 
 protected:
     // ??1CollisionMesh@Collision2D@@UEAA@XZ 0x180065400. NON-VIRTUAL;

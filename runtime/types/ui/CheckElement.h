@@ -86,8 +86,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180048a80
-    uint32_t    Type() const override;                            // [2] 0x180048a60
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180048a80, Type 0x180048a60, TypeId 0x180048a70, _TypeName 0x180048a40
+    //         _ParentTypeName 0x180048a50, CreateNewObject 0x180048b70, CreateInPlaceObject 0x180048c20
+    DECLARE_TYPE(CheckElement)
+public:
     void ComputeSize() override;                                  // [4] 0x180111740
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;            // [5] 0x1801117b0
@@ -105,9 +109,6 @@ public:
     CheckElement(const CheckElement& src);                        // 0x180048ca0  not ported (door retired: no caller)
     CheckElement& operator=(const CheckElement& src);             // 0x180048cf0  not ported
 
-    static uint32_t TypeId();                                     // 0x180048a70  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180048b70  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180048c20  the class's own (B39 D2)
 
 protected:
     // `??1CheckElement@UI@@UEAA@XZ` (0x180111700). NON-VIRTUAL and EMPTY
@@ -116,9 +117,6 @@ protected:
     ~CheckElement();
 
 private:
-    static const char* _TypeName();                               // 0x180048a40 -> "CheckElement"
-    static const char* _ParentTypeName();                         // 0x180048a50 -> "ButtonElement"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fa9a8 (minted)
 
 public:
     uint8_t _checked;          // +0xd8  ctor 0 (BYTE store in 0x1801116a0). Toggled by

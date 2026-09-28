@@ -240,9 +240,6 @@ namespace {
 using AnimationClip  = ::Graphics::Animation;
 using AnimationGroup = ::Graphics::AnimationGroup;
 
-const uint8_t* AnimGroupTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A");
-}
 
 // ENDGAME B.3.9 block GFX: batch 7's `ConstructBody` (the Base / External /
 // AnimationGroup stamps out of the MINT plus the field stores) is gone. The
@@ -355,14 +352,10 @@ namespace Graphics {
 
 // [1] ?TypeName@AnimationGroup@Graphics@@UEBAPEBDXZ  0x180016310
 //     reads `?_typeInfo@AnimationGroup@Graphics@@` + 8 (BaseTypeInfo::name).
-const char* AnimationGroup::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, AnimGroupTypeInfo() + 8, sizeof v); return v;
-}
+// ENDGAME B.3.9 TI-REST: TypeName / Type / TypeId are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 
 // [2] ?Type@AnimationGroup@Graphics@@UEBAIXZ  0x1800162f0 — the record's +0x00.
-uint32_t AnimationGroup::Type() const {
-    uint32_t v = 0; std::memcpy(&v, AnimGroupTypeInfo(), sizeof v); return v;
-}
 
 // [3] ?GetFileVersion@AnimationGroup@Graphics@@UEBAHXZ  0x1800fb680
 //     `MOV EAX,8; RET`. EIGHT — the version every AnimationGroup in every save
@@ -486,9 +479,6 @@ AnimationGroup::~AnimationGroup() {
 
 // ?TypeId@AnimationGroup@Graphics@@SAIXZ 0x180016300 -- the static twin of
 // slot 2: the minted record's +0x00 until the W3 fold (B39_RULES D6 step 1).
-uint32_t AnimationGroup::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, AnimGroupTypeInfo(), sizeof v); return v;
-}
 
 // ?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ 0x180016400
 // -- `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x58, align 8; retail's null
@@ -526,9 +516,6 @@ namespace {
 // that header's banner for the two-witness argument.
 using ParticleSystem = ::Graphics::ParticleSystem;
 
-const uint8_t* ParticleSystemTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A");
-}
 
 }  // namespace
 
@@ -648,14 +635,10 @@ namespace Graphics {
 
 // [1] ?TypeName@ParticleSystem@Graphics@@UEBAPEBDXZ  0x1800203e0
 //     reads `?_typeInfo@ParticleSystem@Graphics@@` + 8 (BaseTypeInfo::name).
-const char* ParticleSystem::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, ParticleSystemTypeInfo() + 8, sizeof v); return v;
-}
+// ENDGAME B.3.9 TI-REST: TypeName / Type / TypeId are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 
 // [2] ?Type@ParticleSystem@Graphics@@UEBAIXZ  0x1800203c0 — the record's +0x00.
-uint32_t ParticleSystem::Type() const {
-    uint32_t v = 0; std::memcpy(&v, ParticleSystemTypeInfo(), sizeof v); return v;
-}
 
 // [3] ?GetFileVersion@ParticleSystem@Graphics@@UEBAHXZ  0x1800a4d10.
 //     0x1001 == 4097, and it is NOT `Particle`'s 0x1000 — the two were decoded
@@ -717,9 +700,6 @@ ParticleSystem::~ParticleSystem() {
 
 // ?TypeId@ParticleSystem@Graphics@@SAIXZ 0x1800203d0 -- the static twin of slot
 // 2: the minted record's +0x00 until the W3 fold (B39_RULES D6 step 1).
-uint32_t ParticleSystem::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, ParticleSystemTypeInfo(), sizeof v); return v;
-}
 
 // ?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ 0x1800204d0
 // -- the FACTREST row it replaces called ??0ParticleSystem after the locked

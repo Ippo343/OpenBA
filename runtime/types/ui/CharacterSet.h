@@ -75,8 +75,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;              // [1] 0x180037450
-    uint32_t    Type() const override;                  // [2] 0x180037430
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180037450, Type 0x180037430, CreateNewObject 0x180037540, CreateInPlaceObject 0x1800375f0
+    DECLARE_TYPE(CharacterSet)
+public:
     int32_t     GetFileVersion() const override;        // [3] 0x1800cb830
     // [4] 0x1800066e0 is Object::External::Compile, inherited unchanged.
     bool        Serialize(void* stream) override;       // [5] 0x1800cb7b0
@@ -88,7 +91,6 @@ public:
     CharacterSet(const CharacterSet& src);              // 0x180037720
     CharacterSet& operator=(const CharacterSet& src);   // 0x1800377b0
     // 0x180037440 — the minted record's type id (characterset.cpp).
-    static uint32_t TypeId();
     // The reflection block's statics go through `System::MemoryAllocator`,
     // a door for the whole of step 6 (B36_RULES section 7). Placement is
     // spelt `::new (p) CharacterSet()` (B9-5): these stay undefined.
@@ -97,8 +99,6 @@ public:
     static void  operator delete(void* p);                     // 0x1800374e0
     // Retail's factory pair (B39_RULES D2): MemAlloc(0x28, 8) + the ctor, and
     // the null-tested in-place ctor. Defined and registered in characterset.cpp.
-    static Object::Base* CreateNewObject();                    // 0x180037540
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x1800375f0
 
 protected:
     // `??1CharacterSet@UI@@UEAA@XZ` 0x1800cb840. NON-VIRTUAL; holds the retired

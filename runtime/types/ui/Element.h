@@ -382,8 +382,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180035440
-    uint32_t    Type() const override;                            // [2] 0x180035420
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180035440, Type 0x180035420, TypeId 0x180035430, _TypeName 0x180035400
+    //         _ParentTypeName 0x180035410, CreateNewObject 0x180035450
+    DECLARE_TYPE_INHERITED_INPLACE(Element)
+public:
     void        Persist(void* stream) override;                   // [3] 0x180116870  (IO::Stream&)
     virtual void ComputeSize() = 0;                               // [4] _purecall
     virtual void ComputeLayout(int32_t x, int32_t y,
@@ -488,9 +492,7 @@ public:
 
     // Reflection statics (retail's DECLARE_TYPE block). `_typeInfo` is still the
     // MINTED record TypeId reads by name.
-    static uint32_t TypeId();                                     // 0x180035430  element_vtable.cpp
     // Abstract: retail's factory is `xor eax,eax; ret` (element.cpp).
-    static Object::Base* CreateNewObject();                       // 0x180035450  element.cpp
 
 protected:
     // `??0Element@UI@@QEAA@XZ` (0x180115e50) — the REAL constructor: the
@@ -506,9 +508,6 @@ private:
     void InitFields();      // 0x180115e50 minus ??0Internal + vptr store (element.cpp)
     void ReleaseFields();   // 0x1801161a0 minus restamp + ~Internal tail (element.cpp)
 
-    static const char* _TypeName();                               // 0x180035400 -> "Element"
-    static const char* _ParentTypeName();                         // 0x180035410 -> "Object::Internal"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fab30 (minted)
 
 public:
     // ---- the 0xB0 bytes Element adds after Object::Internal -----------------

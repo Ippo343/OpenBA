@@ -77,8 +77,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;              // [1] 0x18003af80
-    uint32_t    Type() const override;                  // [2] 0x18003af60
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003af80, Type 0x18003af60, CreateNewObject 0x18003b070, CreateInPlaceObject 0x18003b120
+    DECLARE_TYPE(Cursor)
+public:
     int32_t     GetFileVersion() const override;        // [3] 0x1800cd1b0
     // [4] 0x1800066e0 is Object::External::Compile, inherited unchanged.
     bool        Serialize(void* stream) override;       // [5] 0x1800cd110
@@ -97,14 +100,11 @@ public:
     Cursor(const Cursor& src);                          // 0x18003b280
     Cursor& operator=(const Cursor& src);               // 0x18003b310
     // 0x18003af70 — the minted record's type id (cursor.cpp).
-    static uint32_t TypeId();
     // Placement is spelt `::new (p) Cursor()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x18003af90
     static void* operator new(std::size_t bytes, void* place); // 0x18003b000
     static void  operator delete(void* p);                     // 0x18003b010
     // Retail's factory pair (B39_RULES D2), defined and registered in cursor.cpp.
-    static Object::Base* CreateNewObject();                    // 0x18003b070
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x18003b120
 
 protected:
     ~Cursor();              // 0x1800cd1c0: empty; the compiler chains ~External

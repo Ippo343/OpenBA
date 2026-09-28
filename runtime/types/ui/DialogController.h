@@ -86,8 +86,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                        // [1] 0x18003b6d0
-    uint32_t    Type() const override;                            // [2] 0x18003b6b0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003b6d0, Type 0x18003b6b0, CreateNewObject 0x18003b6e0, CreateInPlaceObject 0x18003b6f0
+    DECLARE_TYPE(DialogController)
+public:
     // [3] Persist — Object::Internal's own `RET` (0x1800bfda0), inherited.
     virtual void OnCreated();                                     // [4] 0x1800cd2b0  RET
     virtual void OnOpened();                                      // [5] 0x1800cd2a0  RET
@@ -116,11 +119,8 @@ public:
     DialogController& operator=(const DialogController& other);   // 0x18003b780
 
     // 0x18003b6c0 — the minted record's type id (dialog_controller_base.cpp).
-    static uint32_t      TypeId();
     // Retail's factory pair (B39_RULES D2): both are `XOR EAX,EAX ; RET`.
     // Defined and registered in dialog_controller_base.cpp.
-    static Object::Base* CreateNewObject();                       // 0x18003b6e0
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18003b6f0
 
 protected:
     // ??0DialogController@UI@@QEAA@XZ  0x1800cd320 — the REAL constructor
@@ -142,8 +142,6 @@ protected:
     // RULE B5-15 / B6-7, both COPIED from B36_SLOTS section 3:
     //   0x18003b690  ?_TypeName@       -> "DialogController"
     //   0x18003b6a0  ?_ParentTypeName@ -> "Object::Internal"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     // ---- the 0x20 bytes DialogController adds ----------------------------

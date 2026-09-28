@@ -151,12 +151,12 @@ uint32_t VisitorStream::GetSize() const         { StubReached("VisitorStream::Ge
 // ---- IO::PackageFile (runtime/src/io/package_file*.cpp) --------------------
 // ENDGAME B.3.9 IO: the class is concrete, so the b39_io_packagefile test
 // builds the REAL class and the link needs its vtable (key function
-// TypeName, in package_file.cpp, which stands on the port registry). The
+// GetFileVersion, in package_file.cpp, which stands on the port registry). The
 // constructor and slot 0 are inline and real; the destructor's host body
-// releases nothing because a freshly built package holds nothing.
-const char*   PackageFile::TypeName() const             { StubReached("PackageFile::TypeName"); }
-uint32_t      PackageFile::Type() const                 { StubReached("PackageFile::Type"); }
-int32_t       PackageFile::GetFileVersion() const       { StubReached("PackageFile::GetFileVersion"); }
+// releases nothing because a freshly built package holds nothing. Slots 1/2
+// are DECLARE_TYPE's inline bodies over the class's record (ENDGAME B.3.9
+// TI-REST; runtime/src/io/io_type_records.cpp is linked by sources.mk).
+int32_t      PackageFile::GetFileVersion() const       { StubReached("PackageFile::GetFileVersion"); }
 Object::External::CompileResult PackageFile::Compile(const System::Filename&) {
     StubReached("PackageFile::Compile");
 }

@@ -361,41 +361,13 @@ inline void** VideoDeviceSingleton() {
     return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
-// ---- Wave 9 lane Z: the exported DATA slot ?TypeName@ reads ----------------
-// Through RT_DATA_SLOT, which caches a hit and RETRIES a miss, so the row can
-// be minted after this file first resolves it. See the ⚠ note on
-// RtUiDialogInstance_TypeName below: this row is NOT in the mint today.
-inline const uint8_t* DialogInstanceTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A");
-}
-
-// `Object::BaseTypeInfo::name`. The layout is runtime/types/object/TypeInfo.h's
-// (+0x00 typeId, +0x04 an unused word, +0x08 `const char* name`, 0x38 total);
-// it is spelled as a constant here only because that header cannot be included
-// in this TU — see the ⚠ note beside the includes.
-constexpr int kBaseTypeInfoName = 0x08;
-
-// ---- WAVE 27 lane IOTEXT: the same exported DATA slot, for ----------------
-// `??_7ElementDescription@UI@@6B@` slots 1 and 2.
-//
-// `?TypeName@ElementDescription@UI@@UEBAPEBDXZ` (0x1800350f0) is
-//     MOV RAX,qword ptr [0x1801fab00] ; RET
-// and `?Type@ElementDescription@UI@@UEBAIXZ` (0x1800350d0) is
-//     MOV EAX,dword ptr [0x1801faaf8] ; RET
-// -- the identical two-slot / one-object shape `RtUiDialogInstance_TypeName`
-// documents below, eight bytes apart on ONE BaseTypeInfo. Read out of the
-// RETAIL DLL's disassembly (Runtime-x64.dll), not the profile build.
-//
-// UNLIKE the DialogInstance row's ⚠ note, this symbol IS in the mint today:
-// standalone/rt_data_mint_tables.inc:1989 carries
-// `?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A` at 0x1801faaf8.
-// Same door, same retry-a-miss form, so a row minted later cannot be frozen
-// null by whoever resolves first.
-inline const uint8_t* ElementDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A");
-}
+// ---- slots 1/2 of DialogInstance and ElementDescription --------------------
+// Retail reads ONE `Object::BaseTypeInfo` per class, +0x00 the id and +0x08 the
+// name: `MOV EAX,[0x1801faac0]` / `MOV RAX,[0x1801faac8]` (DialogInstance,
+// 0x1800453e0 / 0x180045400) and `MOV EAX,[0x1801faaf8]` / `MOV RAX,[0x1801fab00]`
+// (ElementDescription, 0x1800350d0 / 0x1800350f0). ENDGAME B.3.9 TI-UI: that
+// record is each class's own `_typeInfo` (DECLARE_TYPE / DEFINE_TYPE at the end
+// of this file); the RT_DATA_SLOT accessors of the minted rows are gone.
 
 
 // ---- WAVE 9 LANE UID helpers ----------------------------------------------
@@ -472,68 +444,9 @@ inline void MemFreeStatic(void* p) {
 // ENDGAME B.3.9 UI-D: the two RET slot doors are retired with the minted
 // table; the members are `DialogInstance::Persist` / `OnSerializeSettings`.
 
-// ---- ?TypeName@DialogInstance@UI@@UEBAPEBDXZ  0x180045400  ord 4379 -------
-//
-//     180045400  MOV RAX,qword ptr [0x1801faac8]
-//     180045407  RET
-//
-// TWO INSTRUCTIONS, and the whole of the work is knowing what 0x1801faac8 is.
-// It is not a string pointer of its own: the symbol at 0x1801faac0 is
-// `?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A`, and +0x8 into an
-// `Object::BaseTypeInfo` is its `name` field (runtime/types/object/TypeInfo.h:
-// +0x00 `typeId`, +0x04 unused word, +0x08 `const char* name`). So retail
-// returns `_typeInfo.name`, i.e. the literal "DialogInstance" the BaseTypeInfo
-// constructor was handed.
-//
-// The corroboration is the NEXT slot: `?Type@DialogInstance@UI@@UEBAIXZ`
-// (0x1800453e0) is `MOV EAX,dword ptr [0x1801faac0] / RET` — the SAME object,
-// read at +0x00 for the type id. Two adjacent vtable slots reading +0x00 and
-// +0x08 of one address is what makes this a BaseTypeInfo rather than a guess.
-//
-// RETURNING A STRING LITERAL WAS REJECTED. `"DialogInstance"` would compare
-// equal under every `strcmp` in the tree and would need no data slot at all —
-// and it would be a different POINTER from the one `Object::Factory::Startup`
-// CRC'd into the type id and from the one every other reader of this
-// BaseTypeInfo sees. A port whose only failure mode is pointer identity is a
-// port that fails silently and late; reading the real field cannot.
-//
-// ⚠ **THIS PORT NAMES A MISSING MINT ROW, AND THAT IS THE POINT.**
-// `?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A` (0x1801faac0) is NOT
-// among the 33 `?_typeInfo@` rows in standalone/rt_data_mint_tables.inc, even
-// though `??_7DialogInstance@UI@@6B@` IS minted there in full and TWO of its
-// slots — this one and `?Type@` — read nothing else. That file is lane C2's and
-// this lane did not touch it. Until the row exists, this body dereferences a
-// null and dies IN A FUNCTION THAT NAMES ITSELF, which is strictly better than
-// the alternative it replaces (a null stamped into a derived vtable, faulting
-// later with no name attached) and is exactly the "do not fix a faithful crash
-// with a null check" case: the fix is upstream, in the mint, not a guard here.
-// (ENDGAME B.3.9 UI-D: the door is retired; the member is below.)
-
-// ---- ?Type@DialogInstance@UI@@UEBAIXZ  0x1800453e0 ------------------------
-// WAVE 10B LANE DLGV. The corroborating slot the note above cites, now ported
-// rather than only quoted:
-//
-//     1800453e0  MOV EAX,dword ptr [0x1801faac0]
-//     1800453e6  RET
-//
-// The SAME `?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A` object
-// `TypeName` reads at +0x08, read here at +0x00 for the type id. It goes through
-// the same `DialogInstanceTypeInfo()` slot, so there is one resolution site for
-// the pair and no address door.
-//
-// The ⚠ note above is now STALE in its one factual claim and is left standing
-// because its REASONING is not: `?_typeInfo@DialogInstance@UI@@` was added to
-// standalone/rt_data_mint_tables.inc and lane MINTSEL then PROMOTED it, so this
-// symbol resolves to our own minted storage on every run. That storage's typeId
-// is no longer the 0xFFFFFFFF ctor sentinel — MintTypeInfos() computes it with
-// the same `TypeNameCRC(name)` line `Factory::Startup` uses, and the mint
-// shadow compares all 104 against the loaded DLL's own nodes with 0 mismatches.
-// So this body reads a value that has been checked against retail's, which is a
-// stronger position than the null-deref this comment used to describe, and a
-// weaker one than reading the DLL's static directly would be. Stated rather than
-// hidden: the id is verified by the shadow's field comparison, not by an oracle
-// on this body.
-constexpr int kBaseTypeInfoTypeId = 0x00;
+// ---- ?TypeName@ / ?Type@DialogInstance@UI@@ (0x180045400 / 0x1800453e0) ----
+// `MOV RAX,[0x1801faac8]` / `MOV EAX,[0x1801faac0]`: +0x08 and +0x00 of the
+// class's record -- DECLARE_TYPE's inline bodies (ENDGAME B.3.9 TI-UI).
 
 // ---- ?OnClosed@DialogInstance@UI@@UEAAXXZ  0x180115330  ord 3269
 //
@@ -951,37 +864,9 @@ void** RtUiDialogController_GetContainer(DialogController* self, void** out) {
 // GetFileVersion (member section below); the door delegates QUALIFIED.
 // (ENDGAME B.3.9 UI-D: the slot door is retired; the member is below.)
 
-// ============================================================================
-// ?TypeName@ElementDescription@UI@@UEBAPEBDXZ  retail 0x1800350f0
-// ?Type@ElementDescription@UI@@UEBAIXZ         retail 0x1800350d0
-//                                          (WAVE 27 LANE IOTEXT, slots 1 and 2)
-// ============================================================================
-//
-// Two instructions each, both reading one `Object::BaseTypeInfo` at 0x1801faaf8
-// -- +0x00 for the type id, +0x08 for the name. The disassembly is quoted
-// beside `ElementDescriptionTypeInfo()` above.
-//
-// NEITHER READS RCX. Retail's `MOV EAX,dword ptr [...]` / `MOV RAX,qword ptr
-// [...]` touch no `this`; the parameter is named and unused here for the same
-// reason the PackageFile pair (runtime/src/io/package_file.cpp) names it --
-// the vtable dispatches them with a this-pointer and the signature must match.
-//
-// NO ORACLE, AND THE REASON IS NOT "no route" -- IT IS THAT AN ORACLE WOULD BE
-// VACUOUS TODAY. `?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A`
-// is MINTED (rt_data_mint_tables.inc:1989) but NOT PROMOTED
-// (standalone/reg_mint_promoted.cpp carries no row for it), so with the DLL
-// present RT_DATA_SLOT falls through to the DLL's own static -- our side and
-// retail's side would read the SAME object through the SAME door and a
-// comparison would be retail against itself
-// (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
-// What IS checked: the mint shadow compares every minted BaseTypeInfo's fields
-// against the loaded DLL's nodes, and that is the check that becomes
-// load-bearing the day this row is promoted. Stated, not hidden.
-// ENDGAME B.3.6 fragment pass F2: the bodies are UI::ElementDescription::
-// TypeName / Type (member section below); the doors delegate QUALIFIED.
-// Neither member reads `this`, exactly as retail's two instructions do not
-// read RCX.
-// (ENDGAME B.3.9 UI-D: both slot doors are retired; the members are below.)
+// ?TypeName@ / ?Type@ElementDescription@UI@@ (retail 0x1800350f0 / 0x1800350d0):
+// DECLARE_TYPE's inline bodies over the class's own record (ENDGAME B.3.9
+// TI-UI).
 
 // ============================================================================
 // ??1ElementDescription@UI@@UEAA@XZ  retail 0x180116100  ord 585
@@ -1395,19 +1280,8 @@ namespace UI {
 void DialogInstance::Persist(void* /*stream*/) {}              // [3] 0x180114fa0  RET
 void DialogInstance::OnSerializeSettings(void* /*stream*/) {}  // [9] 0x180115470  RET
 
-const char* DialogInstance::TypeName() const {                 // [1] 0x180045400
-    return *reinterpret_cast<const char* const*>(
-        DialogInstanceTypeInfo() + kBaseTypeInfoName);
-}
 
-// ?TypeId@DialogInstance@UI@@SAIXZ 0x1800453f0 — the first dword of the
-// minted `?_typeInfo@DialogInstance@UI@@` record (ENDGAME B.3.9 UI-D).
-uint32_t DialogInstance::TypeId() {
-    return *reinterpret_cast<const uint32_t*>(
-        DialogInstanceTypeInfo() + kBaseTypeInfoTypeId);
-}
 
-uint32_t DialogInstance::Type() const { return TypeId(); }     // [2] 0x1800453e0
 
 // ?CreateNewObject@DialogInstance@UI@@SAPEAVBase@Object@@XZ  0x1800454f0
 // The retired FACTUI1 row: the locked MemAlloc of 0xb8 bytes, align 8;
@@ -1975,19 +1849,10 @@ Object::InternalPtr<Element> DialogController::GetContainer() {  // 0x18003b700
 // `self->x` / `d + 0x..` became member access; the doors above delegate
 // QUALIFIED. Per-body evidence (the retail disassembly) stays at each door.
 
-const char* ElementDescription::TypeName() const {                 // [1] 0x1800350f0
-    return *reinterpret_cast<const char* const*>(
-        ElementDescriptionTypeInfo() + kBaseTypeInfoName);
-}
 
 // ?TypeId@ElementDescription@UI@@SAIXZ 0x1800350e0 — the record's first
 // dword (ENDGAME B.3.9 UI-D).
-uint32_t ElementDescription::TypeId() {
-    return *reinterpret_cast<const uint32_t*>(
-        ElementDescriptionTypeInfo() + kBaseTypeInfoTypeId);
-}
 
-uint32_t ElementDescription::Type() const { return TypeId(); }     // [2] 0x1800350d0
 
 // ?CreateNewObject@ElementDescription@UI@@SAPEAVBase@Object@@XZ       0x180035100
 // ?CreateInPlaceObject@ElementDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180035110
@@ -2271,3 +2136,21 @@ int RtUiDialogRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ElementDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ElementDescription@UI@@ (0x1801faaf8): name "ElementDescription", parent
+// "Object::External" (retail ?_ParentTypeName@ElementDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ElementDescription, "Object::External", nullptr)
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::DialogInstance's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@DialogInstance@UI@@ (0x1801faac0): name "DialogInstance", parent
+// "Object::Internal" (retail ?_ParentTypeName@DialogInstance@UI@@), no file extension; factories:
+// CreateNewObject the class's own, CreateInPlaceObject Object::Internal's (inherited).
+// ============================================================================
+DEFINE_TYPE(UI::DialogInstance, "Object::Internal", nullptr)

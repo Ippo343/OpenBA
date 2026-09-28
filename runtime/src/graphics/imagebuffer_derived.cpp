@@ -82,25 +82,7 @@ namespace {
 // `?_typeInfo@` rows are MINTED and PROMOTED (standalone/reg_mint_promoted.cpp
 // :936-992). By address we would read the DLL's copy while the rest of the tree
 // reads the minted one — the split-brain shape mainloop_video.cpp:303 warns of.
-const uint8_t* TypeInfoGenerated() {
-    return RT_DATA_SLOT(const uint8_t*,
-        "?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* TypeInfoFrameCopy() {
-    return RT_DATA_SLOT(const uint8_t*,
-        "?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A");
-}
-const uint8_t* TypeInfoReflection() {
-    return RT_DATA_SLOT(const uint8_t*,
-        "?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A");
-}
 
-uint32_t ReadTypeId(const uint8_t* node) {
-    uint32_t v = 0; std::memcpy(&v, node, sizeof v); return v;
-}
-const char* ReadTypeName(const uint8_t* node) {
-    const char* v = nullptr; std::memcpy(&v, node + 8, sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // The named dependencies. RT_EXPORT_ONCE, not the raw DLL door: these calls
@@ -192,15 +174,10 @@ bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
 namespace Graphics {
 
 // slot 2 — `MOV EAX,dword ptr [0x1801f9a20]` (= ?_typeInfo@… + 0x00)
-uint32_t GeneratedImageBuffer::Type() const {
-    return ReadTypeId(TypeInfoGenerated());      // retail never touches RCX
-}
-uint32_t GeneratedImageBuffer::TypeId() { return ReadTypeId(TypeInfoGenerated()); }
+// ENDGAME B.3.9 TI-REST: Type / TypeId / TypeName are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 
 // slot 1 — `MOV RAX,qword ptr [0x1801f9a28]` (= ?_typeInfo@… + 0x08)
-const char* GeneratedImageBuffer::TypeName() const {
-    return ReadTypeName(TypeInfoGenerated());
-}
 
 // slot 3 — `MOV EAX,0x7 ; RET`. A LITERAL, not a derivation: the on-disk format
 // version of this class. It happens to equal Video::ImageBuffer's 7 and that is
@@ -213,8 +190,7 @@ int32_t GeneratedImageBuffer::GetFileVersion() const { return 7; }
 // namespacing.
 //   0x18001eda0  ?_TypeName@       -> "GeneratedImageBuffer"   (no namespace)
 //   0x18001edb0  ?_ParentTypeName@ -> "Video::ImageBuffer"     (namespaced)
-const char* GeneratedImageBuffer::_TypeName()       { return "GeneratedImageBuffer"; }
-const char* GeneratedImageBuffer::_ParentTypeName() { return "Video::ImageBuffer"; }
+// (Both are DEFINE_TYPE's, graphics_type_records.cpp.)
 
 // ============================================================================
 // slot 5 — ?Serialize@GeneratedImageBuffer@Graphics@@UEAA_NAEAVStream@IO@@@Z
@@ -242,19 +218,15 @@ bool GeneratedImageBuffer::Serialize(void* stream) {
 // ############################################################################
 
 // slot 2 — `MOV EAX,dword ptr [0x1801f99e8]`
-uint32_t FrameCopyImageBuffer::Type() const { return ReadTypeId(TypeInfoFrameCopy()); }
-uint32_t FrameCopyImageBuffer::TypeId()     { return ReadTypeId(TypeInfoFrameCopy()); }
+// ENDGAME B.3.9 TI-REST: Type / TypeId / TypeName are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 // slot 1 — `MOV RAX,qword ptr [0x1801f99f0]`
-const char* FrameCopyImageBuffer::TypeName() const {
-    return ReadTypeName(TypeInfoFrameCopy());
-}
 // slot 3 — `MOV EAX,0x1007 ; RET`
 int32_t FrameCopyImageBuffer::GetFileVersion() const { return 0x1007; }
 
 // RULE B5-15, COPIED: 0x18001ef70 -> "FrameCopyImageBuffer",
 // 0x18001ef80 -> "GeneratedImageBuffer" (NO namespace).
-const char* FrameCopyImageBuffer::_TypeName()       { return "FrameCopyImageBuffer"; }
-const char* FrameCopyImageBuffer::_ParentTypeName() { return "GeneratedImageBuffer"; }
+// (Both are DEFINE_TYPE's, graphics_type_records.cpp.)
 
 // ============================================================================
 // slot 5 — ?Serialize@FrameCopyImageBuffer@Graphics@@UEAA_NAEAVStream@IO@@@Z
@@ -402,19 +374,15 @@ Object::Base* ReflectionImageBuffer::CreateInPlaceObject(void* place) {
 }
 
 // slot 2 — `MOV EAX,dword ptr [0x1801f9a90]`
-uint32_t ReflectionImageBuffer::Type() const { return ReadTypeId(TypeInfoReflection()); }
-uint32_t ReflectionImageBuffer::TypeId()     { return ReadTypeId(TypeInfoReflection()); }
+// ENDGAME B.3.9 TI-REST: Type / TypeId / TypeName are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 // slot 1 — `MOV RAX,qword ptr [0x1801f9a98]`
-const char* ReflectionImageBuffer::TypeName() const {
-    return ReadTypeName(TypeInfoReflection());
-}
 // slot 3 — `MOV EAX,0x1007 ; RET`
 int32_t ReflectionImageBuffer::GetFileVersion() const { return 0x1007; }
 
 // RULE B5-15, COPIED: 0x180022190 -> "ReflectionImageBuffer",
 // 0x1800221a0 -> "GeneratedImageBuffer" (NO namespace).
-const char* ReflectionImageBuffer::_TypeName()       { return "ReflectionImageBuffer"; }
-const char* ReflectionImageBuffer::_ParentTypeName() { return "GeneratedImageBuffer"; }
+// (Both are DEFINE_TYPE's, graphics_type_records.cpp.)
 
 // slot 7 — retail 0x1800224c0, byte-identical to FrameCopy's: slot 0, flags 0.
 void ReflectionImageBuffer::Destruct() { DeletingDtor(0u); }

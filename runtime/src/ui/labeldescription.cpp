@@ -45,37 +45,10 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: member bodies resolve through namespace-scope atomics (the same
-// never-cache-a-null contract as element_common.h's rtuielem::AtomicExport,
-// which cannot be included beside description_common.h — both declare Module).
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfoSlot{nullptr};
-
-const uint8_t* LabelTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
 
-uint32_t LabelDescription::Type() const { return TypeId(); }
-// ?TypeId@LabelDescription@UI@@SAIXZ 0x1800423a0 — the record's first dword.
-uint32_t LabelDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, LabelTypeInfo(), sizeof v); return v;
-}
-const char* LabelDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, LabelTypeInfo() + 8, sizeof v); return v;
-}
 int32_t LabelDescription::GetFileVersion() const { return 0x2304; }
 
 // 0x180042550: null test (it sat in the retired door), then a JMP to the ctor.
@@ -225,3 +198,12 @@ int RtUiLabelDescriptionRegister() {
     RegisterRuntimeAddr(0x180042520ull, (void*)&UI::LabelDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::LabelDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@LabelDescription@UI@@ (0x1801fa008): name "LabelDescription", parent
+// "TextDescription" (retail ?_ParentTypeName@LabelDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::LabelDescription, "TextDescription", nullptr)

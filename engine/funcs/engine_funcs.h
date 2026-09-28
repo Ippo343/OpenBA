@@ -2912,17 +2912,10 @@ extern fn_Array_Resize_t fn_Array_Resize_Stride16B;      // 0x14001ef10  M3.5 Pa
 // ENDGAME B.3.9 TR: the GraphicsMesh (0x140151f20) / Particle (0x140151420) import-slot
 // pointers and the Weather cell pointer (0x1401c6198) are gone -- their readers use
 // Graphics::GraphicsMesh::TypeId() / Graphics::Particle::TypeId() / Weather::TypeId().
-// MaterialInstance's stays: Graphics::MaterialInstance::TypeId() is not ported yet.
-
-// M3.5 Path B session 3 — additional typed-ExternalPtr serialize helper.
-// FUN_140007140 is byte-identical to FUN_14001b8e0 (helper #9, GraphicsMesh)
-// except for the typeInfo source slot. Reads BaseTypeInfo* from .rdata slot
-// 0x140151350. Confirmed via shared xrefs: CharacterComponent_impl_08c0
-// FindOrLoads "Terrain/Selection.rsc" then calls
-// Graphics::MaterialInstance::Setup on the result, validating against the
-// same slot — so 0x140151350 is the BaseTypeInfo* pointer slot for
-// Graphics::MaterialInstance.
-extern uint32_t** g_ppTypeInfo_MaterialInstance;  // .rdata slot 0x140151350
+// MaterialInstance's went at ENDGAME B.3.9 TI-REST: its readers use
+// Graphics::MaterialInstance::TypeId() (the import slot 0x140151350,
+// ?_typeInfo@MaterialInstance@Graphics@@, and g_ppTypeInfo_MaterialInstance
+// are gone).
 
 // ============================================================
 // M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr

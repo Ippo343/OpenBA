@@ -58,11 +58,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-const uint8_t* SpriteCaptureTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -95,16 +90,6 @@ using ScalarFn = void (*)(void* rw, void* value, const char* name);
 // ############################################################################
 namespace UI {
 
-uint32_t SpriteCapture::Type() const { return TypeId(); }
-// ?TypeId@SpriteCapture@UI@@SAIXZ 0x18003c800 — the same first dword.
-uint32_t SpriteCapture::TypeId() {
-    const uint8_t* ti = SpriteCaptureTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* SpriteCapture::TypeName() const {
-    const uint8_t* ti = SpriteCaptureTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // 0x1800d9520: `MOV EAX,0x1 ; RET`.
 int32_t SpriteCapture::GetFileVersion() const { return 1; }
 
@@ -479,3 +464,12 @@ int RtUiSpriteCaptureClassRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::SpriteCapture's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@SpriteCapture@UI@@ (0x1801fa3f8): name "SpriteCapture", parent
+// "Object::External" (retail ?_ParentTypeName@SpriteCapture@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::SpriteCapture, "Object::External", nullptr)

@@ -88,8 +88,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180047a00
-    uint32_t    Type() const override;                            // [2] 0x1800479e0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180047a00, Type 0x1800479e0, TypeId 0x1800479f0, _TypeName 0x1800479c0
+    //         _ParentTypeName 0x1800479d0, CreateNewObject 0x180047af0, CreateInPlaceObject 0x180047ba0
+    DECLARE_TYPE(RadioElement)
+public:
     // [4..6] GroupElement's, inherited.
     // [7] `InternalPtr<DialogInstance>` arrives as a POINTER to the caller's
     // temporary (RULE B6-11; see Element.h's banner).
@@ -110,9 +114,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     RadioElement(const RadioElement& src);                        // 0x180047c20  not ported
     RadioElement& operator=(const RadioElement& src);             // 0x180047c90  not ported
-    static uint32_t TypeId();                                     // 0x1800479f0  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180047af0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047ba0  the class's own (B39 D2)
 
 protected:
     // `??1RadioElement@UI@@UEAA@XZ` (0x1800d5820). NON-VIRTUAL and EMPTY
@@ -131,9 +132,6 @@ public:
     void FindCheckBoxes(Object::InternalPtr<Element>* root);      // 0x1800d5750
 
 private:
-    static const char* _TypeName();                               // 0x1800479c0 -> "RadioElement"
-    static const char* _ParentTypeName();                         // 0x1800479d0 -> "GroupElement"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     Collection::Array<Element*> _checkBoxes;   // +0xC0

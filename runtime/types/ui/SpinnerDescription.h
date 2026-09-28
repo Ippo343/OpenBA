@@ -74,8 +74,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x18004ad60
-    uint32_t    Type() const override;                            // [2] 0x18004ad40
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18004ad60, Type 0x18004ad40, _TypeName 0x18004ad20, _ParentTypeName 0x18004ad30
+    DECLARE_TYPE(SpinnerDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d8940
     bool        Serialize(void* stream) override;                 // [5] 0x1800d8880 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x18004aee0
@@ -87,9 +90,6 @@ public:
 
     SpinnerDescription(const SpinnerDescription& src);            // 0x18004af20  not ported
     SpinnerDescription& operator=(const SpinnerDescription& src); // 0x18004af80  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1SpinnerDescription@UI@@UEAA@XZ` (0x1800d8950): NON-VIRTUAL (no virtual dtor until
@@ -98,9 +98,6 @@ protected:
     ~SpinnerDescription();
 
 private:
-    static const char* _TypeName();                               // 0x18004ad20
-    static const char* _ParentTypeName();                         // 0x18004ad30
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     void*    _editDescription;   // +0x68  ExternalPtr<UI::ElementDescription> -> children[0]

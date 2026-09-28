@@ -196,8 +196,6 @@ void B39NoteDtor(const void* self) {
 namespace UI {
 
 // ---- ButtonElement ----
-const char* ButtonElement::TypeName() const { Note(this, kButtonE, 1); return "ButtonElement"; }
-uint32_t ButtonElement::Type() const { Note(this, kButtonE, 2); return 0xB0u; }
 void ButtonElement::ComputeSize() { Note(this, kButtonE, 4); }
 void ButtonElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kButtonE, 5, (long long)x * 1000 + h);
@@ -212,8 +210,6 @@ void ButtonElement::Enable(bool enable) { Note(this, kButtonE, 8, enable ? 1 : 0
 ButtonElement::~ButtonElement() { B39NoteDtor(this); }
 
 // ---- CheckElement — Update calls its PARENT's body QUALIFIED, as the real one does.
-const char* CheckElement::TypeName() const { Note(this, kCheckE, 1); return "CheckElement"; }
-uint32_t CheckElement::Type() const { Note(this, kCheckE, 2); return 0xC0u; }
 void CheckElement::ComputeSize() { Note(this, kCheckE, 4); }
 void CheckElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kCheckE, 5, (long long)x * 1000 + h);
@@ -228,8 +224,6 @@ void CheckElement::Update(const System::Time& time, UserInterface* ui,
 CheckElement::~CheckElement() { B39NoteDtor(this); }
 
 // ---- ButtonDescription ----
-const char* ButtonDescription::TypeName() const { Note(this, kButtonD, 1); return "ButtonDescription"; }
-uint32_t ButtonDescription::Type() const { Note(this, kButtonD, 2); return 0xBDu; }
 int32_t ButtonDescription::GetFileVersion() const { Note(this, kButtonD, 3); return 0x104; }
 bool ButtonDescription::Serialize(void* stream) {
     Note(this, kButtonD, 5, reinterpret_cast<intptr_t>(stream)); return true;
@@ -247,8 +241,6 @@ Object::External* ButtonDescription::Construct() { Note(this, kButtonD, 9); retu
 ButtonDescription::~ButtonDescription() { B39NoteDtor(this); }
 
 // ---- CheckDescription — Serialize calls ButtonDescription's QUALIFIED.
-const char* CheckDescription::TypeName() const { Note(this, kCheckD, 1); return "CheckDescription"; }
-uint32_t CheckDescription::Type() const { Note(this, kCheckD, 2); return 0xCDu; }
 int32_t CheckDescription::GetFileVersion() const { Note(this, kCheckD, 3); return 0x1104; }
 bool CheckDescription::Serialize(void* stream) {
     Note(this, kCheckD, 5);
@@ -267,8 +259,6 @@ Object::External* CheckDescription::Construct() { Note(this, kCheckD, 9); return
 CheckDescription::~CheckDescription() { B39NoteDtor(this); }
 
 // ---- ComboElement: overrides slots 1, 2 and 7 only.
-const char* ComboElement::TypeName() const { Note(this, kComboE, 1); return "ComboElement"; }
-uint32_t ComboElement::Type() const { Note(this, kComboE, 2); return 0xCE0u; }
 void ComboElement::Update(const System::Time& time, UserInterface* ui,
                           Object::InternalPtr<DialogInstance>* dialog, const UpdateState& state) {
     Note(this, kComboE, 7);
@@ -278,8 +268,6 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 ComboElement::~ComboElement() { B39NoteDtor(this); }
 
 // ---- ComboDescription — Serialize calls ButtonDescription's QUALIFIED.
-const char* ComboDescription::TypeName() const { Note(this, kComboD, 1); return "ComboDescription"; }
-uint32_t ComboDescription::Type() const { Note(this, kComboD, 2); return 0xCD0u; }
 int32_t ComboDescription::GetFileVersion() const { Note(this, kComboD, 3); return 0x2104; }
 bool ComboDescription::Serialize(void* stream) {
     Note(this, kComboD, 5);
@@ -298,8 +286,6 @@ Object::External* ComboDescription::Construct() { Note(this, kComboD, 9); return
 ComboDescription::~ComboDescription() { B39NoteDtor(this); }
 
 // ---- BorderElement: overrides 1, 2, 4, 5, 6.
-const char* BorderElement::TypeName() const { Note(this, kBorderE, 1); return "BorderElement"; }
-uint32_t BorderElement::Type() const { Note(this, kBorderE, 2); return 0xBE0u; }
 void BorderElement::ComputeSize() { Note(this, kBorderE, 4); }
 void BorderElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kBorderE, 5, (long long)x * 1000 + h);
@@ -309,8 +295,6 @@ BorderElement::~BorderElement() { B39NoteDtor(this); }
 
 // ---- ClipRegionElement: overrides 1, 2, 4, 5, 6, 7 and 9. Contains chains
 // to Element::Contains QUALIFIED, as the real body does.
-const char* ClipRegionElement::TypeName() const { Note(this, kClipE, 1); return "ClipRegionElement"; }
-uint32_t ClipRegionElement::Type() const { Note(this, kClipE, 2); return 0xC1E0u; }
 void ClipRegionElement::ComputeSize() { Note(this, kClipE, 4); }
 void ClipRegionElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kClipE, 5, (long long)x * 1000 + h);
@@ -327,8 +311,6 @@ bool ClipRegionElement::Contains(int32_t x, int32_t y, UserInterface* ui) const 
 ClipRegionElement::~ClipRegionElement() { B39NoteDtor(this); }
 
 // ---- BorderDescription / ClipRegionDescription: direct ElementDescription leaves.
-const char* BorderDescription::TypeName() const { Note(this, kBorderD, 1); return "BorderDescription"; }
-uint32_t BorderDescription::Type() const { Note(this, kBorderD, 2); return 0xBD0u; }
 int32_t BorderDescription::GetFileVersion() const { Note(this, kBorderD, 3); return 0x104; }
 bool BorderDescription::Serialize(void* stream) {
     Note(this, kBorderD, 5, reinterpret_cast<intptr_t>(stream)); return true;
@@ -345,8 +327,6 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
 Object::External* BorderDescription::Construct() { Note(this, kBorderD, 9); return this; }
 BorderDescription::~BorderDescription() { B39NoteDtor(this); }
 
-const char* ClipRegionDescription::TypeName() const { Note(this, kClipD, 1); return "ClipRegionDescription"; }
-uint32_t ClipRegionDescription::Type() const { Note(this, kClipD, 2); return 0xC1D0u; }
 int32_t ClipRegionDescription::GetFileVersion() const { Note(this, kClipD, 3); return 0x104; }
 bool ClipRegionDescription::Serialize(void* stream) {
     Note(this, kClipD, 5, reinterpret_cast<intptr_t>(stream)); return true;
@@ -365,15 +345,65 @@ ClipRegionDescription::~ClipRegionDescription() { B39NoteDtor(this); }
 
 }  // namespace UI
 
+// ENDGAME B.3.9 TI-UI: slots 1/2 are DECLARE_TYPE's inline bodies over each
+// class's own record, so the host defines the records (the literals are the
+// ones runtime/src/ui/*.cpp passes) and the factory pair they point at; the
+// factories are never called here.
+#define C1_TEST_FACTORIES(CLS)                                                  \
+    ::Object::Base* UI::CLS::CreateNewObject() { return nullptr; }              \
+    ::Object::Base* UI::CLS::CreateInPlaceObject(void*) { return nullptr; }
+C1_TEST_FACTORIES(ButtonElement)
+DEFINE_TYPE(UI::ButtonElement, "Element", nullptr)
+C1_TEST_FACTORIES(CheckElement)
+DEFINE_TYPE(UI::CheckElement, "ButtonElement", nullptr)
+C1_TEST_FACTORIES(ButtonDescription)
+DEFINE_TYPE(UI::ButtonDescription, "ElementDescription", nullptr)
+C1_TEST_FACTORIES(CheckDescription)
+DEFINE_TYPE(UI::CheckDescription, "ButtonDescription", nullptr)
+C1_TEST_FACTORIES(ComboElement)
+DEFINE_TYPE(UI::ComboElement, "ButtonElement", nullptr)
+C1_TEST_FACTORIES(ComboDescription)
+DEFINE_TYPE(UI::ComboDescription, "ButtonDescription", nullptr)
+C1_TEST_FACTORIES(BorderElement)
+DEFINE_TYPE(UI::BorderElement, "Element", nullptr)
+C1_TEST_FACTORIES(ClipRegionElement)
+DEFINE_TYPE(UI::ClipRegionElement, "Element", nullptr)
+C1_TEST_FACTORIES(BorderDescription)
+DEFINE_TYPE(UI::BorderDescription, "ElementDescription", nullptr)
+C1_TEST_FACTORIES(ClipRegionDescription)
+DEFINE_TYPE(UI::ClipRegionDescription, "ElementDescription", nullptr)
+#undef C1_TEST_FACTORIES
+
 namespace {
+
+// Slots 1/2 (TI-UI): the record of the class `who` names.
+const ::Object::BaseTypeInfo* WhoRecord(int who) {
+    switch (who) {
+    case kButtonD: return &UI::ButtonDescription::GetTypeInfo();
+    case kCheckD: return &UI::CheckDescription::GetTypeInfo();
+    case kButtonE: return &UI::ButtonElement::GetTypeInfo();
+    case kCheckE: return &UI::CheckElement::GetTypeInfo();
+    case kComboD: return &UI::ComboDescription::GetTypeInfo();
+    case kComboE: return &UI::ComboElement::GetTypeInfo();
+    case kBorderD: return &UI::BorderDescription::GetTypeInfo();
+    case kBorderE: return &UI::BorderElement::GetTypeInfo();
+    case kClipD: return &UI::ClipRegionDescription::GetTypeInfo();
+    case kClipE: return &UI::ClipRegionElement::GetTypeInfo();
+    default: return nullptr;
+    }
+}
 
 // Raw-call every OWN slot of an Element-shaped probe and check the marker.
 void ExpectElementSlot(void* raw, int off, int who) {
     const int slot = off / 8;
     Reset();
     switch (off) {
-    case kE1_TypeName: SlotAt<const char* (*)(const void*)>(raw, off)(raw); break;
-    case kE2_Type:     SlotAt<uint32_t (*)(const void*)>(raw, off)(raw); break;
+    case kE1_TypeName:   // TI-UI: the class's own record, by what it returns
+        CHECK(SlotAt<const char* (*)(const void*)>(raw, off)(raw) == WhoRecord(who)->name);
+        CHECK(std::strcmp(WhoRecord(who)->name, "") != 0); CHECK_EQ(g_who, (int)kNone); return;
+    case kE2_Type:
+        CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, off)(raw), WhoRecord(who)->typeId);
+        CHECK_EQ(g_who, (int)kNone); return;
     case kE4_ComputeSize: SlotAt<void (*)(void*)>(raw, off)(raw); break;
     case kE5_ComputeLayout:
         SlotAt<void (*)(void*, int, int, int, int)>(raw, off)(raw, 7, 0, 0, 9);
@@ -396,8 +426,12 @@ void ExpectDescriptionSlot(void* raw, int off, int who) {
     const int slot = off / 8;
     Reset();
     switch (off) {
-    case kD1_TypeName: SlotAt<const char* (*)(const void*)>(raw, off)(raw); break;
-    case kD2_Type:     SlotAt<uint32_t (*)(const void*)>(raw, off)(raw); break;
+    case kD1_TypeName:   // TI-UI: the class's own record, by what it returns
+        CHECK(SlotAt<const char* (*)(const void*)>(raw, off)(raw) == WhoRecord(who)->name);
+        CHECK_EQ(g_who, (int)kNone); return;
+    case kD2_Type:
+        CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, off)(raw), WhoRecord(who)->typeId);
+        CHECK_EQ(g_who, (int)kNone); return;
     case kD3_GetFileVersion: SlotAt<int32_t (*)(const void*)>(raw, off)(raw); break;
     case kD5_Serialize:
         SlotAt<bool (*)(void*, void*)>(raw, off)(raw, (void*)0x55); break;

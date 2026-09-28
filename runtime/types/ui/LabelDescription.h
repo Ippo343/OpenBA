@@ -86,8 +86,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x1800423b0
-    uint32_t    Type() const override;                           // [2] 0x180042390
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800423b0, Type 0x180042390, TypeId 0x1800423a0, _TypeName 0x180042370
+    //         _ParentTypeName 0x180042380, CreateNewObject 0x1800424a0, CreateInPlaceObject 0x180042520
+    DECLARE_TYPE(LabelDescription)
+public:
     int32_t     GetFileVersion() const override;                 // [3] 0x1800d2950
     bool        Serialize(void* stream) override;                // [5] 0x1800d2820
     Object::External* Reconstruct() override;                    // [6] 0x180042530
@@ -99,9 +103,6 @@ public:
 
     LabelDescription(const LabelDescription& src);               // 0x180042570  not ported
     LabelDescription& operator=(const LabelDescription& src);    // 0x180042630  not ported
-    static uint32_t TypeId();                                    // 0x1800423a0  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x1800424a0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042520  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x1800423c0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180042430  not ported
     static void  operator delete(void* p);                       // 0x180042440  not ported
@@ -113,9 +114,6 @@ protected:
     ~LabelDescription();
 
 private:
-    static const char* _TypeName();                              // 0x180042370 -> "LabelDescription"
-    static const char* _ParentTypeName();                        // 0x180042380 -> "TextDescription"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801fa008 (minted)
 
 public:
     uint32_t     _word90;        // +0x90  kScalarUInt, ctor 3

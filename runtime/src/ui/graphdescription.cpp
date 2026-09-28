@@ -34,39 +34,10 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: the members below run on the loader thread. Every export they
-// resolve lives in a namespace-scope atomic, never a function-local static.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-
-const uint8_t* GraphTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
 
-// [1] 0x180040090 / [2] 0x180040070 — the BaseTypeInfo's +0x08 name and +0x00 id.
-const char* GraphDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, GraphTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t GraphDescription::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, GraphTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t GraphDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, GraphTypeInfo(), sizeof v); return v;
-}
 // [3] 0x1800d1b20
 int32_t GraphDescription::GetFileVersion() const { return 0x104; }
 
@@ -197,3 +168,12 @@ int RtUiGraphDescriptionRegister() {
     RegisterRuntimeAddr(0x180040200ull, (void*)&UI::GraphDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::GraphDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@GraphDescription@UI@@ (0x1801f9f98): name "GraphDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@GraphDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::GraphDescription, "ElementDescription", nullptr)

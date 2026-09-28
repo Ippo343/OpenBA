@@ -77,8 +77,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180048680
-    uint32_t    Type() const override;                            // [2] 0x180048660
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180048680, Type 0x180048660, TypeId 0x180048670, _TypeName 0x180048640
+    //         _ParentTypeName 0x180048650, CreateNewObject 0x180048770, CreateInPlaceObject 0x180048800
+    DECLARE_TYPE(CheckDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x180111920
     bool        Serialize(void* stream) override;                 // [5] 0x180111930
     Object::External* Reconstruct() override;                     // [6] 0x180048850
@@ -93,9 +97,6 @@ public:
     CheckDescription(const CheckDescription& src);                // 0x180048900  not ported
     CheckDescription& operator=(const CheckDescription& src);     // 0x180048950  not ported
 
-    static uint32_t TypeId();                                     // 0x180048670  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180048770  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180048800  the class's own (B39 D2)
 
 protected:
     // `??1CheckDescription@UI@@UEAA@XZ` (0x180111620). NON-VIRTUAL and EMPTY
@@ -104,9 +105,6 @@ protected:
     ~CheckDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180048640 -> "CheckDescription"
-    static const char* _ParentTypeName();                         // 0x180048650 -> "ButtonDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fa970 (minted)
 
 public:
     void* _checkDesc;              // +0xa0  ExternalPtr<ElementDescription>, the tick.

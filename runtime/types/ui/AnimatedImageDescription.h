@@ -100,8 +100,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x1800366d0
-    uint32_t    Type() const override;                            // [2] 0x1800366b0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800366d0, Type 0x1800366b0, TypeId 0x1800366c0, _TypeName 0x180036690
+    //         _ParentTypeName 0x1800366a0, CreateNewObject 0x1800367c0, CreateInPlaceObject 0x180036840
+    DECLARE_TYPE(AnimatedImageDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800cb6a0
     // [4] Compile — Object::External's, inherited.
     bool        Serialize(void* stream) override;                 // [5] 0x1800cb5c0  (IO::Stream&)
@@ -115,9 +119,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     AnimatedImageDescription(const AnimatedImageDescription& src);            // 0x180036890
     AnimatedImageDescription& operator=(const AnimatedImageDescription& src); // 0x180036930
-    static uint32_t TypeId();                                     // 0x1800366c0  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x1800367c0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180036840  the class's own (B39 D2)
 
 protected:
     // `??1AnimatedImageDescription@UI@@UEAA@XZ` (0x1800cb6b0). NON-VIRTUAL
@@ -126,9 +127,6 @@ protected:
     ~AnimatedImageDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180036690
-    static const char* _ParentTypeName();                         // 0x1800366a0 -> "ImageDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     Collection::Array<char*> _frameNames;   // +0x80 .. +0x8f  Array<System::String>

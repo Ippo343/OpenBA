@@ -125,6 +125,8 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/DialogController.h"   // B.3.9 TI-UI: X::TypeId()
+#include "../../types/ui/GroupElement.h"
 #include "../../types/ui/Element.h"       // ENDGAME B.3.6 closing pass: FindElement
 #include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.6 closing pass: GetSpriteIndexFromName
 #include <new>
@@ -263,56 +265,12 @@ void** ElementFindElement(void* self, void** out, const void* nameString) {
 // bodies INLINED. ENDGAME B.3.9 UI-D: `::new (p) UI::Dialog()` and
 // `DeletingDtor(0)` (the door pair is retired).
 
-// The two `?_typeInfo@…@0VBaseTypeInfo@Object@@A` statics the bodies read a
-// type id out of. Retail loads the FIRST DWORD of the static
-// (`MOV EDX,dword ptr [0x1801f9e48]`), which BaseTypeInfo.h calls `typeId`.
-//
-// *** AEAA/0V… MEANS PRIVATE, NOT UNEXPORTED. *** This DLL exports its private
-// members and both of these ARE in the export table
-// (reference_aeaa_is_private_not_unexported.md), so they are resolved BY NAME
-// and there is no address door here to justify.
-//
-// WAVE 10C lane TIDENT -- the ATTENDANCE line, and why a promotion needs it.
-//
-// `ResolveExport` consults the PORT REGISTRY FIRST
-// (reference_resolveaddr_consults_port_registry_first.md), so once a
-// `?_typeInfo@` row is promoted this helper reads OUR minted node instead of
-// the DLL's. The value it takes out is the typeId, and our node's typeId is the
-// same CRC the DLL's holds -- so a promotion is, correctly, invisible in
-// behaviour. That is exactly what makes an A/B on it UNINFORMATIVE: a run in
-// which nothing changes cannot tell a safe promotion from one that was never
-// exercised (this file's own "WHY NOT ALL 104" rule, in reg_mint_promoted.cpp).
-//
-// This line resolves that, the way lane ELEM's `[ElemTid]` line did: it prints
-// WHICH NODE was read, not just what came out. Across an A/B the pointer must
-// move out of the DLL's data into our image while the id stays byte-identical
-// -- and if the line never prints at all, the row has no live consumer on that
-// route and must not be promoted.
-uint32_t TypeIdOfStatic(const char* mangled, uint32_t* cache) {
-    if (*cache) return *cache;
-    if (const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveExport(mangled))) {
-        *cache = *p;
-        // The RAW pointer, deliberately unclassified. A "(ours)/(theirs)"
-        // verdict here would need an image-range test this TU does not have,
-        // and inventing one is how a lane ships a label that means nothing.
-        // The A/B does the classifying, exactly as lane ELEM's [ElemTid] line
-        // did: our image and the DLL sit in visibly different ranges.
-        printf("[TidStatic] %s  node=%p id=0x%08x\n",
-               mangled, (const void*)p, *cache);
-    }
-    return *cache;
-}
-uint32_t g_tidDialogController = 0;   // ?_typeInfo@DialogController@UI@@  0x1801f9e48
-uint32_t g_tidGroupElement     = 0;   // ?_typeInfo@GroupElement@UI@@      0x1801fabd8
-
-inline uint32_t TypeIdDialogController() {
-    return TypeIdOfStatic("?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A",
-                          &g_tidDialogController);
-}
-inline uint32_t TypeIdGroupElement() {
-    return TypeIdOfStatic("?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A",
-                          &g_tidGroupElement);
-}
+// The two type ids the bodies test against. Retail loads the FIRST DWORD of
+// each class's `_typeInfo` (`MOV EDX,dword ptr [0x1801f9e48]` for
+// DialogController, 0x1801fabd8 for GroupElement): `X::TypeId()`, read at the
+// use. ENDGAME B.3.9 TI-UI: the by-name lookup, its first-use cache and the
+// WAVE 10C `[TidStatic]` attendance line (it reported which minted node the
+// lookup read; there is no minted node left to report) are gone.
 
 // ?_singleton@Factory@Object@@0PEAV12@EA — the class static now (ENDGAME
 // B.3.9 SS1, B39_RULES D7): read fresh, no lazy cache (B9-10).
@@ -625,7 +583,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
     void* const created =
         reinterpret_cast<void* (*)(void*)>(info->factoryFn)(info);
 
-    const bool isController = ::IsDerivedFrom(created, TypeIdDialogController());
+    const bool isController = ::IsDerivedFrom(created, UI::DialogController::TypeId());
 
     // 0x18011341e `CMOVNZ RDI,RBX` — a non-controller leaves the target NULL.
     DialogController* const c =
@@ -690,7 +648,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
 
         // ---- the GroupElement gate ---------------------------------------
         void* const target =
-            ::IsDerivedFrom(insertion, TypeIdGroupElement()) ? insertion : nullptr;
+            ::IsDerivedFrom(insertion, UI::GroupElement::TypeId()) ? insertion : nullptr;
 
         // ---- phase 2: build the element through a UI::Dialog temporary ----
         alignas(16) uint8_t tmpDialog[0x90];

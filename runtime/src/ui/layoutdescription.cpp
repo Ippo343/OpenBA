@@ -86,13 +86,8 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
-const uint8_t* LayoutDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 using MemFreeFn = void (*)(void*);
 MemFreeFn MemFree() {
     return reinterpret_cast<MemFreeFn>(AtomicExport(
@@ -208,19 +203,6 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t coun
 // ============================================================================
 namespace UI {
 
-uint32_t LayoutDescription::Type() const {
-    const uint8_t* ti = LayoutDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t LayoutDescription::TypeId() {
-    const uint8_t* ti = LayoutDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* LayoutDescription::TypeName() const {
-    const uint8_t* ti = LayoutDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t LayoutDescription::GetFileVersion() const { return 0x304; }
 
 // 0x180043060 — the ctor is INLINED here in retail: placement-new the class
@@ -519,3 +501,12 @@ int RtUiLayoutDescriptionRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::LayoutDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@LayoutDescription@UI@@ (0x1801fa078): name "LayoutDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@LayoutDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::LayoutDescription, "ElementDescription", nullptr)

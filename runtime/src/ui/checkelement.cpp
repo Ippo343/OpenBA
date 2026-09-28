@@ -38,12 +38,6 @@ namespace {
 
 constexpr int kChildTick = 5;
 
-// B6-5: namespace-scope atomic door cache for the member bodies.
-std::atomic<void*> g_checkTypeInfo{nullptr};
-const uint8_t* CheckElementTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_checkTypeInfo, "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // The ctor/dtor doors only.
 
 
@@ -54,11 +48,6 @@ constexpr uint32_t kFlagPressStarted = 0x00200000u;
 }  // namespace
 
 namespace UI {
-
-// ?TypeId@CheckElement@UI@@SAIXZ 0x180048a70 — the record's first dword.
-uint32_t CheckElement::TypeId() { return TypeIdOf(CheckElementTypeInfo()); }
-uint32_t CheckElement::Type() const { return TypeId(); }
-const char* CheckElement::TypeName() const { return TypeNameOf(CheckElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@CheckElement@UI@@UEAAXXZ   0x180111740
@@ -194,3 +183,12 @@ int RtUiCheckElementRegister() {
     RegisterRuntimeAddr(0x180048c20ull, (void*)&UI::CheckElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::CheckElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@CheckElement@UI@@ (0x1801fa9a8): name "CheckElement", parent
+// "ButtonElement" (retail ?_ParentTypeName@CheckElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::CheckElement, "ButtonElement", nullptr)

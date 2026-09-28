@@ -58,14 +58,8 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_pageDescriptionTypeInfo{nullptr};
 std::atomic<void*> g_setActivePage{nullptr};
 
-const uint8_t* PageDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_pageDescriptionTypeInfo,
-        "?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // ?SetActivePage@PageElement@UI@@QEAAXH@Z (0x1800d5110) — the member is
 // declared in PageElement.h, but its body is widgets_layout.cpp's registered
 // door (fragment pass), so a member call would not link: reached by name.
@@ -82,17 +76,6 @@ void CallSetActivePage(UI::PageElement* elem, int32_t page) {
 // ============================================================================
 namespace UI {
 
-uint32_t PageDescription::Type() const { return TypeId(); }   // 0x180046ec0
-// ?TypeId@PageDescription@UI@@SAIXZ 0x180046ed0 — the record's first dword.
-uint32_t PageDescription::TypeId() {
-    const uint8_t* ti = PageDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// The key function: GCC emits `vtable for UI::PageDescription` here.
-const char* PageDescription::TypeName() const {                // 0x180046ee0
-    const uint8_t* ti = PageDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t PageDescription::GetFileVersion() const { return 0x1104; }   // 0x1800d54a0
 
 // 0x180047080: the null test sat in the retired door; then the out-of-line ctor
@@ -221,3 +204,12 @@ int RtUiPageDescriptionRegister() {
     RegisterRuntimeAddr(0x180047050ull, (void*)&UI::PageDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::PageDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@PageDescription@UI@@ (0x1801fa1c8): name "PageDescription", parent
+// "GroupDescription" (retail ?_ParentTypeName@PageDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::PageDescription, "GroupDescription", nullptr)

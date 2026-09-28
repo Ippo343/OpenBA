@@ -101,9 +101,6 @@ using rt::io::Stream;
 using rt::io::ReaderWriter;
 using Video::VertexLayout;
 
-const uint8_t* VertexLayoutTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A");
-}
 void* ActiveDeviceDataPtr() {
     void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
@@ -164,17 +161,8 @@ extern "C" void RtVideo_VertexLayout_SerializeElements(Serializer* ser, int coun
 // ============================================================================
 namespace Video {
 
-// slot 1 — the `_typeInfo` record's +0x08 (`BaseTypeInfo::name`, CONTENT-only).
-const char* VertexLayout::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, VertexLayoutTypeInfo() + 8, sizeof v); return v;
-}
-// 0x18004dcc0 — the static accessor: the record's +0x00, 0xFFFFFFFF until
-// Factory::Startup (B39_RULES D6 step 1).
-uint32_t VertexLayout::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, VertexLayoutTypeInfo(), sizeof v); return v;
-}
-// slot 2 — 0x18004dcb0, the same load.
-uint32_t VertexLayout::Type() const { return TypeId(); }
+// slot 1, TypeId 0x18004dcc0, slot 2 0x18004dcb0: DECLARE_TYPE's over the
+// class's own record (video_type_records.cpp; ENDGAME B.3.9 TI-REST).
 
 // slot 3 — 0x1800f5e60 is `MOV EAX,3 ; RET`. This port said 1 until the
 // 2026-09-12 cutover walk: DLL-present the DLL's own vtable answered, so nothing

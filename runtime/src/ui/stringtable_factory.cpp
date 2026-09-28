@@ -117,11 +117,6 @@ constexpr size_t kTiNameOffset   = 0x08;
 static_assert(kTiTypeIdOffset == 0, "BaseTypeInfo::typeId is at +0x00");
 static_assert(kTiNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
 
-const uint8_t* StringTableTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 using SerFactoryFn = void* (*)(void* encoding, void* ser, int flag);
 using SerU32Fn     = void  (*)(void* impl, uint32_t* v, const char* name);
 using DeleteFn     = void* (*)(void* self, int flag);
@@ -143,22 +138,6 @@ void* VSlotOf(const void* obj, size_t byteOffset) {
 
 namespace UI {
 
-// ?Type@StringTable@UI@@UEBAIXZ 0x180002170: `MOV EAX,[0x1801fae08] ; RET`.
-uint32_t StringTable::Type() const { return TypeId(); }
-// ?TypeId@StringTable@UI@@SAIXZ 0x180002180 — the same first dword.
-uint32_t StringTable::TypeId() {
-    const uint8_t* node = StringTableTypeInfo();
-    uint32_t v = 0;
-    std::memcpy(&v, node + kTiTypeIdOffset, sizeof v);
-    return v;
-}
-// ?TypeName@StringTable@UI@@UEBAPEBDXZ 0x180002190: the same node at +8.
-const char* StringTable::TypeName() const {
-    const uint8_t* node = StringTableTypeInfo();
-    const char* v = nullptr;
-    std::memcpy(&v, node + kTiNameOffset, sizeof v);
-    return v;
-}
 // ?GetFileVersion@StringTable@UI@@UEBAHXZ 0x18011d930: `MOV EAX,1`.
 int32_t StringTable::GetFileVersion() const { return 1; }
 
@@ -266,3 +245,12 @@ int RtUiStringTableFactoryRegister() {
     RegisterRuntimeAddr(0x180002280, (void*)&UI::StringTable::CreateNewObject);      ++n;
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::StringTable's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@StringTable@UI@@ (0x1801fae08): name "StringTable", parent
+// "Object::External" (retail ?_ParentTypeName@StringTable@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::StringTable, "Object::External", nullptr)

@@ -43,13 +43,6 @@ using namespace rtuielem;
 
 namespace {
 
-// RULE B6-5: namespace-scope atomic caches for the member bodies.
-std::atomic<void*> g_animatedImageElementTypeInfo{nullptr};
-const uint8_t* AnimatedImageElementTypeInfoAtomic() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_animatedImageElementTypeInfo,
-        "?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // `System::Timer::_secondsPerTick`, an exported DOUBLE (ordinal 4797, read at
 // 0x1800cb2d2 as `MOVSD XMM3,[0x1801fe728]`). The same slot
 // runtime/src/audio/audio_scene_update.cpp reads. ENDGAME B.3.9 SS1
@@ -63,16 +56,6 @@ using ArrayDtorFn     = void* (*)(void* array);
 }  // namespace
 
 namespace UI {
-
-uint32_t AnimatedImageElement::Type() const { return TypeId(); }   // 0x180036a90
-// ?TypeId@AnimatedImageElement@UI@@SAIXZ 0x180036aa0 — the record's first dword.
-uint32_t AnimatedImageElement::TypeId() {
-    return rtuielem::TypeIdOf(AnimatedImageElementTypeInfoAtomic());
-}
-// The key function: GCC emits `vtable for UI::AnimatedImageElement` here.
-const char* AnimatedImageElement::TypeName() const {            // 0x180036ab0
-    return rtuielem::TypeNameOf(AnimatedImageElementTypeInfoAtomic());
-}
 
 // ============================================================================
 // ?Update@AnimatedImageElement@UI@@   0x1800cb290
@@ -188,3 +171,12 @@ int RtUiAnimatedImageElementRegister() {
     RegisterRuntimeAddr(0x180036c20ull, (void*)&UI::AnimatedImageElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::AnimatedImageElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@AnimatedImageElement@UI@@ (0x1801f9cc0): name "AnimatedImageElement", parent
+// "ImageElement" (retail ?_ParentTypeName@AnimatedImageElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::AnimatedImageElement, "ImageElement", nullptr)

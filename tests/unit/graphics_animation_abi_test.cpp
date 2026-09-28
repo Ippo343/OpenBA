@@ -122,7 +122,8 @@ struct AnimationGroupProbe final : Graphics::AnimationGroup {
 // takes a `const System::Filename&` (one pointer) and returns a four-byte enum
 // in EAX with NO hidden return slot (B35_RULES section 2.5 excludes `?AW4`), so
 // it raw-calls safely too.
-void CheckExternalFamilySlots(void* raw, bool checkConstruct) {
+void CheckExternalFamilySlots(void* raw, bool checkConstruct,
+                              const ::Object::BaseTypeInfo* record = nullptr) {
     using DtorFn  = void* (*)(void*, unsigned);
     using NameFn  = const char* (*)(const void*);
     using TypeFn  = uint32_t (*)(const void*);
@@ -136,11 +137,16 @@ void CheckExternalFamilySlots(void* raw, bool checkConstruct) {
     CHECK_EQ(g_lastMark, kDeletingDtor / 8);
     CHECK(g_lastSelf == raw);
 
-    Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);
-    CHECK_EQ(g_lastMark, kTypeName / 8);
+    if (record) {   // DECLARE_TYPE's real slots 1/2 over the class's record (B.3.9 TI-REST)
+        CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record->name);
+        CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record->typeId);
+    } else {
+        Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);
+        CHECK_EQ(g_lastMark, kTypeName / 8);
 
-    Reset(); SlotAt<TypeFn>(raw, kType)(raw);
-    CHECK_EQ(g_lastMark, kType / 8);
+        Reset(); SlotAt<TypeFn>(raw, kType)(raw);
+        CHECK_EQ(g_lastMark, kType / 8);
+    }
 
     Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);
     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
@@ -209,9 +215,10 @@ UNIT_TEST(graphics_animationgroup_slot_order_is_retails) {
     AnimationGroupProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    // Slots 1-8 are AnimationGroup's OWN overrides, whose bodies are the marker
-    // stubs at the bottom of this file. Slot 0 is the probe's.
-    CheckExternalFamilySlots(raw, /*checkConstruct=*/true);
+    // Slots 3-8 are AnimationGroup's OWN overrides, whose bodies are the marker
+    // stubs at the bottom of this file; 1/2 are DECLARE_TYPE's over the class
+    // record (ENDGAME B.3.9 TI-REST). Slot 0 is the probe's.
+    CheckExternalFamilySlots(raw, /*checkConstruct=*/true, &Graphics::AnimationGroup::GetTypeInfo());
 
     const void* const* vt = *reinterpret_cast<const void* const* const*>(raw);
     for (int i = 0; i < 9; ++i)
@@ -531,16 +538,12 @@ UNIT_TEST(graphics_animationmanager_layout) {
 
 namespace Graphics {
 
-const char* AnimationEvent::TypeName() const { return "AnimationEvent"; }
-uint32_t    AnimationEvent::Type() const { return 0u; }
 // ENDGAME B.3.9 GFX: the marker RECORDS each call (the real body is empty).
 AnimationEvent::~AnimationEvent() {
     if (g_aeDtorCount < 4) g_aeDtorOrder[g_aeDtorCount] = this;
     ++g_aeDtorCount;
 }
 
-const char* AnimationGroup::TypeName() const { Note(this, kTypeName / 8); return "AnimationGroup"; }
-uint32_t    AnimationGroup::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     AnimationGroup::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 8; }
 Object::External::CompileResult AnimationGroup::Compile(const System::Filename&) {
     Note(this, kCompile / 8); return 1u;

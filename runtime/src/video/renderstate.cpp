@@ -115,9 +115,6 @@ struct RenderStateDoorAccess {
 
 namespace {
 
-const uint8_t* RenderStateTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A");
-}
 
 // `?_singleton@Device@Video@@0PEAV12@EA` -> `Device+0x100` -> the live
 // `Video::DeviceData*`. B35_RULES section 9: the static row stays an
@@ -214,28 +211,17 @@ void RenderState::PlatformDestruct() {
 }
 
 // ---- the vtable slots ------------------------------------------------------
-// slot 2 — `MOV EAX,dword ptr [_typeInfo + 0x00]`
-uint32_t RenderState::Type() const {
-    uint32_t v = 0; std::memcpy(&v, RenderStateTypeInfo(), sizeof v); return v;
-}
-// slot 1 — `MOV RAX,qword ptr [_typeInfo + 0x08]`, i.e. `BaseTypeInfo::name`.
-// CONTENT-only: never compared by pointer
-// (reference_basetypeinfo_name_is_content_only.md).
-const char* RenderState::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, RenderStateTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t RenderState::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, RenderStateTypeInfo(), sizeof v); return v;
-}
+// slots 2 / 1 and TypeId: DECLARE_TYPE's `MOV EAX,[_typeInfo]` /
+// `MOV RAX,[_typeInfo+8]` over the class's own record (video_type_records.cpp;
+// ENDGAME B.3.9 TI-REST).
 // slot 3 — `MOV EAX,0x3; RET`. A LITERAL in the shipped code: the on-disk
 // format version of this class, and getting it wrong silently changes which
 // branch the loader takes on every render state in the game.
 int32_t RenderState::GetFileVersion() const { return 3; }
 
-// RULE B5-15: the .rdata literals at 0x180157710 / 0x1801544f0. The parent
-// really is "Object::External" and not "Object::CompiledExternal".
-const char* RenderState::_TypeName()       { return "RenderState"; }
-const char* RenderState::_ParentTypeName() { return "Object::External"; }
+// RULE B5-15: the .rdata literals at 0x180157710 / 0x1801544f0 are
+// DEFINE_TYPE's. The parent really is "Object::External" and not
+// "Object::CompiledExternal".
 
 // slot 8 — ?Construct@ 0x18004b710.
 // `TEST RCX,RCX; JNZ <ctor>; XOR EAX,EAX; RET` — MSVC's placement-new codegen;

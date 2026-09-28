@@ -1,14 +1,9 @@
 [FactoryReg] Registered 310 exe type records in _firstTypeInfo
-[FactoryReg] ResolveTypeIdByNameLazy("ButtonElement") = 0x5310bda4
-[FactoryReg] ResolveTypeIdByNameLazy("CheckElement") = 0x1039fdd3
 [FactoryReg] ResolveTypeIdByNameLazy("ClimateGenerator") = 0x14c14555
 [FactoryReg] ResolveTypeIdByNameLazy("Dialog") = 0x4fcc106b
 [FactoryReg] ResolveTypeIdByNameLazy("ElementDescription") = 0x42f6a818
-[FactoryReg] ResolveTypeIdByNameLazy("ImageElement") = 0x35413056
 [FactoryReg] ResolveTypeIdByNameLazy("MapGenerator") = 0xca06d4fd
 [FactoryReg] ResolveTypeIdByNameLazy("TerrainGenerator") = 0xefc2f724
-[FactoryReg] ResolveTypeIdByNameLazy("TextElement") = 0x1a20cede
-[FactoryReg] ResolveTypeIdByNameLazy("Toolbar") = 0xc9dd0172
 [FactoryReg] ResolveTypeIdByNameLazy("Tutorial") = 0x12e38b5a
 [FactoryReg] ResolveTypeIdByNameLazy("TutorialGoal") = 0x310de117
 [FactoryReg] ResolveTypeIdByNameLazy("TutorialImage") = 0x00305aa7

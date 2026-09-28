@@ -84,8 +84,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                       // [1] 0x180045e90
-    uint32_t    Type() const override;                           // [2] 0x180045e70
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180045e90, Type 0x180045e70, TypeId 0x180045e80, _TypeName 0x180045e50
+    //         _ParentTypeName 0x180045e60, CreateNewObject 0x180045f80, CreateInPlaceObject 0x180046000
+    DECLARE_TYPE(NumberEditDescription)
+public:
     int32_t     GetFileVersion() const override;                 // [3] 0x1800d4fd0
     bool        Serialize(void* stream) override;                // [5] 0x1800d4ee0
     Object::External* Reconstruct() override;                    // [6] 0x180046010
@@ -97,9 +101,6 @@ public:
 
     NumberEditDescription(const NumberEditDescription& src);             // 0x180046050  not ported
     NumberEditDescription& operator=(const NumberEditDescription& src);  // 0x1800460c0  not ported
-    static uint32_t TypeId();                                    // 0x180045e80  ported over the minted record
-    static Object::Base* CreateNewObject();                      // 0x180045f80  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180046000  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180045ea0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180045f10  not ported
     static void  operator delete(void* p);                       // 0x180045f20  not ported
@@ -111,9 +112,6 @@ protected:
     ~NumberEditDescription();
 
 private:
-    static const char* _TypeName();                              // 0x180045e50 -> "NumberEditDescription"
-    static const char* _ParentTypeName();                        // 0x180045e60 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                       // 0x1801fa158 (minted)
 
 public:
     Font*   _font;       // +0x68  ExternalPtr<UI::Font>

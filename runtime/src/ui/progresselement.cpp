@@ -52,22 +52,6 @@ static_assert(kBackColor   == offsetof(UI::ProgressElement, _backgroundColor), "
 static_assert(kMaxValue    == offsetof(UI::ProgressElement, _maxValue), "");
 static_assert(kCurValue    == offsetof(UI::ProgressElement, _currentValue), "");
 
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* ProgressTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 // A sprite's frame width / height (widget_common.h's reader, handed the sprite
 // itself at offset 0).
 int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
@@ -76,18 +60,6 @@ int32_t SpriteH(const ::Sprite& s) { return SpriteHeight(&s, 0); }
 }  // namespace
 
 namespace UI {
-
-// [1] 0x180077d40 / [2] 0x180077d20
-const char* ProgressElement::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, ProgressTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t ProgressElement::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t ProgressElement::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // [4] ?ComputeSize@ProgressElement@UI@@UEAAXXZ   0x1801198f0
@@ -297,3 +269,12 @@ int RtUiProgressElementRegister() {
     RegisterRuntimeAddr(0x180077eb0ull, (void*)&UI::ProgressElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ProgressElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ProgressElement@UI@@ (0x1801fad28): name "ProgressElement", parent
+// "Element" (retail ?_ParentTypeName@ProgressElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ProgressElement, "Element", nullptr)

@@ -42,25 +42,6 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: namespace-scope atomic door caches, never a function-local static
-// inside a member (see buttondescription.cpp).
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_borderTypeInfo{nullptr};
-
-const uint8_t* BorderTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_borderTypeInfo, "?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
@@ -68,19 +49,6 @@ namespace UI {
 // ============================================================================
 // The trivial slots
 // ============================================================================
-// `Type` returns the FIRST DWORD of the BaseTypeInfo static (0x1801fa890) and
-// `TypeName` the pointer at +0x08 — retail reads them as two separate globals,
-// which are the same two fields runtime/types/object/TypeInfo.h pins.
-uint32_t BorderDescription::Type() const { return TypeId(); }
-// ?TypeId@BorderDescription@UI@@SAIXZ 0x1800409d0 — the same first dword.
-uint32_t BorderDescription::TypeId() {
-    const uint8_t* ti = BorderTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* BorderDescription::TypeName() const {
-    const uint8_t* ti = BorderTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // 0x18010fe10: `MOV EAX,0x104 ; RET`. Per-class constant; read from this body,
 // not inherited from a sibling.
 int32_t BorderDescription::GetFileVersion() const { return 0x104; }
@@ -237,3 +205,12 @@ int RtUiBorderDescriptionRegister() {
     RegisterRuntimeAddr(0x180040b50ull, (void*)&UI::BorderDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::BorderDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@BorderDescription@UI@@ (0x1801fa890): name "BorderDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@BorderDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::BorderDescription, "ElementDescription", nullptr)

@@ -105,6 +105,7 @@
 #include "../../types/engine/Engine.h"     // ENDGAME B.3.7: Engine::Engine (Loader::Run)
 #include "../../types/application/Application.h"  // ENDGAME B.3.7: SleepThread
 #include "../../types/ui/DialogInstance.h" // ENDGAME B.3.7: slot 4 OnOpened
+#include "../../types/ui/Dialog.h"         // ENDGAME B.3.9 TI-UI: Dialog::TypeId()
 #include "../../types/object/External.h"
 #include "../../types/io/Modification.h"    // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../../types/system/Value.h"
@@ -307,13 +308,8 @@ Engine::MainLoop* MainLoopSingleton() {
     MainLoopSlot p = reinterpret_cast<MainLoopSlot>(&::Engine::MainLoop::_singleton);
     return p ? *p : nullptr;
 }
-// UI::Dialog's BaseTypeInfo. Both Load bodies read its FIRST DWORD as the type
-// id (`MOV EDX,[0x1801faa88]`), exactly as element.cpp reads its two.
-uint32_t DialogTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A");
-    return p ? *p : 0u;
-}
+// Both Load bodies read the FIRST DWORD of UI::Dialog's `_typeInfo` as the type
+// id (`MOV EDX,[0x1801faa88]`): `UI::Dialog::TypeId()` (ENDGAME B.3.9 TI-UI).
 
 // ============================================================================
 // The two inlined idioms this family repeats
@@ -567,7 +563,7 @@ void Engine::DialogLoopT::Load() {
     if (external) {
         // `? external : nullptr` is a CMOVNZ on the type test, not a branch
         // that skips the store: the field is written either way.
-        if (IsDerivedFrom()(external, DialogTypeId())) result = external;
+        if (IsDerivedFrom()(external, UI::Dialog::TypeId())) result = external;
     }
     _dialogExternal = result;
 }
@@ -639,7 +635,7 @@ void Engine::DialogLoaderLoopT::Load() {
     void* external = FindOrLoad()(Factory(), &tmp);
     void* result = nullptr;
     if (external) {
-        if (IsDerivedFrom()(external, DialogTypeId())) result = external;
+        if (IsDerivedFrom()(external, UI::Dialog::TypeId())) result = external;
     }
     _dialogExternal = result;
 }

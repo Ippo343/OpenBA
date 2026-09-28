@@ -361,19 +361,7 @@ inline const char* TypeNameOf(const uint8_t* typeInfo) {
 
 }  // namespace rtuielem
 
-// Every batch-3 class file defines these two accessors with RT_DATA_SLOT and
-// then expands this pair. `NAME` is the class's short name.
-#define RTELEM_TYPE_SLOTS(NAME)                                                    \
-    static const uint8_t* NAME##TypeInfo() {                                     \
-        return RT_DATA_SLOT(const uint8_t*,                                      \
-            "?_typeInfo@" #NAME "@UI@@0VBaseTypeInfo@Object@@A");                \
-    }                                                                            \
-    static void* Vt##NAME() { return RT_DATA_SLOT(void*, "??_7" #NAME "@UI@@6B@"); }
-
-#define RTELEM_TYPE_BODIES(NAME)                                                   \
-    extern "C" uint32_t RtUi_##NAME##_Type(const void*) {                        \
-        return rtuielem::TypeIdOf(NAME##TypeInfo());                                 \
-    }                                                                            \
-    extern "C" const char* RtUi_##NAME##_TypeName(const void*) {                 \
-        return rtuielem::TypeNameOf(NAME##TypeInfo());                               \
-    }
+// (ENDGAME B.3.9 TI-UI: RTELEM_TYPE_SLOTS / RTELEM_TYPE_BODIES, the by-name
+// `?_typeInfo@<NAME>@UI@@` / `??_7<NAME>@UI@@` accessors and the Type/TypeName
+// slot bodies over them, had no expansion left; deleted -- every class carries
+// its own `DECLARE_TYPE` record.)

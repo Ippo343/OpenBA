@@ -116,22 +116,6 @@ using UI::Element;
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// The exported DATA slot 0x180035420 and 0x180035440 read.
-//
-// `?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A` is at 0x1801fab30 and IS in
-// the export table (ordinal 4856). `0V…A` is the PRIVATE static spelling and
-// this DLL exports its private members, so a NAME door is the correct door
-// here — `reference_aeaa_is_private_not_unexported.md`.
-//
-//   0x180035420  MOV EAX,dword ptr [0x1801fab30]   -> typeInfo + 0x00 = typeId
-//   0x180035440  MOV RAX,qword ptr [0x1801fab38]   -> typeInfo + 0x08 = name
-// ---------------------------------------------------------------------------
-std::atomic<void*> g_typeInfoSlot{nullptr};
-const uint8_t* ElementTypeInfo() {
-    return static_cast<const uint8_t*>(rtuielem::AtomicExport(
-        g_typeInfoSlot, "?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 // ---------------------------------------------------------------------------
 // THE ONE ADDRESS DOOR, declared rather than hidden.
@@ -232,31 +216,10 @@ ElemCounts g_elemCounts;
 // null check, so do we.
 namespace UI {
 
-// ---- slot 2  ?Type@Element@UI@@UEBAIXZ  0x180035420 ------------------------
-//   MOV EAX,dword ptr [0x1801fab30] / RET     — RCX is never read.
-uint32_t Element::Type() const { return TypeId(); }
-
-// ?TypeId@Element@UI@@SAIXZ 0x180035430 — the same record's first dword
-// (ENDGAME B.3.9 UI-D).
-uint32_t Element::TypeId() {
-    uint32_t id = 0;
-    std::memcpy(&id, ElementTypeInfo(), sizeof id);
-    return id;
-}
-
-// ---- slot 1  ?TypeName@Element@UI@@UEBAPEBDXZ  0x180035440 -----------------
-//   MOV RAX,qword ptr [0x1801fab38] / RET     — typeInfo + 8, RCX unread.
-// Reading the field is right because it is FAITHFUL; nothing in either shipped
-// binary consumes a BaseTypeInfo::name by pointer (WAVE10C_LANE_TIDENT.md).
-//
-// This is the class's KEY FUNCTION (the first non-pure, non-inline virtual), so
-// GCC emits `vtable for UI::Element` in this translation unit; the real
-// constructor stamps it (ENDGAME B.3.9 UI-D retired the minted table).
-const char* Element::TypeName() const {
-    const char* name = nullptr;
-    std::memcpy(&name, ElementTypeInfo() + 8, sizeof name);
-    return name;
-}
+// ---- slots 1/2 and the static TypeId -- ?TypeName@ 0x180035440
+// (`MOV RAX,[0x1801fab38]`), ?Type@ 0x180035420 / ?TypeId@ 0x180035430
+// (`MOV EAX,[0x1801fab30]`): DECLARE_TYPE_INHERITED_INPLACE's inline bodies
+// over the class's own record (ENDGAME B.3.9 TI-UI).
 
 // ---- slot 10  ?SetColor@Element@UI@@UEAAXI@Z  0x180035620 ------------------
 //   MOV dword ptr [RCX + 0x38],EDX / RET
@@ -624,3 +587,12 @@ int RtUiElementVtableRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::Element's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@Element@UI@@ (0x1801fab30): name "Element", parent
+// "Object::Internal" (retail ?_ParentTypeName@Element@UI@@), no file extension; factories:
+// CreateNewObject the class's own, CreateInPlaceObject Object::Internal's (inherited).
+// ============================================================================
+DEFINE_TYPE(UI::Element, "Object::Internal", nullptr)

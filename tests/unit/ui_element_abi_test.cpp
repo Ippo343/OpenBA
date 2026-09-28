@@ -165,8 +165,6 @@ struct BareExternalProbe final : Object::External {
 // serialize.cpp} and dialog.cpp, none of which links here.
 // ===========================================================================
 namespace UI {
-const char* Element::TypeName() const { Note(this, kE1_TypeName / 8); return "Element"; }
-uint32_t Element::Type() const { Note(this, kE2_Type / 8); return 0x1234u; }
 void Element::Persist(void* stream) { Note(this, kE3_Persist / 8, reinterpret_cast<intptr_t>(stream)); }
 void Element::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kE5_ComputeLayout / 8, (long long)x * 1000 + h);
@@ -191,14 +189,21 @@ Object::InternalPtr<Element>* Element::GetBorder(Object::InternalPtr<Element>* r
 }
 // (dtor inline since ENDGAME B.3.8 block RB; markers in rb_ui_abi_test.cpp)
 
-const char* ElementDescription::TypeName() const { Note(this, kD1_TypeName / 8); return "ElementDescription"; }
-uint32_t ElementDescription::Type() const { Note(this, kD2_Type / 8); return 0x5678u; }
 int32_t ElementDescription::GetFileVersion() const { Note(this, kD3_GetFileVersion / 8); return 4; }
 bool ElementDescription::Serialize(void* stream) {
     Note(this, kD5_Serialize / 8, reinterpret_cast<intptr_t>(stream)); return true;
 }
 // (dtor inline since ENDGAME B.3.8 block RB; markers in rb_ui_abi_test.cpp)
 }  // namespace UI
+
+// ENDGAME B.3.9 TI-UI: the two records (literals as runtime/src/ui passes them).
+// Element's record carries Object::Internal's in-place factory
+// (DECLARE_TYPE_INHERITED_INPLACE); the factories are never called here.
+::Object::Base* UI::Element::CreateNewObject() { return nullptr; }
+DEFINE_TYPE(UI::Element, "Object::Internal", nullptr)
+::Object::Base* UI::ElementDescription::CreateNewObject() { return nullptr; }
+::Object::Base* UI::ElementDescription::CreateInPlaceObject(void*) { return nullptr; }
+DEFINE_TYPE(UI::ElementDescription, "Object::External", nullptr)
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -291,10 +296,9 @@ UNIT_TEST(ui_element_slot_order_is_retails) {
 
     Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, kE0_DeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == raw);
-    Reset(); SlotAt<const char* (*)(const void*)>(raw, kE1_TypeName)(raw);
-    CHECK_EQ(g_lastMark, 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(raw, kE2_Type)(raw);
-    CHECK_EQ(g_lastMark, 2);
+    // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
+    CHECK(SlotAt<const char* (*)(const void*)>(raw, kE1_TypeName)(raw) == UI::Element::GetTypeInfo().name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kE2_Type)(raw), UI::Element::GetTypeInfo().typeId);
     Reset(); SlotAt<void (*)(void*, void*)>(raw, kE3_Persist)(raw, (void*)0x33);
     CHECK_EQ(g_lastMark, 3); CHECK_EQ(g_lastArg, 0x33);
     Reset(); SlotAt<void (*)(void*)>(raw, kE4_ComputeSize)(raw);
@@ -328,10 +332,9 @@ UNIT_TEST(ui_elementdescription_slot_order_is_retails) {
 
     Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, kD0_DeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, 0);
-    Reset(); SlotAt<const char* (*)(const void*)>(raw, kD1_TypeName)(raw);
-    CHECK_EQ(g_lastMark, 1);
-    Reset(); SlotAt<uint32_t (*)(const void*)>(raw, kD2_Type)(raw);
-    CHECK_EQ(g_lastMark, 2);
+    // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
+    CHECK(SlotAt<const char* (*)(const void*)>(raw, kD1_TypeName)(raw) == UI::ElementDescription::GetTypeInfo().name);
+    CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kD2_Type)(raw), UI::ElementDescription::GetTypeInfo().typeId);
     Reset(); SlotAt<int32_t (*)(const void*)>(raw, kD3_GetFileVersion)(raw);
     CHECK_EQ(g_lastMark, 3);
     Reset(); SlotAt<bool (*)(void*, void*)>(raw, kD5_Serialize)(raw, (void*)0x55);

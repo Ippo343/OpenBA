@@ -48,11 +48,6 @@ static_assert(kSeries == 0xf0 && kSeriesCnt == 0xf8,
 
 // The two exported DATA slots, in namespace-scope atomics (RULE B6-5: the
 // members below may run on the loader thread).
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* GraphElementTypeInfo() {
-    return static_cast<const uint8_t*>(
-        AtomicExport(g_typeInfo, "?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 // UI::SpriteContext::AddLine(ctx, const Sprite&, x0, y0, x1, y1, color) — block
 // D's class, reached by address (its door stays a door).
@@ -68,12 +63,6 @@ constexpr float kOne  = 1.0f;
 }  // namespace
 
 namespace UI {
-
-// [1] 0x180040460 / [2] 0x180040440 — the BaseTypeInfo's +0x08 name and +0x00 id.
-const char* GraphElement::TypeName() const { return TypeNameOf(GraphElementTypeInfo()); }
-uint32_t    GraphElement::Type() const     { return TypeIdOf(GraphElementTypeInfo()); }
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t    GraphElement::TypeId()          { return TypeIdOf(GraphElementTypeInfo()); }
 
 // ============================================================================
 // [4] ?ComputeSize@GraphElement@UI@@UEAAXXZ   0x1800d1810
@@ -236,3 +225,12 @@ int RtUiGraphElementRegister() {
     RegisterRuntimeAddr(0x1800405d0ull, (void*)&UI::GraphElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::GraphElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@GraphElement@UI@@ (0x1801f9fd0): name "GraphElement", parent
+// "Element" (retail ?_ParentTypeName@GraphElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::GraphElement, "Element", nullptr)

@@ -95,8 +95,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180036ab0
-    uint32_t    Type() const override;                            // [2] 0x180036a90
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180036ab0, Type 0x180036a90, TypeId 0x180036aa0, _TypeName 0x180036a70
+    //         _ParentTypeName 0x180036a80, CreateNewObject 0x180036ba0, CreateInPlaceObject 0x180036c20
+    DECLARE_TYPE(AnimatedImageElement)
+public:
     // [4..6] ImageElement's, inherited.
     // [7] `InternalPtr<DialogInstance>` arrives as a POINTER to the caller's
     // temporary (RULE B6-11; `MOV RAX,[R9]` at 0x1800cb29a).
@@ -108,9 +112,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     AnimatedImageElement(const AnimatedImageElement& src);        // 0x180036c30  not ported (door retired: no caller)
     AnimatedImageElement& operator=(const AnimatedImageElement& src); // 0x180036cb0  not ported
-    static uint32_t TypeId();                                     // 0x180036aa0  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180036ba0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180036c20  the class's own (B39 D2)
 
 protected:
     // `??1AnimatedImageElement@UI@@UEAA@XZ` (0x1800cb3a0). NON-VIRTUAL
@@ -119,9 +120,6 @@ protected:
     ~AnimatedImageElement();
 
 private:
-    static const char* _TypeName();                               // 0x180036a70
-    static const char* _ParentTypeName();                         // 0x180036a80 -> "ImageElement"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     Collection::Array<Sprite> _frames;   // +0xE0 .. +0xEF

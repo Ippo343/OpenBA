@@ -233,8 +233,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x18003be50
-    uint32_t    Type() const override;                            // [2] 0x18003be30
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18003be50, Type 0x18003be30, _TypeName 0x18003be10, _ParentTypeName 0x18003be20
+    //         CreateNewObject 0x18003bf40, CreateInPlaceObject 0x18003bfc0
+    DECLARE_TYPE(DocumentTextElement)
+public:
     void ComputeSize() override;                                  // [4] 0x1800cdb60
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;            // [5] 0x1800cda00
@@ -256,9 +260,6 @@ public:
 
     DocumentTextElement(const DocumentTextElement& src);          // 0x18003c140  not ported (no caller)
     DocumentTextElement& operator=(const DocumentTextElement& src); // 0x18003c3d0 not ported
-    static uint32_t TypeId();                                     // over the minted record until W3
-    static Object::Base* CreateNewObject();                       // 0x18003bf40  (D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003bfc0  (D2)
 
     // ---- the private text pipeline (`AEAA` in retail) ----------------------
     // Public here only because each keeps a registered door that reaches it.
@@ -278,9 +279,6 @@ protected:
     ~DocumentTextElement();
 
 private:
-    static const char* _TypeName();                               // 0x18003be10
-    static const char* _ParentTypeName();                         // 0x18003be20
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     ::UIString _text;             // +0xc0   UI::String {table, index}: SetText(UI::String), the applier

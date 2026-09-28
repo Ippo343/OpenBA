@@ -65,25 +65,6 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: namespace-scope atomic door caches for the member bodies.
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_imageDescriptionTypeInfo{nullptr};
-
-const uint8_t* ImageDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_imageDescriptionTypeInfo,
-        "?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 // ============================================================================
@@ -91,17 +72,6 @@ const uint8_t* ImageDescriptionTypeInfo() {
 // ============================================================================
 namespace UI {
 
-uint32_t ImageDescription::Type() const { return TypeId(); }  // 0x180035cb0
-// ?TypeId@ImageDescription@UI@@SAIXZ 0x180035cc0 — the record's first dword.
-uint32_t ImageDescription::TypeId() {
-    const uint8_t* ti = ImageDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// The key function: GCC emits `vtable for UI::ImageDescription` here.
-const char* ImageDescription::TypeName() const {               // 0x180035cd0
-    const uint8_t* ti = ImageDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t ImageDescription::GetFileVersion() const { return 0x204; }   // 0x1801184a0
 
 // 0x180036010: the null test (180036021) sat in the retired door; then the
@@ -302,3 +272,12 @@ int RtUiImageDescriptionRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ImageDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ImageDescription@UI@@ (0x1801fac10): name "ImageDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ImageDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ImageDescription, "ElementDescription", nullptr)

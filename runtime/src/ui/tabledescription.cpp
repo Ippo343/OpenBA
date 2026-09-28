@@ -73,13 +73,8 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
-const uint8_t* TableDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
@@ -122,19 +117,6 @@ void ReleaseStringField(char** field) {
 // ============================================================================
 namespace UI {
 
-uint32_t TableDescription::Type() const {
-    const uint8_t* ti = TableDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t TableDescription::TypeId() {
-    const uint8_t* ti = TableDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* TableDescription::TypeName() const {
-    const uint8_t* ti = TableDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t TableDescription::GetFileVersion() const { return 0x204; }
 
 // 0x180079070 — the ctor, placement (the null test sat in the retired door).
@@ -364,3 +346,12 @@ int RtUiTableDescriptionRegister() {
     RegisterRuntimeAddr(0x180079040ull, (void*)&UI::TableDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::TableDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@TableDescription@UI@@ (0x1801fae40): name "TableDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@TableDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::TableDescription, "ElementDescription", nullptr)

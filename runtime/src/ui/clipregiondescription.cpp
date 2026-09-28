@@ -47,39 +47,10 @@ namespace {
 
 using namespace rtdesc;
 
-// RULE B6-5: namespace-scope atomic door caches, never a function-local static
-// inside a member (see buttondescription.cpp).
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_clipTypeInfo{nullptr};
-
-const uint8_t* ClipRegionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_clipTypeInfo, "?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 namespace UI {
 
-uint32_t ClipRegionDescription::Type() const { return TypeId(); }
-// ?TypeId@ClipRegionDescription@UI@@SAIXZ 0x180037980 — the record's first dword.
-uint32_t ClipRegionDescription::TypeId() {
-    const uint8_t* ti = ClipRegionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* ClipRegionDescription::TypeName() const {
-    const uint8_t* ti = ClipRegionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 int32_t ClipRegionDescription::GetFileVersion() const { return 0x104; }
 
 // 0x180037ce0: the inlined constructor (the null test at 0x180037cf4 sat in
@@ -203,3 +174,12 @@ int RtUiClipRegionDescriptionRegister() {
     RegisterRuntimeAddr(0x180037b80ull, (void*)&UI::ClipRegionDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ClipRegionDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ClipRegionDescription@UI@@ (0x1801f9d30): name "ClipRegionDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ClipRegionDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ClipRegionDescription, "ElementDescription", nullptr)

@@ -188,20 +188,8 @@ void CacheText(void* self) {
     RT_EXPORT_ONCE(Fn, "?CacheText@TextElement@UI@@AEAAXXZ")(self);
 }
 
-// `?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A` (0x1801fa4a0). Already
-// a MINTED row (standalone/rt_data_mint_tables.inc), so RT_DATA_SLOT is the
-// right door: with the DLL present it is the DLL's live node, and at cutover it
-// is the minted one. `Object::BaseTypeInfo` is +0x00 typeId (uint32), +0x04 an
-// unused word, +0x08 `const char* name` — spelled as constants here for the same
-// reason dialog_controller_base.cpp spells them: that header cannot be pulled
-// into this TU without dragging the object-model dependency chain with it.
-constexpr int kBaseTypeInfoTypeId = 0x00;
-constexpr int kBaseTypeInfoName   = 0x08;
-
-inline const uint8_t* ToolTipDialogTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A");
-}
+// (ENDGAME B.3.9 TI-UI: slots 1/2 and TypeId -- 0x18004cfc0 / 0x18004cfa0 /
+// 0x18004cfb0 -- are DECLARE_TYPE's, over the class's own record.)
 
 template <typename T> inline T& Field(void* p, size_t off) {
     return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
@@ -360,18 +348,6 @@ inline void ElementFindElement(void* child, void** hit, char* const* name) {
 // ############################################################################
 namespace UI {
 
-const char* ToolTipDialog::TypeName() const {                  // [1] 0x18004cfc0
-    return *reinterpret_cast<const char* const*>(
-        ToolTipDialogTypeInfo() + kBaseTypeInfoName);
-}
-
-uint32_t ToolTipDialog::Type() const { return TypeId(); }      // [2] 0x18004cfa0
-// ?TypeId@ToolTipDialog@UI@@SAIXZ 0x18004cfb0 — the same dword.
-uint32_t ToolTipDialog::TypeId() {
-    return *reinterpret_cast<const uint32_t*>(
-        ToolTipDialogTypeInfo() + kBaseTypeInfoTypeId);
-}
-
 // ?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ  0x18004d0b0
 // The FACTUI2 row this replaces: the locked MemAlloc of 0xc0 bytes, align 8;
 // retail's null branch; then ??0ToolTipDialog (DialogInstance() + the stamp).
@@ -504,3 +480,12 @@ int RtUiToolTipDialogRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ToolTipDialog's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ToolTipDialog@UI@@ (0x1801fa4a0): name "ToolTipDialog", parent
+// "UI::DialogInstance" (retail ?_ParentTypeName@ToolTipDialog@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ToolTipDialog, "UI::DialogInstance", nullptr)

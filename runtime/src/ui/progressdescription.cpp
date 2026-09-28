@@ -94,12 +94,7 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     }
     return p;
 }
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_getSpriteIndex{nullptr};
-const uint8_t* ProgressTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ — block D's class, a door.
 int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
     using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
@@ -111,17 +106,7 @@ int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
 
 namespace UI {
 
-// [1] 0x180077770 / [2] 0x180077750 / [3] 0x18011a070
-const char* ProgressDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, ProgressTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t ProgressDescription::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t ProgressDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
-}
+// [3] 0x18011a070
 int32_t ProgressDescription::GetFileVersion() const { return 0x204; }
 
 // [9] 0x180077910 — the ctor, placement (the null test sat in the retired door).
@@ -295,3 +280,12 @@ int RtUiProgressDescriptionRegister() {
     RegisterRuntimeAddr(0x1800778e0ull, (void*)&UI::ProgressDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::ProgressDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@ProgressDescription@UI@@ (0x1801facf0): name "ProgressDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@ProgressDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::ProgressDescription, "ElementDescription", nullptr)

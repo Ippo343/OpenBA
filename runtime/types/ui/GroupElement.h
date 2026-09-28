@@ -75,8 +75,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180046bb0
-    uint32_t    Type() const override;                            // [2] 0x180046b90
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180046bb0, Type 0x180046b90, TypeId 0x180046ba0, _TypeName 0x180046b70
+    //         _ParentTypeName 0x180046b80, CreateNewObject 0x180046ca0, CreateInPlaceObject 0x180046d30
+    DECLARE_TYPE(GroupElement)
+public:
     // [3] Persist — Element's, inherited.
     void ComputeSize() override;                                  // [4] 0x180117f00
     void ComputeLayout(int32_t x, int32_t y,
@@ -87,9 +91,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     GroupElement(const GroupElement& src);                        // 0x180046d70  not ported (door retired: no caller)
     GroupElement& operator=(const GroupElement& src);             // 0x180046da0  not ported
-    static uint32_t TypeId();                                     // 0x180046ba0  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180046ca0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180046d30  the class's own (B39 D2)
 
 protected:
     // `??1GroupElement@UI@@UEAA@XZ` (0x180117cc0). NON-VIRTUAL and EMPTY
@@ -97,9 +98,6 @@ protected:
     ~GroupElement();
 
 private:
-    static const char* _TypeName();                               // 0x180046b70 -> "GroupElement"
-    static const char* _ParentTypeName();                         // 0x180046b80 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 };
 
 static_assert(sizeof(GroupElement) == 0xc0,

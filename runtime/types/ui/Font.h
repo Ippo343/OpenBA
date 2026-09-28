@@ -221,8 +221,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;              // [1] 0x1800319c0
-    uint32_t    Type() const override;                  // [2] 0x1800319a0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800319c0, Type 0x1800319a0, CreateNewObject 0x180031ab0, CreateInPlaceObject 0x180031ba0
+    DECLARE_TYPE(Font)
+public:
     int32_t     GetFileVersion() const override;        // [3] 0x1801176b0
     CompileResult Compile(const System::Filename& path) override;  // [4] 0x1801176c0 — OVERRIDE
     bool        Serialize(void* stream) override;       // [5] 0x1801176d0
@@ -261,14 +264,11 @@ public:
     Font(const Font& src);                              // 0x180031e10
     Font& operator=(const Font& src);                   // 0x180031f60
     // 0x1800319b0 — the minted record's type id (font.cpp).
-    static uint32_t TypeId();
     // Placement is spelt `::new (p) Font()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x1800319d0
     static void* operator new(std::size_t bytes, void* place); // 0x180031a40
     static void  operator delete(void* p);                     // 0x180031a50
     // Retail's factory pair (B39_RULES D2), defined and registered in font.cpp.
-    static Object::Base* CreateNewObject();                    // 0x180031ab0
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180031ba0
 
 protected:
     // 0x1801175a0 — the retired door's body (font.cpp); the compiler runs the

@@ -140,8 +140,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180040460
-    uint32_t    Type() const override;                            // [2] 0x180040440
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180040460, Type 0x180040440, _TypeName 0x180040420, _ParentTypeName 0x180040430
+    //         CreateNewObject 0x180040550, CreateInPlaceObject 0x1800405d0
+    DECLARE_TYPE(GraphElement)
+public:
     // [3] Persist — Element's
     void ComputeSize() override;                                  // [4] 0x1800d1810
     void ComputeLayout(int32_t x, int32_t y,
@@ -162,9 +166,6 @@ public:
 
     GraphElement(const GraphElement& src);    // 0x1800406d0  not ported (no caller)
     GraphElement& operator=(const GraphElement& src);             // 0x1800407a0  not ported
-    static uint32_t TypeId();                                     // over the minted record until W3
-    static Object::Base* CreateNewObject();                       // 0x180040550  (D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800405d0  (D2)
 
 protected:
     // ??1GraphElement 0x1800d1840 -- NON-VIRTUAL; retail's body in
@@ -172,9 +173,6 @@ protected:
     ~GraphElement();
 
 private:
-    static const char* _TypeName();                               // 0x180040420 -> "GraphElement"
-    static const char* _ParentTypeName();                         // 0x180040430 -> "Element"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     int32_t  _width;          // +0xc0  ctor 100; ComputeSize -> _layoutWidth

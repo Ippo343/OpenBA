@@ -108,8 +108,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180035cd0
-    uint32_t    Type() const override;                            // [2] 0x180035cb0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180035cd0, Type 0x180035cb0, TypeId 0x180035cc0, _TypeName 0x180035c90
+    //         _ParentTypeName 0x180035ca0, CreateNewObject 0x180035dc0, CreateInPlaceObject 0x180035eb0
+    DECLARE_TYPE(ImageDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1801184a0
     // [4] Compile — Object::External's, inherited.
     bool        Serialize(void* stream) override;                 // [5] 0x1801184b0  (IO::Stream&)
@@ -127,9 +131,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     ImageDescription(const ImageDescription& src);                // 0x1800360d0  not ported
     ImageDescription& operator=(const ImageDescription& src);     // 0x180036140  not ported
-    static uint32_t TypeId();                                     // 0x180035cc0  ported over the minted record
-    static Object::Base* CreateNewObject();                       // 0x180035dc0  the class's own (B39 D2)
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180035eb0  the class's own (B39 D2)
 
 protected:
     // `??1ImageDescription@UI@@UEAA@XZ` (0x180118370). NON-VIRTUAL
@@ -138,9 +139,6 @@ protected:
     ~ImageDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180035c90 -> "ImageDescription"
-    static const char* _ParentTypeName();                         // 0x180035ca0 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     void*    _spriteSheet;    // +0x68  ExternalPtr<UI::SpriteSheet> (one raw pointer)

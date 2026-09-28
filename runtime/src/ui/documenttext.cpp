@@ -89,6 +89,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/DocumentTextElement.h"
+#include "../../types/ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()
 #include "../../types/system/String.h"
 
 #include <atomic>
@@ -145,7 +146,6 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_memFree{nullptr};
-std::atomic<void*> g_captureTypeInfo{nullptr};
 
 using MemFreeFn = void (*)(void*);
 void MemFree(void* p) {
@@ -238,14 +238,9 @@ inline bool IsWhitespace(uint8_t c) {
     return c <= 0x20 && ((kWhitespaceMask >> c) & 1u) != 0;
 }
 
-// UI::SpriteCapture's BaseTypeInfo static; its first dword is the type id the
-// ^d search compares against. Retail reads the global at 0x1801fa3f8 directly,
-// which is that static's id field (name pointer 0x1801567d0 == "SpriteCapture").
-uint32_t SpriteCaptureTypeId() {
-    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
-        g_captureTypeInfo, "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A"));
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
+// The ^d search compares against UI::SpriteCapture's type id: retail reads the
+// global at 0x1801fa3f8 directly, the first dword of that class's `_typeInfo`
+// -- `UI::SpriteCapture::TypeId()` (ENDGAME B.3.9 TI-UI).
 
 }  // namespace
 
@@ -839,7 +834,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                             B(PTR(_resourceList, 0x20), 0) + off);   // 1800ce9ab
 
                         const bool isCapture = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(
-                            obj, SpriteCaptureTypeId());        // 1800ce9b8
+                            obj, UI::SpriteCapture::TypeId());        // 1800ce9b8
                         // Retail NULLS the pointer when the type does not match
                         // and then calls GetPath on it anyway (0x1800ce9ce
                         // takes RCX unchanged). Not a guard we get to add: the

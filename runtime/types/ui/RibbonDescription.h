@@ -80,8 +80,11 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180044130
-    uint32_t    Type() const override;                            // [2] 0x180044110
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180044130, Type 0x180044110, _TypeName 0x1800440f0, _ParentTypeName 0x180044100
+    DECLARE_TYPE(RibbonDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d5ef0
     bool        Serialize(void* stream) override;                 // [5] 0x1800d5f00 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x1800443c0
@@ -93,9 +96,6 @@ public:
 
     RibbonDescription(const RibbonDescription& src);              // 0x180044530  not ported
     RibbonDescription& operator=(const RibbonDescription& src);   // 0x1800445a0  not ported
-    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
-    static Object::Base* CreateNewObject();                       // (D2) the class's own
-    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
     // `??1RibbonDescription@UI@@UEAA@XZ` (0x1800d5c90): NON-VIRTUAL (no virtual dtor until
@@ -104,9 +104,6 @@ protected:
     ~RibbonDescription();
 
 private:
-    static const char* _TypeName();                               // 0x1800440f0
-    static const char* _ParentTypeName();                         // 0x180044100
-    static Object::BaseTypeInfo _typeInfo;                        // minted
 
 public:
     uint8_t  _vertical;        // +0x68  kScalarBool -> RibbonElement::_vertical (+0xc0)

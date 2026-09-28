@@ -129,12 +129,7 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     }
     return p;
 }
-std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_getSpriteIndex{nullptr};
-const uint8_t* TabTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ — block D's class, a door.
 int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
     using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
@@ -146,17 +141,7 @@ int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
 
 namespace UI {
 
-// [1] 0x18004c1f0 / [2] 0x18004c1d0 / [3] 0x1800da8d0
-const char* TabDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, TabTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t TabDescription::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t TabDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
-}
+// [3] 0x1800da8d0
 int32_t TabDescription::GetFileVersion() const { return 0x104; }
 
 // [9] 0x18004c390 — the ctor, placement (the null test sat in the retired door).
@@ -358,3 +343,12 @@ int RtUiTabDescriptionRegister() {
     RegisterRuntimeAddr(0x18004c360ull, (void*)&UI::TabDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::TabDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@TabDescription@UI@@ (0x1801fa430): name "TabDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@TabDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::TabDescription, "ElementDescription", nullptr)

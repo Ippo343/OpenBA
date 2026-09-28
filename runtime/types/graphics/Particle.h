@@ -432,8 +432,12 @@ public:
     //   H2's file set, so the direction is reversed and the member calls the
     //   registered door. The same split `external_class_doors.cpp` documents and
     //   `Graphics::AnimationEvent` (block H1) already uses.
-    const char* TypeName() const override;                 // [1]
-    uint32_t    Type() const override;                     // [2]
+    // [1] TypeName / [2] Type, TypeId 0x18001ff20, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(Particle)
+public:
     int32_t     GetFileVersion() const override;           // [3] 0x1000 == 4096
     // [4] Compile is Object::External's own body (0x1800066e0), inherited.
     bool        Serialize(void* stream) override;           // [5] 0x180103f00
@@ -456,9 +460,6 @@ public:
     //
     // ?IsInstanced@Particle@Graphics@@QEBA_NXZ            0x18001ff60 — NOT PORTED
     bool IsInstanced() const;
-    // ?TypeId@Particle@Graphics@@SAIXZ                    0x18001ff20 — B.3.9 GFX,
-    //   over the minted `?_typeInfo@` record until the W3 fold
-    static uint32_t TypeId();
     // ?CreateNewObject@…SAPEAVBase@Object@@XZ             0x18001ff40 — B.3.9 GFX
     // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z     0x18001ff50 — B.3.9 GFX
     //   ENDGAME B.3.9: retail's ABSTRACT pair, both `XOR EAX,EAX ; RET`
@@ -467,9 +468,7 @@ public:
     //   `System::MemoryAllocator`, which B35_RULES section 11 keeps as doors for
     //   the whole of step 5. Note what is ABSENT: `Particle` has no `??2`/`??3`
     //   of its own in the export table — it is abstract, so only `ParticleSystem`
-    //   carries the per-class operator new / delete.
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* place);
+    //   carries the per-class operator new / delete. (Declared by DECLARE_TYPE.)
 
     // ?_rng@Particle@Graphics@@1VRandom@System@@A  retail 0x1801fe7f0 — the one
     // MT19937 every particle draws from (ParticleInstance::SetParticle,
@@ -645,8 +644,12 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                  // [1] 0x1800203e0
-    uint32_t    Type() const override;                      // [2] 0x1800203c0
+    // [1] 0x1800203e0 TypeName / [2] 0x1800203c0 Type, TypeId 0x1800203d0, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(ParticleSystem)
+public:
     int32_t     GetFileVersion() const override;            // [3] 0x1800a4d10 -> 0x1001
     // [4] Compile stays Object::External's body, inherited through Particle.
     bool        Serialize(void* stream) override;           // [5] 0x1800a4d20
@@ -660,9 +663,6 @@ public:
     virtual Object::External* Construct();                  // [9] 0x180020580
 
     // ---- the non-slot exported members -------------------------------------
-    // ?TypeId@ParticleSystem@Graphics@@SAIXZ                 0x1800203d0 — B.3.9
-    //   GFX, over the minted `?_typeInfo@` record until the W3 fold
-    static uint32_t TypeId();
     // ??2ParticleSystem@Graphics@@SAPEAX_K@Z                 0x1800203f0 — NOT PORTED
     // ??2ParticleSystem@Graphics@@SAPEAX_KPEAX@Z             0x180020460 — NOT PORTED
     // ??3ParticleSystem@Graphics@@SAXPEAX@Z                  0x180020470 — NOT PORTED
@@ -672,8 +672,7 @@ public:
     static void* operator new(std::size_t bytes);
     static void* operator new(std::size_t bytes, void* place);
     static void  operator delete(void* p);
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* place);
+    // (CreateNewObject / CreateInPlaceObject: declared by DECLARE_TYPE above.)
 
 protected:
     // ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0. NON-virtual (no virtual

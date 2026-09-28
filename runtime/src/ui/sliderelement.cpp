@@ -77,22 +77,6 @@ struct WidgetEvent {
 };
 static_assert(sizeof(WidgetEvent) == 0x30, "");
 
-// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* SliderTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 // ?UpdateNumber@SliderElement@UI@@AEAAXXZ (0x1800d6c20) — its body is
 // element_bodies_b5.cpp's door (fragment pass); reached by address.
 using UpdateNumberFn = void (*)(void* self);
@@ -132,18 +116,6 @@ void QueueEvent(UI::SliderElement* self, void* ui,
 }  // namespace
 
 namespace UI {
-
-// [1] 0x180049d20 / [2] 0x180049d00
-const char* SliderElement::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, SliderTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t SliderElement::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t SliderElement::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
-}
 
 // [4] 0x1800d7380
 void SliderElement::ComputeSize() {
@@ -387,3 +359,12 @@ int RtUiSliderElementRegister() {
     RegisterRuntimeAddr(0x180049e90ull, (void*)&UI::SliderElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::SliderElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@SliderElement@UI@@ (0x1801fa350): name "SliderElement", parent
+// "Element" (retail ?_ParentTypeName@SliderElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::SliderElement, "Element", nullptr)

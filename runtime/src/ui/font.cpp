@@ -79,10 +79,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-const uint8_t* FontTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -208,17 +204,7 @@ int32_t MeasureLiteral(const uint8_t* self, const char* text, int32_t bytes) {
 // with a QUALIFIED call (a live Font wears the MINTED table).
 namespace UI {
 
-uint32_t Font::Type() const { return TypeId(); }
-// ?TypeId@Font@UI@@SAIXZ 0x1800319b0 — the same first dword.
-uint32_t Font::TypeId() {
-    const uint8_t* ti = FontTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
 // 0x1800319c0: `MOV RAX,[0x1801fab70] ; RET` — the same node at +8.
-const char* Font::TypeName() const {
-    const uint8_t* ti = FontTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // 0x1801176b0: `MOV EAX,0x8 ; RET`. Eight — a plain integer, unlike the
 // *Description family's packed 0x104 / 0x204 / 0x10204.
 int32_t Font::GetFileVersion() const { return 8; }
@@ -884,3 +870,12 @@ int RtUiFontRegister() {
 
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::Font's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@Font@UI@@ (0x1801fab68): name "Font", parent
+// "Object::External" (retail ?_ParentTypeName@Font@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::Font, "Object::External", nullptr)

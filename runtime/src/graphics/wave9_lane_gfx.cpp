@@ -86,13 +86,9 @@ bool CallIsDerivedFrom(const void* obj, uint32_t typeId) {
 // The semantics are identical (cache the HIT, retry a miss, so a read before
 // the mint is not poisoned) and the audit can now see the door is port-aware.
 // ---------------------------------------------------------------------------
-uint32_t GeneratedImageBufferTypeId() {
-    static const uint32_t* cached = nullptr;
-    if (!cached)
-        cached = reinterpret_cast<const uint32_t*>(ResolveExport(
-            "?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A"));
-    return cached ? *cached : 0xffffffffu;
-}
+// ENDGAME B.3.9 TI-REST: the class's own `DEFINE_TYPE` record, read fresh
+// (the function-local cache over the minted record is gone, B9-10).
+uint32_t GeneratedImageBufferTypeId() { return Graphics::GeneratedImageBuffer::TypeId(); }
 
 // ---------------------------------------------------------------------------
 // MemAlloc / MemFree, the two halves of the Array helper below.

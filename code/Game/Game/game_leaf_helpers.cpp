@@ -23,6 +23,7 @@
 // name inside Volume.h's own static_asserts (Geometry.h includes Volume.h).
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "system/String.h"
@@ -283,10 +284,10 @@ void Game_TerrainResolveMaterial(void* refTriple) {
 
     void* result = nullptr;
     if (obj) {
-        const uint32_t* tid =
-            (g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance)
-                ? *g_ppTypeInfo_MaterialInstance : nullptr;
-        if (!tid || (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *tid)))
+        // Retail: IsDerivedFrom against [0x140151350] (?_typeInfo@MaterialInstance@
+        // Graphics@@); ENDGAME B.3.9 TI-REST: the class accessor.
+        const uint32_t tid = Graphics::MaterialInstance::TypeId();
+        if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tid))
             result = obj;
     }
     *reinterpret_cast<void**>(b + 0x10) = result;

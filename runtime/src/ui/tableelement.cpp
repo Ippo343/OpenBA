@@ -54,22 +54,6 @@ using namespace rtui;
 
 namespace {
 
-std::atomic<void*> g_typeInfo{nullptr};
-
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-const uint8_t* TypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 // `?GetRowHeight@` (0x18011e090) / `?GetColumnWidth@` (0x18011e1a0) — declared
 // on the class, bodies still element_bodies_b5.cpp's doors (fragment pass).
 using ExtentFn = int32_t (*)(void* self, int32_t index);
@@ -80,20 +64,6 @@ using ExtentFn = int32_t (*)(void* self, int32_t index);
 // The member bodies (ENDGAME B.3.6 block C4)
 // ============================================================================
 namespace UI {
-
-uint32_t TableElement::Type() const {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t TableElement::TypeId() {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* TableElement::TypeName() const {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // slot 4 — ?ComputeSize@TableElement@UI@@UEAAXXZ   0x18011df60
@@ -256,3 +226,12 @@ int RtUiTableElementRegister() {
     RegisterRuntimeAddr(0x180079440ull, (void*)&UI::TableElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::TableElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@TableElement@UI@@ (0x1801fae78): name "TableElement", parent
+// "Element" (retail ?_ParentTypeName@TableElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::TableElement, "Element", nullptr)

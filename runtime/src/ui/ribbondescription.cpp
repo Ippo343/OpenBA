@@ -59,19 +59,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-// RULE B6-5: the members below (Construct/Reconstruct run ConstructBody) may
-// run on the loader thread, so every export they resolve lives in a
-// namespace-scope atomic, never a function-local first-call cache.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -101,26 +88,10 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // The MEMBERS
 // ============================================================================
 namespace {
-std::atomic<void*> g_typeInfo{nullptr};
-const uint8_t* RibbonTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
 }  // namespace
 
 namespace UI {
 
-// [1] 0x180044130 / [2] 0x180044110
-const char* RibbonDescription::TypeName() const {
-    const char* v = nullptr; __builtin_memcpy(&v, RibbonTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t RibbonDescription::Type() const {
-    uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t RibbonDescription::TypeId() {
-    uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
-}
 // [3] 0x1800d5ef0: `MOV EAX,0x204 ; RET`. 0x204, not GroupDescription's 0x104 —
 // the file version is per class and the two must not be shared.
 int32_t RibbonDescription::GetFileVersion() const { return 0x204; }
@@ -304,3 +275,12 @@ int RtUiRibbonDescriptionRegister() {
     RegisterRuntimeAddr(0x180044310ull, (void*)&UI::RibbonDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::RibbonDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@RibbonDescription@UI@@ (0x1801fa2a8): name "RibbonDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@RibbonDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::RibbonDescription, "ElementDescription", nullptr)

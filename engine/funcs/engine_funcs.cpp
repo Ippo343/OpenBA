@@ -586,9 +586,6 @@ fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride14 = nullptr;
 fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride02 = nullptr;
 
 
-// M3.5 Path B session 3 — typed-ExternalPtr serialize helper at 0x140007140.
-uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
-
 // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers.
 fn_Array_Resize_t fn_Array_Resize_Stride02       = nullptr;  // 0x14001c890
 fn_Array_Resize_t fn_Array_Resize_Stride16B      = nullptr;  // 0x14001ef10
@@ -1598,9 +1595,8 @@ bool EngineFuncsInit() {
     // null until the underlying type registers, in which case the helpers
     // below detect null and emit a one-shot warning instead of crashing.
 
-    // M3.5 Path B session 3 — FUN_140007140 + MaterialInstance typeInfo slot.
-    g_ppTypeInfo_MaterialInstance = reinterpret_cast<uint32_t**>(
-        ResolveAddr(Module::Exe, 0x140151350));
+    // (M3.5 Path B session 3's MaterialInstance typeInfo slot 0x140151350 went
+    // at ENDGAME B.3.9 TI-REST: readers use Graphics::MaterialInstance::TypeId().)
 
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved\n");
@@ -1617,9 +1613,6 @@ bool EngineFuncsInit() {
     printf("  ExtPtr Mesh/Weather     = %p / %p\n",
         (void*)fn_ExternalPtr_Serialize_GraphicsMesh,
         (void*)fn_ExternalPtr_Serialize_Weather);
-    // M3.5 Path B session 3
-    printf("  TypeInfo MaterialInst   = %p\n",
-        (void*)g_ppTypeInfo_MaterialInstance);
 #endif
 
     // ============================================================

@@ -71,30 +71,6 @@ namespace {
 
 using namespace rtdesc;
 
-// ---------------------------------------------------------------------------
-// RULE B6-5 door caches. UI is constructed on the LOADER thread while the main
-// thread draws, so a member body keeps no function-local first-call cache
-// (`RT_DATA_SLOT` / `RT_EXPORT_ONCE`'s shape): it resolves through a
-// namespace-scope atomic slot. Never caches a null; a miss is retried.
-// ---------------------------------------------------------------------------
-void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
-std::atomic<void*> g_groupDescriptionTypeInfo{nullptr};
-
-const uint8_t* GroupDescriptionTypeInfo() {
-    return static_cast<const uint8_t*>(AtomicResolve(
-        g_groupDescriptionTypeInfo,
-        "?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 }  // namespace
 
 // ============================================================================
@@ -102,22 +78,6 @@ const uint8_t* GroupDescriptionTypeInfo() {
 // ============================================================================
 namespace UI {
 
-// `Type` returns the FIRST DWORD of the BaseTypeInfo static and `TypeName` the
-// pointer at +0x08 — retail reads them as two separate globals
-// (`?_typeInfo@GroupDescription@UI@@` and the label Ghidra prints as
-// `PTR_s_GroupDescription_1801faba8`, which is that static + 8), the same two
-// fields runtime/types/object/TypeInfo.h pins.
-uint32_t GroupDescription::Type() const { return TypeId(); }
-// ?TypeId@GroupDescription@UI@@SAIXZ 0x180046650 — the record's first dword.
-uint32_t GroupDescription::TypeId() {
-    const uint8_t* ti = GroupDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// The key function: GCC emits `vtable for UI::GroupDescription` here.
-const char* GroupDescription::TypeName() const {
-    const uint8_t* ti = GroupDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 // 0x180117cf0: `MOV EAX,0x104 ; RET`. 0x104 == 260, the dialog resource file
 // version this class understands.
 int32_t GroupDescription::GetFileVersion() const { return 0x104; }
@@ -293,3 +253,12 @@ int RtUiGroupDescriptionRegister() {
     RegisterRuntimeAddr(0x180046840ull, (void*)&UI::GroupDescription::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::GroupDescription's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@GroupDescription@UI@@ (0x1801faba0): name "GroupDescription", parent
+// "ElementDescription" (retail ?_ParentTypeName@GroupDescription@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::GroupDescription, "ElementDescription", nullptr)

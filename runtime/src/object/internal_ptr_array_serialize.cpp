@@ -27,6 +27,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/object/Internal.h"
+#include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.9 TI-REST: T::TypeId()
+#include "../../types/achievement/Goal.h"
 
 using RtObject::InternalBasePtr;
 
@@ -68,29 +70,18 @@ extern "C" void RtObject_InternalPtrArray_Serialize(::IO::Serializer* ser, int c
     TypedPtr::SerializeArray(*ser, count, reinterpret_cast<TypedPtr*>(elems), typeId);
 }
 
-#define INTPTR_ARRAY_THUNK(fnName, mangledTypeInfo)                             \
-    extern "C" void fnName(::IO::Serializer* ser, int count, InternalBasePtr* elems) { \
-        using TypeInfoPtr = const uint32_t*;                                    \
-        const uint32_t* ti = RT_DATA_SLOT(TypeInfoPtr, mangledTypeInfo);        \
-        if (ti == nullptr) {                                                    \
-            static bool warned = false;                                         \
-            if (!warned) {                                                      \
-                warned = true;                                                  \
-                std::fprintf(stderr, "[RtIntPtr] %s did not resolve -- this "   \
-                             "instantiation cannot run its type check\n",       \
-                             mangledTypeInfo);                                  \
-            }                                                                   \
-            return;                                                             \
-        }                                                                       \
-        RtObject_InternalPtrArray_Serialize(ser, count, elems, *ti);            \
-    }
-
-INTPTR_ARRAY_THUNK(RtObject_InternalPtrArraySerialize_AchievementInstance,
-                   "?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A")
-INTPTR_ARRAY_THUNK(RtObject_InternalPtrArraySerialize_GoalInstance,
-                   "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A")
-
-#undef INTPTR_ARRAY_THUNK
+// ENDGAME B.3.9 TI-REST (B39_RULES D6): T's type id is the class's own
+// `DEFINE_TYPE` record's, read fresh per call (retail: the first dword of
+// ?_typeInfo@T@Achievement@@, 0x1801f98d0 / 0x1801f9940). The by-name thunk
+// macro over the minted records went with them.
+extern "C" void RtObject_InternalPtrArraySerialize_AchievementInstance(
+        ::IO::Serializer* ser, int count, InternalBasePtr* elems) {
+    RtObject_InternalPtrArray_Serialize(ser, count, elems, Achievement::AchievementInstance::TypeId());
+}
+extern "C" void RtObject_InternalPtrArraySerialize_GoalInstance(
+        ::IO::Serializer* ser, int count, InternalBasePtr* elems) {
+    RtObject_InternalPtrArray_Serialize(ser, count, elems, Achievement::GoalInstance::TypeId());
+}
 
 int RtObjectInternalPtrArraySerializeRegister() {
     int n = 0;

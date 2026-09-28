@@ -203,13 +203,13 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         // the type-id slot 0x140151350 may be unfilled → can't verify → TRUST the load
         // (IsDerivedFromOrTrust pattern) rather than dropping a valid material.
         material = obj;
-        if (obj && fn_IsDerivedFrom && g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance) {
-            if (!fn_IsDerivedFrom(obj, **g_ppTypeInfo_MaterialInstance)) material = nullptr;
+        if (obj && fn_IsDerivedFrom) {   // ENDGAME B.3.9 TI-REST: the class accessor
+            if (!fn_IsDerivedFrom(obj, Graphics::MaterialInstance::TypeId())) material = nullptr;
         }
     }
 
     // B.3.5 bridge — `material` is a PROVED `Graphics::MaterialInstance`: the block
-    // above gates it through `fn_IsDerivedFrom(obj, **g_ppTypeInfo_MaterialInstance)`.
+    // above gates it through `fn_IsDerivedFrom(obj, Graphics::MaterialInstance::TypeId())`.
     if (material)
         reinterpret_cast<const Graphics::MaterialInstance*>(material)
             ->Setup(*reinterpret_cast<Video::Context*>(ctx), 0);   // B.3.5 bridge

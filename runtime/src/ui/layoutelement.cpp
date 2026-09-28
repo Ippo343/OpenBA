@@ -56,22 +56,6 @@ using namespace rtui;
 
 namespace {
 
-std::atomic<void*> g_typeInfo{nullptr};
-
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-const uint8_t* TypeInfo() {
-    return static_cast<const uint8_t*>(AtomicExport(
-        g_typeInfo, "?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
 // `?GetChildLayout@LayoutElement@UI@@AEAAXHHHHHH_N@Z` (0x1800d2dc0) — declared
 // on the class, body still element_bodies_b5.cpp's door (fragment pass).
 using GetChildLayoutFn = void (*)(void* self, int32_t index, int32_t sizePass,
@@ -89,20 +73,6 @@ void RowsDtor(void* hdr) { RtAddr<ArrayDtorFn>(0x180043cb0ull)(hdr); }
 // The member bodies (ENDGAME B.3.6 block C4)
 // ============================================================================
 namespace UI {
-
-uint32_t LayoutElement::Type() const {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-// static -- the same read as slot 2 (the minted record until W3).
-uint32_t LayoutElement::TypeId() {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-const char* LayoutElement::TypeName() const {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
 
 // ---------------------------------------------------------------------------
 // slot 4 — ?ComputeSize@LayoutElement@UI@@UEAAXXZ   0x1800d3100
@@ -286,3 +256,12 @@ int RtUiLayoutElementRegister() {
     RegisterRuntimeAddr(0x180043420ull, (void*)&UI::LayoutElement::CreateInPlaceObject);
     return n;
 }
+
+// ============================================================================
+// ENDGAME B.3.9 TI-UI (B39 D6): UI::LayoutElement's own type record, built at CRT init
+// (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
+// the retired minted row ?_typeInfo@LayoutElement@UI@@ (0x1801fa0b0): name "LayoutElement", parent
+// "Element" (retail ?_ParentTypeName@LayoutElement@UI@@), no file extension; factories:
+// the class's own.
+// ============================================================================
+DEFINE_TYPE(UI::LayoutElement, "Element", nullptr)

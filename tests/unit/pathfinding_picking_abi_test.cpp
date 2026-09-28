@@ -81,8 +81,10 @@ struct BareExternalProbe final : Object::External {
 };
 
 // Raw-call slots 0..8 (4 included: Compile is overridden on both resources
-// here) and check the marker each one leaves.
-void CheckNineOwnSlots(void* raw) {
+// here) and check the marker each one leaves. Slots 1 and 2 are DECLARE_TYPE's
+// real inline bodies (ENDGAME B.3.9 TI-REST) over the class's own record, so
+// they are checked against that record, not a marker.
+void CheckNineOwnSlots(void* raw, const ::Object::BaseTypeInfo& record) {
     using DtorFn    = void* (*)(void*, unsigned);
     using NameFn    = const char* (*)(const void*);
     using TypeFn    = uint32_t (*)(const void*);
@@ -94,8 +96,8 @@ void CheckNineOwnSlots(void* raw) {
 
     Reset(); SlotAt<DtorFn>(raw, kDeletingDtor)(raw, 0u);
     CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
-    Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);       CHECK_EQ(g_lastMark, kTypeName / 8);
-    Reset(); SlotAt<TypeFn>(raw, kType)(raw);           CHECK_EQ(g_lastMark, kType / 8);
+    CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record.name);
+    CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record.typeId);
     Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);  CHECK_EQ(g_lastMark, kGetFileVersion / 8);
     Reset();
     const uint32_t r = SlotAt<CompileFn>(raw, kCompile)(raw, nullptr);
@@ -122,8 +124,6 @@ void CheckNineOwnSlots(void* raw) {
 // Pathfinding::PointList's out-of-line members, AS MARKERS.
 // ===========================================================================
 namespace Pathfinding {
-const char* PointList::TypeName() const { Note(this, 1); return "PointList"; }
-uint32_t PointList::Type() const { Note(this, 2); return 0x9151u; }
 int32_t PointList::GetFileVersion() const { Note(this, 3); return 5; }
 Object::External::CompileResult PointList::Compile(const System::Filename&) { Note(this, 4); return 1; }
 bool PointList::Serialize(void*) { Note(this, 5); return true; }
@@ -205,7 +205,7 @@ UNIT_TEST(pathfinding_pointlist_getters_read_retails_offsets) {
 UNIT_TEST(pathfinding_pointlist_slot_order_is_retails) {
     PointListProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineOwnSlots(raw);
+    CheckNineOwnSlots(raw, Pathfinding::PointList::GetTypeInfo());
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 
@@ -350,8 +350,6 @@ UNIT_TEST(pathfinding_scene_layout) {
 // Picking::PickingMesh's out-of-line members, AS MARKERS.
 // ===========================================================================
 namespace Picking {
-const char* PickingMesh::TypeName() const { Note(this, 1); return "PickingMesh"; }
-uint32_t PickingMesh::Type() const { Note(this, 2); return 0x71c0u; }
 int32_t PickingMesh::GetFileVersion() const { Note(this, 3); return 9; }
 Object::External::CompileResult PickingMesh::Compile(const System::Filename&) { Note(this, 4); return 1; }
 bool PickingMesh::Serialize(void*) { Note(this, 5); return true; }
@@ -534,7 +532,7 @@ UNIT_TEST(picking_pickingmesh_accessors_read_retails_offsets) {
 UNIT_TEST(picking_pickingmesh_slot_order_is_retails) {
     PickingMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
-    CheckNineOwnSlots(raw);
+    CheckNineOwnSlots(raw, Picking::PickingMesh::GetTypeInfo());
     CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
 }
 

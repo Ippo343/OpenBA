@@ -268,8 +268,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x1800350f0  dialog.cpp
-    uint32_t    Type() const override;                            // [2] 0x1800350d0  dialog.cpp
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800350f0, Type 0x1800350d0, TypeId 0x1800350e0, _TypeName 0x1800350b0
+    //         _ParentTypeName 0x1800350c0, CreateNewObject 0x180035100, CreateInPlaceObject 0x180035110
+    DECLARE_TYPE(ElementDescription)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x180116af0  dialog.cpp
     // [4] Compile — Object::External's own body, inherited unchanged.
     bool        Serialize(void* stream) override;                 // [5] 0x180116b00  (IO::Stream&)
@@ -290,10 +294,7 @@ public:
     ElementDescription& operator=(const ElementDescription& src); // 0x180035210  not ported
 
     // Reflection statics. `_typeInfo` is the MINTED record TypeId reads.
-    static uint32_t TypeId();                                     // 0x1800350e0  dialog.cpp
     // Abstract: retail's pair is `xor eax,eax; ret` (dialog.cpp).
-    static Object::Base* CreateNewObject();                       // 0x180035100  dialog.cpp
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180035110  dialog.cpp
 
 protected:
     // `??0ElementDescription@UI@@QEAA@XZ` (0x180115a40) — the REAL constructor
@@ -310,9 +311,6 @@ private:
     void InitFields();      // +0x20..+0x67 stores of 0x180115a40 (dialog.cpp)
     void ReleaseFields();   // the +0x60 String release of 0x180116100 (dialog.cpp)
 
-    static const char* _TypeName();                               // 0x1800350b0 -> "ElementDescription"
-    static const char* _ParentTypeName();                         // 0x1800350c0 -> "Object::External"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801faaf8 (minted)
 
 public:
     // ---- the 0x48 bytes after Object::External — RtUI::ElementDescription's

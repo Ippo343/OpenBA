@@ -88,8 +88,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*   TypeName() const override;                      // [1] 0x1800398d0
-    uint32_t      Type() const override;                          // [2] 0x1800398b0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x1800398d0, Type 0x1800398b0, _TypeName 0x180039890, _ParentTypeName 0x1800398a0
+    //         CreateNewObject 0x1800399c0, CreateInPlaceObject 0x180039a40
+    DECLARE_TYPE(ContainerDescription)
+public:
     int32_t       GetFileVersion() const override;                // [3] 0x1800ccfe0
     // [4] Compile — Object::External's own body, inherited unchanged.
     bool          Serialize(void* stream) override;               // [5] 0x1800cced0  (IO::Stream&)
@@ -104,10 +108,7 @@ public:
     ContainerDescription(const ContainerDescription& src);        // 0x180039a90
     ContainerDescription& operator=(const ContainerDescription&); // 0x180039b10
     // 0x1800398c0 -- over the minted `?_typeInfo@` record until the W3 fold.
-    static uint32_t      TypeId();
     // Retail's factory pair (B39_RULES D2), containerdescription.cpp.
-    static Object::Base* CreateNewObject();                       // 0x1800399c0
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180039a40
 
 protected:
     // `??1ContainerDescription@UI@@UEAA@XZ` (0x1800ccff0). NON-VIRTUAL; retail's
@@ -116,9 +117,6 @@ protected:
     ~ContainerDescription();
 
 private:
-    static const char* _TypeName();                               // 0x180039890 -> "ContainerDescription"
-    static const char* _ParentTypeName();                         // 0x1800398a0 -> "ElementDescription"
-    static Object::BaseTypeInfo _typeInfo;                        // 0x1801f9da0 (minted)
 
 public:
     // ---- the 0x28 bytes after ElementDescription ---------------------------

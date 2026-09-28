@@ -88,41 +88,12 @@ namespace {
 // Neither instruction has an RCX operand: `this` is not read by either body.
 // That is not an inference from a decompile, it is what the encodings contain.
 //
-// 0x1801f99b0 is cross-checked, not merely decoded: it is the VA of the minted
-// `?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A` row in
-// standalone/rt_data_mint_tables.inc (line 1973) and of the promotion-storage
-// registration at standalone/reg_mint_promoted.cpp:931. So this file reads the
-// node through RT_DATA_SLOT rather than pinning the DLL's address, which is
-// what makes these two FOLLOW a promotion of that `?_typeInfo@` row — exactly
-// the arrangement graphics_typeinfo_accessors.cpp established for the
-// AnimationEvent / MaterialInstance / Particle nodes, and cutover needs.
-//
-// `0V…A` is the PRIVATE static spelling and this DLL exports its private
-// members, so a NAME door is the correct door here and no address door is
-// needed on the node's account (reference_aeaa_is_private_not_unexported.md).
+// 0x1801f99b0 is EdgeMesh's own type record (retail `?_typeInfo@EdgeMesh@
+// Graphics@@`). ENDGAME B.3.9 TI-REST: it is the class's `DEFINE_TYPE` static
+// (graphics_type_records.cpp) and both slots are DECLARE_TYPE's bodies; the
+// RT_DATA_SLOT node readers that stood here are gone.
 // ---------------------------------------------------------------------------
-constexpr size_t kTypeInfoTypeIdOffset = 0x00;
-constexpr size_t kTypeInfoNameOffset   = 0x08;
-static_assert(kTypeInfoTypeIdOffset == 0, "BaseTypeInfo::typeId is at +0x00");
-static_assert(kTypeInfoNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
 
-const uint8_t* EdgeMeshTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A");
-}
-
-uint32_t ReadTypeId(const uint8_t* node) {
-    if (!node) return 0;
-    uint32_t v = 0;
-    std::memcpy(&v, node + kTypeInfoTypeIdOffset, sizeof v);
-    return v;
-}
-const char* ReadTypeName(const uint8_t* node) {
-    if (!node) return nullptr;
-    const char* v = nullptr;
-    std::memcpy(&v, node + kTypeInfoNameOffset, sizeof v);
-    return v;
-}
 
 typedef uint32_t    (*U32ThisFn)(const void*);
 typedef const char* (*CStrThisFn)(const void*);
@@ -283,9 +254,8 @@ namespace Graphics {
 
 // ---- slot 2  ?Type@EdgeMesh@Graphics@@UEBAIXZ  0x180012c70 -----------------
 //   0x180012c70  8b 05 ..   MOV EAX,[0x1801f99b0]   RET   -> node + 0x00, DWORD
-uint32_t EdgeMesh::Type() const {
-    return ReadTypeId(EdgeMeshTypeInfo());
-}
+// ENDGAME B.3.9 TI-REST: Type / TypeName / TypeId are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 
 // ---- slot 1  ?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ  0x180012c90 ----------
 //
@@ -296,9 +266,6 @@ uint32_t EdgeMesh::Type() const {
 //   strcmp, because it is the one screen that can still see identity move, and
 //   the identity question is retired in both shipped binaries (zero consumers
 //   of any node's +0x08 — reference_basetypeinfo_name_is_content_only.md).
-const char* EdgeMesh::TypeName() const {
-    return ReadTypeName(EdgeMeshTypeInfo());
-}
 
 // ---- slot 3  ?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ  0x1800a23d0 -------
 //
@@ -544,7 +511,6 @@ Object::External* EdgeMesh::Reconstruct() {
 
 // ?TypeId@EdgeMesh@Graphics@@SAIXZ 0x180012c80 -- over the minted
 // `?_typeInfo@` record until the W3 fold (B39_RULES D6).
-uint32_t EdgeMesh::TypeId() { return ReadTypeId(EdgeMeshTypeInfo()); }
 
 // ?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ 0x180012d80 --
 // `??2EdgeMesh` (MemAlloc 0x180, align 8), the null branch, the ctor.
