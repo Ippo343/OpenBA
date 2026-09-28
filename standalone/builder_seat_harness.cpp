@@ -29,7 +29,6 @@
 // is retail's (0x140091130, already registered by reg_townhallui.cpp); only the
 // pressing is ours.
 
-#include "resolve.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>

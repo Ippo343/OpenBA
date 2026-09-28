@@ -101,7 +101,6 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include <cstdio>
-#include "resolve.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include "Component/LivestockComponent.h"

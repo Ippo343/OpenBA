@@ -33,7 +33,6 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"  // ENDGAME B.3.2 step 2: real Array<uint8_t>
 // ENDGAME B.3.5 block VC: the real `IO::Serializer` / `IO::ReaderWriter`, which
 // replace this file's two hand-inlined ReaderWriter slot offsets.

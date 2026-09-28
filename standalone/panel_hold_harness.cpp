@@ -38,7 +38,6 @@
 // Diagnostic harness: it drives the same retail path a player click drives and writes
 // nothing of its own.
 
-#include "resolve.h"
 #include "object/Internal.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"

@@ -76,7 +76,6 @@
 
 #include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>

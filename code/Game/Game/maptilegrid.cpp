@@ -25,7 +25,6 @@
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "perf_terrain.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstring>
 

@@ -30,7 +30,6 @@
 #include "../../types/object/TypeInfo.h"
 
 #if !defined(BANISHED_UNIT_TEST)
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 #endif
 

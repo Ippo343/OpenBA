@@ -27,7 +27,6 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/picking/Scene.h"
 #include "../collection/array_internal.h"
 

@@ -150,7 +150,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
 #include "../../types/video/Context.h"
 // ENDGAME B.3.5 block J: the real Video::ContextData, block A's abstract base,

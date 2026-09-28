@@ -45,7 +45,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<T> bridge
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteCapture.h"

@@ -954,7 +954,6 @@ void NewGameDialog::OnUpdateLayout() {
 // our standalone ctor at that address below.
 
 #include "Object/factory_registration.h"
-#include "resolve.h"
 
 // Defined in standalone/autostart.cpp — the auto-new-game driver reads this to
 // find the dialog opened by MainMenuDialog::OpenNewGame.

@@ -29,7 +29,6 @@
 // whose compiler vtables the two retail addresses serve (B38_RULES D5).
 
 
-#include "resolve.h"
 #include "stall_debug.h"
 #include "options.h"
 #include "system/Thread.h"   // ENDGAME B.3.4b System callers: System::Thread

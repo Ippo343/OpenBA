@@ -90,7 +90,6 @@
 #include <cstring>
 #include <initializer_list>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/video/Context.h"

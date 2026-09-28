@@ -65,7 +65,6 @@
 #include "external_path.h"
 #include "external_path_stack.h"
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"

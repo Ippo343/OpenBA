@@ -161,7 +161,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../../types/ui/DialogControllerConfig.h"   // ENDGAME B.3.9 TI-UI: UI::DialogControllerConfig::GetTypeInfo()

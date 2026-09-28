@@ -89,7 +89,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/CompanionData.h"
 // ENDGAME B.3.5 block D1 — `Video::Context`, for the one line

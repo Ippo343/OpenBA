@@ -21,7 +21,6 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "math/Math.h"
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <cstdint>

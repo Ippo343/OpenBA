@@ -35,7 +35,6 @@
 #include <new>
 
 #include "../../types/system/Filename.h"
-#include "../../funcs/rt_port.h"
 #include "string.h"
 
 namespace RtSystem {

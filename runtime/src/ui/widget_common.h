@@ -31,7 +31,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../../types/ui/Element.h"     // B3X W0: InlineGetPaddedSize calls ComputeSize by name
 #include "../../types/system/MemoryAllocator.h"   // B3R RT-UI: MemFree, direct

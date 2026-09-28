@@ -18,7 +18,6 @@
 #include <map>
 #include <set>
 #include <string>
-#include "resolve.h"
 #include "options.h"
 #include "graphics/Geometry.h"   // Graphics::Geometry::AddDrawItems (B3X W0)
 #include "graphics/Mesh.h"       // RtGraphics_MeshInstance_AddDrawItems (B3R W2-RES)

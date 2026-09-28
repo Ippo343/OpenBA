@@ -59,7 +59,6 @@
 #include <cstring>
 #include <new>                 // placement new, for the Node copy-ctor door
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"

@@ -29,7 +29,6 @@
 #include "ui/UserInterface.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include "Game/serialize_externals.h"
 #include "Object/factory_registration.h"
 #include <cstdint>

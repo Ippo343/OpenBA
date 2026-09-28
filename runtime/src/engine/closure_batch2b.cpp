@@ -19,7 +19,6 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"   // B3R: RtApp_SetDestroyTree
 #include "../../types/system/MemoryAllocator.h"    // B3R: rtalloc::FreeLockedIgnoringSelf
 #include "../../types/video/Context.h"             // Rt_GuardedObjectFree (0x180006a10)

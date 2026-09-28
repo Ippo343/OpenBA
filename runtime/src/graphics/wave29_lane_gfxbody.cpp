@@ -163,7 +163,6 @@
 #include <cstdio>   // unqualified printf: log_strip.h #defines it away
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"   // Graphics::Animation -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Camera.h"   // Renderer, RendererDrawGroup, RendererDrawable
 #include "../../types/graphics/Scene.h"    // Scene, _globals @ +0x60

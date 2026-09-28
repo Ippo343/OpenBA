@@ -114,7 +114,6 @@
 #include <cstring>
 #include <ctime>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/graphics/Particle.h"

@@ -39,7 +39,6 @@
 // two files consistent is worth more than two lines of nesting.
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/Crc.h"
 
 namespace {

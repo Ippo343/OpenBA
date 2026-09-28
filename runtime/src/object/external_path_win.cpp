@@ -53,7 +53,6 @@
 
 #include "external_path.h"
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"

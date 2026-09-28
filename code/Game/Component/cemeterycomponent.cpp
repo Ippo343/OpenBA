@@ -16,7 +16,6 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
-#include "resolve.h"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>

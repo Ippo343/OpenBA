@@ -96,7 +96,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
 
 using RtVideo::DisplayMode;

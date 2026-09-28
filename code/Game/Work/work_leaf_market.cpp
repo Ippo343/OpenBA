@@ -26,7 +26,6 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "system/MemoryAllocator.h"
-#include "resolve.h"
 #include <cstdint>
 
 // ============================================================

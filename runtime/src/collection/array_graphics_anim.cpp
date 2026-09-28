@@ -60,7 +60,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
 #include "array_internal.h"
 #include "array_destroy_internal.h"

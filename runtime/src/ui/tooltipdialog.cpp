@@ -88,7 +88,6 @@
 #include <cstdio>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TextElement.h"

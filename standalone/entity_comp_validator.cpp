@@ -36,7 +36,6 @@
 // Diagnostic only: it never modifies the slot, so the faithful save path is
 // unchanged whether the probe is on or off.
 
-#include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"   // Object::Base::Type (B3X W0)

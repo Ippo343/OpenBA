@@ -83,7 +83,6 @@
 
 #include "external_set.h"
 #include "../system/string.h"
-#include "../../funcs/rt_port.h"
 #include "../../types/object/External.h"
 #include "../../types/io/FileStream.h"
 

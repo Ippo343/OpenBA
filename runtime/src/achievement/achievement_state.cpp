@@ -84,7 +84,6 @@
 #include <cstdio>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
 #include "../../types/system/String.h"

@@ -151,7 +151,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/engine/UpdateLoop.h"         // ENDGAME B.3.7: the loop classes
 #include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine

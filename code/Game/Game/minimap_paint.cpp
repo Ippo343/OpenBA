@@ -51,7 +51,6 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "options.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

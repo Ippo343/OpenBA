@@ -122,7 +122,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/StringTable.h"
 #include "../../types/system/MemoryAllocator.h"
 

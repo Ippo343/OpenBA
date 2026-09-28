@@ -1643,7 +1643,6 @@ cleanup:
 // interface (no DialogController), so no second-vtable block.
 
 #include "Object/factory_registration.h"
-#include "resolve.h"
 
 // ENDGAME B.3.8 block DLG: OptionsDialog is a real class (Dialog/OptionsDialog.h);
 // the hand-built table is gone. 0x14015ceb0 has no by-address reader, so its

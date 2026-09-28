@@ -28,7 +28,6 @@
 #include <windows.h>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 
 using rt::system::MemoryAllocator;

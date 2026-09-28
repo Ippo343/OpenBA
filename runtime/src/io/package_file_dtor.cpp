@@ -195,7 +195,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/PackageFile.h"     // ENDGAME B.3.9 IO: the member dtor

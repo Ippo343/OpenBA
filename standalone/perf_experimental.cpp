@@ -9,7 +9,6 @@
 #include "perf_terrain.h"
 #include <cstdint>
 #include "system/Value.h"
-#include "resolve.h"
 #include "options.h"
 #include <cstdio>
 #include <cstdlib>

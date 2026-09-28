@@ -162,7 +162,6 @@
 #include <cstdint>
 #include <new>                // placement new -- see ReloadEntry::file below
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Modification.h"
 // TypeInfo.h MUST come before External.h. External.h:343 includes it from

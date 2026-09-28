@@ -122,7 +122,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/ui/SpinnerElement.h"
 #include "../../types/ui/ComboElement.h"

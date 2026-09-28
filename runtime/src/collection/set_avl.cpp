@@ -100,7 +100,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"   // rtcoll::DoorFree (the one allocator door)
 #include "set_avl.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name

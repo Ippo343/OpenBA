@@ -56,7 +56,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 

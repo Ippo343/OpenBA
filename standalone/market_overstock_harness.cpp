@@ -45,7 +45,6 @@
 // the resulting "gate=SURPLUS_SHED" from marketwork.cpp.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
 #include "Component/MarketComponent.h"

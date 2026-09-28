@@ -36,7 +36,6 @@
 #include "Component/coll_bridge.h"
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include "collection/Collection.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

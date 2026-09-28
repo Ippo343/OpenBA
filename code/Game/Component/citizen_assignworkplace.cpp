@@ -37,7 +37,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <windows.h>
 #include <cstdio>
-#include "resolve.h"
 #include <cstdint>
 #include <cstdlib>   // qsort
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

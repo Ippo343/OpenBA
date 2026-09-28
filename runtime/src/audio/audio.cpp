@@ -71,7 +71,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Audio.h"
 #include "../../../engine/types/common.h"   // Vector3
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)

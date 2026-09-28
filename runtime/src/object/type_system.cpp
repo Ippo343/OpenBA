@@ -46,7 +46,6 @@
 
 #include "../../types/object/TypeInfo.h"
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
-#include "../../funcs/rt_port.h"
 
 
 namespace RtObject {

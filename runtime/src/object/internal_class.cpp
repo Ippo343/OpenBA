@@ -62,7 +62,6 @@
                                      // two streams on. Header-only; no registry.
 
 #if !defined(BANISHED_UNIT_TEST)
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/Value.h"   // B3R: System::Random::Rand by name
 #endif

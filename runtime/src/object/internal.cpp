@@ -94,7 +94,6 @@
 #include <cstring>
 
 #include "../../types/object/Internal.h"
-#include "../../funcs/rt_port.h"
 
 namespace RtObject {
 namespace {

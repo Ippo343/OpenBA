@@ -2,7 +2,6 @@
 
 
 #include "redzone_alloc.h"
-#include "resolve.h"
 #include "options.h"
 #include "system/MemoryAllocator.h"   // -Iruntime/types: the instrument seat
 

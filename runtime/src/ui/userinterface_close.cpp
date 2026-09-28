@@ -143,7 +143,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/DialogInstance.h"

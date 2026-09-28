@@ -34,7 +34,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "rt_port.h"
 
 #include "../../types/math/Math.h"
 #include "../../types/graphics/Camera.h"

@@ -65,7 +65,6 @@
 #include "Game/exe_bodies.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "ui/Dialogs.h"
 #include "system/String.h"
 #include "system/Filename.h"

@@ -172,7 +172,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Mesh.h"              // ENDGAME B.3.5 block G
 #include "../../types/graphics/AnimationManager.h"  // ENDGAME B.3.5 block G

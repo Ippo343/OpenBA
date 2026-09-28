@@ -17,7 +17,6 @@
 #include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeNameById (pre-fault report)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>

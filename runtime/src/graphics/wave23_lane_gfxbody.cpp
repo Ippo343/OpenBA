@@ -39,7 +39,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/graphics/AnimationManager.h"   // ENDGAME B.3.5 block GC
 #include "../../types/graphics/AnimationState.h"     // ditto

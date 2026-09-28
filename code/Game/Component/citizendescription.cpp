@@ -40,7 +40,6 @@
 #include "Object/factory_registration.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstring>
 #include <cstdint>

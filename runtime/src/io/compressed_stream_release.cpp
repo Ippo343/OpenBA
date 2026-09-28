@@ -24,7 +24,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"

@@ -8,7 +8,6 @@
 // `XOR EAX,EAX; RET` (the FACTREST rows they replace had no steps).
 // ============================================================================
 
-#include "../../funcs/rt_port.h"
 #include "../../types/object/ExternalCompiler.h"
 
 namespace Object {

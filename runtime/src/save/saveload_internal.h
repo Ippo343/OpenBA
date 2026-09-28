@@ -28,7 +28,6 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/Persistence.h"   // SaveBlock — SetupLoadFn's return

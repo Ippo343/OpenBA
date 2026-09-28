@@ -107,7 +107,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 
 namespace rtcrt {
 

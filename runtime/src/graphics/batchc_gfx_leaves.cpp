@@ -93,7 +93,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/GeneratedImageBuffer.h"  // ENDGAME B.3.5 block GC
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G

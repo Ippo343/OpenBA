@@ -137,7 +137,6 @@
 #include <cstring>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"        // rtcrt::StrICmp
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members

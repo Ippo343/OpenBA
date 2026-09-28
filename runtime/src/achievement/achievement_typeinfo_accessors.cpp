@@ -163,7 +163,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 
 // ENDGAME B.3.7 block B3: the eleven bodies are MEMBERS of the four real

@@ -34,7 +34,6 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/DialogControllerConfig.h"
 
 namespace RtUI {

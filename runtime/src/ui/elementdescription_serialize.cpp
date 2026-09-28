@@ -120,7 +120,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/object/External.h"

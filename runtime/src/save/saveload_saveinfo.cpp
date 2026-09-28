@@ -43,7 +43,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton

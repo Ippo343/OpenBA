@@ -66,7 +66,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
 #include "../collection/introsort_msvc.h"
 #include "../system/string.h"

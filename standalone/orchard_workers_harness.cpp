@@ -31,7 +31,6 @@
 // Do NOT touch code/Game/Component/orchardcomponent*.cpp from here — this file only pokes
 // already-published entry points.
 
-#include "resolve.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName

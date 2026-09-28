@@ -357,7 +357,6 @@
 
 #include <windows.h>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"

@@ -239,7 +239,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: _quitRequested

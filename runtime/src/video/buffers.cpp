@@ -25,7 +25,6 @@
 // full differential oracle, three constructors, two destructors, and one
 // held-back function (SaveImageToFile — see its own comment).
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Device.h"   // Wave 9 lane W: the lock and +0x100

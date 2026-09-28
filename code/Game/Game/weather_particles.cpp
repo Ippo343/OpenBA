@@ -39,7 +39,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
-#include "resolve.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include "object/Internal.h"     // Object::detail::InternalMemFree

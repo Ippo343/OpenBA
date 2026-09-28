@@ -58,7 +58,6 @@
 // reachable only when the WorkComponent still holds a work id (+0x28 >= 0).
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include "Component/exe_bodies.h"

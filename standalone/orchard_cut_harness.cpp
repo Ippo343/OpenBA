@@ -16,7 +16,6 @@
 //
 // Default OFF. Cutting is destructive to the orchard under test, so it must never fire
 // during the plant/tend/harvest runs.
-#include "resolve.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/OrchardComponent.h"

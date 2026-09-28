@@ -71,7 +71,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"   // rtcoll::DoorAlloc (the one allocator door)
 #include "avl_trees.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name

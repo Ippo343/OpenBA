@@ -68,7 +68,6 @@
 #include <cstring>
 #include <new>          // the retslot doors placement-new the member's prvalue
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton

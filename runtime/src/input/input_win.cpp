@@ -66,7 +66,6 @@
 #include <windows.h>
 
 #include <cstdint>
-#include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 

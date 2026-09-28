@@ -145,7 +145,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileStream.h"
 #include <new>          // B.3.4 block 4: the GetSource door placement-constructs
                        // retail's by-value String into the caller's raw slot

@@ -39,7 +39,6 @@
 #include <new>
 
 #include "../../types/system/String.h"
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
 #include "string.h"
 #ifndef BANISHED_UNIT_TEST

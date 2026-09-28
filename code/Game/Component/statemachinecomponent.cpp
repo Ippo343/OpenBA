@@ -24,7 +24,6 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (state-2 workplace hand-off)
 #include "system/Value.h"
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

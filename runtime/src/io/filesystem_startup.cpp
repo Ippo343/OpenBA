@@ -59,7 +59,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton

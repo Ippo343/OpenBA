@@ -99,7 +99,6 @@
 #include <cstdio>
 #include <new>          // placement new into the retail hidden return slot
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "string.h"
 #include "pod_bridge.h"

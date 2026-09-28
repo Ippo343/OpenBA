@@ -159,7 +159,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"   // B.3.4 block 4: IO::CompressedFileStream
 #include "../../types/io/FileSystem.h"   //                 and RtIO::FileInfo

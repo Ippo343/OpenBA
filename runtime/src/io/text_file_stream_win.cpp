@@ -61,7 +61,6 @@
 
 #include <windows.h>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"

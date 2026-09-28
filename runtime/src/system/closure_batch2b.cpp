@@ -56,7 +56,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "string.h"
 #include "../../types/system/MemoryAllocator.h"
 

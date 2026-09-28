@@ -62,7 +62,6 @@
 // before our body writes anything.
 // ============================================================================
 
-#include "rt_port.h"
 #include "../../types/math/Math.h"
 
 #include <cstdint>

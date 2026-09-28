@@ -24,7 +24,6 @@
 //   CitizenComp_Entity_FindComponent_Storage 0x140008090  (citizenaicomponent.cpp) -> c7cf0
 //   Entity_impl_7fb0 0x140087fb0, CalcDistance 0x140008830, arrayAdd 0x140003110
 
-#include "resolve.h"
 #include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
 #include <new>
 #include "object/TypeInfo.h"

@@ -37,7 +37,6 @@
 // so we resolve it the same self-contained way citizenaicomponent.cpp already does
 // for its own sibling-find (GetTypeIdByName, not the raw .rdata global).
 
-#include "resolve.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A

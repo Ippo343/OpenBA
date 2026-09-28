@@ -9,6 +9,25 @@
 #include "video/Device.h"             // RtVideoDeviceStartupIdentity
 #include "graphics/Mesh.h"            // RtGraphicsWave29SlotsSummary
 
+#include <cstdio>
+#include <windows.h>   // AFTER the runtime headers: <wingdi.h> declares a function
+                       // named Rectangle (Volume::Rectangle, via graphics/Mesh.h)
+
+bool RuntimeDllNotMapped() {
+    // Nothing in the process may map the retail Runtime DLL: our ports and our
+    // allocator are the runtime. A mapped copy means something in the build is
+    // still pulling the DLL in, and that is worth stopping on.
+    if (GetModuleHandleA("Runtime-x64.dll")) {
+        fprintf(stderr, "[Standalone] FATAL: Runtime-x64.dll is mapped in the "
+                        "process -- the exe must never load it (ENDGAME A.1)\n");
+        fflush(stderr);
+        return false;
+    }
+    fprintf(stderr, "[Standalone] Runtime-x64.dll: never loaded (ENDGAME A.1)\n");
+    fflush(stderr);
+    return true;
+}
+
 void RuntimeInit() {
     // The transcendental seam every Math / Volume body calls through.
     RtLibm::Init();

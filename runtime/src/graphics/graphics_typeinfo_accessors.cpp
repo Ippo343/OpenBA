@@ -99,7 +99,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"   // Graphics::AnimationEvent -- block GC
 #include "../../types/graphics/Material.h"    // Graphics::MaterialInstance -- ditto
 #include "../../types/graphics/Particle.h"    // Graphics::Particle -- ditto

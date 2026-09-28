@@ -13,7 +13,6 @@
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"
-#include "resolve.h"
 #include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // ============================================================================

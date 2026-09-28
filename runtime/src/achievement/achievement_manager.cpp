@@ -50,7 +50,6 @@
 #include <cstring>
 #include <new>          // placement new into the retslot doors
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/object/External.h"   // Object::ExternalPtr<T>, ExternalList

@@ -238,7 +238,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Stream.h"
 #include "../../types/collection/Collection.h"   // rtcoll::ArrayDtorImpl
 

@@ -49,7 +49,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"

@@ -93,7 +93,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/Error.h"
 #include "../../types/video/Device.h"

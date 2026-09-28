@@ -82,7 +82,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/io/Persistence.h"    // ENDGAME B.3.9 SS1: Persistence::_singleton

@@ -39,7 +39,6 @@
 #include "math/Math.h"
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -50,7 +49,6 @@
 #include <cmath>
 #include <atomic>
 #include <windows.h>  // GetCurrentThreadId (double-dispatch diagnostic)
-#include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)

@@ -173,7 +173,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../system/string.h"
 #include "../../types/video/ShaderProgram.h"
 

@@ -79,7 +79,6 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Audio.h"
 #include "../../types/io/Serializer.h"
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: AsArray bridge

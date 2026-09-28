@@ -132,7 +132,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/DialogController.h"
 
 namespace RtUi {

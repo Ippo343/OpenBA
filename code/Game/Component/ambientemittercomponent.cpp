@@ -17,7 +17,6 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)

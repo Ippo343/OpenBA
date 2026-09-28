@@ -44,7 +44,6 @@
 
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/object/TypeInfo.h"
 #include "../../funcs/rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc), called by name
 

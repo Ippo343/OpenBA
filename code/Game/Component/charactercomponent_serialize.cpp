@@ -46,7 +46,6 @@
 // (action_pf_ctors.cpp, boatcomponent_route.cpp, animalcomponent.cpp) — we
 // resolve our own copies rather than share their statics, per house convention.
 
-#include "resolve.h"
 #include "math/Math.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton

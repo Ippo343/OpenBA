@@ -25,7 +25,6 @@
 //   * Serializer is {Stream* stream; int version; ...}; ctor(self, stream, v).
 //   * After serializing an InternalBasePtr, retail validates the pointee with
 //     IsDerivedFrom(ptr, typeId) and nulls the ref on mismatch.
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>

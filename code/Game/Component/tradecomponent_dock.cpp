@@ -68,7 +68,6 @@
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "Component/ControllerComponent.h"
 #include "Component/RawMaterialDescription.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

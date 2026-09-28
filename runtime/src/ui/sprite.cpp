@@ -68,7 +68,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 
 #include "../../types/object/External.h"
 #include "../../types/ui/Sprite.h"

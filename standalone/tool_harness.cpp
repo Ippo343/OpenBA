@@ -17,7 +17,6 @@
 
 
 #include "tool_harness.h"
-#include "resolve.h"
 #include "options.h"
 #include <windows.h>
 #include "math/Math.h"

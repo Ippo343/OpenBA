@@ -43,7 +43,6 @@
 
 #include <cstdint>
 #include <cstring>
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_sink.h"   // RtSink, the write sink EnableCursorBody takes
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"

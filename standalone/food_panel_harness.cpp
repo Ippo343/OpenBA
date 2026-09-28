@@ -29,7 +29,6 @@
 // Runs once, at a settle frame (default 900, override with BANISHED_FOOD_PANEL_FRAME) so
 // the world and the demo buildings exist. Test-only, opt-in, default off.
 
-#include "resolve.h"
 #include <windows.h>
 #include <new>
 #include "Game/exe_bodies.h"

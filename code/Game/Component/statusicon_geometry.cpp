@@ -26,7 +26,6 @@
 #include "graphics/Camera.h"     // Graphics::Renderer
 #include "graphics/InterpolatedState.h"   // ENDGAME B.3.5 closing pass --
                                           // Graphics::InterpolatedState<Transform>
-#include "resolve.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/External.h"

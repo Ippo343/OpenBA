@@ -43,7 +43,6 @@
 
 
 #include <new>
-#include "resolve.h"
 #include <cstdint>
 #include <vector>
 #include <cstring>

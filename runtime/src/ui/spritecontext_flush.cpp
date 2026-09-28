@@ -152,7 +152,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_libm.h"
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data

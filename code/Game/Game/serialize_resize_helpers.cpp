@@ -33,7 +33,6 @@
 // directly.
 
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

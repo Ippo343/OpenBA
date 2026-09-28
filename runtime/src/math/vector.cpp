@@ -30,7 +30,6 @@
 
 #include <cmath>
 #include "../../types/math/Math.h"
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 #include "vector.h"

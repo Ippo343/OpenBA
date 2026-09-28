@@ -98,7 +98,6 @@
 #include <cstdint>
 
 #include "../../types/collection/Collection.h"
-#include "../../funcs/rt_port.h"
 #include "set_avl.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 

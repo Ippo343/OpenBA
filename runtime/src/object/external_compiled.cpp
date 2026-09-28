@@ -62,7 +62,6 @@
 #include "external_compiled.h"
 #include "external_path_stack.h"
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
 #include "../system/string.h"

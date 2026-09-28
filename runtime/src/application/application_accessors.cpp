@@ -23,7 +23,6 @@
 // ============================================================================
 
 #include <cstdint>
-#include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 
 // ENDGAME B.3.7: `Application::Application` is the real class; a global

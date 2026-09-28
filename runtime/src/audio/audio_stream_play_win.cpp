@@ -99,7 +99,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Stream.h"
 
 // 0x18000c300 — `Collection::Array<Block>::SetSize(4)` (kSpec_Blob8ba0,

@@ -91,7 +91,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/UserInterface.h"
 // `enum class Module` + `ResolveAddr` (declared once there, byte-identical to

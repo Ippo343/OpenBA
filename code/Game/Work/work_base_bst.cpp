@@ -19,7 +19,6 @@
 
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
-#include "resolve.h"
 #include "io/Serializer.h"     // ENDGAME B.3.4 caller batch C
 #include "object/Internal.h"   // ENDGAME B.3.4a closing: InternalBasePtr::Serialize
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()

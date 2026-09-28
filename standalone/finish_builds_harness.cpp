@@ -28,7 +28,6 @@
 // the short bridge in an ordinary run finishes on its own and is the evidence for
 // that. Opt-in, off by default.
 
-#include "resolve.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"

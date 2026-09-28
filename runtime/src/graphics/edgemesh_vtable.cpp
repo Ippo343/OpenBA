@@ -65,7 +65,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
 #include "../../types/io/Serializer.h"    // IO::ReaderWriter (B3X W0)
 #include "../../types/object/External.h"  // RtObject_ExternalPtrSerialize_*

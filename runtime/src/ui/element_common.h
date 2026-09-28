@@ -38,7 +38,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 // ENDGAME B.3.6 block A: the real `UI::Element` class, so the two inline
 // helpers below dispatch slots 4/5 as member calls instead of raw slot reads.
 #include "../../types/ui/Element.h"

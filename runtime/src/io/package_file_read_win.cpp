@@ -203,7 +203,6 @@
 #include <cstring>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/io/Stream.h"

@@ -57,7 +57,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
 #include "../../types/system/Value.h"              // System::Time, ditto

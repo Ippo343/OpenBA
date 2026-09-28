@@ -140,7 +140,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/ComboDialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/Element.h"   // ENDGAME B.3.6 closing pass: FindElementType

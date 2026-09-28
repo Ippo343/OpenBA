@@ -96,7 +96,6 @@
 #include <cstdlib>
 
 #include "../system/string.h"
-#include "../../funcs/rt_port.h"
 #include "../../types/object/TypeInfo.h"   // BEFORE External.h -- see external_savetext_win.cpp
 #include "../../types/object/External.h"
 #include "../../types/io/Stream.h"

@@ -111,7 +111,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "scene_grid.h"
 
 namespace rtgfxgrid {

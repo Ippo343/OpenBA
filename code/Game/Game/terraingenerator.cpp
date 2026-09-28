@@ -44,7 +44,6 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "system/Filename.h"
-#include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B

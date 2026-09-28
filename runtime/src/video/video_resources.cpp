@@ -106,7 +106,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::{Device,RenderBuffer}Data

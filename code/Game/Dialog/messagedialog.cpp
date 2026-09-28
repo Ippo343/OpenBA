@@ -81,7 +81,6 @@ void MessageDialog::OnNo()     { CloseWithResult(this, 3); }
 // the vtable store. No additional fields beyond DialogInstance's.
 
 #include "Object/factory_registration.h"
-#include "resolve.h"
 #include <cstdio>
 
 MessageDialog::MessageDialog(UI::UserInterface* ui, const UI::Dialog* dialog,

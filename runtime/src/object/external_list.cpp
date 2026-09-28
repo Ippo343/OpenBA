@@ -49,7 +49,6 @@
 #include <cstdint>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/object/External.h"
 #include "../../types/object/Internal.h"   // Object::detail::InternalMemAlloc
 #include "../../types/collection/Collection.h"   // B3R: rtcoll::RtColl_ArraySetSize_18002f070

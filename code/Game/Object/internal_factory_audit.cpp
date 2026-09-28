@@ -3,7 +3,6 @@
 
 #include "Object/internal_factory_audit.h"
 #include "Game/force_work.h"
-#include "resolve.h"
 #include "object/Internal.h"   // ENDGAME B.3.9 SS2: Object::InternalFactory::_singleton
 
 #include <cstdio>

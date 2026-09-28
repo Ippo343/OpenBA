@@ -18,7 +18,6 @@
 // Do NOT touch code/Game/Component/orchardcomponent*.cpp — actively owned by
 // the porting pass. This file only pokes already-published fields/paths.
 
-#include "resolve.h"
 #include <windows.h>
 #include "ui/UserInterface.h"
 #include "object/Internal.h"

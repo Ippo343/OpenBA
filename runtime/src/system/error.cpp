@@ -112,7 +112,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 // ENDGAME B.3.4b SYSTEM (4): `System::Error` is a real class with two static
 // members (runtime/types/system/Error.h). The mangling is the evidence --
 // `?SetText@Error@System@@SA...` is a static member of a class named

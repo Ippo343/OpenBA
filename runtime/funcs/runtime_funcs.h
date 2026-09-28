@@ -1,16 +1,9 @@
 #pragma once
-// Resolved function pointers for Runtime-x64.dll internal calls.
-// These are for functions called BY reimplemented Runtime DLL code (internal calls).
-// Function pointers called BY exe code (like ImageBuffer methods the UI panels call)
-// stay in engine/funcs/engine_funcs.h per existing convention.
-//
-// Resolved by RuntimeFuncsInit() after ResolveInit() succeeds.
+// Declarations of Runtime bodies that other Runtime modules call by name and
+// whose defining module's header could not carry them (B3R, R5). (B3R W2-RES:
+// RuntimeFuncsInit(), which resolved nothing, is deleted with its call.)
 
 #include <cstdint>
-
-// Resolve all Runtime DLL internal function pointers.
-// Call after ResolveInit(). Returns true on success.
-bool RuntimeFuncsInit();
 
 // ==== B3R RT-UI: a Runtime body reached by name from runtime/src/ui ====
 // Declared here (B3R_RULES R5: the defining module's header,

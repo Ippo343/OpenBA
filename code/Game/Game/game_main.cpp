@@ -26,7 +26,6 @@
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
 #include "io/Persistence.h"    // ENDGAME B.3.4 caller batch P
 #include "io/FileSystem.h"     // ENDGAME B.3.4a closing: FileSystem::ClosePackages

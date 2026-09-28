@@ -128,7 +128,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "scene_grid.h"
 
 // Wave 9 lane Q's allocator boundary. These two ARE the Enter/Allocate/Leave

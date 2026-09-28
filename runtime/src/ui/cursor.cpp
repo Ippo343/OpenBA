@@ -46,7 +46,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Cursor.h"
 #include "../../types/object/External.h"

@@ -47,7 +47,6 @@
 // ============================================================================
 
 #include "../../types/system/Thread.h"
-#include "../../funcs/rt_port.h"
 
 #include <cstdio>
 

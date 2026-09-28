@@ -30,7 +30,6 @@
 // Opt-in, off by default, and it prints on every failure branch — a silent log means
 // it never ran, not that it traded nothing.
 
-#include "resolve.h"
 #include <windows.h>
 #include "object/TypeInfo.h"
 #include "Dialog/exe_bodies.h"

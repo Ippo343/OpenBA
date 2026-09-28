@@ -37,10 +37,6 @@
 #include "../system/string.h"       // RtSystem::StringRefCount / RtMemFree
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
-#if !defined(BANISHED_UNIT_TEST)
-#include "../../funcs/rt_port.h"
-#endif
-
 namespace Object {
 
 // ============================================================================

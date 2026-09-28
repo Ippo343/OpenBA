@@ -37,7 +37,6 @@
 #include "Tutorial/exe_bodies.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "system/String.h"
 #include <cstdint>
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)

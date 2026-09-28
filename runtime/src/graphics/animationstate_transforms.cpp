@@ -81,7 +81,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"

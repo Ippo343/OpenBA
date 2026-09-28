@@ -178,7 +178,6 @@
 
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/io/Registry.h"
 #include "../../types/system/String.h"

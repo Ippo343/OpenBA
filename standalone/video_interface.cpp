@@ -47,7 +47,6 @@
 // reorder these two blocks.
 #include "video/Device.h"    // Video::Device, Video::Device::InterfaceSlot
 
-#include "resolve.h"
 #include "dx11_seam.h"
 
 #include <windows.h>

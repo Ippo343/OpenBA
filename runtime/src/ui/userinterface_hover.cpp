@@ -50,7 +50,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/Element.h"

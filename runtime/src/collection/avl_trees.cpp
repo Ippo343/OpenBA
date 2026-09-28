@@ -125,7 +125,6 @@
 #include <cstdio>
 
 #include "../../types/collection/Collection.h"
-#include "../../funcs/rt_port.h"
 #include "../../types/object/TypeInfo.h"
 #include "avl_trees.h"
 #include "set_avl.h"

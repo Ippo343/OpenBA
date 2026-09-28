@@ -71,7 +71,6 @@
 #include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
 #include "Action/PerformWork.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
-#include "resolve.h"
 #include "Component/HappinessComponent.h"   // ENDGAME B.3.9 CB: kHappinessMessageTargetTypeId
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (c7158 heal)

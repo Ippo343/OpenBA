@@ -46,7 +46,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/TableDescription.h"
 #include "../../types/ui/TableElement.h"
 #include "../../types/io/Serializer.h"

@@ -50,7 +50,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"        // Graphics::Animation -- block GC
 #include "../../types/system/Value.h"             // System::Time, ditto
 #include "../../types/graphics/AnimationState.h"

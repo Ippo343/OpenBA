@@ -42,7 +42,6 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
-#include "resolve.h"
 #include "force_work.h"                     // generic ForceWork core (probes + drive)
 #include "Component/ForesterComponent.h"     // caller batch CB6: TypeId()
 #include "Component/ForesterDescription.h"

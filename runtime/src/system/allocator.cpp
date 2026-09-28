@@ -64,7 +64,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/Error.h"   // B3R: FatalOutOfMemory calls Error by name
 

@@ -58,7 +58,6 @@
 // or out of frame at the silhouette. Do not simplify it.
 // ============================================================================
 
-#include "rt_port.h"
 #include "rt_libm.h"
 #include "../../types/math/Math.h"
 #include "../../types/volume/Volume.h"

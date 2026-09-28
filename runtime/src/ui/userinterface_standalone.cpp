@@ -49,7 +49,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/Value.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/audio/Audio.h"   // ENDGAME B.3.7 callers (K4): Audio::Scene

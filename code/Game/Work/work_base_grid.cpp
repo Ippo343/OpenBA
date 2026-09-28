@@ -10,7 +10,6 @@
 // against the Ghidra decompile.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "Work/Work.h"   // B.3.x W0: the work tree payload by name
 #include <cstdint>
 

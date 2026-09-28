@@ -46,7 +46,6 @@
 #include "WorldGeometry.h"   // caller batch CB6: RebuildDirtyChunks is the class's
 #include <atomic>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

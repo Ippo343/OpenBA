@@ -43,7 +43,6 @@
 // Site REGISTRATION into townMgr+0x100 (buildcomponent_state1.cpp) is unchanged and
 // still required — it is what makes a site visible to the finders behind the click.
 
-#include "resolve.h"
 #include <cstdint>
 
 

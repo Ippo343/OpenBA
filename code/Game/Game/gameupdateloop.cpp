@@ -47,7 +47,6 @@
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
-#include "resolve.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
 #include "perf_experimental.h" // PerfX non-retail perf knobs (standalone/)
 #include <cstdio>
@@ -105,7 +104,6 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 #include "scene_watch.h"
 #include "citizen_vitals.h"
 #include "mouse_inject.h"                 // BANISHED_MOUSE_INJECT hover/drag route (standalone/)
-#include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"          // kRdata_* (B3R)

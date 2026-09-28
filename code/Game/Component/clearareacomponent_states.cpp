@@ -43,7 +43,6 @@
 #include "Component/Component.h"   // B.3.x W0: Component::OnEvent by name
 #include "Work/Work.h"   // B.3.8 CB1a (Vtable)
 #include "Work/ClearArea.h"   // B.3.8 CB1a (Vtable)
-#include "resolve.h"
 #include "clearareacomponent_funcs.h"
 #include <cstdint>
 #include <cstdio>

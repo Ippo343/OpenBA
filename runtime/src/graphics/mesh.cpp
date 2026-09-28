@@ -128,7 +128,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G

@@ -46,7 +46,6 @@
 #include <cstdint>
 #include <cstring>
 #include <cmath>
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
 #include "../../types/utility/PerlinNoise.h"
 

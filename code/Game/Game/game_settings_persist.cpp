@@ -27,7 +27,6 @@
 //   byte 0x15 ShowCelcius        byte 0x16 ShowWeather  byte 0x17 AutoSlow
 
 #include "options.h"
-#include "resolve.h"
 #include "io/Persistence.h"   // ENDGAME B.3.4a closing: Persistence::Get/Set members
 #include <cstdint>
 #include <cstdio>

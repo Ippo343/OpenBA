@@ -173,7 +173,6 @@
 #include <cstring>
 #include <initializer_list>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<void*> bridge
 #include "../../types/system/String.h"
 #include "../../types/ui/Dialog.h"

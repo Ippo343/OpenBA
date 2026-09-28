@@ -81,7 +81,6 @@
 #include <cstddef>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/video/Device.h"             // ENDGAME B.3.9 VID: the class statics

@@ -157,7 +157,6 @@
 #include <cstddef>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 #include "../../types/system/Value.h"   // System::Time

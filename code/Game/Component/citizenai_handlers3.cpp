@@ -56,7 +56,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>

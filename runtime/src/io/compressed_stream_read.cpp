@@ -126,7 +126,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/system/Compression.h"
 #include "../../types/system/MemoryAllocator.h"

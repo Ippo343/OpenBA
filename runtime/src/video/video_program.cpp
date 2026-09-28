@@ -137,7 +137,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/VideoProgram.h"
 

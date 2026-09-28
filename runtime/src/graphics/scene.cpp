@@ -139,7 +139,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Scene.h"
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems

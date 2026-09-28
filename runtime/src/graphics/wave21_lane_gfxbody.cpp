@@ -32,7 +32,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/VideoProgram.h"   // ENDGAME B.3.5 caller batch

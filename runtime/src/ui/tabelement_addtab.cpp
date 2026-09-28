@@ -90,7 +90,6 @@
 #include <cstddef>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/ElementDescription.h"

@@ -50,7 +50,6 @@
 #include <cstddef>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
 // ENDGAME B.3.5 block E: the real `Graphics::Light` / `AmbientLight` /
 // `SpotLight` / `SunLight`. `Light.h` is AUTHORED FROM THE BODIES IN THIS FILE —

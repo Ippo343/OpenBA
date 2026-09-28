@@ -44,7 +44,6 @@
 // partition sequence, and substituting a different sort would reorder equal-priced
 // trade rows relative to retail. That is cosmetic, but it is not nothing, and it
 // would be invisible in testing.
-#include "resolve.h"
 #include "ui/UserInterface.h"
 #include "object/External.h"
 #include "system/String.h"

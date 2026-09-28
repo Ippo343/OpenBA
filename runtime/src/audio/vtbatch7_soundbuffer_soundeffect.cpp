@@ -125,7 +125,6 @@
 #include <cstring>
 #include <new>          // placement new of the two SoundBuffer Strings
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../../types/collection/Collection.h"   // rtcoll::MemAlloc / MemFree

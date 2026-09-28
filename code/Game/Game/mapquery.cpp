@@ -33,7 +33,6 @@
 #include "math/Math.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "resolve.h"
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include <cstdint>
 #include <cstdio>

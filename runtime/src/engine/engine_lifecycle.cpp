@@ -197,7 +197,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformStartup / PlatformShutdown
 #include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: the ctor door's named fields
@@ -950,8 +949,7 @@ extern "C" void RtEngineLifecycleSummary() {
                 g_shutdownRuns, g_shutdownSteps);
     if (g_startupRuns && g_startupFailAt)
         printf("[RtEngineLife] Engine::Startup FAILED at step %u -- the engine "
-                    "did not start; see the [RtUnresolved] lines above for the "
-                    "symbol, if any, that was missing.\n", g_startupFailAt);
+                    "did not start.\n", g_startupFailAt);
     if (g_shutdownRuns == 0)
         printf("[RtEngineLife] Engine::Shutdown ran 0 times -- STRUCTURAL, not a "
                     "regression: game_main.cpp calls ShutdownEngineStaged() instead. "

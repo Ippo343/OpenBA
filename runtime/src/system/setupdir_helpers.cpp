@@ -33,7 +33,6 @@
 #include <cstdio>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "string.h"

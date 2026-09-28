@@ -108,7 +108,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
 // RtString_GetLength / RtSystem_String_SubString / RtString_ReleaseInline, the

@@ -110,7 +110,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Device.h"
 #include "../../types/video/ImageBuffer.h"

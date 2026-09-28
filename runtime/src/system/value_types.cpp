@@ -54,7 +54,6 @@
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
 #include "../../types/system/Timer.h"   // B3R: the Timer statics by name
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
-#include "../../funcs/rt_port.h"
 #include "widestring.h"
 
 // ============================================================================

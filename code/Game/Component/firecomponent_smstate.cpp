@@ -36,7 +36,6 @@
 // Decompiled READ-ONLY from Application-x64.exe.
 
 #include "system/Value.h"
-#include "resolve.h"
 #include <cstdint>
 #include "Component/firecomponent_funcs.h"
 #include "Component/controller_state_table.h"
