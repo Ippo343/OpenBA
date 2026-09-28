@@ -131,7 +131,8 @@ using rt::io::Stream;
 // The 22 bodies moved onto the real class `IO::Serializer`
 // (runtime/types/io/Serializer.h, bodies in serializer_class.cpp, which is
 // registry-free so `make unit` can drive the real class). What is left here is
-// the 22 registered entry points and `RtIoSerializerRegister()`.
+// the `RtSerializer_*` forwarders the exe's Serializer import slots are bound
+// to; B3R RT-IO deleted every registration row and `RtIoSerializerRegister()`.
 //
 // *** EVERY DOOR DELEGATES WITH A PLAIN, UNQUALIFIED CALL, AND THAT IS NOT AN
 // OVERSIGHT. *** Blocks 1 and 2 had to write the delegation qualified —
@@ -291,18 +292,9 @@ int RtSerializer_GetVersion(Serializer* self) {
 // without anything being wrong. The log line prints the vtable pointer so the
 // two cases are distinguishable.
 //
-// B.3.4 block 3: the body is now `IO::Serializer::Serializer(Stream&, int)`
-// (serializer_class.cpp). The door PLACEMENT-CONSTRUCTS into the caller's own
-// bytes, which is the only shape that preserves what matters here: the caller
-// supplied the storage, the storage keeps its address, and the 12-byte header
-// is consumed or emitted at exactly this point in the caller's stream
-// sequence — not one statement earlier or later. It is also the shape
-// B34_RULES §7.3 gives the 187 exe-side call sites, so door and caller agree.
-Serializer* RtSerializer_Ctor(Serializer* self, Stream* stream, int version) {
-    ::new (static_cast<void*>(self))                              // B.3.4 bridge
-        IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), version);
-    return self;   // MOV RAX,RBX
-}
+// B.3.4 block 3: the body is `IO::Serializer::Serializer(Stream&, int)`
+// (serializer_class.cpp). B3R RT-IO deleted the door once its last reader
+// (runtime/src/ui/dialog_settings.cpp) called the constructor directly.
 
 // ============================================================================
 // dtor — NO ORACLE
@@ -319,18 +311,3 @@ Serializer* RtSerializer_Ctor(Serializer* self, Stream* stream, int version) {
 // Note retail does NOT null self->readerWriter afterwards. Kept.
 
 } // extern "C"
-
-// ============================================================================
-// Registration
-// ============================================================================
-//
-int RtIoSerializerRegister() {
-    // B3R RT-IO: the other 25 rows had no reader left (every Serializer caller
-    // calls the member); the ctor row is read by runtime/src/ui/dialog_settings.cpp
-    // and stays until that reader converts (W2 deletes it).
-    RegisterRuntimeExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z",     (void*)&RtSerializer_Ctor);
-
-    const int total = 1;
-    printf("[RtIO/Serializer] %d exports registered\n", total);
-    return total;
-}

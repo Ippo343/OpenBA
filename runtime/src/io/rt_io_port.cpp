@@ -40,7 +40,6 @@
 #include "../../types/io/Modification.h"
 #include "../../types/io/Persistence.h"
 
-extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // Wave 19 lane PERSIST: the save-ENUMERATION and request-ISSUE half of
@@ -176,7 +175,6 @@ void RtIoPortInit() {
     // static from here on (name door, address door, manifest publish).
 
     int n = 0;
-    n += RtIoSerializerRegister();
     n += RtIoPersistenceRegister();
     n += RtIoPersistenceSavesRegister();
     n += RtIoFileSystemRegister();

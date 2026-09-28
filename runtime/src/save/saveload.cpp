@@ -1051,7 +1051,6 @@ int RtSaveLoadRegister() {
     int n = 0;
     RegisterRuntimeExport("??0SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Ctor); ++n;
     RegisterRuntimeExport("??0SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Ctor); ++n;
-    RegisterRuntimeExport("??1SavedState@Save@@QEAA@XZ", (void*)&RtSave_SavedState_Dtor); ++n;
     // WAVE 9 LANE SYS2. `QEAA`, the NON-VIRTUAL spelling -- SaveLoad has no
     // vtable (the header proves it: the ctor writes an int at +0x00 and the
     // DLL exports no ??_7SaveLoad@Save@@6B@), so `UEAA` here would be a
@@ -1070,21 +1069,6 @@ int RtSaveLoadRegister() {
     // internals by address grows the cutover surface; owning the internals
     // instead is the version of that which shrinks it.
     RegisterRuntimeAddr(0x1800c3f40, (void*)&SaveInfo_Dtor);
-    // Wave 8 lane E: engine_funcs.cpp's ResolveExport call for CheckMod was a
-    // phantom-name typo (QEAAHHI, not this real QEBAHHH) that had been dead
-    // since it was written; fixed at its source there. Registering by
-    // address too closes the WAVE7.md §3 failure mode where a phantom-name
-    // fix, once corrected, is still the ONLY door — a second port reached by
-    // address stays correct even if the name is mistyped again.
-    // WAVE 23 LANE TAIL. Both doors; the banner above records why neither
-    // breaks ProbeSaveLoadSingleton's oracle.
-    // Wave 14 lane AUTONAME. Registered both ways from the start (not a
-    // retrofit): saveload_update.cpp's UpdateSave/UpdateList already call
-    // this by NAME through RT_EXPORT_ONCE (:1159, :1753), so the address door
-    // closes the same silent-reversion class those two call sites would
-    // otherwise be exposed to if the export name were ever mistyped again.
-    // Wave 8 lane E: same phantom-name fix as CheckMod above, applied to
-    // engine_funcs.cpp's SetSaveName resolve; registered by address too.
     return n;
 }
 

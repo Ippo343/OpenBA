@@ -14,9 +14,8 @@
 // These functions are reached two ways, and that is deliberate — they are the
 // SAME function pointer both times, not two ports of one class:
 //
-//   1. RegisterRuntimeExport(<mangled>, &RtSerializer_X) in
-//      RtIoSerializerRegister(). Flips every ResolveExport call site
-//      (engine/funcs/engine_funcs.cpp's fn_* table, and any direct caller).
+//   1. (B3R RT-IO: the RegisterRuntimeExport rows and RtIoSerializerRegister()
+//      are gone -- no reader was left; callers use IO::Serializer's members.)
 //
 //   2. RegisterDispatchSlot(0x1401524xx, &RtSerializer_X) in
 //      standalone/address_registry.cpp. The exe's retail-shaped code reads
@@ -47,12 +46,6 @@
 
 extern "C" {
 
-// ---- lifetime --------------------------------------------------------------
-// The ctor returns `this` in RAX, as every MSVC ctor does. It also CONSUMES OR
-// EMITS 12 BYTES of stream (see runtime/types/io/Serializer.h) — it is not a
-// cheap wrapper construction.
-rt::io::Serializer* RtSerializer_Ctor(rt::io::Serializer* self, rt::io::Stream* stream, int version);
-
 // ---- accessors -------------------------------------------------------------
 int                     RtSerializer_GetVersion (rt::io::Serializer* self);
 
@@ -81,7 +74,3 @@ void RtSerializer_Serialize_UIntArr  (rt::io::Serializer* self, int n, uint32_t*
 void RtSerializer_Serialize_FloatArr (rt::io::Serializer* self, int n, float*    d, const char* name);
 
 } // extern "C"
-
-// Wave 4 lane A registration hook, called from rt_io_port.cpp under
-// the old DLL-era switch. Returns the number of exports registered.
-int RtIoSerializerRegister();
