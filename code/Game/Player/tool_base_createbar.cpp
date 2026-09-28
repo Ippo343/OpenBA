@@ -43,7 +43,6 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "Dialog/BuildRequirementUI.h"
 #include "Component/ToolbarDescription.h"
@@ -60,45 +59,19 @@
 #include "ui/ImageElement.h"   // UI::ImageElement::TypeId() (ENDGAME B.3.9 TR)
 #include <new>
 #include "Player/exe_bodies.h"
+#include "volume/Volume.h"
+#include "object/TypeInfo.h"
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// By-value Math/Volume/String helpers not present in engine_funcs.h. Resolved by
-// mangled export name from Runtime-x64.dll (ASLR handled by ResolveExport). Names
-// recovered from the exe dispatch-slot name tables (0x140152900 / 0x140152950 /
-// 0x140151470 / 0x1401528a8 / 0x140151308).
+// Called by name (the exe dispatch slots 0x140152950 / 0x1401528a8 name them):
+//   Box::GetCorners(this, outVec3x8)  -> RtVolume_Box_GetCorners
+//   Rectangle::Rectangle(this)        -> RtVolume_Rectangle_Ctor (volume/Volume.h)
+//   0x1400fec70 PlayerScreenRect_BuildCorners_ec70 -- 4 footprint corners from a tile rect
+//   0x1400fe960 PlayerScreenRect_AccumulateRect_fe960 -- N corners -> a screen rectangle
+//   (Player/exe_bodies.h)
 // ---------------------------------------------------------------------------
-// Vector3::Min(this, retbuf, other) -> retbuf (member, hidden retbuf, componentwise min)
-// Transform::operator*(this, retbuf, vec) -> retbuf (member, transforms a point)
-// Box::GetCorners(this, outVec3x8) — fills 8 Vector3 (member, no retval)
-typedef void (*BoxGetCorners_t)(const void* self, void* outCorners);
-// Rectangle::Rectangle(this) — default ctor
-typedef void* (*RectCtor_t)(void* self);
-// FUN_1400fec70 (REG) — build 4 footprint corners from a tile rect
-typedef uint32_t (*Ec70_t)(uint64_t, int, int, int, int, float*);
-// FUN_1400fe960 (REG) — project N corners into a screen rectangle
-typedef uint8_t (*Fe960_t)(uint64_t, uint32_t, float*, void*);
-
-BoxGetCorners_t  s_fn_BoxGetCorners = nullptr;
-RectCtor_t       s_fn_RectCtor     = nullptr;
-Ec70_t           s_fn_ec70         = nullptr;
-Fe960_t          s_fn_fe960        = nullptr;
-
-void EnsureCreateBarExports() {
-    static bool s_ready = false;
-    if (s_ready) return;
-    s_fn_BoxGetCorners = reinterpret_cast<BoxGetCorners_t>(ResolveExport("?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z"));
-    s_fn_RectCtor      = reinterpret_cast<RectCtor_t>(ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
-    // ec70 / fe960 are exe code (registered in standalone).
-    s_fn_ec70  = reinterpret_cast<Ec70_t>(ResolveAddr(Module::Exe, 0x1400fec70));
-    s_fn_fe960 = reinterpret_cast<Fe960_t>(ResolveAddr(Module::Exe, 0x1400fe960));
-    // Latch once everything critical resolved (retry next call otherwise). The
-    // by-value math/rect helpers + fe960 are the ones that would crash if null.
-    if (s_fn_BoxGetCorners && s_fn_RectCtor &&
-        s_fn_ec70 && s_fn_fe960)
-        s_ready = true;
-}
 
 // DAT_1401c4d40 — "BuildRequirementUI" (parent UI::DialogController). The CreateBar
 // controller type used to filter GetController. RegisterType_BuildRequirementUI.
@@ -182,7 +155,7 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
             uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();  // B.3.8 bridge
             if (t == tid) {
                 void* obj = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                comp = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tid)) ? obj : nullptr;
+                comp = Object::IsDerivedFromNullSafe(obj, tid) ? obj : nullptr;
                 break;
             }
         }
@@ -318,10 +291,10 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
     void* obj = *reinterpret_cast<void**>(elemIBP);
 
     uint32_t imgTid = ImageElementTypeId();
-    void* ptr = (obj && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, imgTid)) ? obj : nullptr;
+    void* ptr = (obj && Object::IsDerivedFromNullSafe(obj, imgTid)) ? obj : nullptr;
 
     uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+    new (&ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
 
     if (ibp != 0) {
@@ -339,7 +312,8 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
 // corner componentwise to (1e6, 1e6, 2.5) then applying the mesh Transform.
 // Returns 8 (the corner count). param_1 is a dummy the original never reads.
 extern "C" uint32_t UpdateToolUI_ebb0(void* /*dummy*/, void* box, void* transform, float* outCorners) {
-    if (s_fn_BoxGetCorners) s_fn_BoxGetCorners(box, outCorners);
+    RtVolume_Box_GetCorners(static_cast<const struct Box*>(box),
+                            reinterpret_cast<Math::Vector3*>(outCorners));
     const float clampConst[3] = { 1000000.0f, 1000000.0f, 2.5f };  // 0x49742400,0x49742400,0x40200000
     float* corner = outCorners;
     for (int i = 0; i < 8; i++) {
@@ -369,8 +343,6 @@ extern "C" uint32_t UpdateToolUI_ebb0(void* /*dummy*/, void* box, void* transfor
 extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void* param_4,
                                   char param_5, char param_6, char param_7, int param_8,
                                   int param_9, int param_10, void* param_11, void* param_12) {
-    EnsureCreateBarExports();
-
     // No dialog open -> nothing to update.
     if (*reinterpret_cast<void**>(param_1) == nullptr) return;
     void* dialog = *reinterpret_cast<void**>(param_1);
@@ -383,10 +355,10 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     void* ctrl = nullptr;
     if (ctrlBuf != 0) {
         void* c = reinterpret_cast<void*>(ctrlBuf);
-        if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, ctrlTid)) ctrl = c;
+        if (Object::IsDerivedFromNullSafe(c, ctrlTid)) ctrl = c;
     }
     uint64_t ctrlIBP = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ctrlIBP) ::Object::InternalBasePtr(
+    new (&ctrlIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(ctrl));   // B.3.3 bridge
     // One-shot diagnostic: confirm the CreateBar controller resolved (type-ids correct)
     // — else the populate silently no-ops here. Logs once; A/B-safe (only when fc60 runs).
@@ -446,8 +418,8 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
         // Drag rectangle: project start/end cells to world corners.
         int mapW = *reinterpret_cast<int*>(
             *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8));
-        if (s_fn_ec70 && mapW != 0) {
-            cornerCount = s_fn_ec70(
+        if (mapW != 0) {
+            cornerCount = PlayerScreenRect_BuildCorners_ec70(
                 static_cast<uint64_t>(static_cast<uint32_t>(param_9 % mapW)),  // p1 (unused by ec70)
                 param_9 % mapW,     // col_start
                 param_9 / mapW,     // row_start
@@ -459,8 +431,8 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
 
     // --- Project corners into a screen rectangle ---
     float rect[4] = {};   // Volume::Rectangle {minX, minY, maxX, maxY}
-    if (s_fn_RectCtor) s_fn_RectCtor(rect);
-    uint8_t ok = s_fn_fe960 ? s_fn_fe960(0, cornerCount, corners, rect) : 0;
+    RtVolume_Rectangle_Ctor(reinterpret_cast<struct Rectangle*>(rect));
+    uint8_t ok = PlayerScreenRect_AccumulateRect_fe960(0, cornerCount, corners, rect);
     if (ok == 0) return;
 
     // --- Read the dialog root bounds (+0x68 left, +0x6c top, +0x70 right, +0x74 bottom) ---

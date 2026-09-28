@@ -13,7 +13,8 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "object/TypeInfo.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.8 callers)
@@ -71,12 +72,11 @@
 //   placementtool.cpp: same shape.
 //
 // Closure (all satisfied):
-//   - fn_UI_CloseDialog, fn_InternalBasePtr_Ctor, fn_IsDerivedFrom,
-//     fn_MemAlloc, fn_UI_AddDialog  — engine_funcs exports; UI::DialogInstance's
-//     real ctor (block RB)
+//   - UserInterface::CloseDialog / AddDialog, InternalBasePtr ctor,
+//     Object::IsDerivedFromNullSafe, System::MemoryAllocator::MemAlloc — called by
+//     name; UI::DialogInstance's real ctor (block RB)
 //   - ::Object::ExternalFactory::FindOrLoad — member call (B.3.3)
-//   - g_pGameWorldSingleton, g_pExternalFactorySingleton, UI::Dialog::TypeId(),
-//     g_pMemAllocSingleton  — singleton globals
+//   - g_pGameWorldSingleton, ExternalFactory::_singleton, UI::Dialog::TypeId()
 //   - DWORD_1401c7f58  — exe type-id storage global (ResolveAddr, lazily)
 //   No unregistered exe sub-calls.
 extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint64_t param_3) {
@@ -89,7 +89,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
             reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&local));
-        if (fn_InternalBasePtr_Ctor) new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *slot = local;
     }
 
@@ -106,18 +106,14 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
                 ::Object::ExternalFactory::_singleton;  // B.3.3 bridge
             obj = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname)));
         }
-        if (obj && fn_IsDerivedFrom &&
-            fn_IsDerivedFrom(obj, UI::Dialog::TypeId())) {
+        if (obj && Object::IsDerivedFromNullSafe(obj, UI::Dialog::TypeId())) {
             resource = obj;
         }
     }
 
     // (3) Allocate + construct the DialogInstance (the real class: its compiler
     // table is the one retail's copy at 0x14015f5a0 describes).
-    void* dialog = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
-        dialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
-    }
+    void* dialog = System::MemoryAllocator::MemAlloc(0xB8, 8);
     void* dialogToWrap = nullptr;
     if (dialog) {
         ::new (dialog) UI::DialogInstance(
@@ -132,7 +128,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     // (4) Wrap into IBP, store, and add to the UI.
     {
         uint64_t newIBP = 0;
-        if (fn_InternalBasePtr_Ctor) new (&newIBP) ::Object::InternalBasePtr(
+        new (&newIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(dialogToWrap));   // B.3.3 bridge
         *slot = newIBP;
         uint64_t addIBP = newIBP;
@@ -156,7 +152,7 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
                 uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (t == tid) {
                     void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                    if (fn_IsDerivedFrom) fn_IsDerivedFrom(c, tid);  // probe; result discarded
+                    (void)Object::IsDerivedFromNullSafe(c, tid);  // probe; result discarded
                     break;
                 }
             }

@@ -24,7 +24,8 @@
 // Port is 1:1 with the Ghidra decompile + disasm-verified — do NOT "improve".
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "system/MemoryAllocator.h"
+#include "Action/exe_bodies.h"
 #include <cstdint>
 #include <cstring>
 #include "Player/exe_bodies.h"
@@ -33,45 +34,17 @@
 extern "C" int64_t PlayerTrade_Rot_15000(int64_t* root, int64_t node);
 extern "C" int64_t PlayerTrade_Rot_14ed0(int64_t* root, int64_t node);
 
-// The radius tessellation (0x1400ace40) is resolved at runtime via ResolveAddr (NOT a
-// link-time extern): it is a large geometry builder still under verification (draft in
-// notes/wave5_drafts/ace40.draft.cpp). Until it is registered, ResolveAddr returns null
-// and b0d80 skips the tessellation (manages the slot but emits no geometry) — safe.
+// The radius tessellation 0x1400ace40 (TradeWork_impl_ace40, tool_base_highlight_tess.cpp)
+// and the tile-entry array grow 0x14001fa80 (Pf_VectorResize60_fa80, Action/exe_bodies.h)
+// are called by name; so is the static MemAlloc/MemFree pair (slots 0x140152b60 /
+// 0x140152b68) -> System::MemoryAllocator.
 namespace {
-
-typedef void (*Ace40_t)(int64_t param_1, int param_2, char param_3, int param_4, int param_5);
-Ace40_t s_ace40 = nullptr;
-
-// ---- static System::MemoryAllocator MemAlloc/MemFree (2-arg static form via slot
-// 0x140152b60 / 0x140152b68, ResolveExport fallback) — mirrors tool_base_trade.cpp. ----
-typedef void* (*MemAllocStatic_t)(uint64_t size, uint32_t align);  // real export is SAPEAX_KH (uint64 size, int align); SAPEAXII does not exist
-typedef void  (*MemFreeStatic_t)(void* ptr);                       // SAXPEAX
-MemAllocStatic_t s_memAlloc = nullptr;
-MemFreeStatic_t  s_memFree  = nullptr;
-bool s_memInit = false;
-void EnsureMem() {
-    if (s_memInit) return;
-    auto slot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x140152b60));
-    if (!s_memAlloc) s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
-        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x140152b68));
-    if (!s_memFree) s_memFree = reinterpret_cast<MemFreeStatic_t>(
-        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    s_memInit = true;
-}
 
 // AVL node field accessors (offsets verified against decompile/disasm).
 inline int64_t&  NodeParent(int64_t n) { return *reinterpret_cast<int64_t*>(n + 0x18); }
 inline int64_t&  NodeLeft(int64_t n)   { return *reinterpret_cast<int64_t*>(n + 0x20); }
 inline int64_t&  NodeRight(int64_t n)  { return *reinterpret_cast<int64_t*>(n + 0x28); }
 
-// 0x14001fa80 TradeWork_impl_fa80 (registered) — grows the tile-renderer entry array.
-typedef void (*Fa80_t)(int64_t* arrHolder, int newCount, void* templateEntry);
-Fa80_t s_fa80 = nullptr;
 
 } // namespace
 
@@ -83,8 +56,7 @@ extern "C" void TradeWork_helper_14b00(int64_t /*ctx*/ param_1, void* node) {
     if (node != nullptr) {
         TradeWork_helper_14b00(param_1, *reinterpret_cast<void**>((int64_t)node + 0x20));
         TradeWork_helper_14b00(param_1, *reinterpret_cast<void**>((int64_t)node + 0x28));
-        EnsureMem();
-        if (s_memFree) s_memFree(node);
+        System::MemoryAllocator::MemFree(node);
     }
 }
 
@@ -96,8 +68,7 @@ extern "C" void TradeWork_helper_14b00(int64_t /*ctx*/ param_1, void* node) {
 extern "C" int64_t TradeWork_impl_1f850(int64_t /*ctx*/ param_1, const void* keySrc,
                                         int64_t parent) {
     (void)param_1;
-    EnsureMem();
-    uint32_t* p = s_memAlloc ? reinterpret_cast<uint32_t*>(s_memAlloc(0x38, 8)) : nullptr;
+    uint32_t* p = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (p == nullptr) return 0;
     const uint32_t* src = reinterpret_cast<const uint32_t*>(keySrc);
     p[0] = src[0];           // +0x00
@@ -327,8 +298,6 @@ extern "C" int TradeWork_impl_0d80(int64_t param_1, int param_2, int param_3, in
                                    uint64_t /*param_18 unused*/, uint8_t param_19) {
     if (param_8 == 0) return -1;
 
-    if (!s_fa80) s_fa80 = reinterpret_cast<Fa80_t>(ResolveAddr(Module::Exe, 0x14001fa80));
-
     int iVar3 = 0;
     int iVar2 = *reinterpret_cast<int*>(param_1 + 0x1f8);          // count
     bool grew = false;
@@ -348,11 +317,11 @@ extern "C" int TradeWork_impl_0d80(int64_t param_1, int param_2, int param_3, in
         uint8_t tmpl[0x60];
         std::memset(tmpl, 0, sizeof(tmpl));
         *reinterpret_cast<int32_t*>(tmpl + 0x28) = -1;
-        if (s_fa80) s_fa80(reinterpret_cast<int64_t*>(param_1 + 0x1f0),
-                           *reinterpret_cast<int*>(param_1 + 0x1f8) + 1, tmpl);
-        EnsureMem();
-        if (s_memFree) { s_memFree(*reinterpret_cast<void**>(tmpl + 0x18));
-                         s_memFree(*reinterpret_cast<void**>(tmpl + 0x08)); }
+        Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(param_1 + 0x1f0),
+                               *reinterpret_cast<int*>(param_1 + 0x1f8) + 1,
+                               reinterpret_cast<uint64_t*>(tmpl));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(tmpl + 0x18));
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(tmpl + 0x08));
         iVar3 = iVar2;
         grew = true;
     }
@@ -376,8 +345,7 @@ haveSlot:
     *reinterpret_cast<uint32_t*>(entry + 0x58) = param_14;
     *reinterpret_cast<uint8_t*>(entry + 0x5c) = 1;
     *reinterpret_cast<uint8_t*>(entry + 0x5d) = param_19;
-    if (!s_ace40) s_ace40 = reinterpret_cast<Ace40_t>(ResolveAddr(Module::Exe, 0x1400ace40));
-    if (s_ace40) s_ace40(param_1, iVar3, param_15, param_16, param_17);
+    TradeWork_impl_ace40(param_1, iVar3, param_15, param_16, param_17);
     return iVar3;
 }
 
