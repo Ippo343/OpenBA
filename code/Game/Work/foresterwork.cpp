@@ -11,6 +11,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/exe_bodies.h"
 #include "Work/ForesterWork.h"
 #include "Work/foresterwork_funcs.h"
 #include "options.h"

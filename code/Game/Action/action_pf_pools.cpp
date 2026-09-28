@@ -3,6 +3,7 @@
 //
 // Faithful 1:1 ports of the A*/pathfinder node-pool free-list grow helpers and the
 // associated dynamic-array (vector) resize/copy/free helpers. In standalone these are
+#include "Action/exe_bodies.h"
 // reached via ResolveAddr(Module::Exe, 0xADDR) from the pathfinder / trade-component /
 // build-structure closures; unless registered they resolve to 0 and the call is silently
 // skipped. None of this is on the autostart path, so a *wrong* port is undetectable

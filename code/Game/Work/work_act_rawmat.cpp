@@ -3,6 +3,7 @@
 //
 // Two exe helpers that build the action sequence for a citizen "gather raw
 // material" / "fishing" work task. Each allocates a chain of Action objects
+#include "Work/exe_bodies.h"
 // (SendComponentMessage / ShowTool / CompleteTask / CreateRawMaterial /
 // PerformWork / MoveTo) and appends InternalBasePtr wrappers to the
 // CitizenAIComponent task action list (citizen+0x278 -> aiComp, list base

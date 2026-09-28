@@ -9,6 +9,7 @@
 // Methods implemented:
 //   Serialize (vtable slot 3, 0x1400ec560)
 //   Execute   (vtable slot 4, 0x1400ebe40)
+#include "Work/exe_bodies.h"
 //   OnComplete(vtable slot 6, 0x1400ebdf0)
 //   OnCancel  (vtable slot 7, 0x1400ebdb0)
 //   Cleanup   (vtable slot 8, 0x1400ec480)

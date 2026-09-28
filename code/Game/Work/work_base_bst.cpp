@@ -2,6 +2,7 @@
 // Shared Work "simple BST" (AVL) family — citizen-AI work-tracking tree.
 //
 // These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from many
+#include "Work/exe_bodies.h"
 // code/Game/Work/*.cpp. In standalone mode they resolve to 0 (silently skipped) unless
 // registered. Registration point: RegisterWorkBstBatch in standalone/reg_work_bst.cpp.
 //

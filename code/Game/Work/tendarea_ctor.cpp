@@ -6,6 +6,7 @@
 // unported leaf in OrchardComponent state 10's closure: both the state-10 enter
 // (0x140050e30) and its per-frame seasonal re-post (0x140050c00) build the tending work
 // item with `TendArea_CopyCtor(MemAlloc(0x60, 8), &orchard->+0x10, 1)`.
+#include "Work/exe_bodies.h"
 //
 // ABI, read from the disassembly at 0x1400f5a80 (not inferred):
 //   TendArea* __fastcall TendArea_CtorFromEntity(void* mem /*RCX*/,

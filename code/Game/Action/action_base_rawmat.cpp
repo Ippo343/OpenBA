@@ -8,6 +8,7 @@
 // (pure array ops, MemAlloc/MemFree, or engine_funcs export-resolved pointers) — i.e.
 // whose entire sub-callee closure is already satisfiable. The registration point is
 // RegisterActionRawMatBatch() in standalone/reg_action_rawmat.cpp.
+#include "Action/exe_bodies.h"
 //
 // TAIL LANDED (this file): 0x140129760 PositionEntity and 0x140088ef0 RegisterRawMaterial
 // — the prior "deferred" note for both was STALE. PositionEntity's getters (0x140004680,

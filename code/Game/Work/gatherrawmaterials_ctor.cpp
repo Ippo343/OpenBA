@@ -8,6 +8,7 @@
 // Layout produced (see engine/types/BuildActions.h : GatherRawMaterials):
 //   +0x00 vtable = 0x140161420
 //   +0x10..0x40 Work base (initialised by Work_Ctor25 @0x1400f72e0)
+#include "Work/exe_bodies.h"
 //   +0x48 int[] ptr  / +0x50 count(=matCount)  "amount already present per material"
 //   +0x58 int[] ptr  / +0x60 count(=matCount)  "delivered per material" (all 0)
 //   +0x68 BST root (0) / +0x70 count (0)

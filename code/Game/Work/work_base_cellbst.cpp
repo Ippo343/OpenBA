@@ -3,6 +3,7 @@
 //
 // Structurally identical to the simple BST in work_base_bst.cpp, but with a wider node
 // (0x30 bytes) carrying an int cell key + an Object IBP, and shifted child/metadata
+#include "Work/exe_bodies.h"
 // offsets. Resolved via ResolveAddr(Module::Exe, 0xADDR) from clear-area / harvest /
 // plant Work classes; registered via RegisterWorkCellBstBatch in reg_work_cellbst.cpp.
 //

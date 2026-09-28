@@ -3,6 +3,7 @@
 //
 // Like work_base_reimpl.cpp, these are exe sub-helpers resolved via
 // ResolveAddr(Module::Exe, 0xADDR) from code/Game/Work/*.cpp. They resolve to 0
+#include "Work/exe_bodies.h"
 // (silently skipped) unless registered. This file provides faithful 1:1 reimplementations and
 // a single registration point (RegisterWorkAccessorBatch in
 // standalone/reg_work_accessor.cpp) so the shared call sites fire real logic.

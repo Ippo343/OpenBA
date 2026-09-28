@@ -47,6 +47,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/exe_bodies.h"
 
 // Spawn side (pasturecomponent_spawn.cpp).
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);

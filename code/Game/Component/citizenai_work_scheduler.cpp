@@ -35,6 +35,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/exe_bodies.h"
 
 // ---- resolved exe helpers --------------------------------------------------------
 typedef void  (*WS_Rebalance_t)(void* treeField, void* pInsertedSlot);          // a8c0/3480/4b40

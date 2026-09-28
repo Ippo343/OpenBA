@@ -3,6 +3,7 @@
 //
 // Faithful 1:1 port of ShowTool_Action_Ctor4 @ 0x1400c1530 (Application-x64.exe),
 // exposed here as WorkAct_HarvestAreaCtor_c1530. Despite the (mislabeled) Ghidra
+#include "Work/exe_bodies.h"
 // name, this is a LARGE work-action-queue builder (~0x948 bytes): it builds the
 // citizen's action chain on the CitizenAIComponent task list and stores it on the
 // entity (citizen+0x278 -> aiComp, list base aiComp+0x48; the SendComponentMessage
