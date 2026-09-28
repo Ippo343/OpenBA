@@ -291,11 +291,7 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32
                     0.0f
                 };
                 float outPos[3] = {};
-                if (fn_MapGetTerrainPos) {
-                    fn_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);
-                } else {
-                    outPos[0] = inXY[0]; outPos[1] = inXY[1]; outPos[2] = 0.0f;
-                }
+                Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
                 uintptr_t camTarget = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0xE0);
                 *(float*)(camTarget + 0x1C) = outPos[0];
                 *(float*)(camTarget + 0x20) = outPos[1];
