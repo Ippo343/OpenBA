@@ -38,14 +38,16 @@ public:
     void     Command(int command) override;                       // [14] 0x140044930 PORT GAP
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint8_t  isEnabled;    // +0x28 (retail ctor 1; the tree's zero is kept, PORT GAP)
+    bool     isEnabled;    // +0x28 (retail ctor 1; the tree's zero is kept, PORT GAP)
     uint8_t  _pad29[7];    // +0x29
-    void*    field30;      // +0x30 int array data (freed by the retail dtor)
-    void*    field38;      // +0x38 its count / capacity
+    int32_t* field30;          // +0x30 Array<int32> data (freed by the retail dtor)
+    int32_t  field30Count;     // +0x38 its size (Persist 0x1400449d0 serializes it)
+    int32_t  field30Capacity;  // +0x3c its capacity
 };
 
 static_assert(sizeof(AutoPickupComponent) == 0x40, "AutoPickupComponent is 0x40 (create 0x1400033c0)");
 static_assert(alignof(AutoPickupComponent) == 8, "AutoPickupComponent alignment");
 static_assert(offsetof(AutoPickupComponent, isEnabled) == 0x28, "");
 static_assert(offsetof(AutoPickupComponent, field30) == 0x30, "");
-static_assert(offsetof(AutoPickupComponent, field38) == 0x38, "");
+static_assert(offsetof(AutoPickupComponent, field30Count) == 0x38, "");
+static_assert(offsetof(AutoPickupComponent, field30Capacity) == 0x3c, "");
