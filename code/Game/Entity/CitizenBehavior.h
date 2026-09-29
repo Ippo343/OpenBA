@@ -37,6 +37,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "collection/Collection.h"   // Collection::Array<int32_t> (the +0x140 buckets)
 
 class ComponentEntity;
 class CemeteryComponent;
@@ -52,6 +53,7 @@ class BuildComponent;
 class WellComponent;
 class DiseaseComponent;
 class ComponentDescription;
+class Map;
 
 // ============================================================
 // ProfessionResourceEntry — one element of the +0x170 array (stride 0x20).
@@ -210,8 +212,10 @@ public:
     int32_t* field_0x130;                  // +0x130 Array of {int32, int32} pairs (0x140017f60)
     int32_t  field_0x138;                  // +0x138 count
     int32_t  field_0x13C;                  // +0x13C capacity
-    void*    field_0x140;                  // +0x140 Array of 0x10-byte elements, each an inner int Array
-                                           //        (0x140017640; version > 4)
+    Collection::Array<int32_t>* field_0x140; // +0x140 Array of 0x10-byte elements, each an inner int Array
+                                           //        (0x140017640; version > 4): the COARSE water
+                                           //        index, (W>>3)^2 buckets of water ids (< 0: a
+                                           //        well, -1-id into +0xE0; >= 0: a +0x130 pair)
     int32_t  field_0x148;                  // +0x148 count
     int32_t  field_0x14C;                  // +0x14C capacity
     void*    field_0x150;                  // +0x150 Array of 0x10-byte elements, each an inner int Array;
@@ -242,6 +246,12 @@ public:
     void CountResources();                 // 0x140089ed0
     void CheckThresholds(int64_t* deltaTime); // 0x14008c100
     void CollectStats();                   // 0x14008a730
+    // The water search FireWork's Execute (slot 4) runs from the citizen's cell:
+    // an expanding ring over the +0x140 coarse index, closest reachable well or
+    // water pair wins; writes two terrain positions, returns 1 when it did.
+    int64_t FindWater(uint32_t centreCell, int extent, float* outA, float* outB);  // 0x1400881d0
+    void ScanWaterCell(Map* map, int coarseCell, int ringX, int ringY, uint32_t srcCell,
+                       int* bestCost, int* bestId, WellComponent** bestWell);    // 0x140088730
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");
@@ -307,6 +317,7 @@ static_assert(offsetof(CitizenBehavior, field_0x130) == 0x130, "");
 static_assert(offsetof(CitizenBehavior, field_0x138) == 0x138, "");
 static_assert(offsetof(CitizenBehavior, field_0x13C) == 0x13C, "");
 static_assert(offsetof(CitizenBehavior, field_0x140) == 0x140, "");
+static_assert(sizeof(Collection::Array<int32_t>) == 0x10, "+0x140 bucket stride 0x10 (0x140088730)");
 static_assert(offsetof(CitizenBehavior, field_0x148) == 0x148, "");
 static_assert(offsetof(CitizenBehavior, field_0x14C) == 0x14C, "");
 static_assert(offsetof(CitizenBehavior, field_0x150) == 0x150, "");

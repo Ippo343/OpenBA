@@ -25,9 +25,6 @@ extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP);  // no r
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)
 
-// ---- firework_search.cpp
-int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_3, float* param_4, float* param_5);  // 0x1400881d0
-
 // ---- foresterwork.cpp
 bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)
 extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)

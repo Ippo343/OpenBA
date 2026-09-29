@@ -36,6 +36,7 @@
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
 #include "Game/ProfessionList.h"
 #include <cstdint>
 #include <cstring>
@@ -105,7 +106,7 @@ int FireWork::Execute(void* citizenIBPArg, void* time) {
 
     // Get map data (GameUpdateLoop m_citizenList / m_game are still void*: LEFT)
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t mapData = (uintptr_t)gameWorld->m_citizenList;
+    CitizenBehavior* townMgr = (CitizenBehavior*)gameWorld->m_citizenList;
     int* mapGrid = (int*)gameWorld->m_game;
 
     // Citizen -> CharacterComponent (+0x278) -> ModelComponent (+0x68) -> world pos
@@ -132,7 +133,7 @@ int FireWork::Execute(void* citizenIBPArg, void* time) {
 
     // Search for a burning entity (spiral search from citizen position)
     int searchRadius = citizenComp->_if8;
-    bool found = static_cast<uint8_t>(FireWork_SpiralSearch_81d0(static_cast<int64_t>(mapData), centerCell, searchRadius, srcPos, destPos)) != 0;
+    bool found = static_cast<uint8_t>(townMgr->FindWater(centerCell, searchRadius, srcPos, destPos)) != 0;
 
     // Outcome of the TownManager water search (0x1400881d0). This is the ONLY place
     // that walks townMgr+0x140, so it is also the only place that proves the coarse
@@ -151,7 +152,7 @@ int FireWork::Execute(void* citizenIBPArg, void* time) {
         if (s_fwCalls <= 4 || (s_fwCalls % 250) == 0) {
             fprintf(stderr, "[FireWork] water search #%d: townMgr=%p buckets=%p "
                     "centerCell=%u radius=%d -> found=%d  (census: found=%d missed=%d)\n",
-                    s_fwCalls, (void*)mapData, *(void**)(mapData + 0x140), centerCell,
+                    s_fwCalls, (void*)townMgr, (void*)townMgr->field_0x140, centerCell,
                     searchRadius, (int)found, s_fwFound, s_fwMissed);
             fflush(stderr);
         }
