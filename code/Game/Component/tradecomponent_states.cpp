@@ -76,6 +76,11 @@
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
+#include "Component/ComponentDescription.h"
+#include "Component/BoatComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -85,17 +90,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"               // RtSystem_Time_Ctor (import slot 0x140152b00)
-#include "Component/exe_bodies.h"       // 0x140002e10 / 0x14012ead0 / 0x14012ec60 / 0x140002cc0
-#include "Work/exe_bodies.h"            // WorkBase_FindComponent_3050
+#include "Component/exe_bodies.h"       // 0x14012ec60 / 0x140002cc0
 #include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
-
-// Layer 2 lives in boatcomponent_route.cpp (retail 0x14000eb20 / 0x1400456e0).
-extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP);
-extern "C" void  BoatComponent_SetDestination(int64_t boatComp, int64_t* destEntityIBP);
-
-// Layer 3 lives in tradecomponent_dock.cpp (retail 0x14005a800 / 0x14005a6d0).
-extern "C" char TradeCtrl_State13_Enter(void* self, void* sm);    // 0x14005a800
-extern "C" char TradeCtrl_State13_Update(void* self, void* sm);   // 0x14005a6d0
 
 // TradeCtrlTag lives in TradeComponent.h (the member type needs it).
 using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
@@ -103,59 +99,38 @@ using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
 namespace {
 
 // ── Leaves, by retail address ────────────────────────────────────────────────────
-// 0x140002e10 and 0x140003050 both carry misleading names in our tree (see the note in
-// orchardcomponent_states.cpp); the address is what picks the body:
-//   0x140002e10 AttendanceComponent_GetJobHostComponent (the WorkPlaceComponent finder)
-//   0x140003050 WorkBase_FindComponent_3050 (the scheduler finder)
-//   0x14012ead0 WorkComponent_CheckWorkSlot     0x14012ec60 CitizenAI_WorkScheduler_Post
+//   0x140002e10 FindComponent<WorkPlaceComponent>   0x140003050 FindComponent<WorkComponent>
+//   0x14012ead0 WorkComponent::IsWorkPosted         0x14012ec60 CitizenAI_WorkScheduler_Post
 //   import slot 0x140152b00 RtSystem_Time_Ctor
 // Layer 2 (merchant spawn / teardown) leaves:
 //   0x1400c3720 ComponentEntity_CtorFromDescription  0x1400c48a0 EntityList_RegisterEntity_Impl
+//   0x14000eb20 FindComponent<BoatComponent>         0x1400456e0 BoatComponent::SetDestination
 //   0x1400a9660 StateMachine_TickReimpl              0x140002cc0 CemeteryListErase_Reimpl
 
-// The first call into the machine prints its dependencies once, as it always has.
-void ReportDepsOnce() {
-    static bool s_reported = false;
-    if (s_reported) return;
-    s_reported = true;
-    std::fprintf(stderr,
-        "[TradeCtrl] deps: findWP=%p findSched=%p hasWork=%p post=%p "
-        "timeCtor=%p entityCopy=%p entityAdd=%p smTick=%p erase=%p\n",
-        reinterpret_cast<void*>(&AttendanceComponent_GetJobHostComponent),
-        reinterpret_cast<void*>(&WorkBase_FindComponent_3050),
-        reinterpret_cast<void*>(&WorkComponent_CheckWorkSlot),
-        reinterpret_cast<void*>(&CitizenAI_WorkScheduler_Post),
-        reinterpret_cast<void*>(&RtSystem_Time_Ctor),
-        reinterpret_cast<void*>(&ComponentEntity_CtorFromDescription),
-        reinterpret_cast<void*>(&EntityList_RegisterEntity_Impl),
-        reinterpret_cast<void*>(&::StateMachine_TickReimpl),
-        reinterpret_cast<void*>(&CemeteryListErase_Reimpl));
-    std::fflush(stderr);
-}
-
-// The TradeDescription off component+0x18, cast exactly as retail does it.
+// The TradeDescription off +0x18, cast exactly as retail does it.
 // The deref of the result is left UNGUARDED below, as retail leaves it: retail
 // relies on the cast succeeding, and a guard here would skip the behaviour rather
 // than restore it. If this ever faults, the description on +0x18 is the bug.
-void* TradeDesc(uintptr_t comp) {
-    void* raw = *reinterpret_cast<void**>(comp + 0x18);
-    return Object::IsDerivedFromNullSafe(raw, TradeDescription::TypeId()) ? raw : nullptr;
+TradeDescription* TradeDesc(const TradeComponent* comp) {
+    Description* raw = comp->_description;
+    return Object::IsDerivedFromNullSafe(raw, TradeDescription::TypeId())
+        ? static_cast<TradeDescription*>(raw) : nullptr;
 }
 
 
 // Rate-limited outcome trace for the state-2 enter. Prints on EVERY branch, including
 // the ones that post nothing, so a silent log means the handler never ran rather than
 // that it ran and succeeded.
-void TradeCtrlReport(uintptr_t comp, bool tried, void* work, bool schedHasWork) {
+void TradeCtrlReport(const TradeComponent* comp, bool tried, const void* work, bool schedHasWork) {
     static int n = 0;
     if (n >= 16) return;
     ++n;
     std::fprintf(stderr,
         "[TradeCtrl] state2 enter comp=%p accepting=%s work=%p schedHasWork=%s "
         "timer(+0x78)=%lld\n",
-        reinterpret_cast<void*>(comp), tried ? "yes" : "no", work,
+        static_cast<const void*>(comp), tried ? "yes" : "no", work,
         schedHasWork ? "yes" : "no",
-        static_cast<long long>(*reinterpret_cast<int64_t*>(comp + 0x78)));
+        static_cast<long long>(comp->merchantTimer._ticks));
     std::fflush(stderr);
 }
 
@@ -168,18 +143,17 @@ void TradeCtrlReport(uintptr_t comp, bool tried, void* work, bool schedHasWork) 
 // of the first tier whose threshold (+0x00) is above the town's current population
 // figure at *(gameWorld+0xf0)+0xa8; if none is, the last tier. A negative population
 // short-circuits to the current index, which is retail's behaviour on an unbuilt town.
-extern "C" int TradeComponent_PickMerchantTier(void* selfV) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-    uint8_t* desc = static_cast<uint8_t*>(TradeDesc(comp));
+// LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a).
+int TradeComponent::PickMerchantTier() {
+    TradeDescription* desc = TradeDesc(this);
 
-    const int count = *reinterpret_cast<int*>(desc + 0x60);
-    const int64_t tiers = *reinterpret_cast<int64_t*>(desc + 0x58);
+    const int count = desc->_priceCount;
+    const TradeTier* tiers = desc->_prices;
     int idx = 0;
     for (int i = 0; i < count; ++i) {
-        const int64_t townState = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+        const uintptr_t townState = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
         const int pop = *reinterpret_cast<int*>(townState + 0xa8);
-        if (pop >= 0 && pop < *reinterpret_cast<int*>(tiers + static_cast<int64_t>(i) * 0x14))
+        if (pop >= 0 && pop < tiers[i].populationLimit)
             return idx;
         ++idx;
     }
@@ -189,29 +163,21 @@ extern "C" int TradeComponent_PickMerchantTier(void* selfV) {
 // ============================================================
 // 0x14005b450 — arm the countdown to the next merchant
 // ============================================================
-// comp+0x78 = Time( (RandFloatTol() * tier.spread + tier.base) * 300.0f )
+// +0x78 = Time( (RandFloatTol() * tier.tolerance + tier.base) * 300.0f )
 // The tier record is 0x14 bytes: +0x00 population threshold, +0x04 base delay,
 // +0x08 tolerance. DAT_140172234 is the literal 300.0f (0x43960000).
-extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
-    ReportDepsOnce();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-    uint8_t* desc = static_cast<uint8_t*>(TradeDesc(comp));
+void TradeComponent::ArmMerchantTimer() {
+    TradeDescription* desc = TradeDesc(this);
 
-    const int tier = TradeComponent_PickMerchantTier(selfV);
-    const int64_t tiers = *reinterpret_cast<int64_t*>(desc + 0x58);
-    const int64_t rec = tiers + static_cast<int64_t>(tier) * 0x14;
+    const int tier = PickMerchantTier();
+    const TradeTier& rec = desc->_prices[tier];
 
-    void* rng = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
+    System::Random* rng = GameUpdateLoop::_singleton->m_random;
     const float tol = fn_Random_RandFloatTol(rng);
-    float seconds = (tol * *reinterpret_cast<float*>(rec + 8) +
-                           *reinterpret_cast<float*>(rec + 4)) * 300.0f;
+    float seconds = (tol * rec.delayTolerance + rec.delayBase) * 300.0f;
 
-
-    uint64_t t[4] = {0, 0, 0, 0};
-    uint64_t* out = reinterpret_cast<uint64_t*>(
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(t), seconds));
-    *reinterpret_cast<int64_t*>(comp + 0x78) = static_cast<int64_t>(*out);
+    System::Time t = {0};
+    merchantTimer = *RtSystem_Time_Ctor(&t, seconds);
 
     // OUTCOME: the armed countdown read back off the component, not the seconds we
     // computed. A zero here means the arm silently did nothing, which is exactly the
@@ -222,33 +188,10 @@ extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
         std::fprintf(stderr,
             "[TradeCtrl] arm timer comp=%p tier=%d base=%.2f tol=%.2f -> %.1fs "
             "timer(+0x78)=%lld\n",
-            reinterpret_cast<void*>(comp), tier,
-            *reinterpret_cast<float*>(rec + 4), *reinterpret_cast<float*>(rec + 8),
-            seconds,
-            static_cast<long long>(*reinterpret_cast<int64_t*>(comp + 0x78)));
+            static_cast<void*>(this), tier, rec.delayBase, rec.delayTolerance,
+            seconds, static_cast<long long>(merchantTimer._ticks));
         std::fflush(stderr);
     }
-}
-
-// ============================================================
-// 0x1400f6ea0 — TradeWork::TradeWork(entityIBP)
-// ============================================================
-// The real ctor. tradecomponent.cpp's slot-14 toggle hand-rolled this inline and
-// had to call TradeWork_ResolveFuncs() itself to compensate; going through the ctor
-// keeps the one construction path. See reference_creatework_must_call_work_resolvefuncs.
-//
-// ENDGAME B.3.8 MI-B: the object is now the REAL TradeWork (code/Game/Work/TradeWork.h):
-// its default ctor is the base init + `+0x48 = +0x50 = 0` + TradeWork_ResolveFuncs, the
-// compiler stamps TradeWork's own vtable, and Work::InitFromEntity is the body of the
-// entity-seeded base ctor 0x1400f72e0 (Work_Ctor25) — the same bytes the hand build
-// wrote, with the compiler's table in place of the 0x140161a10 read-back. The extern "C"
-// name stays: standalone/reg_trade_ctrl.cpp registers it at 0x1400f6ea0.
-extern "C" void* TradeWork_CtorFromEntity(void* mem, void* entityIBP) {
-    if (!mem) return nullptr;
-    uint64_t ibp[2] = {*reinterpret_cast<uint64_t*>(entityIBP), 0};
-    TradeWork* work = new (mem) TradeWork();
-    work->InitFromEntity(ibp);
-    return mem;
 }
 
 // ============================================================
@@ -257,57 +200,47 @@ extern "C" void* TradeWork_CtorFromEntity(void* mem, void* entityIBP) {
 // THE self-drive step. On entering idle: if the scheduler is not already holding a
 // work slot and the workplace is accepting, allocate a TradeWork and post it. Then
 // arm the merchant countdown. Today nothing does this without the player clicking
-// the work toggle (TradeComponent_Slot14), which is why a post that has never been
+// the work toggle (TradeComponent::Command), which is why a post that has never been
 // toggled never fetches anything.
 //
 // Returns 0 in AL — retail's tail is `CALL 0x14005b450; XOR AL,AL; RET`.
-extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
-    ReportDepsOnce();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
+char TradeComponent::EnterIdle() {
+    WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
 
-    int64_t wpc[2] = {0, 0};
-    AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(comp + 0x10), wpc);
+    WorkComponent* sched = _entity->FindComponent<WorkComponent>();          // 0x140003050
 
-    int64_t schedBuf[2] = {0, 0};
-    // The finder RETURNS its out-param; use the returned pointer, never the local.
-    // See reference_outparam_finder_recycled_ibp.
-    int64_t* sched = static_cast<int64_t*>(
-        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(comp + 0x10), schedBuf));
-
-    // The door read AL off 0x14012ead0; the body returns bool — the same byte.
-    if (WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(*sched))) {          // already holds work — nothing to post
-        TradeCtrlReport(comp, false, nullptr, true);
-        TradeComponent_ArmMerchantTimer(selfV);
+    if (sched->IsWorkPosted()) {          // already holds work — nothing to post
+        TradeCtrlReport(this, false, nullptr, true);
+        ArmMerchantTimer();
         return 0;
     }
 
-    if (*reinterpret_cast<char*>(wpc[0] + 0x50) != 0) {   // workplace accepting
-        void* work = nullptr;
+    if (wpc->isAccepting) {   // workplace accepting
+        TradeWork* work = nullptr;
+        // MemAlloc(0x58, 8) + the from-entity TradeWork ctor 0x1400f6ea0: the default
+        // ctor (Work/TradeWork.h) and Work::InitFromEntity (0x1400f72e0's body).
         void* mem = System::MemoryAllocator::MemAlloc(0x58, 8);
         if (mem) {
-            int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
-            work = TradeWork_CtorFromEntity(mem, &entityIBP);
+            ComponentEntity* entityIBP[2] = {_entity, nullptr};
+            work = new (mem) TradeWork();
+            work->InitFromEntity(entityIBP);
         }
-        uint64_t workIBP[2] = {0, 0};
-        new (workIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
+        Object::InternalPtr<TradeWork> workIBP(work);
 
-        int64_t schedBuf2[2] = {0, 0};
-        int64_t* sched2 = static_cast<int64_t*>(
-            WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(comp + 0x10), schedBuf2));
-        CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(*sched2), 1, '\0', workIBP);
+        WorkComponent* sched2 = _entity->FindComponent<WorkComponent>();
+        // LEFT: 0x14012ec60 takes the WorkComponent as an integer (COMP-b's declaration).
+        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(sched2), 1, '\0', &workIBP);
 
         // OUTCOME, not intent: report whether a TradeWork was really constructed and
         // whether the scheduler is holding one AFTER the post. "accepting was set" and
         // "a work object exists" are different claims, and only the readback proves the
         // second. See reference_diagnostics_must_report_outcomes.
-        TradeCtrlReport(comp, true, work,
-                        WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(*sched2)));
+        TradeCtrlReport(this, true, work, sched2->IsWorkPosted());
     } else {
-        TradeCtrlReport(comp, false, nullptr, false);
+        TradeCtrlReport(this, false, nullptr, false);
     }
 
-    TradeComponent_ArmMerchantTimer(selfV);
+    ArmMerchantTimer();
     return 0;
 }
 
@@ -317,20 +250,18 @@ extern "C" char TradeCtrl_State2_Enter(void* selfV, void* /*sm*/) {
 // Retail is literally `MOV AL,0x1; RET` (two bytes, which is why Ghidra never made it
 // a function and c650 refers to it as LAB_14005aa50). Nothing to do on entry to
 // "merchant inbound" — the work happens in the events.
-extern "C" char TradeCtrl_State12_Enter(void* /*self*/, void* /*sm*/) { return 1; }
+char TradeComponent::EnterInbound() { return 1; }
 
 // ============================================================
 // state 0x13 trans38 (per frame) — 0x14005a780
 // ============================================================
 // Counts the merchant's stay down. When it expires and the post is not mid-trade
-// (comp+0x71), request state 2. comp+0x71 is what stops a merchant vanishing out
-// from under an open checkout.
-extern "C" char TradeCtrl_State13_Tick(void* selfV, void* sm, void* deltaTime) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-    const int64_t dt = deltaTime ? *reinterpret_cast<int64_t*>(deltaTime) : 0;
-    *reinterpret_cast<int64_t*>(comp + 0x78) -= dt;
-    if (*reinterpret_cast<int64_t*>(comp + 0x78) < 1 &&
-        *reinterpret_cast<char*>(comp + 0x71) == '\0') {
+// (+0x71), request state 2. +0x71 is what stops a merchant vanishing out from under an
+// open checkout. The null delta test is the tree's.
+char TradeComponent::TickDocked(void* sm, const System::Time* deltaTime) {
+    const int64_t dt = deltaTime ? deltaTime->_ticks : 0;
+    merchantTimer._ticks -= dt;
+    if (merchantTimer._ticks < 1 && !tradeFlag) {
         ::ControllerLive::RequestStateTransition(sm, 2);
     }
     return 1;
@@ -356,26 +287,19 @@ extern "C" char TradeCtrl_State13_Tick(void* selfV, void* sm, void* deltaTime) {
 //     +0x20   -1         == EventLog_PopupIndex(0xd)
 // so reusing AddEvent reproduces the inlined body exactly instead of duplicating it.
 //
-// The event log lives at gameWorld+0x138 (g_pGameWorldSingleton IS the GameUpdateLoop).
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
-
-extern "C" char TradeCtrl_Event09_MerchantDocked(void* selfV, void* sm) {
-    ReportDepsOnce();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton
-                                                                 : nullptr;
+// The event log lives at gameWorld+0x138 (GameUpdateLoop::m_eventNotifier).
+char TradeComponent::OnMerchantDocked(void* sm) {
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
-        void* eventLog = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x138);
         // Retail copies the owner IBP to a local and passes its ADDRESS (the tile-index
         // helper takes an InternalBasePtr*, not the entity).
-        int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
-        EventLog_AddEvent(eventLog, 0xd, 2, &entityIBP);
+        ComponentEntity* entityIBP = _entity;
+        EventLog_AddEvent(gw->m_eventNotifier, 0xd, 2, &entityIBP);
     }
 
     ::ControllerLive::RequestStateTransition(sm, 0x13);
     std::fprintf(stderr, "[TradeCtrl] event 9: MERCHANT DOCKED comp=%p -> state 0x13\n",
-                 (void*)comp);
+                 static_cast<void*>(this));
     std::fflush(stderr);
     return 1;
 }
@@ -383,13 +307,10 @@ extern "C" char TradeCtrl_Event09_MerchantDocked(void* selfV, void* sm) {
 // ============================================================
 // state 0x12 event 0xb — 0x14005a9c0
 // ============================================================
-// The inbound boat went away without docking: clear the merchant reference at
-// comp+0x80 and go back to idle.
-extern "C" char TradeCtrl_Event0B_MerchantLost(void* selfV, void* sm) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-    uint64_t nullIBP[2] = {0, 0};
-    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    *reinterpret_cast<uint64_t*>(comp + 0x80) = nullIBP[0];
+// The inbound boat went away without docking: clear the merchant reference at +0x80
+// and go back to idle.
+char TradeComponent::OnMerchantLost(void* sm) {
+    merchant = nullptr;
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
 }
@@ -415,9 +336,8 @@ extern "C" char TradeCtrl_Event0B_MerchantLost(void* selfV, void* sm) {
 // first four lines including the nested drain tick and the node re-read, so the
 // only thing this handler adds over its 0xb sibling is the immediate tick — which
 // is the point: dismissing a merchant has to take effect on the click, not on the
-// next simulation frame.
-extern "C" char TradeCtrl_Event0A_Dismissed(void* selfV, void* smV) {
-    (void)selfV;   // retail ignores param_1 entirely
+// next simulation frame. Retail ignores param_1 entirely, so the handler stays free.
+static char TradeCtrl_Event0A_Dismissed(void* /*self*/, void* smV) {
     if (!smV) return 1;
     ::ControllerLive::RequestStateTransition(smV, 2);
     ::StateMachine_TickReimpl(smV, /*time*/ 0, /*param3*/ 0, /*param4*/ 1);
@@ -427,47 +347,34 @@ extern "C" char TradeCtrl_Event0A_Dismissed(void* selfV, void* smV) {
 // ============================================================
 // state 2 trans38 (per frame) - 0x14005aa60   THE MERCHANT SPAWN
 // ============================================================
-// Counts the merchant timer at comp+0x78 down; when it reaches zero it CLONES the
+// Counts the merchant timer at +0x78 down; when it reaches zero it CLONES the
 // TraderBoat entity out of the TradeDescription, hands the clone to the route builder,
 // registers it with the world entity list and asks for state 0x12 (inbound).
 //
-// This is the handler layer 1 left as a null: it was blocked on the route builder
-// (0x1400456e0), because a boat that is created but never routed is worse than no boat.
-// That builder is now ported in boatcomponent_route.cpp.
-//
 // RETURN VALUE: retail always returns a value whose LOW BYTE is zero - the not-yet
 // branch returns the delta-time with the low byte masked off, and the fired branch masks
-// the transition result the same way. So: 0, on every path.
-extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
-    ReportDepsOnce();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-    const int64_t dt = deltaTime ? *reinterpret_cast<int64_t*>(deltaTime) : 0;
-    *reinterpret_cast<int64_t*>(comp + 0x78) -= dt;
-    if (*reinterpret_cast<int64_t*>(comp + 0x78) >= 1) return 0;
+// the transition result the same way. So: 0, on every path. The null delta test is the
+// tree's.
+char TradeComponent::TickIdle(void* smV, const System::Time* deltaTime) {
+    const int64_t dt = deltaTime ? deltaTime->_ticks : 0;
+    merchantTimer._ticks -= dt;
+    if (merchantTimer._ticks >= 1) return 0;
 
-    void* desc = TradeDesc(comp);
+    TradeDescription* desc = TradeDesc(this);
 
     // Clone the merchant entity from the description's template (desc+0x30).
-    void* boat = nullptr;
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    ComponentEntity* boat = nullptr;
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (mem)
-        boat = ComponentEntity_CtorFromDescription(
-            reinterpret_cast<ComponentEntity*>(mem),
-            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x30));
+        boat = ComponentEntity_CtorFromDescription(mem, desc->_merchantTemplate);
 
-    uint64_t boatIBP[2] = {0, 0};
-    new (boatIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(boat));   // B.3.3 bridge
-    *reinterpret_cast<uint64_t*>(comp + 0x80) = boatIBP[0];
+    merchant = boat;
 
-    // Route it to THIS post. The destination is the trading post's own entity (comp+0x10).
-    int64_t destIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
-    uint64_t boatCompIBP[2] = {0, 0};
-    void* boatComp = BoatRoute_FindBoatComponent(*reinterpret_cast<int64_t*>(comp + 0x80),
-                                                 boatCompIBP);
-    // eb20 returns its OUT-PARAM, so `boatComp` is always non-null; the component is the
-    // value inside it. Retail derefs that value unguarded because a merchant template
-    // always carries a BoatComponent.
+    // Route it to THIS post. The destination is the trading post's own entity (+0x10).
+    Object::InternalPtr<ComponentEntity> destIBP(_entity);
+    BoatComponent* boatComp = merchant->FindComponent<BoatComponent>();   // 0x14000eb20
+    // Retail derefs the BoatComponent unguarded because a merchant template always
+    // carries one.
     //
     // The guard below is a STANDALONE-ONLY difference, not a softened retail deref: the
     // BoatComponent type-id slot (0x1401c4020) is seeded behind BANISHED_LIVE_TRADE_TIDS,
@@ -475,9 +382,8 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
     // gate the player can turn off is not a faithful reproduction of anything, so say
     // which gate is missing instead. If this fires with TRADE_TIDS on, the merchant
     // template genuinely lacks the component and THAT is the bug.
-    const int64_t boatCompPtr = *reinterpret_cast<int64_t*>(boatComp);
-    if (boatCompPtr) {
-        BoatComponent_SetDestination(boatCompPtr, &destIBP);
+    if (boatComp) {
+        boatComp->SetDestination(&destIBP);   // 0x1400456e0
     } else {
         std::fprintf(stderr, "[TradeCtrl] merchant has NO BoatComponent "
                              "(the template lacks it) — "
@@ -486,14 +392,12 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
     }
 
     // Publish the entity. The category is the template's own (template+0x20).
-    int64_t regIBP = *reinterpret_cast<int64_t*>(comp + 0x80);
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    Object::InternalPtr<ComponentEntity> regIBP = merchant;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw && desc) {
-        void* tmpl = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x30);
-        EntityList_RegisterEntity_Impl(
-            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
-            &regIBP,
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
+        ComponentDescription* tmpl = desc->_merchantTemplate;
+        EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP,
+                                       static_cast<int>(tmpl->_category));
     }
 
     // OUTCOME, not intent: the route point count is the only thing that says the boat can
@@ -501,14 +405,15 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
 
     // Retail ticks the machine once first when it has no current state yet
     // (`if (*(char*)(sm+9) < 0)` at 14005ab6a), then requests 0x12.
+    // LEFT: the StateMachine bytes are untyped (COMP-e).
     uint8_t* sm = reinterpret_cast<uint8_t*>(smV);
     if (sm && static_cast<int8_t>(sm[9]) < 0) {
-        uint8_t zeroTime[8] = {};
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
+        System::Time zeroTime = {0};
+        RtSystem_Time_Ctor(&zeroTime, 0.0f);
         // The door typed `time` as a pointer and passed &zeroTime; the body takes the
         // 8-byte Time by value, as retail passes it. With param4 = 0 the body never
         // reads `time`, so passing the value is the same call.
-        ::StateMachine_TickReimpl(smV, *reinterpret_cast<int64_t*>(zeroTime), 0, 0);
+        ::StateMachine_TickReimpl(smV, zeroTime._ticks, 0, 0);
     }
     ::ControllerLive::RequestStateTransition(smV, 0x12);
     return 0;
@@ -519,42 +424,34 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
 // ============================================================
 // Carried by every state. Unregisters the post from the world's trading-post list, and if
 // a merchant is present hands the boat back (a NULL destination is what tells the route
-// builder to release it), frees the post's item array and clears the docked merchant
+// builder to release it), frees the post's manifest and clears the docked merchant
 // index.
 //
-// comp+0x50 / +0x58 here are the TradeComponent's ITEM array base and count - NOT the
+// +0x50 / +0x58 here are the TradeComponent's MANIFEST base and count - NOT the
 // BoatComponent's route head, which occupies the same offsets on a different object. The
 // two are easy to confuse when reading b160 and 56e0 side by side.
-extern "C" char TradeCtrl_Teardown(void* selfV) {
-    ReportDepsOnce();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-
-    int64_t entityIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+char TradeComponent::Teardown() {
+    ComponentEntity* entityIBP = _entity;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
+        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a); its list at +0x30.
         CemeteryListErase_Reimpl(reinterpret_cast<void*>(
-                        *reinterpret_cast<uintptr_t*>(
-                            reinterpret_cast<uintptr_t>(gw) + 0xf0) + 0x30),
+                        reinterpret_cast<uintptr_t>(gw->m_citizenList) + 0x30),
                     &entityIBP);
     }
 
-    if (*reinterpret_cast<int64_t*>(comp + 0x80) != 0) {
-        int64_t nullDest = 0;
-        new (&nullDest) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint64_t boatCompIBP[2] = {0, 0};
-        void* boatComp = BoatRoute_FindBoatComponent(*reinterpret_cast<int64_t*>(comp + 0x80),
-                                                     boatCompIBP);
-        const int64_t boatCompPtr = *reinterpret_cast<int64_t*>(boatComp);
-        if (boatCompPtr) BoatComponent_SetDestination(boatCompPtr, &nullDest);
+    if (merchant.Get() != nullptr) {
+        Object::InternalPtr<ComponentEntity> nullDest(nullptr);
+        BoatComponent* boatComp = merchant->FindComponent<BoatComponent>();   // 0x14000eb20
+        if (boatComp) boatComp->SetDestination(&nullDest);   // the tree's null test
 
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(comp + 0x50));
-        *reinterpret_cast<uint64_t*>(comp + 0x50) = 0;
-        *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
-        *reinterpret_cast<int32_t*>(comp + 0x2c) = -1;      // no merchant docked
+        System::MemoryAllocator::MemFree(manifest);
+        manifest = nullptr;
+        manifestCount = 0;
+        manifestCap = 0;
+        tradeId = -1;      // no merchant docked
 
-        uint64_t clearIBP[2] = {0, 0};
-        new (clearIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<uint64_t*>(comp + 0x80) = clearIBP[0];
+        merchant = nullptr;
     }
     return 1;
 }
@@ -562,6 +459,21 @@ extern "C" char TradeCtrl_Teardown(void* selfV) {
 // ============================================================
 // Table build — replicates 0x14005c650
 // ============================================================
+// The handlers the dispatcher calls with (owner, sm[, delta]); RCX is the component.
+static char TradeCtrl_State2_Enter(TradeComponent* c)       { return c->EnterIdle(); }         // 0x14005abd0
+static char TradeCtrl_State2_Tick(TradeComponent* c, void* sm, void* dt) {                    // 0x14005aa60
+    return c->TickIdle(sm, static_cast<const System::Time*>(dt));
+}
+static char TradeCtrl_State12_Enter(TradeComponent* c)      { return c->EnterInbound(); }      // 0x14005aa50
+static char TradeCtrl_Event09_MerchantDocked(TradeComponent* c, void* sm) { return c->OnMerchantDocked(sm); }   // 0x14005a850
+static char TradeCtrl_Event0B_MerchantLost(TradeComponent* c, void* sm)   { return c->OnMerchantLost(sm); }     // 0x14005a9c0
+static char TradeCtrl_State13_Enter(TradeComponent* c)      { return c->EnterDocked(); }       // 0x14005a800
+static char TradeCtrl_State13_Tick(TradeComponent* c, void* sm, void* dt) {                   // 0x14005a780
+    return c->TickDocked(sm, static_cast<const System::Time*>(dt));
+}
+static char TradeCtrl_State13_Update(TradeComponent* c)     { return c->LeaveDocked(); }       // 0x14005a6d0
+static char TradeCtrl_Teardown(TradeComponent* c)           { return c->Teardown(); }          // 0x14005b160
+
 // Built ONCE at static-init time, as retail's 0x14005c650 does (B38 D6/D7).
 static void TradeCtrl_PopulateTable() {
     ::ControllerLive::StateTable& t = TradeDispatch::table;

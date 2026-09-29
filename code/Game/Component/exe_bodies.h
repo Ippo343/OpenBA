@@ -253,12 +253,10 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
 extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount);  // 0x140028860
 
 // ---- tradecomponent.cpp
-void TradeComponent_Setup(void* selfP);  // 0x14005c220
-void TradeComponent_ResizeNames(int64_t* field, int count);  // 0x14000e760
-void TradeComponent_ResizeItems(int64_t* field, int count);  // 0x14000e8d0
+// B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.
 
 // ---- tradecomponent_livestock.cpp
-extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty);  // 0x14005ace0
+extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty);  // 0x14005ace0 B4 FORWARD -> TradeComponent::SpawnPurchasedLivestock (Dialog/tradeui_checkout.cpp)
 
 // ---- wellcomponent.cpp
 void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2);  // 0x140091ba0

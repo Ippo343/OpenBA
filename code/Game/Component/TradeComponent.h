@@ -122,6 +122,24 @@ public:
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x14000dba0
 
+    // ---- non-virtual members (retail addresses; B.4 COMP-f) ----
+    void Setup();                                                       // 0x14005c220
+    int  PickMerchantTier();                                            // 0x14005b4f0
+    void ArmMerchantTimer();                                            // 0x14005b450
+    void BuildMerchantManifest();                                       // 0x14005b580
+    void AutoTrade();                                                   // 0x140059ad0
+    void SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigned int qty);   // 0x14005ace0
+    // The controller's state handlers (table 0x14005c650; RCX = this).
+    char EnterIdle();                                                   // 0x14005abd0 state 2 enter
+    char TickIdle(void* sm, const System::Time* deltaTime);                         // 0x14005aa60 state 2 per-frame
+    char EnterInbound();                                                // 0x14005aa50 state 0x12 enter
+    char OnMerchantDocked(void* sm);                                    // 0x14005a850 state 0x12 event 9
+    char OnMerchantLost(void* sm);                                      // 0x14005a9c0 state 0x12 event 0xb
+    char EnterDocked();                                                 // 0x14005a800 state 0x13 enter
+    char TickDocked(void* sm, const System::Time* deltaTime);                       // 0x14005a780 state 0x13 per-frame
+    char LeaveDocked();                                                 // 0x14005a6d0 state 0x13 update
+    char Teardown();                                                    // 0x14005b160 transition 3
+
     // PUBLIC while unconverted readers (TradeUI, the trade harness) read them.
     int32_t  tradeState;        // +0x28 auto-trade mode: 1 on arrival, 2 on departure (Persist int&)
     int32_t  tradeId;           // +0x2c the docked merchant's index, -1 = none
@@ -137,8 +155,8 @@ public:
     TradeResourceNode* stockRoot;          // +0x60 the stock tree's root (TradeUI's sell rows)
     int32_t  stockCount;                   // +0x68 its node count
     uint8_t  _pad6C[4];                    // +0x6c never written by retail's ctor
-    uint8_t  workEnabled;       // +0x70 Command's cached toggle (Persist bool&; not in the ctor)
-    uint8_t  tradeFlag;         // +0x71 the trade panel is open: the stay timer waits (Persist bool&)
+    bool     workEnabled;       // +0x70 Command's cached toggle (Persist bool&; not in the ctor)
+    bool     tradeFlag;         // +0x71 the trade panel is open: the stay timer waits (Persist bool&)
     uint8_t  _pad72[6];         // +0x72
     System::Time merchantTimer;            // +0x78 countdown to the next merchant / its stay
     Object::InternalPtr<ComponentEntity> merchant;   // +0x80 the merchant boat entity (Persist
