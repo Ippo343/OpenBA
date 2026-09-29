@@ -68,3 +68,9 @@ Notes:
   marked LEFT: `ComponentDescription::_subDescs` is `void**` (COMP-c types it).
 - Row 12: R-GFX's B11 attribution of its 154 differing functions was not handed in; two
   restructurings (`BeginDrawGroup`, `Render`) add zeroing stores retail does not have.
+
+| 16 | W1-R-VIDEO | `612f0962` | runtime video: Device, Context, RenderState, the programs by name; `Device::deviceData` typed: 587 -> 41 in 44 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · devlost COMPLETE=194, crash log empty, killed at 600 s | 0 |
+
+Metric at `612f0962`: **38,046** to remove (tier I 330, CAST-OK 237). Floor ceilings raised in
+`FLOOR.md`: `crt` 5 -> 7 (the two `qsort` comparator parameters in `saveload_saveinfo.cpp`, R-IO),
+`dx11_seam` 27 -> 39 (the twelve `DeletingDtor` vector arms in `CompanionData.h`, R-VIDEO).
