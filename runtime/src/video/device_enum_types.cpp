@@ -92,8 +92,6 @@ using DisplayMode       = Video::Device::DisplayMode;
 using GraphicsInterface = Video::Device::GraphicsInterface;
 using RefreshRate       = Video::Device::RefreshRate;
 
-// The Win32 twin (device_adjustdisplay_win.cpp).
-extern "C" void RtVideo_Device_AdjustDisplay(void* self);
 
 namespace {
 
@@ -558,11 +556,7 @@ Video::Device::DisplayMode Video::Device::GetDisplayMode(int index) const {
     return out;
 }
 
-// ENDGAME B.3.5 block D2: `AdjustDisplay`'s body is `EnumDisplaySettingsW` and
-// `ChangeDisplaySettingsExW` in device_adjustdisplay_win.cpp, a TU that cannot
-// include Device.h (PLAN §4.1 decision 1). The member is a one-line forward so
-// C++ callers exist; the REGISTERED DOOR stays the `_win` function itself.
-void Video::Device::AdjustDisplay() {
-    RtVideo_Device_AdjustDisplay(this);
-}
+// `Video::Device::AdjustDisplay` is defined in device_adjustdisplay_win.cpp
+// (B.4 R-VIDEO: the member itself; the `RtVideo_Device_AdjustDisplay(void*)`
+// C body and this one-line forward are gone).
 

@@ -108,16 +108,6 @@ using GraphicsInterface = Video::Device::GraphicsInterface;
 using InterfaceSlot     = Video::Device::InterfaceSlot;
 using RefreshRate       = Video::Device::RefreshRate;
 
-// The Win32 half (device_startup_win.cpp): the two message callbacks whose
-// ADDRESSES PlatformStartup stores, and the EnumDisplaySettingsW probe.
-extern "C" int  RtVideo_Device_SizeWindow(void* hwnd, unsigned msg, uint64_t w, int64_t l);
-extern "C" int  RtVideo_Device_MoveWindow(void* hwnd, unsigned msg, uint64_t w, int64_t l);
-// Deliberately typed with void* on both sides so this declaration and the
-// definition in the _win twin are textually identical — the twin cannot include
-// Device.h (see its banner), so a typed declaration here could drift from the
-// definition there and C linkage would not catch it. `self` is `const`: the
-// member is `QEBA` and the callee never reads it.
-extern "C" int  RtVideo_Device_GetDefaultResolution(const void* self, const void* adapter);
 
 namespace {
 
@@ -328,26 +318,10 @@ void RtVideo_ArrayModeAssign(DisplayMode*& data, int32_t& size, int32_t& capacit
 // and that is the thing to find.
 // ============================================================================
 // ---------------------------------------------------------------------------
-// ENDGAME B.3.5 block D2 — the three members whose real bodies live in a `_win`
-// twin that cannot include this header (PLAN §4.1 decision 1: no <windows.h>
-// under runtime/src/ outside a `_win` file). Each member is a one-line forward
-// into the `extern "C"` Win32 body, and the REGISTERED DOOR stays the `_win`
-// function: that is the one place in this block where the door is not a
-// delegation, and it is a platform-seam constraint rather than a choice. C++
-// callers — `Device::ValidateConfiguration` below is one — now reach them as
-// members.
+// `Device::GetDefaultResolution`, `SizeWindow` and `MoveWindow` are defined in
+// device_startup_win.cpp, the Win32 twin (B.4 R-VIDEO: the members themselves;
+// the three `extern "C"` C bodies and their one-line forwards are gone).
 // ---------------------------------------------------------------------------
-int Video::Device::GetDefaultResolution(const Adapter& adapter) const {
-    return RtVideo_Device_GetDefaultResolution(this, &adapter);
-}
-
-int Video::Device::SizeWindow(void* hwnd, unsigned msg, uint64_t wparam, int64_t lparam) {
-    return RtVideo_Device_SizeWindow(hwnd, msg, wparam, lparam);
-}
-
-int Video::Device::MoveWindow(void* hwnd, unsigned msg, uint64_t wparam, int64_t lparam) {
-    return RtVideo_Device_MoveWindow(hwnd, msg, wparam, lparam);
-}
 
 bool Video::Device::ValidateConfiguration() {
     const int32_t ifaceTotal = interfaceCount;

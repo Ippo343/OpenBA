@@ -569,7 +569,10 @@ public:
                                            //        ctor — adapter enumeration fills it.
     uint8_t           settingsChanged;     // +0x9C  ApplyChangedSettings sets it to 1
     uint8_t           field9D;             // +0x9D  ctor zeroes it in the same 2-byte store
-    uint8_t           gap9E[0x12];         // +0x9E..+0xAF  ctor zeroes +0xa0 and +0xa8
+    uint8_t           gap9E[2];            // +0x9E..+0x9F
+    void*             monitor;             // +0xA0  HMONITOR: AdjustDisplay hands it to GetMonitorInfoW
+                                           //        (0x1800f7e68); the ctor zeroes it
+    uint8_t           gapA8[8];            // +0xA8  the ctor zeroes it; meaning not recovered
     InterfaceSlot     dllSlots[3];         // +0xB0  DX9, DX11, GL — standalone/video_interface.cpp writes slot 1 here
     int32_t           activeInterface;     // +0xF8  ctor = -1; Startup copies it back into Configuration::interfaceIndex
     int32_t           gapFC;               // +0xFC
@@ -904,6 +907,8 @@ static_assert(offsetof(Video::Device, windowHandle) == 0x90, "Device::windowHand
 static_assert(offsetof(Video::Device, maxAnisotropy) == 0x98, "Device::maxAnisotropy — must match optionsdialog.cpp:359");
 static_assert(offsetof(Video::Device, settingsChanged) == 0x9C, "Device::settingsChanged");
 static_assert(offsetof(Video::Device, field9D) == 0x9D, "Device::field9D");
+static_assert(offsetof(Video::Device, monitor) == 0xA0, "Device::monitor (B.4 R-VIDEO)");
+static_assert(offsetof(Video::Device, gapA8) == 0xA8, "Device::gapA8");
 static_assert(offsetof(Video::Device, dllSlots) == 0xB0, "Device::dllSlots — must match standalone/video_interface.cpp kSlot0");
 static_assert(offsetof(Video::Device, activeInterface) == 0xF8, "Device::activeInterface — must match standalone/main.cpp:1068");
 static_assert(offsetof(Video::Device, deviceData) == 0x100, "Device::deviceData — must match dx11/src/buffers.cpp:209");
